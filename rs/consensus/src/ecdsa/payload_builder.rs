@@ -259,6 +259,7 @@ pub(crate) fn create_summary_payload(
     // For next interval: context.registry_version from the new summary block
     let next_interval_registry_version = context.registry_version;
 
+    // Get ecdsa_config from registry if it exists
     let ecdsa_config = get_ecdsa_config_if_enabled(
         subnet_id,
         curr_interval_registry_version,
@@ -270,6 +271,7 @@ pub(crate) fn create_summary_payload(
     };
     let ecdsa_config = ecdsa_config.unwrap();
 
+    // Get ecdsa_payload from parent block if it exists
     let ecdsa_payload = parent_block.payload.as_ref().as_data().ecdsa.as_ref();
     if ecdsa_payload.is_none() {
         // Parent block doesn't have ECDSA payload and feature is enabled.
@@ -298,6 +300,29 @@ pub(crate) fn create_summary_payload(
         ecdsa_payload_metrics,
         &log,
     )?;
+
+    create_summary_payload_helper(
+        subnet_id,
+        registry_client,
+        &block_reader,
+        height,
+        curr_interval_registry_version,
+        next_interval_registry_version,
+        ecdsa_payload,
+        log,
+    )
+}
+
+fn create_summary_payload_helper(
+    subnet_id: SubnetId,
+    registry_client: &dyn RegistryClient,
+    block_reader: &dyn EcdsaBlockReader,
+    height: Height,
+    curr_interval_registry_version: RegistryVersion,
+    next_interval_registry_version: RegistryVersion,
+    ecdsa_payload: &ecdsa::EcdsaPayload,
+    log: ReplicaLogger,
+) -> Result<ecdsa::Summary, EcdsaPayloadError> {
     let created = match &ecdsa_payload.key_transcript.next_in_creation {
         ecdsa::KeyTranscriptCreation::Created(unmasked) => {
             let transcript = block_reader.transcript(unmasked.as_ref())?;
@@ -326,14 +351,17 @@ pub(crate) fn create_summary_payload(
         None => created.is_some(),
     };
 
-    // Check for membership change, start next key creation if needed.
-    // The registry versions to determine node membership:
+    // Check for membership change, start next key creation only when both of the following are
+    // satisfied:
+    // 1. Time to reshare key transcript (either due to membership change, or node key change)
+    // 2. We don't have a key transcript creation in progress.
     let next_in_creation = if is_time_to_reshare_key_transcript(
         registry_client,
         curr_interval_registry_version,
         next_interval_registry_version,
         subnet_id,
-    )? {
+    )? && created.is_some()
+    {
         info!(
             log,
             "Noticed subnet membership change, will start key_transcript_creation: height = {:?} \
@@ -383,7 +411,7 @@ pub(crate) fn create_summary_payload(
             key_id: ecdsa_payload.key_transcript.key_id.clone(),
         },
     };
-    update_summary_refs(height, &mut ecdsa_summary, &block_reader)?;
+    update_summary_refs(height, &mut ecdsa_summary, block_reader)?;
     Ok(Some(ecdsa_summary))
 }
 
@@ -431,6 +459,10 @@ pub(crate) fn is_time_to_reshare_key_transcript(
     next_interval_registry_version: RegistryVersion,
     subnet_id: SubnetId,
 ) -> Result<bool, MembershipError> {
+    // Shortcut the case where registry version didn't change
+    if curr_interval_registry_version == next_interval_registry_version {
+        return Ok(false);
+    }
     let current_nodes =
         get_subnet_nodes(registry_client, curr_interval_registry_version, subnet_id)?
             .into_iter()
@@ -1686,6 +1718,7 @@ mod tests {
             messages::RequestBuilder,
         },
     };
+    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_types::batch::BatchPayload;
     use ic_types::consensus::dkg::{Dealings, Summary};
     use ic_types::consensus::{BlockPayload, DataPayload, HashedBlock, Payload, SummaryPayload};
@@ -3724,6 +3757,137 @@ mod tests {
                 .signature_agreements
                 .get(&[4; 32])
                 .is_some());
+        })
+    }
+
+    #[test]
+    fn test_if_next_in_creation_continues() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                registry,
+                registry_data_provider,
+                ..
+            } = dependencies(pool_config, 1);
+            let subnet_id = subnet_test_id(1);
+            let node_ids = vec![node_test_id(0)];
+            let subnet_record = SubnetRecordBuilder::from(&node_ids)
+                .with_dkg_interval_length(9)
+                .build();
+            add_subnet_record(&registry_data_provider, 11, subnet_id, subnet_record);
+            registry.update_to_latest_version();
+            let registry_version = registry.get_latest_version();
+
+            let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+            let block_reader = TestEcdsaBlockReader::new();
+            let transcript_builder = TestEcdsaTranscriptBuilder::new();
+            let signature_builder = TestEcdsaSignatureBuilder::new();
+            let ecdsa_config = EcdsaConfig {
+                quadruples_to_create_in_advance: 1,
+                key_ids: vec![key_id.clone()],
+                ..EcdsaConfig::default()
+            };
+
+            // Step 1: initial bootstrap payload should be created successfully
+            let payload_0 =
+                make_bootstrap_summary(subnet_id, key_id, Height::from(0), None, &no_op_logger());
+            assert!(matches!(payload_0, Ok(Some(_))));
+            let payload_0 = payload_0.unwrap().unwrap();
+
+            // Step 2: a summary payload should be created successfully, with next_in_creation
+            // set to Begin.
+            let payload_1 = create_summary_payload_helper(
+                subnet_id,
+                registry.as_ref(),
+                &block_reader,
+                Height::from(1),
+                registry_version,
+                registry_version,
+                &payload_0,
+                no_op_logger(),
+            );
+            assert!(matches!(payload_1, Ok(Some(_))));
+            let payload_1 = payload_1.unwrap().unwrap();
+            assert!(matches!(
+                payload_1.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::Begin
+            ));
+
+            // Step 3: a data payload be created successfully
+            let mut payload_2 = payload_1;
+            let result = create_data_payload_helper_2(
+                &mut payload_2,
+                Height::from(2),
+                mock_time(),
+                &ecdsa_config,
+                registry_version,
+                &node_ids,
+                &BTreeMap::default(),
+                &BTreeMap::default(),
+                &block_reader,
+                &transcript_builder,
+                &signature_builder,
+                None,
+                no_op_logger(),
+            );
+            assert!(result.is_ok());
+            assert!(matches!(
+                payload_2.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::RandomTranscriptParams(_)
+            ));
+
+            // Step 4: the summary payload should be created successfully, carrying forward
+            // unfinished next_in_creation
+            let payload_3 = create_summary_payload_helper(
+                subnet_id,
+                registry.as_ref(),
+                &block_reader,
+                Height::from(3),
+                registry_version,
+                registry_version,
+                &payload_2,
+                no_op_logger(),
+            );
+            assert!(matches!(payload_3, Ok(Some(_))));
+            let payload_3 = payload_3.unwrap().unwrap();
+            assert!(matches!(
+                payload_3.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::RandomTranscriptParams(_)
+            ));
+
+            // Step 5: the summary payload should be created successfully, carrying forward
+            // unfinished next_in_creation even when membership changes
+            let node_ids = vec![node_test_id(0), node_test_id(1)];
+            let subnet_record = SubnetRecordBuilder::from(&node_ids)
+                .with_dkg_interval_length(9)
+                .build();
+            add_subnet_record(&registry_data_provider, 12, subnet_id, subnet_record);
+            registry.update_to_latest_version();
+            let new_registry_version = registry.get_latest_version();
+            assert!(matches!(
+                is_time_to_reshare_key_transcript(
+                    registry.as_ref(),
+                    registry_version,
+                    new_registry_version,
+                    subnet_id,
+                ),
+                Ok(true)
+            ));
+            let payload_4 = create_summary_payload_helper(
+                subnet_id,
+                registry.as_ref(),
+                &block_reader,
+                Height::from(3),
+                registry_version,
+                registry_version,
+                &payload_2,
+                no_op_logger(),
+            );
+            assert!(matches!(payload_4, Ok(Some(_))));
+            let payload_4 = payload_4.unwrap().unwrap();
+            assert!(matches!(
+                payload_4.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::RandomTranscriptParams(_)
+            ));
         })
     }
 }
