@@ -21,7 +21,9 @@ use service_discovery::{
 };
 use slog::{info, o, Drain, Logger};
 
-use crate::config_writer::{NodeIDRegexFilter, TargetGroupFilter, TargetGroupFilterList};
+use crate::config_writer::{
+    NodeIDRegexFilter, OldMachinesFilter, TargetGroupFilter, TargetGroupFilterList,
+};
 
 mod config_writer;
 mod vector_configuration;
@@ -61,6 +63,8 @@ fn main() -> Result<()> {
             filter_node_id_regex.clone(),
         )));
     };
+
+    filters_vec.push(Box::new(OldMachinesFilter {}));
 
     let filters = TargetGroupFilterList::new(filters_vec);
 
