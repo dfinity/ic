@@ -23,7 +23,7 @@ SYNCING_PERIOD=1800 # 1/2 hour
 REPLAY_PERIOD=14400 # 4 hours
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="cdefdf1be9e43219a4578373d4acc54bc28c41eb"
+DEFAULT_BUILD_ID="6a9a02b82b3149a1fd5d72479f794256f44175a3"
 echo "Enter the BUILD_ID of the proper ic-backup version:"
 echo "(default: ${DEFAULT_BUILD_ID}):"
 read BUILD_ID
@@ -73,6 +73,7 @@ chmod +x ${BACKUP_EXE}
 
 read -r -d '' CONFIG <<-EOM
 {
+    "ic_name_metrics": "mercury",
     "backup_instance": "${BACKUP_INSTANCE}",
     "nns_url": "${NNS_URL}",
     "nns_pem": "${WORK_DIR}/$PUBLIC_KEY_NAME",

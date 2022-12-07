@@ -19,6 +19,7 @@ pub struct SubnetConfig {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
+    pub ic_name_metrics: String,
     pub backup_instance: String,
     pub nns_url: Option<Url>,
     pub nns_pem: PathBuf,
