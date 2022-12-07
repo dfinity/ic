@@ -32,7 +32,7 @@ dependency-scan-nightly:
   needs: []  # don't wait on other jobs
   stage: test
   variables: 
-    PYTHONPATH : ${CI_PROJECT_DIR}/gitlab-ci/src/dependencies
+    PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     CARGO_AUDIT_VERSION : "0.16.0"
   script:
     - |
