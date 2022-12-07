@@ -7566,65 +7566,92 @@ async fn validate_open_sns_token_swap(
 ) -> Result<(), GovernanceError> {
     let mut defects = vec![];
 
-    // Inspect target_swap_canister_id.
-    match &open_sns_token_swap.target_swap_canister_id {
-        None => defects.push(
+    // Require target_swap_canister_id.
+    let target_swap_canister_id = open_sns_token_swap.target_swap_canister_id;
+    if target_swap_canister_id.is_none() {
+        defects.push(
             "OpenSnsTokenSwap lacks a value in its target_swap_canister_id field.".to_string(),
-        ),
+        );
+    }
 
-        Some(target_swap_canister_id) => {
-            if let Err(err) = CanisterId::try_from(*target_swap_canister_id) {
+    // Try to convert to CanisterId (from PrincipalId).
+    let mut target_swap_canister_id = target_swap_canister_id.and_then(|id| {
+        let result = CanisterId::try_from(id);
+
+        if let Err(err) = &result {
+            defects.push(format!(
+                "OpenSnsTokenSwap.target_swap_canister_id is not a valid canister ID: {:?}",
+                err,
+            ));
+        }
+
+        // Convert to Option.
+        result.ok()
+    });
+
+    // Is target_swap_canister_id known to sns_wasm ?
+    if let Some(some_target_swap_canister_id) = target_swap_canister_id {
+        let result = env
+            .call_canister_method(
+                SNS_WASM_CANISTER_ID,
+                "list_deployed_snses",
+                Encode!(&ListDeployedSnsesRequest {}).expect(""),
+            )
+            .await;
+
+        let target_swap_canister_id_is_ok = match &result {
+            Err(err) => {
                 defects.push(format!(
-                    "OpenSnsTokenSwap.target_swap_canister_id is not a valid canister ID: {:?}",
-                    err
-                ))
+                    "Failed to call the list_deployed_snses method on sns_wasm ({}): {:?}",
+                    SNS_WASM_CANISTER_ID, err,
+                ));
+                false
             }
 
-            let result = env
-                .call_canister_method(
-                    SNS_WASM_CANISTER_ID,
-                    "list_deployed_snses",
-                    Encode!(&ListDeployedSnsesRequest {}).expect(""),
-                )
-                .await;
-
-            match result {
+            Ok(reply_bytes) => match Decode!(reply_bytes, ListDeployedSnsesResponse) {
                 Err(err) => {
                     defects.push(format!(
-                        "Failed to call the list_deploye_snses method on sns-wasm ({}): {:?}",
-                        SNS_WASM_CANISTER_ID, err,
+                        "Unable to decode response as ListDeployedSnsesResponse: {}. reply_bytes = {:#?}",
+                        err, reply_bytes,
                     ));
+                    false
                 }
-                Ok(bytes) => match Decode!(&bytes, ListDeployedSnsesResponse) {
-                    Err(err) => defects.push(format!(
-                        "Unable to decode response as ListDeployedSnsesResponse: {}. bytes = {:#?}",
-                        err, bytes,
-                    )),
-                    Ok(response) => {
-                        let is_swap = response
-                            .instances
-                            .iter()
-                            .any(|sns| sns.swap_canister_id == Some(*target_swap_canister_id));
-                        if !is_swap {
-                            defects.push(format!(
-                                "Not the ID of any known swap canister: {}",
-                                target_swap_canister_id
-                            ));
-                        }
+
+                Ok(response) => {
+                    let is_swap = response.instances.iter().any(|sns| {
+                        sns.swap_canister_id == Some(some_target_swap_canister_id.into())
+                    });
+                    if !is_swap {
+                        defects.push(format!(
+                            "target_swap_canister_id is not the ID of any swap canister \
+                             known to sns_wasm: {}",
+                            some_target_swap_canister_id
+                        ));
                     }
-                },
-            }
+                    is_swap
+                }
+            },
+        };
+
+        if !target_swap_canister_id_is_ok {
+            target_swap_canister_id = None;
         }
     }
 
     // Inspect params.
-    match &open_sns_token_swap.params {
-        None => defects.push("OpenSnsTokenSwap lacks a value in its params field.".to_string()),
-
-        Some(params) => {
-            if let Err(err) = params.validate() {
-                defects.push(format!("OpenSnsTokenSwap.params is invalid: {:?}.", err));
-            }
+    if let Some(target_swap_canister_id) = target_swap_canister_id {
+        let result = validate_swap_params(
+            env,
+            target_swap_canister_id,
+            open_sns_token_swap.params.as_ref(),
+        )
+        .await;
+        if let Err(err) = result {
+            defects.push(format!(
+                "OpenSnsTokenSwap.params was invalid for the following \
+                 reasons:\n{}",
+                err,
+            ));
         }
     }
 
@@ -7648,6 +7675,60 @@ async fn validate_open_sns_token_swap(
         ));
     }
     Ok(())
+}
+
+async fn validate_swap_params(
+    env: &mut dyn Environment,
+    target_swap_canister_id: CanisterId,
+    params: Option<&sns_swap_pb::Params>,
+) -> Result<(), String> {
+    let params = &params.ok_or("The `params` field in OpenSnsTokenSwap is not filled in.")?;
+
+    // Get other data that we need to validate params from the swap canister.
+    let result = env
+        .call_canister_method(
+            target_swap_canister_id,
+            "get_state",
+            Encode!(&sns_swap_pb::GetStateRequest {}).expect("Unable to encode GetStateRequest."),
+        )
+        .await;
+
+    // Decode response.
+    let response = result.map_err(|err| {
+        format!(
+            "Unable to validate OpenSnsTokenSwap.params because there was an error \
+             while calling the get_state method of the swap canister {}: {:?}.",
+            target_swap_canister_id, err,
+        )
+    })?;
+    let response = Decode!(&response, sns_swap_pb::GetStateResponse).map_err(|err| {
+        format!(
+            "Unable to decode GetStateResponse from \
+             swap canister (canister ID={}): {:#?}\nresponse:{:?}",
+            target_swap_canister_id, err, response
+        )
+    })?;
+
+    // Dig out Init from response.
+    let init = match response {
+        sns_swap_pb::GetStateResponse {
+            swap: Some(sns_swap_pb::Swap {
+                init: Some(init), ..
+            }),
+            ..
+        } => init,
+        _ => {
+            return Err(format!(
+                "Unable to get Init from GetStateResponse sent by swap \
+             (canister ID={}): {:#?}",
+                target_swap_canister_id, response
+            ))
+        }
+    };
+
+    // Now that we have all the ingredients, finally do the real work of
+    // validating params.
+    params.validate(&init)
 }
 
 /// A helper for the Registry's get_node_providers_monthly_xdr_rewards method
@@ -7950,10 +8031,15 @@ impl TimeWarp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
+    use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
+    use ic_sns_swap::pb::v1::{params::NeuronBasketConstructionParameters, Swap};
     use ic_sns_wasm::pb::v1::DeployedSns;
     use lazy_static::lazy_static;
     use maplit::hashmap;
+    use std::{
+        collections::VecDeque,
+        sync::{Arc, Mutex},
+    };
 
     #[test]
     fn test_time_warp() {
@@ -7968,14 +8054,12 @@ mod tests {
     }
 
     const PARAMS: sns_swap_pb::Params = sns_swap_pb::Params {
-        max_icp_e8s: 1000,
-        min_icp_e8s: 10,
-        min_participant_icp_e8s: 5,
-        max_participant_icp_e8s: 1000,
-
-        // Not used, but just for realism.
+        max_icp_e8s: 1000 * E8,
+        min_icp_e8s: 10 * E8,
+        min_participant_icp_e8s: 5 * E8,
+        max_participant_icp_e8s: 1000 * E8,
         min_participants: 2,
-        sns_token_e8s: 1000,
+        sns_token_e8s: 1000 * E8,
         swap_due_timestamp_seconds: 2524629600, // midnight, Jan 1, 2050
         neuron_basket_construction_parameters: Some(
             sns_swap_pb::params::NeuronBasketConstructionParameters {
@@ -7985,22 +8069,86 @@ mod tests {
         ),
     };
 
+    type CanisterMethodCallResult = Result<Vec<u8>, (Option<i32>, String)>;
+
     lazy_static! {
         static ref PRINCIPAL_ID_1: PrincipalId = PrincipalId::new_user_test_id(1);
         static ref PRINCIPAL_ID_2: PrincipalId = PrincipalId::new_user_test_id(2);
-        static ref SWAP_CANISTER_ID: PrincipalId = PrincipalId::new_user_test_id(180_901);
+        static ref TARGET_SWAP_CANISTER_ID: CanisterId = CanisterId::from_u64(435106);
         static ref OPEN_SNS_TOKEN_SWAP: OpenSnsTokenSwap = OpenSnsTokenSwap {
-            target_swap_canister_id: Some(*SWAP_CANISTER_ID),
+            target_swap_canister_id: Some((*TARGET_SWAP_CANISTER_ID).into()),
             params: Some(PARAMS.clone()),
             community_fund_investment_e8s: Some(500),
         };
+        static ref SWAP_INIT: sns_swap_pb::Init = sns_swap_pb::Init {
+            transaction_fee_e8s: Some(12_345),
+            neuron_minimum_stake_e8s: Some(123_456_789),
+            ..Default::default() // Not realistic, but good enough for tests.
+        };
+
+        static ref EXPECTED_LIST_DEPLOYED_SNSES: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterMethodCallResult) =
+            (
+                ExpectedCallCanisterMethodCallArguments {
+                    target: SNS_WASM_CANISTER_ID,
+                    method_name: "list_deployed_snses",
+                    request: Encode!(&ListDeployedSnsesRequest {}).unwrap(),
+                },
+                Ok(Encode!(&ListDeployedSnsesResponse {
+                    instances: vec![DeployedSns {
+                        swap_canister_id: Some((*TARGET_SWAP_CANISTER_ID).into()),
+                        ..Default::default()
+                    },]
+                })
+                   .unwrap()),
+            );
     }
 
-    #[derive(Default)]
-    struct MockEnvironment {}
+    #[derive(Debug, PartialEq, Eq, Clone)]
+    struct ExpectedCallCanisterMethodCallArguments<'a> {
+        target: CanisterId,
+        method_name: &'a str,
+        request: Vec<u8>,
+    }
+
+    #[allow(clippy::type_complexity)]
+    struct MockEnvironment<'a> {
+        expected_call_canister_method_calls: Arc<
+            Mutex<
+                VecDeque<(
+                    ExpectedCallCanisterMethodCallArguments<'a>,
+                    Result<Vec<u8>, (Option<i32>, String)>,
+                )>,
+            >,
+        >,
+    }
+
+    impl Default for MockEnvironment<'_> {
+        fn default() -> Self {
+            Self {
+                expected_call_canister_method_calls: Arc::new(Mutex::new(VecDeque::from([
+                    EXPECTED_LIST_DEPLOYED_SNSES.clone(),
+                    (
+                        ExpectedCallCanisterMethodCallArguments {
+                            target: *TARGET_SWAP_CANISTER_ID,
+                            method_name: "get_state",
+                            request: Encode!(&sns_swap_pb::GetStateRequest {}).unwrap(),
+                        },
+                        Ok(Encode!(&sns_swap_pb::GetStateResponse {
+                            swap: Some(Swap {
+                                init: Some(SWAP_INIT.clone()),
+                                ..Default::default() // Not realistic, but good enough for test.
+                            }),
+                            derived: None, // Not realistic, but good enough for test.
+                        })
+                        .unwrap()),
+                    ),
+                ]))),
+            }
+        }
+    }
 
     #[async_trait]
-    impl Environment for MockEnvironment {
+    impl Environment for MockEnvironment<'_> {
         fn now(&self) -> u64 {
             unimplemented!();
         }
@@ -8031,17 +8179,82 @@ mod tests {
             method_name: &str,
             request: Vec<u8>,
         ) -> Result<Vec<u8>, (Option<i32>, String)> {
-            assert_eq!(target, SNS_WASM_CANISTER_ID);
-            assert_eq!(method_name, "list_deployed_snses");
-            assert_eq!(request, Encode!(&ListDeployedSnsesRequest {}).unwrap());
+            let (expected_arguments, result) = self
+                .expected_call_canister_method_calls
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Unexpected canister method call:\n\
+                     method_name = {}\n\
+                     target = {}\n\
+                     request.len() = {}",
+                        method_name,
+                        target,
+                        request.len(),
+                    )
+                });
 
-            Ok(Encode!(&ListDeployedSnsesResponse {
-                instances: vec![DeployedSns {
-                    swap_canister_id: Some(*SWAP_CANISTER_ID),
-                    ..Default::default()
-                },]
-            })
-            .unwrap())
+            let decode_request_bytes = |bytes| {
+                match method_name {
+                    "get_state" => {
+                        match Decode!(bytes, sns_swap_pb::GetStateRequest) {
+                            Ok(ok) => format!("{:#?}", ok),
+                            Err(err) => format!(
+                                "Unable to decode request bytes as GetStateRequest because of {:?}: {}",
+                                err, default_request_bytes_format(bytes),
+                            ),
+                        }
+                    }
+
+                    "list_deployed_snses" => {
+                        match Decode!(bytes, ListDeployedSnsesRequest) {
+                            Ok(ok) => format!("{:#?}", ok),
+                            Err(err) => format!(
+                                "Unable to decode request bytes as ListDeployedSnsesRequest because of {:?}: {}",
+                                err, default_request_bytes_format(bytes),
+                            ),
+                        }
+                    }
+
+                    _ => default_request_bytes_format(bytes)
+                }
+            };
+            fn default_request_bytes_format(bytes: &[u8]) -> String {
+                let truncated = if bytes.len() > 16 {
+                    let head = &bytes[..8];
+                    let tail = &bytes[(bytes.len() - 8)..];
+                    format!("head = {:?}, tail = {:?}", head, tail)
+                } else {
+                    format!("content = {:?}", bytes)
+                };
+
+                format!("<len = {}, {}>", bytes.len(), truncated)
+            }
+
+            // Compare incoming arguments vs. expected.
+            assert_eq!(
+                method_name, expected_arguments.method_name,
+                "{:#?}",
+                expected_arguments
+            );
+            assert_eq!(
+                target, expected_arguments.target,
+                "{:#?}",
+                expected_arguments
+            );
+            assert!(
+                // Because these are Vec<u8>, assert_eq would generate feedback
+                // that's very hard to decypher, so we skip that by using
+                // assert! plus the == operator instead.
+                request == expected_arguments.request,
+                "{}\nvs.\n{}",
+                decode_request_bytes(&request),
+                decode_request_bytes(&expected_arguments.request),
+            );
+
+            result
         }
     }
 
@@ -8054,109 +8267,191 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn validate_open_sns_token_swap_target_swap_canister_id() {
-        let result = validate_open_sns_token_swap(
-            &OpenSnsTokenSwap {
-                target_swap_canister_id: None,
-                ..OPEN_SNS_TOKEN_SWAP.clone()
-            },
-            &mut MockEnvironment::default(),
-        )
-        .await;
-        assert!(result.is_err(), "{:#?}", result);
+    async fn validate_open_sns_token_swap_missing_target_swap_canister_id() {
+        assert_is_err!(
+            validate_open_sns_token_swap(
+                &OpenSnsTokenSwap {
+                    target_swap_canister_id: None,
+                    ..OPEN_SNS_TOKEN_SWAP.clone()
+                },
+                &mut MockEnvironment::default(),
+            )
+            .await
+        );
     }
 
     #[tokio::test]
-    async fn validate_open_sns_token_swap_params() {
-        let result = validate_open_sns_token_swap(
-            &OpenSnsTokenSwap {
-                params: None,
-                ..OPEN_SNS_TOKEN_SWAP.clone()
-            },
-            &mut MockEnvironment::default(),
-        )
-        .await;
-        assert!(result.is_err(), "{:#?}", result);
+    async fn validate_open_sns_token_swap_params_no_params() {
+        assert_is_err!(
+            validate_open_sns_token_swap(
+                &OpenSnsTokenSwap {
+                    params: None,
+                    ..OPEN_SNS_TOKEN_SWAP.clone()
+                },
+                &mut MockEnvironment::default(),
+            )
+            .await
+        );
+    }
 
-        let result = validate_open_sns_token_swap(
-            &OpenSnsTokenSwap {
-                params: Some(sns_swap_pb::Params {
-                    max_icp_e8s: 1, // Too small.
-                    ..PARAMS.clone()
-                }),
-                ..OPEN_SNS_TOKEN_SWAP.clone()
-            },
-            &mut MockEnvironment::default(),
-        )
-        .await;
-        assert!(result.is_err(), "{:#?}", result);
-
-        let result = validate_open_sns_token_swap(
-            &OpenSnsTokenSwap {
-                params: Some(sns_swap_pb::Params {
-                    neuron_basket_construction_parameters: Some(
-                        NeuronBasketConstructionParameters {
-                            count: 0,                                 // Too small
-                            dissolve_delay_interval_seconds: 7890000, // 3 months
+    #[tokio::test]
+    async fn validate_open_sns_token_swap_sns_wasm_list_deployed_snses_fail() {
+        assert_is_err!(
+            validate_open_sns_token_swap(
+                &OPEN_SNS_TOKEN_SWAP,
+                &mut MockEnvironment {
+                    expected_call_canister_method_calls: Arc::new(Mutex::new(VecDeque::from([(
+                        ExpectedCallCanisterMethodCallArguments {
+                            target: SNS_WASM_CANISTER_ID,
+                            method_name: "list_deployed_snses",
+                            request: Encode!(&ListDeployedSnsesRequest {}).unwrap(),
                         },
-                    ),
-                    ..PARAMS.clone()
-                }),
-                ..OPEN_SNS_TOKEN_SWAP.clone()
-            },
-            &mut MockEnvironment::default(),
-        )
-        .await;
-        assert!(result.is_err(), "{:#?}", result);
+                        Err((None, "derp".to_string())),
+                    ),]),)),
+                },
+            )
+            .await
+        );
+    }
 
-        let result = validate_open_sns_token_swap(
-            &OpenSnsTokenSwap {
-                params: Some(sns_swap_pb::Params {
-                    neuron_basket_construction_parameters: Some(
-                        NeuronBasketConstructionParameters {
-                            count: 12,
-                            dissolve_delay_interval_seconds: 0, // Too small
+    #[tokio::test]
+    async fn validate_open_sns_token_swap_unknown_swap() {
+        assert_is_err!(
+            validate_open_sns_token_swap(
+                &OPEN_SNS_TOKEN_SWAP,
+                &mut MockEnvironment {
+                    expected_call_canister_method_calls: Arc::new(Mutex::new(VecDeque::from([(
+                        ExpectedCallCanisterMethodCallArguments {
+                            target: SNS_WASM_CANISTER_ID,
+                            method_name: "list_deployed_snses",
+                            request: Encode!(&ListDeployedSnsesRequest {}).unwrap(),
                         },
-                    ),
-                    ..PARAMS.clone()
-                }),
-                ..OPEN_SNS_TOKEN_SWAP.clone()
-            },
-            &mut MockEnvironment::default(),
-        )
-        .await;
-        assert!(result.is_err(), "{:#?}", result);
+                        Ok(Encode!(&ListDeployedSnsesResponse { instances: vec![] }).unwrap()),
+                    )]))),
+                },
+            )
+            .await
+        );
+    }
 
-        let result = validate_open_sns_token_swap(
-            &OpenSnsTokenSwap {
-                params: Some(sns_swap_pb::Params {
-                    neuron_basket_construction_parameters: Some(
-                        NeuronBasketConstructionParameters {
-                            count: 2,
-                            dissolve_delay_interval_seconds: u64::MAX, // Will result in overflow
-                        },
-                    ),
-                    ..PARAMS.clone()
-                }),
-                ..OPEN_SNS_TOKEN_SWAP.clone()
-            },
-            &mut MockEnvironment::default(),
-        )
-        .await;
-        assert!(result.is_err(), "{:#?}", result);
+    #[tokio::test]
+    async fn validate_open_sns_token_swap_swap_get_state_fail() {
+        assert_is_err!(
+            validate_open_sns_token_swap(
+                &OPEN_SNS_TOKEN_SWAP,
+                &mut MockEnvironment {
+                    expected_call_canister_method_calls: Arc::new(Mutex::new(VecDeque::from([
+                        EXPECTED_LIST_DEPLOYED_SNSES.clone(),
+                        (
+                            ExpectedCallCanisterMethodCallArguments {
+                                target: *TARGET_SWAP_CANISTER_ID,
+                                method_name: "get_state",
+                                request: Encode!(&sns_swap_pb::GetStateRequest {}).unwrap(),
+                            },
+                            Err((None, "derp".to_string())),
+                        )
+                    ]),)),
+                },
+            )
+            .await
+        );
+    }
+
+    #[tokio::test]
+    async fn validate_open_sns_token_swap_params_max_icp_e8s_too_small() {
+        assert_is_err!(
+            validate_open_sns_token_swap(
+                &OpenSnsTokenSwap {
+                    params: Some(sns_swap_pb::Params {
+                        max_icp_e8s: 1, // Too small.
+                        ..PARAMS.clone()
+                    }),
+                    ..OPEN_SNS_TOKEN_SWAP.clone()
+                },
+                &mut MockEnvironment::default(),
+            )
+            .await
+        );
+    }
+
+    #[tokio::test]
+    async fn validate_open_sns_token_swap_params_basket_count_too_small() {
+        assert_is_err!(
+            validate_open_sns_token_swap(
+                &OpenSnsTokenSwap {
+                    params: Some(sns_swap_pb::Params {
+                        neuron_basket_construction_parameters: Some(
+                            NeuronBasketConstructionParameters {
+                                count: 0,                                 // Too small
+                                dissolve_delay_interval_seconds: 7890000, // 3 months
+                            },
+                        ),
+                        ..PARAMS.clone()
+                    }),
+                    ..OPEN_SNS_TOKEN_SWAP.clone()
+                },
+                &mut MockEnvironment::default(),
+            )
+            .await
+        );
+    }
+
+    #[tokio::test]
+    async fn validate_open_sns_token_swap_params_zero_dissolve_delay() {
+        assert_is_err!(
+            validate_open_sns_token_swap(
+                &OpenSnsTokenSwap {
+                    params: Some(sns_swap_pb::Params {
+                        neuron_basket_construction_parameters: Some(
+                            NeuronBasketConstructionParameters {
+                                count: 12,
+                                dissolve_delay_interval_seconds: 0, // Too small
+                            },
+                        ),
+                        ..PARAMS.clone()
+                    }),
+                    ..OPEN_SNS_TOKEN_SWAP.clone()
+                },
+                &mut MockEnvironment::default(),
+            )
+            .await
+        );
+    }
+
+    #[tokio::test]
+    async fn validate_open_sns_token_swap_params_practically_forever_dissolve_delay() {
+        assert_is_err!(
+            validate_open_sns_token_swap(
+                &OpenSnsTokenSwap {
+                    params: Some(sns_swap_pb::Params {
+                        neuron_basket_construction_parameters: Some(
+                            NeuronBasketConstructionParameters {
+                                count: 2,
+                                dissolve_delay_interval_seconds: u64::MAX, // Will result in overflow
+                            },
+                        ),
+                        ..PARAMS.clone()
+                    }),
+                    ..OPEN_SNS_TOKEN_SWAP.clone()
+                },
+                &mut MockEnvironment::default(),
+            )
+            .await
+        );
     }
 
     #[tokio::test]
     async fn validate_open_sns_token_swap_community_fund_investment_e8s() {
-        let result = validate_open_sns_token_swap(
-            &OpenSnsTokenSwap {
-                community_fund_investment_e8s: Some(1001), // Too big.
-                ..OPEN_SNS_TOKEN_SWAP.clone()
-            },
-            &mut MockEnvironment::default(),
-        )
-        .await;
-        assert!(result.is_err(), "{:#?}", result);
+        assert_is_err!(
+            validate_open_sns_token_swap(
+                &OpenSnsTokenSwap {
+                    community_fund_investment_e8s: Some(1001 * E8), // Exceeds max_icp_e8s.
+                    ..OPEN_SNS_TOKEN_SWAP.clone()
+                },
+                &mut MockEnvironment::default(),
+            )
+            .await
+        );
     }
 
     lazy_static! {
@@ -8164,18 +8459,18 @@ mod tests {
             // (maturity, controller, joined cf at)
 
             // CF neurons.
-            (100, *PRINCIPAL_ID_1, Some(1)),
-            (200, *PRINCIPAL_ID_2, Some(1)),
-            (300, *PRINCIPAL_ID_1, Some(1)),
+            (100 * E8, *PRINCIPAL_ID_1, Some(1)),
+            (200 * E8, *PRINCIPAL_ID_2, Some(1)),
+            (300 * E8, *PRINCIPAL_ID_1, Some(1)),
 
             // non-CF neurons.
-            (400, *PRINCIPAL_ID_1, None),
-            (500, *PRINCIPAL_ID_2, None),
+            (400 * E8, *PRINCIPAL_ID_1, None),
+            (500 * E8, *PRINCIPAL_ID_2, None),
         ]);
 
         static ref ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT: u64 = {
             let result = total_community_fund_maturity_e8s_equivalent(&ID_TO_NEURON);
-            assert_eq!(result, 600);
+            assert_eq!(result, 600 * E8);
             result
         };
     }
@@ -8339,7 +8634,7 @@ mod tests {
         let observed_cf_neurons = draw_funds_from_the_community_fund(
             &mut id_to_neuron,
             *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
-            /* withdrawal_amount_e8s = */ 60,
+            /* withdrawal_amount_e8s = */ 60 * E8,
             &PARAMS,
         );
 
@@ -8351,11 +8646,11 @@ mod tests {
                 cf_neurons: vec![
                     sns_swap_pb::CfNeuron {
                         nns_neuron_id: 1,
-                        amount_icp_e8s: 10,
+                        amount_icp_e8s: 10 * E8,
                     },
                     sns_swap_pb::CfNeuron {
                         nns_neuron_id: 3,
-                        amount_icp_e8s: 30,
+                        amount_icp_e8s: 30 * E8,
                     },
                 ],
             },
@@ -8363,7 +8658,7 @@ mod tests {
                 hotkey_principal: PRINCIPAL_ID_2.to_string(),
                 cf_neurons: vec![sns_swap_pb::CfNeuron {
                     nns_neuron_id: 2,
-                    amount_icp_e8s: 20,
+                    amount_icp_e8s: 20 * E8,
                 }],
             },
         ];
@@ -8374,12 +8669,12 @@ mod tests {
             id_to_neuron,
             craft_id_to_neuron(&[
                 // CF neurons less 10% of their maturity.
-                (90, *PRINCIPAL_ID_1, Some(1)),
-                (180, *PRINCIPAL_ID_2, Some(1)),
-                (270, *PRINCIPAL_ID_1, Some(1)),
+                (90 * E8, *PRINCIPAL_ID_1, Some(1)),
+                (180 * E8, *PRINCIPAL_ID_2, Some(1)),
+                (270 * E8, *PRINCIPAL_ID_1, Some(1)),
                 // non-CF neurons remain untouched.
-                (400, *PRINCIPAL_ID_1, None),
-                (500, *PRINCIPAL_ID_2, None),
+                (400 * E8, *PRINCIPAL_ID_1, None),
+                (500 * E8, *PRINCIPAL_ID_2, None),
             ]),
         );
 
@@ -8393,7 +8688,7 @@ mod tests {
         let observed_cf_neurons = draw_funds_from_the_community_fund(
             &mut id_to_neuron,
             2 * *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
-            /* withdrawal_amount_e8s = */ 60,
+            /* withdrawal_amount_e8s = */ 60 * E8,
             &PARAMS,
         );
 
@@ -8405,11 +8700,11 @@ mod tests {
                 cf_neurons: vec![
                     sns_swap_pb::CfNeuron {
                         nns_neuron_id: 1,
-                        amount_icp_e8s: 5,
+                        amount_icp_e8s: 5 * E8,
                     },
                     sns_swap_pb::CfNeuron {
                         nns_neuron_id: 3,
-                        amount_icp_e8s: 15,
+                        amount_icp_e8s: 15 * E8,
                     },
                 ],
             },
@@ -8417,7 +8712,7 @@ mod tests {
                 hotkey_principal: PRINCIPAL_ID_2.to_string(),
                 cf_neurons: vec![sns_swap_pb::CfNeuron {
                     nns_neuron_id: 2,
-                    amount_icp_e8s: 10,
+                    amount_icp_e8s: 10 * E8,
                 }],
             },
         ];
@@ -8428,12 +8723,12 @@ mod tests {
             id_to_neuron,
             craft_id_to_neuron(&[
                 // CF neurons less 10% of their maturity.
-                (95, *PRINCIPAL_ID_1, Some(1)),
-                (190, *PRINCIPAL_ID_2, Some(1)),
-                (285, *PRINCIPAL_ID_1, Some(1)),
+                (95 * E8, *PRINCIPAL_ID_1, Some(1)),
+                (190 * E8, *PRINCIPAL_ID_2, Some(1)),
+                (285 * E8, *PRINCIPAL_ID_1, Some(1)),
                 // non-CF neurons remain untouched.
-                (400, *PRINCIPAL_ID_1, None),
-                (500, *PRINCIPAL_ID_2, None),
+                (400 * E8, *PRINCIPAL_ID_1, None),
+                (500 * E8, *PRINCIPAL_ID_2, None),
             ]),
         );
 
@@ -8447,7 +8742,7 @@ mod tests {
         let observed_cf_neurons = draw_funds_from_the_community_fund(
             &mut id_to_neuron,
             *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT / 2,
-            /* withdrawal_amount_e8s = */ 60,
+            /* withdrawal_amount_e8s = */ 60 * E8,
             &PARAMS,
         );
 
@@ -8459,11 +8754,11 @@ mod tests {
                 cf_neurons: vec![
                     sns_swap_pb::CfNeuron {
                         nns_neuron_id: 1,
-                        amount_icp_e8s: 10,
+                        amount_icp_e8s: 10 * E8,
                     },
                     sns_swap_pb::CfNeuron {
                         nns_neuron_id: 3,
-                        amount_icp_e8s: 30,
+                        amount_icp_e8s: 30 * E8,
                     },
                 ],
             },
@@ -8471,7 +8766,7 @@ mod tests {
                 hotkey_principal: PRINCIPAL_ID_2.to_string(),
                 cf_neurons: vec![sns_swap_pb::CfNeuron {
                     nns_neuron_id: 2,
-                    amount_icp_e8s: 20,
+                    amount_icp_e8s: 20 * E8,
                 }],
             },
         ];
@@ -8482,12 +8777,12 @@ mod tests {
             id_to_neuron,
             craft_id_to_neuron(&[
                 // CF neurons less 10% of their maturity.
-                (90, *PRINCIPAL_ID_1, Some(1)),
-                (180, *PRINCIPAL_ID_2, Some(1)),
-                (270, *PRINCIPAL_ID_1, Some(1)),
+                (90 * E8, *PRINCIPAL_ID_1, Some(1)),
+                (180 * E8, *PRINCIPAL_ID_2, Some(1)),
+                (270 * E8, *PRINCIPAL_ID_1, Some(1)),
                 // non-CF neurons remain untouched.
-                (400, *PRINCIPAL_ID_1, None),
-                (500, *PRINCIPAL_ID_2, None),
+                (400 * E8, *PRINCIPAL_ID_1, None),
+                (500 * E8, *PRINCIPAL_ID_2, None),
             ]),
         );
 
@@ -8520,7 +8815,7 @@ mod tests {
         let observed_cf_neurons = draw_funds_from_the_community_fund(
             &mut id_to_neuron,
             *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
-            /* withdrawal_amount_e8s = */ 1000,
+            /* withdrawal_amount_e8s = */ 1000 * E8,
             &PARAMS,
         );
 
@@ -8532,11 +8827,11 @@ mod tests {
                 cf_neurons: vec![
                     sns_swap_pb::CfNeuron {
                         nns_neuron_id: 1,
-                        amount_icp_e8s: 100,
+                        amount_icp_e8s: 100 * E8,
                     },
                     sns_swap_pb::CfNeuron {
                         nns_neuron_id: 3,
-                        amount_icp_e8s: 300,
+                        amount_icp_e8s: 300 * E8,
                     },
                 ],
             },
@@ -8544,7 +8839,7 @@ mod tests {
                 hotkey_principal: PRINCIPAL_ID_2.to_string(),
                 cf_neurons: vec![sns_swap_pb::CfNeuron {
                     nns_neuron_id: 2,
-                    amount_icp_e8s: 200,
+                    amount_icp_e8s: 200 * E8,
                 }],
             },
         ];
@@ -8559,8 +8854,8 @@ mod tests {
                 (0, *PRINCIPAL_ID_2, Some(1)),
                 (0, *PRINCIPAL_ID_1, Some(1)),
                 // non-CF neurons remain untouched.
-                (400, *PRINCIPAL_ID_1, None),
-                (500, *PRINCIPAL_ID_2, None),
+                (400 * E8, *PRINCIPAL_ID_1, None),
+                (500 * E8, *PRINCIPAL_ID_2, None),
             ]),
         );
 
@@ -8570,8 +8865,8 @@ mod tests {
     #[test]
     fn draw_funds_from_the_community_fund_exclude_small_cf_neuron_and_cap_large() {
         let params = sns_swap_pb::Params {
-            min_participant_icp_e8s: 150,
-            max_participant_icp_e8s: 225,
+            min_participant_icp_e8s: 150 * E8,
+            max_participant_icp_e8s: 225 * E8,
             ..PARAMS.clone()
         };
         let mut id_to_neuron = ID_TO_NEURON.clone();
@@ -8579,7 +8874,7 @@ mod tests {
         let observed_cf_neurons = draw_funds_from_the_community_fund(
             &mut id_to_neuron,
             *ORIGINAL_TOTAL_COMMUNITY_FUND_MATURITY_E8S_EQUIVALENT,
-            /* withdrawal_amount_e8s = */ 600,
+            /* withdrawal_amount_e8s = */ 600 * E8,
             &params,
         );
 
@@ -8590,14 +8885,14 @@ mod tests {
                 hotkey_principal: PRINCIPAL_ID_1.to_string(),
                 cf_neurons: vec![sns_swap_pb::CfNeuron {
                     nns_neuron_id: 3,
-                    amount_icp_e8s: 225,
+                    amount_icp_e8s: 225 * E8,
                 }],
             },
             sns_swap_pb::CfParticipant {
                 hotkey_principal: PRINCIPAL_ID_2.to_string(),
                 cf_neurons: vec![sns_swap_pb::CfNeuron {
                     nns_neuron_id: 2,
-                    amount_icp_e8s: 200,
+                    amount_icp_e8s: 200 * E8,
                 }],
             },
         ];
@@ -8608,12 +8903,12 @@ mod tests {
             id_to_neuron,
             craft_id_to_neuron(&[
                 // CF neurons.
-                (100, *PRINCIPAL_ID_1, Some(1)), // Does not participate, because too small.
-                (0, *PRINCIPAL_ID_2, Some(1)),   // Fully participates.
-                (75, *PRINCIPAL_ID_1, Some(1)),  // Participates up to the allowed participant max.
+                (100 * E8, *PRINCIPAL_ID_1, Some(1)), // Does not participate, because too small.
+                (0, *PRINCIPAL_ID_2, Some(1)),        // Fully participates.
+                (75 * E8, *PRINCIPAL_ID_1, Some(1)), // Participates up to the allowed participant max.
                 // non-CF neurons remain untouched.
-                (400, *PRINCIPAL_ID_1, None),
-                (500, *PRINCIPAL_ID_2, None),
+                (400 * E8, *PRINCIPAL_ID_1, None),
+                (500 * E8, *PRINCIPAL_ID_2, None),
             ]),
         );
 
@@ -8692,44 +8987,40 @@ mod tests {
 
         #[test]
         fn ok() {
-            let result = validate_settle_community_fund_participation(&COMMITTED);
-            assert!(result.is_ok(), "{:?}", result);
-
-            let result = validate_settle_community_fund_participation(&ABORTED);
-            assert!(result.is_ok(), "{:?}", result);
+            assert_is_ok!(validate_settle_community_fund_participation(&COMMITTED));
+            assert_is_ok!(validate_settle_community_fund_participation(&ABORTED));
         }
 
         #[test]
         fn no_proposal_id() {
-            let result =
-                validate_settle_community_fund_participation(&SettleCommunityFundParticipation {
+            assert_is_err!(validate_settle_community_fund_participation(
+                &SettleCommunityFundParticipation {
                     open_sns_token_swap_proposal_id: None,
                     ..COMMITTED.clone()
-                });
-            assert!(result.is_err(), "{:?}", result);
+                }
+            ));
         }
 
         #[test]
         fn no_result() {
-            let result =
-                validate_settle_community_fund_participation(&SettleCommunityFundParticipation {
+            assert_is_err!(validate_settle_community_fund_participation(
+                &SettleCommunityFundParticipation {
                     result: None,
                     ..COMMITTED.clone()
-                });
-            assert!(result.is_err(), "{:?}", result);
+                }
+            ));
         }
 
         #[test]
         fn no_sns_governance_canister_id() {
-            let result =
-                validate_settle_community_fund_participation(&SettleCommunityFundParticipation {
+            assert_is_err!(validate_settle_community_fund_participation(
+                &SettleCommunityFundParticipation {
                     open_sns_token_swap_proposal_id: Some(7),
                     result: Some(Result::Committed(Committed {
                         sns_governance_canister_id: None,
                     })),
-                });
-
-            assert!(result.is_err(), "{:?}", result);
+                }
+            ));
         }
     }
 }

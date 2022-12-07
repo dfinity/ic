@@ -24,6 +24,7 @@ use rand_chacha::ChaCha20Rng;
 use std::collections::hash_map::Entry;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::sync::Arc;
@@ -56,12 +57,15 @@ pub struct FakeAccount {
 
 type LedgerMap = HashMap<AccountIdentifier, u64>;
 
+type CallCanisterResult = Result<Vec<u8>, (Option<i32>, String)>;
+
 /// The state required for fake implementations of `Environment` and
 /// `Ledger`.
 pub struct FakeState {
     pub now: u64,
     pub rng: ChaCha20Rng,
     pub accounts: LedgerMap,
+    pub call_canister_method_results: VecDeque<CallCanisterResult>,
 }
 
 impl Default for FakeState {
@@ -82,6 +86,7 @@ impl Default for FakeState {
             // different places doesn't conflict.
             rng: ChaCha20Rng::seed_from_u64(9539),
             accounts: HashMap::new(),
+            call_canister_method_results: vec![Ok(vec![])].into(),
         }
     }
 }
@@ -369,8 +374,9 @@ impl Environment for FakeDriver {
 
                         fallback_controller_principal_ids: vec![DEVELOPER_PRINCIPAL_ID.to_string()],
 
-                        transaction_fee_e8s: Some(0xDEAD_BEEF),
-                        neuron_minimum_stake_e8s: Some(0xDEAD_BEEF),
+                        // Similar to NNS, but different.
+                        transaction_fee_e8s: Some(12_345),
+                        neuron_minimum_stake_e8s: Some(123_456_789),
                     }),
                     ..Default::default() // Not realistic, but sufficient for tests.
                 }),

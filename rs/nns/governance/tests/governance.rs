@@ -5,13 +5,14 @@
 
 use assert_matches::assert_matches;
 use async_trait::async_trait;
-use candid::Encode;
+use candid::{Decode, Encode};
 #[cfg(feature = "test")]
 use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
 use dfn_protobuf::ToProto;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
+use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
@@ -3265,6 +3266,7 @@ fn governance_with_staked_neuron(
             amount_e8s: neuron_stake_e8s,
         }])
         .with_supply(Tokens::from_tokens(400_000_000).unwrap());
+
     let mut gov = Governance::new(
         empty_fixture(),
         driver.get_fake_env(),
@@ -5851,6 +5853,7 @@ fn governance_with_neurons(neurons: &[Neuron]) -> (fake::FakeDriver, Governance)
             amount_e8s: n.cached_neuron_stake_e8s,
         })
         .collect();
+
     let driver = fake::FakeDriver::default()
         .at(56)
         .with_ledger_accounts(accounts)
@@ -7059,14 +7062,14 @@ fn test_default_followees() {
             target_swap_canister_id: Some(*TARGET_SWAP_CANISTER_ID),
             params: Some(Params {
                 min_participants: 100,
-                min_icp_e8s: 1,
-                max_icp_e8s: 100,
-                min_participant_icp_e8s: 1,
-                max_participant_icp_e8s: 2,
+                min_icp_e8s: 20 * E8,
+                max_icp_e8s: 1000 * E8,
+                min_participant_icp_e8s: 10 * E8,
+                max_participant_icp_e8s: 12 * E8,
                 swap_due_timestamp_seconds: 0,
-                sns_token_e8s: 1,
+                sns_token_e8s: 1000 * E8,
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                    count: 3,
+                    count: BASKET_COUNT,
                     dissolve_delay_interval_seconds: 30 * ONE_DAY_SECONDS,
                 }),
             }),
@@ -10745,9 +10748,14 @@ impl Environment for MockEnvironment<'_> {
             ExpectedCallCanisterMethodCallArguments {
                 target,
                 method_name,
-                request
+                request: request.clone(),
             },
             expected_arguments,
+            "Decoded request:\n{}",
+            match method_name {
+                "open" => format!("{:#?}", Decode!(&request, sns_swap_pb::OpenRequest)),
+                _ => "???".to_string(),
+            },
         );
 
         result
@@ -10793,21 +10801,28 @@ lazy_static! {
 
         fallback_controller_principal_ids: vec![DEVELOPER_PRINCIPAL_ID.to_string()],
 
-        transaction_fee_e8s: Some(0xDEAD_BEEF),
-        neuron_minimum_stake_e8s: Some(0xDEAD_BEEF),
+        // These values are similar to, but different from the standard
+        // values. This allows our tests to detect accidental usage of the
+        // standard values by code under test.
+        transaction_fee_e8s: Some(12_345),
+        neuron_minimum_stake_e8s: Some(123_456_789),
     };
+}
 
+const BASKET_COUNT: u64 = 3;
+
+lazy_static! {
     static ref SWAP_PARAMS: sns_swap_pb::Params = sns_swap_pb::Params {
-        sns_token_e8s: 1_000_000,
-        min_icp_e8s: 1,
-        max_icp_e8s: 42_000,
-        min_participant_icp_e8s: 1,
-        max_participant_icp_e8s: 42_000,
+        sns_token_e8s: 70_000 * E8,
+        min_icp_e8s: 2 * E8,
+        max_icp_e8s: 42_000 * E8,
+        min_participant_icp_e8s: BASKET_COUNT * 2 * E8,
+        max_participant_icp_e8s: 42_000 * E8,
         min_participants: 1,
         swap_due_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS + 2 * ONE_DAY_SECONDS,
         neuron_basket_construction_parameters: Some(
             sns_swap_pb::params::NeuronBasketConstructionParameters {
-                count: 3,
+                count: BASKET_COUNT,
                 dissolve_delay_interval_seconds: 7890000, // 3 months
             },
         ),
@@ -10818,7 +10833,7 @@ lazy_static! {
     // Neuron 4 also belongs to principal(1), but is NOT a CF neuron.
     static ref SWAP_ID_TO_NEURON: HashMap<u64, Neuron> = {
         let neuron_base = Neuron {
-            cached_neuron_stake_e8s: 100_000_000,
+            cached_neuron_stake_e8s: 100_000 * E8,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                 MAX_DISSOLVE_DELAY_SECONDS,
             )),
@@ -10829,21 +10844,21 @@ lazy_static! {
             1 => Neuron {
                 id: Some(NeuronId { id: 1 }),
                 controller: Some(principal(1)),
-                maturity_e8s_equivalent: 60,
+                maturity_e8s_equivalent: 60 * E8,
                 joined_community_fund_timestamp_seconds: Some(1),
                 ..neuron_base.clone()
             },
             2 => Neuron {
                 id: Some(NeuronId { id: 2 }),
                 controller: Some(principal(1)),
-                maturity_e8s_equivalent: 10,
+                maturity_e8s_equivalent: 10 * E8,
                 joined_community_fund_timestamp_seconds: Some(1),
                 ..neuron_base.clone()
             },
             3 => Neuron {
                 id: Some(NeuronId { id: 3 }),
                 controller: Some(principal(2)),
-                maturity_e8s_equivalent: 30,
+                maturity_e8s_equivalent: 30 * E8,
                 joined_community_fund_timestamp_seconds: Some(1),
                 ..neuron_base.clone()
             },
@@ -10852,7 +10867,7 @@ lazy_static! {
             4 => Neuron {
                 id: Some(NeuronId { id: 4 }),
                 controller: Some(principal(1)),
-                maturity_e8s_equivalent: 1_000_000,
+                maturity_e8s_equivalent: 1_000_000 * E8,
                 ..neuron_base
             },
         }
@@ -10959,7 +10974,7 @@ lazy_static! {
     };
 }
 
-const COMMUNITY_FUND_INVESTMENT_E8S: u64 = 61;
+const COMMUNITY_FUND_INVESTMENT_E8S: u64 = 61 * E8;
 
 #[tokio::test]
 async fn test_open_sns_token_swap_proposal_happy() {
@@ -10973,6 +10988,10 @@ async fn test_open_sns_token_swap_proposal_happy() {
     let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
         [
             EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
+            // Called by validation.
+            EXPECTED_SWAP_GET_STATE_CALL.clone(),
+            // Called again by fetch_swap_background_information. This is
+            // admittedly a bit wasteful, but not super horrible.
             EXPECTED_SWAP_GET_STATE_CALL.clone(),
             EXPECTED_SNS_ROOT_LIST_SNS_CANISTERS_CALL.clone(),
             (
@@ -10986,9 +11005,6 @@ async fn test_open_sns_token_swap_proposal_happy() {
     let driver = fake::FakeDriver::default();
     let mut gov = Governance::new(
         governance_proto,
-        // This is where the main expectation is set. To wit, we expect that
-        // execution of the proposal will cause governance to call out to the
-        // swap canister.
         Box::new(MockEnvironment {
             expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
         }),
@@ -11069,6 +11085,10 @@ async fn test_open_sns_token_swap_proposal_execution_fails() {
     let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
         [
             EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
+            // Called by validation.
+            EXPECTED_SWAP_GET_STATE_CALL.clone(),
+            // Called again by fetch_swap_background_information. This is
+            // admittedly a bit wasteful, but not super horrible.
             EXPECTED_SWAP_GET_STATE_CALL.clone(),
             EXPECTED_SNS_ROOT_LIST_SNS_CANISTERS_CALL.clone(),
             (

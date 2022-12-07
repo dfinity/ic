@@ -319,9 +319,6 @@ fn begin_swap(
 
     // Propose that a swap be scheduled to start 3 days from now, and last for
     // 10 days.
-    let neuron_id = nns_common_pb::NeuronId {
-        id: TEST_NEURON_1_ID,
-    };
     let fund_raising_amount_e8s = (planned_participation_amount_per_account * num_accounts
         + planned_community_fund_participation_amount)
         .into_e8s();
@@ -343,7 +340,9 @@ fn begin_swap(
                 // We need at least one participant, but they can contribute whatever
                 // amount they want (subject to max_icp_e8s for the whole swap).
                 min_participants: 1,
-                min_participant_icp_e8s: 1,
+                // 1.2 ICP to ensure that all participants are able to form SNS
+                // neurons.
+                min_participant_icp_e8s: E8 * 5 / 4,
                 max_participant_icp_e8s: INITIAL_ICP_BALANCE.get_e8s(),
 
                 swap_due_timestamp_seconds: *SWAP_DUE_TIMESTAMP_SECONDS,
@@ -367,7 +366,9 @@ fn begin_swap(
     let response = nns_governance_make_proposal(
         state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL, // sender
-        neuron_id,
+        nns_common_pb::NeuronId {
+            id: TEST_NEURON_1_ID,
+        },
         &proposal,
     );
     let proposal_id = response
@@ -970,7 +971,7 @@ fn swap_lifecycle_sad() {
         &mut state_machine,
         sns_canister_ids.swap.unwrap().try_into().unwrap(),
         *TEST_USER2_PRINCIPAL,
-        ExplosiveTokens::from_e8s(E8 - 1),
+        ExplosiveTokens::from_e8s(E8 * 5 / 4),
     );
 
     // Make sure the swap is still in the Open state.
