@@ -5,10 +5,12 @@ pub mod labeled_tree_visitor;
 pub mod manifest;
 pub mod state_sync;
 pub mod stream_encoding;
+pub mod tip;
 pub mod tree_diff;
 pub mod tree_hash;
 
 use crate::state_sync::chunkable::cache::StateSyncCache;
+use crate::tip::{spawn_tip_thread, TipRequest};
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::CanisterId;
 use ic_canonical_state::{
@@ -35,9 +37,7 @@ use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory, page_map::PersistenceError, PageIndex, PageMap,
     ReplicatedState,
 };
-use ic_state_layout::{
-    error::LayoutError, AccessPolicy, CheckpointLayout, StateLayout, TipHandler,
-};
+use ic_state_layout::{error::LayoutError, AccessPolicy, CheckpointLayout, StateLayout};
 use ic_types::{
     artifact::StateSyncArtifactId,
     chunkable::Chunkable,
@@ -134,6 +134,7 @@ pub struct CheckpointMetrics {
     make_checkpoint_step_duration: HistogramVec,
     load_checkpoint_step_duration: HistogramVec,
     load_canister_step_duration: HistogramVec,
+    tip_handler_request_duration: HistogramVec,
 }
 
 impl CheckpointMetrics {
@@ -161,10 +162,19 @@ impl CheckpointMetrics {
             &["step"],
         );
 
+        let tip_handler_request_duration = metrics_registry.histogram_vec(
+            "state_manager_tip_handler_request_duration_seconds",
+            "Duration to ecxecute requests to Tip handling thread in seconds.",
+            // 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, …, 10s, 20s, 50s
+            decimal_buckets(-3, 1),
+            &["request"],
+        );
+
         Self {
             make_checkpoint_step_duration,
             load_checkpoint_step_duration,
             load_canister_step_duration,
+            tip_handler_request_duration,
         }
     }
 }
@@ -659,7 +669,6 @@ pub struct StateManagerImpl {
     log: ReplicaLogger,
     metrics: StateManagerMetrics,
     state_layout: StateLayout,
-    tip_handler: Arc<Mutex<TipHandler>>,
     /// The main metadata. Different threads will need to access this field.
     ///
     /// To avoid the risk of deadlocks, this lock should be held as short a time
@@ -678,8 +687,8 @@ pub struct StateManagerImpl {
     _state_hasher_handle: JoinOnDrop<()>,
     _deallocation_handle: JoinOnDrop<()>,
     persist_metadata_guard: Arc<Mutex<()>>,
-    #[cfg(debug_assertions)]
-    initialize_tip_guard: Arc<Mutex<()>>,
+    tip_channel: Sender<TipRequest>,
+    _tip_thread_handle: JoinOnDrop<()>,
 }
 
 fn load_checkpoint(
@@ -707,24 +716,12 @@ fn load_checkpoint(
         })
 }
 
-// Resets tip to the given height and loads the checkpoint at that height.
-// The returned state has its `root` pointing to the tip directory, however
-// all `PageMap`s in the state are based on the clean read-only checkpoint
-// files located in the checkpoint directory. This is important to ensure
-// that message execution never reads from mutable tip files.
 fn initialize_tip(
-    #[cfg(debug_assertions)] lock: &Arc<Mutex<()>>,
     log: &ReplicaLogger,
-    state_layout: &StateLayout,
-    tip_handler: &mut TipHandler,
+    tip_channel: &Sender<TipRequest>,
     snapshot: &Snapshot,
     checkpoint_ref: &CheckpointRef,
 ) -> ReplicatedState {
-    #[cfg(debug_assertions)]
-    let _guard = lock
-        .try_lock()
-        .expect("initialize_tip() must never be called concurrently");
-
     debug_assert_eq!(snapshot.height, checkpoint_ref.0.height);
 
     // Since we initialize tip from checkpoint states, we expect a clean sandbox slate
@@ -752,11 +749,16 @@ fn initialize_tip(
 
     info!(log, "Recovering checkpoint @{} as tip", snapshot.height);
 
-    let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+    tip_channel
+        .send(TipRequest::ResetTipTo {
+            checkpoint_ref: checkpoint_ref.clone(),
+        })
+        .unwrap();
 
-    tip_handler
-        .reset_tip_to(state_layout, snapshot.height, Some(&mut thread_pool))
-        .unwrap_or_else(|err| fatal!(log, "Failed to reset tip to checkpoint height: {:?}", err));
+    // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
+    let (send, recv) = unbounded();
+    tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
+    recv.recv().unwrap();
 
     ReplicatedState::clone(&snapshot.state)
 }
@@ -1265,8 +1267,14 @@ impl StateManagerImpl {
         let starting_time = Instant::now();
         let state_layout = StateLayout::try_new(log.clone(), config.state_root())
             .unwrap_or_else(|err| fatal!(&log, "Failed to init state layout: {:?}", err));
-        let mut tip_handler = state_layout.capture_tip_handler();
         info!(log, "StateLayout init took {:?}", starting_time.elapsed());
+
+        let (_tip_thread_handle, tip_channel) = spawn_tip_thread(
+            log.clone(),
+            state_layout.capture_tip_handler(),
+            state_layout.clone(),
+            metrics.clone(),
+        );
 
         let starting_time = Instant::now();
         let loaded_states_metadata =
@@ -1390,24 +1398,13 @@ impl StateManagerImpl {
             state: Arc::new(initial_state(own_subnet_id, own_subnet_type).take()),
         };
 
-        #[cfg(debug_assertions)]
-        let initialize_tip_guard = Arc::new(Mutex::new(()));
-
         let tip_height_and_state = match snapshots.last() {
             Some((snapshot, checkpoint_ref)) => {
                 // Set latest state height in metadata to be last checkpoint height
                 latest_state_height.store(snapshot.height.get(), Ordering::Relaxed);
                 let starting_time = Instant::now();
 
-                let tip = initialize_tip(
-                    #[cfg(debug_assertions)]
-                    &initialize_tip_guard,
-                    &log,
-                    &state_layout,
-                    &mut tip_handler,
-                    snapshot,
-                    checkpoint_ref,
-                );
+                let tip = initialize_tip(&log, &tip_channel, snapshot, checkpoint_ref);
 
                 info!(log, "Initialize tip took {:?}", starting_time.elapsed());
                 (snapshot.height, tip)
@@ -1506,7 +1503,6 @@ impl StateManagerImpl {
             log: log.clone(),
             metrics,
             state_layout,
-            tip_handler: Arc::new(Mutex::new(tip_handler)),
             states,
             verifier,
             own_subnet_id,
@@ -1519,8 +1515,8 @@ impl StateManagerImpl {
             _state_hasher_handle,
             _deallocation_handle,
             persist_metadata_guard,
-            #[cfg(debug_assertions)]
-            initialize_tip_guard,
+            tip_channel,
+            _tip_thread_handle,
         }
     }
 
@@ -1528,12 +1524,6 @@ impl StateManagerImpl {
     /// StateManager.
     pub fn state_layout(&self) -> &StateLayout {
         &self.state_layout
-    }
-
-    /// Returns `TipHandler` pointing to the Tip folder managed by this
-    /// StateManager.
-    pub fn tip_handler(&self) -> &Mutex<TipHandler> {
-        &self.tip_handler
     }
 
     /// Returns requested state as a Chunkable artifact for StateSync.
@@ -1934,7 +1924,8 @@ impl StateManagerImpl {
         } else {
             info!(
                 self.log,
-                "The previous certification metadata at height {} has been removed. This can happen when the replica syncs a newer state concurrently and removes the states below.",
+                "The previous certification metadata at height {} has been removed. This can happen when the replica \
+                syncs a newer state concurrently and removes the states below.",
                 prev_height,
             );
         }
@@ -1943,33 +1934,8 @@ impl StateManagerImpl {
     /// Flushes to disk all the canister heap deltas accumulated in memory
     /// during one round of execution.
     fn flush_page_maps(&self, tip_state: &mut ReplicatedState, height: Height) {
-        let mut tip_handler = self.tip_handler.lock().expect("Failed to lock TipHandler");
-        let tip_layout = tip_handler
-            .tip(height)
-            .unwrap_or_else(|err| fatal!(self.log, "Failed to access @TIP: {}", err));
-
-        let get_path = |entry: PageMapType, path_cache: &mut Option<PathBuf>| match path_cache {
-            Some(path) => path.clone(),
-            None => {
-                let path = entry.path(&tip_layout).unwrap_or_else(|err| {
-                    fatal!(
-                        self.log,
-                        "Failed to access layout @TIP {}: {}",
-                        tip_layout.raw_path().display(),
-                        err
-                    )
-                });
-                *path_cache = Some(path.clone());
-                path
-            }
-        };
-
         for entry in PageMapType::list_all(tip_state) {
             if let Some(page_map) = entry.get_mut(tip_state) {
-                // Accessing the path has some overhead to ensure that
-                // the path exists, so we don't want to do it twice
-                let mut path_cache = None;
-
                 // In cases where a PageMap's data has to be wiped, execution will replace the PageMap with a newly
                 // created one. In these cases, we also need to wipe the data from the file on disk.
                 // If the PageMap represents a new file, then the base_height will be None, as we set base_height only
@@ -1980,23 +1946,24 @@ impl StateManagerImpl {
                 // we have not persisted round deltas before, then there are no relevant pages beyond the ones in the
                 // round delta, and we truncate the file on disk to size 0.
                 if page_map.base_height.is_none() && !page_map.has_stripped_round_deltas() {
-                    let path = &get_path(entry, &mut path_cache);
-                    truncate_path(&self.log, path);
+                    self.tip_channel
+                        .send(TipRequest::TruncatePageMapsPath {
+                            height,
+                            page_map_type: entry,
+                        })
+                        .unwrap();
                 }
-
                 if !page_map.round_delta_is_empty() {
-                    let path = &get_path(entry, &mut path_cache);
-
-                    page_map.persist_round_delta(path).unwrap_or_else(|err| {
-                        fatal!(
-                            self.log,
-                            "Failed to persist page delta to file {}: {}",
-                            path.display(),
-                            err
-                        )
-                    });
+                    // Clone and send page map for asynchornous flushing to disc. The round deltas are
+                    // emptied in the original to ensure we don't flush twice.
+                    self.tip_channel
+                        .send(TipRequest::FlushRoundDelta {
+                            height,
+                            page_map: page_map.clone(),
+                            page_map_type: entry,
+                        })
+                        .unwrap();
                 }
-
                 // We strip empty round deltas to keep has_stripped_round_deltas() correct
                 page_map.strip_round_delta();
             }
@@ -2440,11 +2407,8 @@ impl StateManager for StateManagerImpl {
         std::mem::drop(states);
 
         let mut new_tip = initialize_tip(
-            #[cfg(debug_assertions)]
-            &self.initialize_tip_guard,
             &self.log,
-            &self.state_layout,
-            &mut self.tip_handler.lock().expect("Failed to lock TipHandler"),
+            &self.tip_channel,
             &target_snapshot,
             &checkpoint_ref,
         );
@@ -2822,7 +2786,7 @@ impl StateManager for StateManagerImpl {
         }
 
         let mut previous_checkpoint_info: Option<PreviousCheckpointInfo> = None;
-        let checkpointed_state = match scope {
+        let (cp_ref, checkpointed_state) = match scope {
             CertificationScope::Full => {
                 let start = Instant::now();
                 {
@@ -2869,16 +2833,14 @@ impl StateManager for StateManagerImpl {
                     checkpoint::make_checkpoint(
                         &state,
                         height,
-                        &self.state_layout,
-                        &mut self.tip_handler.lock().expect("Failed to lock TipHandler"),
-                        &self.log,
+                        &self.tip_channel,
                         &self.metrics.checkpoint_metrics,
                         &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
                     )
                 };
 
                 let elapsed = start.elapsed();
-                let checkpointed_state = match result {
+                let (cp_ref, checkpointed_state) = match result {
                     Ok(checkpointed_state) => {
                         info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
                         self.metrics
@@ -2893,7 +2855,8 @@ impl StateManager for StateManagerImpl {
                                 "Failed to create checkpoint @{} because it already exists, re-loading the checkpoint from disk", height
                             );
 
-                        self.state_layout
+                        let checkpointed_state = self
+                            .state_layout
                             .checkpoint(height)
                             .map_err(|e| e.into())
                             .and_then(|layout| {
@@ -2916,7 +2879,8 @@ impl StateManager for StateManagerImpl {
                                     height,
                                     err
                                 )
-                            })
+                            });
+                        (self.new_checkpoint_ref(height), checkpointed_state)
                     }
                     Err(err) => fatal!(
                         self.log,
@@ -2926,9 +2890,9 @@ impl StateManager for StateManagerImpl {
                     ),
                 };
                 switch_to_checkpoint(&mut state, &checkpointed_state);
-                checkpointed_state
+                (Some(cp_ref), checkpointed_state)
             }
-            CertificationScope::Metadata => state.clone(),
+            CertificationScope::Metadata => (None, state.clone()),
         };
 
         let certification_metadata =
@@ -2997,11 +2961,10 @@ impl StateManager for StateManagerImpl {
                         },
                     );
 
-                    let checkpoint_ref = self.new_checkpoint_ref(height);
                     states.states_metadata.insert(
                         height,
                         StateMetadata {
-                            checkpoint_ref: Some(checkpoint_ref.clone()),
+                            checkpoint_ref: cp_ref.clone(),
                             manifest: None,
                             root_hash: None,
                             state_sync_file_group: None,
@@ -3014,7 +2977,7 @@ impl StateManager for StateManagerImpl {
 
                     self.compute_manifest_request_sender
                         .send(ComputeManifestRequest::Compute {
-                            checkpoint_ref,
+                            checkpoint_ref: cp_ref.unwrap(),
                             manifest_delta: if is_nns { None } else { manifest_delta },
                         })
                         .expect("failed to send ComputeManifestRequest message");
@@ -3305,20 +3268,6 @@ impl CertifiedStreamStore for StateManagerImpl {
         self.get_latest_state()
             .get_ref()
             .subnets_with_available_streams()
-    }
-}
-
-fn truncate_path(log: &ReplicaLogger, path: &Path) {
-    if let Err(err) = nix::unistd::truncate(path, 0) {
-        // It's OK if the file doesn't exist, everything else is a fatal error.
-        if err != nix::errno::Errno::ENOENT {
-            fatal!(
-                log,
-                "failed to truncate page map stored at {}: {}",
-                path.display(),
-                err
-            )
-        }
     }
 }
 
