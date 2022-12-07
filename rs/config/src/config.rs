@@ -11,7 +11,6 @@ use crate::{
     crypto::CryptoConfig,
     execution_environment::Config as HypervisorConfig,
     firewall::Config as FirewallConfig,
-    http_handler,
     http_handler::Config as HttpHandlerConfig,
     logger::Config as LoggerConfig,
     message_routing::Config as MessageRoutingConfig,
@@ -24,7 +23,7 @@ use crate::{
 };
 use ic_types::malicious_behaviour::MaliciousBehaviour;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, convert::TryFrom, path::PathBuf};
+use std::{collections::HashSet, path::PathBuf};
 
 /// The config struct for the replica.  Just consists of `Config`s for
 /// the components.
@@ -62,7 +61,7 @@ pub struct ConfigOptional {
     pub transport: Option<TransportConfig>,
     pub state_manager: Option<StateManagerConfig>,
     pub hypervisor: Option<HypervisorConfig>,
-    pub http_handler: Option<http_handler::ExternalConfig>,
+    pub http_handler: Option<HttpHandlerConfig>,
     pub metrics: Option<MetricsConfig>,
     pub artifact_pool: Option<ArtifactPoolTomlConfig>,
     pub consensus: Option<ConsensusConfig>,
@@ -140,12 +139,7 @@ impl Config {
             transport: cfg.transport.unwrap_or(default.transport),
             state_manager: cfg.state_manager.unwrap_or(default.state_manager),
             hypervisor: cfg.hypervisor.unwrap_or(default.hypervisor),
-            http_handler: HttpHandlerConfig::try_from(cfg.http_handler).map_err(|msg| {
-                ConfigError::ValidationError {
-                    source: source.clone(),
-                    message: msg.to_string(),
-                }
-            })?,
+            http_handler: cfg.http_handler.unwrap_or(default.http_handler),
             metrics: cfg.metrics.unwrap_or(default.metrics),
             artifact_pool: cfg.artifact_pool.unwrap_or(default.artifact_pool),
             consensus: cfg.consensus.unwrap_or(default.consensus),

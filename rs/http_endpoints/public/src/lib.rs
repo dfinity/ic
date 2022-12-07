@@ -335,7 +335,6 @@ pub fn start_server(
     );
     let status_service = StatusService::new_service(
         log.clone(),
-        config.clone(),
         nns_subnet_id,
         Arc::clone(&registry_client),
         Arc::clone(&health_status),

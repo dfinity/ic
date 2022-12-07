@@ -28,8 +28,7 @@ use ic_config::{
     crypto::CryptoConfig,
     execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
-    http_handler,
-    http_handler::PortConfig,
+    http_handler::Config as HttpHandlerConfig,
     logger::Config as LoggerConfig,
     metrics::{Config as MetricsConfig, Exporter},
     registry_client::{Config as RegistryClientConfig, DataProviderConfig},
@@ -670,13 +669,9 @@ struct ValidatedConfig {
 impl ValidatedConfig {
     fn build_replica_config(self: &ValidatedConfig) -> ReplicaConfig {
         let state_manager = Some(StateManagerConfig::new(self.state_manager_root.clone()));
-        let http_handler = Some(http_handler::ExternalConfig {
-            listen_addr: Some(self.http_listen_addr),
-            port: self
-                .http_port_file
-                .as_ref()
-                .map(|http_port_file| PortConfig::WritePortTo(http_port_file.clone())),
-            ..Default::default()
+        let http_handler = Some(HttpHandlerConfig {
+            listen_addr: self.http_listen_addr,
+            port_file_path: self.http_port_file.clone(),
         });
         let metrics = self.metrics_addr.map(|metrics_addr| MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
