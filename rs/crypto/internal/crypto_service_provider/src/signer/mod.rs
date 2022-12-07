@@ -9,6 +9,7 @@ use ed25519::types::SignatureBytes;
 use ic_crypto_internal_basic_sig_ecdsa_secp256k1 as ecdsa_secp256k1;
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult};
 use ic_crypto_internal_multi_sig_bls12381 as multi_sig;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use openssl::sha::sha256;
@@ -24,14 +25,34 @@ impl CspSigner for Csp {
         key_id: KeyId,
     ) -> CryptoResult<CspSignature> {
         match algorithm_id {
-            AlgorithmId::Ed25519 => self
-                .csp_vault
-                .sign(algorithm_id, message, key_id)
-                .map_err(CspBasicSignatureError::into),
-            AlgorithmId::MultiBls12_381 => self
-                .csp_vault
-                .multi_sign(algorithm_id, message, key_id)
-                .map_err(CspMultiSignatureError::into),
+            AlgorithmId::Ed25519 => {
+                let result = self
+                    .csp_vault
+                    .sign(algorithm_id, message, key_id)
+                    .map_err(CspBasicSignatureError::into);
+                self.metrics.observe_parameter_size(
+                    MetricsDomain::BasicSignature,
+                    "sign_basic",
+                    "message",
+                    message.len(),
+                    MetricsResult::from(&result),
+                );
+                result
+            }
+            AlgorithmId::MultiBls12_381 => {
+                let result = self
+                    .csp_vault
+                    .multi_sign(algorithm_id, message, key_id)
+                    .map_err(CspMultiSignatureError::into);
+                self.metrics.observe_parameter_size(
+                    MetricsDomain::MultiSignature,
+                    "sign_multi",
+                    "message",
+                    message.len(),
+                    MetricsResult::from(&result),
+                );
+                result
+            }
             _ => Err(CryptoError::InvalidArgument {
                 message: format!("Cannot sign with unsupported algorithm: {:?}", algorithm_id),
             }),

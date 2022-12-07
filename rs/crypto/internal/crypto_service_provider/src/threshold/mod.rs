@@ -11,6 +11,7 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPu
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use ic_types::NodeIndex;
 
+use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult};
 use std::convert::TryFrom;
 
 pub mod ni_dkg;
@@ -42,7 +43,16 @@ impl ThresholdSignatureCspClient for Csp {
         public_coefficients: CspPublicCoefficients,
     ) -> Result<CspSignature, CspThresholdSignError> {
         let key_id = KeyId::from(&public_coefficients);
-        self.csp_vault.threshold_sign(algorithm_id, message, key_id)
+        let message_len = message.len();
+        let result = self.csp_vault.threshold_sign(algorithm_id, message, key_id);
+        self.metrics.observe_parameter_size(
+            MetricsDomain::MultiSignature,
+            "sign_multi",
+            "message",
+            message_len,
+            MetricsResult::from(&result),
+        );
+        result
     }
 
     fn threshold_combine_signatures(

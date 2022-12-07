@@ -117,6 +117,35 @@ impl CryptoMetrics {
                 .inc();
         }
     }
+
+    /// Observes the parameter size of selected input parameters for crypto operations.
+    ///
+    /// # Parameters
+    /// * `domain` the domain of the operation
+    /// * `method_name` the name of the method for the operation
+    /// * `parameter_name` the name of the parameter that is being observed
+    /// * `parameter_size` the size of the parameter being observed, in bytes
+    /// * `result` the result of the crypto operation
+    pub fn observe_parameter_size(
+        &self,
+        domain: MetricsDomain,
+        method_name: &str,
+        parameter_name: &str,
+        parameter_size: usize,
+        result: MetricsResult,
+    ) {
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .crypto_parameter_byte_sizes
+                .with_label_values(&[
+                    method_name,
+                    parameter_name,
+                    &format!("{}", domain),
+                    &format!("{}", result),
+                ])
+                .observe(parameter_size as f64);
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
@@ -266,6 +295,13 @@ struct Metrics {
     /// Counter vector for crypto results that can be expressed as booleans. An additional label
     /// is used to identify the type of operation.
     pub crypto_boolean_results: IntCounterVec,
+
+    /// Histograms of crypto method parameter sizes.
+    /// The 'method_name' label indicates the functionality, such as `sign`.
+    /// The 'domain' label indicates the domain, e.g., `MetricsDomain::BasicSignature`.
+    /// The 'parameter_name' indicates the name of the parameter, e.g., `message`.
+    /// The 'parameter_size' indicates the size of the parameter in bytes.
+    pub crypto_parameter_byte_sizes: HistogramVec,
 }
 
 impl Display for MetricsDomain {
@@ -349,6 +385,15 @@ impl Metrics {
                 "crypto_boolean_results",
                 "Boolean results from crypto operations",
                 &["operation", "result"],
+            ),
+            crypto_parameter_byte_sizes: r.histogram_vec(
+                "crypto_parameter_byte_sizes",
+                "Byte sizes of crypto operation parameters",
+                vec![
+                    1000.0, 10000.0, 100000.0, 1000000.0, 2000000.0, 4000000.0, 8000000.0,
+                    16000000.0, 20000000.0, 24000000.0, 28000000.0, 30000000.0,
+                ],
+                &["method_name", "parameter_name", "domain", "result"],
             ),
         }
     }

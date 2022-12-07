@@ -93,6 +93,7 @@ impl<T> CryptoServiceProvider for T where
 pub struct Csp {
     csp_vault: Arc<dyn CspVault>,
     logger: ReplicaLogger,
+    metrics: Arc<CryptoMetrics>,
 }
 
 /// This lock provides the option to add metrics about lock acquisition times.
@@ -177,6 +178,7 @@ impl Csp {
                 tokio_runtime_handle.expect("missing tokio runtime handle"),
                 config,
                 logger,
+                metrics,
             ),
         }
     }
@@ -207,10 +209,14 @@ impl Csp {
             secret_key_store,
             canister_key_store,
             public_key_store,
-            metrics,
+            metrics.clone(),
             new_logger!(&logger),
         ));
-        Csp { csp_vault, logger }
+        Csp {
+            csp_vault,
+            logger,
+            metrics,
+        }
     }
 
     fn new_with_unix_socket_vault(
@@ -218,6 +224,7 @@ impl Csp {
         rt_handle: tokio::runtime::Handle,
         config: &CryptoConfig,
         logger: Option<ReplicaLogger>,
+        metrics: Arc<CryptoMetrics>,
     ) -> Self {
         let logger = logger.unwrap_or_else(no_op_logger);
         info!(
@@ -233,6 +240,7 @@ impl Csp {
         Csp {
             csp_vault: Arc::new(csp_vault),
             logger,
+            metrics,
         }
     }
 }
@@ -253,6 +261,7 @@ impl Csp {
                 ProtoPublicKeyStore::open(&config.crypto_root, PUBLIC_KEY_STORE_DATA_FILENAME),
             )),
             logger: no_op_logger(),
+            metrics: Arc::new(CryptoMetrics::none()),
         }
     }
 }
@@ -304,6 +313,7 @@ impl Csp {
                 public_key_store,
             )),
             logger: no_op_logger(),
+            metrics: Arc::new(CryptoMetrics::none()),
         }
     }
 

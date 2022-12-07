@@ -34,6 +34,7 @@ DEPENDENCIES = [
     "//rs/utils",
     "@crate_index//:arrayvec",
     "@crate_index//:base64",
+    "@crate_index//:bincode",
     "@crate_index//:clap",
     "@crate_index//:ed25519-consensus",
     "@crate_index//:hex",
