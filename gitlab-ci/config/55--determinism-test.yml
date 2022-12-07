@@ -95,8 +95,6 @@ build-determinism-setup-os:
   artifacts:
     paths:
       - artifacts
-  # TODO: NODE-724
-  allow_failure: true
   variables:
     PATH0: "setup-os/disk-img"
     PATH1: "setup-os/disk-img-determinism"
