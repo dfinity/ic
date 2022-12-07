@@ -97,9 +97,6 @@ function read_variables() {
 
 function assemble_config_media() {
     cmd=(/opt/ic/bin/build-bootstrap-config-image.sh ${MEDIA})
-    if [ -d "/boot/config/ssh_authorized_keys" ]; then
-        cmd+=(--accounts_ssh_authorized_keys /boot/config/ssh_authorized_keys)
-    fi
     cmd+=(--nns_public_key "/boot/config/nns_public_key.pem")
     cmd+=(--journalbeat_hosts "$(/opt/ic/bin/fetch-property.sh --key=.logging.hosts --metric=hostos_logging_hosts --config=${DEPLOYMENT})")
     cmd+=(--ipv6_address "$(/opt/ic/bin/generate-deterministic-ipv6.sh --index=1)")
