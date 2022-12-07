@@ -31,8 +31,8 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
@@ -533,14 +533,14 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         &self,
         active_key_ids: BTreeSet<KeyId>,
         oldest_public_key: MEGaPublicKey,
-    ) -> Result<(), IDkgRetainThresholdKeysError> {
+    ) -> Result<(), IDkgRetainKeysError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_retain_active_keys(
             context_with_timeout(self.rpc_timeout),
             active_key_ids,
             oldest_public_key,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(IDkgRetainThresholdKeysError::InternalError {
+            Err(IDkgRetainKeysError::InternalError {
                 internal_error: rpc_error.to_string(),
             })
         })

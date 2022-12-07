@@ -7,7 +7,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
 };
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
+    IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
     IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
     IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
@@ -155,7 +155,7 @@ pub trait CspIDkgProtocol {
         &self,
         active_transcripts: &BTreeSet<IDkgTranscriptInternal>,
         oldest_public_key: MEGaPublicKey,
-    ) -> Result<(), IDkgRetainThresholdKeysError>;
+    ) -> Result<(), IDkgRetainKeysError>;
 }
 
 /// Crypto service provider (CSP) client for threshold ECDSA signature share

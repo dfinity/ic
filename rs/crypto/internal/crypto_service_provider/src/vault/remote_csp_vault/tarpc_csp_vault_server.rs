@@ -40,8 +40,8 @@ use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
+    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
+    IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
@@ -437,7 +437,7 @@ impl<
         _: context::Context,
         active_key_ids: BTreeSet<KeyId>,
         oldest_public_key: MEGaPublicKey,
-    ) -> Result<(), IDkgRetainThresholdKeysError> {
+    ) -> Result<(), IDkgRetainKeysError> {
         let vault = self.local_csp_vault;
         let job = move || vault.idkg_retain_active_keys(active_key_ids, oldest_public_key);
         execute_on_thread_pool(self.thread_pool_handle, job).await

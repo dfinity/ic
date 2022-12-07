@@ -4,7 +4,7 @@ use ic_crypto_internal_csp::api::CspIDkgProtocol;
 use ic_crypto_internal_threshold_sig_ecdsa::{IDkgTranscriptInternal, MEGaPublicKey};
 use ic_interfaces::crypto::ErrorReproducibility;
 use ic_interfaces_registry::RegistryClient;
-use ic_types::crypto::canister_threshold_sig::error::IDkgRetainThresholdKeysError;
+use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use std::collections::{BTreeSet, HashSet};
 use std::convert::TryFrom;
@@ -18,7 +18,7 @@ pub fn retain_keys_for_transcripts<C: CspIDkgProtocol>(
     node_id: &NodeId,
     registry: &Arc<dyn RegistryClient>,
     active_transcripts: &HashSet<IDkgTranscript>,
-) -> Result<(), IDkgRetainThresholdKeysError> {
+) -> Result<(), IDkgRetainKeysError> {
     if active_transcripts.is_empty() {
         return Ok(());
     }
@@ -29,7 +29,7 @@ pub fn retain_keys_for_transcripts<C: CspIDkgProtocol>(
         .iter()
         .map(|transcript| {
             IDkgTranscriptInternal::try_from(transcript).map_err(|e| {
-                IDkgRetainThresholdKeysError::SerializationError {
+                IDkgRetainKeysError::SerializationError {
                     internal_error: format!("failed to deserialize internal transcript: {:?}", e),
                 }
             })
@@ -42,18 +42,18 @@ fn oldest_public_key(
     node_id: &NodeId,
     registry: &Arc<dyn RegistryClient>,
     transcripts: &HashSet<IDkgTranscript>,
-) -> Option<Result<MEGaPublicKey, IDkgRetainThresholdKeysError>> {
+) -> Option<Result<MEGaPublicKey, IDkgRetainKeysError>> {
     minimum_registry_version(transcripts).map(|version| {
         get_mega_pubkey(node_id, registry.as_ref(), version).map_err(|err| {
             if err.is_reproducible() {
-                IDkgRetainThresholdKeysError::InternalError {
+                IDkgRetainKeysError::InternalError {
                     internal_error: format!(
                         "Internal error while searching for iDKG public key: {:?}",
                         err
                     ),
                 }
             } else {
-                IDkgRetainThresholdKeysError::TransientInternalError {
+                IDkgRetainKeysError::TransientInternalError {
                     internal_error: format!(
                         "Transient error while searching for iDKG public key: {:?}",
                         err

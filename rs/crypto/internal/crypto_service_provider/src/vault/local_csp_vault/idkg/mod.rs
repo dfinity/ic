@@ -18,13 +18,15 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     SecretShares, Seed,
 };
 use ic_logger::debug;
+use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::canister_threshold_sig::error::{
-    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError,
-    IDkgRetainThresholdKeysError, IDkgVerifyDealingPrivateError,
+    IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
+    IDkgVerifyDealingPrivateError,
 };
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
+use parking_lot::RwLockWriteGuard;
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
@@ -188,35 +190,22 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         result
     }
 
-    //TODO CRP-1729: use `oldest_public_key` to retain active public keys and corresponding private keys.
     fn idkg_retain_active_keys(
         &self,
         active_key_ids: BTreeSet<KeyId>,
-        _oldest_public_key: MEGaPublicKey,
-    ) -> Result<(), IDkgRetainThresholdKeysError> {
+        oldest_public_key: MEGaPublicKey,
+    ) -> Result<(), IDkgRetainKeysError> {
         debug!(self.logger; crypto.method_name => "idkg_retain_active_keys");
         let start_time = self.metrics.now();
-        self.canister_sks_write_lock()
-            .retain(
-                move |key_id, _| active_key_ids.contains(key_id),
-                IDKG_THRESHOLD_KEYS_SCOPE,
-            )
-            .map_err(|e| match e {
-                SecretKeyStorePersistenceError::SerializationError(e) => {
-                    IDkgRetainThresholdKeysError::InternalError { internal_error: e }
-                }
-                SecretKeyStorePersistenceError::IoError(e) => {
-                    IDkgRetainThresholdKeysError::TransientInternalError { internal_error: e }
-                }
-            })?;
+        let result = self.idkg_retain_active_keys_internal(active_key_ids, oldest_public_key);
         self.metrics.observe_duration_seconds(
             MetricsDomain::IDkgProtocol,
             MetricsScope::Local,
             "idkg_retain_active_keys",
-            MetricsResult::Ok,
+            MetricsResult::from(&result),
             start_time,
         );
-        Ok(())
+        result
     }
 }
 
@@ -451,8 +440,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 pks_write_lock
                     .set_idkg_dealing_encryption_pubkeys(public_keys)
                     .map_err(|ioe: io::Error| CspCreateMEGaKeyError::TransientInternalError {
-                            internal_error: format!("failed to persist iDKG dealing encryption public keys: IO error: {ioe:?}"),
-                        },
+                        internal_error: format!("failed to persist iDKG dealing encryption public keys: IO error: {ioe:?}"),
+                    },
                     )
             })
     }
@@ -488,6 +477,96 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         .map_err(|e| IDkgOpenTranscriptError::InternalError {
             internal_error: format!("{:?}", e),
         })
+    }
+
+    fn idkg_retain_active_keys_internal(
+        &self,
+        active_canister_key_ids: BTreeSet<KeyId>,
+        oldest_public_key: MEGaPublicKey,
+    ) -> Result<(), IDkgRetainKeysError> {
+        let oldest_public_key_proto =
+            idkg_dealing_encryption_pk_to_proto(oldest_public_key.clone());
+        {
+            let (sks_write_lock, pks_write_lock) = self.sks_and_pks_write_locks();
+            let public_keys_to_keep = idkg_most_recent_public_keys_up_to_inclusive(
+                &pks_write_lock,
+                &oldest_public_key_proto,
+                &oldest_public_key,
+            )?;
+            let key_ids_to_keep = idkg_public_key_proto_to_key_id(&public_keys_to_keep)?;
+            self.idkg_retain_active_dealing_encryption_secret_keys(sks_write_lock, key_ids_to_keep)
+                .and_then(|()| {
+                    self.idkg_retain_active_dealing_encryption_public_keys(
+                        pks_write_lock,
+                        public_keys_to_keep,
+                    )
+                })?;
+        } //drop locks on sks and pks
+        self.idkg_retain_active_canister_secret_shares(active_canister_key_ids)
+    }
+
+    fn idkg_retain_active_dealing_encryption_secret_keys(
+        &self,
+        mut sks_write_lock: RwLockWriteGuard<S>,
+        active_secret_key_ids: BTreeSet<KeyId>,
+    ) -> Result<(), IDkgRetainKeysError> {
+        sks_write_lock
+            .retain(
+                move |key_id, _| active_secret_key_ids.contains(key_id),
+                IDKG_MEGA_SCOPE,
+            )
+            .map_err(|sks_error| match sks_error {
+                SecretKeyStorePersistenceError::SerializationError(e) => {
+                    IDkgRetainKeysError::SerializationError {
+                        internal_error: format!("Serialization error while retaining active IDKG dealing encryption secret keys: {:?}", e),
+                    }
+                }
+                SecretKeyStorePersistenceError::IoError(e) => {
+                    IDkgRetainKeysError::TransientInternalError {
+                        internal_error: format!("IO error while retaining active IDKG dealing encryption secret keys: {:?}", e)
+                    }
+                }
+            })
+    }
+
+    fn idkg_retain_active_dealing_encryption_public_keys(
+        &self,
+        mut pks_write_lock: RwLockWriteGuard<P>,
+        public_keys_to_keep: Vec<PublicKey>,
+    ) -> Result<(), IDkgRetainKeysError> {
+        pks_write_lock
+            .set_idkg_dealing_encryption_pubkeys(public_keys_to_keep)
+            .map_err(|io_error| IDkgRetainKeysError::TransientInternalError {
+                internal_error: format!(
+                    "IO error while retaining active IDKG dealing encryption public keys: {:?}",
+                    io_error
+                ),
+            })
+    }
+
+    fn idkg_retain_active_canister_secret_shares(
+        &self,
+        active_key_ids: BTreeSet<KeyId>,
+    ) -> Result<(), IDkgRetainKeysError> {
+        self.canister_sks_write_lock()
+            .retain(
+                move |key_id, _| active_key_ids.contains(key_id),
+                IDKG_THRESHOLD_KEYS_SCOPE,
+            )
+            .map_err(|e| match e {
+                SecretKeyStorePersistenceError::SerializationError(e) => {
+                    IDkgRetainKeysError::SerializationError {
+                        internal_error: format!("Serialization error while retaining active IDKG canister secret shares: {:?}", e),
+                    }
+
+                }
+                SecretKeyStorePersistenceError::IoError(e) => {
+                    IDkgRetainKeysError::TransientInternalError {
+                        internal_error: format!("IO error while retaining active IDKG canister secret shares: {:?}", e)
+                    }
+
+                }
+            })
     }
 
     fn get_secret_shares(
@@ -603,4 +682,56 @@ fn generate_idkg_key_material_from_seed(
             .map_err(CspCreateMEGaKeyError::SerializationError)?,
     });
     Ok((public_key, csp_secret_key, key_id))
+}
+
+fn idkg_most_recent_public_keys_up_to_inclusive<P: PublicKeyStore>(
+    pks_write_lock: &RwLockWriteGuard<P>,
+    oldest_public_key_proto: &PublicKey,
+    oldest_public_key: &MEGaPublicKey,
+) -> Result<Vec<PublicKey>, IDkgRetainKeysError> {
+    let mut idkg_public_keys_to_keep = Vec::new();
+    let mut keep = false;
+
+    for public_key_proto in pks_write_lock.idkg_dealing_encryption_pubkeys() {
+        if !keep && public_key_proto == oldest_public_key_proto {
+            keep = true;
+        }
+        if keep {
+            idkg_public_keys_to_keep.push(public_key_proto.clone());
+        }
+    }
+    if idkg_public_keys_to_keep.is_empty() {
+        return Err(IDkgRetainKeysError::InternalError {
+            internal_error: format!(
+                "Could not find oldest IDKG public key {:?} locally",
+                &oldest_public_key
+            ),
+        });
+    }
+    Ok(idkg_public_keys_to_keep)
+}
+
+fn idkg_public_key_proto_to_key_id(
+    public_keys: &[PublicKey],
+) -> Result<BTreeSet<KeyId>, IDkgRetainKeysError> {
+    public_keys
+        .iter()
+        .map(|public_key| {
+            let curve_type = match AlgorithmIdProto::from_i32(public_key.algorithm) {
+                Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
+                alg_id => Err(IDkgRetainKeysError::InternalError {
+                    internal_error: format!("Unsupported algorithm {:?}", alg_id),
+                }),
+            }?;
+
+            let mega_public_key = MEGaPublicKey::deserialize(curve_type, &public_key.key_value)
+                .map_err(|err| IDkgRetainKeysError::InternalError {
+                    internal_error: format!("Error deserializing IDKG public key: {:?}", err),
+                })?;
+
+            KeyId::try_from(&mega_public_key).map_err(|error| IDkgRetainKeysError::InternalError {
+                internal_error: format!("Invalid key ID {:?}", error),
+            })
+        })
+        .collect()
 }

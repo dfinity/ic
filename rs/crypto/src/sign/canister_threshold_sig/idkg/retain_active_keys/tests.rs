@@ -2,7 +2,7 @@ use crate::sign::canister_threshold_sig::idkg::retain_active_keys::oldest_public
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
 use ic_interfaces_registry::RegistryClient;
-use ic_types::crypto::canister_threshold_sig::error::IDkgRetainThresholdKeysError;
+use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
@@ -50,7 +50,7 @@ mod oldest_public_key {
         assert!(matches!(
             result,
             Some(Err(
-                IDkgRetainThresholdKeysError::TransientInternalError { internal_error }
+                IDkgRetainKeysError::TransientInternalError { internal_error }
             )) if internal_error.contains("Transient error")
         ))
     }
@@ -68,7 +68,7 @@ mod oldest_public_key {
         assert!(matches!(
             result,
             Some(Err(
-                IDkgRetainThresholdKeysError::InternalError { internal_error }
+                IDkgRetainKeysError::InternalError { internal_error }
             )) if internal_error.contains("Internal error")
         ))
     }
@@ -96,7 +96,7 @@ mod oldest_public_key {
         assert!(matches!(
             result,
             Some(Err(
-                IDkgRetainThresholdKeysError::InternalError { internal_error }
+                IDkgRetainKeysError::InternalError { internal_error }
             )) if internal_error.contains("MalformedPublicKey")
         ))
     }
