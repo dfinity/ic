@@ -28,7 +28,7 @@ use ic_crypto_internal_types::scope::{ConstScope, Scope};
 use ic_logger::debug;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
+    IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
     IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
     IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
@@ -266,7 +266,7 @@ impl CspIDkgProtocol for Csp {
         &self,
         active_transcripts: &BTreeSet<IDkgTranscriptInternal>,
         oldest_public_key: MEGaPublicKey,
-    ) -> Result<(), IDkgRetainThresholdKeysError> {
+    ) -> Result<(), IDkgRetainKeysError> {
         debug!(self.logger; crypto.method_name => "idkg_retain_active_keys");
 
         let active_key_ids = active_transcripts

@@ -4,7 +4,7 @@
 use ic_base_types::NodeId;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
+    IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
     IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyInitialDealingsError,
     IDkgVerifyOpeningError, IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
     ThresholdEcdsaSignShareError, ThresholdEcdsaVerifyCombinedSignatureError,
@@ -253,7 +253,7 @@ pub trait IDkgProtocol {
     fn retain_active_transcripts(
         &self,
         active_transcripts: &HashSet<IDkgTranscript>,
-    ) -> Result<(), IDkgRetainThresholdKeysError>;
+    ) -> Result<(), IDkgRetainKeysError>;
 }
 
 /// A Crypto Component interface to generate ECDSA threshold signature shares.

@@ -135,12 +135,12 @@ pub enum IDkgOpenTranscriptError {
 impl_display_using_debug!(IDkgOpenTranscriptError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum IDkgRetainThresholdKeysError {
+pub enum IDkgRetainKeysError {
     InternalError { internal_error: String },
     SerializationError { internal_error: String },
     TransientInternalError { internal_error: String },
 }
-impl_display_using_debug!(IDkgRetainThresholdKeysError);
+impl_display_using_debug!(IDkgRetainKeysError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IDkgLoadTranscriptError {

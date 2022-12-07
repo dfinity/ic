@@ -31,7 +31,7 @@ use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPu
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
+    IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
     IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
     IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
@@ -326,7 +326,7 @@ mock! {
             &self,
             active_transcripts: &std::collections::BTreeSet<IDkgTranscriptInternal>,
             oldest_public_key: MEGaPublicKey,
-        ) -> Result<(), IDkgRetainThresholdKeysError>;
+        ) -> Result<(), IDkgRetainKeysError>;
 
         fn idkg_gen_dealing_encryption_key_pair(&self) -> Result<MEGaPublicKey, CspCreateMEGaKeyError>;
 

@@ -5,7 +5,7 @@ use ic_interfaces::crypto::IDkgProtocol;
 use ic_logger::{debug, new_logger};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
-    IDkgOpenTranscriptError, IDkgRetainThresholdKeysError, IDkgVerifyComplaintError,
+    IDkgOpenTranscriptError, IDkgRetainKeysError, IDkgVerifyComplaintError,
     IDkgVerifyDealingPrivateError, IDkgVerifyDealingPublicError, IDkgVerifyInitialDealingsError,
     IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
 };
@@ -455,7 +455,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
     fn retain_active_transcripts(
         &self,
         active_transcripts: &HashSet<IDkgTranscript>,
-    ) -> Result<(), IDkgRetainThresholdKeysError> {
+    ) -> Result<(), IDkgRetainKeysError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
             crypto.log_id => log_id,
