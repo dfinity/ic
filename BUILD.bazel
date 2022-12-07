@@ -46,3 +46,9 @@ gazelle(
     ],
     command = "update-repos",
 )
+
+alias(
+    name = "gobin",
+    actual = "@go_sdk//:bin/go",
+    visibility = ["//visibility:public"],
+)
