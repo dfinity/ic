@@ -1,7 +1,8 @@
 use ic_base_types::NodeId;
-use ic_config::{artifact_pool::ArtifactPoolTomlConfig, http_handler};
 use ic_config::{
+    artifact_pool::ArtifactPoolTomlConfig,
     crypto::CryptoConfig,
+    http_handler::Config as HttpHandlerConfig,
     logger::{Config as LoggerConfig, LogTarget},
     metrics::Config as MetricsConfig,
     registry_client::{Config as RegistryClientConfig, DataProviderConfig},
@@ -487,8 +488,8 @@ impl IcManager {
             send_queue_size: 256,
         });
         replica_config.state_manager = Some(StateManagerConfig::new(state_manager_root));
-        replica_config.http_handler = Some(http_handler::ExternalConfig {
-            listen_addr: Some(http_addr),
+        replica_config.http_handler = Some(HttpHandlerConfig {
+            listen_addr: http_addr,
             ..Default::default()
         });
         replica_config.metrics = Some(MetricsConfig {

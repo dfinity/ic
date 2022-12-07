@@ -109,16 +109,6 @@
     // ====================================
     http_handler: {
         listen_addr: "[{{ ipv6_address }}]:8080",
-
-        // For test networks, and networks that we still reset
-        // rather often (e.g. Sodium), let them indicate the root public key
-        // in /api/v2/status, so that agents can fetch them.
-        // This is convenient, but of course not very secure.
-        //
-        // From Mercury on, or at least once we really stop resetting,
-        // we should set this to false and thus force agents
-        // to get the key from a secure place.
-        show_root_key_in_status: true,
     },
     
     // ====================================
