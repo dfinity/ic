@@ -64,10 +64,10 @@ build --flag_alias=s3_endpoint=//gitlab-ci/src/artifacts:s3_endpoint
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
 build --build_tag_filters="-system_test"
-test --test_tag_filters="-system_test,-post_master,-allowed_to_fail"
+test --test_tag_filters="-system_test,-post_master,-allow_to_fail"
 test:alltests --test_tag_filters=""
-test:paritytests --test_tag_filters="-system_test,-allowed_to_fail"
-test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-allowed_to_fail"
+test:paritytests --test_tag_filters="-system_test,-allow_to_fail"
+test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-allow_to_fail"
 
 test --test_output=errors
 test --test_env=RUST_BACKTRACE=full
