@@ -1,5 +1,6 @@
 use crate::driver::test_env_api::*;
 use crate::types::*;
+use anyhow::bail;
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
 use dfn_protobuf::{protobuf, ProtoBuf};
@@ -28,6 +29,7 @@ use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs, Subaccount, Tokens,
     DEFAULT_TRANSFER_FEE,
 };
+use itertools::Itertools;
 use on_wire::FromWire;
 use rand_chacha::ChaCha8Rng;
 use slog::{debug, info};
@@ -921,14 +923,9 @@ pub fn get_unassinged_nodes_endpoints(handle: &IcHandle) -> Vec<&IcEndpoint> {
 // This indirectly asserts a non-zero finalization rate of the subnet:
 // - We store a string in the memory by sending an `update` message to a canister
 // - We retrieve the saved string by sending `query` message to a canister
-pub(crate) async fn assert_subnet_can_make_progress(
-    logger: &slog::Logger,
-    message: &[u8],
-    endpoint: &IcEndpoint,
-) {
-    let agent = assert_create_agent(endpoint.url.as_str()).await;
-    let universal_canister =
-        UniversalCanister::new_with_retries(&agent, endpoint.effective_canister_id(), logger).await;
+pub(crate) async fn assert_subnet_can_make_progress(message: &[u8], node: &IcNodeSnapshot) {
+    let agent = assert_create_agent(node.get_public_url().as_str()).await;
+    let universal_canister = UniversalCanister::new(&agent, node.effective_canister_id()).await;
     universal_canister.store_to_stable(0, message).await;
     assert_eq!(
         universal_canister
@@ -962,6 +959,37 @@ pub(crate) fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code
 pub enum EndpointsStatus {
     AllHealthy,
     AllUnhealthy,
+}
+
+pub(crate) fn assert_nodes_health_statuses(
+    log: slog::Logger,
+    nodes: &[IcNodeSnapshot],
+    status: EndpointsStatus,
+) {
+    let nodes_with_undesired_status = || {
+        let health_statuses = nodes.iter().map(|n| (n, n.status_is_healthy()));
+        match status {
+            EndpointsStatus::AllHealthy => health_statuses
+                .into_iter()
+                .filter_map(|(n, s)| s.map_or(Some(n), |f| (!f).then_some(n)))
+                .collect(),
+            EndpointsStatus::AllUnhealthy => health_statuses
+                .into_iter()
+                .filter_map(|(n, s)| s.map_or(None, |f| f.then_some(n)))
+                .collect(),
+        }
+    };
+
+    retry(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
+        let nodes: Vec<&IcNodeSnapshot> = nodes_with_undesired_status();
+        if nodes.is_empty() {
+            Ok(())
+        } else {
+            let nodes_str = nodes.iter().map(|e|format!("[node_id={}, ip={}]", e.node_id, e.get_ip_addr())).join(",\n");
+            let msg = format!("The following nodes have not reached the desired health statuses {status:?}:\n{nodes_str}");
+            bail!(msg);
+        }
+    }).unwrap_or_else(|err| panic!("Retry function failed within the timeout of {} sec, {err}", READY_WAIT_TIMEOUT.as_secs()));
 }
 
 pub(crate) async fn assert_endpoints_health(endpoints: &[&IcEndpoint], status: EndpointsStatus) {

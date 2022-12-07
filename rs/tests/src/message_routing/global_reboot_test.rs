@@ -27,18 +27,20 @@ end::catalog[] */
 
 use std::time::Duration;
 
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot,
+};
 use crate::util::{
-    self, assert_endpoints_health, assert_subnet_can_make_progress, block_on, runtime_from_url,
+    assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, runtime_from_url,
     EndpointsStatus,
 };
 
-use crate::driver::{ic::InternetComputer, vm_control::IcControl};
+use crate::driver::ic::InternetComputer;
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_registry_subnet_type::SubnetType;
-use slog::info;
+use slog::{info, Logger};
 use tokio::time::sleep;
 use xnet_test::{CanisterId, Metrics};
 
@@ -55,114 +57,92 @@ pub fn config(env: TestEnv) {
         })
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 pub fn test(env: TestEnv) {
-    let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let endpoints = handle.as_permutation(&mut rng).collect::<Vec<_>>();
-    let endpoints_runtime = (0..SUBNETS_COUNT)
-        .map(|i| {
-            runtime_from_url(
-                endpoints[i].url.clone(),
-                endpoints[i].effective_canister_id(),
-            )
-        })
-        .collect::<Vec<_>>();
-    // Assert all nodes are reachable after IC setup.
-    block_on(assert_endpoints_health(
-        endpoints.as_slice(),
-        EndpointsStatus::AllHealthy,
-    ));
-    info!(ctx.logger, "All status endpoints are reachable over http.");
+    let log = env.logger();
+    let all_nodes: Vec<IcNodeSnapshot> = env
+        .topology_snapshot()
+        .subnets()
+        .flat_map(|s| s.nodes())
+        .collect();
+    assert_eq!(all_nodes.len(), SUBNETS_COUNT); // 1 node per subnet
+    let runtimes: Vec<Runtime> = all_nodes
+        .iter()
+        .map(|n| runtime_from_url(n.get_public_url(), n.effective_canister_id()))
+        .collect();
     // Step 1: Build and install Xnet canisters on each subnet.
-    info!(ctx.logger, "Building Xnet canister wasm...");
+    info!(log, "Building Xnet canister wasm ...");
     let wasm = Project::cargo_bin_maybe_from_env("xnet-test-canister", &[]);
-    info!(ctx.logger, "Installing Xnet canisters on subnets ...");
-    let canisters = install_canisters(
-        &endpoints_runtime,
-        SUBNETS_COUNT,
-        CANISTERS_PER_SUBNET,
-        wasm,
-    );
+    info!(log, "Installing Xnet canisters on subnets ...");
+    let canisters = install_canisters(&runtimes, SUBNETS_COUNT, CANISTERS_PER_SUBNET, wasm);
     let canisters_count = canisters.iter().map(Vec::len).sum::<usize>();
     assert_eq!(canisters_count, SUBNETS_COUNT * CANISTERS_PER_SUBNET);
     info!(
-        ctx.logger,
+        log,
         "All {} canisters installed successfully.", canisters_count
     );
     // Step 2: Start all canisters (via update `start` call).
-    info!(ctx.logger, "Calling start() on all canisters...");
+    info!(log, "Calling start() on all canisters ...");
     start_all_canisters(&canisters, PAYLOAD_SIZE_BYTES, CANISTER_TO_SUBNET_RATE);
     // Step 3:  Wait 15 secs for canisters to exchange messages.
-    info!(
-        ctx.logger,
-        "Sending messages for {} secs...", MSG_EXEC_TIME_SEC
-    );
+    info!(log, "Sending messages for {} secs ...", MSG_EXEC_TIME_SEC);
     block_on(async {
         sleep(Duration::from_secs(MSG_EXEC_TIME_SEC)).await;
     });
     // Step 4: Collect metrics from all canisters (via query `metrics` call).
-    info!(ctx.logger, "Collecting metrics from all canisters...");
+    info!(log, "Collecting metrics from all canisters ...");
     let metrics_pre_reboot = collect_metrics(&canisters);
     // Step 5: Reboot all nodes and wait till they become reachable again.
-    info!(ctx.logger, "Rebooting all nodes...");
-    for ep in endpoints.iter() {
-        ep.restart_node(ctx.logger.clone());
-        // Confirm node reboot success by asserting it is unreachable.
-        block_on(assert_endpoints_health(
-            &[ep],
-            util::EndpointsStatus::AllUnhealthy,
-        ));
+    info!(log, "Rebooting all nodes ...");
+    for n in all_nodes.iter().cloned() {
+        n.vm().reboot();
+        assert_nodes_health_statuses(log.clone(), &[n], EndpointsStatus::AllUnhealthy);
     }
-    info!(ctx.logger, "Waiting for endpoints to be reachable again...");
-    block_on(assert_endpoints_health(
-        endpoints.as_slice(),
-        util::EndpointsStatus::AllHealthy,
-    ));
-    // Step 6: Wait another 15 secs for canisters to exchange messages.
-    info!(
-        ctx.logger,
-        "Sending messages for {} secs...", MSG_EXEC_TIME_SEC
+    info!(log, "Waiting for endpoints to be reachable again ...");
+    assert_nodes_health_statuses(
+        log.clone(),
+        all_nodes.as_slice(),
+        EndpointsStatus::AllHealthy,
     );
+    // Step 6: Wait another 15 secs for canisters to exchange messages.
+    info!(log, "Sending messages for {} secs ...", MSG_EXEC_TIME_SEC);
     block_on(async {
         sleep(Duration::from_secs(MSG_EXEC_TIME_SEC)).await;
     });
     // Step 7: Collect metrics from all canisters again.
-    info!(ctx.logger, "Collecting metrics from all canisters...");
+    info!(log, "Collecting metrics from all canisters ...");
     let metrics_post_reboot = collect_metrics(&canisters);
     // Step 8: Assert that metrics have progressed after reboot and no errors in calls are observed.
-    assert_metrics_progress_without_errors(&metrics_pre_reboot, &metrics_post_reboot, ctx);
+    assert_metrics_progress_without_errors(&log, &metrics_pre_reboot, &metrics_post_reboot);
     // Step 9: Stop all canisters (via update `stop_canister` call).
-    info!(ctx.logger, "Stopping all canisters...");
+    info!(log, "Stopping all canisters ...");
     block_on(async {
         for canister in canisters.iter().flatten() {
             canister.stop().await.expect("Stopping canister failed.");
         }
     });
     // Step 10: Delete all canisters (via update `delete_canister` call).
-    info!(ctx.logger, "Deleting all canisters...");
+    info!(log, "Deleting all canisters ...");
     block_on(async {
         for canister in canisters.iter().flatten() {
             canister.delete().await.expect("Deleting canister failed.");
         }
     });
     // Step 11: Assert all subnets can make progress (via installing universal canisters and storing a message).
-    info!(
-        ctx.logger,
-        "Asserting all subnets can still make progress..."
-    );
+    info!(log, "Asserting all subnets can still make progress ...");
     let update_message = b"This beautiful prose should be persisted for future generations";
     block_on(async {
-        for ep in endpoints {
-            assert_subnet_can_make_progress(&logger, update_message, ep).await;
+        for n in all_nodes {
+            assert_subnet_can_make_progress(update_message, &n).await;
         }
     });
-    info!(
-        ctx.logger,
-        "All subnets can progress via update/query calls."
-    );
+    info!(log, "All subnets can progress via update/query calls.");
 }
 
 pub fn start_all_canisters(
@@ -195,9 +175,9 @@ pub fn start_all_canisters(
 }
 
 pub fn assert_metrics_progress_without_errors(
+    log: &Logger,
     metrics_pre_reboot: &[Vec<Metrics>],
     metrics_post_reboot: &[Vec<Metrics>],
-    ctx: &ic_fondue::pot::Context,
 ) {
     for (subnet_idx, canister_idx) in metrics_pre_reboot
         .iter()
@@ -222,7 +202,7 @@ pub fn assert_metrics_progress_without_errors(
         assert!(responses_post_reboot > responses_pre_reboot);
 
         info!(
-            ctx.logger,
+            log,
             "Metrics for subnet_idx={}, canister_idx={}, before reboot:\n{:?}\nafter reboot:\n{:?}",
             subnet_idx,
             canister_idx,
