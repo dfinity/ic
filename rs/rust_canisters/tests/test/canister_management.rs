@@ -33,7 +33,9 @@ fn test_set_controller() {
         //
         // The anonymous user is not allowed to do a "canister_status"
         let res: Result<CanisterStatusResult, String> = runtime
-            .get_management_canister()
+            .get_management_canister_with_effective_canister_id(
+                universal_canister.canister_id().into(),
+            )
             .update_(
                 ic00::Method::CanisterStatus.to_string(),
                 dfn_candid::candid,

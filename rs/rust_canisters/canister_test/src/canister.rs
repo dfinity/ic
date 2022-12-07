@@ -280,6 +280,19 @@ impl<'a> Runtime {
         }
     }
 
+    /// Returns a client-side view of the management canister with given effective canister id.
+    pub fn get_management_canister_with_effective_canister_id(
+        &'a self,
+        effective_canister_id: PrincipalId,
+    ) -> Canister<'a> {
+        Canister {
+            runtime: self,
+            effective_canister_id,
+            canister_id: IC_00,
+            wasm: None,
+        }
+    }
+
     /// Creates a new canister with the maximum allowed cycles balance.
     ///
     /// Note that this calls ic00::Method::ProvisionalCreateCanisterWithCycles,
@@ -640,7 +653,7 @@ impl<'a> Canister<'a> {
     pub async fn add_controller(&self, additional_controller: PrincipalId) -> Result<(), String> {
         let status_res: CanisterStatusResultV2 = self
             .runtime
-            .get_management_canister()
+            .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_("canister_status", candid, (self.as_record(),))
             .await?;
 
@@ -648,7 +661,7 @@ impl<'a> Canister<'a> {
         controllers.push(additional_controller);
 
         self.runtime
-            .get_management_canister()
+            .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_(
                 ic00::Method::UpdateSettings.to_string(),
                 dfn_candid::candid_multi_arity,
@@ -668,7 +681,7 @@ impl<'a> Canister<'a> {
 
     pub async fn set_controller(&self, new_controller: PrincipalId) -> Result<(), String> {
         self.runtime
-            .get_management_canister()
+            .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_(
                 ic00::Method::SetController.to_string(),
                 dfn_candid::candid_multi_arity,
@@ -694,14 +707,14 @@ impl<'a> Canister<'a> {
     pub async fn stop(&self) -> Result<(), String> {
         let stop_res: Result<(), String> = self
             .runtime
-            .get_management_canister()
+            .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_("stop_canister", candid_multi_arity, (self.as_record(),))
             .await;
         stop_res?;
         loop {
             let status_res: Result<CanisterStatusResult, String> = self
                 .runtime
-                .get_management_canister()
+                .get_management_canister_with_effective_canister_id(self.canister_id().into())
                 .update_("canister_status", candid, (self.as_record(),))
                 .await;
             let status = status_res?;
@@ -715,7 +728,7 @@ impl<'a> Canister<'a> {
     /// Tries to delete this canister.
     pub async fn delete(&self) -> Result<(), String> {
         self.runtime
-            .get_management_canister()
+            .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_("delete_canister", candid_multi_arity, (self.as_record(),))
             .await?;
         Ok(())
@@ -733,7 +746,7 @@ impl<'a> Canister<'a> {
         self.stop().await?;
         let start_res: Result<(), String> = self
             .runtime
-            .get_management_canister()
+            .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_("start_canister", candid_multi_arity, (self.as_record(),))
             .await;
         start_res?;

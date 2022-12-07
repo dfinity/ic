@@ -18,7 +18,7 @@ fn test_that_the_anonymous_user_cannot_stop_any_nns_canister() {
 
         for canister in &nns_canisters.all_canisters() {
             let res: Result<(), String> = runtime
-                .get_management_canister()
+                .get_management_canister_with_effective_canister_id(canister.canister_id().into())
                 .update_(
                     "stop_canister",
                     candid_multi_arity,
