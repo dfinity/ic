@@ -34,8 +34,8 @@ webpack(
         "tsconfig.json",
     ],
     visibility = [
-        "//ic-os/boundary-guestos/dev:__pkg__",
-        "//ic-os/boundary-guestos/dev-sev:__pkg__",
+        "//ic-os/boundary-guestos/envs/dev:__pkg__",
+        "//ic-os/boundary-guestos/envs/dev-sev:__pkg__",
     ],
 )
 
