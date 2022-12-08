@@ -171,6 +171,7 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
         let malicious_flags = self.malicious_flags.clone();
         let state_reader_executor = self.state_reader_executor.clone();
         let validator_executor = self.validator_executor.clone();
+        let metrics = self.metrics.clone();
         Box::pin(async move {
             let targets = match validator_executor
                 .get_authorized_canisters(&request, registry_client, &malicious_flags)
@@ -189,6 +190,7 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
                 &read_state.paths,
                 &targets,
                 effective_canister_id,
+                &metrics,
             )
             .await
             {
@@ -233,6 +235,7 @@ async fn verify_paths(
     paths: &[Path],
     targets: &CanisterIdSet,
     effective_canister_id: CanisterId,
+    metrics: &HttpHandlerMetrics,
 ) -> Result<(), HttpError> {
     let state = state_reader_executor.get_latest_state().await?.take();
     let mut num_request_ids = 0;
@@ -322,6 +325,10 @@ async fn verify_paths(
         }
     }
 
+    metrics
+        .read_state_request_status_request_ids
+        .observe(num_request_ids.into());
+
     Ok(())
 }
 
@@ -402,6 +409,7 @@ fn can_read_canister_metadata(
 mod test {
     use crate::{
         common::test::{array, assert_cbor_ser_equal, bytes, int},
+        metrics::HttpHandlerMetrics,
         read_state::{can_read_canister_metadata, verify_paths},
         state_reader_executor::StateReaderExecutor,
         HttpError,
@@ -410,6 +418,7 @@ mod test {
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
     use ic_interfaces_state_manager::Labeled;
     use ic_interfaces_state_manager_mocks::MockStateManager;
+    use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{BitcoinState, CanisterQueues, ReplicatedState, SystemMetadata};
     use ic_test_utilities::{
@@ -561,7 +570,8 @@ mod test {
                 &user_test_id(1),
                 &[Path::from(Label::from("time"))],
                 &CanisterIdSet::All,
-                canister_test_id(1)
+                canister_test_id(1),
+                &HttpHandlerMetrics::new(&MetricsRegistry::default())
             )
             .await,
             Ok(())
