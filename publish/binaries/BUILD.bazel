@@ -28,6 +28,7 @@ STRIP_BINARIES = {
     "ic-registry-replicator": "//rs/orchestrator/registry_replicator:ic-registry-replicator",
     "ic-replay": "//rs/replay:ic-replay",
     "ic-rosetta-api": "//rs/rosetta-api:ic-rosetta-api",
+    "ic-test-state-machine": "//rs/state_machine_tests:ic-test-state-machine",
     "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
     "icx-proxy": "//rs/boundary_node/icx_proxy:icx-proxy",
     "orchestrator": "//rs/orchestrator",
