@@ -1,15 +1,23 @@
-use crate::state::{replace_state, take_state};
-use ic_cdk::api::stable::{StableReader, StableWriter};
-
-pub fn pre_upgrade() {
-    ic_cdk::println!("Executing pre upgrade");
-    ciborium::ser::into_writer(&take_state(|s| s), StableWriter::default())
-        .expect("failed to encode minter state");
-}
+use crate::eventlog::replay;
+use crate::state::replace_state;
+use crate::storage::{count_events, events};
 
 pub fn post_upgrade() {
-    ic_cdk::println!("Executing post upgrade");
-    replace_state(
-        ciborium::de::from_reader(StableReader::default()).expect("failed to decode minter state"),
+    ic_cdk::println!("[upgrade]: replaying {} events", count_events());
+
+    let start = ic_cdk::api::instruction_counter();
+
+    replace_state(replay(events()).unwrap_or_else(|e| {
+        ic_cdk::trap(&format!(
+            "[upgrade]: failed to replay the event log: {:?}",
+            e
+        ))
+    }));
+
+    let end = ic_cdk::api::instruction_counter();
+
+    ic_cdk::println!(
+        "[upgrade]: replaying events consumed {} instructions",
+        end - start
     );
 }

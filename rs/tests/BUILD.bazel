@@ -506,7 +506,7 @@ system_test(
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS + [
             "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-            "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
         ],
     deps = DEPENDENCIES + [":tests"],
 )

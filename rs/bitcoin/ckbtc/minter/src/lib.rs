@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub mod address;
 pub mod dashboard;
+pub mod eventlog;
 pub mod guard;
 pub mod lifecycle;
 pub mod management;
@@ -15,13 +16,14 @@ pub mod metrics;
 pub mod queries;
 pub mod signature;
 pub mod state;
+pub mod storage;
 pub mod tx;
 pub mod updates;
 
 #[cfg(test)]
 mod tests;
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize)]
+#[derive(CandidType, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ECDSAPublicKey {
     pub public_key: Vec<u8>,
     pub chain_code: Vec<u8>,
@@ -83,6 +85,11 @@ async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress)
             .filter(|u| !known_utxos.contains(u))
             .collect(),
         None => utxos,
+    });
+
+    storage::record_event(&eventlog::Event::ReceivedUtxos {
+        to_account: main_account.clone(),
+        utxos: new_utxos.clone(),
     });
 
     state::mutate_state(|s| s.add_utxos(main_account.clone(), new_utxos));
@@ -188,6 +195,9 @@ async fn submit_pending_requests() {
                         ));
                         // There is no point in retrying the request because the
                         // amount is too low.
+                        storage::record_event(&eventlog::Event::RemovedRetrieveBtcRequest {
+                            block_index: req.block_index,
+                        });
                         s.push_finalized_request(state::FinalizedBtcRetrieval {
                             request: req,
                             state: state::FinalizedStatus::AmountTooLow,
@@ -246,12 +256,23 @@ async fn submit_pending_requests() {
                             "[heartbeat]: successfully sent transaction {}",
                             hex::encode(txid)
                         ));
+                        let submitted_at = ic_cdk::api::time();
+                        storage::record_event(&eventlog::Event::SentBtcTransaction {
+                            request_block_indices: req
+                                .requests
+                                .iter()
+                                .map(|r| r.block_index)
+                                .collect(),
+                            txid,
+                            utxos: req.utxos.clone(),
+                            submitted_at,
+                        });
                         state::mutate_state(|s| {
-                            s.push_submitted_request(state::SubmittedBtcTransaction {
+                            s.push_submitted_transaction(state::SubmittedBtcTransaction {
                                 requests: req.requests,
                                 txid,
                                 used_utxos: req.utxos,
-                                submitted_at: ic_cdk::api::time(),
+                                submitted_at,
                             });
                         });
                     }
@@ -354,6 +375,7 @@ async fn finalize_requests() {
             continue;
         }
 
+        storage::record_event(&eventlog::Event::ConfirmedBtcTransaction { txid: req.txid });
         state::mutate_state(|s| s.finalize_transaction(&req.txid));
 
         let now = ic_cdk::api::time();

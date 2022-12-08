@@ -499,7 +499,7 @@ proptest! {
         });
         for (utxo, acc_idx) in utxos_acc_idx {
             state.add_utxos(accounts[acc_idx].clone(), vec![utxo]);
-            state.check_invariants();
+            state.check_invariants().expect("invariant check failed");
         }
     }
 

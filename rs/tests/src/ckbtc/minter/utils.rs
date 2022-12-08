@@ -125,6 +125,17 @@ pub async fn wait_for_mempool_change(btc_rpc: &Client, logger: &Logger) -> Vec<T
     }
 }
 
+pub async fn self_check(minter: &CkBtcMinterAgent) -> Result<(), String> {
+    let bytes = minter
+        .agent
+        .query(&minter.minter_canister_id, "self_check")
+        .with_arg(candid::encode_one(()).unwrap())
+        .call()
+        .await
+        .expect("failed to call self_check on the minter; do you run a debug version?");
+    candid::decode_one(&bytes).expect("failed to decode self_check result")
+}
+
 /// Wait for the minter to send a transaction for the retrieval with the
 /// specified block index.
 /// Returns the Bitcoin TXID of the transfer.
@@ -144,6 +155,9 @@ pub async fn wait_for_signed_tx(
         if start.elapsed() >= RETRIEVE_BTC_STATUS_TIMEOUT {
             panic!("No new signed tx emitted by minter");
         };
+        self_check(ckbtc_minter_agent)
+            .await
+            .expect("ckBTC minter is not healthy");
         match ckbtc_minter_agent
             .retrieve_btc_status(block_index)
             .await
@@ -193,6 +207,9 @@ pub async fn wait_for_finalization(
                 block_index, RETRIEVE_BTC_STATUS_TIMEOUT
             );
         };
+        self_check(ckbtc_minter_agent)
+            .await
+            .expect("ckBTC minter is not healthy");
         match ckbtc_minter_agent
             .retrieve_btc_status(block_index)
             .await
