@@ -36,6 +36,8 @@ pub struct ProcessTestsArgs {
     ci_commit_sha: String,
     #[clap(long = "ci-commit-short-sha")]
     ci_commit_short_sha: String,
+    #[clap(long = "ci-commit-date")]
+    ci_commit_date: String,
     #[clap(long = "ic-version-id")]
     ic_version_id: String,
     #[clap(long = "ic-version-id-date")]
@@ -125,6 +127,7 @@ impl ProcessTestsArgs {
             working_dir: self.working_dir,
             ci_commit_sha: self.ci_commit_sha,
             ci_commit_short_sha: self.ci_commit_short_sha,
+            ci_commit_date: self.ci_commit_date,
             ci_job_url: self.ci_job_url,
             ci_project_url: self.ci_project_url,
             ic_version_id: self.ic_version_id,
@@ -175,6 +178,7 @@ pub struct ValidatedCliProcessTestsArgs {
     pub ci_project_url: String,
     pub ci_commit_sha: String,
     pub ci_commit_short_sha: String,
+    pub ci_commit_date: String,
     pub ic_version_id: String,
     pub ic_version_id_date: String,
 }

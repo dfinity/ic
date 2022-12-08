@@ -1184,13 +1184,14 @@ fn generate_alerts(
     {
         let message = format!(
             r#"Pot `{pot_name}` *failed*. <{ci_job_url}|log>.
-Commit: <{ci_project_url}/-/commit/{ci_commit_sha}|{ci_commit_short_sha}>.
+Commit: <{ci_project_url}/-/commit/{ci_commit_sha}|{ci_commit_short_sha}>; {ci_commit_date}.
 IC_VERSION_ID: `{ic_version_id}`; {ic_version_id_date}."#,
             pot_name = failed_pot.name,
             ci_job_url = validated_args.ci_job_url,
             ci_project_url = validated_args.ci_project_url,
             ci_commit_sha = validated_args.ci_commit_sha,
             ci_commit_short_sha = validated_args.ci_commit_short_sha,
+            ci_commit_date = validated_args.ci_commit_date,
             ic_version_id = validated_args.ic_version_id,
             ic_version_id_date = validated_args.ic_version_id_date
         );
