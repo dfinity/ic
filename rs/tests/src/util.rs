@@ -4,7 +4,6 @@ use anyhow::bail;
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
 use dfn_protobuf::{protobuf, ProtoBuf};
-use futures::FutureExt;
 use ic_agent::export::Principal;
 use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, Agent, AgentError, Identity, RequestId,
@@ -992,57 +991,6 @@ pub(crate) fn assert_nodes_health_statuses(
     }).unwrap_or_else(|err| panic!("Retry function failed within the timeout of {} sec, {err}", READY_WAIT_TIMEOUT.as_secs()));
 }
 
-pub(crate) async fn assert_endpoints_health(endpoints: &[&IcEndpoint], status: EndpointsStatus) {
-    // Returns true if: either all endpoints are reachable or all unreachable (depending on the desired input status).
-    let check_reachability = || async move {
-        let hs = futures::future::join_all(endpoints.iter().map(|e| {
-            let e_ = (*e).clone();
-            e.healthy().map(|healthy| (e_, healthy))
-        }))
-        .await;
-        match status {
-            // For AllReachable status, we return the result of healthy().
-            EndpointsStatus::AllHealthy => hs
-                .into_iter()
-                .filter_map(|(e, h)| {
-                    if h.as_ref().map_or(true, |h| !h.0) {
-                        Some(e)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>(),
-            // For AllUnreachable status, we return the NOT result of healthy().
-            EndpointsStatus::AllUnhealthy => hs
-                .into_iter()
-                .filter_map(|(e, h)| {
-                    if h.as_ref().map_or(false, |h| h.0) {
-                        Some(e)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>(),
-        }
-    };
-
-    let start = Instant::now();
-    let mut es: Vec<IcEndpoint> = vec![];
-    while start.elapsed() < READY_WAIT_TIMEOUT {
-        es = check_reachability().await;
-        if es.is_empty() {
-            return;
-        }
-        tokio::time::sleep(RETRY_BACKOFF).await;
-    }
-    panic!(
-      "The following endpoints have not reached the desired health status {:?} within timeout {} sec:\n{:?}",
-      status,
-      READY_WAIT_TIMEOUT.as_secs(),
-      es.iter().map(|e|format!("{:?}",e)).collect::<Vec<String>>().join("\n")
-    );
-}
-
 pub(crate) fn assert_http_submit_fails(
     result: Result<RequestId, AgentError>,
     http_status_code: reqwest::StatusCode,
@@ -1222,7 +1170,7 @@ pub(crate) async fn get_icp_balance(
 }
 
 pub(crate) async fn transact_icp_subaccount(
-    ctx: &ic_fondue::pot::Context,
+    log: &slog::Logger,
     ledger: &Canister<'_>,
     sender: (&UniversalCanister<'_>, Option<Subaccount>),
     amount: u64,
@@ -1238,7 +1186,7 @@ pub(crate) async fn transact_icp_subaccount(
         created_at_time: None,
         from_subaccount: sender.1,
     };
-    info!(ctx.logger, "send {:?}", args);
+    info!(log, "send {:?}", args);
     let reply = sender
         .0
         .forward_to(
@@ -1250,7 +1198,7 @@ pub(crate) async fn transact_icp_subaccount(
         .map_err(|e| format!("{:?}", e))?;
 
     let decoded: u64 = ProtoBuf::from_bytes(reply).map(|ProtoBuf(c)| c)?;
-    info!(ctx.logger, "decoded result is {:?}", decoded);
+    info!(log, "decoded result is {:?}", decoded);
 
     get_icp_balance(
         ledger,
@@ -1261,13 +1209,13 @@ pub(crate) async fn transact_icp_subaccount(
 }
 
 pub(crate) async fn transact_icp(
-    ctx: &ic_fondue::pot::Context,
+    log: &slog::Logger,
     ledger: &Canister<'_>,
     sender: &UniversalCanister<'_>,
     amount: u64,
     recipient: &UniversalCanister<'_>,
 ) -> Result<Tokens, String> {
-    transact_icp_subaccount(ctx, ledger, (sender, None), amount, (recipient, None)).await
+    transact_icp_subaccount(log, ledger, (sender, None), amount, (recipient, None)).await
 }
 
 pub(crate) fn to_principal_id(principal: &Principal) -> PrincipalId {

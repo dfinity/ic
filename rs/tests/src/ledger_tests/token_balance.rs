@@ -29,12 +29,12 @@ Coverage::
 end::catalog[] */
 
 use crate::driver::ic::InternetComputer;
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+};
 use crate::util::{
-    assert_create_agent, get_icp_balance, get_random_application_node_endpoint,
-    get_random_nns_node_endpoint, runtime_from_url, transact_icp, transact_icp_subaccount,
+    block_on, get_icp_balance, runtime_from_url, transact_icp, transact_icp_subaccount,
     UniversalCanister,
 };
 use canister_test::Canister;
@@ -59,71 +59,45 @@ pub fn config(env: TestEnv) {
         .add_fast_single_node_subnet(SubnetType::Application)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 pub fn test(env: TestEnv) {
-    let logger = env.logger();
-    info!(logger, "Installing NNS canisters...");
-    env.topology_snapshot()
-        .root_subnet()
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns_agent = nns_node.with_default_agent(|agent| async move { agent });
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let app_node = topology
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap()
         .nodes()
         .next()
-        .unwrap()
+        .unwrap();
+    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+    info!(log, "Installing NNS canisters ...");
+    nns_node
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
 
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-    let mut rng = ctx.rng.clone();
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    rt.block_on(async move {
-        // choose a random nodes from the nns subnet
-        let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-        nns_endpoint.assert_ready(ctx).await;
-
-        // choose a random node from the application subnet
-        let application_endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-        application_endpoint.assert_ready(ctx).await;
-
+    block_on(async move {
         // upgrade the `lifeline` canister, since it is the minting
         // canister as tracked by the ledger
-        let nns = runtime_from_url(
-            nns_endpoint.url.clone(),
-            nns_endpoint.effective_canister_id(),
-        );
-        let nns_agent = assert_create_agent(nns_endpoint.url.as_str()).await;
-        let lifeline = UniversalCanister::upgrade(&nns, &nns_agent, &LIFELINE_CANISTER_ID).await;
-
-        let agent = assert_create_agent(application_endpoint.url.as_str()).await;
+        let lifeline =
+            UniversalCanister::upgrade(&nns_runtime, &nns_agent, &LIFELINE_CANISTER_ID).await;
         let (can1, can2, can3, can4, can5) = tokio::join!(
-            UniversalCanister::new_with_retries(
-                &agent,
-                application_endpoint.effective_canister_id(),
-                &logger
-            ),
-            UniversalCanister::new_with_retries(
-                &agent,
-                application_endpoint.effective_canister_id(),
-                &logger
-            ),
-            UniversalCanister::new_with_retries(
-                &agent,
-                application_endpoint.effective_canister_id(),
-                &logger
-            ),
-            UniversalCanister::new_with_retries(
-                &agent,
-                application_endpoint.effective_canister_id(),
-                &logger
-            ),
-            UniversalCanister::new_with_retries(
-                &agent,
-                application_endpoint.effective_canister_id(),
-                &logger
-            )
+            UniversalCanister::new_with_retries(&app_agent, app_node.effective_canister_id(), &log),
+            UniversalCanister::new_with_retries(&app_agent, app_node.effective_canister_id(), &log),
+            UniversalCanister::new_with_retries(&app_agent, app_node.effective_canister_id(), &log),
+            UniversalCanister::new_with_retries(&app_agent, app_node.effective_canister_id(), &log),
+            UniversalCanister::new_with_retries(&app_agent, app_node.effective_canister_id(), &log)
         );
-        let ledger = Canister::new(&nns, LEDGER_CANISTER_ID);
+        let ledger = Canister::new(&nns_runtime, LEDGER_CANISTER_ID);
 
         // verify that `lifeline` (as the minting canister) is fully stocked
         let minting_balance = Tokens::from_tokens(10000).unwrap();
@@ -139,48 +113,48 @@ pub fn test(env: TestEnv) {
 
         let fee = DEFAULT_TRANSFER_FEE.get_e8s();
         assert_eq!(
-            transact_icp(ctx, &ledger, &lifeline, 400, &can1).await,
+            transact_icp(&log, &ledger, &lifeline, 400, &can1).await,
             Ok(Tokens::from_e8s(400))
         );
         assert_eq!(
-            transact_icp(ctx, &ledger, &lifeline, 1800 + 3 * fee, &can2,).await,
+            transact_icp(&log, &ledger, &lifeline, 1800 + 3 * fee, &can2,).await,
             Ok(Tokens::from_e8s(1800 + 3 * fee))
         );
         assert_eq!(
-            transact_icp(ctx, &ledger, &can2, 750, &can3).await,
+            transact_icp(&log, &ledger, &can2, 750, &can3).await,
             Ok(Tokens::from_e8s(750))
         );
         assert_eq!(
-            transact_icp(ctx, &ledger, &lifeline, 859 + 2 * fee, &can4).await,
+            transact_icp(&log, &ledger, &lifeline, 859 + 2 * fee, &can4).await,
             Ok(Tokens::from_e8s(859 + 2 * fee))
         );
         assert_eq!(
-            transact_icp(ctx, &ledger, &lifeline, 23 + 2 * fee, &can5).await,
+            transact_icp(&log, &ledger, &lifeline, 23 + 2 * fee, &can5).await,
             Ok(Tokens::from_e8s(23 + 2 * fee))
         );
         assert_eq!(
-            transact_icp(ctx, &ledger, &lifeline, 1750, &can2).await,
+            transact_icp(&log, &ledger, &lifeline, 1750, &can2).await,
             Ok(Tokens::from_e8s(2800 + fee * 2))
         );
-        // transact_icp(ctx, &ledger, &can4, 1000, &lifeline) // not possible
+        // transact_icp(&logger, &ledger, &can4, 1000, &lifeline) // not possible
         assert_eq!(
-            transact_icp(ctx, &ledger, &can2, 800, &can5).await,
+            transact_icp(&log, &ledger, &can2, 800, &can5).await,
             Ok(Tokens::from_e8s(823 + fee * 2))
         );
         assert_eq!(
-            transact_icp(ctx, &ledger, &can5, 0, &can5).await,
+            transact_icp(&log, &ledger, &can5, 0, &can5).await,
             Ok(Tokens::from_e8s(823 + fee))
         ); // self, zero
         assert_eq!(
-            transact_icp(ctx, &ledger, &can5, 42, &can5).await,
+            transact_icp(&log, &ledger, &can5, 42, &can5).await,
             Ok(Tokens::from_e8s(823))
         ); // self
         assert_eq!(
-            transact_icp(ctx, &ledger, &can2, 0, &can5).await,
+            transact_icp(&log, &ledger, &can2, 0, &can5).await,
             Ok(Tokens::from_e8s(823))
         ); // zero
         assert_eq!(
-            transact_icp(ctx, &ledger, &lifeline, fee, &can5).await,
+            transact_icp(&log, &ledger, &lifeline, fee, &can5).await,
             Ok(Tokens::from_e8s(823 + fee))
         ); // zero
 
@@ -211,7 +185,7 @@ pub fn test(env: TestEnv) {
         );
 
         // as a preparation, get the subaccounts of neurons
-        let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
+        let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
         // verify that test identity is not authorised
         let authz_fail = governance
@@ -251,7 +225,7 @@ pub fn test(env: TestEnv) {
 
         // upgrade `governance` to universal
         let governance =
-            UniversalCanister::upgrade(&nns, &nns_agent, &GOVERNANCE_CANISTER_ID).await;
+            UniversalCanister::upgrade(&nns_runtime, &nns_agent, &GOVERNANCE_CANISTER_ID).await;
 
         // perform a few subaccount transfers
         // first: account -> subaccount
@@ -260,7 +234,7 @@ pub fn test(env: TestEnv) {
 
         assert_eq!(
             transact_icp_subaccount(
-                ctx,
+                &log,
                 &ledger,
                 (&can5, None),
                 100,
@@ -276,7 +250,7 @@ pub fn test(env: TestEnv) {
 
         assert_eq!(
             transact_icp_subaccount(
-                ctx,
+                &log,
                 &ledger,
                 (&governance, Some(subaccount2)),
                 100,
@@ -290,7 +264,7 @@ pub fn test(env: TestEnv) {
         // step)
         assert_eq!(
             transact_icp_subaccount(
-                ctx,
+                &log,
                 &ledger,
                 (&governance, Some(subaccount1)),
                 100,
@@ -303,7 +277,7 @@ pub fn test(env: TestEnv) {
         // fourth: subaccount -> account (checking the fee consumption from first step)
         assert_eq!(
             transact_icp_subaccount(
-                ctx,
+                &log,
                 &ledger,
                 (&governance, Some(subaccount2)),
                 100,
