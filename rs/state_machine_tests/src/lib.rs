@@ -914,6 +914,31 @@ impl StateMachine {
         Ok(canister_id)
     }
 
+    /// Installs the provided Wasm in an empty canister.
+    ///
+    /// This function is synchronous.
+    pub fn install_existing_canister(
+        &self,
+        canister_id: CanisterId,
+        module: Vec<u8>,
+        payload: Vec<u8>,
+    ) -> Result<(), UserError> {
+        self.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, module, payload)
+    }
+
+    /// Erases the previous state and code of the canister with the specified ID
+    /// and replaces the code with the provided Wasm.
+    ///
+    /// This function is synchronous.
+    pub fn reinstall_canister(
+        &self,
+        canister_id: CanisterId,
+        module: Vec<u8>,
+        payload: Vec<u8>,
+    ) -> Result<(), UserError> {
+        self.install_wasm_in_mode(canister_id, CanisterInstallMode::Reinstall, module, payload)
+    }
+
     /// Creates a new canister with cycles and installs its code.
     /// Returns the ID of the newly created canister.
     ///

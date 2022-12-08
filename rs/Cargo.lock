@@ -8332,8 +8332,12 @@ name = "ic-state-machine-tests"
 version = "0.8.0"
 dependencies = [
  "candid",
+ "ciborium",
+ "clap 3.2.23",
+ "hex",
  "ic-config",
  "ic-constants",
+ "ic-crypto",
  "ic-crypto-internal-seed",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
