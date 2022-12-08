@@ -106,8 +106,9 @@ pub fn config(env: TestEnv) {
     );
 
     info!(&logger, "Waiting for routes file");
-    let sleep_command = "until [ -f /var/cache/ic_routes/* ]; do sleep 5; done";
-    let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, sleep_command).unwrap();
+    let routes_path = "/var/opt/nginx/ic/ic_routes.js";
+    let sleep_command = format!("while grep -q '// PLACEHOLDER' {routes_path}; do sleep 5; done");
+    let (cmd_output, exit_status) = exec_ssh_command(&boundary_node_vm, &sleep_command).unwrap();
     info!(
         logger,
         "{BOUNDARY_NODE_SNP_NAME} ran `{sleep_command}`: '{}'. Exit status = {exit_status}",

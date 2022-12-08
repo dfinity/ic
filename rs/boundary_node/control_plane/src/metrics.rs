@@ -12,7 +12,7 @@ use tracing::info;
 
 use crate::{
     registry::{CreateRegistryClient, RoutingTable, Snapshot},
-    Check, Persist, PersistStatus, Run,
+    Check, Persist, PersistStatus, Reload, Run,
 };
 
 pub struct MetricParams {
@@ -144,8 +144,35 @@ impl<T: Check> Check for WithMetrics<T> {
 }
 
 #[async_trait]
+impl<T: Reload> Reload for WithMetrics<T> {
+    async fn reload(&self) -> Result<(), Error> {
+        let start_time = Instant::now();
+
+        let out = self.0.reload().await;
+
+        let status = if out.is_ok() { "ok" } else { "fail" };
+        let duration = start_time.elapsed().as_secs_f64();
+
+        let labels = &[KeyValue::new("status", status)];
+
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        counter.add(1, labels);
+        recorder.record(duration, labels);
+
+        info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
+
+        out
+    }
+}
+
+#[async_trait]
 impl<T: Persist> Persist for WithMetrics<T> {
-    async fn persist(&mut self, rt: RoutingTable) -> Result<PersistStatus, Error> {
+    async fn persist(&self, rt: &RoutingTable) -> Result<PersistStatus, Error> {
         let start_time = Instant::now();
 
         let out = self.0.persist(rt).await;

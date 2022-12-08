@@ -12,37 +12,33 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:axum",
     "@crate_index//:bytes",
+    "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:dashmap",
     "@crate_index//:futures",
+    "@crate_index//:hex",
     "@crate_index//:mockall",
-    "@crate_index//:opentelemetry",
+    "@crate_index//:nix",
     "@crate_index//:opentelemetry-prometheus",
+    "@crate_index//:opentelemetry",
     "@crate_index//:prometheus",
     "@crate_index//:reqwest",
-    "@crate_index//:serde",
     "@crate_index//:serde_cbor",
     "@crate_index//:serde_json",
+    "@crate_index//:serde",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
+    "@crate_index//:tracing",
 ]
 
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
 
-DEV_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_binary(
     name = "boundary-node-control-plane",
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "boundary_node_control_plane",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
@@ -51,8 +47,7 @@ rust_binary(
 
 rust_test(
     name = "control_plane_test",
-    aliases = ALIASES,
     crate = ":boundary-node-control-plane",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
 )

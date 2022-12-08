@@ -168,12 +168,13 @@ function setup_geolite2_dbs() {
 function setup_ic_router() {
     local -r SNAKEOIL_PEM='/etc/ssl/certs/ssl-cert-snakeoil.pem'
     local -r IC_ROUTING='/var/opt/nginx/ic'
+    local -r IC_LEGACY_ROUTING='/var/cache/ic_routes'
     local -r TRUSTED_CERTS="${IC_ROUTING}/trusted_certs.pem"
-    local -r NGINX_TABLE="${IC_ROUTING}/nginx_table.conf"
-    local -r IC_ROUTER_TABLE="${IC_ROUTING}/ic_router_table.js"
+    local -r NGINX_TABLE="${IC_ROUTING}/ic_upstreams.conf"
+    local -r IC_ROUTER_TABLE="${IC_ROUTING}/ic_routes.js"
 
     # Place to store the generated routing tables
-    mkdir -p "${IC_ROUTING}"
+    mkdir -p "${IC_ROUTING}" "${IC_LEGACY_ROUTING}"
 
     # trusted_cert.pem contains all certificates for the upstream replica. This file
     # is periodically updated by the proxy+watcher service. To bootstrap the process
@@ -185,20 +186,11 @@ function setup_ic_router() {
     fi
 
     if [[ ! -f "${NGINX_TABLE}" ]]; then
-        cat >"${NGINX_TABLE}" <<EOF
-# MAINTAINED BY ic_router_control_plane.py DO NOT EDIT BY HAND
-# END MAINTAINED BY ic_router_control_plane.py DO NOT EDIT BY HAND
-EOF
+        echo '# PLACEHOLDER' >"${NGINX_TABLE}"
     fi
 
     if [[ ! -f "${IC_ROUTER_TABLE}" ]]; then
-        cat >"${IC_ROUTER_TABLE}" <<EOF
-let subnet_table = {
-// MAINTAINED BY ic_router_control_plane.py DO NOT EDIT BY HAND
-// END MAINTAINED BY ic_router_control_plane.py DO NOT EDIT BY HAND
-};
-export default subnet_table;
-EOF
+        echo 'let subnet_table = {}; export default subnet_table; // PLACEHOLDER' >"${IC_ROUTER_TABLE}"
     fi
 }
 
