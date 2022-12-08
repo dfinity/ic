@@ -145,10 +145,12 @@ export type Token = { type: <T>() => IDL.Type<T> };
 
 ## Release
 
-1. Create MR that updates `version` in `package.json`
-2. Test the built artifact using testnet boundary node VMs
-   1. TODO https://dfinity.atlassian.net/browse/L2-442
-3. Merge MR to master
-4. Tag the commit on `master` with `service-worker_v${version}`
-5. Verify that the desired version has been pushed to NPM: https://www.npmjs.com/package/@dfinity/service-worker
-6. Create an MR for the boundary nodes team that updates the `sw_version` and `sw_sha256` in `ic-os/boundary-guestos/rootfs/Dockerfile`
+1. Make an MR to bump the service worker version
+      1. Update `version` in `package.json`
+      1. Run `npm i --package-lock-only`
+      1. Test the built artifact using testnet boundary node VMs
+            - Currently needs to be done before making the MR as the boundary nodes are not built if only service worker files are updated
+1. Merge MR to master
+1. Tag the commit on `master` with `service-worker_v${version}`
+1. Verify that the desired version has been pushed to NPM: https://www.npmjs.com/package/@dfinity/service-worker
+1. Create an MR for the boundary nodes team that updates the `sw_version` and `sw_sha256` in `ic-os/boundary-guestos/rootfs/Dockerfile`
