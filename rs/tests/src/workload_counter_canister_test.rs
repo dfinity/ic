@@ -23,15 +23,11 @@ Runbook::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasGroupSetup, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
 };
-use crate::util::{
-    assert_canister_counter_with_retries, assert_create_agent, assert_endpoints_health, block_on,
-    delay, get_random_application_node_endpoint, EndpointsStatus,
-};
+use crate::util::{assert_canister_counter_with_retries, assert_create_agent, block_on, delay};
 use crate::workload::{CallSpec, Request, RoundRobinPlan, Workload};
 use ic_agent::{export::Principal, Agent};
 use ic_base_types::PrincipalId;
@@ -57,6 +53,11 @@ pub fn config(env: TestEnv) {
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(NODES_COUNT))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 /// SLO test configuration with a NNS subnet and an app subnet with the same number of nodes as used on mainnet
@@ -69,6 +70,11 @@ pub fn two_third_latency_config(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 /// Default test installing two canisters and sending 60 requests per second for 30 seconds
@@ -98,19 +104,18 @@ fn test(
     duration: Duration,
     is_install_nns_canisters: bool,
 ) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-    let mut rng = ctx.rng.clone();
-    let app_endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-    let endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
-
-    block_on(async move {
-        // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
-        assert_endpoints_health(endpoints.as_slice(), EndpointsStatus::AllHealthy).await;
-        info!(ctx.logger, "All nodes are reachable, IC setup succeeded.");
-    });
+    let log = env.logger();
+    let app_node = env
+        .topology_snapshot()
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap()
+        .nodes()
+        .next()
+        .unwrap();
 
     if is_install_nns_canisters {
-        info!(&ctx.logger, "Installing NNS canisters...");
+        info!(log, "Installing NNS canisters...");
         env.topology_snapshot()
             .root_subnet()
             .nodes()
@@ -122,25 +127,20 @@ fn test(
 
     block_on(async move {
         info!(
-            ctx.logger,
+            log,
             "Step 1: Install {} canisters on the subnet..", canister_count
         );
         let mut agents = Vec::new();
         let mut canisters = Vec::new();
 
-        agents.push(assert_create_agent(app_endpoint.url.as_str()).await);
+        agents.push(assert_create_agent(app_node.get_public_url().as_str()).await);
         let install_agent = agents[0].clone();
         for _ in 0..canister_count {
             canisters.push(
-                install_counter_canister(&install_agent, app_endpoint.effective_canister_id())
-                    .await,
+                install_counter_canister(&install_agent, app_node.effective_canister_id()).await,
             );
         }
-        info!(
-            ctx.logger,
-            "{} canisters installed successfully.",
-            canisters.len()
-        );
+        info!(log, "{} canisters installed successfully.", canisters.len());
         assert_eq!(
             canisters.len(),
             canister_count,
@@ -148,7 +148,7 @@ fn test(
             canisters.len(),
             canister_count
         );
-        info!(ctx.logger, "Step 2: Instantiate and start the workload..");
+        info!(log, "Step 2: Instantiate and start the workload..");
         let payload: Vec<u8> = vec![0; 12];
         let plan = RoundRobinPlan::new(vec![
             Request::Update(CallSpec::new(canisters[0], "write", payload.clone())),
@@ -164,19 +164,16 @@ fn test(
             )),
             Request::Update(CallSpec::new(canisters[1], "write", payload.clone())),
         ]);
-        let workload = Workload::new(agents, rps, duration, plan, ctx.logger.clone())
+        let workload = Workload::new(agents, rps, duration, plan, log.clone())
             .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
             .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
         let metrics = workload
             .execute()
             .await
             .expect("Workload execution has failed.");
+        info!(log, "Results of the workload execution {:?}", metrics);
         info!(
-            ctx.logger,
-            "Results of the workload execution {:?}", metrics
-        );
-        info!(
-            ctx.logger,
+            log,
             "Step 3: Assert expected number of failed query calls on each canister.."
         );
         let requests_count = rps * duration.as_secs() as usize;
@@ -184,13 +181,13 @@ fn test(
         let min_expected_failure_calls = (SUCCESS_THRESHOLD * requests_count as f32 / 2.0) as usize;
         let min_expected_success_calls = min_expected_failure_calls;
         info!(
-            ctx.logger,
+            log,
             "Min expected number of success calls {}, failure calls {}",
             min_expected_success_calls,
             min_expected_failure_calls
         );
         info!(
-            ctx.logger,
+            log,
             "Actual number of success calls {}, failure calls {}",
             metrics.success_calls(),
             metrics.failure_calls()
@@ -227,17 +224,17 @@ fn test(
             metrics.total_calls()
         );
         info!(
-            ctx.logger,
+            log,
             "Step 4: Assert the expected number of update calls on each canister.."
         );
         let min_expected_canister_counter = min_expected_success_calls / canister_count;
         info!(
-            ctx.logger,
+            log,
             "Min expected counter value on canisters {}", min_expected_canister_counter
         );
         for canister in canisters.iter() {
             assert_canister_counter_with_retries(
-                &ctx.logger,
+                &log,
                 &install_agent,
                 canister,
                 payload.clone(),

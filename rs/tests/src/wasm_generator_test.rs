@@ -1,6 +1,6 @@
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
 use crate::util;
 use candid::Encode;
 use ic_agent::export::Principal;
@@ -18,23 +18,26 @@ pub fn config(env: TestEnv) {
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 pub fn test(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let endpoints: Vec<_> = handle.as_permutation(&mut rng).collect();
-    let node = util::get_random_application_node_endpoint(&handle, &mut rng);
+    let log = env.logger();
+    let app_node = env
+        .topology_snapshot()
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap()
+        .nodes()
+        .next()
+        .unwrap();
+    let app_agent = app_node.with_default_agent(|agent| async move { agent });
     util::block_on(async move {
-        info!(ctx.logger, "Asserting reachability of all nodes..");
-        // Assert all nodes are reachable via http:://[IPv6]:8080/api/v2/status
-        util::assert_endpoints_health(endpoints.as_slice(), util::EndpointsStatus::AllHealthy)
-            .await;
-
-        info!(ctx.logger, "All nodes are reachable, creating agent..");
-        let agent = util::assert_create_agent(node.url.as_str()).await;
-
-        info!(ctx.logger, "Reading canister paths..");
+        info!(log, "Reading canister paths ...");
         // A path of a directory containing canisters has to be passed in to the test
         // through an env variable named `RANDOM_CANISTERS_BASE_DIR`.
         let canisters_base_dir = env::var("RANDOM_CANISTERS_BASE_DIR")
@@ -43,17 +46,17 @@ pub fn test(env: TestEnv) {
             fs::read_dir(canisters_base_dir).expect("directory with random canisters is incorrect");
 
         for p in can_paths {
-            info!(ctx.logger, "Installing canister {:?}..", p);
+            info!(log, "Installing canister {:?} ...", p);
             let cid = install_random_canister(
-                &agent,
-                node.effective_canister_id(),
+                &app_agent,
+                app_node.effective_canister_id(),
                 &p.expect("canister path incorrect").path(),
             )
             .await;
-            info!(ctx.logger, "Send query to canister");
+            info!(log, "Send query to canister");
             // Verify that the compute function exported by the installed canister can be
             // called.
-            agent
+            app_agent
                 .query(&cid, "compute")
                 .with_arg(&Encode!().unwrap())
                 .call()

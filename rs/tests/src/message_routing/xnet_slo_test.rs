@@ -4,10 +4,10 @@ Title:: XNet messaging functions within SLO.
 Goal:: Ensure IC routes XNet traffic in a timely manner.
 
 Runbook::
-0. Instantiate an IC with SUBNETS applications subnets containing NODES_PER_SUBNET nodes each.
+0. Instantiate an IC with N application subnets containing M nodes each.
 1. Build and install Xnet canisters on each subnet (number of canisters is calculated dynamically).
 2. Start all canisters (via update `start` call).
-3. Wait RUNTIME_SEC secs for canisters to exchange messages.
+3. Wait for RUNTIME_SEC secs for canisters to exchange messages.
 4. Stop sending messages for all canisters (via update `stop` call).
 5. Collect metrics from all canisters (via query `metrics` call).
 6. Aggregate metrics for each subnet (over its canisters).
@@ -24,10 +24,12 @@ If the NNS canisters are not deployed, the subnets will stop making progress aft
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::{get_ic_handle_and_ctx, PotSetupFn, SysTestFn};
+use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
-use crate::util::{assert_endpoints_health, block_on, runtime_from_url, EndpointsStatus};
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+};
+use crate::util::{block_on, runtime_from_url};
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_registry_subnet_type::SubnetType;
@@ -129,30 +131,23 @@ fn setup(env: TestEnv, config: Config) {
         })
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 // Generic test
 pub fn test(env: TestEnv, config: Config) {
     let logger = env.logger();
     info!(logger, "Config for the test: {:?}", config);
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-    let mut rng = ctx.rng.clone();
-    let mut endpoints = handle.as_permutation(&mut rng).collect::<Vec<_>>();
-    assert_eq!(endpoints.len(), config.subnets * config.nodes_per_subnet);
-    // Assert all nodes are reachable after IC setup.
-    block_on(assert_endpoints_health(
-        endpoints.as_slice(),
-        EndpointsStatus::AllHealthy,
-    ));
-    info!(
-        logger,
-        "IC setup succeeded, all status endpoints are reachable over http."
-    );
+    let topology = env.topology_snapshot();
     // Install NNS for long tests (note that for large numbers of subnets or
     // nodes the registry might be too big for installation as a canister)
     if config.runtime > Duration::from_secs(1200) {
         info!(logger, "Installing NNS canisters on the root subnet...");
-        env.topology_snapshot()
+        topology
             .root_subnet()
             .nodes()
             .next()
@@ -162,19 +157,14 @@ pub fn test(env: TestEnv, config: Config) {
         info!(&logger, "NNS canisters installed successfully.");
     }
     // Installing canisters on a subnet requires an Agent (or a Runtime wrapper around Agent).
-    // We need only one endpoint per subnet for canister installation.
-    endpoints.sort_by_key(|key| key.subnet_id().unwrap());
-    endpoints.dedup_by_key(|key| key.subnet_id().unwrap());
-    assert_eq!(
-        endpoints.len(),
-        config.subnets,
-        "Selecting unique endpoints based on subnet_id failed."
-    );
-    // All elements are related to subnets with different ids.
-    let endpoints_runtime = endpoints
-        .iter()
-        .map(|ep| runtime_from_url(ep.url.clone(), ep.effective_canister_id()))
-        .collect::<Vec<_>>();
+    // We need only one agent (runtime) per subnet for canister installation.
+    let endpoints_runtime: Vec<Runtime> = topology
+        .subnets()
+        .map(|s| {
+            let node = s.nodes().next().unwrap();
+            runtime_from_url(node.get_public_url(), node.effective_canister_id())
+        })
+        .collect();
     assert_eq!(endpoints_runtime.len(), config.subnets);
     // Step 1: Build and install Xnet canisters on each subnet.
     info!(logger, "Building Xnet canister wasm...");
