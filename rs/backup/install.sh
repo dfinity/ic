@@ -15,6 +15,8 @@ BACKUP_EXE_GZ="${BACKUP_EXE}.gz"
 CONFIG_FILE_NAME="config.json5"
 CONFIG_FILE="${TMP_DIR}/${CONFIG_FILE_NAME}"
 SERVICE_CONFIG_FILE="${TMP_DIR}/ic-backup.service"
+UPDATE_FILE_NAME="update.sh"
+UPDATE_FILE="${TMP_DIR}/${UPDATE_FILE_NAME}"
 NNS_URL="https://ic0.app"
 PUBLIC_KEY_NAME="ic_public_key.pem"
 PUBLIC_KEY_FILE="${TMP_DIR}/${PUBLIC_KEY_NAME}"
@@ -23,7 +25,7 @@ SYNCING_PERIOD=1800 # 1/2 hour
 REPLAY_PERIOD=14400 # 4 hours
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="6a9a02b82b3149a1fd5d72479f794256f44175a3"
+DEFAULT_BUILD_ID="0859a59573399a9756181bd4111ce6e06095ae1d"
 echo "Enter the BUILD_ID of the proper ic-backup version:"
 echo "(default: ${DEFAULT_BUILD_ID}):"
 read BUILD_ID
@@ -73,6 +75,7 @@ chmod +x ${BACKUP_EXE}
 
 read -r -d '' CONFIG <<-EOM
 {
+    "version": 1,
     "push_metrics": true,
     "backup_instance": "${BACKUP_INSTANCE}",
     "nns_url": "${NNS_URL}",
@@ -137,11 +140,15 @@ WantedBy=multi-user.target
 
 echo "${SERVICE_CONFIG}" >${SERVICE_CONFIG_FILE}
 
+echo "bash <(curl -L https://raw.githubusercontent.com/dfinity/ic/master/rs/backup/upgrade.sh)" >${UPDATE_FILE}
+chmod +x ${UPDATE_FILE}
+
 mkdir -p ${WORK_DIR}
 mkdir -p ${ROOT_DIR}
 cp ${BACKUP_EXE} ${WORK_DIR}
 cp ${CONFIG_FILE} ${WORK_DIR}
 cp ${PUBLIC_KEY_FILE} ${WORK_DIR}
+cp ${UPDATE_FILE} ${WORK_DIR}
 
 echo "Installing system config..."
 sudo cp ${SERVICE_CONFIG_FILE} /etc/systemd/system
@@ -163,3 +170,7 @@ echo "sudo systemctl start ic-backup.service"
 echo
 echo "also consider to let it run on a reboot with this command:"
 echo "sudo systemctl enable ic-backup.service"
+echo
+echo "Later on you can periodically update to the latest version of the backup tool"
+echo "by running ${UPDATE_FILE_NAME} in the ${WORK_DIR}"
+echo
