@@ -25,7 +25,7 @@ SYNCING_PERIOD=1800 # 1/2 hour
 REPLAY_PERIOD=14400 # 4 hours
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="0859a59573399a9756181bd4111ce6e06095ae1d"
+DEFAULT_BUILD_ID="f0c69aebc64fc0ec52f1579d5ed049006a70e050"
 echo "Enter the BUILD_ID of the proper ic-backup version:"
 echo "(default: ${DEFAULT_BUILD_ID}):"
 read BUILD_ID
@@ -75,7 +75,7 @@ chmod +x ${BACKUP_EXE}
 
 read -r -d '' CONFIG <<-EOM
 {
-    "version": 1,
+    "version": 2,
     "push_metrics": true,
     "backup_instance": "${BACKUP_INSTANCE}",
     "nns_url": "${NNS_URL}",
@@ -140,7 +140,11 @@ WantedBy=multi-user.target
 
 echo "${SERVICE_CONFIG}" >${SERVICE_CONFIG_FILE}
 
-echo "bash <(curl -L https://raw.githubusercontent.com/dfinity/ic/master/rs/backup/upgrade.sh)" >${UPDATE_FILE}
+UPDATE_CONTENT="#!/bin/bash
+bash <(curl -L https://raw.githubusercontent.com/dfinity/ic/master/rs/backup/upgrade.sh)
+"
+
+echo "${UPDATE_CONTENT}" >${UPDATE_FILE}
 chmod +x ${UPDATE_FILE}
 
 mkdir -p ${WORK_DIR}
