@@ -1048,11 +1048,6 @@ struct ProposeToCreateSubnetCmd {
     pub gossip_retransmission_request_ms: Option<u32>,
 
     #[clap(long)]
-    /// advert best effort percentage (GossipAdvertConfig in
-    /// rs/protobuf/def/registry/subnet/v1/subnet.proto)
-    pub advert_best_effort_percentage: Option<u32>,
-
-    #[clap(long)]
     /// if set, the subnet will start as (new) NNS.
     pub start_as_nns: bool,
 
@@ -1249,7 +1244,6 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             gossip_pfn_evaluation_period_ms: self.gossip_pfn_evaluation_period_ms.unwrap(),
             gossip_registry_poll_period_ms: self.gossip_registry_poll_period_ms.unwrap(),
             gossip_retransmission_request_ms: self.gossip_retransmission_request_ms.unwrap(),
-            advert_best_effort_percentage: self.advert_best_effort_percentage,
             start_as_nns: self.start_as_nns,
             subnet_type: self.subnet_type,
             is_halted: self.is_halted,
@@ -1549,11 +1543,6 @@ struct ProposeToUpdateSubnetCmd {
     pub gossip_retransmission_request_ms: Option<u32>,
 
     #[clap(long)]
-    /// advert best effort percentage (GossipAdvertConfig in
-    /// rs/protobuf/def/registry/subnet/v1/subnet.proto)
-    pub advert_best_effort_percentage: Option<u32>,
-
-    #[clap(long)]
     /// If set, it will set a default value for the entire gossip config. Useful
     /// when you want to only set some fields for the gossip config and there's
     /// currently none set.
@@ -1791,7 +1780,6 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
             pfn_evaluation_period_ms: self.gossip_pfn_evaluation_period_ms,
             registry_poll_period_ms: self.gossip_registry_poll_period_ms,
             retransmission_request_ms: self.gossip_retransmission_request_ms,
-            advert_best_effort_percentage: self.advert_best_effort_percentage,
             set_gossip_config_to_default: self.set_gossip_config_to_default,
             start_as_nns: self.start_as_nns,
 

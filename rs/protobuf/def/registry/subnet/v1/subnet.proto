@@ -240,6 +240,8 @@ message ExtendedDerivationPath {
 message GossipConfig {
   reserved 9;
   reserved "relay_config";
+  reserved 10;
+  reserved "advert_config";
 
   // max outstanding request per peer MIN/DEFAULT/MAX 1/20/200
   uint32 max_artifact_streams_per_peer = 1;
@@ -258,20 +260,8 @@ message GossipConfig {
   // period for sending a retransmission request    
   uint32 retransmission_request_ms = 8;
   // config for advert distribution.
-  // If this field is not specified, the feature is turned off.
-  GossipAdvertConfig advert_config = 10;
 }
 
-// Per subnet config for advert distribution.
-message GossipAdvertConfig {
-  // The subset of peers to broadcast to, specified in percentage.
-  // This is only  used when the P2P clients mark the advert as
-  // requiring best effort distribution. In future, this fixed
-  // percentage could be replaced by dynamic computation of the
-  // distribution set size, as a function of subnet size.
-  // 0 < best_effort_percentage <= 100
-  uint32 best_effort_percentage = 1;
-}
 
 // Represents the type of subnet. Subnets of different type might exhibit different
 // behavior, e.g. being more restrictive in what operations are allowed or privileged

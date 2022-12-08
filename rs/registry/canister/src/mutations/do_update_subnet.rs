@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use ic_base_types::{subnet_id_into_protobuf, SubnetId};
 use ic_ic00_types::EcdsaKeyId;
-use ic_protobuf::registry::subnet::v1::{GossipAdvertConfig, SubnetRecord};
+use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
@@ -175,7 +175,6 @@ pub struct UpdateSubnetPayload {
     pub pfn_evaluation_period_ms: Option<u32>,
     pub registry_poll_period_ms: Option<u32>,
     pub retransmission_request_ms: Option<u32>,
-    pub advert_best_effort_percentage: Option<u32>,
 
     pub set_gossip_config_to_default: bool,
 
@@ -234,7 +233,6 @@ fn is_any_gossip_field_set(payload: &UpdateSubnetPayload) -> bool {
         || payload.pfn_evaluation_period_ms.is_some()
         || payload.registry_poll_period_ms.is_some()
         || payload.retransmission_request_ms.is_some()
-        || payload.advert_best_effort_percentage.is_some()
 }
 
 // Merges the changes included in the `UpdateSubnetPayload` to the given
@@ -274,7 +272,6 @@ fn merge_subnet_record(
         pfn_evaluation_period_ms,
         registry_poll_period_ms,
         retransmission_request_ms,
-        advert_best_effort_percentage,
         set_gossip_config_to_default,
         start_as_nns,
         subnet_type,
@@ -314,10 +311,6 @@ fn merge_subnet_record(
     maybe_set!(gossip_config, pfn_evaluation_period_ms);
     maybe_set!(gossip_config, registry_poll_period_ms);
     maybe_set!(gossip_config, retransmission_request_ms);
-    let advert_config = advert_best_effort_percentage.map(|val| GossipAdvertConfig {
-        best_effort_percentage: val,
-    });
-    maybe_set!(gossip_config, advert_config);
     subnet_record.gossip_config = Some(gossip_config);
 
     maybe_set!(subnet_record, start_as_nns);
@@ -353,7 +346,7 @@ mod tests {
     };
     use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
-    use ic_protobuf::registry::subnet::v1::{GossipAdvertConfig, GossipConfig, SubnetRecord};
+    use ic_protobuf::registry::subnet::v1::{GossipConfig, SubnetRecord};
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::types::ids::subnet_test_id;
@@ -394,7 +387,6 @@ mod tests {
             pfn_evaluation_period_ms: Some(5000),
             registry_poll_period_ms: Some(4000),
             retransmission_request_ms: Some(7000),
-            advert_best_effort_percentage: Some(50),
             set_gossip_config_to_default: false,
             start_as_nns: Some(true),
             subnet_type: None,
@@ -440,7 +432,6 @@ mod tests {
             pfn_evaluation_period_ms: None,
             registry_poll_period_ms: None,
             retransmission_request_ms: None,
-            advert_best_effort_percentage: None,
             set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: None,
@@ -479,7 +470,6 @@ mod tests {
                 pfn_evaluation_period_ms: 100,
                 registry_poll_period_ms: 100,
                 retransmission_request_ms: 100,
-                advert_config: None,
             }),
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
@@ -516,7 +506,6 @@ mod tests {
             pfn_evaluation_period_ms: Some(5000),
             registry_poll_period_ms: Some(4000),
             retransmission_request_ms: Some(7000),
-            advert_best_effort_percentage: Some(50),
             set_gossip_config_to_default: false,
             start_as_nns: Some(true),
             subnet_type: None,
@@ -564,9 +553,6 @@ mod tests {
                     pfn_evaluation_period_ms: 5000,
                     registry_poll_period_ms: 4000,
                     retransmission_request_ms: 7000,
-                    advert_config: Some(GossipAdvertConfig {
-                        best_effort_percentage: 50
-                    }),
                 }),
                 start_as_nns: true,
                 subnet_type: SubnetType::Application.into(),
@@ -620,9 +606,6 @@ mod tests {
                 pfn_evaluation_period_ms: 100,
                 registry_poll_period_ms: 100,
                 retransmission_request_ms: 100,
-                advert_config: Some(GossipAdvertConfig {
-                    best_effort_percentage: 10,
-                }),
             }),
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
@@ -659,7 +642,6 @@ mod tests {
             pfn_evaluation_period_ms: None,
             registry_poll_period_ms: None,
             retransmission_request_ms: None,
-            advert_best_effort_percentage: None,
             set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: None,
@@ -697,9 +679,6 @@ mod tests {
                     pfn_evaluation_period_ms: 100,
                     registry_poll_period_ms: 100,
                     retransmission_request_ms: 100,
-                    advert_config: Some(GossipAdvertConfig {
-                        best_effort_percentage: 10,
-                    }),
                 }),
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
@@ -788,7 +767,6 @@ mod tests {
             pfn_evaluation_period_ms: None,
             registry_poll_period_ms: None,
             retransmission_request_ms: None,
-            advert_best_effort_percentage: None,
             set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: Some(SubnetType::Application),
@@ -856,7 +834,6 @@ mod tests {
             pfn_evaluation_period_ms: Some(PFN_EVALUATION_PERIOD_MS),
             registry_poll_period_ms: Some(REGISTRY_POLL_PERIOD_MS),
             retransmission_request_ms: Some(RETRANSMISSION_REQUEST_MS),
-            advert_best_effort_percentage: Some(30),
             set_gossip_config_to_default: true,
             start_as_nns: None,
             subnet_type: None,
@@ -894,9 +871,6 @@ mod tests {
                     pfn_evaluation_period_ms: PFN_EVALUATION_PERIOD_MS,
                     registry_poll_period_ms: REGISTRY_POLL_PERIOD_MS,
                     retransmission_request_ms: RETRANSMISSION_REQUEST_MS,
-                    advert_config: Some(GossipAdvertConfig {
-                        best_effort_percentage: 30
-                    }),
                 }),
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
@@ -934,9 +908,6 @@ mod tests {
                 pfn_evaluation_period_ms: 100,
                 registry_poll_period_ms: 100,
                 retransmission_request_ms: 100,
-                advert_config: Some(GossipAdvertConfig {
-                    best_effort_percentage: 10,
-                }),
             }),
             start_as_nns: false,
             subnet_type: SubnetType::Application.into(),
@@ -973,7 +944,6 @@ mod tests {
             pfn_evaluation_period_ms: None,
             registry_poll_period_ms: None,
             retransmission_request_ms: None,
-            advert_best_effort_percentage: Some(100),
             set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: None,
@@ -1011,9 +981,6 @@ mod tests {
                     pfn_evaluation_period_ms: 100,
                     registry_poll_period_ms: 100,
                     retransmission_request_ms: 100,
-                    advert_config: Some(GossipAdvertConfig {
-                        best_effort_percentage: 100
-                    }),
                 }),
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),

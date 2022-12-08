@@ -162,7 +162,6 @@ pub(crate) fn get_updatesubnetpayload_with_keys(
         pfn_evaluation_period_ms: None,
         registry_poll_period_ms: None,
         retransmission_request_ms: None,
-        advert_best_effort_percentage: None,
         set_gossip_config_to_default: false,
         start_as_nns: None,
         subnet_type: None,

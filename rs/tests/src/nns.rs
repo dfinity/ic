@@ -931,7 +931,6 @@ pub async fn submit_create_application_subnet_proposal(
         gossip_pfn_evaluation_period_ms: gossip.pfn_evaluation_period_ms,
         gossip_registry_poll_period_ms: gossip.registry_poll_period_ms,
         gossip_retransmission_request_ms: gossip.retransmission_request_ms,
-        advert_best_effort_percentage: gossip.advert_config.map(|gac| gac.best_effort_percentage),
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,
