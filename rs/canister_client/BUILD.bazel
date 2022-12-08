@@ -17,8 +17,10 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     "//rs/canister_client/sender",
+    "//rs/certification",
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
     "//rs/crypto/tree_hash",
+    "//rs/crypto/utils/threshold_sig_der",
     "//rs/protobuf",
     "//rs/tree_deserializer",
     "//rs/types/ic00_types",
@@ -43,9 +45,10 @@ MACRO_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    "//rs/certification/test-utils",
+    "//rs/crypto/test_utils",
     "//rs/test_utilities",
     "//rs/validator",
-    "//rs/crypto/test_utils",
     "@crate_index//:hex",
     "@crate_index//:libsecp256k1",
     "@crate_index//:rand_0_8_4",
