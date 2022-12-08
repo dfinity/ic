@@ -358,6 +358,7 @@ def populate_dependencies_dir(
         "sns-wasm-canister.wasm": "rs/tests/nns-canisters/sns-wasm-canister",
         "ic-icrc1-ledger.wasm": "rs/rosetta-api/icrc1/ledger/ledger_canister.wasm",
         "ic-ckbtc-minter.wasm": "rs/bitcoin/ckbtc/minter/ckbtc_minter.wasm",
+        "ic-ckbtc-minter_debug.wasm": "rs/bitcoin/ckbtc/minter/ckbtc_minter_debug.wasm",
         "ic-rosetta-api": "rs/rosetta-api/ic-rosetta-api",
         "http_counter.wasm": "rs/tests/test_canisters/http_counter/http_counter.wasm",
         "kv_store.wasm": "rs/tests/test_canisters/kv_store/kv_store.wasm",

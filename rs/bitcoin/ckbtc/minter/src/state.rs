@@ -16,6 +16,27 @@ use ic_btc_types::{Network, OutPoint, Utxo};
 use ic_icrc1::Account;
 use serde::Serialize;
 
+// Like assert_eq, but returns an error instead of panicking.
+macro_rules! ensure_eq {
+    ($lhs:expr, $rhs:expr, $msg:expr $(, $args:expr)* $(,)*) => {
+        if $lhs != $rhs {
+            return Err(format!("{} ({:?}) != {} ({:?}): {}",
+                               std::stringify!($lhs), $lhs,
+                               std::stringify!($rhs), $rhs,
+                               format!($msg $(,$args)*)));
+        }
+    }
+}
+macro_rules! ensure {
+    ($cond:expr, $msg:expr $(, $args:expr)* $(,)*) => {
+        if !$cond {
+            return Err(format!("Condition {} is false: {}",
+                               std::stringify!($cond),
+                               format!($msg $(,$args)*)));
+        }
+    }
+}
+
 /// The maximum number of finalized BTC retrieval requests that we keep in the
 /// history.
 const MAX_FINALIZED_REQUESTS: usize = 100;
@@ -84,7 +105,7 @@ pub enum RetrieveBtcStatus {
 /// The state of the ckBTC Minter.
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
-#[derive(Clone, Debug, serde::Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
 pub struct CkBtcMinterState {
     /// The bitcoin network that the minter will connect to
     pub btc_network: Network,
@@ -143,15 +164,30 @@ pub struct CkBtcMinterState {
 }
 
 impl CkBtcMinterState {
-    pub fn check_invariants(&self) {
+    pub fn reinit(
+        &mut self,
+        InitArgs {
+            btc_network,
+            ecdsa_key_name,
+            retrieve_btc_min_amount,
+            ledger_id,
+        }: InitArgs,
+    ) {
+        self.btc_network = btc_network;
+        self.ecdsa_key_name = ecdsa_key_name;
+        self.retrieve_btc_min_amount = retrieve_btc_min_amount;
+        self.ledger_id = ledger_id;
+    }
+
+    pub fn check_invariants(&self) -> Result<(), String> {
         for utxo in self.available_utxos.iter() {
-            assert!(
+            ensure!(
                 self.outpoint_account.contains_key(&utxo.outpoint),
                 "the output_account map is missing an entry for {:?}",
                 utxo.outpoint
             );
 
-            assert!(
+            ensure!(
                 self.utxos_state_addresses
                     .iter()
                     .any(|(_, utxos)| utxos.contains(utxo)),
@@ -162,9 +198,16 @@ impl CkBtcMinterState {
 
         for (addr, utxos) in self.utxos_state_addresses.iter() {
             for utxo in utxos.iter() {
-                assert_eq!(self.outpoint_account.get(&utxo.outpoint), Some(addr));
+                ensure_eq!(
+                    self.outpoint_account.get(&utxo.outpoint),
+                    Some(addr),
+                    "missing outpoint account for {:?}",
+                    utxo.outpoint
+                );
             }
         }
+
+        Ok(())
     }
 
     pub fn add_utxos(&mut self, account: Account, utxos: Vec<Utxo>) {
@@ -185,7 +228,8 @@ impl CkBtcMinterState {
         }
 
         #[cfg(debug_assertions)]
-        self.check_invariants();
+        self.check_invariants()
+            .expect("state invariants are violated");
     }
 
     /// Returns the status of the retrieve_btc request with the specified
@@ -282,6 +326,18 @@ impl CkBtcMinterState {
         }
     }
 
+    /// Removes a pending retrive_btc request with the specified block index.
+    pub fn remove_pending_request(&mut self, block_index: u64) -> Option<RetrieveBtcRequest> {
+        match self
+            .pending_retrieve_btc_requests
+            .iter()
+            .position(|req| req.block_index == block_index)
+        {
+            Some(pos) => self.pending_retrieve_btc_requests.remove(pos),
+            None => None,
+        }
+    }
+
     /// Marks the specified retrieve_btc request as in-flight.
     ///
     /// # Panics
@@ -314,7 +370,7 @@ impl CkBtcMinterState {
     ///
     /// This function panics if there is a pending retrieve_btc request with the
     /// same identifier as one of the request used for the transaction.
-    pub fn push_submitted_request(&mut self, tx: SubmittedBtcTransaction) {
+    pub fn push_submitted_transaction(&mut self, tx: SubmittedBtcTransaction) {
         for req in tx.requests.iter() {
             assert!(!self.has_pending_request(req.block_index));
             self.requests_in_flight.remove(&req.block_index);
@@ -336,6 +392,73 @@ impl CkBtcMinterState {
         }
         self.finalized_requests.push_back(req)
     }
+
+    /// Checks whether the internal state of the minter matches the other state
+    /// semantically (the state holds the same data, but maybe in a slightly
+    /// different form).
+    pub fn check_semantically_eq(&self, other: &Self) -> Result<(), String> {
+        ensure_eq!(
+            self.btc_network,
+            other.btc_network,
+            "btc_network does not match"
+        );
+        ensure_eq!(
+            self.ecdsa_key_name,
+            other.ecdsa_key_name,
+            "ecdsa_key_name does not match"
+        );
+        ensure_eq!(
+            self.min_confirmations,
+            other.min_confirmations,
+            "min_confirmations does not match"
+        );
+        ensure_eq!(self.ledger_id, other.ledger_id, "ledger_id does not match");
+        ensure_eq!(
+            self.finalized_requests,
+            other.finalized_requests,
+            "finalized_requests do not match"
+        );
+        ensure_eq!(
+            self.requests_in_flight,
+            other.requests_in_flight,
+            "requests_in_flight do not match"
+        );
+        ensure_eq!(
+            self.available_utxos,
+            other.available_utxos,
+            "available_utxos do not match"
+        );
+        ensure_eq!(
+            self.utxos_state_addresses,
+            other.utxos_state_addresses,
+            "utxos_state_addresses do not match"
+        );
+
+        let my_txs = as_sorted_vec(self.submitted_transactions.iter().cloned(), |tx| tx.txid);
+        let other_txs = as_sorted_vec(other.submitted_transactions.iter().cloned(), |tx| tx.txid);
+        ensure_eq!(my_txs, other_txs, "submitted_transactions do not match");
+
+        let my_requests = as_sorted_vec(self.pending_retrieve_btc_requests.iter().cloned(), |r| {
+            r.block_index
+        });
+        let other_requests =
+            as_sorted_vec(other.pending_retrieve_btc_requests.iter().cloned(), |r| {
+                r.block_index
+            });
+        ensure_eq!(
+            my_requests,
+            other_requests,
+            "pending_retrieve_btc_requests do not match"
+        );
+
+        Ok(())
+    }
+}
+
+fn as_sorted_vec<T, K: Ord>(values: impl Iterator<Item = T>, key: impl Fn(&T) -> K) -> Vec<T> {
+    let mut v: Vec<_> = values.collect();
+    v.sort_by_key(key);
+    v
 }
 
 impl From<InitArgs> for CkBtcMinterState {

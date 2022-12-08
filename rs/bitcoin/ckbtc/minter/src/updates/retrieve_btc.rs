@@ -1,3 +1,5 @@
+use crate::eventlog::Event;
+use crate::storage::record_event;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_icrc1::{
@@ -95,6 +97,8 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         block_index,
         received_at: ic_cdk::api::time(),
     };
+
+    record_event(&Event::AcceptedRetrieveBtcRequest(request.clone()));
 
     mutate_state(|s| s.pending_retrieve_btc_requests.push_back(request));
 

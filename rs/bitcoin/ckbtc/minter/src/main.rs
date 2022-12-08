@@ -1,6 +1,6 @@
 use candid::candid_method;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk_macros::{heartbeat, init, post_upgrade, query, update};
 use ic_ckbtc_minter::dashboard::build_dashboard;
 use ic_ckbtc_minter::lifecycle::{self, init::InitArgs};
 use ic_ckbtc_minter::metrics::encode_metrics;
@@ -13,20 +13,60 @@ use ic_ckbtc_minter::updates::{
     get_withdrawal_account::GetWithdrawalAccountResult,
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult},
 };
+use ic_ckbtc_minter::{eventlog::Event, storage};
 
 #[init]
 fn init(args: InitArgs) {
-    lifecycle::init::init(args)
+    storage::record_event(&Event::Init(args.clone()));
+    lifecycle::init::init(args);
+
+    #[cfg(feature = "self_check")]
+    ok_or_die(check_invariants())
+}
+
+#[cfg(feature = "self_check")]
+fn ok_or_die(result: Result<(), String>) {
+    if let Err(msg) = result {
+        ic_cdk::println!("{}", msg);
+        ic_cdk::trap(&msg);
+    }
+}
+
+/// Checks that ckBTC minter state internally consistent.
+#[cfg(feature = "self_check")]
+fn check_invariants() -> Result<(), String> {
+    use ic_ckbtc_minter::eventlog::replay;
+
+    read_state(|s| {
+        s.check_invariants()?;
+
+        let events: Vec<_> = storage::events().collect();
+        let recovered_state = replay(events.clone().into_iter())
+            .unwrap_or_else(|e| panic!("failed to replay log {:?}: {:?}", events, e));
+
+        recovered_state.check_invariants()?;
+
+        // A running heartbeat can temporarily violate invariants.
+        if !s.is_heartbeat_running {
+            s.check_semantically_eq(&recovered_state)?;
+        }
+
+        Ok(())
+    })
+}
+
+fn check_postcondition<T>(t: T) -> T {
+    #[cfg(feature = "self_check")]
+    ok_or_die(check_invariants());
+    t
 }
 
 #[heartbeat]
 async fn heartbeat() {
-    ic_ckbtc_minter::heartbeat().await;
-}
+    #[cfg(feature = "self_check")]
+    ok_or_die(check_invariants());
 
-#[pre_upgrade]
-fn pre_upgrade() {
-    lifecycle::upgrade::pre_upgrade()
+    ic_ckbtc_minter::heartbeat().await;
 }
 
 #[post_upgrade]
@@ -49,7 +89,7 @@ async fn get_withdrawal_account() -> GetWithdrawalAccountResult {
 #[candid_method(update)]
 #[update]
 async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcError> {
-    updates::retrieve_btc::retrieve_btc(args).await
+    check_postcondition(updates::retrieve_btc::retrieve_btc(args).await)
 }
 
 #[candid_method(query)]
@@ -63,7 +103,7 @@ fn retrieve_btc_status(req: RetrieveBtcStatusRequest) -> RetrieveBtcStatus {
 async fn update_balance(
     args: UpdateBalanceArgs,
 ) -> Result<UpdateBalanceResult, UpdateBalanceError> {
-    updates::update_balance::update_balance(args).await
+    check_postcondition(updates::update_balance::update_balance(args).await)
 }
 
 #[candid_method(query)]
@@ -92,6 +132,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     } else {
         HttpResponseBuilder::not_found().build()
     }
+}
+
+#[cfg(feature = "self_check")]
+#[query]
+fn self_check() -> Result<(), String> {
+    check_invariants()
 }
 
 #[query]

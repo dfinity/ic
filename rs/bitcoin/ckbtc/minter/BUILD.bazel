@@ -16,6 +16,7 @@ LIB_DEPS = [
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "@crate_index//:bech32",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:bs58",
     "@crate_index//:ciborium",
     "@crate_index//:candid",
@@ -50,27 +51,42 @@ alias(
     actual = ":ckbtc_minter_lib",
 )
 
-rust_canister(
-    name = "ckbtc_minter",
-    srcs = ["src/main.rs"],
-    compile_data = [":ckbtc_minter.did"],
-    crate_name = "ic_ckbtc_minter_canister",
-    proc_macro_deps = [
-        "@crate_index//:ic-cdk-macros",
-    ],
-    rustc_env = {
-        "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
-    },
-    service_file = ":ckbtc_minter.did",
-    deps = [
-        ":ckbtc_minter_lib",
-        "//rs/crypto/getrandom_for_wasm",
-        "//rs/monitoring/metrics_encoder",
-        "//rs/rust_canisters/http_types",
-        "@crate_index//:candid",
-        "@crate_index//:ic-cdk",
-    ],
-)
+[
+    rust_canister(
+        name = name,
+        srcs = ["src/main.rs"],
+        compile_data = [":ckbtc_minter.did"],
+        crate_features = features,
+        crate_name = "ic_ckbtc_minter_canister",
+        proc_macro_deps = [
+            "@crate_index//:ic-cdk-macros",
+        ],
+        rustc_env = {
+            "CKBTC_MINTER_DID_PATH": "$(execpath :ckbtc_minter.did)",
+        },
+        service_file = ":ckbtc_minter.did",
+        deps = [
+            ":ckbtc_minter_lib",
+            "//rs/crypto/getrandom_for_wasm",
+            "//rs/monitoring/metrics_encoder",
+            "//rs/rust_canisters/http_types",
+            "@crate_index//:candid",
+            "@crate_index//:ic-cdk",
+        ],
+    )
+    for (name, features) in [
+        # Production version without debug assertions.
+        (
+            "ckbtc_minter",
+            [],
+        ),
+        # Test version with internal consistency checks.
+        (
+            "ckbtc_minter_debug",
+            ["self_check"],
+        ),
+    ]
+]
 
 rust_test(
     name = "ckbtc_minter_lib_unit_tests",
@@ -96,14 +112,14 @@ rust_test(
     name = "ckbtc_minter_tests",
     srcs = ["tests/tests.rs"],
     data = [
-        ":ckbtc_minter.wasm",
+        ":ckbtc_minter_debug.wasm",
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
         "//rs/rosetta-api/icrc1/ledger:ledger_canister.wasm",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/bitcoin/ckbtc/minter",
-        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter.wasm)",
+        "IC_CKBTC_MINTER_WASM_PATH": "$(rootpath :ckbtc_minter_debug.wasm)",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/ledger:ledger_canister.wasm)",
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
