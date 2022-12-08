@@ -99,6 +99,7 @@ pub trait LedgerAccess {
 pub struct LedgerClient {
     ledger_blocks_synchronizer: LedgerBlocksSynchronizer<CanisterAccess>,
     canister_id: CanisterId,
+    root_key: Option<ThresholdSigPublicKey>,
     governance_canister_id: CanisterId,
     canister_access: Option<Arc<CanisterAccess>>,
     ic_url: Url,
@@ -158,6 +159,7 @@ impl LedgerClient {
         Ok(Self {
             ledger_blocks_synchronizer,
             canister_id,
+            root_key,
             token_symbol,
             governance_canister_id,
             canister_access,
@@ -580,11 +582,13 @@ impl LedgerClient {
                         let cbor: serde_cbor::Value = serde_cbor::from_slice(&body)
                             .map_err(|err| format!("While parsing the status body: {}", err))?;
 
-                        let status =
-                            ic_canister_client::parse_read_state_response(&request_id, cbor)
-                                .map_err(|err| {
-                                    format!("While parsing the read state response: {}", err)
-                                })?;
+                        let status = ic_canister_client::parse_read_state_response(
+                            &request_id,
+                            &canister_id,
+                            self.root_key.as_ref(),
+                            cbor,
+                        )
+                        .map_err(|err| format!("While parsing the read state response: {}", err))?;
 
                         debug!("Read state response: {:?}", status);
 

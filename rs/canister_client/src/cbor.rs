@@ -1,9 +1,10 @@
 use crate::agent::Agent;
 use ic_canister_client_sender::Sender;
 use ic_crypto_tree_hash::{LabeledTree, LookupStatus, Path};
+use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
     messages::{
-        Blob, Certificate, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
         HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope, HttpUserQuery, MessageId,
         SignedRequestBytes,
     },
@@ -44,13 +45,21 @@ impl RequestStatus {
 /// the `RequestStatus` if available.
 pub fn parse_read_state_response(
     request_id: &MessageId,
+    effective_canister_id: &CanisterId,
+    root_pk: Option<&ThresholdSigPublicKey>,
     message: CBOR,
 ) -> Result<RequestStatus, String> {
     let response = serde_cbor::value::from_value::<HttpReadStateResponse>(message)
         .map_err(|source| format!("decoding to HttpReadStateResponse failed: {}", source))?;
 
-    let certificate: Certificate = serde_cbor::from_slice(response.certificate.as_slice())
-        .map_err(|source| format!("decoding Certificate failed: {}", source))?;
+    let certificate = match root_pk {
+        Some(pk) => {
+            ic_certification::verify_certificate(&response.certificate, effective_canister_id, pk)
+                .map_err(|source| format!("verifying certificate failed: {}", source))?
+        }
+        None => serde_cbor::from_slice(response.certificate.as_slice())
+            .map_err(|source| format!("decoding Certificate failed: {}", source))?,
+    };
 
     match certificate
         .tree
@@ -316,6 +325,7 @@ pub(crate) fn bytes_to_cbor(bytes: Vec<u8>) -> Result<CBOR, String> {
 mod tests {
     use super::*;
     use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
+    use ic_certification_test_utils::{CertificateBuilder, CertificateData};
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree};
     use ic_test_utilities::crypto::temp_crypto_component_with_fake_registry;
     use ic_test_utilities::types::ids::node_test_id;
@@ -593,11 +603,13 @@ mod tests {
 
     #[test]
     fn test_parse_read_state_response_unknown() {
-        let certificate = Certificate {
-            tree: MixedHashTree::Labeled("time".into(), Box::new(MixedHashTree::Leaf(vec![1]))),
-            signature: Blob(vec![]),
-            delegation: None,
-        };
+        let labeled_tree = LabeledTree::try_from(MixedHashTree::Labeled(
+            "time".into(),
+            Box::new(MixedHashTree::Leaf(vec![1])),
+        ))
+        .unwrap();
+        let data = CertificateData::CustomTree(labeled_tree);
+        let (certificate, root_pk, _) = CertificateBuilder::new(data).build();
 
         let certificate_cbor: Vec<u8> = to_self_describing_cbor(&certificate).unwrap();
 
@@ -611,7 +623,7 @@ mod tests {
 
         let request_id: MessageId = MessageId::from([0; 32]);
         assert_eq!(
-            parse_read_state_response(&request_id, response),
+            parse_read_state_response(&request_id, &CanisterId::from(1), Some(&root_pk), response),
             Ok(RequestStatus::unknown())
         );
     }
@@ -642,12 +654,9 @@ mod tests {
             ),
             MixedHashTree::Labeled("time".into(), Box::new(MixedHashTree::Leaf(vec![1]))),
         )));
-
-        let certificate = Certificate {
-            tree,
-            signature: Blob(vec![]),
-            delegation: None,
-        };
+        let labeled_tree = LabeledTree::try_from(tree).unwrap();
+        let data = CertificateData::CustomTree(labeled_tree);
+        let (certificate, root_pk, _) = CertificateBuilder::new(data).build();
 
         let certificate_cbor: Vec<u8> = to_self_describing_cbor(&certificate).unwrap();
 
@@ -666,7 +675,12 @@ mod tests {
         ]);
 
         assert_eq!(
-            parse_read_state_response(&request_id, response.clone()),
+            parse_read_state_response(
+                &request_id,
+                &CanisterId::from(1),
+                Some(&root_pk),
+                response.clone()
+            ),
             Ok(RequestStatus {
                 status: "replied".to_string(),
                 reply: Some(vec![68, 73, 68, 76, 0, 0]),
@@ -677,7 +691,7 @@ mod tests {
         // Request ID that doesn't exist.
         let request_id: MessageId = MessageId::from([0; 32]);
         assert_eq!(
-            parse_read_state_response(&request_id, response),
+            parse_read_state_response(&request_id, &CanisterId::from(1), Some(&root_pk), response),
             Ok(RequestStatus::unknown())
         );
     }
@@ -717,11 +731,9 @@ mod tests {
             mklabeled("time", MixedHashTree::Leaf(vec![1])),
         );
 
-        let certificate = Certificate {
-            tree,
-            signature: Blob(vec![]),
-            delegation: None,
-        };
+        let labeled_tree = LabeledTree::try_from(tree).unwrap();
+        let data = CertificateData::CustomTree(labeled_tree);
+        let (certificate, root_pk, _) = CertificateBuilder::new(data).build();
 
         let certificate_cbor: Vec<u8> = to_self_describing_cbor(&certificate).unwrap();
 
@@ -740,7 +752,7 @@ mod tests {
         ]);
 
         assert_eq!(
-            parse_read_state_response(&request_id, response),
+            parse_read_state_response(&request_id, &CanisterId::from(1), Some(&root_pk), response),
             Ok(RequestStatus::unknown())
         );
     }

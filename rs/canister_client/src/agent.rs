@@ -10,6 +10,7 @@ use ic_ic00_types::{InstallCodeArgs, Method, Payload, IC_00};
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     consensus::catchup::CatchUpPackageParam,
+    crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{Blob, HttpStatusResponse, MessageId, ReplicaHealthStatus},
     CanisterId,
 };
@@ -88,6 +89,9 @@ pub struct Agent {
     /// The values that any 'sender' field should have when issuing
     /// calls with the user corresponding to this Agent.
     pub sender_field: Blob,
+
+    /// Public key against which we should verify response.
+    pub nns_public_key: Option<ThresholdSigPublicKey>,
 }
 
 impl fmt::Debug for Agent {
@@ -147,12 +151,19 @@ impl Agent {
             http_client,
             sender,
             sender_field,
+            nns_public_key: None,
         }
     }
 
     /// Sets the timeout for ingress requests.
     pub fn with_ingress_timeout(mut self, ingress_timeout: Duration) -> Self {
         self.ingress_timeout = ingress_timeout;
+        self
+    }
+
+    /// Sets the nns key to verify requests with.
+    pub fn with_nns_public_key(mut self, nns_public_key: ThresholdSigPublicKey) -> Self {
+        self.nns_public_key = Some(nns_public_key);
         self
     }
 
@@ -333,7 +344,13 @@ impl Agent {
         let cbor = self
             .request_status_once(request_id.clone(), deadline, effective_canister_id)
             .await?;
-        parse_read_state_response(&request_id, cbor)
+
+        parse_read_state_response(
+            &request_id,
+            effective_canister_id,
+            self.nns_public_key.as_ref(),
+            cbor,
+        )
     }
 
     async fn get_status(&self) -> Result<HttpStatusResponse, String> {
