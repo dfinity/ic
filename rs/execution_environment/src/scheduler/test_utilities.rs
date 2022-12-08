@@ -692,7 +692,7 @@ impl SchedulerTestBuilder {
             &metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
-            SchedulerImpl::compute_capacity(self.scheduler_config.scheduler_cores),
+            SchedulerImpl::compute_capacity_percent(self.scheduler_config.scheduler_cores),
             config,
             Arc::clone(&cycles_account_manager),
         );
