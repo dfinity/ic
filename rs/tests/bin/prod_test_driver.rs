@@ -1185,13 +1185,14 @@ fn generate_alerts(
         let message = format!(
             r#"Pot `{pot_name}` *failed*. <{ci_job_url}|log>.
 Commit: <{ci_project_url}/-/commit/{ci_commit_sha}|{ci_commit_short_sha}>.
-IC_VERSION_ID: `{ic_version_id}`."#,
+IC_VERSION_ID: `{ic_version_id}`; {ic_version_id_date}."#,
             pot_name = failed_pot.name,
             ci_job_url = validated_args.ci_job_url,
             ci_project_url = validated_args.ci_project_url,
             ci_commit_sha = validated_args.ci_commit_sha,
             ci_commit_short_sha = validated_args.ci_commit_short_sha,
-            ic_version_id = validated_args.ic_version_id
+            ic_version_id = validated_args.ic_version_id,
+            ic_version_id_date = validated_args.ic_version_id_date
         );
         failed_pot.alert_channels.iter().for_each(|channel| {
             alerts.insert(alert_id, SlackAlert::new(channel.clone(), message.clone()));
