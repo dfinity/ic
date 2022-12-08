@@ -4758,15 +4758,15 @@ async fn propose_to_add_or_remove_node_provider(
         // TODO(NNS1-771): accept this data from the command line
         reward_account: None,
     };
-    let (change, default_summary) = match cmd.add_or_remove_provider {
-        AddOrRemove::Add => (
-            Some(Change::ToAdd(node_provider)),
-            format!("Add node provider {}", cmd.node_provider_pid),
-        ),
-        AddOrRemove::Remove => (
-            Some(Change::ToRemove(node_provider)),
-            format!("Remove node provider {}", cmd.node_provider_pid),
-        ),
+    let (change, default_summary, title) = match cmd.add_or_remove_provider {
+        AddOrRemove::Add => {
+            let msg = format!("Add node provider: {}", cmd.node_provider_pid);
+            (Some(Change::ToAdd(node_provider)), msg.clone(), msg)
+        }
+        AddOrRemove::Remove => {
+            let msg = format!("Remove node provider: {}", cmd.node_provider_pid);
+            (Some(Change::ToRemove(node_provider)), msg.clone(), msg)
+        }
     };
     let payload = AddOrRemoveNodeProvider { change };
     print_payload(&payload, &cmd);
@@ -4780,7 +4780,7 @@ async fn propose_to_add_or_remove_node_provider(
         .submit_add_or_remove_node_provider_proposal(
             payload,
             parse_proposal_url(cmd.proposal_url),
-            format!("Add node provider: {}", cmd.node_provider_pid),
+            title,
             summary,
         )
         .await;
