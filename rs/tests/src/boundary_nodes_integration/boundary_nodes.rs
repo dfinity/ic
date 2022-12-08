@@ -1183,6 +1183,24 @@ pub fn sw_test(env: TestEnv) {
                 bail!("{name} failed: expected Service Worker loading page but got {body}")
             }
 
+            let res = client
+                .get(format!("https://{canister_id}.ic0.app/foo.js"))
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::OK {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let body = res.bytes().await?.to_vec();
+            let body = String::from_utf8_lossy(&body);
+
+            let body_valid = body.contains("Internet Computer Content Validation Bootstrap")
+                && body.contains(r#"<script defer src="/install-script.js">"#);
+            if !body_valid {
+                bail!("{name} failed: expected Service Worker loading page but got {body}")
+            }
+
             Ok(())
         }
     }));
@@ -1985,6 +2003,27 @@ pub fn seo_test(env: TestEnv) {
         async move {
             let res = client
                 .get(format!("https://{canister_id}.ic0.app/"))
+                .header(
+                    "User-Agent",
+                    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+                )
+                .send()
+                .await?;
+
+            if res.status() != reqwest::StatusCode::OK {
+                bail!("{name} failed: {}", res.status())
+            }
+
+            let body = res.bytes().await?.to_vec();
+            let body = String::from_utf8_lossy(&body);
+
+            if !body.contains("Counter is 0") {
+                bail!("{name} failed: expected icx-response but got {body}")
+            }
+
+            // Test *.js to see if we end up in the nginx 404
+            let res = client
+                .get(format!("https://{canister_id}.ic0.app/foo.js"))
                 .header(
                     "User-Agent",
                     "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
