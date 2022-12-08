@@ -580,6 +580,8 @@ pub(crate) fn validate_controller(
     Ok(())
 }
 
+/// Validate compute allocation is strictly less than scheduler compute capacity,
+/// so it's guaranteed there is always at least 1% of free compute.
 pub(crate) fn validate_compute_allocation(
     total_subnet_compute_allocation_used: u64,
     canister: &CanisterState,
@@ -591,6 +593,7 @@ pub(crate) fn validate_compute_allocation(
         if new_compute_allocation.as_percent() > old_compute_allocation.as_percent() {
             let others = total_subnet_compute_allocation_used
                 .saturating_sub(old_compute_allocation.as_percent());
+            // Plus one guarantees there is always at least 1% of free compute.
             let available = config.compute_capacity.saturating_sub(others + 1);
             if new_compute_allocation.as_percent() > available {
                 return Err(CanisterManagerError::SubnetComputeCapacityOverSubscribed {

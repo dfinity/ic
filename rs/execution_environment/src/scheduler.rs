@@ -81,9 +81,9 @@ pub(crate) struct SchedulerImpl {
 }
 
 impl SchedulerImpl {
-    /// Returns scheduler compute capacity.
-    /// For the DTS scheduler it's (number of cores - 1) * 100%
-    pub fn compute_capacity(scheduler_cores: usize) -> usize {
+    /// Returns scheduler compute capacity in percent.
+    /// For the DTS scheduler, it's `(number of cores - 1) * 100%`
+    pub fn compute_capacity_percent(scheduler_cores: usize) -> usize {
         // Note: the DTS scheduler requires at least 2 scheduler cores
         if scheduler_cores >= 2 {
             (scheduler_cores - 1) * 100
@@ -119,19 +119,25 @@ impl SchedulerImpl {
     ) -> RoundSchedule {
         let number_of_canisters = canister_states.len();
 
-        // DTS Scheduler: Compute the free allocation as F = N * 100 - 𝚺RCi (>= 1).
-        let compute_capacity = Self::compute_capacity(scheduler_cores) as i64;
+        // Total allocatable compute capacity in percent.
+        // As one scheduler core is reserved to guarantee long executions progress,
+        // compute capacity is `(scheduler_cores - 1) * 100`
+        let compute_capacity_percent = Self::compute_capacity_percent(scheduler_cores) as i64;
 
+        // Sum of all canisters compute allocation in percent.
+        // It's guaranteed to be less than `compute_capacity_percent`
+        // by `validate_compute_allocation()`.
         // This corresponds to |a| in Scheduler Analysis.
-        let mut total_compute_allocation: i64 = 0;
+        let mut total_compute_allocation_percent: i64 = 0;
 
-        // Use this multiplier to achieve the following two: 1) The sum of all the
-        // values we add to accumulated priorities to calculate the round priorities
-        // must be divisible by the number of canisters that are given top priority
-        // in this round. 2) The free compute_allocation (the difference between
-        // capacity and total_compute_allocation) can be distributed to all the
-        // canisters evenly.
-        // The `max(1)` is the corner case when there are no Canisters
+        // Use this multiplier to achieve the following two:
+        // 1) The sum of all the values we add to accumulated priorities
+        //    to calculate the round priorities must be divisible by the number
+        //    of canisters that are given top priority in this round.
+        // 2) The free capacity (the difference between `compute_capacity_percent`
+        //    and `total_compute_allocation_percent`) can be distributed to all
+        //    the canisters evenly.
+        // The `max(1)` is the corner case when there are no Canisters.
         let multiplier = (scheduler_cores * number_of_canisters).max(1) as i64;
 
         // This corresponds to the vector p in the Scheduler Analysis document.
@@ -164,34 +170,46 @@ impl SchedulerImpl {
                 has_aborted_or_paused_execution,
             });
 
-            total_compute_allocation += compute_allocation.as_percent() as i64;
+            total_compute_allocation_percent += compute_allocation.as_percent() as i64;
         }
-        // DTS Scheduler: (Always ensure 𝚺RCi <= N * 100 - 1)
-        debug_assert!(total_compute_allocation < compute_capacity);
+        // Assert there is at least `1%` of free capacity to distribute across canisters.
+        // It's guaranteed by `validate_compute_allocation()`
+        debug_assert!(total_compute_allocation_percent < compute_capacity_percent);
 
-        // Distribute the free capacity to all the canisters evenly:
-        // DTS Scheduler: Compute the free allocation as F = N * 100 - 𝚺RCi (>= 1).
-        let free_capacity_per_canister =
-            (compute_capacity.saturating_sub(total_compute_allocation)) * scheduler_cores as i64;
+        // Free capacity per canister in multiplied percent.
+        // Note, to avoid division by zero when there are no canisters
+        // and having `multiplier == number_of_canisters * scheduler_cores`, the
+        // `(compute_capacity - total_compute_allocation) * multiplier / number_of_canisters`
+        // can be simplified to just
+        // `(compute_capacity - total_compute_allocation) * scheduler_cores`
+        let free_capacity_per_canister = (compute_capacity_percent
+            .saturating_sub(total_compute_allocation_percent))
+            * scheduler_cores as i64;
 
         // Fully divide the free allocation across all canisters.
         let mut long_executions_compute_allocation = 0;
-        let mut total_long_executions = 0;
+        let mut number_of_long_executions = 0;
         for rs in round_states.iter_mut() {
             // De-facto compute allocation includes bonus allocation
             let factual =
                 rs.compute_allocation.as_percent() as i64 * multiplier + free_capacity_per_canister;
             let canister = canister_states.get_mut(&rs.canister_id).unwrap();
-            // DTS Scheduler: round priority = accumulated priority + ACi
+            // Increase accumulated priority by de-facto compute allocation.
             rs.accumulated_priority += factual.into();
             canister.scheduler_state.accumulated_priority = rs.accumulated_priority;
+            // Count long executions and sum up their compute allocation.
             if rs.has_aborted_or_paused_execution {
+                // Note: factual compute allocation is multiplied by `multiplier`
                 long_executions_compute_allocation += factual;
-                total_long_executions += 1;
+                number_of_long_executions += 1;
             }
         }
 
-        // DTS Scheduler: long execution cores = round_up(𝚺ACi / 100)
+        // Count long execution cores by dividing `long_execution_compute_allocation`
+        // by `100%` and rounding up (as one scheduler core is reserved to guarantee
+        // long executions progress).
+        // Note, the `long_execution_compute_allocation` is in percent multiplied
+        // by the `multiplier`.
         let long_execution_cores = ((long_executions_compute_allocation + 100 * multiplier - 1)
             / (100 * multiplier)) as usize;
 
@@ -202,12 +220,12 @@ impl SchedulerImpl {
             long_execution_cores,
             round_states
                 .iter()
-                .skip(total_long_executions)
+                .skip(number_of_long_executions)
                 .map(|rs| rs.canister_id)
                 .collect(),
             round_states
                 .iter()
-                .take(total_long_executions)
+                .take(number_of_long_executions)
                 .map(|rs| rs.canister_id)
                 .collect(),
         );
@@ -218,15 +236,22 @@ impl SchedulerImpl {
                 .prioritized_long_canister_ids
                 .chain(scheduling_order.new_canister_ids)
                 .chain(scheduling_order.opportunistic_long_canister_ids);
-            // The number of active scheduler cores is limited by the number of Canisters to schedule.
+            // The number of active scheduler cores is limited by the number
+            // of canisters to schedule.
             let active_cores = scheduler_cores.min(number_of_canisters);
             for (i, canister_id) in scheduling_order.take(active_cores).enumerate() {
                 let canister_state = canister_states.get_mut(canister_id).unwrap();
-                // When handling top canisters, decrease their priority by
-                // `multiplier * capacity / scheduler_cores`
-                // DTS Scheduler: postpone the decrease until the end of the round.
+                // As top `scheduler_cores` canisters are guaranteed to be scheduled
+                // this round, their accumulated priorities must be decreased here
+                // by `capacity * multiplier / scheduler_cores`. But instead this
+                // value is accumulated in the `priority_credit`, and applied later:
+                // * For short executions, the `priority_credit` is deducted from
+                //   the `accumulated_priority` at the end of the round.
+                // * For long executions, the `priority_credit` is accumulated
+                //   for a few rounds, and deducted from the `accumulated_priority`
+                //   at the end of the long execution.
                 canister_state.scheduler_state.priority_credit +=
-                    (compute_capacity * multiplier / active_cores as i64).into();
+                    (compute_capacity_percent * multiplier / active_cores as i64).into();
                 if i < round_schedule.long_execution_cores {
                     canister_state.scheduler_state.long_execution_mode =
                         LongExecutionMode::Prioritized;
