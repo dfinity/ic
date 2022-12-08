@@ -470,6 +470,7 @@ mod tests {
                     port: 9001,
                     protocol: Protocol::Http1 as i32,
                 }],
+                chip_id: vec![],
             }),
         );
 
@@ -515,6 +516,7 @@ mod tests {
                     port: 9001,
                     protocol: Protocol::Http1 as i32,
                 }],
+                chip_id: vec![],
             }),
         );
         assert!(check_endpoint_invariants(&snapshot, true).is_err());
@@ -561,6 +563,7 @@ mod tests {
                     port: 9001,
                     protocol: Protocol::Http1 as i32,
                 }],
+                chip_id: vec![],
             }),
         );
         assert!(check_endpoint_invariants(&snapshot, true).is_err());

@@ -3,30 +3,33 @@ package registry.replica_version.v1;
 
 // Information about a Replica version
 message ReplicaVersionRecord {
-    reserved "binary_url";
-    reserved 1;
+  reserved "binary_url";
+  reserved 1;
 
-    reserved "sha256_hex";
-    reserved 2;
+  reserved "sha256_hex";
+  reserved 2;
 
-    reserved "node_manager_binary_url";
-    reserved 3;
+  reserved "node_manager_binary_url";
+  reserved 3;
 
-    reserved "node_manager_sha256_hex";
-    reserved 4;
+  reserved "node_manager_sha256_hex";
+  reserved 4;
 
-    // The URL against which a HTTP GET request will return a release package
-    // that corresponds to this version
-    // DEPRECATED in favor of `release_package_urls`
-    reserved "release_package_url";
-    reserved 5;
+  // The URL against which a HTTP GET request will return a release package
+  // that corresponds to this version
+  // DEPRECATED in favor of `release_package_urls`
+  reserved "release_package_url";
+  reserved 5;
 
-    // The hex-formatted SHA-256 hash of the archive file served by 'release_package_urls'
-    string release_package_sha256_hex = 6;
+  // The hex-formatted SHA-256 hash of the archive file served by 'release_package_urls'
+  string release_package_sha256_hex = 6;
 
-    // The URLs against which a HTTP GET request will return a release package
-    // that corresponds to this version
-    repeated string release_package_urls = 7;
+  // The URLs against which a HTTP GET request will return a release package
+  // that corresponds to this version
+  repeated string release_package_urls = 7;
+
+  // The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
+  optional string guest_launch_measurement_sha256_hex = 8;
 }
 
 // A list of blessed versions of the IC Replica
@@ -34,6 +37,6 @@ message ReplicaVersionRecord {
 // New versions are added here after a vote has been accepted by token
 // holders. Subnetworks can then be upgraded to any of those version.
 message BlessedReplicaVersions {
-    // A list of version information ids.
-    repeated string blessed_version_ids = 1;
+  // A list of version information ids.
+  repeated string blessed_version_ids = 1;
 }

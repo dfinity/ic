@@ -173,6 +173,7 @@ mod tests {
                             protocol: 2,
                         }],
                         node_operator_id: vec![],
+                        chip_id: vec![],
                     },
                 )
             })

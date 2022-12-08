@@ -64,6 +64,7 @@ impl Registry {
             private_api: vec![],
             prometheus_metrics: vec![],
             xnet_api: vec![],
+            chip_id: vec![],
         };
 
         // 5. Insert node, public keys, and crypto keys

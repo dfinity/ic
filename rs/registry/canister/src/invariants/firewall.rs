@@ -331,6 +331,7 @@ mod tests {
             private_api: vec![],
             prometheus_metrics: vec![],
             xnet_api: vec![],
+            chip_id: vec![],
         }
     }
 

@@ -19,6 +19,8 @@ pub struct SubnetFeatures {
 
     /// Determines whether or not the bitcoin feature is enabled on the subnet.
     pub bitcoin: Option<BitcoinFeature>,
+
+    pub sev_status: Option<SevFeatureStatus>,
 }
 
 impl SubnetFeatures {
@@ -27,6 +29,9 @@ impl SubnetFeatures {
             network: BitcoinNetwork::Mainnet,
             status: BitcoinFeatureStatus::Disabled,
         })
+    }
+    pub fn sev_status(&self) -> SevFeatureStatus {
+        self.sev_status.unwrap_or(SevFeatureStatus::Disabled)
     }
 }
 
@@ -46,6 +51,13 @@ impl From<SubnetFeatures> for pb::SubnetFeatures {
                     },
                     status: bitcoin_feature.status.into(),
                 }),
+            sev_status: features.sev_status.map(|s| match s {
+                SevFeatureStatus::Disabled => 0,
+                SevFeatureStatus::InsecureEnabled => 1,
+                SevFeatureStatus::InsecureIntegrityEnabled => 2,
+                SevFeatureStatus::SecureNoUpgradeEnabled => 3,
+                SevFeatureStatus::SecureEnabled => 4,
+            }),
         }
     }
 }
@@ -78,6 +90,13 @@ impl From<pb::SubnetFeatures> for SubnetFeatures {
                         })
                 }
             },
+            sev_status: features.sev_status.map(|s| match s {
+                1 => SevFeatureStatus::InsecureEnabled,
+                2 => SevFeatureStatus::InsecureIntegrityEnabled,
+                3 => SevFeatureStatus::SecureNoUpgradeEnabled,
+                4 => SevFeatureStatus::SecureEnabled,
+                _ => SevFeatureStatus::Disabled,
+            }),
         }
     }
 }
@@ -250,6 +269,15 @@ impl TryFrom<pb::EcdsaConfig> for EcdsaConfig {
     }
 }
 
+#[derive(CandidType, Clone, Copy, Deserialize, Debug, Eq, PartialEq, Serialize)]
+pub enum SevFeatureStatus {
+    Disabled,
+    InsecureEnabled,
+    InsecureIntegrityEnabled,
+    SecureNoUpgradeEnabled,
+    SecureEnabled,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -285,7 +313,8 @@ mod tests {
                 bitcoin: Some(BitcoinFeature {
                     network: BitcoinNetwork::Testnet,
                     status: BitcoinFeatureStatus::Enabled
-                })
+                }),
+                sev_status: None,
             }
         );
     }
@@ -303,7 +332,8 @@ mod tests {
                 bitcoin: Some(BitcoinFeature {
                     network: BitcoinNetwork::Mainnet,
                     status: BitcoinFeatureStatus::Paused
-                })
+                }),
+                sev_status: None,
             }
         );
     }
@@ -320,7 +350,8 @@ mod tests {
                 bitcoin: Some(BitcoinFeature {
                     network: BitcoinNetwork::Mainnet,
                     status: BitcoinFeatureStatus::Enabled
-                })
+                }),
+                sev_status: None,
             }
         );
     }
@@ -358,5 +389,32 @@ mod tests {
                 SubnetFeatures::from(pb::SubnetFeatures::from(subnet_feature))
             );
         }
+    }
+}
+
+#[test]
+fn test_sev_feature() {
+    let features: &[(SevFeatureStatus, &str)] = &[
+        (SevFeatureStatus::Disabled, "SEV_FEATURE_STATUS_UNSPECIFIED"),
+        (
+            SevFeatureStatus::InsecureEnabled,
+            "SEV_FEATURE_STATUS_INSECURE_ENABLED",
+        ),
+        (
+            SevFeatureStatus::InsecureIntegrityEnabled,
+            "SEV_FEATURE_STATUS_INSECURE_INTEGRITY_ENABLED",
+        ),
+        (
+            SevFeatureStatus::SecureNoUpgradeEnabled,
+            "SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED",
+        ),
+        (
+            SevFeatureStatus::SecureEnabled,
+            "SEV_FEATURE_STATUS_SECURE_ENABLED",
+        ),
+    ];
+    for feature in features {
+        let status: pb::SevFeatureStatus = unsafe { ::std::mem::transmute(feature.0 as i32) };
+        assert_eq!(pb::SevFeatureStatus::as_str_name(&status), feature.1);
     }
 }

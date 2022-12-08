@@ -192,6 +192,7 @@ fn make_nodes_registry(
             private_api: vec![],
             prometheus_metrics: vec![],
             xnet_api: vec![],
+            chip_id: vec![],
         };
         data_provider
             .add(

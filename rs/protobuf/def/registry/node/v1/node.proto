@@ -76,7 +76,10 @@ message NodeRecord {
 
   // Endpoints on which the XNet API is served
   repeated ConnectionEndpoint xnet_api = 14;
-  
+
   // The id of the node operator that added this node.
   bytes node_operator_id = 15;
+
+  // The SEV-SNP chip_identifier for this node.
+  bytes chip_id = 16;
 }

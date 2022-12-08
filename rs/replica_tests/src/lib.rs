@@ -291,6 +291,7 @@ pub fn get_ic_config() -> IcConfig {
         None,
         None,
         /* ssh_readonly_access_to_unassgined_nodes */ vec![],
+        /* guest_launch_measurement_sha256_hex= */ None,
     )
 }
 

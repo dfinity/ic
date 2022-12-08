@@ -182,6 +182,10 @@ struct CliArgs {
     /// version record is left empty.
     #[clap(long)]
     pub allow_empty_update_image: bool,
+
+    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
+    #[clap(long)]
+    pub guest_launch_measurement_sha256_hex: Option<String>,
 }
 
 fn main() -> Result<()> {
@@ -247,6 +251,7 @@ fn main() -> Result<()> {
         valid_args.initial_node_operator,
         valid_args.initial_node_provider,
         valid_args.ssh_readonly_access,
+        valid_args.guest_launch_measurement_sha256_hex,
     );
 
     let ic_config = match valid_args.dc_pk_dir {
@@ -285,6 +290,7 @@ struct ValidatedArgs {
     pub ssh_backup_access: Vec<String>,
     pub max_ingress_bytes_per_message: Option<u64>,
     pub allow_empty_update_image: bool,
+    pub guest_launch_measurement_sha256_hex: Option<String>,
 }
 
 /// Structured definition of a flow provided by the `--p2p-flows` flag.
@@ -720,6 +726,7 @@ impl CliArgs {
                 }
             }),
             allow_empty_update_image: self.allow_empty_update_image,
+            guest_launch_measurement_sha256_hex: self.guest_launch_measurement_sha256_hex,
         })
     }
 }

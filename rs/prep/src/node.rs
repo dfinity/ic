@@ -528,6 +528,7 @@ mod node_configuration {
                 port: 8080,
                 protocol: Protocol::Http1 as i32,
             }),
+            chip_id: vec![],
         };
 
         assert_eq!(got, want);

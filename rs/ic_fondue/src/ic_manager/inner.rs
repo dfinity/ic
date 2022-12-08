@@ -360,6 +360,7 @@ impl IcManager {
             ic.node_operator,
             ic.node_provider,
             ic.ssh_readonly_access_to_unassigned_nodes.clone(),
+            None, // guest_launch_measurement_sha256_hex
         );
 
         debug!(logger, "ic_config.initialize");

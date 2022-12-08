@@ -10,6 +10,9 @@ pub struct ReplicaVersionRecord {
     /// that corresponds to this version
     #[prost(string, repeated, tag = "7")]
     pub release_package_urls: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
+    #[prost(string, optional, tag = "8")]
+    pub guest_launch_measurement_sha256_hex: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// A list of blessed versions of the IC Replica
 ///
