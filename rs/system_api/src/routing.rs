@@ -28,7 +28,6 @@ impl From<candid::Error> for ResolveDestinationError {
 
 /// Inspect the method name and payload of a request to ic:00 to figure out to
 /// which subnet it should be sent to.
-// TODO(EXC-1275): Clean up this method to return a `PrincipalId`.
 pub(super) fn resolve_destination(
     network_topology: &NetworkTopology,
     method_name: &str,
