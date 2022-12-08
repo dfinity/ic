@@ -477,6 +477,7 @@ async fn add_replica_version(nns_api: &'_ Runtime, version: ReplicaVersion) -> R
         release_package_url: "".to_string(),
         release_package_sha256_hex: "".to_string(),
         release_package_urls: None,
+        guest_launch_measurement_sha256_hex: None,
     };
 
     let proposal_id: ProposalId = submit_external_proposal_with_test_id(
@@ -836,6 +837,7 @@ pub async fn submit_bless_replica_version_proposal(
             release_package_url: "".into(),
             release_package_sha256_hex: sha256.clone(),
             release_package_urls: Some(upgrade_urls),
+            guest_launch_measurement_sha256_hex: None,
         },
         format!(
             "Bless replica version: {} with hash: {}",

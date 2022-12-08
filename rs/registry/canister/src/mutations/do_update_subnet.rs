@@ -406,6 +406,7 @@ mod tests {
                 canister_sandboxing: false,
                 http_requests: false,
                 bitcoin: None,
+                sev_status: None,
             }),
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
@@ -528,6 +529,7 @@ mod tests {
                 canister_sandboxing: false,
                 http_requests: false,
                 bitcoin: None,
+                sev_status: None,
             }),
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
@@ -579,6 +581,7 @@ mod tests {
                         canister_sandboxing: false,
                         http_requests: false,
                         bitcoin: None,
+                        sev_status: None,
                     }
                     .into()
                 ),

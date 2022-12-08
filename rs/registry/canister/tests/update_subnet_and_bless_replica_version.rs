@@ -46,6 +46,7 @@ fn test_the_anonymous_user_cannot_bless_a_version() {
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
             release_package_urls: None,
+            guest_launch_measurement_sha256_hex: None,
         };
         // The anonymous end-user tries to bless a version, bypassing the proposals
         // This should be rejected.
@@ -116,6 +117,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_bless_a_version() {
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
             release_package_urls: None,
+            guest_launch_measurement_sha256_hex: None,
         };
         // The attacker canister tries to bless a version, pretending to be the
         // proposals canister. This should have no effect.
@@ -173,6 +175,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             release_package_url: "".into(),
             release_package_sha256_hex: MOCK_HASH.into(),
             release_package_urls: Some(vec!["http://release_package.tar.gz".into()]),
+            guest_launch_measurement_sha256_hex: None,
         };
         assert!(
             forward_call_via_universal_canister(
@@ -204,6 +207,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             release_package_url: "".into(),
             release_package_sha256_hex: "".into(),
             release_package_urls: None,
+            guest_launch_measurement_sha256_hex: None,
         };
         assert!(
             !forward_call_via_universal_canister(
@@ -225,6 +229,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             ReplicaVersionRecord {
                 release_package_sha256_hex: MOCK_HASH.into(),
                 release_package_urls: vec![release_package_url.clone()],
+                guest_launch_measurement_sha256_hex: None,
             }
         );
 

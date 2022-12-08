@@ -90,4 +90,7 @@ pub struct NodeRecord {
     /// The id of the node operator that added this node.
     #[prost(bytes = "vec", tag = "15")]
     pub node_operator_id: ::prost::alloc::vec::Vec<u8>,
+    /// The SEV-SNP chip_identifier for this node.
+    #[prost(bytes = "vec", tag = "16")]
+    pub chip_id: ::prost::alloc::vec::Vec<u8>,
 }

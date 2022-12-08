@@ -265,6 +265,9 @@ pub struct IcConfig {
     /// By default, it has the value 'false', but it can be set to true when ic-starter is
     /// run with --use_specified_ids_allocation_range flag.
     use_specified_ids_allocation_range: bool,
+
+    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
+    initial_guest_launch_measurement_sha256_hex: Option<String>,
 }
 
 #[derive(Error, Debug)]
@@ -342,6 +345,7 @@ impl IcConfig {
         initial_node_operator: Option<PrincipalId>,
         initial_node_provider: Option<PrincipalId>,
         ssh_readonly_access_to_unassigned_nodes: Vec<String>,
+        initial_guest_launch_measurement_sha256_hex: Option<String>,
     ) -> Self {
         Self {
             target_dir: PathBuf::from(target_dir.as_ref()),
@@ -358,6 +362,7 @@ impl IcConfig {
             initial_node_provider,
             ssh_readonly_access_to_unassigned_nodes,
             use_specified_ids_allocation_range: false,
+            initial_guest_launch_measurement_sha256_hex,
         }
     }
 
@@ -498,6 +503,7 @@ impl IcConfig {
         let replica_version_record = ReplicaVersionRecord {
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
             release_package_urls: vec![opturl_to_string(self.initial_release_package_url)],
+            guest_launch_measurement_sha256_hex: self.initial_guest_launch_measurement_sha256_hex,
         };
 
         let blessed_replica_versions_record = BlessedReplicaVersions {

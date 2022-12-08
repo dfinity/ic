@@ -364,6 +364,9 @@ pub struct SubnetFeatures {
     /// supported.
     #[prost(message, optional, tag = "6")]
     pub bitcoin: ::core::option::Option<BitcoinFeatureInfo>,
+    /// Status of the SEV-SNP feature.
+    #[prost(enumeration = "SevFeatureStatus", optional, tag = "7")]
+    pub sev_status: ::core::option::Option<i32>,
 }
 /// Per subnet ECDSA configuration
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -521,6 +524,71 @@ impl BitcoinFeatureStatus {
             BitcoinFeatureStatus::Paused => "BITCOIN_FEATURE_STATUS_PAUSED",
             BitcoinFeatureStatus::Enabled => "BITCOIN_FEATURE_STATUS_ENABLED",
             BitcoinFeatureStatus::Syncing => "BITCOIN_FEATURE_STATUS_SYNCING",
+        }
+    }
+}
+/// These modes correspond to milestones in the SEV-SNP development plan.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SevFeatureStatus {
+    /// The SEV-SNP feature is disabled.
+    ///
+    /// SEV-SNP enabled machines run the Guest without SEV-SNP.
+    ///
+    /// Warning: transitioning from SEV_FEATURE_STATUS_SECURE_ENABLED will result loss of all data.
+    Unspecified = 0,
+    /// The SEV-SNP feature is enabled in insecure mode.
+    ///
+    /// SEV-SNP enabled machines run the Guest with SEV-SNP but without disk integrity protection
+    /// and storing the KEK (Key Encryption Key) in cleartext.
+    ///
+    /// Warning: transitioning from any mode other than SEV_FEATURE_STATUS_UNSPECIFIED will result
+    /// in loss of all data.
+    InsecureEnabled = 1,
+    /// The SEV-SNP feature is enabled in insecure mode with disk integrity protection.
+    ///
+    /// SEV-SNP enabled machines run the Guest with SEV-SNP but with disk integrity protection
+    /// and storing the KEK (Key Encryption Key) in cleartext.
+    ///
+    /// Warning: transitioning to or from this mode will result loss of all data.
+    InsecureIntegrityEnabled = 2,
+    /// The SEV-SNP feature is enabled in secure mode with disk integrity protection.
+    ///
+    /// SEV-SNP enabled machines run the Guest with SEV-SNP with disk integrty protection
+    /// and the KEK (Key Encryption Key) is derived from the measurement.  Upgrades result
+    /// in the loss of all data as the KEK is not passed to the new Guest.
+    ///
+    /// Warning: transitioning to or from this mode except for SEV_FEATURE_STATUS_SECURE_ENABLED
+    /// will resut in loss of all data.
+    SecureNoUpgradeEnabled = 3,
+    /// The SEV-SNP feature is enabled in secure mode with disk integrity protection.
+    ///
+    /// SEV-SNP enabled machines run the Guest with SEV-SNP with disk integrty protection
+    /// and the KEK (Key Encryption Key) is derived from the measurement.  Upgrades do not
+    /// result in the loss of data as the KEK is passed to the new Guest.
+    ///
+    /// Warning: transitioning to or from this mode except for SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED
+    /// will result in loss of all data.
+    SecureEnabled = 4,
+}
+impl SevFeatureStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            SevFeatureStatus::Unspecified => "SEV_FEATURE_STATUS_UNSPECIFIED",
+            SevFeatureStatus::InsecureEnabled => "SEV_FEATURE_STATUS_INSECURE_ENABLED",
+            SevFeatureStatus::InsecureIntegrityEnabled => {
+                "SEV_FEATURE_STATUS_INSECURE_INTEGRITY_ENABLED"
+            }
+            SevFeatureStatus::SecureNoUpgradeEnabled => {
+                "SEV_FEATURE_STATUS_SECURE_NO_UPGRADE_ENABLED"
+            }
+            SevFeatureStatus::SecureEnabled => "SEV_FEATURE_STATUS_SECURE_ENABLED",
         }
     }
 }

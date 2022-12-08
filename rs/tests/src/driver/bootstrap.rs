@@ -164,6 +164,7 @@ pub fn init_ic(
         ic.node_operator,
         ic.node_provider,
         ic.ssh_readonly_access_to_unassigned_nodes.clone(),
+        /* guest_launch_measurement_sha256_hex= */ None,
     );
 
     Ok(ic_config.initialize()?)

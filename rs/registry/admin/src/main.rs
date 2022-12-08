@@ -862,6 +862,7 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload> for ProposeToBlessRepli
             release_package_url: "".into(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
             release_package_urls: Some(self.release_package_urls.clone()),
+            guest_launch_measurement_sha256_hex: None,
         }
     }
 }
@@ -916,6 +917,7 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload>
                 .clone()
                 .expect("Release package sha256 is required"),
             release_package_urls: Some(vec![release_package_url]),
+            guest_launch_measurement_sha256_hex: None,
         }
     }
 }

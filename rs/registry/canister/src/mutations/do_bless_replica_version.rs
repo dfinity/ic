@@ -55,6 +55,8 @@ impl Registry {
                 value: encode_or_panic(&ReplicaVersionRecord {
                     release_package_sha256_hex: payload.release_package_sha256_hex,
                     release_package_urls: payload.release_package_urls.unwrap(),
+                    guest_launch_measurement_sha256_hex: payload
+                        .guest_launch_measurement_sha256_hex,
                 }),
             },
             // Bless the new version (that is, update the list of blessed versions)
@@ -119,4 +121,7 @@ pub struct BlessReplicaVersionPayload {
     /// This field is not optional but this is the only way to add a new field
     /// into a Candid message without breaking backward compatibility.
     pub release_package_urls: Option<Vec<String>>,
+
+    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
+    pub guest_launch_measurement_sha256_hex: Option<String>,
 }

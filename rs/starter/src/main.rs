@@ -46,7 +46,9 @@ use ic_prep_lib::{
 };
 use ic_protobuf::{
     bitcoin::v1::Network as BitcoinNetwork,
-    registry::subnet::v1::{BitcoinFeatureInfo, BitcoinFeatureStatus, EcdsaConfig, SubnetFeatures},
+    registry::subnet::v1::{
+        BitcoinFeatureInfo, BitcoinFeatureStatus, EcdsaConfig, SevFeatureStatus, SubnetFeatures,
+    },
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
@@ -157,6 +159,7 @@ fn main() -> Result<()> {
             None,
             None,
             /* ssh_readonly_access_to_unassigned_nodes */ vec![],
+            /* guest_launch_measurement_sha256_hex */ None,
         );
 
         ic_config.set_use_specified_ids_allocation_range(config.use_specified_ids_allocation_range);
@@ -626,11 +629,32 @@ fn to_subnet_features(features: &[String]) -> SubnetFeatures {
         None
     };
 
+    let sev_status = if features
+        .iter()
+        .any(|s| s.as_str() == "sev_insecure_enabled")
+    {
+        Some(SevFeatureStatus::InsecureEnabled.into())
+    } else if features
+        .iter()
+        .any(|s| s.as_str() == "sev_insecure_integrity_enabled")
+    {
+        Some(SevFeatureStatus::InsecureIntegrityEnabled.into())
+    } else if features
+        .iter()
+        .any(|s| s.as_str() == "sev_secure_no_upgrade_enabled")
+    {
+        Some(SevFeatureStatus::SecureNoUpgradeEnabled.into())
+    } else if features.iter().any(|s| s.as_str() == "sev_secure_enabled") {
+        Some(SevFeatureStatus::SecureEnabled.into())
+    } else {
+        None
+    };
     SubnetFeatures {
         canister_sandboxing,
         http_requests,
         bitcoin_testnet_feature: None,
         bitcoin,
+        sev_status,
     }
 }
 

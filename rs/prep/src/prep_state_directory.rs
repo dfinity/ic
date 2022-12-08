@@ -172,6 +172,7 @@ mod tests {
             None,
             None,
             /* ssh_readonly_access_to_unassigned_nodes */ vec![],
+            /* guest_launch_measurement_sha256_hex */ None,
         );
         let _init_ic = ic_config.initialize()?;
 

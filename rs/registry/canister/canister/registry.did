@@ -41,6 +41,7 @@ type BlessReplicaVersionPayload = record {
   node_manager_sha256_hex : text;
   release_package_url : text;
   sha256_hex : text;
+  guest_launch_measurement_sha256_hex : opt text;
   replica_version_id : text;
   release_package_sha256_hex : text;
   node_manager_binary_url : text;
@@ -188,8 +189,16 @@ type SetFirewallConfigPayload = record {
   firewall_config : text;
   ipv6_prefixes : vec text;
 };
+type SevFeatureStatus = variant {
+  SecureEnabled;
+  Disabled;
+  InsecureIntegrityEnabled;
+  SecureNoUpgradeEnabled;
+  InsecureEnabled;
+};
 type SubnetFeatures = record {
   canister_sandboxing : bool;
+  sev_status : opt SevFeatureStatus;
   http_requests : bool;
   bitcoin : opt BitcoinFeature;
 };
