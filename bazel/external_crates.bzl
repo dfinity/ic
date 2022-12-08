@@ -905,7 +905,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.4.38",
             ),
             "tarpc": crate.spec(
-                version = "^0.27",
+                version = "^0.31",
                 features = [
                     "full",
                 ],
@@ -969,7 +969,10 @@ def external_crates_repository(name, annotations):
                 version = "^0.4.2",
             ),
             "tokio-util": crate.spec(
-                version = "^0.6.8",
+                version = "^0.7.4",
+                features = [
+                    "codec",
+                ],
             ),
             "toml": crate.spec(
                 version = "^0.5.9",

@@ -46,13 +46,13 @@ simple_asn1 = "0.6.1"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 strum = "0.23.0"
 strum_macros = "0.23.0"
-tarpc = { version = "0.27", features = ["full"] }
+tarpc = { version = "0.31", features = ["full"] }
 tempfile = "3.1.0"
 threadpool = "1.8.1"
 tokio = { version = "1.15.0", features = ["full"] }
 tokio-openssl = "0.6.0"
 tokio-serde = { version = "0.8", features = ["json", "bincode"] }
-tokio-util = "0.6.8"
+tokio-util = { version = "0.7.4", features = ["codec"] }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]

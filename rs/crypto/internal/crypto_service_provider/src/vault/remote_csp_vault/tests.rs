@@ -202,6 +202,18 @@ mod basic_sig {
     }
 }
 
+//slow tests
+mod basic_sig_large_message {
+    use super::*;
+
+    #[test]
+    fn should_sign_a_large_hundred_megabytes_message() {
+        let tokio_rt = new_tokio_runtime();
+        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
+        test_utils::basic_sig::should_sign_a_large_hundred_megabytes_message(csp_vault);
+    }
+}
+
 mod multi_sig {
     use super::*;
     use crate::{

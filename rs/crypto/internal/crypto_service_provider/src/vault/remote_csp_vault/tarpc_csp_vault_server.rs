@@ -15,7 +15,7 @@ use crate::vault::api::{
     CspTlsKeygenError, CspTlsSignError, PublicRandomSeedGeneratorError,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
-use crate::vault::remote_csp_vault::TarpcCspVault;
+use crate::vault::remote_csp_vault::{remote_vault_codec_builder, TarpcCspVault};
 use crate::{
     SecretKeyStore, CANISTER_SKS_DATA_FILENAME, PUBLIC_KEY_STORE_DATA_FILENAME, SKS_DATA_FILENAME,
 };
@@ -58,7 +58,6 @@ use tarpc::tokio_serde::formats::Bincode;
 use tarpc::{context, serde_transport, server::Channel};
 use threadpool::ThreadPool;
 use tokio::net::UnixListener;
-use tokio_util::codec::length_delimited::LengthDelimitedCodec;
 
 /// Crypto service provider (CSP) vault server based on the tarpc RPC framework.
 pub struct TarpcCspVaultServerImpl<
@@ -582,8 +581,7 @@ impl<
 {
     pub async fn run(self) {
         // Wrap data in telegrams with a length header.
-        let mut codec_builder = LengthDelimitedCodec::builder();
-        codec_builder.max_frame_length(32 * 1024 * 1024);
+        let codec_builder = remote_vault_codec_builder();
 
         // Listen for connections; spawns one `tokio` task per client.
         loop {
