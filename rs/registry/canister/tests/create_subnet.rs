@@ -382,7 +382,6 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         gossip_pfn_evaluation_period_ms: PFN_EVALUATION_PERIOD_MS,
         gossip_registry_poll_period_ms: REGISTRY_POLL_PERIOD_MS,
         gossip_retransmission_request_ms: RETRANSMISSION_REQUEST_MS,
-        advert_best_effort_percentage: Some(10),
         start_as_nns: false,
         subnet_type: SubnetType::Application,
         is_halted: false,

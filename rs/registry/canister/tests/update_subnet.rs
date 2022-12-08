@@ -13,16 +13,16 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::{
     crypto::v1::EcdsaSigningSubnetList,
-    subnet::v1::{GossipAdvertConfig, GossipConfig, SubnetRecord},
+    subnet::v1::{GossipConfig, SubnetRecord},
 };
 use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
 use ic_types::p2p::{
-    build_default_gossip_config, ADVERT_BEST_EFFORT_PERCENTAGE, MAX_ARTIFACT_STREAMS_PER_PEER,
-    MAX_CHUNK_SIZE, MAX_CHUNK_WAIT_MS, MAX_DUPLICITY, PFN_EVALUATION_PERIOD_MS,
-    RECEIVE_CHECK_PEER_SET_SIZE, REGISTRY_POLL_PERIOD_MS, RETRANSMISSION_REQUEST_MS,
+    build_default_gossip_config, MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_SIZE, MAX_CHUNK_WAIT_MS,
+    MAX_DUPLICITY, PFN_EVALUATION_PERIOD_MS, RECEIVE_CHECK_PEER_SET_SIZE, REGISTRY_POLL_PERIOD_MS,
+    RETRANSMISSION_REQUEST_MS,
 };
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_update_subnet::UpdateSubnetPayload,
@@ -78,7 +78,6 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
             pfn_evaluation_period_ms: Some(PFN_EVALUATION_PERIOD_MS),
             registry_poll_period_ms: Some(REGISTRY_POLL_PERIOD_MS),
             retransmission_request_ms: Some(RETRANSMISSION_REQUEST_MS),
-            advert_best_effort_percentage: None,
             set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: None,
@@ -206,7 +205,6 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             pfn_evaluation_period_ms: Some(PFN_EVALUATION_PERIOD_MS),
             registry_poll_period_ms: Some(REGISTRY_POLL_PERIOD_MS),
             retransmission_request_ms: Some(RETRANSMISSION_REQUEST_MS),
-            advert_best_effort_percentage: None,
             set_gossip_config_to_default: true,
             start_as_nns: None,
             subnet_type: None,
@@ -324,7 +322,6 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
             pfn_evaluation_period_ms: Some(PFN_EVALUATION_PERIOD_MS),
             registry_poll_period_ms: Some(REGISTRY_POLL_PERIOD_MS),
             retransmission_request_ms: Some(RETRANSMISSION_REQUEST_MS),
-            advert_best_effort_percentage: None,
             set_gossip_config_to_default: false,
             start_as_nns: None,
             subnet_type: Some(SubnetType::Application),
@@ -380,9 +377,6 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                     pfn_evaluation_period_ms: PFN_EVALUATION_PERIOD_MS,
                     registry_poll_period_ms: REGISTRY_POLL_PERIOD_MS,
                     retransmission_request_ms: RETRANSMISSION_REQUEST_MS,
-                    advert_config: Some(GossipAdvertConfig {
-                        best_effort_percentage: ADVERT_BEST_EFFORT_PERCENTAGE,
-                    }),
                 }),
                 start_as_nns: false,
                 subnet_type: SubnetType::Application.into(),
@@ -646,7 +640,6 @@ fn empty_update_subnet_payload(subnet_id: SubnetId) -> UpdateSubnetPayload {
         pfn_evaluation_period_ms: None,
         registry_poll_period_ms: None,
         retransmission_request_ms: None,
-        advert_best_effort_percentage: None,
         set_gossip_config_to_default: false,
         start_as_nns: None,
         subnet_type: None,

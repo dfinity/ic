@@ -294,25 +294,10 @@ pub struct GossipConfig {
     #[prost(uint32, tag = "7")]
     pub registry_poll_period_ms: u32,
     /// period for sending a retransmission request    
+    ///
+    /// config for advert distribution.
     #[prost(uint32, tag = "8")]
     pub retransmission_request_ms: u32,
-    /// config for advert distribution.
-    /// If this field is not specified, the feature is turned off.
-    #[prost(message, optional, tag = "10")]
-    pub advert_config: ::core::option::Option<GossipAdvertConfig>,
-}
-/// Per subnet config for advert distribution.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GossipAdvertConfig {
-    /// The subset of peers to broadcast to, specified in percentage.
-    /// This is only  used when the P2P clients mark the advert as
-    /// requiring best effort distribution. In future, this fixed
-    /// percentage could be replaced by dynamic computation of the
-    /// distribution set size, as a function of subnet size.
-    /// 0 < best_effort_percentage <= 100
-    #[prost(uint32, tag = "1")]
-    pub best_effort_percentage: u32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
