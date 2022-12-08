@@ -9,7 +9,7 @@ use crate::vault::api::{
     PublicKeyStoreCspVault, PublicRandomSeedGenerator, PublicRandomSeedGeneratorError,
     SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault,
 };
-use crate::vault::remote_csp_vault::TarpcCspVaultClient;
+use crate::vault::remote_csp_vault::{remote_vault_codec_builder, TarpcCspVaultClient};
 use crate::TlsHandshakeCspVault;
 use core::future::Future;
 use ic_crypto_internal_seed::Seed;
@@ -44,7 +44,6 @@ use std::time::{Duration, SystemTime};
 use tarpc::serde_transport;
 use tarpc::tokio_serde::formats::Bincode;
 use tokio::net::UnixStream;
-use tokio_util::codec::length_delimited::LengthDelimitedCodec;
 
 /// An implementation of `CspVault`-trait that talks to a remote CSP vault.
 #[allow(dead_code)]
@@ -91,9 +90,10 @@ impl RemoteCspVault {
                 server_address: socket_path.to_string_lossy().to_string(),
                 message: e.to_string(),
             })?;
-        let mut codec_builder = LengthDelimitedCodec::builder();
-        codec_builder.max_frame_length(32 * 1024 * 1024);
-        let transport = serde_transport::new(codec_builder.new_framed(conn), Bincode::default());
+        let transport = serde_transport::new(
+            remote_vault_codec_builder().new_framed(conn),
+            Bincode::default(),
+        );
         let client = {
             let _enter_guard = rt_handle.enter();
             TarpcCspVaultClient::new(Default::default(), transport).spawn()

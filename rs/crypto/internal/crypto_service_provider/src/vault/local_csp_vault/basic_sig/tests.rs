@@ -155,6 +155,16 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
     );
 }
 
+//slow tests
+mod basic_sig_large_message {
+    use super::*;
+
+    #[test]
+    fn should_sign_a_large_hundred_megabytes_message() {
+        test_utils::basic_sig::should_sign_a_large_hundred_megabytes_message(new_local_csp_vault());
+    }
+}
+
 fn vault_with_public_key_store<P: PublicKeyStore + 'static>(
     public_key_store: P,
 ) -> Arc<dyn CspVault> {

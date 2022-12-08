@@ -30,6 +30,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use tokio::net::UnixListener;
 
+const FOUR_GIGA_BYTES: usize = 4 * 1024 * 1024 * 1024;
 mod tarpc_csp_vault_client;
 mod tarpc_csp_vault_server;
 
@@ -38,6 +39,8 @@ use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use std::sync::Arc;
 pub use tarpc_csp_vault_client::RemoteCspVault;
 pub use tarpc_csp_vault_server::TarpcCspVaultServerImpl;
+use tokio_util::codec::length_delimited::Builder;
+use tokio_util::codec::LengthDelimitedCodec;
 
 use super::api::PublicRandomSeedGeneratorError;
 
@@ -232,4 +235,12 @@ pub async fn run_csp_vault_server(
         Arc::new(metrics),
     );
     server.run().await
+}
+
+pub fn remote_vault_codec_builder() -> Builder {
+    let mut codec_builder = LengthDelimitedCodec::builder();
+    codec_builder
+        .length_field_type::<u32>()
+        .max_frame_length(FOUR_GIGA_BYTES);
+    codec_builder
 }
