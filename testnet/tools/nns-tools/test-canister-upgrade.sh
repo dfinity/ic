@@ -38,3 +38,50 @@ ensure_variable_set NEURON_ID || help
 export PEM=${PEM:-$SCRIPT_DIR/nns_test_user_dfx_identity}
 
 propose_upgrade_canister_to_version_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$VERSION"
+
+for i in {1..20}; do
+    echo "Testing if upgrade was successful..."
+    if canister_has_version_installed $NNS_URL $CANISTER_NAME $VERSION; then
+        print_green "First upgrade successful"
+        break
+    fi
+
+    if [ $i -eq 20 ]; then
+        print_red "First upgrade failed, aborting remainder of test"
+        exit 1
+    fi
+
+    sleep 10
+done
+
+echo "Testing subsequent upgrade to ensure upgrade path continues to work"
+
+# Download current version, and modify it,
+WASM_GZ_FILE=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$VERSION")
+ORIGINAL_HASH=$(sha_256 $WASM_GZ_FILE)
+
+UNZIPPED=$(ungzip $WASM_GZ_FILE)
+
+NEW_HASH=$(sha_256 "$UNZIPPED")
+
+echo "Checking that hashes are in fact different..."
+if [ "$NEW_HASH" == "$ORIGINAL_HASH" ]; then
+    print_red "Hashes were the same, aborting rest of test..."
+    exit 1
+fi
+
+# We upgrade to same version but with a different hash so that we can verify that second upgrade worked.
+propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$UNZIPPED"
+
+for i in {1..20}; do
+    echo "Testing if second upgrade was successful..."
+    if canister_has_file_contents_installed "$NNS_URL" "$CANISTER_NAME" "$UNZIPPED"; then
+        echo "Second upgrade successful..."
+        print_green "Canister Upgrade test was successful!"
+        exit 0
+    fi
+    sleep 10
+done
+
+print_red "Canister Upgrade test FAILED."
+exit 1

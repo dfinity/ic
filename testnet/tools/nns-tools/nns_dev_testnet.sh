@@ -9,17 +9,18 @@ DEPLOYMENT_STEPS=${DEPLOYMENT_STEPS:-''}
 
 help() {
     print_green "
-Usage: $0 <TESTNET_NAME> <REPLICA_VERSION>
+Usage: $0 <TESTNET_NAME> (<REPLICA_VERSION>)
   TESTNET_NAME: The name of the testnet (a folder name in '<repo_root>/testnet/env').
     Note: Testnet must have a file called 'hosts_unassigned.ini' for this script to succeed.
-  REPLICA_VERSION: The version of the replica to install on the testnet. Usually git id, or a build id for MR pipelines
+  REPLICA_VERSION: The version of the replica to install on the testnet. Usually git id, or a build id for MR pipelines.
+    Defaults to the version in REPO_ROOT/testnet/mainnet_revisions.json
 
   This script will recover a testnet to use mainnet backup in a state ready to launch SNSs and deploy canisters.
   It creates two subnets, one system subnet, and one application subnet.
 "
 }
 
-if [ $# -lt 2 ]; then
+if [ $# -lt 1 ]; then
     help
     echo
     print_red "Not enough arguments"
@@ -27,7 +28,9 @@ if [ $# -lt 2 ]; then
 fi
 
 TESTNET=$1
-VERSION=$2
+# tbd26 is the NNS subnet ID in mainnet, and we track the current replica version deployed
+CURRENT_MAINNET_REPLICA_VERSION=$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' $(repo_root)/testnet/mainnet_revisions.json)
+VERSION=${2:-$CURRENT_MAINNET_REPLICA_VERSION}
 
 SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
 
@@ -141,4 +144,4 @@ echo "export WALLET_CANISTER=$WALLET_CANISTER" >>"$VARS_FILE"
 echo "export IC_ADMIN=$IC_ADMIN" >>$VARS_FILE
 echo "export SNS_CLI=$SNS_CLI" >>$VARS_FILE
 
-echo "Variables from script stored at $VARS_FILE..."
+print_green "Variables from script stored at $VARS_FILE"

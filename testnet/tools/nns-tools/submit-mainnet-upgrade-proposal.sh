@@ -62,8 +62,8 @@ submit_proposal_mainnet() {
         return 1
     fi
 
-    WASM=$(get_nns_canister_wasm_for_type "$CANISTER_NAME" "$VERSION")
-    WASM_SHA=$(sha_256 $WASM)
+    WASM_GZ=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$VERSION")
+    WASM_SHA=$(sha_256 $WASM_GZ)
 
     if [ "$WASM_SHA" != "$PROPOSAL_SHA" ]; then
         echo "SHA256 hash for WASM at proposed version does not match hash stated in proposal"
@@ -92,7 +92,7 @@ submit_proposal_mainnet() {
         --nns-url "https://nns.ic0.app"
         propose-to-change-nns-canister --mode=upgrade
         --canister-id=$CANISTER_ID
-        --wasm-module-path=$WASM
+        --wasm-module-path=$WASM_GZ
         --wasm-module-sha256=$WASM_SHA
         --summary-file=$PROPOSAL_FILE
         --proposer=$NEURON_ID)
@@ -115,7 +115,7 @@ submit_proposal_mainnet() {
 if ! is_variable_set IC_ADMIN; then
     if [ ! -f "$MY_DOWNLOAD_DIR/ic-admin" ]; then
         PREVIOUS_VERSION=$(extract_previous_version "$PROPOSAL_FILE")
-        echo $PREVIOUS_VERSION
+        #TODO make this work for M1 macbooks
         install_binary ic-admin "$PREVIOUS_VERSION" "$MY_DOWNLOAD_DIR"
     fi
     IC_ADMIN=$MY_DOWNLOAD_DIR/ic-admin
