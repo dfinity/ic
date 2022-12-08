@@ -1,10 +1,9 @@
 use std::{
     cmp::min,
-    fs::File,
-    io::BufWriter,
+    fs::{self},
     net::SocketAddr,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
 
@@ -22,19 +21,29 @@ use clap::Parser;
 use dashmap::{DashMap, DashSet};
 use futures::{future::TryFutureExt, stream::FuturesUnordered};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
+use nix::{
+    sys::signal::{kill as send_signal, Signal},
+    unistd::Pid,
+};
 use opentelemetry::{baggage::BaggageExt, global, sdk::Resource, trace::FutureExt, KeyValue};
 use opentelemetry_prometheus::PrometheusExporter;
-use prometheus::{Encoder, TextEncoder};
+use persist::{Persist, PersistStatus};
+use prometheus::{Encoder as PrometheusEncoder, TextEncoder};
 use registry::{RoutingTable, Subnet};
 use tokio::{sync::Semaphore, task};
 use tracing::info;
 
+mod encode;
 mod metrics;
+mod persist;
 mod registry;
 mod retry;
+mod routes;
 
 use crate::{
+    encode::{RoutesEncoder, TrustedCertsEncoder, UpstreamEncoder},
     metrics::{MetricParams, WithMetrics},
+    persist::{LegacyPersister, Persister, WithDedup, WithEmpty, WithMultiple},
     registry::{
         CreateRegistryClient, CreateRegistryClientImpl, Snapshot, Snapshotter, WithMinimumVersion,
     },
@@ -61,8 +70,20 @@ struct Cli {
     #[clap(long, default_value = "1")]
     min_ok_count: u8,
 
-    #[clap(long, default_value = "/tmp/routes")]
-    routes_dir: PathBuf,
+    #[clap(long, default_value = "/tmp/legacy_routes")]
+    legacy_routes_dir: PathBuf,
+
+    #[clap(long, default_value = "/tmp/routes.js")]
+    routes_path: PathBuf,
+
+    #[clap(long, default_value = "/tmp/upstreams.conf")]
+    upstreams_path: PathBuf,
+
+    #[clap(long, default_value = "/tmp/trusted_certs.pem")]
+    trusted_certs_path: PathBuf,
+
+    #[clap(long, default_value = "/var/run/nginx.pid")]
+    pid_path: PathBuf,
 
     #[clap(long, default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
@@ -138,14 +159,36 @@ async fn main() -> Result<(), Error> {
     );
     let checker = WithSemaphore::wrap(checker, 32);
 
-    let persister = Persister::new(cli.routes_dir.clone());
-    let persister = WithDedup(persister, None);
+    // Service Reloads
+    let reloader = Reloader::new(cli.pid_path, Signal::SIGHUP);
+    let reloader = WithMetrics(reloader, MetricParams::new(&meter, SERVICE_NAME, "reload"));
+
+    // Persistence
+    let persister = WithMultiple(vec![
+        Arc::new(LegacyPersister::new(cli.legacy_routes_dir.clone())),
+        Arc::new(Persister::new(
+            cli.routes_path.clone(),
+            Arc::new(RoutesEncoder),
+        )),
+        Arc::new(Persister::new(
+            cli.upstreams_path.clone(),
+            Arc::new(UpstreamEncoder),
+        )),
+        Arc::new(Persister::new(
+            cli.trusted_certs_path.clone(),
+            Arc::new(TrustedCertsEncoder),
+        )),
+    ]);
+
+    let persister = WithReload(persister, reloader);
+    let persister = WithDedup(persister, Arc::new(RwLock::new(None)));
     let persister = WithEmpty(persister);
     let persister = WithMetrics(
         persister,
         MetricParams::new(&meter, SERVICE_NAME, "persist"),
     );
 
+    // Runner
     let check_persist_runner = CheckPersistRunner::new(
         Arc::clone(&routing_table), // routing_table
         checker,                    // checker
@@ -161,7 +204,10 @@ async fn main() -> Result<(), Error> {
 
     info!(
         msg = format!("starting {SERVICE_NAME}").as_str(),
-        routes_dir = cli.routes_dir.display().to_string().as_str(),
+        legacy_routes_dir = cli.legacy_routes_dir.display().to_string().as_str(),
+        routes_path = cli.routes_path.display().to_string().as_str(),
+        upstreams_path = cli.upstreams_path.display().to_string().as_str(),
+        trusted_certs_path = cli.trusted_certs_path.display().to_string().as_str(),
         metrics_addr = cli.metrics_addr.to_string().as_str(),
     );
 
@@ -267,40 +313,36 @@ impl Check for Checker {
     }
 }
 
-enum PersistStatus {
-    Completed,
-    SkippedUnchanged,
-    SkippedEmpty,
-}
-
 #[async_trait]
-trait Persist: Send + Sync {
-    async fn persist(&mut self, rt: RoutingTable) -> Result<PersistStatus, Error>;
+trait Reload: Sync + Send {
+    async fn reload(&self) -> Result<(), Error>;
 }
 
-struct Persister {
-    routes_dir: PathBuf,
+struct Reloader {
+    pid_path: PathBuf,
+    signal: Signal,
 }
 
-impl Persister {
-    fn new(routes_dir: PathBuf) -> Self {
-        Self { routes_dir }
+impl Reloader {
+    fn new(pid_path: PathBuf, signal: Signal) -> Self {
+        Self { pid_path, signal }
     }
 }
 
 #[async_trait]
-impl Persist for Persister {
-    async fn persist(&mut self, rt: RoutingTable) -> Result<PersistStatus, Error> {
-        let p = format!("{:020}.routes", rt.registry_version);
-        let p = self.routes_dir.join(p);
+impl Reload for Reloader {
+    async fn reload(&self) -> Result<(), Error> {
+        let pid = fs::read_to_string(self.pid_path.clone()).context("failed to read pid file")?;
+        let pid = pid.trim().parse::<i32>().context("failed to parse pid")?;
+        let pid = Pid::from_raw(pid);
 
-        let w = File::create(p).context("failed to create routes file")?;
-        let w = BufWriter::new(w);
-        serde_json::to_writer(w, &rt).context("failed to write json routes file")?;
+        send_signal(pid, self.signal)?;
 
-        Ok(PersistStatus::Completed)
+        Ok(())
     }
 }
+
+struct WithReload<T, R>(T, R);
 
 #[async_trait]
 trait Run: Send + Sync {
@@ -485,7 +527,7 @@ impl<C: Check, P: Persist> Run for CheckPersistRunner<C, P> {
 
         // Persist Effective Routing Table
         self.persister
-            .persist(effective_routing_table)
+            .persist(&effective_routing_table)
             .await
             .context("failed to persist routing table")?;
 
@@ -537,33 +579,5 @@ impl<T: Check> Check for WithSemaphore<T> {
     async fn check(&self, addr: &str) -> Result<(), Error> {
         let _permit = self.1.acquire().await?;
         self.0.check(addr).await
-    }
-}
-
-struct WithDedup<T, U>(T, Option<U>);
-
-#[async_trait]
-impl<T: Persist> Persist for WithDedup<T, RoutingTable> {
-    async fn persist(&mut self, rt: RoutingTable) -> Result<PersistStatus, Error> {
-        if self.1.as_ref() == Some(&rt) {
-            return Ok(PersistStatus::SkippedUnchanged);
-        } else {
-            self.1 = Some(rt.clone());
-        }
-
-        self.0.persist(rt).await
-    }
-}
-
-struct WithEmpty<T>(T);
-
-#[async_trait]
-impl<T: Persist> Persist for WithEmpty<T> {
-    async fn persist(&mut self, rt: RoutingTable) -> Result<PersistStatus, Error> {
-        if rt.subnets.iter().filter(|&s| !s.nodes.is_empty()).count() == 0 {
-            return Ok(PersistStatus::SkippedEmpty);
-        }
-
-        self.0.persist(rt).await
     }
 }

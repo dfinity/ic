@@ -282,7 +282,6 @@ RUN chmod 0755 /etc/nginx/* && \
     chmod 0644 /etc/nginx/nginx.conf && \
     chmod 0644 /etc/nginx/modules-enabled/ngx_http_cbor_input_module.conf && \
     chmod 0644 /etc/nginx/modules-enabled/ngx_http_js_module.conf && \
-    chmod 0755 /etc/nginx/ic/ic_router_control_plane_watcher.sh && \
     rm -rf /etc/nginx/conf.d/nginx-global.conf && \
     rm -rf /etc/nginx/conf.d/default.conf && \
     rm -rf /etc/nginx/sites-enabled/default && \

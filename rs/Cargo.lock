@@ -903,9 +903,11 @@ dependencies = [
  "async-trait",
  "axum",
  "bytes",
+ "candid",
  "clap 3.2.23",
  "dashmap 5.4.0",
  "futures",
+ "hex",
  "ic-crypto-utils-basic-sig",
  "ic-protobuf",
  "ic-registry-client",
@@ -913,6 +915,7 @@ dependencies = [
  "ic-registry-local-store",
  "ic-types",
  "mockall 0.11.3",
+ "nix 0.24.2",
  "opentelemetry 0.17.0",
  "opentelemetry-prometheus 0.10.0",
  "prometheus 0.13.3",
@@ -1142,9 +1145,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.8.3"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0571f3777880555f86d8aaa63080162560a8bf183d7853e0cc561d9a75458bbd"
+checksum = "244005a1917bb7614cd775ca8a5d59efeb5ac74397bb14ba29a19347ebd78591"
 dependencies = [
  "anyhow",
  "binread",

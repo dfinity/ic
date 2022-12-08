@@ -1,6 +1,6 @@
 import qs from "querystring";
 
-import subnet_table from "/var/opt/nginx/ic/ic_router_table.js";
+import SUBNET_TABLE from "/var/opt/nginx/ic/ic_routes.js";
 import CANISTER_ID_ALIASES from "/var/opt/nginx/canister_aliases/canister_id_aliases.js";
 
 const CANISTER_ID_LENGTH = 27;
@@ -156,7 +156,7 @@ function inferCanisterId(r) {
 }
 
 function isTableEmpty(r) {
-  return !subnet_table["canister_subnets"] ? "1" : "";
+  return !SUBNET_TABLE["canister_subnets"] ? "1" : "";
 }
 
 function normalizeSubnetType(typ) {
@@ -182,31 +182,31 @@ function route(r) {
   //     ic = custom_route.ic;
   //   }
   // }
-  if (!("canister_subnets" in subnet_table)) {
+  if (!("canister_subnets" in SUBNET_TABLE)) {
     return "";
   }
 
   canister_id = decode_canister_id(canister_id);
-  var subnet_index = find_subnet(canister_id, subnet_table);
+  var subnet_index = find_subnet(canister_id, SUBNET_TABLE);
   if (
-    canister_id < subnet_table.canister_range_starts[subnet_index] ||
-    canister_id > subnet_table.canister_range_ends[subnet_index]
+    canister_id < SUBNET_TABLE.canister_range_starts[subnet_index] ||
+    canister_id > SUBNET_TABLE.canister_range_ends[subnet_index]
   ) {
     return "";
   }
 
-  var subnet_id = subnet_table.canister_subnets[subnet_index];
+  var subnet_id = SUBNET_TABLE.canister_subnets[subnet_index];
 
-  var subnet_types = subnet_table["subnet_types"] || {};
+  var subnet_types = SUBNET_TABLE["subnet_types"] || {};
   var subnet_type = normalizeSubnetType(subnet_types[subnet_id]);
 
-  var nodes = subnet_table.subnet_nodes[subnet_id];
+  var nodes = SUBNET_TABLE.subnet_nodes[subnet_id];
   if (nodes.length < 1) {
     return "";
   }
 
   var node_index = Math.floor(Math.random() * Math.floor(nodes.length));
-  var node_ids = subnet_table.subnet_node_ids[subnet_id];
+  var node_ids = SUBNET_TABLE.subnet_node_ids[subnet_id];
   var node_id = node_ids[node_index];
   r.headersOut["x-ic-subnet-id"] = subnet_id;
   r.headersOut["x-ic-node-id"] = node_id;
@@ -218,7 +218,7 @@ function route(r) {
 }
 
 function randomRoute() {
-  var canisterSubnets = subnet_table.canister_subnets || [];
+  var canisterSubnets = SUBNET_TABLE.canister_subnets || [];
   var subnetCount = canisterSubnets.length;
   if (subnetCount == 0) {
     return "";
@@ -228,13 +228,13 @@ function randomRoute() {
   var subnetIdx = Math.floor(Math.random() * subnetCount);
   var subnetId = canisterSubnets[subnetIdx];
 
-  var subnetNodeIds = subnet_table.subnet_node_ids[subnetId] || [];
+  var subnetNodeIds = SUBNET_TABLE.subnet_node_ids[subnetId] || [];
   var nodeCount = subnetNodeIds.length;
   if (nodeCount == 0) {
     return "";
   }
 
-  var subnetTypes = subnet_table["subnet_types"] || {};
+  var subnetTypes = SUBNET_TABLE["subnet_types"] || {};
   var subnetType = normalizeSubnetType(subnetTypes[subnetId]);
 
   // Choose random node

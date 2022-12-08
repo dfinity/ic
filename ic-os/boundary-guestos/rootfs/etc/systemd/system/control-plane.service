@@ -16,7 +16,10 @@ ExecStart=/opt/ic/bin/boundary-node-control-plane    \
     --local-store          "/var/opt/registry/store" \
     --min-registry-version "${MIN_REGISTRY_VERSION}" \
     --min-ok-count         "5" \
-    --routes-dir           "/var/cache/ic_routes"    \
+    --legacy-routes-dir    "/var/cache/ic_routes"    \
+    --routes-path          "/var/opt/nginx/ic/ic_routes.js"      \
+    --upstreams-path       "/var/opt/nginx/ic/ic_upstreams.conf" \
+    --trusted-certs-path   "/var/opt/nginx/ic/trusted_certs.pem" \
     --metrics-addr         "[::]:9312"
 
 [Install]

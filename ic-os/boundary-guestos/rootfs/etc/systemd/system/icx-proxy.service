@@ -9,7 +9,6 @@ BindsTo=setup-icx-proxy.service
 User=root
 Group=root
 LimitNOFILE=524288
-WorkingDirectory=/etc/nginx/ic
 Environment="RUST_BACKTRACE=1"
 EnvironmentFile=/run/ic-node/etc/icx-proxy/env
 ExecStart=/opt/ic/bin/icx-proxy                                  \
