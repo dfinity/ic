@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if ! which jq >/dev/null; then
+    echo >&2 "Tool \`jq\` not found.  Please install. \`brew install jq\` or check https://stedolan.github.io/jq/"
+    exit 1
+fi
+
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 source "$SCRIPT_DIR/../lib.sh"
@@ -14,14 +19,16 @@ repo_root() {
 }
 
 is_variable_set() {
+    set +u
     if [ -z "${!1}" ]; then
+        set -u
         return 1
     fi
+    set -u
     return 0
 }
 
 ensure_variable_set() {
-    set +u
     while [ $# -gt 0 ]; do
         if ! is_variable_set $1; then
             echo "\$$1 was empty or unset.  Aborting."
@@ -29,19 +36,6 @@ ensure_variable_set() {
         fi
         shift
     done
-    set -u
-}
-
-download_canister_gz() {
-    DOWNLOAD_NAME=$1
-    GIT_HASH=$2
-
-    OUTPUT_FILE="/tmp/$DOWNLOAD_NAME-$GIT_HASH.wasm.gz"
-
-    curl --silent "https://download.dfinity.systems/ic/$GIT_HASH/canisters/$DOWNLOAD_NAME.wasm.gz" \
-        --output "$OUTPUT_FILE"
-
-    echo "$OUTPUT_FILE"
 }
 
 ### Functions for searching nodes and subnets
@@ -94,6 +88,8 @@ node_ip_from_node_id() {
 
 ### End functions for searching nodes and subnets
 
+### Upgrade canister related functions
+
 sha_256() {
     if $(which sha256sum >/dev/null); then
         SHA_CMD="sha256sum"
@@ -113,7 +109,7 @@ propose_upgrade_canister_to_version_pem() {
     local CANISTER_NAME=$4
     local VERSION=$5
 
-    WASM_FILE=$(get_nns_canister_wasm_for_type "$CANISTER_NAME" "$VERSION")
+    WASM_FILE=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$VERSION")
 
     propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE"
 }
@@ -140,7 +136,7 @@ propose_upgrade_canister_wasm_file_pem() {
         --canister-id "$CANISTER_ID" \
         --wasm-module-path "$WASM_FILE" \
         --wasm-module-sha256 "$WASM_SHA" \
-        --summary-file /tmp/testnet_upgrade_proposal.txt \
+        --summary-file $PROPOSAL \
         --proposer "$NEURON_ID"
 
     rm -rf $PROPOSAL
@@ -153,8 +149,8 @@ generate_release_notes_template() {
     local CANISTER_NAME=$3
     local OUTPUT_FILE=${4:-}
 
-    WASM=$(get_nns_canister_wasm_for_type "$CANISTER_NAME" "$NEXT_COMMIT")
-    WASM_SHA=$(sha_256 "$WASM")
+    WASM_GZ=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$NEXT_COMMIT")
+    WASM_SHA=$(sha_256 "$WASM_GZ")
     CAPITALIZED_CANISTER_NAME="$(tr '[:lower:]' '[:upper:]' <<<${CANISTER_NAME:0:1})${CANISTER_NAME:1}"
 
     IC_REPO=$(repo_root)
@@ -179,10 +175,12 @@ TODO ADD FEATURE NOTES
 $(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- "$CANISTER_CODE_LOCATION")
 \`\`\`
 ## Wasm Verification
+Verify that the hash of the gzipped WASM matches the proposed hash.
 \`\`\`
 git fetch
 git checkout $NEXT_COMMIT
 ./gitlab-ci/tools/docker-build-ic --artifacts="canisters"
+sha256sum ./artifacts/docker-build-ic/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
 \`\`\`
 EOF
     )
@@ -221,16 +219,62 @@ get_canister_code_location() {
 ##: get_info
 ## Prints the info for a named NNS canister
 ## Usage: $1 <NETWORK> <CANISTER_NAME>
-## NETWORK: ic, or URL to an NNS subnet (including port)
-## CANISTER_NAME: human readable canister name (i.e. governance, registry, sns-wasm, etc...)
+##      NETWORK: ic, or URL to an NNS subnet (including port)
+##      CANISTER_NAME: human readable canister name (i.e. governance, registry, sns-wasm, etc...)
 get_info() {
-    NETWORK=$1
-    CANISTER_NAME=$2
+    local NETWORK=$1
+    local CANISTER_NAME=$2
 
     dfx canister --network "$NETWORK" info $(nns_canister_id "$CANISTER_NAME")
 }
 
-# End upgrade canister related
+canister_hash() {
+    local NETWORK=$1
+    local CANISTER_NAME=$2
+
+    get_info $NETWORK $CANISTER_NAME \
+        | grep "Module hash:" \
+        | cut -d" " -f3 \
+        | sed 's/^0x//'
+}
+
+##: canister_has_version_installed
+## Check if canister has the right version (git commit)
+##      NETWORK: ic, or URL to an NNS subnet (including port)
+##      CANISTER_NAME: human readable canister name (i.e. governance, registry, sns-wasm, etc...)
+##      VERSION: Git hash of expected version
+canister_has_version_installed() {
+    local NETWORK=$1
+    local CANISTER_NAME=$2
+    local VERSION=$3
+
+    WASM_GZ=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$VERSION")
+
+    canister_has_file_contents_installed "$NETWORK" "$CANISTER_NAME" "$WASM_GZ"
+}
+
+canister_has_file_contents_installed() {
+    local NETWORK=$1
+    local CANISTER_NAME=$2
+    local WASM_FILE=$3
+
+    echo "Checking if canister $CANISTER_NAME is running $WASM_FILE..."
+
+    WASM_HASH=$(sha_256 "$WASM_FILE")
+    RUNNING_HASH=$(canister_hash "$NETWORK" "$CANISTER_NAME")
+
+    if [ "$WASM_HASH" != "$RUNNING_HASH" ]; then
+        echo >&2 "Canister has hash $RUNNING_HASH; expected $WASM_HASH"
+        return 1
+    fi
+
+    echo >&2 "Canister is running with hash $WASM_HASH as expected"
+    return 0
+}
+
+### End upgrade canister related functions
+
+### Functions related to SNS deployments
 
 add_sns_wasms_allowed_principal() {
     ensure_variable_set IC_ADMIN
@@ -320,16 +364,16 @@ upload_canister_wasm_to_sns_wasm() {
     local CANISTER_TYPE=$4
     local VERSION=$5
 
-    WASM=$(get_sns_canister_wasm_for_type "$CANISTER_TYPE" "$VERSION")
+    WASM_GZ=$(get_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$VERSION")
 
-    WASM_SHA=$(sha_256 "$WASM")
+    WASM_SHA=$(sha_256 "$WASM_GZ")
 
-    SUMMARY_FILE=$(tempfile)
+    SUMMARY_FILE=$(mktemp)
     echo "Proposal to add a WASM" >$SUMMARY_FILE
 
     $IC_ADMIN -s "$PEM" --nns-url "$NNS_URL" \
         propose-to-add-wasm-to-sns-wasm \
-        --wasm-module-path "$WASM" \
+        --wasm-module-path "$WASM_GZ" \
         --wasm-module-sha256 "$WASM_SHA" \
         --canister-type "$CANISTER_TYPE" \
         --summary-file "$SUMMARY_FILE" \
@@ -341,7 +385,7 @@ deploy_new_sns() {
 
     local SUBNET_WITH_WALLET_URL=$1
     local WALLET_CANISTER=$2
-    local CONFIG_FILE=$(3:-)
+    local CONFIG_FILE=${3:-}
 
     if [ -z "$CONFIG_FILE" ]; then
         CONFIG_FILE=$SCRIPT_DIR/sns_default_test_init_params.yml
@@ -352,24 +396,80 @@ deploy_new_sns() {
         --init-config-file "$CONFIG_FILE"
 }
 
+##: test_propose_to_open_sns_token_swap_pem
+## Decentralize an SNS with test parameters
+## Usage: $1 <NNS_URL> <NEURON_ID> <PEM> <SWAP_CANISTER_ID>
+##      NNS_URL: The url to the subnet running the NNS in your testnet.
+##      NEURON_ID: The neuron used to submit proposals (should have following to immediately pass)
+##      PEM: path to the pem file of a neuron controller (hotkey or owner)
+##      SWAP_CANISTER_ID: the id of the swap canister to decentralize
+test_propose_to_open_sns_token_swap_pem() {
+    ensure_variable_set IC_ADMIN
+
+    local NNS_URL=$1 # with protocol and port (http://...:8080)
+    local NEURON_ID=$2
+    local PEM=$3
+    local SWAP_ID=$4
+
+    NOW_PLUS_TWO_DAYS=$(($(date +%s) + 86400 + 86400))
+
+    # Min ICP = 50, Max = 500
+    # min per user 1 ICP, max 200
+    # 3 users minimum
+    $IC_ADMIN -s "$PEM" --nns-url "$NNS_URL" \
+        propose-to-open-sns-token-swap \
+        --min-participants 3 \
+        --min-icp-e8s 5000000000 \
+        --max-icp-e8s 50000000000 \
+        --min-participant-icp-e8s 100000000 \
+        --max-participant-icp-e8s 20000000000 \
+        --swap-due-timestamp-seconds $NOW_PLUS_TWO_DAYS \
+        --sns-token-e8s 500000000000 \
+        --target-swap-canister-id "$SWAP_ID" \
+        --neuron-basket-count 3 \
+        --neuron-basket-dissolve-delay-interval-seconds 2629800 \
+        --proposal-title "Decentralize this SNS" \
+        --summary "Decentralize this SNS" \
+        --proposer "$NEURON_ID"
+}
+
+##: nns_proposal_info
+## Get the information for a proposal for a given ID
+## Usage: $1 <NNS_URL> <PROPOSAL_ID>
+##      NNS_URL: The url to the subnet running the NNS in your testnet.
+##      PROPOSAL_ID: The ID of the proposal
+nns_proposal_info() {
+    local NNS_URL=$1
+    local PROPOSAL_ID=$2
+
+    local IC=$(repo_root)
+    local GOV_DID="$IC/rs/nns/governance/canister/governance.did"
+
+    dfx canister --network $NNS_URL \
+        call --candid "$GOV_DID" \
+        $(nns_canister_id governance) get_proposal_info "( $PROPOSAL_ID : nat64 )"
+}
+
+### End functions related to SNS deployments
+
 ### Functions to get WASMs
 
-get_sns_canister_wasm_for_type() {
+get_sns_canister_wasm_gz_for_type() {
     local CANISTER_TYPE=$1
     local VERSION=$2
 
     DOWNLOAD_NAME=$(_canister_download_name_for_sns_canister_type "$CANISTER_TYPE")
     WASM_GZ=$(_download_canister_gz "$DOWNLOAD_NAME" "$VERSION")
-    ungzip "$WASM_GZ"
+    echo "$WASM_GZ"
 }
 
-get_nns_canister_wasm_for_type() {
+get_nns_canister_wasm_gz_for_type() {
     local CANISTER_TYPE=$1
     local VERSION=$2
 
     DOWNLOAD_NAME=$(_canister_download_name_for_nns_canister_type "$CANISTER_TYPE")
     WASM_GZ=$(_download_canister_gz "$DOWNLOAD_NAME" "$VERSION")
-    ungzip "$WASM_GZ"
+    echo "$WASM_GZ"
 }
 
 _download_canister_gz() {
@@ -440,6 +540,42 @@ nns_canister_id() {
     return $FOUND
 }
 
+# TODO deduplicate this from icos_deploy.sh by moving into lib.sh
+disk_image_exists() {
+    GIT_REVISION=$1
+    curl --output /dev/null --silent --head --fail \
+        "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img-dev/disk-img.tar.gz" \
+        || curl --output /dev/null --silent --head --fail \
+            "https://download.dfinity.systems/ic/${GIT_REVISION}/guest-os/disk-img.tar.gz"
+}
+
+##: latest_commit_with_prebuilt_artifacts
+## Gets the latest git commit with a prebuilt governance canister WASM and a disk image
+latest_commit_with_prebuilt_artifacts() {
+
+    IC_REPO=$(repo_root)
+    pushd "$IC_REPO" >/dev/null
+
+    RECENT_CHANGES=$(git log -n 100 --pretty=format:'%H')
+
+    for HASH in $RECENT_CHANGES; do
+        echo >&2 "Checking $HASH..."
+        GZ=$(_download_canister_gz "governance-canister" "$HASH")
+
+        if ungzip "$GZ" >/dev/null 2>&1; then
+            if disk_image_exists "$HASH"; then
+                echo "$HASH"
+                return 0
+            fi
+        fi
+    done
+
+    popd >/dev/null
+
+    echo >&2 "None found!"
+    return 1
+}
+
 ##: published_sns_canister_diff
 ## Gets the diff between the mainnet commits of various SNS canisters and IC master.
 ## Usage: $1
@@ -487,4 +623,21 @@ pretty_git_log() {
     local DIR=$2
     git --no-pager log master --pretty=format:"   %Cred%h%Creset %s" "$COMMIT"... -- "$IC_REPO/$DIR"
     echo
+}
+
+##: nns_neuron_info
+## Get the information for a proposal for a given ID
+## Usage: $1 <NNS_URL> <PROPOSAL_ID>
+##      NNS_URL: The url to the subnet running the NNS in your testnet.
+##      NEURON_ID: The ID of the neuron
+nns_neuron_info() {
+    local NNS_URL=$1
+    local NEURON_ID=$2
+
+    local IC=$(repo_root)
+    local GOV_DID="$IC/rs/nns/governance/canister/governance.did"
+
+    dfx canister --network $NNS_URL \
+        call --candid "$GOV_DID" \
+        $(nns_canister_id governance) get_neuron_info "( $NEURON_ID : nat64 )"
 }

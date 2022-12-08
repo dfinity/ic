@@ -2,7 +2,9 @@
 
 A small collection of tools for testing NNS canisters and upgrades on testnets.
 
-## nns_dev_testnet.sh
+## Spinning up a testnet
+
+### nns_dev_testnet.sh
 
 This script creates a testnet with mainnet state using a stable shared identity and modifies it in a few ways for development purposes.
 1. Adds an application subnet.
@@ -16,12 +18,23 @@ interaction with the subnet
 
 ### Example usage of nns_dev_testnet.sh
 
+When running the testnet creation script, a temporary directory is created.  If you would like to use a particular directory
+you can set `DIR` in your environment.  In our examples, we do this to make it easier to find the outputs from the 
+scripts.
+
+For more information, run `./nns_dev_testnet.sh` without arguments.
+
 #### Run the entire script
+
 ```
 DIR=/tmp/$USER-nns-test/ ./nns_dev_testnet.sh small02 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
 ```
 
 #### Run only the full step 1 of the script.
+
+Sometimes, during testnet setup or when developing the script, you may want to only run some parts.  To see the parts,
+read the script source for current descriptions.
+
 ```
 DIR=/tmp/$USER-nns-test/ STEPS='1' ./nns_dev_testnet.sh small02 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
 ```
@@ -32,6 +45,17 @@ DIR=/tmp/$USER-nns-test/ STEPS='1' DEPLOYMENT_STEPS='[34]' ./nns_dev_testnet.sh 
 ```
 
 ### Interacting afterwards
+
+Variables needed to interact with the testnet are captured in the directory used during the script's operation.  
+
+These variables are captured to files in the `DIR` (or a temporary directory) which is printed at the end of the script.
+
+Sourcing those files into your current directory will set environment variables that make interacting with the testnet
+more convenient (so you do not need to specify NNS_URL or NEURON_ID when running many of the scripts).
+
+To see what variables are set, look at the last lines in `../nns_state_deployment.sh` and `./nns_dev_testnet.sh`, or
+investigate the output of the scripts.
+
 ```
 source $DIRECTORY/output_vars_nns_dev_testnet.sh
 dfx canister --network $NNS_URL call qaa6y-5yaaa-aaaaa-aaafa-cai get_sns_subnet_ids '(record {})'
@@ -44,5 +68,68 @@ $SNS_CLI deploy --network "$SUBNET_URL" \
 ```
 
 Note: When making calls _through_ the wallet canister with `dfx` or `sns` you need to set the `--network` argument
-to be the $SUBNET_URL, as the $NNS_URL points at the NNS replica and will not route your requests to the correct subnet
-where the wallet canister lives.
+to be the $SUBNET_URL (found in `$DIR/output_vars_nns_dev_testnet.sh`), as the $NNS_URL points at the NNS replica and 
+will not route your requests to the correct subnet where the wallet canister lives.  
+
+An example is `sns deploy`, which has to send cycles with the call, and therefore needs to use the wallet canister.  
+That particular call also requires `--wallet-canister-override $WALLET_CANISTER` in order to specify the correct wallet.  
+```
+sns deploy --network $SUBNET_URL --wallet-canister-override $WALLET_CANISTER --init-config-file "<your_config_file>"
+```
+
+## NNS Canister Upgrade Testing Process
+
+In order to test a canister upgrade, you will first need to spin up a testnet.  See [Spinning up a testnet](#spinning-up-a-testnet) above.
+
+If you have a working testnet, start by sourcing variables into your local shell if you have not already done so.
+`source /tmp/$USER-nns-test/output_vars_nns_dev_testnet.sh`
+
+Next, we test the upgrade
+`./test-canister-upgrade.sh <CANISTER_NAME> <TARGET_VERSION>`
+
+`<CANISTER_NAME>` is the key of the canister in `rs/nns/canister_ids.json`.
+`<TARGET_VERSION>` is the git hash of the version that has canisters available on the build system.
+
+For example:
+`./test-canister-upgrade.sh registry 1a2d86e9d66d93c4a9a9a147774577c377ce0c66`
+
+The script will test upgrading the canister via proposal, and then upgrading it again via proposal.  It uses the gzipped
+WASM as well as the un-gzipped WASM, as they will report different hashes in the running canister (allowing us to verify that the proposal succeeded.)
+
+This is essential to ensuring that not only can we upgrade _to_ a particular version, but also _beyond_ that version.
+
+## NNS Canister Upgrade Proposal Process
+
+After you have verified your upgrade works with mainnet state (See [`NNS Canister Upgrade Testing Process`](#nns-canister-upgrade-testing-process)), 
+you will prepare an upgrade proposal and submit it.
+
+This process will be done on a machine that has an HSM key available.
+
+First, run 
+`./prepare-mainnet-proposal-text.sh <LAST_DEPLOY_COMMIT> <TARGET_DEPLOY_COMMIT> <CANISTER_NAME> <PROPOSAL_FILE>`
+
+`<LAST_DEPLOY_COMMIT>` should be obtained from the last relevant proposal for the given canister at present.
+
+For example:
+`./prepare-mainnet-proposal-text.sh f818cf1eb89bcbc9aecb1fb73de8c8de6c258c42 d2d9d63309cf568e3b2c2a0bc366b6850b044792 registry /tmp/upgrade_registry.md`
+
+Next, you will need to open the file, and edit the section with `TODO ADD FEATURE NOTES` in it, and add a list of features
+to be deployed.  These can be determined by looking at the list of commits generated in the proposal.
+
+Finally, after inspecting the proposal, run 
+`./submit-mainnet-upgrade-proposal.sh <PROPOSAL_FILE> <YOUR_NEURON_ID>`
+
+For example:
+`./submit-mainnet-upgrade-proposal.sh /tmp/upgrade_registry.md 123`
+
+This script will read the proposal and validate the following:
+1. The proposed canister ID is consistent with the human readable canister name in the title.
+2. The hash in the proposal matches the hash of the WASM generated for that git version.
+3. There are no TODO items left in the proposal text.
+
+If these items validate, it will output the text of the proposal as well as generate the command for review.
+
+It will ask for your HSM pin, and it will read out the command it is going to execute before executing it, requiring
+confirmation by typing "yes" when asked if you want to proceed.
+
+
