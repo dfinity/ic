@@ -55,9 +55,10 @@ logger.addHandler(stdout_handler)
 
 
 class TargetExecutionResult:
-    def __init__(self, status: str, failure_message: str = "") -> None:
+    def __init__(self, status: str, was_cached: bool, failure_message: str = "") -> None:
         self.status = status
         self.failure_message = failure_message
+        self.was_cached = was_cached
 
 
 def make_request(url, headers=None, data=None):
@@ -160,7 +161,9 @@ def find_system_test_targets_in_BEP(file_path: str) -> Set[str]:
 
 
 def extract_execution_results_for_targets_in_BEP(file_path: str, targets: Set) -> Dict[str, TargetExecutionResult]:
-    results = dict.fromkeys(targets, TargetExecutionResult(status="FAILED", failure_message="couldn't start execution"))
+    results = dict.fromkeys(
+        targets, TargetExecutionResult(status="FAILED", was_cached=False, failure_message="couldn't start execution")
+    )
     with open(file_path) as file:
         for line in file:
             line_dict = json.loads(line)
@@ -171,7 +174,10 @@ def extract_execution_results_for_targets_in_BEP(file_path: str, targets: Set) -
             ):
                 if "testSummary" in line_dict:
                     key = line_dict["id"]["testSummary"]["label"]
-                    results[key] = TargetExecutionResult(status=line_dict["testSummary"]["overallStatus"])
+                    was_cached = "totalNumCached" in line_dict["testSummary"]
+                    results[key] = TargetExecutionResult(
+                        status=line_dict["testSummary"]["overallStatus"], was_cached=was_cached
+                    )
     return results
 
 
@@ -197,12 +203,14 @@ def main(config: Config) -> None:
                     "test_target": test_target_name,
                     "execution_result": target_result.status,
                     "execution_message": target_result.failure_message,
+                    "cached": target_result.was_cached,
                     "job_url": CI_JOB_URL,
                 }
             }
         )
         if target_result.status == "PASSED":
-            logger.info(f"Test target {test_target_name} was executed successfully.")
+            cache_msg = "(cache used) " if target_result.was_cached else ""
+            logger.info(f"Test target {test_target_name} was executed {cache_msg}successfully.")
         else:
             failure_message = target_result.failure_message
             if not target_result.failure_message:
