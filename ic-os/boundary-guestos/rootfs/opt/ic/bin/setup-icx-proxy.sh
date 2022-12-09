@@ -70,7 +70,7 @@ function generate_icx_proxy_config() {
     done
 
     for DOMAIN in "${SYSTEM_DOMAINS[@]}"; do
-        ARG_REPLICA_DOMAIN_ADDRS+=("--replicas ${DOMAIN}|127.0.0.1:443")
+        ARG_REPLICA_DOMAIN_ADDRS+=("--replica ${DOMAIN}|127.0.0.1:443")
     done
 
     for DOMAIN in "${!UNIQUE_DOMAINS[@]}"; do

@@ -57,11 +57,11 @@ struct Opts {
 
     /// A list of replica mappings from domains to socket addresses for replica upstreams.
     /// Format: <URL>[|<IP>:<PORT>]
-    #[clap(long, value_parser = ValueParser::new(parse_domain_addr))]
-    replicas: Vec<DomainAddr>,
+    #[clap(long, value_parser = ValueParser::new(parse_domain_addr), default_value = "http://localhost:8000/")]
+    replica: Vec<DomainAddr>,
 
     /// A list of domains that can be served. These are used for canister resolution.
-    #[clap(long)]
+    #[clap(long, default_value = "localhost")]
     domain: Vec<String>,
 
     /// A list of mappings from canister names to canister principals.
@@ -113,7 +113,7 @@ struct Opts {
 fn main() -> Result<(), anyhow::Error> {
     let Opts {
         address,
-        replicas,
+        replica,
         domain,
         canister_alias,
         ignore_url_canister_param,
@@ -132,7 +132,7 @@ fn main() -> Result<(), anyhow::Error> {
     let client = http_client::setup(http_client::HttpClientOpts {
         ssl_root_certificate,
         danger_accept_invalid_ssl,
-        replicas: &replicas,
+        replicas: &replica,
     })?;
 
     // Setup Metrics
@@ -157,7 +157,7 @@ fn main() -> Result<(), anyhow::Error> {
         },
         proxy::ProxyOpts {
             address,
-            replicas,
+            replicas: replica,
             debug,
             fetch_root_key,
             root_key,

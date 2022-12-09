@@ -26,8 +26,10 @@ pub struct MetricsOpts {
     metrics_addr: Option<SocketAddr>,
 }
 
+#[derive(Clone)]
 pub struct WithMetrics<T>(pub T, pub MetricParams);
 
+#[derive(Clone)]
 pub struct MetricParams {
     pub counter: Counter<u64>,
 }
