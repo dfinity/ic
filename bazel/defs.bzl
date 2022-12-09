@@ -39,11 +39,11 @@ def rust_test_suite_with_extra_srcs(name, srcs, extra_srcs, **kwargs):
 
     for extra_src in extra_srcs:
         if not extra_src.endswith(".rs"):
-            fail("extra_srcs should have `.rs` extensions")
+            fail("Wrong file in extra_srcs: " + extra_src + ". extra_srcs should have `.rs` extensions")
 
     for src in srcs:
         if not src.endswith(".rs"):
-            fail("srcs should have `.rs` extensions")
+            fail("Wrong file in srcs: " + src + ". srcs should have `.rs` extensions")
 
         # Prefixed with `name` to allow parameterization with macros
         # The test name should not end with `.rs`
