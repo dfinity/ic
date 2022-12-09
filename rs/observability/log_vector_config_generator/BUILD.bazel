@@ -8,7 +8,7 @@ DEPENDENCIES = [
     "//rs/http_endpoints/metrics",
     "//rs/ic_p8s_service_discovery/log",
     "//rs/monitoring/metrics",
-    "//rs/service_discovery",
+    "//rs/observability/service_discovery",
     "//rs/types/types",
     "//rs/utils",
     "@crate_index//:anyhow",

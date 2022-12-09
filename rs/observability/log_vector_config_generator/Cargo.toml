@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ic-p8s-service-discovery-log = { path = "../ic_p8s_service_discovery/log" }
+ic-p8s-service-discovery-log = { path = "../../ic_p8s_service_discovery/log" }
 service-discovery = { path = "../service_discovery" }
-ic-types = { path = "../types/types" }
+ic-types = { path = "../../types/types" }
 tokio = { version = "1.15.0", features = ["full"] }
 slog = { version = "2.5.2", features = ["nested-values"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
@@ -21,11 +21,15 @@ crossbeam-channel = "0.5.5"
 futures-util = "0.3.5"
 humantime = "2.0"
 humantime-serde = "1.0"
-ic-config = { path = "../config" }
-ic-async-utils = { path = "../async_utils" }
-ic-metrics = { path = "../monitoring/metrics" }
-ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
+ic-config = { path = "../../config" }
+ic-async-utils = { path = "../../async_utils" }
+ic-metrics = { path = "../../monitoring/metrics" }
+ic-http-endpoints-metrics = { path = "../../http_endpoints/metrics" }
 serde = { version = "1.0.115", features = ["derive"] }
 serde_json = "1.0.54"
-ic-utils = { path = "../utils/" }
+ic-utils = { path = "../../utils/" }
 regex = "1.7.0"
+
+[[bin]]
+name = "log_vector_config_generator"
+path = "src/main.rs"

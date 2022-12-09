@@ -5,10 +5,10 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/config",
+    "//rs/http_endpoints/metrics",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/monitoring/metrics",
-    "//rs/http_endpoints/metrics",
     "//rs/protobuf",
     "//rs/registry/client",
     "//rs/registry/helpers",
@@ -57,7 +57,6 @@ rust_library(
     crate_name = "service_discovery",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.1.0",
     deps = DEPENDENCIES,
 )
 

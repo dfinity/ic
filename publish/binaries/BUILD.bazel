@@ -31,14 +31,14 @@ STRIP_BINARIES = {
     "ic-test-state-machine": "//rs/state_machine_tests:ic-test-state-machine",
     "ic-workload-generator": "//rs/workload_generator:ic-workload-generator",
     "icx-proxy": "//rs/boundary_node/icx_proxy:icx-proxy",
+    "log-vector-config-generator": "//rs/observability/log_vector_config_generator:log_vector_config_generator",
     "orchestrator": "//rs/orchestrator",
     "prod-test-driver": "//rs/tests:prod-test-driver",
     "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
     "sns": "//rs/sns/cli:sns",
     "state-tool": "//rs/state_tool:state-tool",
-    "vector-config-generator": "//rs/vector_config_generator:vector_config_generator",
+    "vector-config-generator": "//rs/observability/vector_config_generator:vector_config_generator",
     "vsock_agent": "//rs/guestos_vsock_agent:vsock_agent",
-    "log-vector-config-generator": "//rs/log_vector_config_generator:log_vector_config_generator",
 }
 
 [release_nostrip_binary(
