@@ -3,6 +3,10 @@ use crate::common::{
     setup_ingress_filter_mock, setup_ingress_ingestion_mock, setup_query_execution_mock,
     IngressFilterHandle, IngressIngestionHandle, QueryExecutionHandle,
 };
+use hyper::{
+    client::{connect::HttpConnector, Client},
+    Body, Error, Method, Request, Response,
+};
 use ic_agent::{
     agent::{http_transport::ReqwestHttpReplicaV2Transport, QueryBuilder, UpdateBuilder},
     agent_error::HttpErrorPayload,
@@ -14,7 +18,7 @@ use ic_agent::{
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
 use ic_crypto_tree_hash::MixedHashTree;
-use ic_http_endpoints_public::start_server;
+use ic_http_endpoints_public::{start_server, MAX_OUTSTANDING_CONNECTIONS};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
@@ -60,7 +64,7 @@ use ic_types::{
 use prost::Message;
 use std::{
     collections::BTreeMap,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -74,19 +78,40 @@ use tokio::{
 
 mod common;
 
-pub fn get_free_port() -> std::io::Result<u16> {
+// Get a free port on this host to which we can connect transport to.
+fn get_free_localhost_socket_addr() -> std::io::Result<SocketAddr> {
     let socket = TcpSocket::new_v4()?;
-    // This allows transport to bind to this address,
-    // even though the socket is already bound.
-    socket.set_reuseport(true)?;
-    socket.set_reuseaddr(true)?;
+    socket.set_reuseport(false)?;
+    socket.set_reuseaddr(false)?;
     socket.bind("127.0.0.1:0".parse().unwrap())?;
-    Ok(socket.local_addr()?.port())
+    socket.local_addr()
+}
+
+async fn send_request(
+    client: &Client<HttpConnector, Body>,
+    addr: SocketAddr,
+) -> Result<Response<Body>, Error> {
+    let req = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}", addr))
+        .body(Body::from(""))
+        .expect("Building the request failed.");
+
+    client.request(req).await
+}
+
+async fn create_client_and_send_request(
+    addr: SocketAddr,
+) -> Result<Client<HttpConnector, Body>, Error> {
+    let client: Client<HttpConnector, Body> = Client::builder().http2_only(true).build_http();
+
+    send_request(&client, addr).await?;
+    Ok(client)
 }
 
 fn start_http_endpoint(
     rt: tokio::runtime::Handle,
-    port: u16,
+    addr: SocketAddr,
     state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     registry_client: Arc<dyn RegistryClient>,
@@ -97,7 +122,7 @@ fn start_http_endpoint(
 ) {
     let metrics = MetricsRegistry::new();
     let config = Config {
-        listen_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port),
+        listen_addr: addr,
         ..Default::default()
     };
     let (ingress_filter, ingress_filter_handle) = setup_ingress_filter_mock();
@@ -137,7 +162,7 @@ fn start_http_endpoint(
 #[test]
 fn test_healthy_behind() {
     let rt = Runtime::new().unwrap();
-    let port = get_free_port().expect("No ports available on host");
+    let addr = get_free_localhost_socket_addr().expect("No ports available on host");
     let certified_state_height = Height::from(1);
     let consensus_height = Height::from(certified_state_height.get() + 25);
 
@@ -257,16 +282,14 @@ fn test_healthy_behind() {
 
     start_http_endpoint(
         rt.handle().clone(),
-        port,
+        addr,
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
     );
 
     let agent = Agent::builder()
-        .with_transport(
-            ReqwestHttpReplicaV2Transport::create(format!("http://127.0.0.1:{}", port)).unwrap(),
-        )
+        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
         .build()
         .unwrap();
 
@@ -296,7 +319,7 @@ fn test_healthy_behind() {
 #[test]
 fn test_unathorized_controller() {
     let rt = Runtime::new().unwrap();
-    let port = get_free_port().expect("No ports available on host");
+    let addr = get_free_localhost_socket_addr().expect("No ports available on host");
 
     let mock_state_manager = basic_state_manager_mock();
     let mock_consensus_cache = basic_consensus_pool_cache();
@@ -304,16 +327,14 @@ fn test_unathorized_controller() {
 
     start_http_endpoint(
         rt.handle().clone(),
-        port,
+        addr,
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
     );
 
     let agent = Agent::builder()
-        .with_transport(
-            ReqwestHttpReplicaV2Transport::create(format!("http://127.0.0.1:{}", port)).unwrap(),
-        )
+        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
         .build()
         .unwrap();
 
@@ -359,7 +380,7 @@ fn test_unathorized_controller() {
 #[test]
 fn test_unathorized_query() {
     let rt = Runtime::new().unwrap();
-    let port = get_free_port().expect("No ports available on host");
+    let addr = get_free_localhost_socket_addr().expect("No ports available on host");
 
     let mock_state_manager = basic_state_manager_mock();
     let mock_consensus_cache = basic_consensus_pool_cache();
@@ -367,16 +388,14 @@ fn test_unathorized_query() {
 
     let (_, _, mut query_handler) = start_http_endpoint(
         rt.handle().clone(),
-        port,
+        addr,
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
     );
 
     let agent = Agent::builder()
-        .with_transport(
-            ReqwestHttpReplicaV2Transport::create(format!("http://127.0.0.1:{}", port)).unwrap(),
-        )
+        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
         .build()
         .unwrap();
 
@@ -446,7 +465,7 @@ fn test_unathorized_query() {
 #[test]
 fn test_unathorized_call() {
     let rt = Runtime::new().unwrap();
-    let port = get_free_port().expect("No ports available on host");
+    let addr = get_free_localhost_socket_addr().expect("No ports available on host");
 
     let mock_state_manager = basic_state_manager_mock();
     let mock_consensus_cache = basic_consensus_pool_cache();
@@ -454,7 +473,7 @@ fn test_unathorized_call() {
 
     let (mut ingress_filter, mut ingress_sender, _) = start_http_endpoint(
         rt.handle().clone(),
-        port,
+        addr,
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
@@ -462,9 +481,7 @@ fn test_unathorized_call() {
 
     let agent = Agent::builder()
         .with_identity(AnonymousIdentity)
-        .with_transport(
-            ReqwestHttpReplicaV2Transport::create(format!("http://127.0.0.1:{}", port)).unwrap(),
-        )
+        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
         .build()
         .unwrap();
 
@@ -547,4 +564,39 @@ fn test_unathorized_call() {
             }
         }
     });
+}
+
+/// Once we have reached the number of outstanding connection, new connections should be refused.
+#[tokio::test]
+async fn test_max_outstanding_conections() {
+    let rt_handle = tokio::runtime::Handle::current();
+    let addr = get_free_localhost_socket_addr().unwrap();
+
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    start_http_endpoint(
+        rt_handle.clone(),
+        addr,
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+    );
+
+    // it is important to keep around the http clients so the connections don't get closed
+    let mut clients = vec![];
+    for _i in 0..MAX_OUTSTANDING_CONNECTIONS {
+        let c = create_client_and_send_request(addr)
+            .await
+            .expect("Creating a new http client/tcp connection and sending a message failed.");
+        clients.push(c);
+    }
+    // Check we hit the limit of live TCP connections by expecting a failure when yet
+    // another request is send.
+    let mut connection_error = false;
+    if let Err(e) = create_client_and_send_request(addr).await {
+        connection_error = e.is_closed();
+    }
+    assert!(connection_error);
 }

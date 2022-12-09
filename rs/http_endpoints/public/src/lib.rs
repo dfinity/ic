@@ -114,7 +114,7 @@ use tower::{
 // In the HttpHandler we can have at most 'MAX_OUTSTANDING_CONNECTIONS'
 // live TCP connections. If we are at the limit, we won't
 // accept new TCP connections.
-const MAX_OUTSTANDING_CONNECTIONS: usize = 20000;
+pub const MAX_OUTSTANDING_CONNECTIONS: usize = 20000;
 
 // Sets the SETTINGS_MAX_CONCURRENT_STREAMS option for HTTP2 connections.
 const HTTP_MAX_CONCURRENT_STREAMS: u32 = 256;

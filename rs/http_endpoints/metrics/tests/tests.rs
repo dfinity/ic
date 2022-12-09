@@ -26,10 +26,8 @@ use tower::util::ServiceExt;
 // Get a free port on this host to which we can connect transport to.
 fn get_free_localhost_port() -> std::io::Result<SocketAddr> {
     let socket = TcpSocket::new_v4()?;
-    // This allows transport to bind to this address,
-    //  even though the socket is already bound.
-    socket.set_reuseport(true)?;
-    socket.set_reuseaddr(true)?;
+    socket.set_reuseport(false)?;
+    socket.set_reuseaddr(false)?;
     socket.bind("127.0.0.1:0".parse().unwrap())?;
     socket.local_addr()
 }
@@ -56,7 +54,7 @@ async fn create_client_and_send_request(
     Ok(client)
 }
 
-/// Once we have reached the number of outstanding connection, new connections are refused.
+/// Once we have reached the number of outstanding connection, new connections should refused.
 #[tokio::test]
 async fn test_max_outstanding_conections() {
     with_test_replica_logger(|log| async move {
