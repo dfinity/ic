@@ -568,6 +568,7 @@ fn test_unathorized_call() {
 
 /// Once we have reached the number of outstanding connection, new connections should be refused.
 #[tokio::test]
+#[ignore]
 async fn test_max_outstanding_conections() {
     let rt_handle = tokio::runtime::Handle::current();
     let addr = get_free_localhost_socket_addr().unwrap();
