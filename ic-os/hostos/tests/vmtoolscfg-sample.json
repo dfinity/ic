@@ -1,0 +1,46 @@
+{
+    "machine_lock_directory": "/tmp",
+    "machine_templates": [
+        {
+            "name": "node0",
+            "nics": [
+                {
+                    "mac": "52:54:00:e8:3c:db",
+                    "netdev": {
+                        "mode": "bridge",
+                        "bridge": "ipv6_ic"
+                    },
+                    "addresses": [
+                        {
+                            "family": 6,
+                            "address": "fd00:2:1:1:1::11",
+                            "mask_length": 64,
+                            "gateway": "fd00:2:1:1:1::1"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "node1",
+            "nics": [
+                {
+                    "mac": "52:54:00:33:b2:41",
+                    "netdev": {
+                        "mode": "bridge",
+                        "bridge": "ipv6_ic"
+                    },
+                    "addresses": [
+                        {
+                            "family": 6,
+                            "address": "fd00:2:1:1:1::12",
+                            "mask_length": 64,
+                            "gateway": "fd00:2:1:1:1::1"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
+

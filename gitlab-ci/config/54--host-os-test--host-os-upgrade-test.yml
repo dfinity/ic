@@ -1,0 +1,54 @@
+.host-e2e-test-base:
+  extends:
+    - .ubuntu-docker-k8s-protected
+    - .rules-parent-pipeline-autorun-on-trigger
+    - .rules-hostos
+  stage: host-os-test
+  variables:
+    HOST_OS_TEST_TIMEOUT: 2400
+    # This var is needed as some shell scripts depend on it.
+    E2E_TEST_TIMEOUT: 480
+
+host-os-upgrade-test:
+  # This test runs VMs on the CI runner, which can be unreliable and slow. This
+  # test is soon to be replaced with Farm tests: NODE-565
+  allow_failure: true
+  extends:
+    - .host-e2e-test-base
+  needs:
+    - job: wait-for-bazel-test-all
+      artifacts: false
+    - job: host-os-diskimg
+      artifacts: false
+  artifacts:
+    paths:
+    - ic-os/hostos/test-out
+  script:
+    - |
+      VERSION=$(git rev-parse HEAD)
+      export VERSION
+
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${VERSION}" --remote-path="release" \
+          --out="artifacts/release"
+
+      mkdir -p test-tools-tmp
+      IC_ADMIN="test-tools-tmp/ic-admin"
+      gunzip -c "artifacts/release/ic-admin.gz" > "${IC_ADMIN}"
+      chmod +x "${IC_ADMIN}"
+
+      # sets the variable $TARGET_VERSION
+      # shellcheck source=/dev/null
+      source ic-os/guestos/tests/scripts/mainnet-revision.sh
+
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${VERSION}" --remote-path="host-os/disk-img" \
+          --out="ic-os/hostos/build-out/disk-img"
+
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
+          --git-rev="${TARGET_VERSION}" --remote-path="host-os/update-img" \
+          --out="ic-os/hostos/build-out/update-img"
+
+      # shellcheck disable=SC2154
+      $SHELL_WRAPPER timeout -k 10 "${HOST_OS_TEST_TIMEOUT}" \
+          "$CI_PROJECT_DIR"/ic-os/hostos/tests/hostos-upgrade.sh "$CI_PROJECT_DIR"
