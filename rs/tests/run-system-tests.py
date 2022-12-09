@@ -163,16 +163,24 @@ def create_env_variables(is_local_run: bool, artifact_dir: str, ci_project_dir: 
     return env
 
 
-def get_ic_version_id_date(ic_version_id: str) -> str:
-    cmd = subprocess.run(["git", "show", "-s", "--format=%cD", f"{ic_version_id}"], capture_output=True)
+def get_current_commit_sha() -> str:
+    cmd = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True)
     if cmd.returncode == 0:
-        datetime = cmd.stdout.decode("UTF-8")
-        logging.info(f"IC_VERSION_ID commit datetime: {datetime}")
+        commit_sha = cmd.stdout.decode("UTF-8").strip()
+        logging.info(f"current commit={commit_sha}")
+        return commit_sha
+    else:
+        exit_with_log("Couldn't get the current commit hash")
+
+
+def get_commit_date(commit_sha: str) -> str:
+    cmd = subprocess.run(["git", "show", "-s", "--format=%cD", f"{commit_sha}"], capture_output=True)
+    if cmd.returncode == 0:
+        datetime = cmd.stdout.decode("UTF-8").strip()
+        logging.info(f"commit={commit_sha} datetime: {datetime}")
         return datetime
     else:
-        logging.error(
-            f"{RED}Couldn't get datetime of the IC_VERSION_ID={ic_version_id}: {cmd.stderr.decode('UTF-8')}{NC}"
-        )
+        logging.error(f"{RED}Couldn't get datetime of the commit={commit_sha}: {cmd.stderr.decode('UTF-8')}{NC}")
         return "unresolved commit datetime"
 
 
@@ -422,7 +430,9 @@ def main(
     is_scheduled_run = CI_PIPELINE_SOURCE == "schedule"
     is_slack_test_failure_notify = not is_local_run and is_scheduled_run
     is_slack_timeout_notify = not is_local_run and is_scheduled_run
-    ic_version_id_date = get_ic_version_id_date(IC_VERSION_ID)
+    ic_version_id_date = get_commit_date(IC_VERSION_ID)
+    current_commit = CI_COMMIT_SHA if not is_local_run else get_current_commit_sha()
+    commit_date = get_commit_date(current_commit)
     # End set variables.
 
     # Firstly, build the prod-test-driver binary.
@@ -646,6 +656,7 @@ def main(
             f"--ci-project-url={CI_PROJECT_URL}",
             f"--ci-commit-sha={CI_COMMIT_SHA}",
             f"--ci-commit-short-sha={CI_COMMIT_SHORT_SHA}",
+            f"--ci-commit-date={commit_date}",
             f"--ic-version-id={IC_VERSION_ID}",
             f"--ic-version-id-date={ic_version_id_date}",
         ]
