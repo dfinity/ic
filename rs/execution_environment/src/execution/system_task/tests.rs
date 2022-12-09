@@ -577,3 +577,67 @@ fn global_timer_refunds_cycles_for_request_in_prep() {
         assert_eq!(initial_cycle_balance - cycle_balance, cycle_balance_diff);
     }
 }
+
+#[test]
+fn global_timer_set_returns_zero_in_canister_global_timer_method() {
+    let env = StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .build();
+    let binary = wabt::wat2wasm(
+        r#"
+        (module
+            (import "ic0" "global_timer_set"
+                (func $ic0_global_timer_set (param i64) (result i64))
+            )
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (import "ic0" "msg_reply_data_append"
+                (func $ic0_msg_reply_data_append (param i32 i32)))
+            (memory 1)
+
+            (func (export "canister_global_timer")
+                ;; Overwrite the value in the timer handler
+                (i64.store
+                    (i32.const 0)
+                    ;; The ic0_global_timer_set should return 0, not 1 here
+                    (call $ic0_global_timer_set (i64.const 1))
+                )
+            )
+            (func (export "canister_update global_timer_set")
+                ;; Store some value at memory offset 0
+                (i64.store (i32.const 0) (i64.const 0xDEADBEAFDEADBEAF))
+                (drop (call $ic0_global_timer_set (i64.const 1)))
+                (call $ic0_msg_reply)
+            )
+            (func (export "canister_query read_value")
+                ;; Read 8-byte value at offset 0
+                (call $ic0_msg_reply_data_append (i32.const 0) (i32.const 8))
+                (call $ic0_msg_reply)
+            )
+        )"#,
+    )
+    .unwrap();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, Cycles::new(100_000_000_000))
+        .unwrap();
+
+    let result = env
+        .execute_ingress(canister_id, "global_timer_set", vec![])
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+
+    // At the beginning there should be a 0xDEADBEAF
+    let result = env.query(canister_id, "read_value", vec![]).unwrap();
+    assert_eq!(
+        result,
+        WasmResult::Reply(0xDEADBEAFDEADBEAF_u64.to_le_bytes().into())
+    );
+
+    // The timer should be triggered.
+    env.advance_time(Duration::from_secs(1));
+    env.tick();
+
+    // Now there should be zero, as the timer value is reset before executing the timer handler
+    let result = env.query(canister_id, "read_value", vec![]).unwrap();
+    assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
+}
