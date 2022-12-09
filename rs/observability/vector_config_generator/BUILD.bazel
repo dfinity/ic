@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/async_utils",
     "//rs/monitoring/metrics",
-    "//rs/service_discovery",
+    "//rs/observability/service_discovery",
     "//rs/types/types",
     "//rs/utils",
     "@crate_index//:anyhow",
@@ -36,6 +36,7 @@ rust_binary(
     name = "vector_config_generator",
     srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
+    crate_name = "vector_config_generator",
     edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
