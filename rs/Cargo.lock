@@ -5175,6 +5175,7 @@ dependencies = [
  "base64 0.11.0",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-test-utils",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
  "openssl",
  "rand 0.8.5",

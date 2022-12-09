@@ -24,5 +24,6 @@ rust_test(
     crate = ":tls",
     deps = [
         "//rs/crypto/test_utils",
+        "//rs/crypto/test_utils/reproducible_rng",
     ],
 )
