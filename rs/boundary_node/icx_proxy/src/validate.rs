@@ -28,6 +28,7 @@ pub trait Validate: Sync + Send {
     ) -> Result<(), Cow<'static, str>>;
 }
 
+#[derive(Clone)]
 pub struct Validator {}
 
 impl Validator {

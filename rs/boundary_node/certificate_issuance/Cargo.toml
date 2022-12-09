@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.66"
 async-trait = "0.1.58"
-axum = { version = "0.5.17", features = ["json"] }
+axum = { version = "0.6.1", features = ["json"] }
 candid = "0.8.3"
 chrono = { version = "0.4.19", default-features = false, features = ["clock"] }
 clap = { version = "4.0.18", features = ["derive"] }

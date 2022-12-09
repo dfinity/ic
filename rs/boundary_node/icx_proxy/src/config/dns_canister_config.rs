@@ -1,4 +1,4 @@
-use std::cmp::Reverse;
+use std::{cmp::Reverse, sync::Arc};
 
 use candid::Principal;
 
@@ -7,7 +7,7 @@ use crate::config::dns_canister_rule::DnsCanisterRule;
 /// Configuration for determination of Domain Name to Principal
 #[derive(Clone, Debug)]
 pub struct DnsCanisterConfig {
-    rules: Vec<DnsCanisterRule>,
+    rules: Arc<[DnsCanisterRule]>,
 }
 
 impl DnsCanisterConfig {
@@ -28,7 +28,9 @@ impl DnsCanisterConfig {
         // Check suffixes first (via stable sort), because they will only match
         // if actually preceded by a canister id.
         rules.sort_by_key(|x| Reverse(x.dns_suffix().len()));
-        Ok(DnsCanisterConfig { rules })
+        Ok(DnsCanisterConfig {
+            rules: rules.into(),
+        })
     }
 
     /// Return the Principal of the canister that matches the hostname.

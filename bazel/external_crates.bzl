@@ -72,7 +72,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.1.31",
             ),
             "axum": crate.spec(
-                version = "^0.5.1",
+                version = "^0.6.1",
             ),
             "backoff": crate.spec(
                 version = "^0.3.0",

@@ -1,5 +1,6 @@
 use std::{
-    net::SocketAddr,
+    borrow::Borrow,
+    net::{IpAddr, SocketAddr},
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc,
@@ -8,15 +9,15 @@ use std::{
 };
 
 use anyhow::bail;
-use axum::{extract::ConnectInfo, Extension};
+use axum::extract::{ConnectInfo, FromRef, State};
 use futures::StreamExt;
 use http_body::{LengthLimitError, Limited};
 use hyper::{
     body,
-    http::header::{HeaderName, CONTENT_TYPE},
+    http::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE},
     Body, Request, Response, StatusCode, Uri,
 };
-use ic_agent::{agent_error::HttpErrorPayload, Agent, AgentError};
+use ic_agent::{agent_error::HttpErrorPayload, export::Principal, Agent, AgentError};
 use ic_utils::{
     call::{AsyncCall, SyncCall},
     interfaces::http_request::{
@@ -24,12 +25,12 @@ use ic_utils::{
         StreamingCallbackHttpResponse, StreamingStrategy, Token,
     },
 };
-use tracing::{enabled, instrument, trace, warn, Level};
+use tracing::{enabled, info, instrument, trace, warn, Level};
 
 use crate::{
-    canister_id::Resolver as CanisterIdResolver,
+    canister_id,
     headers::extract_headers_data,
-    proxy::{HandleError, REQUEST_BODY_SIZE_LIMIT},
+    proxy::{AppState, HandleError, HyperService, REQUEST_BODY_SIZE_LIMIT},
     validate::Validate,
 };
 
@@ -52,58 +53,114 @@ struct ReplicaErrorCodes;
 impl ReplicaErrorCodes {
     const DESTINATION_INVALID: u64 = 3;
 }
-
-pub struct ArgsInner {
-    pub validator: Box<dyn Validate>,
-    pub resolver: Box<dyn CanisterIdResolver>,
-    pub counter: AtomicUsize,
-    pub replicas: Vec<(Agent, Uri)>,
-    pub debug: bool,
+pub struct Args<V, C> {
+    agent: Agent,
+    replica_uri: Arc<Uri>,
+    validator: V,
+    client: C,
+    debug: bool,
 }
 
-pub struct Args {
-    args: Arc<ArgsInner>,
-    current: usize,
+pub struct Pool {
+    counter: AtomicUsize,
+    replicas: Box<[(Agent, Arc<Uri>)]>,
 }
 
-impl Clone for Args {
-    fn clone(&self) -> Self {
-        let args = self.args.clone();
+impl Pool {
+    pub fn new(replicas: impl IntoIterator<Item = (Agent, Uri)>) -> Self {
+        Pool {
+            counter: AtomicUsize::new(0),
+            replicas: replicas
+                .into_iter()
+                .map(|(agent, uri)| (agent, Arc::new(uri)))
+                .collect(),
+        }
+    }
+}
+impl<V: Clone, C: Clone> FromRef<AppState<V, C>> for Args<V, C> {
+    fn from_ref(state: &AppState<V, C>) -> Self {
+        let pool = state.pool();
+        let counter = pool.counter.fetch_add(1, Ordering::Relaxed) % pool.replicas.len();
+        let (agent, replica_uri) = pool.replicas[counter].clone();
         Args {
-            current: args.counter.fetch_add(1, Ordering::Relaxed) % args.replicas.len(),
-            args,
+            agent,
+            replica_uri,
+            validator: state.validator().clone(),
+            client: state.client().clone(),
+            debug: state.debug(),
         }
     }
 }
 
-impl From<ArgsInner> for Args {
-    fn from(args: ArgsInner) -> Self {
-        Args {
-            args: Arc::new(args),
-            current: 0,
-        }
-    }
+fn create_proxied_request<B>(
+    client_ip: &IpAddr,
+    proxy_url: Uri,
+    mut request: Request<B>,
+) -> Result<Request<B>, anyhow::Error> {
+    *request.headers_mut() = remove_hop_headers(request.headers());
+    *request.uri_mut() = forward_uri(proxy_url, &request)?;
+
+    // Add forwarding information in the headers
+    // (TODO: should we switch to `http::header::FORWARDED`?)
+    static X_FORWARDED_FOR: HeaderName = HeaderName::from_static("x-forwarded-for");
+    request
+        .headers_mut()
+        .append(X_FORWARDED_FOR.clone(), client_ip.to_string().parse()?);
+
+    Ok(request)
 }
-impl Args {
-    fn replica(&self) -> (&Agent, &Uri) {
-        let v = &self.args.replicas[self.current];
-        (&v.0, &v.1)
+
+fn forward_uri<B>(proxy_url: Uri, req: &Request<B>) -> Result<Uri, anyhow::Error> {
+    let mut parts = proxy_url.into_parts();
+    parts.path_and_query = req.uri().path_and_query().cloned();
+    Ok(Uri::from_parts(parts)?)
+}
+
+fn is_not_hop_header(name: impl Borrow<HeaderName>) -> bool {
+    use hyper::http::header::*;
+    // `keep-alive` is a non-standard header for H2 and beyond so it doesn't have a constant :(
+    static KEEP_ALIVE: HeaderName = HeaderName::from_static("keep-alive");
+
+    match name.borrow() {
+        &CONNECTION | &PROXY_AUTHENTICATE | &PROXY_AUTHORIZATION | &TE | &TRAILER
+        | &TRANSFER_ENCODING | &UPGRADE => false,
+        x => x != KEEP_ALIVE,
     }
 }
 
-#[instrument(level = "info", skip_all, fields(addr = display(addr), replica = display(args.replica().1)))]
-pub async fn handler(
-    Extension(args): Extension<Args>,
+/// Returns a clone of the headers without the [hop-by-hop headers].
+///
+/// [hop-by-hop headers]: http://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html
+fn remove_hop_headers(headers: &HeaderMap<HeaderValue>) -> HeaderMap<HeaderValue> {
+    headers
+        .iter()
+        .filter(|(k, _v)| is_not_hop_header(*k))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect()
+}
+
+#[instrument(level = "info", skip_all, fields(addr = display(addr), replica = display(&*args.replica_uri)))]
+pub async fn handler<V: Validate, C: HyperService<Body>>(
+    State(args): State<Args<V, C>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    uri_canister_id: Option<canister_id::UriHost>,
+    host_canister_id: Option<canister_id::HostHeader>,
+    query_param_canister_id: Option<canister_id::QueryParam>,
     request: Request<Body>,
 ) -> Response<Body> {
-    let agent = args.replica().0;
-    let args = &args.args;
+    let uri_canister_id = uri_canister_id.map(|v| v.0);
+    let host_canister_id = host_canister_id.map(|v| v.0);
+    let query_param_canister_id = query_param_canister_id.map(|v| v.0);
     process_request_inner(
         request,
-        agent,
-        args.resolver.as_ref(),
-        args.validator.as_ref(),
+        addr,
+        args.agent,
+        &args.replica_uri,
+        args.validator,
+        args.client,
+        uri_canister_id
+            .or(host_canister_id)
+            .or(query_param_canister_id),
     )
     .await
     .handle_error(args.debug)
@@ -111,21 +168,32 @@ pub async fn handler(
 
 async fn process_request_inner(
     request: Request<Body>,
-    agent: &Agent,
-    resolver: &dyn CanisterIdResolver,
-    validator: &dyn Validate,
+    addr: SocketAddr,
+    agent: Agent,
+    replica_uri: &Uri,
+    validator: impl Validate,
+    mut client: impl HyperService<Body>,
+    canister_id: Option<Principal>,
 ) -> Result<Response<Body>, anyhow::Error> {
-    let (parts, body) = request.into_parts();
-
-    let canister_id = match resolver.resolve(&parts) {
+    let canister_id = match canister_id {
         None => {
-            return Ok(Response::builder()
-                .status(StatusCode::BAD_REQUEST)
-                .body("Could not find a canister id to forward to.".into())
-                .unwrap())
+            if request.uri().path().starts_with("/api") {
+                info!("forwarding");
+                let proxied_request =
+                    create_proxied_request(&addr.ip(), replica_uri.clone(), request)?;
+                let response = client.call(proxied_request).await?;
+                let (parts, body) = response.into_parts();
+                return Ok(Response::from_parts(parts, body.into()));
+            } else {
+                return Ok(Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .body("Could not find a canister id to forward to.".into())
+                    .unwrap());
+            }
         }
-        Some(x) => x,
+        Some(canister_id) => canister_id,
     };
+    let (parts, body) = request.into_parts();
     let certification_required = parts.headers.contains_key(&REQUIRE_CERTIFICATION_HEADER);
 
     trace!("<< {} {} {:?}", parts.method, parts.uri, parts.version);
@@ -177,7 +245,7 @@ async fn process_request_inner(
         );
     }
 
-    let canister = HttpRequestCanister::create(agent, canister_id);
+    let canister = HttpRequestCanister::create(&agent, canister_id);
     let query_result = canister
         .http_request_custom(
             method.as_str(),
@@ -312,7 +380,7 @@ async fn process_request_inner(
             certification_required,
             &headers_data,
             &canister_id,
-            agent,
+            &agent,
             &parts.uri,
             &http_response.body,
         );

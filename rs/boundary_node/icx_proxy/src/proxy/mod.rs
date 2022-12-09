@@ -1,13 +1,13 @@
-use std::{fs, net::SocketAddr, path::PathBuf, sync::atomic::AtomicUsize};
+use std::{fs, net::SocketAddr, path::PathBuf, sync::Arc};
 
 use anyhow::{Context, Error};
-use axum::{handler::Handler, Extension, Router};
+use axum::{handler::Handler, Router};
 use hyper::{self, Response, StatusCode, Uri};
 use ic_agent::{agent::http_transport::HyperReplicaV2Transport, Agent};
 use tracing::{error, info};
 
 use crate::{
-    canister_id::Resolver as CanisterIdResolver,
+    canister_id::ResolverState,
     http_client::{Body, HyperService},
     logging::add_trace_layer,
     validate::Validate,
@@ -42,7 +42,7 @@ pub struct ProxyOpts {
 
 mod agent;
 
-use agent::{handler as agent_handler, Args as AgentArgs, ArgsInner as AgentArgsInner};
+use agent::{handler as agent_handler, Pool};
 
 trait HandleError {
     type B;
@@ -72,14 +72,14 @@ where
     }
 }
 
-pub struct SetupArgs<V, R, C> {
+pub struct SetupArgs<V, C> {
     pub validator: V,
-    pub resolver: R,
+    pub resolver: ResolverState,
     pub client: C,
 }
 
 pub fn setup<C: HyperService<Body> + 'static>(
-    args: SetupArgs<impl Validate + 'static, impl CanisterIdResolver + 'static, C>,
+    args: SetupArgs<impl Validate + Clone + 'static, C>,
     opts: ProxyOpts,
 ) -> Result<Runner, anyhow::Error> {
     let client = args.client;
@@ -121,21 +121,48 @@ pub fn setup<C: HyperService<Body> + 'static>(
         Vec::new()
     };
 
-    let agent_service = agent_handler
-        .layer(Extension(AgentArgs::from(AgentArgsInner {
-            validator: Box::new(args.validator),
-            resolver: Box::new(args.resolver),
-            counter: AtomicUsize::new(0),
-            replicas,
-            debug: opts.debug,
-        })))
-        .into_service();
+    let agent_service = agent_handler.with_state(AppState(Arc::new(AppStateInner {
+        replica_pool: Pool::new(replicas),
+        validator: args.validator,
+        resolver: args.resolver,
+        debug: opts.debug,
+        client,
+    })));
 
     Ok(Runner {
-        router: add_trace_layer(Router::new().fallback(agent_service)),
+        router: add_trace_layer(Router::new().fallback_service(agent_service)),
         address: opts.address,
         fetch_root_keys,
     })
+}
+
+#[derive(Clone)]
+pub struct AppState<V, C>(Arc<AppStateInner<V, C>>);
+
+struct AppStateInner<V, C> {
+    replica_pool: Pool,
+    resolver: ResolverState,
+    validator: V,
+    client: C,
+    debug: bool,
+}
+
+impl<V, C> AppState<V, C> {
+    pub fn pool(&self) -> &Pool {
+        &self.0.replica_pool
+    }
+    pub fn resolver(&self) -> &ResolverState {
+        &self.0.resolver
+    }
+    pub fn validator(&self) -> &V {
+        &self.0.validator
+    }
+    pub fn client(&self) -> &C {
+        &self.0.client
+    }
+    pub fn debug(&self) -> bool {
+        self.0.debug
+    }
 }
 
 pub struct Runner {
