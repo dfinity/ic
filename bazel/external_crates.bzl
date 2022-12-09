@@ -627,6 +627,12 @@ def external_crates_repository(name, annotations):
             "pretty_assertions": crate.spec(
                 version = "^0.6.1",
             ),
+            "priority-queue": crate.spec(
+                version = "^1.3.0",
+                features = [
+                    "serde",
+                ],
+            ),
             "proc-macro2": crate.spec(
                 version = "^1.0",
             ),

@@ -1,5 +1,7 @@
 use std::{
+    fs::File,
     net::SocketAddr,
+    path::PathBuf,
     sync::Arc,
     thread::sleep,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -10,15 +12,20 @@ use axum::{
     body::Body,
     extract::MatchedPath,
     handler::Handler,
-    http::{Request, Response, StatusCode},
+    http::{Request, Response, StatusCode, Uri},
     middleware::{self, Next},
     response::IntoResponse,
     routing::{get, post},
     Extension, Router, Server,
 };
+use candid::Principal;
+use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use clap::Parser;
 use futures::future::TryFutureExt;
 use hyper_rustls::HttpsConnectorBuilder;
+use ic_agent::{
+    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::BasicIdentity, Agent,
+};
 use instant_acme::{Account, AccountCredentials};
 use opentelemetry::{
     global,
@@ -31,11 +38,8 @@ use opentelemetry::{
     KeyValue,
 };
 use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
-use prometheus::{Encoder, TextEncoder};
-use tokio::{
-    sync::{Mutex, Semaphore},
-    task,
-};
+use prometheus::{Encoder as PrometheusEncoder, TextEncoder};
+use tokio::{sync::Semaphore, task};
 use tower::ServiceBuilder;
 use tracing::info;
 use trust_dns_resolver::{
@@ -45,10 +49,11 @@ use trust_dns_resolver::{
 
 use crate::{
     acme::Acme,
-    certificate::{Export, RedisExporter, RedisUploader},
+    certificate::{CanisterExporter, CanisterUploader, Export},
     check::{Check, Checker},
     cloudflare::Cloudflare,
     dns::Resolver,
+    encode::{Decoder, Encoder},
     http::HyperClient,
     metrics::{MetricParams, WithMetrics},
     registration::{Create, Get, State, Update},
@@ -61,6 +66,7 @@ mod certificate;
 mod check;
 mod cloudflare;
 mod dns;
+mod encode;
 mod http;
 mod metrics;
 mod registration;
@@ -71,11 +77,21 @@ const SERVICE_NAME: &str = "certificate-issuer";
 #[derive(Parser)]
 #[command(name = SERVICE_NAME)]
 struct Cli {
-    #[arg(long, default_value = "127.0.0.1:6379")]
-    redis_addr: SocketAddr,
-
     #[arg(long, default_value = "127.0.0.1:3000")]
     api_addr: SocketAddr,
+
+    #[clap(long, default_value = "identity.pem")]
+    identity_path: PathBuf,
+
+    #[arg(long, default_value = "http://127.0.0.1:8080/")]
+    orchestrator_uri: Uri,
+
+    #[arg(long)]
+    orchestrator_canister_id: Principal,
+
+    /// A symmetric key used to encrypt and/or decrypt certificates
+    #[clap(long, default_value = "key.pem")]
+    key_path: PathBuf,
 
     /// A domain clients are required to delegate their DNS-0 challenge to.
     #[arg(long)]
@@ -133,10 +149,26 @@ async fn main() -> Result<(), Error> {
     let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { exporter }));
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
-    // Redis
-    let redis_client = redis::Client::open(format!("redis://{}", cli.redis_addr))?;
-    let redis_con = redis_client.get_tokio_connection_manager().await?;
-    let redis_con = Arc::new(Mutex::new(redis_con));
+    // Orchestrator
+    let agent = {
+        let client = reqwest::Client::builder().build()?;
+        let transport = ReqwestHttpReplicaV2Transport::create_with_client(
+            cli.orchestrator_uri.to_string(),
+            client,
+        )?;
+
+        let f = File::open(cli.identity_path).context("failed to open identity file")?;
+        let identity = BasicIdentity::from_pem(f).context("failed to create basic identity")?;
+
+        let agent = Agent::builder()
+            .with_identity(identity)
+            .with_transport(transport)
+            .build()?;
+
+        agent.fetch_root_key().await?;
+
+        Arc::new(agent)
+    };
 
     // DNS
     let resolver = Resolver(TokioAsyncResolver::tokio(
@@ -159,6 +191,21 @@ async fn main() -> Result<(), Error> {
         MetricParams::new(&meter, SERVICE_NAME, "http_request"),
     );
 
+    // Encryption
+    let cipher = Arc::new({
+        let f = std::fs::read(cli.key_path).context("failed to open key file")?;
+        let p = pem::parse(f).context("failed to parse pem file")?;
+        XChaCha20Poly1305::new_from_slice(&p.contents).context("failed to init symmetric key")?
+    });
+
+    let encoder = Encoder::new(cipher.clone());
+    let encoder = WithMetrics(encoder, MetricParams::new(&meter, SERVICE_NAME, "encrypt"));
+    let encoder = Arc::new(encoder);
+
+    let decoder = Decoder::new(cipher.clone());
+    let decoder = WithMetrics(decoder, MetricParams::new(&meter, SERVICE_NAME, "decrypt"));
+    let decoder = Arc::new(decoder);
+
     // Registration
     let registration_checker = Checker::new(
         cli.delegation_domain.clone(),
@@ -172,21 +219,24 @@ async fn main() -> Result<(), Error> {
     );
     let registration_checker = Arc::new(registration_checker);
 
-    let registration_creator = registration::RedisCreator(redis_con.clone());
+    let registration_creator =
+        registration::CanisterCreator(agent.clone(), cli.orchestrator_canister_id);
     let registration_creator = WithMetrics(
         registration_creator,
         MetricParams::new(&meter, SERVICE_NAME, "create_registration"),
     );
     let registration_creator = Arc::new(registration_creator);
 
-    let registration_updater = registration::RedisUpdater(redis_con.clone());
+    let registration_updater =
+        registration::CanisterUpdater(agent.clone(), cli.orchestrator_canister_id);
     let registration_updater = WithMetrics(
         registration_updater,
         MetricParams::new(&meter, SERVICE_NAME, "update_registration"),
     );
     let registration_updater = Arc::new(registration_updater);
 
-    let registration_getter = registration::RedisGetter(redis_con.clone());
+    let registration_getter =
+        registration::CanisterGetter(agent.clone(), cli.orchestrator_canister_id);
     let registration_getter = WithMetrics(
         registration_getter,
         MetricParams::new(&meter, SERVICE_NAME, "get_registration"),
@@ -194,15 +244,23 @@ async fn main() -> Result<(), Error> {
     let registration_getter = Arc::new(registration_getter);
 
     // Certificates
-    let certificate_exporter = RedisExporter(redis_con.clone());
+    let certificate_exporter =
+        CanisterExporter::new(agent.clone(), cli.orchestrator_canister_id, decoder);
     let certificate_exporter = WithMetrics(
         certificate_exporter,
         MetricParams::new(&meter, SERVICE_NAME, "export_certificates"),
     );
     let certificate_exporter = Arc::new(certificate_exporter);
 
+    let certificate_uploader =
+        CanisterUploader::new(agent.clone(), cli.orchestrator_canister_id, encoder);
+    let certificate_uploader = WithMetrics(
+        certificate_uploader,
+        MetricParams::new(&meter, SERVICE_NAME, "upload_certificate"),
+    );
+
     // Work
-    let queuer = work::RedisQueuer(redis_con.clone());
+    let queuer = work::CanisterQueuer(agent.clone(), cli.orchestrator_canister_id);
     let queuer = WithMetrics(queuer, MetricParams::new(&meter, SERVICE_NAME, "queue"));
     let queuer = Arc::new(queuer);
 
@@ -301,16 +359,10 @@ async fn main() -> Result<(), Error> {
     );
 
     // Work
-    let dispenser = work::RedisDispenser(redis_con.clone());
+    let dispenser = work::CanisterDispenser(agent.clone(), cli.orchestrator_canister_id);
     let dispenser = WithMetrics(
         dispenser,
         MetricParams::new(&meter, SERVICE_NAME, "dispense"),
-    );
-
-    let certificate_uploader = RedisUploader(redis_con.clone());
-    let certificate_uploader = WithMetrics(
-        certificate_uploader,
-        MetricParams::new(&meter, SERVICE_NAME, "upload_certificate"),
     );
 
     let processor = work::Processor::new(
@@ -361,7 +413,7 @@ async fn main() -> Result<(), Error> {
                 task::spawn(async move {
                     let _permit = _permit;
 
-                    match processor.process(&task).await {
+                    match processor.process(&id, &task).await {
                         Ok(()) => {
                             registration_updater
                                 .update(&id, &State::Available)
@@ -371,7 +423,7 @@ async fn main() -> Result<(), Error> {
                         Err(err) => {
                             let d: Duration = (&err).into();
                             let t = SystemTime::now().duration_since(UNIX_EPOCH)? + d;
-                            let t = t.as_millis() as u64;
+                            let t = t.as_nanos() as u64;
 
                             queuer
                                 .queue(&id, t)

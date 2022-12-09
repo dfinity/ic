@@ -10,7 +10,6 @@ use axum::{
     Extension, Json,
 };
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 use crate::{
     certificate::Export,
@@ -21,21 +20,21 @@ use crate::{
 
 #[derive(Deserialize)]
 pub struct CreateHandlerRequest {
-    pub domain: String,
+    pub name: String,
 }
 
 #[derive(Serialize)]
 pub struct CreateHandlerResponse {
-    pub id: Uuid,
+    pub id: String,
 }
 
 #[allow(clippy::type_complexity)]
 pub async fn create_handler(
     Extension((ck, c, q)): Extension<(Arc<dyn Check>, Arc<dyn Create>, Arc<dyn Queue>)>,
-    Json(CreateHandlerRequest { domain }): Json<CreateHandlerRequest>,
+    Json(CreateHandlerRequest { name }): Json<CreateHandlerRequest>,
 ) -> Response<Body> {
     // Check request
-    let canister = match ck.check(&domain).await {
+    let canister = match ck.check(&name).await {
         Ok(canister) => canister,
         Err(CheckError::UnexpectedError(_)) => {
             return Response::builder()
@@ -52,7 +51,7 @@ pub async fn create_handler(
     };
 
     // Create registration
-    let (id, is_duplicate) = match c.create(&domain, &canister).await {
+    let (id, is_duplicate) = match c.create(&name, &canister).await {
         Ok(id) => (id, false),
         Err(CreateError::Duplicate(id)) => (id, true),
         Err(CreateError::UnexpectedError(_)) => {
@@ -66,7 +65,7 @@ pub async fn create_handler(
     // Queue task
     if !is_duplicate {
         let t = match SystemTime::now().duration_since(UNIX_EPOCH) {
-            Ok(t) => t.as_millis() as u64,
+            Ok(t) => t.as_nanos() as u64,
             Err(_) => {
                 return Response::builder()
                     .status(500)
@@ -101,13 +100,13 @@ pub async fn create_handler(
 
 pub async fn get_handler(
     Extension(g): Extension<Arc<dyn Get>>,
-    Path(id): Path<Uuid>,
+    Path(id): Path<String>,
     _: Request<Body>,
 ) -> Response<Body> {
     let reg = match g.get(&id).await {
         Ok(reg) => reg,
 
-        Err(GetError::NotFound(_)) => {
+        Err(GetError::NotFound) => {
             return Response::builder()
                 .status(404)
                 .body(Body::from("not found"))

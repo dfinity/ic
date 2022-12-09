@@ -2380,6 +2380,7 @@ dependencies = [
  "predicates 1.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "pretty-bytes",
  "pretty_assertions 0.6.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "priority-queue",
  "proc-macro2 1.0.47 (registry+https://github.com/rust-lang/crates.io-index)",
  "procfs 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "prometheus",
@@ -5997,6 +5998,17 @@ checksum = "c142c0e46b57171fe0c528bee8c5b7569e80f0c17e377cd0e30ea57dbc11bb51"
 dependencies = [
  "proc-macro2 1.0.47 (registry+https://github.com/rust-lang/crates.io-index)",
  "syn 1.0.105 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
+name = "priority-queue"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7685ca4cc0b3ad748c22ce6803e23b55b9206ef7715b965ebeaf41639238fdc"
+dependencies = [
+ "autocfg 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "indexmap",
+ "serde",
 ]
 
 [[package]]

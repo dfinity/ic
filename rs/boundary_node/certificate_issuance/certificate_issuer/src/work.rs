@@ -1,22 +1,19 @@
-use std::{
-    str::FromStr,
-    sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
-use redis::AsyncCommands;
+use candid::{Decode, Encode, Principal};
+use certificate_orchestrator_interface as ifc;
+use garcon::Delay;
+use ic_agent::Agent;
 use serde::Serialize;
-use tokio::sync::Mutex;
 use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
-use uuid::Uuid;
 
 use crate::{
     acme,
     certificate::{self, Pair},
     dns::{self, Resolve},
-    registration::{Registration, State},
+    registration::{Id, Registration, State},
 };
 
 #[derive(Debug, Clone, Serialize)]
@@ -45,19 +42,21 @@ impl From<State> for Action {
 
 #[derive(Debug, Clone)]
 pub struct Task {
-    pub domain: String,
+    pub name: String,
     pub action: Action,
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum QueueError {
+    #[error("Not found")]
+    NotFound,
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 }
 
 #[async_trait]
 pub trait Queue: Sync + Send {
-    async fn queue(&self, id: &Uuid, t: u64) -> Result<(), QueueError>;
+    async fn queue(&self, id: &Id, t: u64) -> Result<(), QueueError>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -70,7 +69,7 @@ pub enum DispenseError {
 
 #[async_trait]
 pub trait Dispense: Sync + Send {
-    async fn dispense(&self) -> Result<(Uuid, Task), DispenseError>;
+    async fn dispense(&self) -> Result<(Id, Task), DispenseError>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -93,88 +92,108 @@ impl From<&ProcessError> for Duration {
 
 #[async_trait]
 pub trait Process: Sync + Send {
-    async fn process(&self, task: &Task) -> Result<(), ProcessError>;
+    async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError>;
 }
 
-pub struct RedisQueuer<T>(pub Arc<Mutex<T>>);
+pub struct CanisterQueuer(pub Arc<Agent>, pub Principal);
 
 #[async_trait]
-impl<T> Queue for RedisQueuer<T>
-where
-    T: AsyncCommands + Clone + Send + Sync,
-{
-    async fn queue(&self, id: &Uuid, t: u64) -> Result<(), QueueError> {
-        self.0
-            .lock()
-            .await
-            .clone()
-            .zadd("tasks", id.to_string(), t)
-            .await
-            .context("failed to queue task")?;
+impl Queue for CanisterQueuer {
+    async fn queue(&self, id: &Id, t: u64) -> Result<(), QueueError> {
+        use ifc::{QueueTaskError as Error, QueueTaskResponse as Response};
 
-        Ok(())
+        let waiter = Delay::builder()
+            .throttle(Duration::from_millis(500))
+            .timeout(Duration::from_millis(3000))
+            .build();
+
+        let args = Encode!(id, &t).context("failed to encode arg")?;
+
+        let resp = self
+            .0
+            .update(&self.1, "queueTask")
+            .with_arg(args)
+            .call_and_wait(waiter)
+            .await
+            .context("failed to query canister")?;
+
+        let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+
+        match resp {
+            Response::Ok(()) => Ok(()),
+            Response::Err(err) => Err(match err {
+                Error::NotFound => QueueError::NotFound,
+                Error::Unauthorized => QueueError::UnexpectedError(anyhow!("unauthorized")),
+                Error::UnexpectedError(err) => QueueError::UnexpectedError(anyhow!(err)),
+            }),
+        }
     }
 }
 
-pub struct RedisDispenser<T>(pub Arc<Mutex<T>>);
+pub struct CanisterDispenser(pub Arc<Agent>, pub Principal);
 
 #[async_trait]
-impl<T> Dispense for RedisDispenser<T>
-where
-    T: AsyncCommands + Clone + Send + Sync,
-{
-    async fn dispense(&self) -> Result<(Uuid, Task), DispenseError> {
-        // Retrieve next available task
-        let script = redis::Script::new(
-            r"
-            -- RETRIEVE ITEM
-            local ids = redis.call('ZRANGE', KEYS[1], '-inf', ARGV[1], 'BYSCORE', 'LIMIT', 0, 1)
-            if (#ids == 0) then
-                return nil
-            end
+impl Dispense for CanisterDispenser {
+    async fn dispense(&self) -> Result<(Id, Task), DispenseError> {
+        let id = {
+            use ifc::{DispenseTaskError as Error, DispenseTaskResponse as Response};
 
-            -- POP ITEM
-            local id = ids[1];
-            redis.call('ZREM', KEYS[1], id)
+            let waiter = Delay::builder()
+                .throttle(Duration::from_millis(500))
+                .timeout(Duration::from_millis(3000))
+                .build();
 
-            return id
-        ",
-        );
+            let args = Encode!().context("failed to encode arg")?;
 
-        // Get current timestamp
-        let t = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .context("failed to get current time")?
-            .as_millis() as u64;
+            let resp = self
+                .0
+                .update(&self.1, "dispenseTask")
+                .with_arg(args)
+                .call_and_wait(waiter)
+                .await
+                .context("failed to query canister")?;
 
-        let id: Option<String> = script
-            .key("tasks")
-            .arg(t)
-            .invoke_async(&mut self.0.lock().await.clone())
-            .await
-            .context("failed to fetch task")?;
+            let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
 
-        // Extract registration ID
-        let id = id.ok_or(DispenseError::NoTasksAvailable)?;
-        let id = Uuid::from_str(&id).context("failed to parse uuid")?;
+            match resp {
+                Response::Ok(id) => Ok(id),
+                Response::Err(err) => Err(match err {
+                    Error::NoTasksAvailable => DispenseError::NoTasksAvailable,
+                    Error::Unauthorized => DispenseError::UnexpectedError(anyhow!("unauthorized")),
+                    Error::UnexpectedError(err) => DispenseError::UnexpectedError(anyhow!(err)),
+                }),
+            }?
+        };
 
-        // Retrieve registration
-        let reg: Option<Registration> = self
-            .0
-            .lock()
-            .await
-            .clone()
-            .get(format!("registration:{id}"))
-            .await
-            .context("failed to get registration")?;
+        let reg: Registration = {
+            use ifc::{GetRegistrationError as Error, GetRegistrationResponse as Response};
 
-        // Check record exists
-        let reg = reg.ok_or_else(|| anyhow!("registration not found"))?;
+            let args = Encode!(&id).context("failed to encode arg")?;
+
+            let resp = self
+                .0
+                .query(&self.1, "getRegistration")
+                .with_arg(args)
+                .call()
+                .await
+                .context("failed to query canister")?;
+
+            let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+
+            match resp {
+                Response::Ok(reg) => Ok(reg.into()),
+                Response::Err(err) => Err(match err {
+                    Error::NotFound => DispenseError::UnexpectedError(anyhow!("not found")),
+                    Error::Unauthorized => DispenseError::UnexpectedError(anyhow!("unauthorized")),
+                    Error::UnexpectedError(err) => DispenseError::UnexpectedError(anyhow!(err)),
+                }),
+            }?
+        };
 
         Ok((
             id,
             Task {
-                domain: reg.domain,
+                name: reg.name,
                 action: reg.state.into(),
             },
         ))
@@ -221,13 +240,13 @@ impl Processor {
 
 #[async_trait]
 impl Process for Processor {
-    async fn process(&self, task: &Task) -> Result<(), ProcessError> {
+    async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError> {
         match task.action {
             Action::Order => {
                 // Phase 5 - Initiate certificate generation via ACME provider
                 let challenge_key = self
                     .acme_order
-                    .order(&task.domain)
+                    .order(&task.name)
                     .await
                     .context("failed to create acme order")?;
 
@@ -235,7 +254,7 @@ impl Process for Processor {
                 self.dns_creator
                     .create(
                         &self.delegation_domain,
-                        &format!("_acme-challenge.{}", task.domain),
+                        &format!("_acme-challenge.{}", task.name),
                         dns::Record::Txt(challenge_key),
                     )
                     .await
@@ -248,7 +267,7 @@ impl Process for Processor {
                 // Phase 7 - Ensure DNS TXT record has propogated
                 self.resolver
                     .lookup(
-                        &format!("_acme-challenge.{}.{}", task.domain, self.delegation_domain),
+                        &format!("_acme-challenge.{}.{}", task.name, self.delegation_domain),
                         RecordType::TXT,
                     )
                     .await
@@ -263,7 +282,7 @@ impl Process for Processor {
 
                 // Phase 8 - Mark ACME order as ready
                 self.acme_ready
-                    .ready(&task.domain)
+                    .ready(&task.name)
                     .await
                     .context("failed to mark acme order as ready")?;
 
@@ -274,7 +293,7 @@ impl Process for Processor {
                 // Phase 9 - Upload resulting certificate to repository
                 let (certificate_chain_pem, private_key_pem) = self
                     .acme_finalize
-                    .finalize(&task.domain)
+                    .finalize(&task.name)
                     .await
                     .context("failed to finalize acme order")?;
 
@@ -282,14 +301,20 @@ impl Process for Processor {
                 self.dns_deleter
                     .delete(
                         &self.delegation_domain,
-                        &format!("_acme-challenge.{}", task.domain),
+                        &format!("_acme-challenge.{}", task.name),
                     )
                     .await
                     .context("failed to delete dns record")?;
 
                 // Phase 11 - Upload certificates
                 self.certificate_uploader
-                    .upload(&task.domain, &Pair(certificate_chain_pem, private_key_pem))
+                    .upload(
+                        id,
+                        Pair(
+                            private_key_pem.into_bytes(),
+                            certificate_chain_pem.into_bytes(),
+                        ),
+                    )
                     .await
                     .context("failed to upload certificates")?;
 
