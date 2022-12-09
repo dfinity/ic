@@ -63,7 +63,7 @@ rust_test_suite_with_extra_srcs(
     name = "integration_tests",
     size = "small",
     srcs = glob(
-        ["tests/**"],
+        ["tests/**/*.rs"],
         exclude = ["tests/common/**"],
     ),
     extra_srcs = glob(["tests/common/**"]),
