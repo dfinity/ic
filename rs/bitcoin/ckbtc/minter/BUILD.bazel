@@ -69,6 +69,7 @@ alias(
             ":ckbtc_minter_lib",
             "//rs/crypto/getrandom_for_wasm",
             "//rs/monitoring/metrics_encoder",
+            "//rs/rosetta-api/icrc1",
             "//rs/rust_canisters/http_types",
             "@crate_index//:candid",
             "@crate_index//:ic-cdk",

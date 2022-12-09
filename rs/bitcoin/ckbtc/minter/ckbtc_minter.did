@@ -136,7 +136,7 @@ service : (InitArgs) -> {
 
     // Returns the account to which the caller should deposit ckBTC
     // before withdrawing BTC using the retrieve_btc endpoint.
-    get_withdrawal_account : () -> (record { account : Account });
+    get_withdrawal_account : () -> (Account);
 
     // Submits a request to convert ckBTC to BTC.
     //

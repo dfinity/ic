@@ -12,8 +12,7 @@ use crate::{
 use candid::{Decode, Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_ckbtc_minter::updates::{
-    get_btc_address::GetBtcAddressArgs,
-    get_withdrawal_account::{compute_subaccount, GetWithdrawalAccountResult},
+    get_btc_address::GetBtcAddressArgs, get_withdrawal_account::compute_subaccount,
 };
 use ic_icrc1::Account;
 
@@ -46,8 +45,7 @@ pub fn test_get_withdrawal_account(env: TestEnv) {
             .call_and_wait(delay())
             .await
             .expect("Error while calling endpoint.");
-        let res = Decode!(res.as_slice(), GetWithdrawalAccountResult)
-            .expect("Error while decoding response.");
+        let res = Decode!(res.as_slice(), Account).expect("Error while decoding response.");
 
         // Check results.
         let caller = agent
@@ -59,7 +57,7 @@ pub fn test_get_withdrawal_account(env: TestEnv) {
                 owner: minter_id.get(),
                 subaccount: Some(subaccount),
             },
-            res.account
+            res
         );
     });
 }
