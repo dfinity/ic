@@ -34,7 +34,7 @@ pub enum CheckError {
 
 #[async_trait]
 pub trait Check: Send + Sync {
-    async fn check(&self, domain: &str) -> Result<Principal, CheckError>;
+    async fn check(&self, name: &str) -> Result<Principal, CheckError>;
 }
 
 pub struct Checker {
@@ -65,10 +65,10 @@ impl Checker {
 
 #[async_trait]
 impl Check for Checker {
-    async fn check(&self, domain: &str) -> Result<Principal, CheckError> {
+    async fn check(&self, name: &str) -> Result<Principal, CheckError> {
         // Phase 1 - Ensure a challenge delegation CNAME record exists
-        let cname_src = format!("_acme-challenge.{}.", domain);
-        let cname_dst = format!("_acme-challenge.{}.{}.", domain, self.delegation_domain);
+        let cname_src = format!("_acme-challenge.{}.", name);
+        let cname_dst = format!("_acme-challenge.{}.{}.", name, self.delegation_domain);
 
         self.resolver
             .lookup(&cname_src, RecordType::CNAME)
@@ -92,7 +92,7 @@ impl Check for Checker {
             })?;
 
         // Phase 2 - Ensure a TXT record for a canister mapping exists
-        let txt_src = format!("_canister-id.{}.", domain);
+        let txt_src = format!("_canister-id.{}.", name);
 
         let canister_id = self
             .resolver
@@ -171,7 +171,7 @@ impl Check for Checker {
             .filter_map(Result::ok)
             .collect();
 
-        if !lns.iter().any(|ln| ln.as_str().eq(domain)) {
+        if !lns.iter().any(|ln| ln.as_str().eq(name)) {
             return Err(CheckError::MissingKnownDomains {
                 id: canister_id.to_string(),
             });

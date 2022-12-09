@@ -1,0 +1,8 @@
+[package]
+name = "certificate_syncer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.66"
+tokio = { version = "1.21.2", features = ["full"] }

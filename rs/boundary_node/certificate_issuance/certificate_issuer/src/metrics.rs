@@ -10,14 +10,16 @@ use opentelemetry::{
 };
 use tracing::info;
 use trust_dns_resolver::{error::ResolveError, lookup::Lookup, proto::rr::RecordType};
-use uuid::Uuid;
 
 use crate::{
-    acme, certificate,
+    acme,
+    certificate::{self, ExportError, UploadError},
     check::{Check, CheckError},
     dns::{self, Record, Resolve},
     http::HttpClient,
-    registration::{Create, CreateError, Get, GetError, Registration, State, Update, UpdateError},
+    registration::{
+        Create, CreateError, Get, GetError, Id, Registration, State, Update, UpdateError,
+    },
     work::{Dispense, DispenseError, Process, ProcessError, Queue, QueueError, Task},
 };
 
@@ -49,10 +51,10 @@ pub struct WithMetrics<T>(pub T, pub MetricParams);
 
 #[async_trait]
 impl<T: Create> Create for WithMetrics<T> {
-    async fn create(&self, domain: &str, canister: &Principal) -> Result<Uuid, CreateError> {
+    async fn create(&self, name: &str, canister: &Principal) -> Result<Id, CreateError> {
         let start_time = Instant::now();
 
-        let out = self.0.create(domain, canister).await;
+        let out = self.0.create(name, canister).await;
 
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
@@ -70,7 +72,7 @@ impl<T: Create> Create for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), domain, status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -78,7 +80,7 @@ impl<T: Create> Create for WithMetrics<T> {
 
 #[async_trait]
 impl<T: Update> Update for WithMetrics<T> {
-    async fn update(&self, id: &Uuid, state: &State) -> Result<(), UpdateError> {
+    async fn update(&self, id: &Id, state: &State) -> Result<(), UpdateError> {
         let start_time = Instant::now();
 
         let out = self.0.update(id, state).await;
@@ -110,7 +112,7 @@ impl<T: Update> Update for WithMetrics<T> {
 
 #[async_trait]
 impl<T: Get> Get for WithMetrics<T> {
-    async fn get(&self, id: &Uuid) -> Result<Registration, GetError> {
+    async fn get(&self, id: &Id) -> Result<Registration, GetError> {
         let start_time = Instant::now();
 
         let out = self.0.get(id).await;
@@ -139,7 +141,7 @@ impl<T: Get> Get for WithMetrics<T> {
 
 #[async_trait]
 impl<T: Queue> Queue for WithMetrics<T> {
-    async fn queue(&self, id: &Uuid, t: u64) -> Result<(), QueueError> {
+    async fn queue(&self, id: &Id, t: u64) -> Result<(), QueueError> {
         let start_time = Instant::now();
 
         let out = self.0.queue(id, t).await;
@@ -168,7 +170,7 @@ impl<T: Queue> Queue for WithMetrics<T> {
 
 #[async_trait]
 impl<T: Dispense> Dispense for WithMetrics<T> {
-    async fn dispense(&self) -> Result<(Uuid, Task), DispenseError> {
+    async fn dispense(&self) -> Result<(Id, Task), DispenseError> {
         let start_time = Instant::now();
 
         let out = self.0.dispense().await;
@@ -197,10 +199,10 @@ impl<T: Dispense> Dispense for WithMetrics<T> {
 
 #[async_trait]
 impl<T: Process> Process for WithMetrics<T> {
-    async fn process(&self, task: &Task) -> Result<(), ProcessError> {
+    async fn process(&self, id: &Id, task: &Task) -> Result<(), ProcessError> {
         let start_time = Instant::now();
 
-        let out = self.0.process(task).await;
+        let out = self.0.process(id, task).await;
 
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
@@ -221,7 +223,7 @@ impl<T: Process> Process for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), domain = task.domain, task = task.action.to_string(), status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), id, name = task.name, task = task.action.to_string(), status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -440,7 +442,7 @@ impl<T: acme::Finalize> acme::Finalize for WithMetrics<T> {
 
 #[async_trait]
 impl<T: certificate::Upload> certificate::Upload for WithMetrics<T> {
-    async fn upload(&self, id: &str, pair: &certificate::Pair) -> Result<(), Error> {
+    async fn upload(&self, id: &str, pair: certificate::Pair) -> Result<(), UploadError> {
         let start_time = Instant::now();
 
         let out = self.0.upload(id, pair).await;
@@ -469,7 +471,7 @@ impl<T: certificate::Upload> certificate::Upload for WithMetrics<T> {
 
 #[async_trait]
 impl<T: certificate::Export> certificate::Export for WithMetrics<T> {
-    async fn export(&self) -> Result<Vec<certificate::Package>, Error> {
+    async fn export(&self) -> Result<Vec<certificate::Package>, ExportError> {
         let start_time = Instant::now();
 
         let out = self.0.export().await;
@@ -498,10 +500,10 @@ impl<T: certificate::Export> certificate::Export for WithMetrics<T> {
 
 #[async_trait]
 impl<T: Check> Check for WithMetrics<T> {
-    async fn check(&self, domain: &str) -> Result<Principal, CheckError> {
+    async fn check(&self, name: &str) -> Result<Principal, CheckError> {
         let start_time = Instant::now();
 
-        let out = self.0.check(domain).await;
+        let out = self.0.check(name).await;
 
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
@@ -519,7 +521,7 @@ impl<T: Check> Check for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), domain, status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), name, status, duration, error = ?out.as_ref().err());
 
         out
     }

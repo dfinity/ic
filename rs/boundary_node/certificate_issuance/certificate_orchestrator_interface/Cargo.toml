@@ -1,0 +1,11 @@
+[package]
+name = "certificate_orchestrator_interface"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+candid = "0.8.4"
+ic-stable-structures = "0.2.0"
+serde = "1.0.148"
+serde_bytes = "0.11.7"
+thiserror = "1.0.37"

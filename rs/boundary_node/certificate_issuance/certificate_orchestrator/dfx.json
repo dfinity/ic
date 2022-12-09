@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "canisters": {
+    "certificate_orchestrator": {
+      "candid": "interface.did",
+      "package": "certificate_orchestrator",
+      "type": "rust"
+    }
+  }
+}

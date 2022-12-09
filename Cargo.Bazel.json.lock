@@ -1,5 +1,5 @@
 {
-  "checksum": "c288a3108df59b470618015e8cf22580a804098f09a4e7aad4a87f82db5ba8af",
+  "checksum": "9506cc8a38a1829d5c9fc87853c88ad8d4f0122238d8b4e5a7921b39b9a8b6a3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12509,6 +12509,10 @@
             {
               "id": "pretty_assertions 0.6.1",
               "target": "pretty_assertions"
+            },
+            {
+              "id": "priority-queue 1.3.0",
+              "target": "priority_queue"
             },
             {
               "id": "proc-macro2 1.0.47",
@@ -32071,6 +32075,85 @@
         "links": "prettyplease01"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "priority-queue 1.3.0": {
+      "name": "priority-queue",
+      "version": "1.3.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/priority-queue/1.3.0/download",
+          "sha256": "d7685ca4cc0b3ad748c22ce6803e23b55b9206ef7715b965ebeaf41639238fdc"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "priority_queue",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "priority_queue",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "serde"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "indexmap 1.9.2",
+              "target": "indexmap"
+            },
+            {
+              "id": "priority-queue 1.3.0",
+              "target": "build_script_build"
+            },
+            {
+              "id": "serde 1.0.149",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.3.0"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "autocfg 1.1.0",
+              "target": "autocfg"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "LGPL-3.0 OR MPL-2.0"
     },
     "proc-macro-crate 0.1.5": {
       "name": "proc-macro-crate",

@@ -1,0 +1,130 @@
+type Id = text;
+type Name = text;
+type Canister = text;
+type Timestamp = nat64;
+
+type State = variant {
+    failed: text;
+    pendingOrder;
+    pendingChallengeResponse;
+    pendingAcmeApproval;
+    available;
+};
+
+type Registration = record {
+    name: Name;
+    canister: principal;
+    state: State;
+};
+
+type EncryptedPair = record {
+    blob; // privateKey
+    blob; // certificate
+};
+
+type ExportPackage = record {
+    name: Name;
+    canister: principal;
+    pair: EncryptedPair;
+};
+
+type InitArg = record {
+    rootPrincipals: vec principal;
+};
+
+type CreateRegistrationError = variant {
+    Duplicate: Id;
+    NameError: text;
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type CreateRegistrationResponse = variant {
+    Ok: Id;
+    Err: CreateRegistrationError;
+};
+
+type GetRegistrationError = variant {
+    NotFound;
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type GetRegistrationResponse = variant {
+    Ok: Registration;
+    Err: GetRegistrationError;
+};
+
+type UpdateRegistrationError = variant {
+    NotFound;
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type UpdateRegistrationResponse = variant {
+    Ok;
+    Err: UpdateRegistrationError;
+};
+
+type UploadCertificateError = variant {
+    NotFound;
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type UploadCertificateResponse = variant {
+    Ok;
+    Err: UploadCertificateError;
+};
+
+type ExportCertificatesError = variant {
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type ExportCertificatesResponse = variant {
+    Ok: vec ExportPackage;
+    Err: ExportCertificatesError;
+};
+
+type QueueTaskError = variant {
+    NotFound;
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type QueueTaskResponse = variant {
+    Ok;
+    Err: QueueTaskError;
+};
+
+type DispenseTaskError = variant {
+    NoTasksAvailable;
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type DispenseTaskResponse = variant {
+    Ok: Id;
+    Err: DispenseTaskError;
+};
+
+service: (InitArg) -> {
+    // Registrations
+    createRegistration: (Name, Canister) -> (CreateRegistrationResponse);
+    getRegistration: (Id) -> (GetRegistrationResponse) query;
+    updateRegistration: (Id, State) -> (UpdateRegistrationResponse);
+
+    // Certificates
+    uploadCertificate: (Id, EncryptedPair) -> (UploadCertificateResponse);
+    exportCertificates: () -> (ExportCertificatesResponse);
+
+    // Tasks
+    queueTask: (Id, Timestamp) -> (QueueTaskResponse);
+    dispenseTask: () -> (DispenseTaskResponse);
+
+    // ACL
+    listAllowedPrincipals: () -> (vec principal) query;
+    addAllowedPrincipal: (principal) -> ();
+    rmAllowedPrincipal: (principal) -> ();
+};
