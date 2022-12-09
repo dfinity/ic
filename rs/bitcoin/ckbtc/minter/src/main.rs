@@ -10,10 +10,10 @@ use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, 
 use ic_ckbtc_minter::updates::{
     self,
     get_btc_address::GetBtcAddressArgs,
-    get_withdrawal_account::GetWithdrawalAccountResult,
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult},
 };
 use ic_ckbtc_minter::{eventlog::Event, storage};
+use ic_icrc1::Account;
 
 #[init]
 fn init(args: InitArgs) {
@@ -82,7 +82,7 @@ async fn get_btc_address(args: GetBtcAddressArgs) -> String {
 
 #[candid_method(update)]
 #[update]
-async fn get_withdrawal_account() -> GetWithdrawalAccountResult {
+async fn get_withdrawal_account() -> Account {
     updates::get_withdrawal_account::get_withdrawal_account().await
 }
 

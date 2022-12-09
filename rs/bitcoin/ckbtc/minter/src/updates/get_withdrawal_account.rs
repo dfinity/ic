@@ -1,18 +1,11 @@
-use candid::{CandidType, Deserialize};
 use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
 use ic_icrc1::{Account, Subaccount, DEFAULT_SUBACCOUNT};
-use serde::Serialize;
 
 use super::get_btc_address::init_ecdsa_public_key;
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub struct GetWithdrawalAccountResult {
-    pub account: Account,
-}
-
 /// Deterministically computes a ckBTC Ledger account ID based on the ckBTC Minter’s principal ID and the caller’s principal ID.
-pub async fn get_withdrawal_account() -> GetWithdrawalAccountResult {
+pub async fn get_withdrawal_account() -> Account {
     let caller = PrincipalId(ic_cdk::caller());
     init_ecdsa_public_key().await;
     let ck_btc_principal = PrincipalId(ic_cdk::id());
@@ -24,11 +17,10 @@ pub async fn get_withdrawal_account() -> GetWithdrawalAccountResult {
             caller
         );
     }
-    let account = Account {
+    Account {
         owner: ck_btc_principal,
         subaccount: Some(caller_subaccount),
-    };
-    GetWithdrawalAccountResult { account }
+    }
 }
 
 /// Compute the subaccount of a principal based on a given nonce.

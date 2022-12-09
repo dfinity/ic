@@ -98,8 +98,7 @@ pub fn test_heartbeat(env: TestEnv) {
         let withdrawal_account = minter_agent
             .get_withdrawal_account()
             .await
-            .expect("Error while calling get_withdrawal_account")
-            .account;
+            .expect("Error while calling get_withdrawal_account");
 
         const TRANSFER_FEE: u64 = 1_000;
 

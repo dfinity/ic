@@ -4,11 +4,10 @@ use ic_ckbtc_minter::queries::RetrieveBtcStatusRequest;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
-    get_withdrawal_account::GetWithdrawalAccountResult,
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk},
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult},
 };
-use ic_icrc1::Subaccount;
+use ic_icrc1::{Account, Subaccount};
 
 #[derive(Debug)]
 pub enum CkBtcMinterAgentError {
@@ -87,9 +86,7 @@ impl CkBtcMinterAgent {
             .await
     }
 
-    pub async fn get_withdrawal_account(
-        &self,
-    ) -> Result<GetWithdrawalAccountResult, CkBtcMinterAgentError> {
+    pub async fn get_withdrawal_account(&self) -> Result<Account, CkBtcMinterAgentError> {
         self.update("get_withdrawal_account", ()).await
     }
 

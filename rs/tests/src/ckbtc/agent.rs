@@ -32,8 +32,7 @@ use candid::Principal;
 use canister_test::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::updates::{
-    get_withdrawal_account::{compute_subaccount, GetWithdrawalAccountResult},
-    retrieve_btc::RetrieveBtcArgs,
+    get_withdrawal_account::compute_subaccount, retrieve_btc::RetrieveBtcArgs,
     update_balance::UpdateBalanceArgs,
 };
 use ic_icrc1::Account;
@@ -95,11 +94,9 @@ async fn test_get_withdrawal_account(agent: &CkBtcMinterAgent) {
     let owner = PrincipalId(agent.agent.get_principal().unwrap());
     let subaccount = compute_subaccount(owner, 0);
     assert_eq!(
-        GetWithdrawalAccountResult {
-            account: Account {
-                owner: PrincipalId(agent.minter_canister_id),
-                subaccount: Some(subaccount),
-            }
+        Account {
+            owner: PrincipalId(agent.minter_canister_id),
+            subaccount: Some(subaccount),
         },
         res
     );

@@ -119,8 +119,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         let withdrawal_account = minter_agent
             .get_withdrawal_account()
             .await
-            .expect("Error while calling get_withdrawal_account")
-            .account;
+            .expect("Error while calling get_withdrawal_account");
         info!(&logger, "Transferring to the minter the ckBTC to be burned");
         let transfer_amount = 42_000_000;
         let transfer_result = ledger_agent
