@@ -17,7 +17,7 @@ impl Default for Config {
         Self {
             exporter: Exporter::Log,
             connection_read_timeout_seconds: default_connection_read_timeout_seconds(),
-            max_outstanding_conections: default_max_outstanding_conections(),
+            max_outstanding_connections: default_max_outstanding_connections(),
             max_concurrent_requests: default_max_concurrent_requests(),
             request_timeout_seconds: default_request_timeout_seconds(),
         }
@@ -35,11 +35,11 @@ pub struct Config {
     #[serde(default = "default_connection_read_timeout_seconds")]
     pub connection_read_timeout_seconds: u64,
 
-    /// We can serve from at most 'max_outstanding_conections'
-    /// live TCP connections. If we are at the limit, we won't
-    /// accept new TCP connections.
-    #[serde(default = "default_max_outstanding_conections")]
-    pub max_outstanding_conections: usize,
+    /// We can serve from at most 'max_outstanding_connections'
+    /// live TCP connections. If we are at the limit and a new
+    /// TCP connection arrives, we accept and drop it immediately.
+    #[serde(default = "default_max_outstanding_connections")]
+    pub max_outstanding_connections: usize,
 
     /// There can be at most 'max_concurrent_requests' in-flight requests.
     #[serde(default = "default_max_concurrent_requests")]
@@ -54,7 +54,7 @@ fn default_connection_read_timeout_seconds() -> u64 {
     300 // 5 min
 }
 
-fn default_max_outstanding_conections() -> usize {
+fn default_max_outstanding_connections() -> usize {
     20
 }
 

@@ -44,7 +44,7 @@ use hyper::{
     client::HttpConnector, server::conn::Http, Body, Client, Request, Response, StatusCode,
 };
 use hyper_tls::HttpsConnector;
-use ic_async_utils::{start_tcp_listener, TcpAcceptor, WrappedTcpStream};
+use ic_async_utils::start_tcp_listener;
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsHandshake;
@@ -87,10 +87,11 @@ use std::{
     time::Duration,
 };
 use tempfile::NamedTempFile;
+use tokio::net::TcpStream;
 use tokio::time::{sleep, timeout, Instant};
 use tower::{
-    load_shed::LoadShed, service_fn, util::BoxCloneService, BoxError, Service, ServiceBuilder,
-    ServiceExt,
+    limit::GlobalConcurrencyLimitLayer, load_shed::LoadShed, service_fn, util::BoxCloneService,
+    BoxError, Service, ServiceBuilder, ServiceExt,
 };
 
 // Constants defining the limits of the HttpHandler.
@@ -110,11 +111,6 @@ use tower::{
 // running into contention. A resonable value can be derived by looking what are
 // the latencies for operations that hold locks (e.g. methods on the
 // RegistryClient and StateManager).
-
-// In the HttpHandler we can have at most 'MAX_OUTSTANDING_CONNECTIONS'
-// live TCP connections. If we are at the limit, we won't
-// accept new TCP connections.
-pub const MAX_OUTSTANDING_CONNECTIONS: usize = 20000;
 
 // Sets the SETTINGS_MAX_CONCURRENT_STREAMS option for HTTP2 connections.
 const HTTP_MAX_CONCURRENT_STREAMS: u32 = 256;
@@ -155,7 +151,6 @@ pub(crate) type EndpointService = BoxCloneService<Request<Body>, Response<Body>,
 /// This is collection of thread-safe data members.
 #[derive(Clone)]
 struct HttpHandler {
-    registry_client: Arc<dyn RegistryClient>,
     call_service: EndpointService,
     query_service: EndpointService,
     catchup_service: EndpointService,
@@ -365,7 +360,6 @@ pub fn start_server(
     );
 
     let http_handler = HttpHandler {
-        registry_client,
         call_service,
         query_service,
         status_service,
@@ -374,7 +368,7 @@ pub fn start_server(
         read_state_service,
         health_status_refresher,
     };
-    let main_service = create_main_service(metrics.clone(), http_handler.clone());
+    let main_service = create_main_service(metrics.clone(), http_handler);
 
     let port_file_path = config.port_file_path;
     // If addr == 0, then a random port will be assigned. In this case it
@@ -383,81 +377,44 @@ pub fn start_server(
     if let Some(path) = port_file_path {
         create_port_file(path, local_addr.port());
     }
-    let tcp_acceptor = TcpAcceptor::new(tcp_listener, MAX_OUTSTANDING_CONNECTIONS);
 
-    let mut http = Http::new();
-    http.http2_max_concurrent_streams(HTTP_MAX_CONCURRENT_STREAMS);
+    let metrics_cl = metrics.clone();
+    let log_cl = log.clone();
+    let conn_svc = ServiceBuilder::new()
+        .load_shed()
+        .layer(GlobalConcurrencyLimitLayer::new(
+            config.max_outstanding_connections,
+        ))
+        .service_fn(move |tcp_stream: TcpStream| {
+            serve_connection(
+                log_cl.clone(),
+                main_service.clone(),
+                tcp_stream,
+                tls_handshake.clone(),
+                registry_client.clone(),
+                metrics_cl.clone(),
+            )
+        });
+    let conn_svc = BoxCloneService::new(conn_svc);
     rt_handle.clone().spawn(async move {
         loop {
-            let log = log.clone();
-            let http = http.clone();
-            let http_handler = http_handler.clone();
-            let tls_handshake = Arc::clone(&tls_handshake);
-            let metrics = metrics.clone();
-            match tcp_acceptor.accept().await {
+            match tcp_listener.accept().await {
                 Ok((tcp_stream, _)) => {
                     metrics.connections_total.inc();
                     // Start recording connection setup duration.
-                    let connection_start_time = Instant::now();
-                    let svc = main_service.clone();
-                    rt_handle.spawn(async move {
-                        // Do a move of the permit so it gets dropped at the end of the scope.
-                        let mut b = [0_u8; 1];
-                        let app_layer = match timeout(
-                            Duration::from_secs(MAX_TCP_PEEK_TIMEOUT_SECS),
-                            tcp_stream.peek(&mut b),
-                        )
-                        .await
-                        {
-                            // The peek operation didn't timeout, and the peek oparation didn't return
-                            // an error.
-                            Ok(Ok(_)) => {
-                                if b[0] == 22 {
-                                    AppLayer::Https
-                                } else {
-                                    AppLayer::Http
-                                }
-                            }
-                            Ok(Err(err)) => {
-                                error!(log, "Can't peek into TCP stream, error = {}", err);
-                                metrics.observe_connection_error(
-                                    ConnectionError::Peek,
-                                    connection_start_time,
-                                );
-                                AppLayer::Http
-                            }
-                            Err(err) => {
-                                warn!(
-                                    log,
-                                    "TCP peeking timeout after {}s, error = {}",
-                                    MAX_TCP_PEEK_TIMEOUT_SECS,
-                                    err
-                                );
-
-                                metrics.observe_connection_error(
-                                    ConnectionError::PeekTimeout,
-                                    connection_start_time,
-                                );
-                                AppLayer::Http
-                            }
-                        };
-                        serve_connection(
-                            log,
-                            svc,
-                            app_layer,
-                            http,
-                            tcp_stream,
-                            tls_handshake,
-                            http_handler,
-                            metrics,
-                            connection_start_time,
-                        )
-                        .await;
+                    let mut conn_svc = conn_svc.clone();
+                    tokio::spawn(async move {
+                        let _ = conn_svc
+                            .ready()
+                            .await
+                            .expect("The load shedder must always be ready.")
+                            .call(tcp_stream)
+                            .await;
                     });
                 }
-                // Don't exit the loop on a connection error. We will want to
-                // continue serving.
                 Err(err) => {
+                    // Don't exit the loop on a connection error. We will want to
+                    // continue serving.
                     metrics.observe_connection_error(ConnectionError::Accept, Instant::now());
                     error!(log, "Can't accept TCP connection, error = {}", err);
                 }
@@ -506,22 +463,54 @@ fn create_main_service(
 async fn serve_connection(
     log: ReplicaLogger,
     service: BoxCloneService<Request<Body>, Response<Body>, Infallible>,
-    app_layer: AppLayer,
-    http: Http,
-    tcp_stream: WrappedTcpStream,
+    tcp_stream: TcpStream,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
-    http_handler: HttpHandler,
+    registry_client: Arc<dyn RegistryClient>,
     metrics: HttpHandlerMetrics,
-    connection_start_time: Instant,
-) {
-    let (tcp_stream, _counter) = tcp_stream.take();
+) -> Result<(), Infallible> {
+    let connection_start_time = Instant::now();
+    let mut http = Http::new();
+    http.http2_max_concurrent_streams(HTTP_MAX_CONCURRENT_STREAMS);
+
+    let mut b = [0_u8; 1];
+    let app_layer = match timeout(
+        Duration::from_secs(MAX_TCP_PEEK_TIMEOUT_SECS),
+        tcp_stream.peek(&mut b),
+    )
+    .await
+    {
+        // The peek operation didn't timeout, and the peek oparation didn't return
+        // an error.
+        Ok(Ok(_)) => {
+            if b[0] == 22 {
+                AppLayer::Https
+            } else {
+                AppLayer::Http
+            }
+        }
+        Ok(Err(err)) => {
+            error!(log, "Can't peek into TCP stream, error = {}", err);
+            metrics.observe_connection_error(ConnectionError::Peek, connection_start_time);
+            AppLayer::Http
+        }
+        Err(err) => {
+            warn!(
+                log,
+                "TCP peeking timeout after {}s, error = {}", MAX_TCP_PEEK_TIMEOUT_SECS, err
+            );
+
+            metrics.observe_connection_error(ConnectionError::PeekTimeout, connection_start_time);
+            AppLayer::Http
+        }
+    };
+
     let connection_result = match app_layer {
         AppLayer::Https => {
             let peer_addr = tcp_stream.peer_addr();
             let tls_stream = match tls_handshake
                 .perform_tls_server_handshake_without_client_auth(
                     tcp_stream,
-                    http_handler.registry_client.get_latest_version(),
+                    registry_client.get_latest_version(),
                 )
                 .await
             {
@@ -534,7 +523,7 @@ async fn serve_connection(
                         log,
                         "TLS handshake failed, error = {}, peer_addr = {:?}", err, peer_addr,
                     );
-                    return;
+                    return Ok(());
                 }
                 Ok(tls_stream) => tls_stream,
             };
@@ -559,6 +548,7 @@ async fn serve_connection(
         }
         Ok(()) => metrics.observe_graceful_conn_termination(app_layer, connection_start_time),
     }
+    Ok(())
 }
 
 type RequestWithTimer = (

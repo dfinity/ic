@@ -696,6 +696,7 @@ impl ValidatedConfig {
         let http_handler = Some(HttpHandlerConfig {
             listen_addr: self.http_listen_addr,
             port_file_path: self.http_port_file.clone(),
+            ..Default::default()
         });
         let metrics = self.metrics_addr.map(|metrics_addr| MetricsConfig {
             exporter: Exporter::Http(metrics_addr),

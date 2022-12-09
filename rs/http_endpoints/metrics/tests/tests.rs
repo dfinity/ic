@@ -45,18 +45,9 @@ async fn send_request(
     client.request(req).await
 }
 
-async fn create_client_and_send_request(
-    addr: SocketAddr,
-) -> Result<Client<HttpConnector, Body>, Error> {
-    let client: Client<HttpConnector, Body> = Client::builder().http2_only(true).build_http();
-
-    send_request(&client, addr).await?;
-    Ok(client)
-}
-
-/// Once we have reached the number of outstanding connection, new connections should refused.
+/// Once we have reached the number of outstanding connection, new connections should be refused.
 #[tokio::test]
-async fn test_max_outstanding_conections() {
+async fn test_max_outstanding_connections() {
     with_test_replica_logger(|log| async move {
         let rt_handle = tokio::runtime::Handle::current();
         let addr = get_free_localhost_port().unwrap();
@@ -72,17 +63,34 @@ async fn test_max_outstanding_conections() {
             &log.inner_logger.root,
         );
 
-        // it is important to keep around the http clients so the connections don't get closed
-        let mut clients = vec![];
-        for _i in 0..config.max_outstanding_conections {
-            let c = create_client_and_send_request(addr)
-                .await
-                .expect("Creating a new http client/tcp connection and sending a message failed.");
-            clients.push(c);
+        let mut senders = vec![];
+        for _i in 0..config.max_outstanding_connections {
+            let target_stream = TcpStream::connect(addr).await.unwrap();
+
+            let (mut request_sender, connection) =
+                hyper::client::conn::handshake(target_stream).await.unwrap();
+
+            // spawn a task to poll the connection and drive the HTTP state
+            tokio::spawn(async move {
+                connection.await.unwrap();
+            });
+
+            let request = Request::builder()
+                .method(Method::GET)
+                .uri(format!("http://{}", addr))
+                .body(Body::from(""))
+                .expect("Building the request failed.");
+            let response = request_sender.send_request(request).await.unwrap();
+            assert!(response.status() == StatusCode::OK);
+            senders.push(request_sender);
         }
-        // Check we hit the limit of live TCP connections by expecting a failure when yet
-        // another request is send.
-        assert!(create_client_and_send_request(addr).await.is_err());
+
+        {
+            let target_stream = TcpStream::connect(addr).await.unwrap();
+            let (_request_sender, connection) =
+                hyper::client::conn::handshake(target_stream).await.unwrap();
+            assert!(connection.await.err().unwrap().is_incomplete_message());
+        }
     })
     .await
 }
@@ -114,15 +122,12 @@ async fn test_connection_read_timeout() {
 
         // spawn a task to poll the connection and drive the HTTP state
         tokio::spawn(async move {
-            if let Err(e) = connection.await {
-                eprintln!("Error in connection: {}", e);
-            }
+            connection.await.unwrap();
         });
 
         let request = Request::builder()
             .method(Method::GET)
             .uri(format!("http://{}", addr))
-            .header(hyper::header::HOST, "hyper.rs")
             .body(Body::from(""))
             .expect("Building the request failed.");
         let response = request_sender.send_request(request).await.unwrap();
