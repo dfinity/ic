@@ -4942,6 +4942,7 @@ dependencies = [
 name = "ic-crypto-internal-csp"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "async-trait",
  "base64 0.11.0",
  "futures",

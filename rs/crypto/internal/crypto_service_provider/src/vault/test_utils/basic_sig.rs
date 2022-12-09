@@ -2,6 +2,7 @@ use crate::keygen::utils::node_signing_pk_to_proto;
 use crate::types::{CspPublicKey, CspSignature};
 use crate::vault::api::{CspBasicSignatureError, CspBasicSignatureKeygenError, CspVault};
 use crate::KeyId;
+use assert_matches::assert_matches;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -15,7 +16,7 @@ pub fn should_generate_node_signing_key_pair_and_store_keys(csp_vault: Arc<dyn C
         .gen_node_signing_key_pair()
         .expect("failed creating key pair");
 
-    assert!(matches!(gen_key_result, CspPublicKey::Ed25519(_)));
+    assert_matches!(gen_key_result, CspPublicKey::Ed25519(_));
     assert!(csp_vault
         .sks_contains(&KeyId::from(&gen_key_result))
         .is_ok());
@@ -35,10 +36,10 @@ pub fn should_fail_with_internal_error_if_node_signing_key_already_set(
 ) {
     let result = csp_vault.gen_node_signing_key_pair();
 
-    assert!(matches!(result,
+    assert_matches!(result,
         Err(CspBasicSignatureKeygenError::InternalError { internal_error })
         if internal_error.contains("node signing public key already set")
-    ));
+    );
 }
 
 pub fn should_fail_with_internal_error_if_node_signing_key_generated_more_than_once(
@@ -48,10 +49,10 @@ pub fn should_fail_with_internal_error_if_node_signing_key_generated_more_than_o
 
     let result = csp_vault.gen_node_signing_key_pair();
 
-    assert!(matches!(result,
+    assert_matches!(result,
         Err(CspBasicSignatureKeygenError::InternalError { internal_error })
         if internal_error.contains("node signing public key already set")
-    ));
+    );
 }
 
 // The given `csp_vault` is expected to return an IO error on set_once_node_signing_pubkey
@@ -60,10 +61,10 @@ pub fn should_fail_with_transient_internal_error_if_node_signing_key_persistence
 ) {
     let result = csp_vault.gen_node_signing_key_pair();
 
-    assert!(matches!(result,
+    assert_matches!(result,
         Err(CspBasicSignatureKeygenError::TransientInternalError { internal_error })
         if internal_error.contains("IO error")
-    ));
+    );
 }
 
 pub fn should_sign_verifiably_with_generated_node_signing_key(csp_vault: Arc<dyn CspVault>) {

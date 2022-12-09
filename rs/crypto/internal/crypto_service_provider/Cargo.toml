@@ -56,6 +56,7 @@ tokio-util = { version = "0.7.4", features = ["codec"] }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
+assert_matches = "1.5.0"
 ic-crypto-internal-csp-test-utils = { path = "../csp_test_utils" }
 ic-crypto-internal-csp-protobuf-generator = { path = "./protobuf_generator" }
 ic-crypto-node-key-generation = { path = "../../node_key_generation" }

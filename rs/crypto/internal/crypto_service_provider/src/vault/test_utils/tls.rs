@@ -6,6 +6,7 @@ use crate::types::CspPublicKey;
 use crate::vault::api::CspTlsKeygenError;
 use crate::vault::api::{CspTlsSignError, CspVault};
 use crate::{CryptoServiceProvider, Csp};
+use assert_matches::assert_matches;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::AlgorithmId;
@@ -46,10 +47,10 @@ pub fn should_fail_if_secret_key_insertion_yields_duplicate_error(
 ) {
     let result = csp_vault.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(CspTlsKeygenError::DuplicateKeyId { key_id }) if key_id ==  *duplicated_key_id
-    ));
+    );
 }
 
 pub fn should_return_der_encoded_self_signed_certificate(csp_vault: Arc<dyn CspVault>) {
@@ -293,10 +294,10 @@ pub fn should_fail_with_internal_error_if_tls_certificate_already_set(
     for node_id in [NODE_1, NODE_1 + 1] {
         let result = csp_vault.gen_tls_key_pair(node_test_id(node_id), NOT_AFTER);
 
-        assert!(matches!(result,
+        assert_matches!(result,
             Err(CspTlsKeygenError::InternalError { internal_error })
             if internal_error.contains("TLS certificate already set")
-        ));
+        );
     }
 }
 
@@ -310,10 +311,10 @@ pub fn should_fail_with_internal_error_if_tls_certificate_generated_more_than_on
     for node_id in [NODE_1, NODE_1 + 1, NODE_1 + 2] {
         let result = csp_vault.gen_tls_key_pair(node_test_id(node_id), NOT_AFTER);
 
-        assert!(matches!(result,
+        assert_matches!(result,
             Err(CspTlsKeygenError::InternalError { internal_error })
             if internal_error.contains("TLS certificate already set")
-        ));
+        );
     }
 }
 
@@ -323,8 +324,8 @@ pub fn should_fail_with_transient_internal_error_if_tls_keygen_persistance_fails
 ) {
     let result = csp_vault.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
 
-    assert!(matches!(result,
+    assert_matches!(result,
         Err(CspTlsKeygenError::TransientInternalError { internal_error })
         if internal_error.contains("IO error")
-    ));
+    );
 }
