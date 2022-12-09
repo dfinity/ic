@@ -151,14 +151,14 @@ impl SchedulerImpl {
         // Compute the priority of the canisters for this round.
         for (&canister_id, canister) in canister_states.iter_mut() {
             if reset_round {
-                canister.scheduler_state.accumulated_priority = 0.into();
-                canister.scheduler_state.priority_credit = 0.into();
+                canister.scheduler_state.accumulated_priority = Default::default();
+                canister.scheduler_state.priority_credit = Default::default();
             }
 
             let has_aborted_or_paused_execution =
                 canister.has_aborted_execution() || canister.has_paused_execution();
             if !has_aborted_or_paused_execution {
-                canister.scheduler_state.long_execution_mode = LongExecutionMode::Opportunistic;
+                canister.scheduler_state.long_execution_mode = Default::default();
             }
 
             let compute_allocation = canister.scheduler_state.compute_allocation;
