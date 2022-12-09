@@ -182,7 +182,7 @@ pub const SAMPLE_CONFIG: &str = r#"
         //   Dump prometheus metrics to the specified file on shutdown.
         exporter: "log",
         connection_read_timeout_seconds: 300,
-        max_outstanding_conections: 20,
+        max_outstanding_connections: 20,
         max_concurrent_requests: 50,
         request_timeout_seconds: 30,
     },

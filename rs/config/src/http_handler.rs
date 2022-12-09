@@ -16,6 +16,16 @@ pub struct Config {
     pub listen_addr: SocketAddr,
     /// The path to write the listening port to
     pub port_file_path: Option<PathBuf>,
+
+    /// We can serve from at most 'max_outstanding_connections'
+    /// live TCP connections. If we are at the limit and a new
+    /// TCP connection arrives, we accept and drop it immediately.
+    #[serde(default = "default_max_outstanding_connections")]
+    pub max_outstanding_connections: usize,
+}
+
+fn default_max_outstanding_connections() -> usize {
+    20_000
 }
 
 impl Default for Config {
@@ -26,6 +36,7 @@ impl Default for Config {
                 DEFAULT_PORT,
             ),
             port_file_path: None,
+            max_outstanding_connections: default_max_outstanding_connections(),
         }
     }
 }
