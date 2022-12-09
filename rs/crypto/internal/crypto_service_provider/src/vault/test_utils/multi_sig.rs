@@ -6,6 +6,7 @@ use crate::types::CspPublicKey;
 use crate::vault::api::{CspMultiSignatureError, CspMultiSignatureKeygenError, CspVault};
 use crate::Csp;
 use crate::KeyId;
+use assert_matches::assert_matches;
 use ic_types::crypto::AlgorithmId;
 use rand::{thread_rng, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
@@ -24,7 +25,7 @@ pub fn should_generate_committee_signing_key_pair_and_store_keys(csp_vault: Arc<
         .gen_committee_signing_key_pair()
         .expect("Failure generating key pair with pop");
 
-    assert!(matches!(pk, CspPublicKey::MultiBls12_381(_)));
+    assert_matches!(pk, CspPublicKey::MultiBls12_381(_));
     assert!(csp_vault.sks_contains(&KeyId::from(&pk)).is_ok());
     assert_eq!(
         csp_vault
@@ -42,10 +43,10 @@ pub fn should_fail_with_internal_error_if_committee_signing_key_already_set(
 ) {
     let result = csp_vault.gen_committee_signing_key_pair();
 
-    assert!(matches!(result,
+    assert_matches!(result,
         Err(CspMultiSignatureKeygenError::InternalError { internal_error })
         if internal_error.contains("committee signing public key already set")
-    ));
+    );
 }
 
 pub fn should_fail_with_internal_error_if_committee_signing_key_generated_more_than_once(
@@ -55,10 +56,10 @@ pub fn should_fail_with_internal_error_if_committee_signing_key_generated_more_t
 
     let result = csp_vault.gen_committee_signing_key_pair();
 
-    assert!(matches!(result,
+    assert_matches!(result,
         Err(CspMultiSignatureKeygenError::InternalError { internal_error })
         if internal_error.contains("committee signing public key already set")
-    ));
+    );
 }
 
 // The given `csp_vault` is expected to return an IO error on set_once_node_signing_pubkey
@@ -67,10 +68,10 @@ pub fn should_fail_with_transient_internal_error_if_committee_signing_key_persis
 ) {
     let result = csp_vault.gen_committee_signing_key_pair();
 
-    assert!(matches!(result,
+    assert_matches!(result,
         Err(CspMultiSignatureKeygenError::TransientInternalError { internal_error })
         if internal_error.contains("IO error")
-    ));
+    );
 }
 
 pub fn should_generate_verifiable_pop(csp_vault: Arc<dyn CspVault>) {

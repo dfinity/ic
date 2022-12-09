@@ -2,6 +2,7 @@ use crate::api::CspCreateMEGaKeyError;
 use crate::key_id::KeyId;
 use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use crate::CspVault;
+use assert_matches::assert_matches;
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -41,8 +42,8 @@ pub fn should_fail_with_transient_internal_error_if_storing_idkg_public_key_fail
 ) {
     let result = csp_vault.idkg_gen_dealing_encryption_key_pair();
 
-    assert!(matches!(result,
+    assert_matches!(result,
         Err(CspCreateMEGaKeyError::TransientInternalError { internal_error })
         if internal_error.contains("IO error")
-    ));
+    );
 }

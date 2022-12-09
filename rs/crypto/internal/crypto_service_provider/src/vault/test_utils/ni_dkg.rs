@@ -9,6 +9,7 @@ use crate::vault::test_utils::ni_dkg::fixtures::{
     random_algorithm_id, MockDkgConfig, MockNetwork, MockNode, StateWithConfig, StateWithDealings,
     StateWithTranscript, StateWithVerifiedDealings,
 };
+use assert_matches::assert_matches;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateFsKeyError;
@@ -433,14 +434,8 @@ pub fn should_generate_dealing_encryption_key_pair_and_store_keys(csp_vault: Arc
         .gen_dealing_encryption_key_pair(NODE_42)
         .expect("failed creating key pair");
 
-    assert!(matches!(
-        public_key,
-        CspFsEncryptionPublicKey::Groth20_Bls12_381(_)
-    ));
-    assert!(matches!(
-        pop,
-        CspFsEncryptionPop::Groth20WithPop_Bls12_381(_)
-    ));
+    assert_matches!(public_key, CspFsEncryptionPublicKey::Groth20_Bls12_381(_));
+    assert_matches!(pop, CspFsEncryptionPop::Groth20WithPop_Bls12_381(_));
     assert!(csp_vault.sks_contains(&KeyId::from(&public_key)).is_ok());
     assert_eq!(
         csp_vault
@@ -458,10 +453,10 @@ pub fn should_fail_with_internal_error_if_ni_dkg_dealing_encryption_key_already_
 ) {
     let result = csp_vault.gen_dealing_encryption_key_pair(NODE_42);
 
-    assert!(matches!(result,
+    assert_matches!(result,
         Err(CspDkgCreateFsKeyError::InternalError(InternalError{internal_error}))
         if internal_error.contains("ni-dkg dealing encryption public key already set")
-    ));
+    );
 }
 
 pub fn should_fail_with_internal_error_if_dkg_dealing_encryption_key_generated_more_than_once(
@@ -472,10 +467,10 @@ pub fn should_fail_with_internal_error_if_dkg_dealing_encryption_key_generated_m
 
     let result = csp_vault.gen_dealing_encryption_key_pair(node);
 
-    assert!(matches!(result,
+    assert_matches!(result,
         Err(CspDkgCreateFsKeyError::InternalError(InternalError{internal_error}))
         if internal_error.contains("ni-dkg dealing encryption public key already set")
-    ));
+    );
 }
 
 // The given `csp_vault` is expected to return an IO error on set_once_ni_dkg_dealing_encryption_pubkey
@@ -484,8 +479,8 @@ pub fn should_fail_with_transient_internal_error_if_dkg_dealing_encryption_key_p
 ) {
     let result = csp_vault.gen_dealing_encryption_key_pair(NODE_42);
 
-    assert!(matches!(result,
+    assert_matches!(result,
         Err(CspDkgCreateFsKeyError::TransientInternalError(internal_error))
         if internal_error.contains("error persisting ni-dkg dealing encryption public key")
-    ));
+    );
 }
