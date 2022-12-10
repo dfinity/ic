@@ -3,7 +3,10 @@ use crate::common::{
     setup_ingress_filter_mock, setup_ingress_ingestion_mock, setup_query_execution_mock,
     IngressFilterHandle, IngressIngestionHandle, QueryExecutionHandle,
 };
-use hyper::{client::conn::handshake, Body, Method, Request, StatusCode};
+use hyper::{
+    client::conn::{handshake, SendRequest},
+    Body, Method, Request, StatusCode,
+};
 use ic_agent::{
     agent::{http_transport::ReqwestHttpReplicaV2Transport, QueryBuilder, UpdateBuilder},
     agent_error::HttpErrorPayload,
@@ -82,6 +85,33 @@ fn get_free_localhost_socket_addr() -> SocketAddr {
     socket.set_reuseaddr(false).unwrap();
     socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
     socket.local_addr().unwrap()
+}
+
+async fn create_conn_and_send_request(addr: SocketAddr) -> (SendRequest<Body>, StatusCode) {
+    let target_stream = TcpStream::connect(addr)
+        .await
+        .expect("tcp connection to server address failed");
+
+    let (mut request_sender, connection) = handshake(target_stream)
+        .await
+        .expect("tcp client handshake failed");
+
+    // spawn a task to poll the connection and drive the HTTP state
+    tokio::spawn(async move {
+        connection.await.unwrap();
+    });
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/bad", addr))
+        .body(Body::from(""))
+        .expect("Building the request failed.");
+    let response = request_sender
+        .send_request(request)
+        .await
+        .expect("failed to send request");
+
+    (request_sender, response.status())
 }
 
 fn start_http_endpoint(
@@ -555,7 +585,6 @@ fn test_unathorized_call() {
 
 /// Once we have reached the number of outstanding connection, new connections should be refused.
 #[tokio::test]
-#[ignore]
 async fn test_max_outstanding_connections() {
     let rt_handle = tokio::runtime::Handle::current();
     let addr = get_free_localhost_socket_addr();
@@ -569,6 +598,7 @@ async fn test_max_outstanding_connections() {
     let mock_consensus_cache = basic_consensus_pool_cache();
     let mock_registry_client = basic_registry_client();
 
+    // Start server
     start_http_endpoint(
         rt_handle.clone(),
         config.clone(),
@@ -577,30 +607,20 @@ async fn test_max_outstanding_connections() {
         Arc::new(mock_registry_client),
     );
 
+    // Create max connections and store to prevent connections from being closed
     let mut senders = vec![];
     for _i in 0..config.max_outstanding_connections {
-        let target_stream = TcpStream::connect(addr).await.unwrap();
-
-        let (mut request_sender, connection) = handshake(target_stream).await.unwrap();
-
-        // spawn a task to poll the connection and drive the HTTP state
-        tokio::spawn(async move {
-            connection.await.unwrap();
-        });
-
-        let request = Request::builder()
-            .method(Method::GET)
-            .uri(format!("http://{}/bad", addr))
-            .body(Body::from(""))
-            .expect("Building the request failed.");
-        let response = request_sender.send_request(request).await.unwrap();
-        assert!(response.status() == StatusCode::NOT_FOUND);
+        let (request_sender, status_code) = create_conn_and_send_request(addr).await;
         senders.push(request_sender);
+        assert!(status_code == StatusCode::NOT_FOUND);
     }
 
-    {
-        let target_stream = TcpStream::connect(addr).await.unwrap();
-        let (_request_sender, connection) = handshake(target_stream).await.unwrap();
-        assert!(connection.await.err().unwrap().is_incomplete_message());
-    }
+    // Expect additional connection to trigger error
+    let target_stream = TcpStream::connect(addr)
+        .await
+        .expect("tcp connection to server address failed");
+    let (_request_sender, connection) = handshake(target_stream)
+        .await
+        .expect("tcp client handshake failed");
+    assert!(connection.await.err().unwrap().is_incomplete_message());
 }
