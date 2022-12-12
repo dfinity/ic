@@ -555,6 +555,97 @@ fn output_queue_decode_with_none_head_fails() {
     ));
 }
 
+// Creates an `OutputQueue` from a VecDeque directly to allow for roundtrips with
+// `queue.len() > capacity`.
+fn output_queue_roundtrip_from_vec_deque(
+    queue: VecDeque<Option<RequestOrResponse>>,
+    num_slots_reserved: usize,
+    num_messages: usize,
+) -> Result<OutputQueue, ProxyDecodeError> {
+    let q = OutputQueue {
+        queue: QueueWithReservation::<Option<RequestOrResponse>> {
+            queue,
+            capacity: super::super::DEFAULT_QUEUE_CAPACITY,
+            num_slots_reserved,
+        },
+        begin: 0,
+        deadline_range_ends: VecDeque::new(),
+        timeout_index: 0,
+        num_messages,
+    };
+
+    let proto_queue: pb_queues::InputOutputQueue = (&q).into();
+    TryInto::<OutputQueue>::try_into(proto_queue)
+}
+
+#[test]
+fn output_queue_decode_check_num_requests_and_responses() {
+    let capacity = super::super::DEFAULT_QUEUE_CAPACITY;
+    let half_capacity = capacity / 2;
+
+    let mut queue = VecDeque::new();
+
+    for _ in 0..half_capacity {
+        queue.push_back(Some(RequestOrResponse::Request(
+            RequestBuilder::default().build().into(),
+        )));
+    }
+    for _ in half_capacity..capacity {
+        queue.push_back(None);
+    }
+    for _ in 0..half_capacity {
+        queue.push_back(Some(RequestOrResponse::Response(
+            ResponseBuilder::default().build().into(),
+        )));
+    }
+    let num_slots_reserved = capacity - half_capacity;
+    let num_messages = 2 * half_capacity;
+    assert!(
+        output_queue_roundtrip_from_vec_deque(queue.clone(), num_slots_reserved, num_messages)
+            .is_ok()
+    );
+
+    // Check we get an error with one more request.
+    queue.push_back(Some(RequestOrResponse::Request(
+        RequestBuilder::default().build().into(),
+    )));
+    assert!(output_queue_roundtrip_from_vec_deque(
+        queue.clone(),
+        num_slots_reserved,
+        num_messages + 1,
+    )
+    .is_err());
+
+    // Check we get an error with one more `None`.
+    queue.pop_back();
+    queue.push_back(None);
+    assert!(
+        output_queue_roundtrip_from_vec_deque(queue.clone(), num_slots_reserved, num_messages)
+            .is_err()
+    );
+
+    // Check we get an error with one more response.
+    queue.pop_back();
+    queue.push_back(Some(RequestOrResponse::Response(
+        ResponseBuilder::default().build().into(),
+    )));
+    assert!(output_queue_roundtrip_from_vec_deque(
+        queue.clone(),
+        num_slots_reserved,
+        num_messages + 1,
+    )
+    .is_err());
+
+    // Check we get an error with one more reservation.
+    queue.pop_back();
+    assert!(output_queue_roundtrip_from_vec_deque(
+        queue.clone(),
+        num_slots_reserved + 1,
+        num_messages,
+    )
+    .is_err());
+}
+
 #[test]
 fn ingress_queue_constructor_test() {
     let mut queue = IngressQueue::default();
