@@ -1229,7 +1229,22 @@ message ProposalData {
   // operation in the execution of an OpenSnsTokenSwap proposal.
   optional ic_sns_swap.pb.v1.Lifecycle sns_token_swap_lifecycle = 19;
 
-  SwapBackgroundInformation swap_background_information = 20;
+  DerivedProposalInformation derived_proposal_information = 20;
+}
+
+// This message has a couple of unusual features.
+//
+// 1. There is (currently) only one field. We expect that more fields will be
+//    (and possibly other clients) to be able to handle this information in a
+//    generic way, i.e. without having to change their code.
+//
+// 2. Fields that might be added later will probably be mutually exclusive with
+//    existing fields. Normally, this would be handled by putting all such
+//    fields into a oneof. However, Candid has a bug where variant is not
+//    handled correctly. Therefore, we refrain from using oneof until we believe
+//    that the fix is very imminent.
+message DerivedProposalInformation {
+  SwapBackgroundInformation swap_background_information = 1;
 }
 
 // Additional information about the SNS that's being "swapped".
@@ -1241,17 +1256,69 @@ message ProposalData {
 //
 // (See Governance::fetch_swap_background_information for how this is compiled.)
 message SwapBackgroundInformation {
-  // Primary SNS canisters.
-  ic_base_types.pb.v1.PrincipalId sns_root_canister_id = 1;
-  ic_base_types.pb.v1.PrincipalId sns_governance_canister_id = 2;
-  ic_base_types.pb.v1.PrincipalId sns_ledger_canister_id = 3;
 
-  // Secondary SNS canisters.
-  ic_base_types.pb.v1.PrincipalId sns_ledger_index_canister_id = 4;
-  repeated ic_base_types.pb.v1.PrincipalId sns_ledger_archive_canister_ids = 5;
+  // Obsolete. Superceded by newer fields.
 
-  repeated ic_base_types.pb.v1.PrincipalId dapp_canister_ids = 6;
+  reserved "sns_root_canister_id"; reserved 1;
+  reserved "sns_governance_canister_id"; reserved 2;
+  reserved "sns_ledger_canister_id"; reserved 3;
+  reserved "sns_ledger_index_canister_id"; reserved 4;
+  reserved "sns_ledger_archive_canister_ids"; reserved 5;
+  reserved "dapp_canister_ids"; reserved 6;
+
+  // In case swap fails/aborts.
+
   repeated ic_base_types.pb.v1.PrincipalId fallback_controller_principal_ids = 7;
+
+  // Primary Canisters
+
+  CanisterSummary root_canister_summary = 8;
+  CanisterSummary governance_canister_summary = 9;
+  CanisterSummary ledger_canister_summary = 10;
+  CanisterSummary swap_canister_summary = 11;
+
+  // Secondary Canisters
+
+  repeated CanisterSummary ledger_archive_canister_summaries = 12;
+  CanisterSummary ledger_index_canister_summary = 13;
+
+  // Non-SNS Canister(s)
+
+  repeated CanisterSummary dapp_canister_summaries = 14;
+
+  // Transcribed from sns/root.
+  message CanisterSummary {
+    ic_base_types.pb.v1.PrincipalId canister_id = 1;
+    CanisterStatusResultV2 status = 2;
+  }
+
+  message CanisterStatusResultV2 {
+    optional CanisterStatusType status = 1;
+    bytes module_hash = 2;
+
+    // no controller field, because that is obsolete and superseded by the
+    // controllers field within settings.
+
+    repeated ic_base_types.pb.v1.PrincipalId controllers = 3;
+
+    // Resources
+
+    optional uint64 memory_size = 4;
+    optional uint64 cycles = 5;
+    optional uint64 freezing_threshold = 6;
+    optional uint64 idle_cycles_burned_per_day = 7;
+  }
+
+  // A canister can be stopped by calling stop_canister. The effect of
+  // stop_canister can be undone by calling start_canister. Stopping is an
+  // intermediate state where new method calls are rejected, but in-flight
+  // method calls are allowed to be fully serviced.
+  enum CanisterStatusType {
+    CANISTER_STATUS_TYPE_UNSPECIFIED = 0;
+    CANISTER_STATUS_TYPE_RUNNING = 1;
+    CANISTER_STATUS_TYPE_STOPPING = 2;
+    CANISTER_STATUS_TYPE_STOPPED = 3;
+  }
 }
 
 // Stores data relevant to the "wait for quiet" implementation.
@@ -1310,6 +1377,8 @@ message ProposalInfo {
   ProposalRewardStatus reward_status = 17;
 
   optional uint64 deadline_timestamp_seconds = 19;
+
+  DerivedProposalInformation derived_proposal_information = 20;
 }
 
 // Network economics contains the parameters for several operations related

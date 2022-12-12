@@ -1,16 +1,9 @@
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::convert::{TryFrom, TryInto};
-use std::fmt;
-use std::ops::RangeInclusive;
-use std::str::FromStr;
-use std::string::ToString;
-
-use crate::pb::v1::governance::neuron_in_flight_command::SyncCommand;
 use crate::pb::v1::{
     add_or_remove_node_provider::Change,
-    governance::neuron_in_flight_command::Command as InFlightCommand,
-    governance::NeuronInFlightCommand,
+    governance::{
+        neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
+        NeuronInFlightCommand,
+    },
     governance_error::ErrorType,
     manage_neuron,
     manage_neuron::{
@@ -22,16 +15,23 @@ use crate::pb::v1::{
     neuron::Followees,
     proposal,
     reward_node_provider::RewardMode,
-    settle_community_fund_participation, Ballot, BallotInfo, ExecuteNnsFunction,
-    Governance as GovernanceProto, GovernanceError, KnownNeuron, KnownNeuronData,
-    ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListProposalInfo,
-    ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
+    settle_community_fund_participation, swap_background_information, Ballot, BallotInfo,
+    DerivedProposalInformation, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
+    KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
+    ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
     MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronInfo,
     NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData, ProposalInfo,
     ProposalRewardStatus, ProposalStatus, RewardEvent, RewardNodeProvider, RewardNodeProviders,
     SetSnsTokenSwapOpenTimeWindow, SettleCommunityFundParticipation, SwapBackgroundInformation,
     Tally, Topic, UpdateNodeProvider, Vote,
 };
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::convert::{TryFrom, TryInto};
+use std::fmt;
+use std::ops::RangeInclusive;
+use std::str::FromStr;
+use std::string::ToString;
 
 use async_trait::async_trait;
 use candid::{Decode, Encode};
@@ -44,7 +44,7 @@ use ic_nns_constants::{
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
-use ic_sns_root::pb::v1 as sns_root_pb;
+use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, DEFAULT_TRANSFER_FEE};
@@ -4158,6 +4158,7 @@ impl Governance {
             deadline_timestamp_seconds: Some(
                 data.get_deadline_timestamp_seconds(voting_period_seconds),
             ),
+            derived_proposal_information: data.derived_proposal_information.clone(),
         }
     }
 
@@ -5713,6 +5714,13 @@ impl Governance {
                 None
             };
         // Create the proposal.
+        let derived_proposal_information = if swap_background_information.is_some() {
+            Some(DerivedProposalInformation {
+                swap_background_information,
+            })
+        } else {
+            None
+        };
         let mut info = ProposalData {
             id: Some(proposal_id),
             proposer: Some(proposer_id.clone()),
@@ -5721,7 +5729,7 @@ impl Governance {
             proposal_timestamp_seconds: now_seconds,
             ballots: electoral_roll,
             original_total_community_fund_maturity_e8s_equivalent,
-            swap_background_information,
+            derived_proposal_information,
             ..Default::default()
         };
 
@@ -7896,118 +7904,269 @@ async fn fetch_swap_background_information(
         .init
         .expect("`init` field is not set in GetStateResponse.swap.");
 
-    // Call the SNS root canister's `list_sns_canisters` method.
+    // Call the SNS root canister's `get_sns_canisters_summary` method.
     let sns_root_canister_id = swap_init.sns_root();
-    let list_sns_canisters_result = env
+    let get_sns_canisters_summary_result = env
         .call_canister_method(
             sns_root_canister_id,
-            "list_sns_canisters",
-            Encode!(&sns_root_pb::ListSnsCanistersRequest {})
-                .expect("Unable to encode a ListSnsCanistersRequest."),
+            "get_sns_canisters_summary",
+            Encode!(&GetSnsCanistersSummaryRequest {
+                update_canister_list: None
+            })
+            .expect("Unable to encode a GetSnsCanistersSummaryRequest."),
         )
         .await;
-    let list_sns_canisters_response = match list_sns_canisters_result {
+    let get_sns_canisters_summary_response = match get_sns_canisters_summary_result {
         Err(err) => {
             return Err(GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(
-                    "list_sns_canisters call to root {} to failed: {:?}",
+                    "get_sns_canisters_summary call to root {} to failed: {:?}",
                     sns_root_canister_id, err,
                 ),
             ));
         }
 
-        Ok(reply_bytes) => Decode!(&reply_bytes, sns_root_pb::ListSnsCanistersResponse)
+        Ok(reply_bytes) => Decode!(&reply_bytes, ic_sns_root::GetSnsCanistersSummaryResponse)
             .unwrap_or_else(|err| {
                 panic!(
-                    "Unable to decode {} bytes into a ListSnsCanistersResponse: {:?}",
+                    "Unable to decode {} bytes into a GetSnsCanistersSummaryResponse: {:?}",
                     reply_bytes.len(),
                     err,
                 )
             }),
     };
 
-    // Extract fields from swap_init. Prefix with swap_, because we'll do
-    // something similar with list_sns_canisters_response.
-    let sns_swap_pb::Init {
-        sns_governance_canister_id: swap_sns_governance_canister_id,
-        sns_ledger_canister_id: swap_sns_ledger_canister_id,
-        sns_root_canister_id: swap_sns_root_canister_id,
-
-        fallback_controller_principal_ids,
-
-        nns_governance_canister_id: _,
-        icp_ledger_canister_id: _,
-        transaction_fee_e8s: _,
-        neuron_minimum_stake_e8s: _,
-    } = swap_init;
-
-    // Extract fields from list_sns_canisters_response.
-    let sns_root_pb::ListSnsCanistersResponse {
-        root: root_sns_root_canister_id,
-        governance: root_sns_governance_canister_id,
-        ledger: root_sns_ledger_canister_id,
-
-        dapps: dapp_canister_ids,
-        archives: sns_ledger_archive_canister_ids,
-        index: sns_ledger_index_canister_id,
-
-        swap: _,
-    } = list_sns_canisters_response;
-    let root_sns_root_canister_id =
-        root_sns_root_canister_id.expect("`root` field in ListSnsCanistersResponse is empty.");
-    let root_sns_governance_canister_id = root_sns_governance_canister_id
-        .expect("`governance` field in ListSnsCanistersResponse is empty.");
-    let root_sns_ledger_canister_id =
-        root_sns_ledger_canister_id.expect("`ledger` field in ListSnsCanistersResponse is empty.");
-
     // Double check that swap and root agree on IDs of sister canisters. This
     // should never be a problem; we are just being extra defensive here.
-    let canister_ids_match = (
-        &swap_sns_root_canister_id,
-        &swap_sns_governance_canister_id,
-        &swap_sns_ledger_canister_id,
-    ) == (
-        &root_sns_root_canister_id.to_string(),
-        &root_sns_governance_canister_id.to_string(),
-        &root_sns_ledger_canister_id.to_string(),
+    let ok = is_information_about_swap_from_different_sources_consistent(
+        &get_sns_canisters_summary_response,
+        &swap_init,
+        PrincipalId::from(target_swap_canister_id),
     );
-    if !canister_ids_match {
+    if !ok {
         return Err(GovernanceError::new_with_message(
             ErrorType::External,
             format!(
-                "root: {} vs. {}\n\
-                 governance: {} vs. {}\n\
-                 ledger: {} vs. {}",
-                swap_sns_root_canister_id,
-                root_sns_root_canister_id,
-                swap_sns_governance_canister_id,
-                root_sns_governance_canister_id,
-                swap_sns_ledger_canister_id,
-                root_sns_ledger_canister_id,
+                "Inconsistent value(s) from root and swap canisters:\n\
+                 get_sns_canisters_summary_response = {:#?}\n\
+                 vs.\n\
+                 swap_init = {:#?}\n\
+                 vs.\n\
+                 target_swap_canister_id = {}",
+                get_sns_canisters_summary_response, swap_init, target_swap_canister_id,
             ),
         ));
     }
 
     // Repackage everything we just fetched into a deduplicated form.
-    Ok(SwapBackgroundInformation {
-        sns_root_canister_id: Some(root_sns_root_canister_id),
-        sns_governance_canister_id: Some(root_sns_governance_canister_id),
-        sns_ledger_canister_id: Some(root_sns_ledger_canister_id),
-
-        sns_ledger_index_canister_id,
-        sns_ledger_archive_canister_ids,
-
-        dapp_canister_ids,
-        fallback_controller_principal_ids: fallback_controller_principal_ids
-            .iter()
-            .map(|string| {
-                PrincipalId::from_str(string).unwrap_or_else(|err| {
-                    panic!("Could not parse {:?} as a PrincipalId: {:?}", string, err)
-                })
+    let fallback_controller_principal_ids = swap_init
+        .fallback_controller_principal_ids
+        .iter()
+        .map(|string| {
+            PrincipalId::from_str(string).unwrap_or_else(|err| {
+                panic!("Could not parse {:?} as a PrincipalId: {:?}", string, err)
             })
-            .collect(),
-    })
+        })
+        .collect::<Vec<_>>();
+    Ok(SwapBackgroundInformation::new(
+        &fallback_controller_principal_ids,
+        &get_sns_canisters_summary_response,
+    ))
+}
+
+fn is_information_about_swap_from_different_sources_consistent(
+    get_sns_canisters_summary_response: &GetSnsCanistersSummaryResponse,
+    swap_init: &sns_swap_pb::Init,
+    target_swap_canister_id: PrincipalId,
+) -> bool {
+    match get_sns_canisters_summary_response {
+        GetSnsCanistersSummaryResponse {
+            root:
+                Some(ic_sns_root::CanisterSummary {
+                    canister_id: Some(root_sns_root_canister_id),
+                    ..
+                }),
+            governance:
+                Some(ic_sns_root::CanisterSummary {
+                    canister_id: Some(root_sns_governance_canister_id),
+                    ..
+                }),
+            ledger:
+                Some(ic_sns_root::CanisterSummary {
+                    canister_id: Some(root_sns_ledger_canister_id),
+                    ..
+                }),
+            swap:
+                Some(ic_sns_root::CanisterSummary {
+                    canister_id: Some(root_sns_swap_canister_id),
+                    ..
+                }),
+
+            archives: _,
+            index:
+                Some(ic_sns_root::CanisterSummary {
+                    canister_id: Some(_),
+                    ..
+                }),
+
+            dapps: _,
+        } => {
+            // Extract fields from swap_init.
+            let sns_swap_pb::Init {
+                sns_governance_canister_id: swap_sns_governance_canister_id,
+                sns_ledger_canister_id: swap_sns_ledger_canister_id,
+                sns_root_canister_id: swap_sns_root_canister_id,
+
+                fallback_controller_principal_ids: _,
+
+                nns_governance_canister_id: _,
+                icp_ledger_canister_id: _,
+                transaction_fee_e8s: _,
+                neuron_minimum_stake_e8s: _,
+            } = swap_init;
+
+            (
+                swap_sns_root_canister_id,
+                swap_sns_governance_canister_id,
+                swap_sns_ledger_canister_id,
+                target_swap_canister_id,
+            ) == (
+                &root_sns_root_canister_id.to_string(),
+                &root_sns_governance_canister_id.to_string(),
+                &root_sns_ledger_canister_id.to_string(),
+                *root_sns_swap_canister_id,
+            )
+        }
+        _ => false,
+    }
+}
+
+impl SwapBackgroundInformation {
+    fn new(
+        fallback_controller_principal_ids: &[PrincipalId],
+        get_sns_canisters_summary_response: &GetSnsCanistersSummaryResponse,
+    ) -> Self {
+        // Extract field values from get_sns_canisters_summary_response.
+        let GetSnsCanistersSummaryResponse {
+            root: root_canister_summary,
+            governance: governance_canister_summary,
+            ledger: ledger_canister_summary,
+            swap: swap_canister_summary,
+            dapps: dapp_canister_summaries,
+            archives: ledger_archive_canister_summaries,
+            index: ledger_index_canister_summary,
+        } = get_sns_canisters_summary_response;
+
+        // Convert field values to analogous PB types.
+        let root_canister_summary = root_canister_summary.as_ref().map(|s| s.into());
+        let governance_canister_summary = governance_canister_summary.as_ref().map(|s| s.into());
+        let ledger_canister_summary = ledger_canister_summary.as_ref().map(|s| s.into());
+        let swap_canister_summary = swap_canister_summary.as_ref().map(|s| s.into());
+        let ledger_index_canister_summary =
+            ledger_index_canister_summary.as_ref().map(|s| s.into());
+
+        let dapp_canister_summaries = dapp_canister_summaries
+            .iter()
+            .map(|s| s.into())
+            .collect::<Vec<_>>();
+        let ledger_archive_canister_summaries = ledger_archive_canister_summaries
+            .iter()
+            .map(|s| s.into())
+            .collect::<Vec<_>>();
+
+        let fallback_controller_principal_ids = fallback_controller_principal_ids.into();
+
+        Self {
+            // Primary SNS Canisters
+            root_canister_summary,
+            governance_canister_summary,
+            ledger_canister_summary,
+            swap_canister_summary,
+
+            // Secondary SNS Canisters
+            ledger_archive_canister_summaries,
+            ledger_index_canister_summary,
+
+            // Application
+            dapp_canister_summaries,
+            fallback_controller_principal_ids,
+        }
+    }
+}
+
+impl From<&ic_sns_root::CanisterSummary> for swap_background_information::CanisterSummary {
+    fn from(src: &ic_sns_root::CanisterSummary) -> Self {
+        let ic_sns_root::CanisterSummary {
+            canister_id,
+            status,
+        } = src;
+
+        let canister_id = *canister_id;
+        let status = status.as_ref().map(|status| status.into());
+
+        Self {
+            canister_id,
+            status,
+        }
+    }
+}
+
+impl From<&ic_sns_root::CanisterStatusResultV2>
+    for swap_background_information::CanisterStatusResultV2
+{
+    fn from(src: &ic_sns_root::CanisterStatusResultV2) -> Self {
+        // Extract from src.
+        let status = src.status();
+        let module_hash = src.module_hash();
+        let controllers = src.controllers();
+        let memory_size = src.memory_size();
+        let cycles = src.cycles();
+        let freezing_threshold = src.freezing_threshold();
+        let idle_cycles_burned_per_day = src.idle_cycles_burned_per_day();
+
+        // Convert data extracted from src.
+        let status = swap_background_information::CanisterStatusType::from(status);
+        let module_hash = module_hash.unwrap_or_else(|| vec![]);
+        let cycles = u64::try_from(cycles).unwrap_or_else(|err| {
+            println!(
+                "{}WARNING: Unable to convert cycles to u64: {:?}",
+                LOG_PREFIX, err,
+            );
+            u64::MAX
+        });
+        let idle_cycles_burned_per_day =
+            u64::try_from(idle_cycles_burned_per_day).unwrap_or_else(|err| {
+                println!(
+                    "{}WARNING: Unable to convert idle_cycles_burned_per_day to u64: {:?}",
+                    LOG_PREFIX, err,
+                );
+                u64::MAX
+            });
+
+        // Repackage into PB type.
+        Self {
+            status: Some(status as i32),
+            module_hash,
+            controllers,
+            memory_size: Some(memory_size.get()),
+            cycles: Some(cycles),
+            freezing_threshold: Some(freezing_threshold),
+            idle_cycles_burned_per_day: Some(idle_cycles_burned_per_day),
+        }
+    }
+}
+
+impl From<ic_sns_root::CanisterStatusType> for swap_background_information::CanisterStatusType {
+    fn from(src: ic_sns_root::CanisterStatusType) -> Self {
+        use ic_sns_root::CanisterStatusType as Src;
+
+        match src {
+            Src::Running => Self::Running,
+            Src::Stopping => Self::Stopping,
+            Src::Stopped => Self::Stopped,
+        }
+    }
 }
 
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).

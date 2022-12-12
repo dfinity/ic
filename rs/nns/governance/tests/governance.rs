@@ -6,11 +6,9 @@
 use assert_matches::assert_matches;
 use async_trait::async_trait;
 use candid::{Decode, Encode};
-#[cfg(feature = "test")]
-use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
 use dfn_protobuf::ToProto;
 use futures::future::FutureExt;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha::Sha256;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
@@ -22,15 +20,6 @@ use ic_nns_common::{
 };
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
-};
-#[cfg(feature = "test")]
-use ic_nns_governance::{
-    governance::governance_minting_account,
-    pb::v1::{
-        governance::GovernanceCachedMetricsChange, neuron::DissolveStateChange,
-        proposal::ActionDesc, BallotChange, BallotInfoChange, GovernanceChange, NeuronChange,
-        ProposalChange, ProposalDataChange, TallyChange, WaitForQuietStateDesc,
-    },
 };
 use ic_nns_governance::{
     governance::{
@@ -63,19 +52,18 @@ use ic_nns_governance::{
         neuron::{self, DissolveState, Followees},
         proposal::{self, Action},
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
-        AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot, BallotInfo, Empty, ExecuteNnsFunction,
+        swap_background_information, AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot,
+        BallotInfo, DerivedProposalInformation, Empty, ExecuteNnsFunction,
         Governance as GovernanceProto, GovernanceError, KnownNeuron, KnownNeuronData, ListNeurons,
         ListNeuronsResponse, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron,
         NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData,
-        ProposalRewardStatus,
-        ProposalRewardStatus::{AcceptVotes, ReadyToSettle},
-        ProposalStatus,
-        ProposalStatus::Rejected,
+        ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
+        ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees,
         SwapBackgroundInformation, Tally, Topic, UpdateNodeProvider, Vote,
     },
 };
-use ic_sns_root::pb::v1 as sns_root_pb;
+use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::{
     self as sns_swap_pb, params::NeuronBasketConstructionParameters, Params,
 };
@@ -97,6 +85,18 @@ use crate::fake::{
     DAPP_CANISTER_ID, DEVELOPER_PRINCIPAL_ID, SNS_GOVERNANCE_CANISTER_ID,
     SNS_LEDGER_ARCHIVE_CANISTER_ID, SNS_LEDGER_CANISTER_ID, SNS_LEDGER_INDEX_CANISTER_ID,
     SNS_ROOT_CANISTER_ID, TARGET_SWAP_CANISTER_ID,
+};
+
+#[cfg(feature = "test")]
+use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
+#[cfg(feature = "test")]
+use ic_nns_governance::{
+    governance::governance_minting_account,
+    pb::v1::{
+        governance::GovernanceCachedMetricsChange, neuron::DissolveStateChange,
+        proposal::ActionDesc, BallotChange, BallotInfoChange, GovernanceChange, NeuronChange,
+        ProposalChange, ProposalDataChange, TallyChange, WaitForQuietStateDesc,
+    },
 };
 
 /// The 'fake' module is the old scheme for providing NNS test fixtures, aka
@@ -10932,24 +10932,97 @@ lazy_static! {
         .unwrap()),
     );
 
-    static ref EXPECTED_SNS_ROOT_LIST_SNS_CANISTERS_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
+    static ref EXPECTED_SNS_ROOT_GET_SNS_CANISTERS_SUMMARY_CALL: (ExpectedCallCanisterMethodCallArguments<'static>, CanisterCallResult) = (
         ExpectedCallCanisterMethodCallArguments {
             target: (*SNS_ROOT_CANISTER_ID).try_into().unwrap(),
-            method_name: "list_sns_canisters",
-            request: Encode!(&sns_root_pb::ListSnsCanistersRequest {}).unwrap(),
+            method_name: "get_sns_canisters_summary",
+            request: Encode!(&GetSnsCanistersSummaryRequest { update_canister_list: None }).unwrap(),
         },
-        Ok(Encode!(&sns_root_pb::ListSnsCanistersResponse {
-            root: Some(*SNS_ROOT_CANISTER_ID),
-            governance: Some(*SNS_GOVERNANCE_CANISTER_ID),
-            ledger: Some(*SNS_LEDGER_CANISTER_ID),
-            swap: Some(*TARGET_SWAP_CANISTER_ID),
-
-            dapps: vec![*DAPP_CANISTER_ID],
-            archives: vec![*SNS_LEDGER_ARCHIVE_CANISTER_ID],
-            index: Some(*SNS_LEDGER_INDEX_CANISTER_ID),
+        Ok(Encode!(&GetSnsCanistersSummaryResponse {
+            root: Some(ic_sns_root::CanisterSummary {
+                canister_id: Some(*SNS_ROOT_CANISTER_ID),
+                status: Some(ic_sns_root::CanisterStatusResultV2::new(
+                    ic_sns_root::CanisterStatusType::Running,
+                    Some(vec![0xCA, 0xFE]),  // module_hash
+                    PrincipalId::new_user_test_id(647671), // controller
+                    vec![PrincipalId::new_user_test_id(647671)], // controllers
+                    NumBytes::from(485082), // memory_size
+                    766182, // cycles
+                    808216, // compute_allocation
+                    Some(517576), // memory_allocation
+                    448076, // freezing_threshold
+                    268693, // idle_cycles_burned_per_day
+                )),
+            }),
+            governance: Some(ic_sns_root::CanisterSummary {
+                canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+                status: None,
+            }),
+            ledger: Some(ic_sns_root::CanisterSummary {
+                canister_id: Some(*SNS_LEDGER_CANISTER_ID),
+                status: None,
+            }),
+            swap: Some(ic_sns_root::CanisterSummary {
+                canister_id: Some(*TARGET_SWAP_CANISTER_ID),
+                status: None,
+            }),
+            dapps: vec![ic_sns_root::CanisterSummary {
+                canister_id: Some(*DAPP_CANISTER_ID),
+                status: None,
+            }],
+            archives: vec![ic_sns_root::CanisterSummary {
+                canister_id: Some(*SNS_LEDGER_ARCHIVE_CANISTER_ID),
+                status: None,
+            }],
+            index: Some(ic_sns_root::CanisterSummary {
+                canister_id: Some(*SNS_LEDGER_INDEX_CANISTER_ID),
+                status: None,
+            }),
         })
         .unwrap()),
     );
+
+    static ref EXPECTED_SWAP_BACKGROUND_INFORMATION: SwapBackgroundInformation = SwapBackgroundInformation {
+        root_canister_summary: Some(swap_background_information::CanisterSummary {
+            canister_id: Some(*SNS_ROOT_CANISTER_ID),
+            status: Some(swap_background_information::CanisterStatusResultV2 {
+                status: Some(swap_background_information::CanisterStatusType::Running as i32),
+                module_hash: vec![0xCA, 0xFE],
+                controllers: vec![PrincipalId::new_user_test_id(647671)],
+                memory_size: Some(485082),
+                cycles: Some(766182),
+                freezing_threshold: Some(448076),
+                idle_cycles_burned_per_day: Some(268693),
+            }),
+        }),
+
+        governance_canister_summary: Some(swap_background_information::CanisterSummary {
+            canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+            status: None,
+        }),
+        ledger_canister_summary: Some(swap_background_information::CanisterSummary {
+            canister_id: Some(*SNS_LEDGER_CANISTER_ID),
+            status: None,
+        }),
+        swap_canister_summary: Some(swap_background_information::CanisterSummary {
+            canister_id: Some(*TARGET_SWAP_CANISTER_ID),
+            status: None,
+        }),
+        ledger_archive_canister_summaries: vec![swap_background_information::CanisterSummary {
+            canister_id: Some(*SNS_LEDGER_ARCHIVE_CANISTER_ID),
+            status: None,
+        }],
+        ledger_index_canister_summary: Some(swap_background_information::CanisterSummary {
+            canister_id: Some(*SNS_LEDGER_INDEX_CANISTER_ID),
+            status: None,
+        }),
+        dapp_canister_summaries: vec![swap_background_information::CanisterSummary {
+            canister_id: Some(*DAPP_CANISTER_ID),
+            status: None,
+        }],
+
+        fallback_controller_principal_ids: vec![*DEVELOPER_PRINCIPAL_ID],
+    };
 
     static ref EXPECTED_SWAP_OPEN_CALL: ExpectedCallCanisterMethodCallArguments<'static> = ExpectedCallCanisterMethodCallArguments {
         target: CanisterId::try_from(*TARGET_SWAP_CANISTER_ID).unwrap(),
@@ -10993,7 +11066,7 @@ async fn test_open_sns_token_swap_proposal_happy() {
             // Called again by fetch_swap_background_information. This is
             // admittedly a bit wasteful, but not super horrible.
             EXPECTED_SWAP_GET_STATE_CALL.clone(),
-            EXPECTED_SNS_ROOT_LIST_SNS_CANISTERS_CALL.clone(),
+            EXPECTED_SNS_ROOT_GET_SNS_CANISTERS_SUMMARY_CALL.clone(),
             (
                 EXPECTED_SWAP_OPEN_CALL.clone(),
                 Ok(Encode!(&sns_swap_pb::OpenResponse {}).unwrap()),
@@ -11058,17 +11131,9 @@ async fn test_open_sns_token_swap_proposal_happy() {
     assert_eq!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
     assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
     assert_eq!(
-        proposal.swap_background_information,
-        Some(SwapBackgroundInformation {
-            sns_root_canister_id: Some(*SNS_ROOT_CANISTER_ID),
-            sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
-            sns_ledger_canister_id: Some(*SNS_LEDGER_CANISTER_ID),
-
-            sns_ledger_index_canister_id: Some(*SNS_LEDGER_INDEX_CANISTER_ID),
-            sns_ledger_archive_canister_ids: vec![*SNS_LEDGER_ARCHIVE_CANISTER_ID],
-
-            dapp_canister_ids: vec![*DAPP_CANISTER_ID],
-            fallback_controller_principal_ids: vec![*DEVELOPER_PRINCIPAL_ID],
+        proposal.derived_proposal_information,
+        Some(DerivedProposalInformation {
+            swap_background_information: Some(EXPECTED_SWAP_BACKGROUND_INFORMATION.clone()),
         }),
     );
 }
@@ -11090,7 +11155,7 @@ async fn test_open_sns_token_swap_proposal_execution_fails() {
             // Called again by fetch_swap_background_information. This is
             // admittedly a bit wasteful, but not super horrible.
             EXPECTED_SWAP_GET_STATE_CALL.clone(),
-            EXPECTED_SNS_ROOT_LIST_SNS_CANISTERS_CALL.clone(),
+            EXPECTED_SNS_ROOT_GET_SNS_CANISTERS_SUMMARY_CALL.clone(),
             (
                 EXPECTED_SWAP_OPEN_CALL.clone(),
                 Err((
@@ -11168,17 +11233,9 @@ async fn test_open_sns_token_swap_proposal_execution_fails() {
         );
     }
     assert_eq!(
-        proposal.swap_background_information,
-        Some(SwapBackgroundInformation {
-            sns_root_canister_id: Some(*SNS_ROOT_CANISTER_ID),
-            sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
-            sns_ledger_canister_id: Some(*SNS_LEDGER_CANISTER_ID),
-
-            sns_ledger_index_canister_id: Some(*SNS_LEDGER_INDEX_CANISTER_ID),
-            sns_ledger_archive_canister_ids: vec![*SNS_LEDGER_ARCHIVE_CANISTER_ID],
-
-            dapp_canister_ids: vec![*DAPP_CANISTER_ID],
-            fallback_controller_principal_ids: vec![*DEVELOPER_PRINCIPAL_ID],
+        proposal.derived_proposal_information,
+        Some(DerivedProposalInformation {
+            swap_background_information: Some(EXPECTED_SWAP_BACKGROUND_INFORMATION.clone()),
         }),
     );
 

@@ -29,7 +29,15 @@ pub struct NodeProvider {
 ///
 /// There is no need to specify a node provider Principal ID here, as Governance
 /// uses the Principal ID of the caller as the Node Provider Principal ID.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct UpdateNodeProvider {
     /// The account where rewards earned from providing nodes will be sent.
     #[prost(message, optional, tag = "1")]
@@ -37,7 +45,7 @@ pub struct UpdateNodeProvider {
 }
 /// How did a neuron vote in the recent past? This data is used by
 /// other neurons to determine what neurons to follow.
-#[derive(candid::CandidType, candid::Deserialize, Eq, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
 #[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BallotInfo {
@@ -47,7 +55,16 @@ pub struct BallotInfo {
     pub vote: i32,
 }
 /// The result of querying for the state of a single neuron.
-#[derive(candid::CandidType, candid::Deserialize, Eq, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Eq,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct NeuronInfo {
     /// The exact time at which this data was computed. This means, for
     /// example, that the exact time that this neuron will enter the
@@ -92,6 +109,7 @@ pub struct NeuronInfo {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -122,7 +140,7 @@ pub struct NeuronStakeTransfer {
 }
 /// This structure represents a neuron "at rest" in governance system of
 /// the Internet Computer IC.
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Neuron {
@@ -264,6 +282,7 @@ pub mod neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -290,6 +309,7 @@ pub mod neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -324,6 +344,7 @@ pub mod neuron {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -340,7 +361,7 @@ pub struct ExecuteNnsFunction {
 }
 /// If adopted, a motion should guide the future strategy of the
 /// Internet Computer ecosystem.
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Motion {
@@ -353,6 +374,7 @@ pub struct Motion {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -401,6 +423,7 @@ pub mod add_or_remove_node_provider {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -441,6 +464,7 @@ pub mod reward_node_provider {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -453,6 +477,7 @@ pub mod reward_node_provider {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -465,6 +490,7 @@ pub mod reward_node_provider {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -485,6 +511,7 @@ pub mod reward_node_provider {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -504,6 +531,7 @@ pub struct RewardNodeProviders {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -517,6 +545,7 @@ pub struct SetDefaultFollowees {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -535,7 +564,7 @@ pub struct SetSnsTokenSwapOpenTimeWindow {
 /// all the information from the original proposal submission.
 ///
 /// Making a proposal implicitly votes yes.
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Proposal {
@@ -570,6 +599,7 @@ pub mod proposal {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -650,6 +680,7 @@ pub mod proposal {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -666,6 +697,7 @@ pub struct Empty {}
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -691,6 +723,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -703,6 +736,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -712,6 +746,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -727,6 +762,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -740,6 +776,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -754,6 +791,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -767,6 +805,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -777,6 +816,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -790,6 +830,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -805,6 +846,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -819,6 +861,7 @@ pub mod manage_neuron {
         #[derive(
             candid::CandidType,
             candid::Deserialize,
+            serde::Serialize,
             comparable::Comparable,
             Clone,
             PartialEq,
@@ -850,6 +893,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -869,6 +913,7 @@ pub mod manage_neuron {
         #[derive(
             candid::CandidType,
             candid::Deserialize,
+            serde::Serialize,
             comparable::Comparable,
             Clone,
             PartialEq,
@@ -885,6 +930,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -899,6 +945,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -917,6 +964,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -941,6 +989,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -958,6 +1007,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -974,6 +1024,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1020,6 +1071,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1037,6 +1089,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1052,6 +1105,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1066,6 +1120,7 @@ pub mod manage_neuron {
         #[derive(
             candid::CandidType,
             candid::Deserialize,
+            serde::Serialize,
             comparable::Comparable,
             Clone,
             PartialEq,
@@ -1080,6 +1135,7 @@ pub mod manage_neuron {
         #[derive(
             candid::CandidType,
             candid::Deserialize,
+            serde::Serialize,
             comparable::Comparable,
             Clone,
             PartialEq,
@@ -1107,6 +1163,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1121,6 +1178,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1159,6 +1217,7 @@ pub mod manage_neuron {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -1176,6 +1235,7 @@ pub mod manage_neuron_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1185,6 +1245,7 @@ pub mod manage_neuron_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1198,6 +1259,7 @@ pub mod manage_neuron_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1211,6 +1273,7 @@ pub mod manage_neuron_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1225,6 +1288,7 @@ pub mod manage_neuron_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1239,6 +1303,7 @@ pub mod manage_neuron_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1248,6 +1313,7 @@ pub mod manage_neuron_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1261,6 +1327,7 @@ pub mod manage_neuron_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1270,6 +1337,7 @@ pub mod manage_neuron_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1283,6 +1351,7 @@ pub mod manage_neuron_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1292,6 +1361,7 @@ pub mod manage_neuron_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1305,6 +1375,7 @@ pub mod manage_neuron_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1317,6 +1388,7 @@ pub mod manage_neuron_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1351,7 +1423,7 @@ pub mod manage_neuron_response {
         StakeMaturity(StakeMaturityResponse),
     }
 }
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct GovernanceError {
@@ -1362,7 +1434,21 @@ pub struct GovernanceError {
 }
 /// Nested message and enum types in `GovernanceError`.
 pub mod governance_error {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
     #[repr(i32)]
     pub enum ErrorType {
         Unspecified = 0,
@@ -1452,7 +1538,7 @@ pub mod governance_error {
         }
     }
 }
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Ballot {
@@ -1462,7 +1548,7 @@ pub struct Ballot {
     pub voting_power: u64,
 }
 /// A tally of votes.
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Tally {
@@ -1483,7 +1569,7 @@ pub struct Tally {
 /// A ProposalData contains everything related to an open proposal:
 /// the proposal itself (immutable), as well as mutable data such as
 /// ballots.
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProposalData {
@@ -1566,6 +1652,30 @@ pub struct ProposalData {
     #[prost(enumeration = "::ic_sns_swap::pb::v1::Lifecycle", optional, tag = "19")]
     pub sns_token_swap_lifecycle: ::core::option::Option<i32>,
     #[prost(message, optional, tag = "20")]
+    pub derived_proposal_information: ::core::option::Option<DerivedProposalInformation>,
+}
+/// This message has a couple of unusual features.
+///
+/// 1. There is (currently) only one field. We expect that more fields will be
+///     (and possibly other clients) to be able to handle this information in a
+///     generic way, i.e. without having to change their code.
+///
+/// 2. Fields that might be added later will probably be mutually exclusive with
+///     existing fields. Normally, this would be handled by putting all such
+///     fields into a oneof. However, Candid has a bug where variant is not
+///     handled correctly. Therefore, we refrain from using oneof until we believe
+///     that the fix is very imminent.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct DerivedProposalInformation {
+    #[prost(message, optional, tag = "1")]
     pub swap_background_information: ::core::option::Option<SwapBackgroundInformation>,
 }
 /// Additional information about the SNS that's being "swapped".
@@ -1579,33 +1689,131 @@ pub struct ProposalData {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
     ::prost::Message,
 )]
 pub struct SwapBackgroundInformation {
-    /// Primary SNS canisters.
-    #[prost(message, optional, tag = "1")]
-    pub sns_root_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
-    #[prost(message, optional, tag = "2")]
-    pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
-    #[prost(message, optional, tag = "3")]
-    pub sns_ledger_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
-    /// Secondary SNS canisters.
-    #[prost(message, optional, tag = "4")]
-    pub sns_ledger_index_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
-    #[prost(message, repeated, tag = "5")]
-    pub sns_ledger_archive_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
-    #[prost(message, repeated, tag = "6")]
-    pub dapp_canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    // In case swap fails/aborts.
     #[prost(message, repeated, tag = "7")]
     pub fallback_controller_principal_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    // Primary Canisters
+    #[prost(message, optional, tag = "8")]
+    pub root_canister_summary: ::core::option::Option<swap_background_information::CanisterSummary>,
+    #[prost(message, optional, tag = "9")]
+    pub governance_canister_summary:
+        ::core::option::Option<swap_background_information::CanisterSummary>,
+    #[prost(message, optional, tag = "10")]
+    pub ledger_canister_summary:
+        ::core::option::Option<swap_background_information::CanisterSummary>,
+    #[prost(message, optional, tag = "11")]
+    pub swap_canister_summary: ::core::option::Option<swap_background_information::CanisterSummary>,
+    // Secondary Canisters
+    #[prost(message, repeated, tag = "12")]
+    pub ledger_archive_canister_summaries:
+        ::prost::alloc::vec::Vec<swap_background_information::CanisterSummary>,
+    #[prost(message, optional, tag = "13")]
+    pub ledger_index_canister_summary:
+        ::core::option::Option<swap_background_information::CanisterSummary>,
+    // Non-SNS Canister(s)
+    #[prost(message, repeated, tag = "14")]
+    pub dapp_canister_summaries:
+        ::prost::alloc::vec::Vec<swap_background_information::CanisterSummary>,
+}
+/// Nested message and enum types in `SwapBackgroundInformation`.
+pub mod swap_background_information {
+    /// Transcribed from sns/root.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct CanisterSummary {
+        #[prost(message, optional, tag = "1")]
+        pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+        #[prost(message, optional, tag = "2")]
+        pub status: ::core::option::Option<CanisterStatusResultV2>,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct CanisterStatusResultV2 {
+        #[prost(enumeration = "CanisterStatusType", optional, tag = "1")]
+        pub status: ::core::option::Option<i32>,
+        #[prost(bytes = "vec", tag = "2")]
+        pub module_hash: ::prost::alloc::vec::Vec<u8>,
+        // no controller field, because that is obsolete and superseded by the
+        // controllers field within settings.
+        #[prost(message, repeated, tag = "3")]
+        pub controllers: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+        // Resources
+        #[prost(uint64, optional, tag = "4")]
+        pub memory_size: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "5")]
+        pub cycles: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "6")]
+        pub freezing_threshold: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "7")]
+        pub idle_cycles_burned_per_day: ::core::option::Option<u64>,
+    }
+    /// A canister can be stopped by calling stop_canister. The effect of
+    /// stop_canister can be undone by calling start_canister. Stopping is an
+    /// intermediate state where new method calls are rejected, but in-flight
+    /// method calls are allowed to be fully serviced.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum CanisterStatusType {
+        Unspecified = 0,
+        Running = 1,
+        Stopping = 2,
+        Stopped = 3,
+    }
+    impl CanisterStatusType {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                CanisterStatusType::Unspecified => "CANISTER_STATUS_TYPE_UNSPECIFIED",
+                CanisterStatusType::Running => "CANISTER_STATUS_TYPE_RUNNING",
+                CanisterStatusType::Stopping => "CANISTER_STATUS_TYPE_STOPPING",
+                CanisterStatusType::Stopped => "CANISTER_STATUS_TYPE_STOPPED",
+            }
+        }
+    }
 }
 /// Stores data relevant to the "wait for quiet" implementation.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -1621,6 +1829,7 @@ pub struct WaitForQuietState {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -1675,6 +1884,8 @@ pub struct ProposalInfo {
     pub reward_status: i32,
     #[prost(uint64, optional, tag = "19")]
     pub deadline_timestamp_seconds: ::core::option::Option<u64>,
+    #[prost(message, optional, tag = "20")]
+    pub derived_proposal_information: ::core::option::Option<DerivedProposalInformation>,
 }
 /// Network economics contains the parameters for several operations related
 /// to the economy of the network. When submitting a NetworkEconomics proposal
@@ -1685,7 +1896,7 @@ pub struct ProposalInfo {
 ///
 /// NOTE: If adding a value to this proto, make sure there is a corresponding
 /// `if` in Governance::perform_action().
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NetworkEconomics {
@@ -1739,6 +1950,7 @@ pub struct NetworkEconomics {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -1779,6 +1991,7 @@ pub struct RewardEvent {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -1791,7 +2004,7 @@ pub struct KnownNeuron {
     pub known_neuron_data: ::core::option::Option<KnownNeuronData>,
 }
 /// Known neurons have extra information (a name and optionally a description) that can be used to identify them.
-#[derive(candid::CandidType, candid::Deserialize, Eq, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable, Eq)]
 #[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct KnownNeuronData {
@@ -1804,8 +2017,8 @@ pub struct KnownNeuronData {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
-    comparable::Comparable,
     serde::Serialize,
+    comparable::Comparable,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -1826,7 +2039,7 @@ pub struct OpenSnsTokenSwap {
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
 /// across upgrades of the NNS governance system.
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
 #[compare_default]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Governance {
@@ -1924,6 +2137,7 @@ pub mod governance {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -1952,6 +2166,7 @@ pub mod governance {
         #[derive(
             candid::CandidType,
             candid::Deserialize,
+            serde::Serialize,
             comparable::Comparable,
             Clone,
             PartialEq,
@@ -1961,6 +2176,7 @@ pub mod governance {
         #[derive(
             candid::CandidType,
             candid::Deserialize,
+            serde::Serialize,
             comparable::Comparable,
             Clone,
             PartialEq,
@@ -1989,7 +2205,7 @@ pub mod governance {
     }
     /// Stores metrics that are too costly to compute each time metrics are
     /// requested
-    #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+    #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, comparable::Comparable)]
     #[compare_default]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct GovernanceCachedMetrics {
@@ -2034,7 +2250,15 @@ pub mod governance {
 ///
 /// The actual ballots of the proposal are restricted to ballots cast
 /// by the caller.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ListProposalInfo {
     /// Limit on the number of \[ProposalInfo\] to return. If no value is
     /// specified, or if a value greater than 100 is specified, 100
@@ -2066,7 +2290,15 @@ pub struct ListProposalInfo {
     #[prost(enumeration = "ProposalStatus", repeated, tag = "5")]
     pub include_status: ::prost::alloc::vec::Vec<i32>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ListProposalInfoResponse {
     #[prost(message, repeated, tag = "1")]
     pub proposal_info: ::prost::alloc::vec::Vec<ProposalInfo>,
@@ -2076,7 +2308,15 @@ pub struct ListProposalInfoResponse {
 /// of neurons listed in `neuron_ids` and, if `caller_neurons` is true,
 /// the list of neuron IDs of neurons for which the caller is the
 /// controller or one of the hot keys.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ListNeurons {
     /// The neurons to get information about. The "requested list"
     /// contains all of these neuron IDs.
@@ -2090,7 +2330,15 @@ pub struct ListNeurons {
 /// A response to a `ListNeurons` request.
 ///
 /// The "requested list" is described in `ListNeurons`.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ListNeuronsResponse {
     /// For each neuron ID in the "requested list", if this neuron exists,
     /// its `NeuronInfo` at the time of the call will be in this map.
@@ -2104,14 +2352,30 @@ pub struct ListNeuronsResponse {
     pub full_neurons: ::prost::alloc::vec::Vec<Neuron>,
 }
 /// A response to "ListKnownNeurons"
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ListKnownNeuronsResponse {
     /// List of known neurons.
     #[prost(message, repeated, tag = "1")]
     pub known_neurons: ::prost::alloc::vec::Vec<KnownNeuron>,
 }
 /// Response to list_node_providers
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ListNodeProvidersResponse {
     /// List of all "NodeProviders"
     #[prost(message, repeated, tag = "1")]
@@ -2120,7 +2384,15 @@ pub struct ListNodeProvidersResponse {
 /// The arguments to the method `claim_or_refresh_neuron_from_account`.
 ///
 /// DEPRECATED: Use ManageNeuron::ClaimOrRefresh.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ClaimOrRefreshNeuronFromAccount {
     /// The principal for which to refresh the account. If not specified,
     /// defaults to the caller.
@@ -2133,7 +2405,15 @@ pub struct ClaimOrRefreshNeuronFromAccount {
 /// Response to claim_or_refresh_neuron_from_account.
 ///
 /// DEPRECATED: Use ManageNeuron::ClaimOrRefresh.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ClaimOrRefreshNeuronFromAccountResponse {
     #[prost(
         oneof = "claim_or_refresh_neuron_from_account_response::Result",
@@ -2143,7 +2423,15 @@ pub struct ClaimOrRefreshNeuronFromAccountResponse {
 }
 /// Nested message and enum types in `ClaimOrRefreshNeuronFromAccountResponse`.
 pub mod claim_or_refresh_neuron_from_account_response {
-    #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
     pub enum Result {
         /// Specified in case of error.
         #[prost(message, tag = "1")]
@@ -2157,6 +2445,7 @@ pub mod claim_or_refresh_neuron_from_account_response {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -2173,6 +2462,7 @@ pub struct MostRecentMonthlyNodeProviderRewards {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     PartialEq,
@@ -2198,6 +2488,7 @@ pub mod settle_community_fund_participation {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -2214,6 +2505,7 @@ pub mod settle_community_fund_participation {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -2225,6 +2517,7 @@ pub mod settle_community_fund_participation {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
+        serde::Serialize,
         comparable::Comparable,
         Clone,
         PartialEq,
@@ -2243,6 +2536,8 @@ pub mod settle_community_fund_participation {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
     strum_macros::EnumIter,
     Clone,
     Copy,
@@ -2360,6 +2655,8 @@ impl Topic {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
     Clone,
     Copy,
     Debug,
@@ -2430,6 +2727,7 @@ impl NeuronState {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     Copy,
@@ -2466,7 +2764,21 @@ impl Vote {
     }
 }
 /// List of NNS functions that can be called by proposals.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum NnsFunction {
     /// This exists because proto3 defaults to the 0 value on enums.
@@ -2661,6 +2973,7 @@ impl NnsFunction {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    serde::Serialize,
     comparable::Comparable,
     Clone,
     Copy,
@@ -2706,7 +3019,21 @@ impl ProposalStatus {
 }
 /// The proposal status, with respect to reward distribution.
 /// See also ProposalStatus.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum ProposalRewardStatus {
     Unspecified = 0,
