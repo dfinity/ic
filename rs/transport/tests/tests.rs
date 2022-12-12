@@ -353,11 +353,11 @@ fn test_multiple_connections_to_single_peer_impl(use_h2: bool) {
 
         let mut successful_sends = 0;
         let normal_msg = TransportPayload(vec![0xb; 1000000]);
-
+        let sends_per_peer = 500;
         for node_data in remainder {
             let node_b = node_data.0;
             let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
-            for _ in 1..500 {
+            for _ in 1..=sends_per_peer {
                 if node_b
                     .send(&NODE_ID_1, channel_id, normal_msg.clone())
                     .is_ok()
@@ -368,7 +368,7 @@ fn test_multiple_connections_to_single_peer_impl(use_h2: bool) {
             }
         }
 
-        for _ in 1..successful_sends {
+        for _ in 1..=successful_sends {
             assert_eq!(nodes[0].3.blocking_recv(), Some(normal_msg.clone()));
         }
     });
