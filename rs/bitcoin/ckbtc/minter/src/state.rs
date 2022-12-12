@@ -120,6 +120,10 @@ pub struct CkBtcMinterState {
     /// The minimum number of confirmations on the Bitcoin chain.
     pub min_confirmations: u32,
 
+    /// Maximum time of nanoseconds that a transaction should spend in the queue
+    /// before being sent.
+    pub max_time_in_queue_nanos: u64,
+
     /// Per-principal lock for update_balance
     pub update_balance_principals: BTreeSet<Principal>,
 
@@ -129,8 +133,9 @@ pub struct CkBtcMinterState {
     /// Minimum amount of bitcoin that can be retrieved
     pub retrieve_btc_min_amount: u64,
 
-    /// Retrieve_btc requests that are waiting to be served
-    pub pending_retrieve_btc_requests: VecDeque<RetrieveBtcRequest>,
+    /// Retrieve_btc requests that are waiting to be served, sorted by
+    /// received_at.
+    pub pending_retrieve_btc_requests: Vec<RetrieveBtcRequest>,
 
     /// The identifiers of retrieve_btc requests which we're currently signing a
     /// transaction or sending to the Bitcoin network.
@@ -171,12 +176,14 @@ impl CkBtcMinterState {
             ecdsa_key_name,
             retrieve_btc_min_amount,
             ledger_id,
+            max_time_in_queue_nanos,
         }: InitArgs,
     ) {
         self.btc_network = btc_network;
         self.ecdsa_key_name = ecdsa_key_name;
         self.retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.ledger_id = ledger_id;
+        self.max_time_in_queue_nanos = max_time_in_queue_nanos;
     }
 
     pub fn check_invariants(&self) -> Result<(), String> {
@@ -205,6 +212,17 @@ impl CkBtcMinterState {
                     utxo.outpoint
                 );
             }
+        }
+
+        for (l, r) in self
+            .pending_retrieve_btc_requests
+            .iter()
+            .zip(self.pending_retrieve_btc_requests.iter().skip(1))
+        {
+            ensure!(
+                l.received_at <= r.received_at,
+                "pending retrieve_btc requests are not sorted by receive time"
+            );
         }
 
         Ok(())
@@ -259,7 +277,8 @@ impl CkBtcMinterState {
         match self
             .finalized_requests
             .iter()
-            .find_map(|req| (req.request.block_index == block_index).then(|| req.state.clone()))
+            .find(|finalized_request| finalized_request.request.block_index == block_index)
+            .map(|final_req| final_req.state.clone())
         {
             Some(FinalizedStatus::AmountTooLow) => return RetrieveBtcStatus::AmountTooLow,
             Some(FinalizedStatus::Confirmed { txid }) => {
@@ -269,6 +288,37 @@ impl CkBtcMinterState {
         }
 
         RetrieveBtcStatus::Unknown
+    }
+
+    /// Returns true if the pending requests queue has enough requests to form a
+    /// batch or there are old enough requests to form a batch.
+    pub fn can_form_a_batch(&self, min_pending: usize, now: u64) -> bool {
+        if self.pending_retrieve_btc_requests.len() >= min_pending {
+            return true;
+        }
+
+        match self.pending_retrieve_btc_requests.first() {
+            Some(req) => self.max_time_in_queue_nanos < now.saturating_sub(req.received_at),
+            None => false,
+        }
+    }
+
+    /// Forms a batch of retrieve_btc requests that the minter can fulfill.
+    pub fn build_batch(&mut self) -> Vec<RetrieveBtcRequest> {
+        let available_utxos_value = self.available_utxos.iter().map(|u| u.value).sum::<u64>();
+        let mut batch = vec![];
+        let mut tx_amount = 0;
+        for req in std::mem::take(&mut self.pending_retrieve_btc_requests) {
+            if available_utxos_value < req.amount + tx_amount {
+                // Put this request back to the queue until we have enough liquid UTXOs.
+                self.pending_retrieve_btc_requests.push(req);
+            } else {
+                tx_amount += req.amount;
+                batch.push(req);
+            }
+        }
+
+        batch
     }
 
     /// Returns the total number of all retrieve_btc requests that we haven't
@@ -333,7 +383,7 @@ impl CkBtcMinterState {
             .iter()
             .position(|req| req.block_index == block_index)
         {
-            Some(pos) => self.pending_retrieve_btc_requests.remove(pos),
+            Some(pos) => Some(self.pending_retrieve_btc_requests.remove(pos)),
             None => None,
         }
     }
@@ -350,17 +400,36 @@ impl CkBtcMinterState {
         self.requests_in_flight.insert(block_index, status);
     }
 
-    /// Adds a new retrieve_btc request to the back of the queue.
+    /// Returns a retrieve_btc requests back to the pending queue.
     ///
     /// # Panics
     ///
     /// This function panics if there is a pending retrieve_btc request with the
     /// same identifier.
-    pub fn push_pending_request(&mut self, req: RetrieveBtcRequest) {
-        assert!(!self.has_pending_request(req.block_index));
+    pub fn push_from_in_flight_to_pending_requests(
+        &mut self,
+        mut requests: Vec<RetrieveBtcRequest>,
+    ) {
+        for req in requests.iter() {
+            assert!(!self.has_pending_request(req.block_index));
+            self.requests_in_flight.remove(&req.block_index);
+        }
+        self.pending_retrieve_btc_requests.append(&mut requests);
+        self.pending_retrieve_btc_requests
+            .sort_by_key(|r| r.received_at);
+    }
 
-        self.requests_in_flight.remove(&req.block_index);
-        self.pending_retrieve_btc_requests.push_back(req);
+    /// Push back a retrieve_btc request to the ordered queue.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the new request breaks the request ordering in
+    /// the queue.
+    pub fn push_back_pending_request(&mut self, request: RetrieveBtcRequest) {
+        if let Some(last_req) = self.pending_retrieve_btc_requests.last() {
+            assert!(last_req.received_at <= request.received_at);
+        }
+        self.pending_retrieve_btc_requests.push(request);
     }
 
     /// Records a BTC transaction as submitted and updates statuses of all
@@ -468,6 +537,7 @@ impl From<InitArgs> for CkBtcMinterState {
             ecdsa_key_name: args.ecdsa_key_name,
             ecdsa_public_key: None,
             min_confirmations: crate::lifecycle::init::DEFAULT_MIN_CONFIRMATIONS,
+            max_time_in_queue_nanos: args.max_time_in_queue_nanos,
             update_balance_principals: Default::default(),
             retrieve_btc_principals: Default::default(),
             retrieve_btc_min_amount: args.retrieve_btc_min_amount,

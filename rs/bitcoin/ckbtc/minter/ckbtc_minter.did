@@ -81,6 +81,10 @@ type InitArgs = record {
 
     // The minimal amount of ckBTC that we allow to convert to BTC.
     retrieve_btc_min_amount: nat64;
+
+    /// Maximum time of nanoseconds that a transaction should spend in the queue
+    /// before being sent.
+    max_time_in_queue_nanos: nat64;
 };
 
 type RetrieveBtcStatus = variant {

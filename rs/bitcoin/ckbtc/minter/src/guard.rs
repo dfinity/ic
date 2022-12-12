@@ -123,6 +123,7 @@ mod tests {
             ecdsa_key_name: "".to_string(),
             retrieve_btc_min_amount: 0,
             ledger_id: CanisterId::from_u64(42),
+            max_time_in_queue_nanos: 0,
         }
     }
 

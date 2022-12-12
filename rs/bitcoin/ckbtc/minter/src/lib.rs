@@ -23,6 +23,13 @@ pub mod updates;
 #[cfg(test)]
 mod tests;
 
+/// Time constants
+const SEC_NANOS: u64 = 1_000_000_000;
+const MIN_NANOS: u64 = 60 * SEC_NANOS;
+/// The minimum number of pending request in the queue before we try to make
+/// a batch transaction.
+pub const MIN_PENDING_REQUESTS: usize = 20;
+
 #[derive(CandidType, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ECDSAPublicKey {
     pub public_key: Vec<u8>,
@@ -49,9 +56,8 @@ fn undo_sign_request(requests: Vec<state::RetrieveBtcRequest>, utxos: Vec<Utxo>)
         for utxo in utxos {
             assert!(s.available_utxos.insert(utxo));
         }
-        for req in requests {
-            s.push_pending_request(req);
-        }
+        // Insert requests in reverse order so that they are still sorted.
+        s.push_from_in_flight_to_pending_requests(requests);
     })
 }
 
@@ -136,6 +142,12 @@ async fn submit_pending_requests() {
         return;
     }
 
+    // We make requests if we have old requests in the queue or if have enough
+    // requests to fill a batch.
+    if !state::read_state(|s| s.can_form_a_batch(MIN_PENDING_REQUESTS, ic_cdk::api::time())) {
+        return;
+    }
+
     let main_account = Account {
         owner: ic_cdk::id().into(),
         subaccount: None,
@@ -166,57 +178,64 @@ async fn submit_pending_requests() {
     fetch_main_utxos(&main_account, &main_address).await;
 
     let maybe_sign_request = state::mutate_state(|s| {
-        match s.pending_retrieve_btc_requests.pop_front() {
-            Some(req) => {
-                match build_unsigned_transaction(
-                    &mut s.available_utxos,
-                    vec![(req.address.clone(), req.amount)],
-                    main_address,
-                    fee_millisatoshi_per_vbyte,
-                ) {
-                    Ok((unsigned_tx, utxos)) => {
-                        s.push_in_flight_request(req.block_index, state::InFlightStatus::Signing);
+        let batch = s.build_batch();
 
-                        Some(SignTxRequest {
-                            key_name: s.ecdsa_key_name.clone(),
-                            ecdsa_public_key,
-                            outpoint_account: filter_output_accounts(s, &unsigned_tx),
-                            network: s.btc_network,
-                            unsigned_tx,
-                            requests: vec![req],
-                            utxos,
-                        })
-                    }
-                    Err(BuildTxError::AmountTooLow) => {
-                        ic_cdk::print(format!(
-                            "[heartbeat]: dropping a request for BTC amount {} to {} too low to cover the fees",
-                            req.amount,
-                            req.address.display(s.btc_network)
-                        ));
-                        // There is no point in retrying the request because the
-                        // amount is too low.
-                        storage::record_event(&eventlog::Event::RemovedRetrieveBtcRequest {
-                            block_index: req.block_index,
-                        });
-                        s.push_finalized_request(state::FinalizedBtcRetrieval {
-                            request: req,
-                            state: state::FinalizedStatus::AmountTooLow,
-                        });
-                        None
-                    }
-                    Err(BuildTxError::NotEnoughFunds) => {
-                        ic_cdk::print(format!(
-                            "[heartbeat]: not enough funds to unsigned transaction for request {:?}",
-                            req
-                        ));
-                        // Push the transaction to the end of the queue so that
-                        // we have a chance to handle other requests.
-                        s.pending_retrieve_btc_requests.push_back(req);
-                        None
-                    }
+        if batch.is_empty() {
+            return None;
+        }
+
+        let outputs: Vec<_> = batch
+            .iter()
+            .map(|req| (req.address.clone(), req.amount))
+            .collect();
+
+        match build_unsigned_transaction(
+            &mut s.available_utxos,
+            outputs,
+            main_address,
+            fee_millisatoshi_per_vbyte,
+        ) {
+            Ok((unsigned_tx, utxos)) => {
+                for req in batch.iter() {
+                    s.push_in_flight_request(req.block_index, state::InFlightStatus::Signing);
                 }
+
+                Some(SignTxRequest {
+                    key_name: s.ecdsa_key_name.clone(),
+                    ecdsa_public_key,
+                    outpoint_account: filter_output_accounts(s, &unsigned_tx),
+                    network: s.btc_network,
+                    unsigned_tx,
+                    requests: batch,
+                    utxos,
+                })
             }
-            None => None,
+            Err(BuildTxError::AmountTooLow) => {
+                ic_cdk::print(format!(
+                    "[heartbeat]: dropping a request for BTC amount {} to {} too low to cover the fees",
+                    batch.iter().map(|req| req.amount).sum::<u64>(),
+                    batch.iter().map(|req| req.address.display(s.btc_network)).collect::<Vec<_>>().join(",")
+                ).as_str());
+
+                // There is no point in retrying the request because the
+                // amount is too low.
+                for request in batch {
+                    s.push_finalized_request(state::FinalizedBtcRetrieval {
+                        request,
+                        state: state::FinalizedStatus::AmountTooLow,
+                    });
+                }
+                None
+            }
+            Err(BuildTxError::NotEnoughFunds) => {
+                ic_cdk::print(format!(
+                    "[heartbeat]: not enough funds to unsigned transaction for requests at block indexes [{}]",
+                    batch.iter().map(|req| req.block_index.to_string()).collect::<Vec<_>>().join(",")
+                ));
+
+                s.push_from_in_flight_to_pending_requests(batch);
+                None
+            }
         }
     });
 
@@ -297,9 +316,6 @@ async fn submit_pending_requests() {
 }
 
 fn finalization_time_estimate(min_confirmations: u32, network: Network) -> u64 {
-    const SEC_NANOS: u64 = 1_000_000_000;
-    const MIN_NANOS: u64 = 60 * SEC_NANOS;
-
     min_confirmations as u64
         * match network {
             Network::Mainnet => 10 * MIN_NANOS,
