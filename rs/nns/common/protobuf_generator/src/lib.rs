@@ -12,6 +12,9 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     let mut config = Config::new();
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
+
+    config.type_attribute(".", "#[derive(serde::Serialize)]");
+
     config.type_attribute(
         "ic_nns_common.pb.v1.CanisterId",
         [

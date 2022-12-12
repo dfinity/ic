@@ -14,7 +14,7 @@ use ic_nns_governance::{
         NetworkEconomics, Neuron, NnsFunction, Proposal, Vote,
     },
 };
-use ic_sns_root::pb::v1 as sns_root_pb;
+use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1 as sns_swap_pb;
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
@@ -385,20 +385,46 @@ impl Environment for FakeDriver {
             .unwrap());
         }
 
-        if method_name == "list_sns_canisters" {
+        if method_name == "get_sns_canisters_summary" {
             assert_eq!(PrincipalId::from(target), *SNS_ROOT_CANISTER_ID);
 
-            let request = Decode!(&request, sns_root_pb::ListSnsCanistersRequest).unwrap();
-            assert_eq!(request, sns_root_pb::ListSnsCanistersRequest {});
+            let request = Decode!(&request, GetSnsCanistersSummaryRequest).unwrap();
+            assert_eq!(
+                request,
+                GetSnsCanistersSummaryRequest {
+                    update_canister_list: None
+                }
+            );
 
-            return Ok(Encode!(&sns_root_pb::ListSnsCanistersResponse {
-                root: Some(*SNS_ROOT_CANISTER_ID),
-                governance: Some(*SNS_GOVERNANCE_CANISTER_ID),
-                ledger: Some(*SNS_LEDGER_CANISTER_ID),
-                swap: Some(*TARGET_SWAP_CANISTER_ID),
-                dapps: vec![*DAPP_CANISTER_ID],
-                archives: vec![*SNS_LEDGER_ARCHIVE_CANISTER_ID],
-                index: Some(*SNS_LEDGER_INDEX_CANISTER_ID),
+            return Ok(Encode!(&GetSnsCanistersSummaryResponse {
+                root: Some(ic_sns_root::CanisterSummary {
+                    canister_id: Some(*SNS_ROOT_CANISTER_ID),
+                    status: None,
+                }),
+                governance: Some(ic_sns_root::CanisterSummary {
+                    canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+                    status: None,
+                }),
+                ledger: Some(ic_sns_root::CanisterSummary {
+                    canister_id: Some(*SNS_LEDGER_CANISTER_ID),
+                    status: None,
+                }),
+                swap: Some(ic_sns_root::CanisterSummary {
+                    canister_id: Some(*TARGET_SWAP_CANISTER_ID),
+                    status: None,
+                }),
+                dapps: vec![ic_sns_root::CanisterSummary {
+                    canister_id: Some(*DAPP_CANISTER_ID),
+                    status: None,
+                }],
+                archives: vec![ic_sns_root::CanisterSummary {
+                    canister_id: Some(*SNS_LEDGER_ARCHIVE_CANISTER_ID),
+                    status: None,
+                }],
+                index: Some(ic_sns_root::CanisterSummary {
+                    canister_id: Some(*SNS_LEDGER_INDEX_CANISTER_ID),
+                    status: None,
+                }),
             })
             .unwrap());
         }

@@ -1,6 +1,6 @@
 /// A PB container for a CanisterId, which uniquely identifies
 /// a principal.
-#[derive(candid::CandidType, candid::Deserialize, Eq, comparable::Comparable)]
+#[derive(serde::Serialize, candid::CandidType, candid::Deserialize, Eq, comparable::Comparable)]
 #[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterId {
@@ -9,7 +9,14 @@ pub struct CanisterId {
 }
 /// A container for a NeuronId blob, which uniquely identifies
 /// a Neuron.
-#[derive(candid::CandidType, candid::Deserialize, Eq, std::hash::Hash, comparable::Comparable)]
+#[derive(
+    serde::Serialize,
+    candid::CandidType,
+    candid::Deserialize,
+    Eq,
+    std::hash::Hash,
+    comparable::Comparable,
+)]
 #[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct NeuronId {
@@ -17,7 +24,9 @@ pub struct NeuronId {
     pub id: u64,
 }
 /// The id of a specific proposal.
-#[derive(candid::CandidType, candid::Deserialize, Eq, Copy, comparable::Comparable)]
+#[derive(
+    serde::Serialize, candid::CandidType, candid::Deserialize, Eq, Copy, comparable::Comparable,
+)]
 #[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProposalId {
@@ -27,7 +36,9 @@ pub struct ProposalId {
 /// A descriptor of the authorization of a single method.
 /// Any of the principals in the list are authorized to execute
 /// the method.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    serde::Serialize, candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message,
+)]
 pub struct MethodAuthzInfo {
     #[prost(string, tag = "1")]
     pub method_name: ::prost::alloc::string::String,
@@ -37,7 +48,9 @@ pub struct MethodAuthzInfo {
 /// A descriptor of the authorization of all the update methods in a
 /// canister that require authorization.
 /// Methods that should be accessible to anyone should not appear in this list
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    serde::Serialize, candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message,
+)]
 pub struct CanisterAuthzInfo {
     #[prost(message, repeated, tag = "1")]
     pub methods_authz: ::prost::alloc::vec::Vec<MethodAuthzInfo>,
