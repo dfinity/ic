@@ -20,6 +20,10 @@ pub struct InitArgs {
 
     /// The CanisterId of the ckBTC Ledger
     pub ledger_id: CanisterId,
+
+    /// Maximum time in nanoseconds that a transaction should spend in the queue
+    /// before being sent.
+    pub max_time_in_queue_nanos: u64,
 }
 
 pub fn init(args: InitArgs) {

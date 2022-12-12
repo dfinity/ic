@@ -64,6 +64,7 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
         ecdsa_key_name: "dfx_test_key".parse().unwrap(),
         retrieve_btc_min_amount: 0,
         ledger_id,
+        max_time_in_queue_nanos: 0,
     };
     env.install_canister(minter_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()

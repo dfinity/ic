@@ -48,6 +48,9 @@ pub(crate) const TRANSFER_FEE: u64 = 1_000;
 
 pub(crate) const RETRIEVE_BTC_MIN_AMOUNT: u64 = 100;
 
+/// Maximum time (in nanoseconds) spend in queue at 0 to make the minter treat requests rigth away
+pub const MAX_NANOS_IN_QUEUE: u64 = 0;
+
 pub fn config(env: TestEnv) {
     // Use the btc integration setup.
     btc_integration::btc::config(env.clone());
@@ -263,6 +266,7 @@ pub(crate) async fn install_minter(
         // ecdsa_key_name: "test_key_1".parse().unwrap(),
         retrieve_btc_min_amount: RETRIEVE_BTC_MIN_AMOUNT,
         ledger_id,
+        max_time_in_queue_nanos: MAX_NANOS_IN_QUEUE,
     };
     install_rust_canister_from_path(
         canister,

@@ -2,6 +2,10 @@ use crate::{
     address::BitcoinAddress, build_unsigned_transaction, fake_sign, greedy,
     signature::EncodedSignature, tx, BuildTxError,
 };
+use crate::{
+    lifecycle::init::InitArgs,
+    state::{CkBtcMinterState, RetrieveBtcRequest, RetrieveBtcStatus},
+};
 use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -11,7 +15,7 @@ use proptest::proptest;
 use proptest::{
     array::uniform20,
     array::uniform32,
-    collection::{btree_set, vec as pvec},
+    collection::{btree_set, vec as pvec, SizeRange},
     option,
     prelude::{any, Strategy},
 };
@@ -219,6 +223,35 @@ fn arb_account() -> impl Strategy<Value = Account> {
             owner: PrincipalId::new_self_authenticating(&pk),
             subaccount,
         }
+    })
+}
+
+fn arb_retrieve_btc_requests(
+    amount: impl Strategy<Value = Satoshi>,
+    num: impl Into<SizeRange>,
+) -> impl Strategy<Value = Vec<RetrieveBtcRequest>> {
+    let request_strategy = (
+        amount,
+        arb_address(),
+        any::<u64>(),
+        1569975147000..2069975147000u64,
+    )
+        .prop_map(
+            |(amount, address, block_index, received_at)| RetrieveBtcRequest {
+                amount,
+                address,
+                block_index,
+                received_at,
+            },
+        );
+    pvec(request_strategy, num).prop_map(|mut reqs| {
+        reqs.sort_by_key(|req| req.received_at);
+
+        for (i, req) in reqs.iter_mut().enumerate() {
+            req.block_index = i as u64;
+        }
+
+        reqs
     })
 }
 
@@ -489,18 +522,53 @@ proptest! {
         utxos_acc_idx in pvec((arb_utxo(5_000u64..1_000_000_000), 0..5usize), 10..20),
         accounts in pvec(arb_account(), 5),
     ) {
-        use crate::{lifecycle::init::InitArgs, state::CkBtcMinterState};
-
         let mut state = CkBtcMinterState::from(InitArgs {
             btc_network: Network::Regtest,
             ecdsa_key_name: "".to_string(),
             retrieve_btc_min_amount: 0,
             ledger_id: CanisterId::from_u64(42),
+            max_time_in_queue_nanos: 0,
         });
         for (utxo, acc_idx) in utxos_acc_idx {
             state.add_utxos(accounts[acc_idx].clone(), vec![utxo]);
             state.check_invariants().expect("invariant check failed");
         }
+    }
+
+    #[test]
+    fn batching_preserves_invariants(
+        utxos_acc_idx in pvec((arb_utxo(5_000u64..1_000_000_000), 0..5usize), 10..20),
+        accounts in pvec(arb_account(), 5),
+        requests in arb_retrieve_btc_requests(5_000u64..1_000_000_000, 1..25),
+    ) {
+        let mut state = CkBtcMinterState::from(InitArgs {
+            btc_network: Network::Regtest,
+            ecdsa_key_name: "".to_string(),
+            retrieve_btc_min_amount: 5_000u64,
+            ledger_id: CanisterId::from_u64(42),
+            max_time_in_queue_nanos: 0,
+        });
+
+        let mut available_amount = 0;
+        for (utxo, acc_idx) in utxos_acc_idx {
+            available_amount += utxo.value;
+            state.add_utxos(accounts[acc_idx].clone(), vec![utxo]);
+        }
+        for req in requests {
+            let block_index = req.block_index;
+            state.push_back_pending_request(req);
+            prop_assert_eq!(state.retrieve_btc_status(block_index), RetrieveBtcStatus::Pending);
+        }
+
+        let batch = state.build_batch();
+
+        for req in batch.iter() {
+            prop_assert_eq!(state.retrieve_btc_status(req.block_index), RetrieveBtcStatus::Unknown);
+        }
+
+        prop_assert!(batch.iter().map(|req| req.amount).sum::<u64>() <= available_amount);
+
+        state.check_invariants().expect("invariant check failed");
     }
 
     #[test]
