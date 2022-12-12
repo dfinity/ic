@@ -491,16 +491,15 @@ async fn serve_connection(
         Ok(Err(err)) => {
             error!(log, "Can't peek into TCP stream, error = {}", err);
             metrics.observe_connection_error(ConnectionError::Peek, connection_start_time);
-            AppLayer::Http
+            return Ok(());
         }
         Err(err) => {
             warn!(
                 log,
                 "TCP peeking timeout after {}s, error = {}", MAX_TCP_PEEK_TIMEOUT_SECS, err
             );
-
             metrics.observe_connection_error(ConnectionError::PeekTimeout, connection_start_time);
-            AppLayer::Http
+            return Ok(());
         }
     };
 
