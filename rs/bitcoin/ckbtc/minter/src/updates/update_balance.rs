@@ -1,8 +1,10 @@
 use crate::eventlog::Event;
+use crate::logs::P1;
 use crate::storage::record_event;
 use candid::{CandidType, Deserialize, Nat};
 use ic_base_types::PrincipalId;
 use ic_btc_types::GetUtxosError;
+use ic_canister_log::log;
 use ic_icrc1::{
     endpoints::{TransferArg, TransferError},
     Account, Subaccount,
@@ -99,7 +101,7 @@ pub async fn update_balance(
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));
 
-    ic_cdk::print(format!("Fetching utxos for address {}", address));
+    log!(P1, "Fetching utxos for address {}", address);
 
     let utxos = get_utxos(btc_network, &address, min_confirmations).await?;
 
@@ -120,11 +122,12 @@ pub async fn update_balance(
         return Err(UpdateBalanceError::NoNewUtxos);
     }
 
-    ic_cdk::print(format!(
+    log!(
+        P1,
         "minting {} wrapped BTC for {} new UTXOs",
         satoshis_to_mint,
         new_utxos.len()
-    ));
+    );
 
     let block_index: u64 = mint(satoshis_to_mint, caller_account.clone()).await?;
 

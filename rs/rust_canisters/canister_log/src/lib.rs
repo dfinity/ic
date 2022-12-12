@@ -99,8 +99,13 @@ mod private {
         pub fn time() -> u64;
     }
 
+    #[cfg(target_arch = "wasm32")]
+    pub fn timestamp() -> u64 {
+        unsafe { time() }
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn time() -> u64 {
+    pub fn timestamp() -> u64 {
         use std::time::SystemTime;
 
         match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
@@ -114,7 +119,7 @@ mod private {
 /// epoch.
 #[doc(hidden)]
 pub fn now() -> u64 {
-    private::time()
+    private::timestamp()
 }
 
 /// Exports the contents of a buffer as a vector of entries in the order of
