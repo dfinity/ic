@@ -186,7 +186,7 @@ fn management_call(env: &StateMachine, call: &ParsedCanisterCall, opts: &Opts) {
                 .expect("failed to decode candid argument for 'create_canister'");
             let canister_id =
                 CanisterId::try_from(settings.canister_id).expect("invalid canister id");
-            match settings.mode {
+            let result = match settings.mode {
                 CanisterInstallMode::Install => {
                     env.install_existing_canister(canister_id, settings.wasm_module, settings.arg)
                 }
@@ -196,12 +196,9 @@ fn management_call(env: &StateMachine, call: &ParsedCanisterCall, opts: &Opts) {
                 CanisterInstallMode::Upgrade => {
                     env.upgrade_canister(canister_id, settings.wasm_module, settings.arg)
                 }
-            }
-            .expect("failed to install canister code");
-            send_response(
-                Ok::<WasmResult, UserError>(WasmResult::Reply(candid::encode_one(()).unwrap())),
-                opts,
-            );
+            };
+            let success = candid::encode_one(()).unwrap();
+            send_response(result.map(|_| WasmResult::Reply(success)), opts);
         }
         other => {
             panic!("unsupported management canister call: {}", other)
