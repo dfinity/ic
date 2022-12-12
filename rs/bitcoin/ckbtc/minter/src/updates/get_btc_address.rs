@@ -1,9 +1,11 @@
 use crate::{
+    logs::P1,
     state::{mutate_state, read_state, CkBtcMinterState},
     ECDSAPublicKey,
 };
 use candid::{CandidType, Deserialize, Principal};
 use ic_base_types::PrincipalId;
+use ic_canister_log::log;
 use ic_ic00_types::{ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId};
 use ic_icrc1::{Account, Subaccount};
 use serde::Serialize;
@@ -72,9 +74,10 @@ pub async fn init_ecdsa_public_key() {
         return;
     }
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
-    ic_cdk::println!("Fetching the ECDSA public key {}", &key_name);
+    log!(P1, "Fetching the ECDSA public key {}", &key_name);
     let ecdsa_public_key = ecdsa_public_key(key_name, vec![]).await;
-    ic_cdk::println!(
+    log!(
+        P1,
         "ECDSA public key set to {}, chain code to {}",
         hex::encode(&ecdsa_public_key.public_key),
         hex::encode(&ecdsa_public_key.chain_code)

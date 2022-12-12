@@ -89,6 +89,11 @@ pub fn build_dashboard() -> Vec<u8> {
                     </thead>
                     <tbody>{}</tbody>
                 </table>
+                <h3>Logs</h3>
+                <table>
+                  <thead><tr><th>Priority</th><th>Timestamp</th><th>Location</th><th>Message</th></tr></thead>
+                  <tbody>{}</tbody>
+                </table>
             </body>
         </html>",
         build_metadata(),
@@ -99,7 +104,8 @@ pub fn build_dashboard() -> Vec<u8> {
         build_available_utxos(),
         build_update_balance_principals(),
         build_retrieve_btc_principals(),
-        build_account_to_utxos_table()
+        build_account_to_utxos_table(),
+        display_logs(),
     );
     html.as_bytes().to_vec()
 }
@@ -393,4 +399,47 @@ pub fn build_retrieve_btc_principals() -> String {
             .map(|p| p.to_text())
             .collect::<String>()
     })
+}
+
+fn display_logs() -> String {
+    use crate::logs::{P0, P1};
+    use ic_canister_log::{export, LogEntry};
+    use std::io::Write;
+
+    fn display_entry(buf: &mut Vec<u8>, tag: &str, e: &LogEntry) {
+        write!(
+            buf,
+            "<tr><td>{}</td><td onmouseover=\"this.title = new Date(this.textContent / 1000000)\">{}</td><td>{}:{}</td><td>{}</td></tr>",
+            tag, e.timestamp, e.file, e.line, e.message
+        )
+        .unwrap()
+    }
+
+    let p0 = export(&P0);
+    let p1 = export(&P1);
+
+    let mut i0 = 0;
+    let mut i1 = 0;
+
+    let mut buf = vec![];
+
+    // Merge sorted log entries with different priorities.
+    while i0 < p0.len() && i1 < p1.len() {
+        if p0[i0].timestamp <= p1[i1].timestamp {
+            display_entry(&mut buf, "P0", &p0[i0]);
+            i0 += 1;
+        } else {
+            display_entry(&mut buf, "P1", &p1[i1]);
+            i1 += 1;
+        }
+    }
+
+    for e in p0[i0..].iter() {
+        display_entry(&mut buf, "P0", e);
+    }
+    for e in p1[i1..].iter() {
+        display_entry(&mut buf, "P1", e);
+    }
+
+    String::from_utf8(buf).unwrap()
 }

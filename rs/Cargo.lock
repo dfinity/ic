@@ -4611,6 +4611,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-btc-types",
+ "ic-canister-log",
  "ic-canisters-http-types",
  "ic-cdk",
  "ic-cdk-macros",

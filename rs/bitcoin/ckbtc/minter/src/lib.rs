@@ -1,6 +1,8 @@
 use crate::address::BitcoinAddress;
+use crate::logs::{P0, P1};
 use candid::{CandidType, Deserialize};
 use ic_btc_types::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
+use ic_canister_log::log;
 use ic_icrc1::Account;
 use serde::Serialize;
 use serde_bytes::ByteBuf;
@@ -11,6 +13,7 @@ pub mod dashboard;
 pub mod eventlog;
 pub mod guard;
 pub mod lifecycle;
+mod logs;
 pub mod management;
 pub mod metrics;
 pub mod queries;
@@ -76,11 +79,12 @@ async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress)
     {
         Ok(utxos) => utxos,
         Err(e) => {
-            ic_cdk::print(format!(
+            log!(
+                P0,
                 "[heartbeat]: failed to fetch UTXOs for the main address {}: {}",
                 main_address.display(btc_network),
                 e
-            ));
+            );
             return;
         }
     };
@@ -118,18 +122,20 @@ async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
             if fees.len() >= 100 {
                 Some(fees[49])
             } else {
-                ic_cdk::print(format!(
+                log!(
+                    P0,
                     "[heartbeat]: not enough data points ({}) to compute the fee",
                     fees.len()
-                ));
+                );
                 None
             }
         }
         Err(err) => {
-            ic_cdk::print(format!(
+            log!(
+                P0,
                 "[heartbeat]: failed to get median fee per vbyte: {}",
                 err
-            ));
+            );
             None
         }
     }
@@ -163,7 +169,8 @@ async fn submit_pending_requests() {
     }) {
         Some((address, key)) => (address, key),
         None => {
-            ic_cdk::print(
+            log!(
+                P0,
                 "unreachable: have retrieve BTC requests but the ECDSA key is not initialized",
             );
             return;
@@ -211,11 +218,11 @@ async fn submit_pending_requests() {
                 })
             }
             Err(BuildTxError::AmountTooLow) => {
-                ic_cdk::print(format!(
+                log!(P0,
                     "[heartbeat]: dropping a request for BTC amount {} to {} too low to cover the fees",
                     batch.iter().map(|req| req.amount).sum::<u64>(),
                     batch.iter().map(|req| req.address.display(s.btc_network)).collect::<Vec<_>>().join(",")
-                ).as_str());
+                );
 
                 // There is no point in retrying the request because the
                 // amount is too low.
@@ -228,10 +235,10 @@ async fn submit_pending_requests() {
                 None
             }
             Err(BuildTxError::NotEnoughFunds) => {
-                ic_cdk::print(format!(
+                log!(P0,
                     "[heartbeat]: not enough funds to unsigned transaction for requests at block indexes [{}]",
                     batch.iter().map(|req| req.block_index.to_string()).collect::<Vec<_>>().join(",")
-                ));
+                );
 
                 s.push_from_in_flight_to_pending_requests(batch);
                 None
@@ -240,10 +247,11 @@ async fn submit_pending_requests() {
     });
 
     if let Some(req) = maybe_sign_request {
-        ic_cdk::print(format!(
+        log!(
+            P1,
             "[heartbeat]: signing a new transaction: {}",
             hex::encode(tx::encode_into(&req.unsigned_tx, Vec::new()))
-        ));
+        );
 
         let txid = req.unsigned_tx.txid();
 
@@ -265,16 +273,18 @@ async fn submit_pending_requests() {
                     }
                 });
 
-                ic_cdk::print(format!(
+                log!(
+                    P1,
                     "[heartbeat]: sending a signed transaction {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
-                ));
+                );
                 match management::send_transaction(&signed_tx, req.network).await {
                     Ok(()) => {
-                        ic_cdk::print(format!(
+                        log!(
+                            P1,
                             "[heartbeat]: successfully sent transaction {}",
                             hex::encode(txid)
-                        ));
+                        );
                         let submitted_at = ic_cdk::api::time();
                         storage::record_event(&eventlog::Event::SentBtcTransaction {
                             request_block_indices: req
@@ -296,19 +306,17 @@ async fn submit_pending_requests() {
                         });
                     }
                     Err(err) => {
-                        ic_cdk::print(format!(
+                        log!(
+                            P0,
                             "[heartbeat]: failed to send a bitcoin transaction: {}",
                             err
-                        ));
+                        );
                         undo_sign_request(req.requests, req.utxos);
                     }
                 }
             }
             Err(err) => {
-                ic_cdk::print(format!(
-                    "[heartbeat]: failed to sign a BTC transaction: {}",
-                    err
-                ));
+                log!(P0, "[heartbeat]: failed to sign a BTC transaction: {}", err);
                 undo_sign_request(req.requests, req.utxos);
             }
         }
@@ -351,7 +359,8 @@ async fn finalize_requests() {
     let ecdsa_public_key = match ecdsa_public_key {
         Some(key) => key,
         None => {
-            ic_cdk::print(
+            log!(
+                P0,
                 "unreachable: have retrieve BTC requests but the ECDSA key is not initialized",
             );
             return;
@@ -365,7 +374,7 @@ async fn finalize_requests() {
         let account = match state::read_state(|s| s.outpoint_account.get(&utxo.outpoint).cloned()) {
             Some(account) => account,
             None => {
-                ic_cdk::println!("[BUG]: forgot the account for UTXO {:?}", utxo);
+                log!(P0, "[BUG]: forgot the account for UTXO {:?}", utxo);
                 continue;
             }
         };
@@ -376,10 +385,12 @@ async fn finalize_requests() {
         let utxos = match management::get_utxos(btc_network, &addr, min_confirmations).await {
             Ok(utxos) => utxos,
             Err(e) => {
-                ic_cdk::print(format!(
+                log!(
+                    P0,
                     "[heartbeat]: failed to fetch UTXOs for address {}: {}",
-                    addr, e
-                ));
+                    addr,
+                    e
+                );
                 continue;
             }
         };
@@ -396,7 +407,8 @@ async fn finalize_requests() {
 
         let now = ic_cdk::api::time();
 
-        ic_cdk::println!(
+        log!(
+            P1,
             "[heartbeat]: finalized transaction {} (retrieved amount = {}) at {} (after {} sec)",
             tx::DisplayTxid(&req.txid),
             req.requests.iter().map(|r| r.amount).sum::<u64>(),

@@ -1,9 +1,11 @@
 use crate::eventlog::replay;
+use crate::logs::P0;
 use crate::state::replace_state;
 use crate::storage::{count_events, events};
+use ic_canister_log::log;
 
 pub fn post_upgrade() {
-    ic_cdk::println!("[upgrade]: replaying {} events", count_events());
+    log!(P0, "[upgrade]: replaying {} events", count_events());
 
     let start = ic_cdk::api::instruction_counter();
 
@@ -16,7 +18,8 @@ pub fn post_upgrade() {
 
     let end = ic_cdk::api::instruction_counter();
 
-    ic_cdk::println!(
+    log!(
+        P0,
         "[upgrade]: replaying events consumed {} instructions",
         end - start
     );

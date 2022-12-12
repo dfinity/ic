@@ -1,11 +1,13 @@
 //! This module contains async functions for interacting with the management canister.
 
+use crate::logs::P0;
 use crate::tx;
 use candid::{CandidType, Principal};
 use ic_btc_types::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, SendTransactionRequest, Utxo, UtxosFilterInRequest,
 };
+use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
 use ic_ic00_types::{EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs, SignWithECDSAReply};
 use serde::de::DeserializeOwned;
@@ -84,7 +86,8 @@ where
 {
     let balance = ic_cdk::api::canister_balance128();
     if balance < payment as u128 {
-        ic_cdk::println!(
+        log!(
+            P0,
             "Failed to call {}: need {} cycles, the balance is only {}",
             method,
             payment,

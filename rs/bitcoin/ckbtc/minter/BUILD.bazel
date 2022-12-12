@@ -11,6 +11,7 @@ LIB_DEPS = [
     "//rs/monitoring/metrics_encoder",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/client/cdk",
+    "//rs/rust_canisters/canister_log",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_core",
     "//rs/types/base_types",
