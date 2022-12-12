@@ -141,14 +141,33 @@ fn check_size(q: &pb_queues::InputOutputQueue) -> Result<(), ProxyDecodeError> {
             super::DEFAULT_QUEUE_CAPACITY
         )));
     }
-    if q.capacity < q.queue.len() as u64 + q.num_slots_reserved {
+
+    let mut num_responses: u64 = 0;
+    let mut num_requests: u64 = 0;
+    for msg in q.queue.iter() {
+        if let pb_queues::RequestOrResponse {
+            r: Some(pb_queues::request_or_response::R::Response(_)),
+        } = msg
+        {
+            num_responses += 1;
+        } else {
+            num_requests += 1;
+        }
+    }
+
+    if num_responses.saturating_add(q.num_slots_reserved) > q.capacity {
         return Err(ProxyDecodeError::Other(format!(
-            "QueueWithReservation: message count ({}) + reserved slots ({}) > capacity ({})",
-            q.queue.len(),
-            q.num_slots_reserved,
-            q.capacity,
+            "QueueWithReservation: response count ({}) > capacity ({})",
+            num_responses, q.capacity,
         )));
     }
+    if num_requests > q.capacity {
+        return Err(ProxyDecodeError::Other(format!(
+            "QueueWithReservation: request count ({}) > capacity ({})",
+            num_requests, q.capacity,
+        )));
+    }
+
     Ok(())
 }
 
