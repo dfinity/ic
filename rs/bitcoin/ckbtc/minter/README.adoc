@@ -1,7 +1,117 @@
-= The ckBTC Minter Canister
+= The ckBTC Minter Canister (under development) +
 
-The ckBTC Minter canister is the canister responsible for converting between bitcoin and ckBTC.
-It works in tandem with a link:../../../rosetta-api/icrc1/README.md[Ledger Canister], which
-handles the _ckBTC_ token, and a link:../../canister/README.adoc[Bitcoin Canister], which is used to
-interface with the Bitcoin network. The ckBTC Minter is named as such because it is the minter of the
-ckBTC Ledger Canister.
+
+The ckBTC Minter canister converts BTC to ckBTC and back.
+It works with a link:../../../rosetta-api/icrc1/README.md[Ledger Canister], handling the _ckBTC_ token transfers, and a link:../../canister/README.adoc[Bitcoin Canister], interfacing with the Bitcoin network.
+The ckBTC Minter canister is a https://github.com/dfinity/ICRC-1/blob/8c526e1dae38622eb0940643996e8187d2063513/standards/ICRC-1/README.md#minting-account-[minter] for the ckBTC Ledger canister: it can mint and burn ckBTC tokens.
+
+IMPORTANT: ckBTC is still under development.
+We do not recommend people try it out yet.
+
+== Interact with the ckBTC minter
+
+=== Bitcoin to ckBTC
+```
+ ┌────┐         ┌──────┐┌──────────────┐
+ │User│         │Minter││BitcoinNetwork│
+ └─┬──┘         └──┬───┘└──────┬───────┘
+   │               │           │        
+   │get_btc_address│           │        
+   │──────────────>│           │        
+   │               │           │        
+   │    address    │           │        
+   │<──────────────│           │        
+   │               │           │        
+   │    Send BTC to address    │        
+   │──────────────────────────>│        
+   │               │           │        
+   │update_balance │           │        
+   │──────────────>│           │        
+ ┌─┴──┐         ┌──┴───┐┌──────┴───────┐
+ │User│         │Minter││BitcoinNetwork│
+ └────┘         └──────┘└──────────────┘
+```
+
+1. Obtain the deposit address:
++
+----
+dfx canister call minter get_btc_address '(record {subaccount=null;})'
+----
++
+2. Send bitcoin to the BTC address the minter gave you.
+3. Wait until your Bitcoin transaction got enough confirmations.
+   Mainnet ckBTC can require up to 12 confirmations, corresponding to a 2-hour waiting period on average.
+4. Notify the minter about the transfer.
++
+----
+dfx canister call minter update_balance '(record {subaccount=null;})'
+----
++
+
+You now have some ckBTC, you can enjoy the Internet Computer speed and low fees!
+
+If you would like to transfer them to your wallet (plug, stoic, ...), copy the principal of your wallet and paste it over PRINCIPAL and change AMOUNT to the desired amount (in satoshis) in the following command:
+----
+dfx canister call ledger icrc1_transfer '(record {from_subaccount=null; to=record{owner="PRINCIPAL"; subaccount=null;}; amount=AMOUNT; fee=null; memo=null; created_at_time=null;})'
+----
+
+=== ckBTC to Bitcoin
+```
+ ┌────┐                ┌──────┐┌────────────┐
+ │User│                │Minter││ckBTC ledger│
+ └─┬──┘                └──┬───┘└─────┬──────┘
+   │                      │          │       
+   │get_withdrawal_account│          │       
+   │─────────────────────>│          │       
+   │                      │          │       
+   │       account        │          │       
+   │<─────────────────────│          │       
+   │                      │          │       
+   │    icrc1_transfer to account    │       
+   │────────────────────────────────>│       
+   │                      │          │       
+   │     retrieve_btc     │          │       
+   │─────────────────────>│          │       
+ ┌─┴──┐                ┌──┴───┐┌─────┴──────┐
+ │User│                │Minter││ckBTC ledger│
+ └────┘                └──────┘└────────────┘
+
+```
+
+1. Obtain the withdrawal address and store it in a variable.
++
+----
+withdrawal_address="$(dfx canister call minter get_withdrawal_account)"
+----
++
+2. Clean the output of the previous command to get the desired format:
++
+----
+cleaned_withdrawal_address=$(echo "$(echo "withdrawal_addres" | sed 's/^( //g' | sed 's/ )$//g')" | sed 's/,$//g')
+----
++
+3. Transfer the ckBTCs you want to unwrap to *cleaned_withdrawal_address* on the ckBTC ledger.
+   Replace AMOUNT with the amount that you want to unwrap.
++
+----
+dfx canister call ledger icrc1_transfer '(record {from=null; to=$cleaned_withdrawal_address; amount=AMOUNT; fee=null; memo=null; created_at_time=null;})'
+----
++
+4. Call the `retrieve_btc` endpoint with the desired BTC destination address where you want to receive your Bitcoin.
+   Replace BTC_ADDRESS with your BTC address (the minter supports P2WPKH, P2PKH, and P2SH addresses).
+   Replace AMOUNT with the amount that you transferred for unwrapping.
++
+----
+dfx canister call minter retrieve_btc '(record {address=BTC_ADDRESS; amount=AMOUNT})'
+----
+
+You now have your BTC back on the Bitcoin network (caution: transaction finalization may take a while). 
+
+[NOTE]
+====
+You can query the status of your `retrieve_btc` request using the following command (replace `BLOCK_INDEX` with the block index you get when calling retrieve_btc): 
+----
+dfx canister call minter retrieve_btc_status '(record { block_index = BLOCK_INDEX; })'
+----
+====
+
