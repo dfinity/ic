@@ -355,6 +355,7 @@ impl BackupHelper {
             std::fs::create_dir_all(self.logs_dir()).expect("Failure creating a directory");
         }
 
+        // replay the current version once, but if there is upgrade do it again
         loop {
             match self.replay_current_version(&current_replica_version) {
                 Ok(ReplayResult::UpgradeRequired(upgrade_version)) => {
@@ -371,17 +372,6 @@ impl BackupHelper {
                     break;
                 }
             }
-        }
-
-        // replay the current version once, but if there is upgrade do it again
-        while let Ok(ReplayResult::UpgradeRequired(upgrade_version)) =
-            self.replay_current_version(&current_replica_version)
-        {
-            self.notification_client.message_slack(format!(
-                "Replica version upgrade detected (current: {} new: {}): upgrading the ic-replay tool to retry... 🤞",
-                current_replica_version, upgrade_version
-            ));
-            current_replica_version = upgrade_version;
         }
 
         let finish_height = self.last_checkpoint();
