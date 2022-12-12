@@ -25,7 +25,7 @@ SYNCING_PERIOD=1800 # 1/2 hour
 REPLAY_PERIOD=14400 # 4 hours
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="f0c69aebc64fc0ec52f1579d5ed049006a70e050"
+DEFAULT_BUILD_ID="e9edb10f3ac3dde0d357e54580fae6df91f2b358"
 echo "Enter the BUILD_ID of the proper ic-backup version:"
 echo "(default: ${DEFAULT_BUILD_ID}):"
 read BUILD_ID
