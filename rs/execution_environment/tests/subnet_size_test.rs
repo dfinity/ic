@@ -14,12 +14,9 @@ use ic_state_machine_tests::{
 };
 use ic_test_utilities::types::messages::SignedIngressBuilder;
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_types::canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES;
 use ic_types::ingress::WasmResult;
-use ic_types::messages::{
-    SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-    MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
-};
-
+use ic_types::messages::{SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES};
 use ic_types::{CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId};
 use std::time::Duration;
 use std::{convert::TryFrom, str::FromStr};
@@ -603,7 +600,7 @@ fn calculate_http_request_cost(
     let response_size = match response_size_limit {
         Some(response_size) => response_size.get(),
         // Defaults to maximum response size.
-        None => MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+        None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
     };
     let total_bytes = response_size + request_size.get();
     scale_cost(

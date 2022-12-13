@@ -30,7 +30,6 @@
 //! 4c. If neither 4a nor 4b yield a result after a certrain amount of time, the timeout mechanism ends the request
 //! with an error and unblocks the requesting canister.
 
-use crate::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use crate::{
     crypto::{CryptoHashOf, Signed},
     messages::{CallbackId, RejectContext, Request},
@@ -39,7 +38,7 @@ use crate::{
 };
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_ic00_types::{CanisterHttpRequestArgs, HttpMethod, TransformContext};
+use ic_ic00_types::{CanisterHttpRequestArgs, HttpHeader, HttpMethod, TransformContext};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::system_metadata::v1 as pb_metadata,
@@ -60,6 +59,27 @@ pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
 /// Limiting the number of responses can improve performance, as otherwise validation times
 /// could become too large.
 pub const CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK: usize = 500;
+
+/// The following constants are defined in Interface Spec:
+/// https://ic-interface-spec.netlify.app/#ic-http_request
+///
+/// Maximum number of request bytes for canister http_request.
+pub const MAX_CANISTER_HTTP_REQUEST_BYTES: u64 = 2_000_000;
+
+/// Maximum number of response bytes for canister http_request.
+pub const MAX_CANISTER_HTTP_RESPONSE_BYTES: u64 = 2_000_000;
+
+/// Maximum number of bytes to represent URL for canister http_request.
+pub const MAX_CANISTER_HTTP_URL_SIZE: usize = 8192;
+
+/// Maximum number of all HTTP headers.
+pub const MAX_CANISTER_HTTP_HEADER_NUM: usize = 64;
+
+/// Maximum number of bytes to represent one HTTP header name.
+pub const MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH: usize = 8 * 1024;
+
+/// Maximum total number of bytes to represent all HTTP header names and values.
+pub const MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE: usize = 48 * 1024;
 
 pub type CanisterHttpRequestId = CallbackId;
 
@@ -181,6 +201,56 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
     }
 }
 
+pub fn validate_http_headers_and_body(
+    headers: &[HttpHeader],
+    body: &[u8],
+) -> Result<(), CanisterHttpRequestContextError> {
+    let mut headers_num = 0;
+    let mut headers_max_name_len = 0;
+    let mut headers_max_value_len = 0;
+    let mut headers_size_bytes = 0;
+    for h in headers.iter() {
+        headers_num += 1;
+        let name_len = h.name.len();
+        let value_len = h.value.len();
+        headers_max_name_len = name_len.max(headers_max_name_len);
+        headers_max_value_len = value_len.max(headers_max_value_len);
+        headers_size_bytes += name_len + value_len;
+    }
+
+    if headers_num > MAX_CANISTER_HTTP_HEADER_NUM {
+        return Err(CanisterHttpRequestContextError::TooManyHeaders(headers_num));
+    }
+
+    if headers_max_name_len > MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH {
+        return Err(CanisterHttpRequestContextError::TooLongHeaderName(
+            headers_max_name_len,
+        ));
+    }
+
+    if headers_max_value_len > MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH {
+        return Err(CanisterHttpRequestContextError::TooLongHeaderValue(
+            headers_max_value_len,
+        ));
+    }
+
+    if headers_size_bytes > MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE {
+        return Err(CanisterHttpRequestContextError::TooLargeHeaders(
+            headers_size_bytes,
+        ));
+    }
+
+    let body_size_bytes = body.len();
+    let request_total_bytes = headers_size_bytes + body_size_bytes;
+    if request_total_bytes > (MAX_CANISTER_HTTP_REQUEST_BYTES as usize) {
+        return Err(CanisterHttpRequestContextError::TooLargeRequest(
+            request_total_bytes,
+        ));
+    }
+
+    Ok(())
+}
+
 impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestContext {
     type Error = CanisterHttpRequestContextError;
 
@@ -199,11 +269,11 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
 
         let max_response_bytes = match args.max_response_bytes {
             Some(max_response_bytes) => {
-                if max_response_bytes > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 {
+                if max_response_bytes > MAX_CANISTER_HTTP_RESPONSE_BYTES {
                     Err(CanisterHttpRequestContextError::MaxResponseBytes(
                         InvalidMaxResponseBytes {
                             min: 0,
-                            max: MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+                            max: MAX_CANISTER_HTTP_RESPONSE_BYTES,
                             given: max_response_bytes,
                         },
                     ))
@@ -213,6 +283,14 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
             }
             None => Ok(None),
         }?;
+
+        let url_len = args.url.len();
+        if url_len > MAX_CANISTER_HTTP_URL_SIZE {
+            return Err(CanisterHttpRequestContextError::UrlTooLong(url_len));
+        }
+
+        let request_body = args.body;
+        validate_http_headers_and_body(&args.headers, request_body.as_ref().unwrap_or(&vec![]))?;
 
         Ok(CanisterHttpRequestContext {
             request: request.clone(),
@@ -227,7 +305,7 @@ impl TryFrom<(Time, &Request, CanisterHttpRequestArgs)> for CanisterHttpRequestC
                     value: h.value,
                 })
                 .collect(),
-            body: args.body,
+            body: request_body,
             http_method: match args.method {
                 HttpMethod::GET => CanisterHttpMethod::GET,
                 HttpMethod::POST => CanisterHttpMethod::POST,
@@ -277,6 +355,12 @@ pub struct InvalidTransformPrincipalId {
 pub enum CanisterHttpRequestContextError {
     MaxResponseBytes(InvalidMaxResponseBytes),
     TransformPrincipalId(InvalidTransformPrincipalId),
+    UrlTooLong(usize),
+    TooManyHeaders(usize),
+    TooLongHeaderName(usize),
+    TooLongHeaderValue(usize),
+    TooLargeHeaders(usize),
+    TooLargeRequest(usize),
 }
 
 impl From<CanisterHttpRequestContextError> for UserError {
@@ -294,6 +378,45 @@ impl From<CanisterHttpRequestContextError> for UserError {
                 format!(
                     "transform principal id expected to be {}, got {}",
                     err.expected_principal_id, err.actual_principal_id,
+                ),
+            ),
+            CanisterHttpRequestContextError::UrlTooLong(url_size) => UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!("url size {} exceeds {}", url_size, MAX_CANISTER_HTTP_URL_SIZE),
+            ),
+            CanisterHttpRequestContextError::TooManyHeaders(num_headers) => UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "number of all http headers {} exceeds {}",
+                    num_headers, MAX_CANISTER_HTTP_HEADER_NUM
+                ),
+            ),
+            CanisterHttpRequestContextError::TooLongHeaderName(name_size) => UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "number of bytes to represent some http header name {} exceeds {}",
+                    name_size, MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH
+                ),
+            ),
+            CanisterHttpRequestContextError::TooLongHeaderValue(value_size) => UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "number of bytes to represent some http header value {} exceeds {}",
+                    value_size, MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH
+                ),
+            ),
+            CanisterHttpRequestContextError::TooLargeHeaders(total_header_size) => UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "total number of bytes to represent all http header names and values {} exceeds {}",
+                    total_header_size, MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE
+                ),
+            ),
+            CanisterHttpRequestContextError::TooLargeRequest(total_request_size) => UserError::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "total number of bytes to represent all http header names and values and http body {} exceeds {}",
+                    total_request_size, MAX_CANISTER_HTTP_REQUEST_BYTES
                 ),
             ),
         }
