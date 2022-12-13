@@ -1737,6 +1737,8 @@ fn execute_canisters_on_thread(
         }
         canister.system_state.canister_metrics.executed += 1;
         canisters.push(canister);
+        round_limits.instructions -=
+            as_round_instructions(config.instruction_overhead_per_canister);
     }
 
     ExecutionThreadResult {

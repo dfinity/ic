@@ -31,9 +31,13 @@ pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS: NumInstructions =
 // approximately 1 second to be processed.
 const MAX_INSTRUCTIONS_PER_SLICE: NumInstructions = NumInstructions::new(2 * B);
 
-// We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes
-// at most 1ms to enter and exit the Wasm engine.
+// We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 1ms
+// to enter and exit the Wasm engine.
 const INSTRUCTION_OVERHEAD_PER_MESSAGE: NumInstructions = NumInstructions::new(2 * M);
+
+// We assume 1 cycles unit ≅ 1 CPU cycle, so on a 2 GHz CPU it takes about 4ms
+// to prepare execution of a canister.
+const INSTRUCTION_OVERHEAD_PER_CANISTER: NumInstructions = NumInstructions::new(8 * M);
 
 // Metrics show that finalization can take 13ms when there were 5000 canisters
 // in a subnet. This comes out to about 3us per canister which comes out to
@@ -160,6 +164,10 @@ pub struct SchedulerConfig {
     /// towards the round limit.
     pub instruction_overhead_per_message: NumInstructions,
 
+    /// The overhead of preparing execution of a canister. The overhead is
+    /// measured in instructions that are counted towards the round limit.
+    pub instruction_overhead_per_canister: NumInstructions,
+
     /// The overhead (per canister) of running the finalization code at the end
     /// of an iteration. This overhead is counted toward the round limit at the
     /// end of each iteration. Since finalization is mostly looping over all
@@ -221,6 +229,7 @@ impl SchedulerConfig {
             max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
             max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
+            instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
@@ -249,6 +258,7 @@ impl SchedulerConfig {
             // Effectively disable DTS on system subnets.
             max_instructions_per_slice: max_instructions_per_message_without_dts,
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
+            instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code,
@@ -277,6 +287,7 @@ impl SchedulerConfig {
             max_instructions_per_message_without_dts: MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
             max_instructions_per_slice: MAX_INSTRUCTIONS_PER_SLICE,
             instruction_overhead_per_message: INSTRUCTION_OVERHEAD_PER_MESSAGE,
+            instruction_overhead_per_canister: INSTRUCTION_OVERHEAD_PER_CANISTER,
             instruction_overhead_per_canister_for_finalization:
                 INSTRUCTION_OVERHEAD_PER_CANISTER_FOR_FINALIZATION,
             max_instructions_per_install_code: MAX_INSTRUCTIONS_PER_INSTALL_CODE,
