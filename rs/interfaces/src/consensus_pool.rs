@@ -255,8 +255,7 @@ pub trait HeightIndexedPool<T> {
     fn get_highest(&self) -> Result<T, OnlyError>;
 
     /// Return an iterator over instances of artifact of type T at the highest
-    /// height currently in the pool. Returns an error if there isn't one, or
-    /// if there are more than one.
+    /// height currently in the pool.
     fn get_highest_iter(&self) -> Box<dyn Iterator<Item = T>>;
 }
 // end::interface[]
