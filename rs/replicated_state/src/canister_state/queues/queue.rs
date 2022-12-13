@@ -52,7 +52,8 @@ impl<T: std::clone::Clone> QueueWithReservation<T> {
     /// Returns the number of slots available in the queue. This many items can
     /// be reserved or pushed before an error is returned.
     fn available_slots(&self) -> usize {
-        self.capacity - (self.queue.len() + self.num_slots_reserved)
+        self.capacity
+            .saturating_sub(self.queue.len() + self.num_slots_reserved)
     }
 
     /// Reserves a slot if available, else returns `Err(StateError::QueueFull)`.
