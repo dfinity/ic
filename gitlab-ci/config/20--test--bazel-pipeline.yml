@@ -12,7 +12,9 @@
 
 .bazel-rules-pipeline-no-merge-train-allow-to-fail:
   rules:
+    # Set to manual due to capacity crunch 2022-12-13.
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
+      when: manual
       allow_failure: true
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
       allow_failure: true
