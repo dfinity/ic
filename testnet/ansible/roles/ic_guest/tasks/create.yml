@@ -81,7 +81,7 @@
 
 - name: copy file disk.img for aux nodes
   vars:
-    aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | default([]) }}"
+    aux_nodes: "{{ hostvars[inventory_hostname].groups.aux | intersect(hostvars[inventory_hostname].ic_guests) | default([]) }}"
     ic_disk_size_bytes: "{{ ic_disk_gb | int * (1024 | pow(3)) | int }}"
   shell: |
     set -eExuo pipefail
