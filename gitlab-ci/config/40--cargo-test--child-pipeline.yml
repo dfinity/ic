@@ -34,7 +34,7 @@ check-bins-darwin:
     - .rules-parent-pipeline
   stage: cargo-test
   needs:
-    - job: wait-for-bazel-test-all
+    - job: wait-for-bazel-test-all-macos
       artifacts: false
   tags:
     - dfinity
