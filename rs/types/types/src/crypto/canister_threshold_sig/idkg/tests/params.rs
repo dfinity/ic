@@ -2,6 +2,7 @@ use super::super::*;
 use crate::crypto::AlgorithmId;
 use crate::NodeId;
 use crate::RegistryVersion;
+use assert_matches::assert_matches;
 use maplit::btreeset;
 use std::collections::BTreeSet;
 
@@ -274,10 +275,7 @@ fn should_not_create_with_empty_dealers() {
         IDkgTranscriptOperation::Random,
     );
 
-    assert!(matches!(
-        result,
-        Err(IDkgParamsValidationError::DealersEmpty)
-    ));
+    assert_matches!(result, Err(IDkgParamsValidationError::DealersEmpty));
 }
 
 #[test]
@@ -293,10 +291,7 @@ fn should_not_create_with_empty_receivers() {
         IDkgTranscriptOperation::Random,
     );
 
-    assert!(matches!(
-        result,
-        Err(IDkgParamsValidationError::ReceiversEmpty)
-    ));
+    assert_matches!(result, Err(IDkgParamsValidationError::ReceiversEmpty));
 }
 
 #[test]
@@ -387,12 +382,12 @@ fn should_not_create_with_placeholder_algid() {
         IDkgTranscriptOperation::Random,
     );
 
-    assert!(matches!(
-        result.unwrap_err(),
-        IDkgParamsValidationError::UnsupportedAlgorithmId {
+    assert_matches!(
+        result,
+        Err(IDkgParamsValidationError::UnsupportedAlgorithmId {
             algorithm_id: AlgorithmId::Placeholder
-        }
-    ));
+        })
+    );
 }
 
 #[test]
@@ -408,12 +403,12 @@ fn should_not_create_with_wrong_algid() {
         IDkgTranscriptOperation::Random,
     );
 
-    assert!(matches!(
-        result.unwrap_err(),
-        IDkgParamsValidationError::UnsupportedAlgorithmId {
+    assert_matches!(
+        result,
+        Err(IDkgParamsValidationError::UnsupportedAlgorithmId {
             algorithm_id: AlgorithmId::RsaSha256
-        }
-    ));
+        })
+    );
 }
 
 #[test]

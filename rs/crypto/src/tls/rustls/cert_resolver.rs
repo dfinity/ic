@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Formatter};
 use tokio_rustls::rustls::sign::CertifiedKey;
 use tokio_rustls::rustls::{ClientHello, ResolvesClientCert, ResolvesServerCert, SignatureScheme};
 
@@ -60,5 +61,18 @@ impl ResolvesServerCert for StaticCertResolver {
             return None;
         }
         Some(self.certified_key.clone())
+    }
+}
+
+impl Debug for StaticCertResolver {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "StaticCertResolver{{ \
+                certified_key: CertifiedKey{{ cert: {:?}, key: OMITTED, ocsp: {:?}, sct_list: {:?} }}, \
+                sig_scheme: {:?} \
+            }}",
+            self.certified_key.cert, self.certified_key.ocsp, self.certified_key.sct_list, self.sig_scheme
+        )
     }
 }

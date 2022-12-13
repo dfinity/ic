@@ -517,6 +517,7 @@ mod verify_public_key {
 mod non_malleability {
     use crate::types::{PublicKeyBytes, SignatureBytes};
     use crate::verify;
+    use assert_matches::assert_matches;
     use ic_crypto_internal_test_vectors::ed25519::{crypto_lib_testvec, Ed25519TestVector};
     use ic_types::crypto::CryptoError;
     use num_bigint::BigUint;
@@ -534,8 +535,9 @@ mod non_malleability {
 
             let result = verify(&SignatureBytes(sig), &msg, &PublicKeyBytes(pk));
 
-            assert!(
-                matches!(result, Err(CryptoError::SignatureVerification { .. })),
+            assert_matches!(
+                result,
+                Err(CryptoError::SignatureVerification { .. }),
                 "Signature for test vector is malleable: {:?}",
                 test_vec
             );

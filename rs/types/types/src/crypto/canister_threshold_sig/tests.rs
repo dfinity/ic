@@ -4,6 +4,7 @@ use crate::crypto::canister_threshold_sig::error::{
 };
 use crate::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
+use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::set_of_nodes;
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
@@ -45,10 +46,10 @@ fn should_not_create_quadruples_with_inconsistent_algorithms() {
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert!(matches!(
+    assert_matches!(
         quadruple,
         Err(PresignatureQuadrupleCreationError::InconsistentAlgorithmIds)
-    ));
+    );
 }
 
 #[test]
@@ -67,10 +68,10 @@ fn should_not_create_quadruples_with_inconsistent_receivers() {
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert!(matches!(
+    assert_matches!(
         quadruple,
         Err(PresignatureQuadrupleCreationError::InconsistentReceivers)
-    ));
+    );
 }
 
 #[test]
@@ -91,9 +92,8 @@ fn should_not_create_quadruples_for_kappa_with_wrong_type() {
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert!(
-        matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
-        if error==format!("`kappa_unmasked` transcript expected to have type `Unmasked` with `ReshareMasked` origin, but found transcript of type {:?}",kappa_unmasked.transcript_type))
+    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+        if error == format!("`kappa_unmasked` transcript expected to have type `Unmasked` with `ReshareMasked` origin, but found transcript of type {:?}",kappa_unmasked.transcript_type)
     );
 }
 
@@ -115,9 +115,8 @@ fn should_not_create_quadruples_for_lambda_with_wrong_type() {
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert!(
-        matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
-        if error==format!("`lambda_masked` transcript expected to have type `Masked` with `Random` origin, but found transcript of type {:?}",lambda_masked.transcript_type))
+    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+        if error == format!("`lambda_masked` transcript expected to have type `Masked` with `Random` origin, but found transcript of type {:?}",lambda_masked.transcript_type)
     );
 }
 
@@ -144,9 +143,8 @@ fn should_not_create_quadruples_for_kappa_times_lambda_with_wrong_origin() {
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert!(
-        matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
-          if error==format!("`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}", kappa_unmasked.transcript_id, lambda_masked.transcript_id, wrong_kappa_times_lambda_type))
+    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+          if error == format!("`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}", kappa_unmasked.transcript_id, lambda_masked.transcript_id, wrong_kappa_times_lambda_type)
     );
 }
 
@@ -170,9 +168,8 @@ fn should_not_create_quadruples_for_kappa_times_lambda_of_wrong_type() {
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert!(
-        matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
-        if error==format!("`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}", kappa_unmasked.transcript_id, lambda_masked.transcript_id, wrong_kappa_times_lambda_type))
+    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+        if error == format!("`kappa_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},{:?})`, but found transcript of type {:?}", kappa_unmasked.transcript_id, lambda_masked.transcript_id, wrong_kappa_times_lambda_type)
     );
 }
 
@@ -199,9 +196,8 @@ fn should_not_create_quadruples_for_key_times_lambda_with_wrong_origin() {
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert!(
-        matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
-        if error==format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, wrong_key_times_lambda_type))
+    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+        if error == format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, wrong_key_times_lambda_type)
     );
 }
 
@@ -225,9 +221,8 @@ fn should_not_create_quadruples_for_key_times_lambda_with_wrong_type() {
         kappa_times_lambda,
         key_times_lambda,
     );
-    assert!(
-        matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
-        if error==format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, wrong_key_times_lambda_type))
+    assert_matches!(quadruple, Err(PresignatureQuadrupleCreationError::InvalidTranscriptOrigin(error))
+        if error == format!("`key_times_lambda` transcript expected to have type `Masked` with origin of type `UnmaskedTimesMasked(_,{:?})`, but found transcript of type {:?}", lambda_masked.transcript_id, wrong_key_times_lambda_type)
     );
 }
 
@@ -299,10 +294,10 @@ fn should_not_create_ecdsa_inputs_with_inconsistent_algorithm() {
         key_transcript,
     );
 
-    assert!(matches!(
+    assert_matches!(
         ecdsa_inputs,
         Err(ThresholdEcdsaSigInputsCreationError::InconsistentAlgorithmIds)
-    ));
+    );
 }
 
 #[test]
@@ -341,10 +336,10 @@ fn should_not_create_ecdsa_inputs_with_unsupported_algorithm() {
         key_transcript,
     );
 
-    assert!(matches!(
+    assert_matches!(
         ecdsa_inputs,
         Err(ThresholdEcdsaSigInputsCreationError::UnsupportedAlgorithm)
-    ));
+    );
 }
 
 #[test]
@@ -369,10 +364,10 @@ fn should_not_create_ecdsa_inputs_with_invalid_hash_length() {
         key_transcript,
     );
 
-    assert!(matches!(
+    assert_matches!(
         ecdsa_inputs,
         Err(ThresholdEcdsaSigInputsCreationError::InvalidHashLength)
-    ));
+    );
 }
 
 #[test]
@@ -402,10 +397,10 @@ fn should_not_create_ecdsa_inputs_with_distinct_receivers() {
         key_transcript,
     );
 
-    assert!(matches!(
+    assert_matches!(
         ecdsa_inputs,
         Err(ThresholdEcdsaSigInputsCreationError::InconsistentReceivers)
-    ));
+    );
 }
 
 #[test]
@@ -434,9 +429,8 @@ fn should_not_create_ecdsa_inputs_for_quadruple_with_wrong_origin() {
         quadruple.clone().unwrap(),
         key_transcript.clone(),
     );
-    assert!(
-        matches!(ecdsa_inputs, Err(ThresholdEcdsaSigInputsCreationError::InvalidQuadrupleOrigin(error))
-        if error==format!("Quadruple transcript `key_times_lambda` expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},_)`, but found transcript of type {:?}", key_transcript.transcript_id, quadruple.unwrap().key_times_lambda().transcript_type))
+    assert_matches!(ecdsa_inputs, Err(ThresholdEcdsaSigInputsCreationError::InvalidQuadrupleOrigin(error))
+        if error == format!("Quadruple transcript `key_times_lambda` expected to have type `Masked` with origin of type `UnmaskedTimesMasked({:?},_)`, but found transcript of type {:?}", key_transcript.transcript_id, quadruple.unwrap().key_times_lambda().transcript_type)
     );
 }
 

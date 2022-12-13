@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_crypto::get_tecdsa_master_public_key;
 use ic_crypto_internal_threshold_sig_ecdsa::{EccScalar, IDkgDealingInternal, MEGaCiphertext};
@@ -85,9 +86,7 @@ mod create_dealing {
 
         let result = crypto_for(dealer_id, &env.crypto_components).create_dealing(&params);
         let err = result.unwrap_err();
-        assert!(
-            matches!(err, IDkgCreateDealingError::PublicKeyNotFound { node_id, .. } if node_id==new_node_id)
-        );
+        assert_matches!(err, IDkgCreateDealingError::PublicKeyNotFound { node_id, .. } if node_id==new_node_id);
     }
 
     #[test]
@@ -107,9 +106,7 @@ mod create_dealing {
 
         let result = crypto_for(bad_dealer_id, &env.crypto_components).create_dealing(&params);
         let err = result.unwrap_err();
-        assert!(
-            matches!(err, IDkgCreateDealingError::NotADealer { node_id } if node_id==bad_dealer_id)
-        );
+        assert_matches!(err, IDkgCreateDealingError::NotADealer { node_id } if node_id==bad_dealer_id);
     }
 
     #[test]
@@ -131,10 +128,7 @@ mod create_dealing {
 
         let result = crypto_for(dealer_id, &env.crypto_components).create_dealing(&reshare_params);
         let err = result.unwrap_err();
-        assert!(matches!(
-            err,
-            IDkgCreateDealingError::SecretSharesNotFound { .. }
-        ));
+        assert_matches!(err, IDkgCreateDealingError::SecretSharesNotFound { .. });
 
         // Now, load the transcript and make sure it succeeds
         load_transcript(&initial_transcript, &env.crypto_components, dealer_id);
@@ -172,11 +166,11 @@ mod create_transcript {
         let result = crypto_for(creator_id, &env.crypto_components)
             .create_transcript(&params, &batch_signed_dealings);
         let err = result.unwrap_err();
-        assert!(matches!(
+        assert_matches!(
             err,
             IDkgCreateTranscriptError::UnsatisfiedCollectionThreshold { threshold, dealing_count }
             if (threshold as usize)==(params.collection_threshold().get() as usize) && (dealing_count as usize)==dealings.len()
-        ));
+        );
     }
 
     #[test]
@@ -205,10 +199,7 @@ mod create_transcript {
         let result = crypto_for(creator_id, &env.crypto_components)
             .create_transcript(&params, &batch_signed_dealings);
         let err = result.unwrap_err();
-        assert!(matches!(
-            err,
-            IDkgCreateTranscriptError::DealerNotAllowed { .. }
-        ));
+        assert_matches!(err, IDkgCreateTranscriptError::DealerNotAllowed { .. });
     }
 
     #[test]
@@ -242,13 +233,13 @@ mod create_transcript {
         let result = crypto_for(creator_id, &env.crypto_components)
             .create_transcript(&modified_params, &batch_signed_dealings);
         let err = result.unwrap_err();
-        assert!(matches!(
+        assert_matches!(
             err,
             IDkgCreateTranscriptError::SignerNotAllowed {
                 node_id
             }
             if node_id==removed_node_id
-        ));
+        );
     }
 
     #[test]
@@ -287,11 +278,11 @@ mod create_transcript {
         let result = crypto_for(creator_id, &env.crypto_components)
             .create_transcript(&params, &insufficient_batch_signed_dealings);
         let err = result.unwrap_err();
-        assert!(matches!(
+        assert_matches!(
             err,
             IDkgCreateTranscriptError::UnsatisfiedVerificationThreshold { threshold, signature_count, .. }
             if threshold == params.verification_threshold().get() && signature_count == (threshold as usize - 1)
-        ));
+        );
     }
 
     #[test]
@@ -308,12 +299,12 @@ mod create_transcript {
         let result = crypto_for(creator_id, &env.crypto_components)
             .create_transcript(&params, &batch_signed_dealings);
 
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(IDkgCreateTranscriptError::InvalidSignatureBatch {
                 crypto_error: CryptoError::SignatureVerification { .. }
             })
-        ));
+        );
     }
 
     #[test]
@@ -332,12 +323,12 @@ mod create_transcript {
         let result = crypto_for(creator_id, &env.crypto_components)
             .create_transcript(&params, &batch_signed_dealings);
 
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(IDkgCreateTranscriptError::InvalidSignatureBatch {
                 crypto_error: CryptoError::SignatureVerification { .. }
             })
-        ));
+        );
     }
 
     #[test]
@@ -356,12 +347,12 @@ mod create_transcript {
         let result = crypto_for(creator_id, &env.crypto_components)
             .create_transcript(&params, &batch_signed_dealings);
 
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(IDkgCreateTranscriptError::InvalidSignatureBatch {
                 crypto_error: CryptoError::SignatureVerification { .. }
             })
-        ));
+        );
     }
 
     fn create_batch_signed_dealings(
@@ -428,7 +419,7 @@ mod load_transcript {
 
         let result = crypto_for(loader_id, &env.crypto_components).load_transcript(&transcript);
 
-        assert!(matches!(result, Ok(complaints) if complaints.is_empty()));
+        assert_matches!(result, Ok(complaints) if complaints.is_empty());
     }
 }
 
@@ -499,14 +490,14 @@ mod verify_complaint {
         let wrong_complainer_id =
             random_receiver_id_excluding(params.receivers(), complainer.get_node_id());
 
-        assert!(matches!(
+        assert_matches!(
             crypto_for(random_receiver_id(&params), &env.crypto_components).verify_complaint(
                 &transcript,
                 wrong_complainer_id,
                 &complaint,
             ),
             Err(IDkgVerifyComplaintError::InvalidComplaint)
-        ));
+        );
     }
 
     #[test]
@@ -532,10 +523,10 @@ mod verify_complaint {
         let result = crypto_for(random_receiver_id(&params), &env.crypto_components)
             .verify_complaint(&transcript, complainer.get_node_id(), &complaint);
 
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(IDkgVerifyComplaintError::InvalidArgumentMismatchingTranscriptIDs)
-        ));
+        );
     }
 
     #[test]
@@ -569,22 +560,22 @@ mod verify_complaint {
         let mut complaint_2 = complaints.get(1).unwrap().clone();
         std::mem::swap(&mut complaint_1.dealer_id, &mut complaint_2.dealer_id);
 
-        assert!(matches!(
+        assert_matches!(
             crypto_for(complainer_id, &env.crypto_components).verify_complaint(
                 &transcript,
                 complainer_id,
                 &complaint_1,
             ),
             Err(IDkgVerifyComplaintError::InvalidComplaint)
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             crypto_for(complainer_id, &env.crypto_components).verify_complaint(
                 &transcript,
                 complainer_id,
                 &complaint_2,
             ),
             Err(IDkgVerifyComplaintError::InvalidComplaint)
-        ));
+        );
     }
 
     #[test]
@@ -621,22 +612,22 @@ mod verify_complaint {
             &mut complaint_2.internal_complaint_raw,
         );
 
-        assert!(matches!(
+        assert_matches!(
             crypto_for(complainer_id, &env.crypto_components).verify_complaint(
                 &transcript,
                 complainer_id,
                 &complaint_1,
             ),
             Err(IDkgVerifyComplaintError::InvalidComplaint)
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             crypto_for(complainer_id, &env.crypto_components).verify_complaint(
                 &transcript,
                 complainer_id,
                 &complaint_2,
             ),
             Err(IDkgVerifyComplaintError::InvalidComplaint)
-        ));
+        );
     }
 }
 
@@ -895,7 +886,7 @@ mod sign_share {
 
         let result = bad_crypto_component.sign_share(&inputs);
         let err = result.unwrap_err();
-        assert!(matches!(err, ThresholdEcdsaSignShareError::NotAReceiver));
+        assert_matches!(err, ThresholdEcdsaSignShareError::NotAReceiver);
     }
 
     #[test]
@@ -913,10 +904,10 @@ mod sign_share {
 
         let result = crypto_for(signer_id, &env.crypto_components).sign_share(&inputs);
         let err = result.unwrap_err();
-        assert!(matches!(
+        assert_matches!(
             err,
             ThresholdEcdsaSignShareError::SecretSharesNotFound { .. }
-        ));
+        );
     }
 
     #[test]
@@ -973,10 +964,10 @@ mod sign_share {
 
         let result = crypto_for(signer_id, &env.crypto_components).sign_share(&inputs);
         let err = result.unwrap_err();
-        assert!(matches!(
+        assert_matches!(
             err,
             ThresholdEcdsaSignShareError::SecretSharesNotFound { .. }
-        ));
+        );
     }
 
     #[test]
@@ -1033,10 +1024,10 @@ mod sign_share {
 
         let result = crypto_for(signer_id, &env.crypto_components).sign_share(&inputs);
         let err = result.unwrap_err();
-        assert!(matches!(
+        assert_matches!(
             err,
             ThresholdEcdsaSignShareError::SecretSharesNotFound { .. }
-        ));
+        );
     }
 }
 
@@ -1176,10 +1167,10 @@ mod retain_active_transcripts {
 
         let result = crypto_for(signer_id, &env.crypto_components).sign_share(&inputs);
         let err = result.unwrap_err();
-        assert!(matches!(
+        assert_matches!(
             err,
             ThresholdEcdsaSignShareError::SecretSharesNotFound { .. }
-        ));
+        );
     }
 
     #[test]
@@ -1230,10 +1221,10 @@ mod retain_active_transcripts {
 
         let result = crypto_for(signer_id, &env.crypto_components).sign_share(&inputs);
         let err = result.unwrap_err();
-        assert!(matches!(
+        assert_matches!(
             err,
             ThresholdEcdsaSignShareError::SecretSharesNotFound { .. }
-        ));
+        );
     }
 
     #[test]
@@ -1284,10 +1275,10 @@ mod retain_active_transcripts {
 
         let result = crypto_for(signer_id, &env.crypto_components).sign_share(&inputs);
         let err = result.unwrap_err();
-        assert!(matches!(
+        assert_matches!(
             err,
             ThresholdEcdsaSignShareError::SecretSharesNotFound { .. }
-        ));
+        );
     }
 
     #[test]
@@ -1338,10 +1329,10 @@ mod retain_active_transcripts {
 
         let result = crypto_for(signer_id, &env.crypto_components).sign_share(&inputs);
         let err = result.unwrap_err();
-        assert!(matches!(
+        assert_matches!(
             err,
             ThresholdEcdsaSignShareError::SecretSharesNotFound { .. }
-        ));
+        );
     }
 
     #[test]
@@ -1517,10 +1508,7 @@ mod retain_active_transcripts {
         // Create dealing should now fail
         let result = crypto_for(dealer_id, &env.crypto_components).create_dealing(&reshare_params);
         let err = result.unwrap_err();
-        assert!(matches!(
-            err,
-            IDkgCreateDealingError::SecretSharesNotFound { .. }
-        ));
+        assert_matches!(err, IDkgCreateDealingError::SecretSharesNotFound { .. });
     }
 
     #[test]
@@ -1565,10 +1553,7 @@ mod retain_active_transcripts {
         // Create dealing should now fail
         let result = crypto_for(dealer_id, &env.crypto_components).create_dealing(&reshare_params);
         let err = result.unwrap_err();
-        assert!(matches!(
-            err,
-            IDkgCreateDealingError::SecretSharesNotFound { .. }
-        ));
+        assert_matches!(err, IDkgCreateDealingError::SecretSharesNotFound { .. });
     }
 }
 
@@ -1644,10 +1629,10 @@ mod load_transcript_with_openings {
         let result =
             complainer.load_transcript_with_openings(&transcript, &complaint_with_openings);
 
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(IDkgLoadTranscriptError::InsufficientOpenings { .. })
-        ));
+        );
     }
 
     fn generate_and_verify_openings_for_complaint(
@@ -1963,11 +1948,11 @@ mod verify_combined_sig {
         let result = crypto_for(combiner_id, &env.crypto_components)
             .combine_sig_shares(&inputs, &sig_shares);
         let err = result.unwrap_err();
-        assert!(matches!(
+        assert_matches!(
             err,
             ThresholdEcdsaCombineSigSharesError::UnsatisfiedReconstructionThreshold {threshold, share_count}
             if threshold == inputs.reconstruction_threshold().get() && share_count == (threshold as usize - 1)
-        ));
+        );
     }
 
     #[test]
@@ -2182,13 +2167,13 @@ mod verify_dealing_private {
             &signed_dealing_with_corrupted_signature,
         );
 
-        assert!(matches!(
+        assert_matches!(
             (result_verify_public, result_verify_private),
             (
                 Err(IDkgVerifyDealingPublicError::InvalidSignature { .. }),
                 Ok(())
             )
-        ));
+        );
     }
 
     #[test]
@@ -2224,9 +2209,7 @@ mod verify_dealing_private {
                 .build_with_signature(&params, dealer, dealer_id),
         );
 
-        assert!(
-            matches!( result, Err(IDkgVerifyDealingPrivateError::InvalidArgument(reason)) if reason.starts_with("mismatching transcript IDs"))
-        );
+        assert_matches!( result, Err(IDkgVerifyDealingPrivateError::InvalidArgument(reason)) if reason.starts_with("mismatching transcript IDs"));
     }
 
     #[test]
@@ -2248,9 +2231,7 @@ mod verify_dealing_private {
                 .build_with_signature(&params, dealer, dealer_id),
         );
 
-        assert!(
-            matches!( result, Err(IDkgVerifyDealingPrivateError::InvalidArgument(reason)) if reason.starts_with("failed to deserialize internal dealing"))
-        );
+        assert_matches!( result, Err(IDkgVerifyDealingPrivateError::InvalidArgument(reason)) if reason.starts_with("failed to deserialize internal dealing"));
     }
 
     /// Call both [IDkgProtocol::verify_dealing_public] and [IDkgProtocol::verify_dealing_private]
@@ -2316,10 +2297,10 @@ mod verify_dealing_public {
 
         let result = verifier.verify_dealing_public(&params, &signed_dealing);
 
-        assert!(matches!( result,
+        assert_matches!( result,
             Err(IDkgVerifyDealingPublicError::InvalidSignature { error, .. })
             if error.contains("Invalid basic signature on signed iDKG dealing from signer")
-        ));
+        );
     }
 
     #[test]
@@ -2343,10 +2324,10 @@ mod verify_dealing_public {
 
         let result = verifier.verify_dealing_public(&params, &signed_dealing);
 
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(IDkgVerifyDealingPublicError::TranscriptIdMismatch)
-        ));
+        );
     }
 
     #[test]
@@ -2376,10 +2357,10 @@ mod verify_dealing_public {
 
         let result = verifier.verify_dealing_public(&params, &signed_dealing);
 
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(IDkgVerifyDealingPublicError::InvalidDealing {reason}) if reason == "InvalidProof"
-        ));
+        );
     }
 
     #[test]
@@ -2403,10 +2384,10 @@ mod verify_dealing_public {
 
         let result = verifier.verify_dealing_public(&params, &signed_dealing);
 
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(IDkgVerifyDealingPublicError::InvalidDealing {reason}) if reason.starts_with("SerializationError")
-        ));
+        );
     }
 }
 
@@ -2435,11 +2416,11 @@ mod verify_initial_dealings {
         let other_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
 
         let verifier = random_receiver_id(&reshare_of_unmasked_params);
-        assert!(matches!(
+        assert_matches!(
             crypto_for(verifier, &env.crypto_components)
                 .verify_initial_dealings(&other_params, &initial_dealings),
             Err(IDkgVerifyInitialDealingsError::MismatchingTranscriptParams)
-        ));
+        );
     }
 
     #[test]
@@ -2455,10 +2436,8 @@ mod verify_initial_dealings {
             &reshare_of_unmasked_params,
             &initial_dealings_with_first_currupted,
         );
-        assert!(
-            matches!(result, Err(IDkgVerifyInitialDealingsError::PublicVerificationFailure { verify_dealing_public_error, ..})
-                if matches!(verify_dealing_public_error, IDkgVerifyDealingPublicError::InvalidSignature { .. })
-            )
+        assert_matches!(result, Err(IDkgVerifyInitialDealingsError::PublicVerificationFailure { verify_dealing_public_error, ..})
+            if matches!(verify_dealing_public_error, IDkgVerifyDealingPublicError::InvalidSignature { .. })
         );
     }
 
@@ -2535,10 +2514,7 @@ mod open_transcript {
             &complaint,
         );
         assert!(result.is_err());
-        assert!(matches!(
-            result,
-            Err(IDkgOpenTranscriptError::InternalError { .. })
-        ));
+        assert_matches!(result, Err(IDkgOpenTranscriptError::InternalError { .. }));
         assert!(
             format!("{:?}", result).contains("InvalidCommitment"),
             "result: {:?}",
@@ -2564,10 +2540,7 @@ mod open_transcript {
             &complaint,
         );
         assert!(result.is_err());
-        assert!(matches!(
-            result,
-            Err(IDkgOpenTranscriptError::InternalError { .. })
-        ));
+        assert_matches!(result, Err(IDkgOpenTranscriptError::InternalError { .. }));
         assert!(
             format!("{:?}", result).contains("MissingDealing"),
             "result: {:?}",
@@ -2589,10 +2562,7 @@ mod open_transcript {
             &complaint,
         );
         assert!(result.is_err());
-        assert!(matches!(
-            result,
-            Err(IDkgOpenTranscriptError::InternalError { .. })
-        ));
+        assert_matches!(result, Err(IDkgOpenTranscriptError::InternalError { .. }));
         assert!(
             format!("{:?}", result).contains("InvalidComplaint"),
             "result: {:?}",
@@ -2619,10 +2589,7 @@ mod open_transcript {
             &complaint,
         );
         assert!(result.is_err());
-        assert!(matches!(
-            result,
-            Err(IDkgOpenTranscriptError::InternalError { .. })
-        ));
+        assert_matches!(result, Err(IDkgOpenTranscriptError::InternalError { .. }));
         assert!(
             format!("{:?}", result).contains("InvalidArgumentMismatchingTranscriptIDs"),
             "result: {:?}",
@@ -2679,11 +2646,7 @@ mod verify_opening {
             &opening,
             &complaint,
         );
-        assert!(
-            matches!(result, Err(IDkgVerifyOpeningError::TranscriptIdMismatch)),
-            "{:?}",
-            result
-        );
+        assert_matches!(result, Err(IDkgVerifyOpeningError::TranscriptIdMismatch));
     }
 
     #[test]
@@ -2710,11 +2673,7 @@ mod verify_opening {
             &opening,
             &complaint,
         );
-        assert!(
-            matches!(result, Err(IDkgVerifyOpeningError::TranscriptIdMismatch)),
-            "{:?}",
-            result
-        );
+        assert_matches!(result, Err(IDkgVerifyOpeningError::TranscriptIdMismatch));
     }
 
     #[test]
@@ -2736,11 +2695,7 @@ mod verify_opening {
             &opening,
             &complaint,
         );
-        assert!(
-            matches!(result, Err(IDkgVerifyOpeningError::DealerIdMismatch)),
-            "{:?}",
-            result
-        );
+        assert_matches!(result, Err(IDkgVerifyOpeningError::DealerIdMismatch));
     }
 
     #[test]
@@ -2766,13 +2721,9 @@ mod verify_opening {
             &opening,
             &complaint,
         );
-        assert!(
-            matches!(
-                result,
-                Err(IDkgVerifyOpeningError::MissingOpenerInReceivers { .. })
-            ),
-            "{:?}",
-            result
+        assert_matches!(
+            result,
+            Err(IDkgVerifyOpeningError::MissingOpenerInReceivers { .. })
         );
     }
 
@@ -2797,11 +2748,7 @@ mod verify_opening {
             &opening,
             &complaint,
         );
-        assert!(
-            matches!(result, Err(IDkgVerifyOpeningError::InternalError { .. })),
-            "{:?}",
-            result
-        );
+        assert_matches!(result, Err(IDkgVerifyOpeningError::InternalError { .. }));
     }
 
     #[test]
@@ -2830,13 +2777,9 @@ mod verify_opening {
             &opening,
             &complaint,
         );
-        assert!(
-            matches!(
-                result,
-                Err(IDkgVerifyOpeningError::MissingDealingInTranscript { .. })
-            ),
-            "{:?}",
-            result
+        assert_matches!(
+            result,
+            Err(IDkgVerifyOpeningError::MissingDealingInTranscript { .. })
         );
     }
 }

@@ -1,4 +1,5 @@
 use crate::tls::rustls::csp_server_signing_key::CspServerEd25519SigningKey;
+use assert_matches::assert_matches;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use ic_crypto_internal_csp::secret_key_store::proto_store::ProtoSecretKeyStore;
@@ -105,9 +106,9 @@ fn should_return_error_from_csp() {
         .expect("failed to choose scheme");
     let result = signer.sign("some message".as_bytes());
 
-    assert!(matches!(result, Err(TLSError::General(message))
-             if message.contains("Failed to create signature during TLS handshake by means of the CspServerEd25519Signer: SecretKeyNotFound")
-    ));
+    assert_matches!(result, Err(TLSError::General(message))
+         if message.contains("Failed to create signature during TLS handshake by means of the CspServerEd25519Signer: SecretKeyNotFound")
+    );
 }
 
 fn local_csp_server() -> (

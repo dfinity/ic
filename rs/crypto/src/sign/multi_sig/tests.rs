@@ -3,6 +3,7 @@
 use super::*;
 use crate::common::test_utils::crypto_component::crypto_component_with;
 use crate::sign::tests::*;
+use assert_matches::assert_matches;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
 
@@ -130,11 +131,11 @@ mod test_multi_sig_verification {
             public_key_store(),
         );
 
-        assert!(matches!(
-        crypto.combine_multi_sig_individuals(empty_signatures, REG_V1),
-        Err(CryptoError::InvalidArgument { message })
-            if message.contains("No signatures to combine. At least one signature is needed to combine a multi-signature")
-        ));
+        assert_matches!(
+            crypto.combine_multi_sig_individuals(empty_signatures, REG_V1),
+            Err(CryptoError::InvalidArgument { message })
+                if message.contains("No signatures to combine. At least one signature is needed to combine a multi-signature")
+        );
     }
 
     #[test]
@@ -198,11 +199,11 @@ mod test_multi_sig_verification {
             public_key_store(),
         );
 
-        assert!(matches!(
-        crypto.verify_multi_sig_combined(&combined_sig, &msg_1, empty_nodes, REG_V1),
-        Err(CryptoError::InvalidArgument { message })
-            if message.contains("Empty signers. At least one signer is needed to verify a combined multi-signature")
-        ));
+        assert_matches!(
+            crypto.verify_multi_sig_combined(&combined_sig, &msg_1, empty_nodes, REG_V1),
+            Err(CryptoError::InvalidArgument { message })
+                if message.contains("Empty signers. At least one signer is needed to verify a combined multi-signature")
+        );
     }
     // TODO: DFN-1233 Add more tests in addition to the above happy-path test.
 }

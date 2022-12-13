@@ -3,6 +3,7 @@
 use super::*;
 use crate::common::test_utils::crypto_component::crypto_component_with;
 use crate::sign::tests::*;
+use assert_matches::assert_matches;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp_test_utils::public_key_store::MockPublicKeyStore;
 use ic_crypto_internal_csp_test_utils::secret_key_store_test_utils::MockSecretKeyStore;
@@ -206,11 +207,11 @@ mod test_basic_sig_verification {
                 MockPublicKeyStore::new(),
             );
 
-            assert!(matches!(
+            assert_matches!(
                 crypto.combine_basic_sig(signatures, REG_V2),
                 Err(CryptoError::InvalidArgument { message })
                 if message.contains("No signatures to combine in a batch. At least one signature is needed to create a batch")
-            ));
+            );
         }
 
         #[test]
@@ -326,10 +327,10 @@ mod test_basic_sig_verification {
             let sig_batch = crypto.combine_basic_sig(signatures, REG_V2);
             assert!(sig_batch.is_ok());
 
-            assert!(matches!(
+            assert_matches!(
                 crypto.verify_basic_sig_batch(&sig_batch.unwrap(), &msg, REG_V2),
                 Err(CryptoError::SignatureVerification { .. })
-            ));
+            );
         }
 
         #[test]
@@ -352,11 +353,11 @@ mod test_basic_sig_verification {
                 MockPublicKeyStore::new(),
             );
 
-            assert!(matches!(
+            assert_matches!(
                 crypto.verify_basic_sig_batch(&empty_batch, &msg, REG_V2),
                 Err(CryptoError::InvalidArgument { message })
                 if message.contains("Empty BasicSignatureBatch. At least one signature should be included in the batch.")
-            ));
+            );
         }
     }
 

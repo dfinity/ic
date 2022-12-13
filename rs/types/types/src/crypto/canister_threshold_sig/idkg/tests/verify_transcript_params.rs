@@ -7,6 +7,7 @@ use crate::crypto::canister_threshold_sig::idkg::{
 use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
 use crate::{Height, NodeId, PrincipalId, RegistryVersion, SubnetId};
+use assert_matches::assert_matches;
 use maplit::{btreemap, btreeset};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -30,7 +31,7 @@ fn should_fail_on_mismatching_transcript_ids() {
 
     let result = transcript.verify_consistency_with_params(&params);
 
-    assert!(matches!(result, Err(error) if error.contains("mismatching transcript IDs")));
+    assert_matches!(result, Err(error) if error.contains("mismatching transcript IDs"));
 }
 
 #[test]
@@ -45,7 +46,7 @@ fn should_fail_on_mismatching_receivers() {
 
     let result = transcript.verify_consistency_with_params(&params);
 
-    assert!(matches!(result, Err(error) if error.contains("mismatching receivers")));
+    assert_matches!(result, Err(error) if error.contains("mismatching receivers"));
 }
 
 #[test]
@@ -56,7 +57,7 @@ fn should_fail_on_mismatching_registry_versions() {
 
     let result = transcript.verify_consistency_with_params(&params);
 
-    assert!(matches!(result, Err(error) if error.contains("mismatching registry versions")));
+    assert_matches!(result, Err(error) if error.contains("mismatching registry versions"));
 }
 
 #[test]
@@ -67,7 +68,7 @@ fn should_fail_on_mismatching_algorithm_ids() {
 
     let result = transcript.verify_consistency_with_params(&params);
 
-    assert!(matches!(result, Err(error) if error.contains("mismatching algorithm IDs")));
+    assert_matches!(result, Err(error) if error.contains("mismatching algorithm IDs"));
 }
 
 #[test]
@@ -77,18 +78,18 @@ fn should_fail_on_mismatching_transcript_types_for_operation_type_random() {
 
     transcript.transcript_type = Itt::Unmasked(Iuto::ReshareMasked(dummy_transcript_id()));
     let result = transcript.verify_consistency_with_params(&params);
-    assert!(matches!(result, Err(e) if e.contains("does not match transcript type derived")));
+    assert_matches!(result, Err(e) if e.contains("does not match transcript type derived"));
 
     transcript.transcript_type = Itt::Unmasked(Iuto::ReshareUnmasked(dummy_transcript_id()));
     let result = transcript.verify_consistency_with_params(&params);
-    assert!(matches!(result, Err(e) if e.contains("does not match transcript type derived")));
+    assert_matches!(result, Err(e) if e.contains("does not match transcript type derived"));
 
     transcript.transcript_type = Itt::Masked(Imto::UnmaskedTimesMasked(
         dummy_transcript_id(),
         dummy_transcript_id(),
     ));
     let result = transcript.verify_consistency_with_params(&params);
-    assert!(matches!(result, Err(e) if e.contains("does not match transcript type derived")));
+    assert_matches!(result, Err(e) if e.contains("does not match transcript type derived"));
 }
 
 #[test]
@@ -98,18 +99,18 @@ fn should_fail_on_mismatching_transcript_types_for_operation_type_reshare_of_mas
 
     transcript.transcript_type = Itt::Masked(Imto::Random);
     let result = transcript.verify_consistency_with_params(&params);
-    assert!(matches!(result, Err(e) if e.contains("does not match transcript type derived")));
+    assert_matches!(result, Err(e) if e.contains("does not match transcript type derived"));
 
     transcript.transcript_type = Itt::Unmasked(Iuto::ReshareUnmasked(dummy_transcript_id()));
     let result = transcript.verify_consistency_with_params(&params);
-    assert!(matches!(result, Err(e) if e.contains("does not match transcript type derived")));
+    assert_matches!(result, Err(e) if e.contains("does not match transcript type derived"));
 
     transcript.transcript_type = Itt::Masked(Imto::UnmaskedTimesMasked(
         dummy_transcript_id(),
         dummy_transcript_id(),
     ));
     let result = transcript.verify_consistency_with_params(&params);
-    assert!(matches!(result, Err(e) if e.contains("does not match transcript type derived")));
+    assert_matches!(result, Err(e) if e.contains("does not match transcript type derived"));
 }
 
 #[test]
@@ -119,18 +120,18 @@ fn should_fail_on_mismatching_transcript_types_for_operation_type_reshare_of_unm
 
     transcript.transcript_type = Itt::Masked(Imto::Random);
     let result = transcript.verify_consistency_with_params(&params);
-    assert!(matches!(result, Err(e) if e.contains("does not match transcript type derived")));
+    assert_matches!(result, Err(e) if e.contains("does not match transcript type derived"));
 
     transcript.transcript_type = Itt::Unmasked(Iuto::ReshareMasked(dummy_transcript_id()));
     let result = transcript.verify_consistency_with_params(&params);
-    assert!(matches!(result, Err(e) if e.contains("does not match transcript type derived")));
+    assert_matches!(result, Err(e) if e.contains("does not match transcript type derived"));
 
     transcript.transcript_type = Itt::Masked(Imto::UnmaskedTimesMasked(
         dummy_transcript_id(),
         dummy_transcript_id(),
     ));
     let result = transcript.verify_consistency_with_params(&params);
-    assert!(matches!(result, Err(e) if e.contains("does not match transcript type derived")));
+    assert_matches!(result, Err(e) if e.contains("does not match transcript type derived"));
 }
 
 #[test]
@@ -141,15 +142,15 @@ fn should_fail_on_mismatching_transcript_types_for_operation_type_unmasked_times
 
     transcript.transcript_type = Itt::Masked(Imto::Random);
     let result = transcript.verify_consistency_with_params(&params);
-    assert!(matches!(result, Err(e) if e.contains("does not match transcript type derived")));
+    assert_matches!(result, Err(e) if e.contains("does not match transcript type derived"));
 
     transcript.transcript_type = Itt::Unmasked(Iuto::ReshareMasked(dummy_transcript_id()));
     let result = transcript.verify_consistency_with_params(&params);
-    assert!(matches!(result, Err(e) if e.contains("does not match transcript type derived")));
+    assert_matches!(result, Err(e) if e.contains("does not match transcript type derived"));
 
     transcript.transcript_type = Itt::Unmasked(Iuto::ReshareUnmasked(dummy_transcript_id()));
     let result = transcript.verify_consistency_with_params(&params);
-    assert!(matches!(result, Err(e) if e.contains("does not match transcript type derived")));
+    assert_matches!(result, Err(e) if e.contains("does not match transcript type derived"));
 }
 
 #[test]
@@ -161,7 +162,7 @@ fn should_fail_on_insufficient_num_of_dealings() {
 
     let result = transcript.verify_consistency_with_params(&params);
 
-    assert!(matches!(result, Err(e) if e.contains("insufficient number of dealings (1<2)")));
+    assert_matches!(result, Err(e) if e.contains("insufficient number of dealings (1<2)"));
 }
 
 #[test]
@@ -173,7 +174,7 @@ fn should_fail_on_dealing_from_non_dealer() {
 
     let result = transcript.verify_consistency_with_params(&params);
 
-    assert!(matches!(result, Err(e) if e.contains("transcript contains dealings from non-dealer")));
+    assert_matches!(result, Err(e) if e.contains("transcript contains dealings from non-dealer"));
 }
 
 #[test]
@@ -185,10 +186,10 @@ fn should_fail_on_mismatching_dealer_indexes() {
 
     let result = transcript.verify_consistency_with_params(&params);
 
-    assert!(matches!(result, Err(e)
+    assert_matches!(result, Err(e)
             if e.contains("mismatching dealer indexes in transcript (0) and \
                           params (1) for dealer gfvbo-licaa-aaaaa-aaaap-2ai")
-    ));
+    );
 }
 
 #[test]
@@ -207,10 +208,10 @@ fn should_fail_on_ineligible_signer() {
 
     let result = transcript.verify_consistency_with_params(&params);
 
-    assert!(matches!(result, Err(e)
+    assert_matches!(result, Err(e)
             if e.contains(&format!("ineligible signers (non-receivers) for \
                            dealer index {}: {{{}}}", first_dealer_index, non_receiver))
-    ));
+    );
 }
 
 fn valid_transcript_and_params() -> (IDkgTranscript, IDkgTranscriptParams) {

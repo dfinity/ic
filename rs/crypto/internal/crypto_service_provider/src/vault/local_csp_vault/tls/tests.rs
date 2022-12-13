@@ -9,6 +9,7 @@ use crate::vault::test_utils;
 use crate::vault::test_utils::sks::secret_key_store_containing_key_with_invalid_encoding;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use crate::LocalCspVault;
+use assert_matches::assert_matches;
 use ic_types_test_utils::ids::node_test_id;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -107,10 +108,8 @@ mod keygen {
         let invalid_not_after = "invalid_not_after_date";
         let result =
             csp_vault.gen_tls_key_pair(node_test_id(test_utils::tls::NODE_1), invalid_not_after);
-        assert!(
-            matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
-                if message.eq("invalid X.509 certificate expiration date (not_after)") && not_after.eq(invalid_not_after)
-            )
+        assert_matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
+            if message.eq("invalid X.509 certificate expiration date (not_after)") && not_after.eq(invalid_not_after)
         );
     }
 
@@ -121,10 +120,8 @@ mod keygen {
 
         let result =
             csp_vault.gen_tls_key_pair(node_test_id(test_utils::tls::NODE_1), date_in_the_past);
-        assert!(
-            matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
-                if message.eq("'not after' date must not be in the past") && not_after.eq(date_in_the_past)
-            )
+        assert_matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
+            if message.eq("'not after' date must not be in the past") && not_after.eq(date_in_the_past)
         );
     }
 

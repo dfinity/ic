@@ -24,6 +24,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/test_vectors",
     "//rs/crypto/test_utils",
     "//rs/interfaces",
+    "@crate_index//:assert_matches",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

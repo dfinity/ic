@@ -14,5 +14,6 @@ serde_bytes = "0.11"
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [dev-dependencies]
+assert_matches = "1.5.0"
 ic-crypto-test-utils = { path = "../../../test_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../test_utils/reproducible_rng" }

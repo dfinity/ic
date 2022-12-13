@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use ic_base_types::NodeId;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::{CryptoComponent, CryptoComponentFatClient};
@@ -177,10 +178,10 @@ fn should_fail_to_convert_mega_pubkey_from_proto_if_algorithm_unsupported() {
 
     let result = mega_public_key_from_proto(&mega_proto);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(MEGaPublicKeyFromProtoError::UnsupportedAlgorithm { .. })
-    ))
+    );
 }
 
 #[test]
@@ -194,8 +195,8 @@ fn should_fail_to_convert_mega_pubkey_from_proto_if_pubkey_malformed() {
 
     let result = mega_public_key_from_proto(&mega_proto);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(MEGaPublicKeyFromProtoError::MalformedPublicKey { .. })
-    ))
+    );
 }

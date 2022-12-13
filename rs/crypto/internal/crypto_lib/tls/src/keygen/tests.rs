@@ -1,5 +1,7 @@
 #![allow(clippy::unwrap_used)]
+
 use super::*;
+use assert_matches::assert_matches;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use openssl::pkey::{Id, Public};
 use openssl::x509::X509VerifyResult;
@@ -146,10 +148,8 @@ fn should_return_error_if_not_after_date_is_in_the_past() {
     let date_in_the_past_string = "20211004235959Z";
     let date_in_the_past = Asn1Time::from_str_x509(date_in_the_past_string).unwrap();
     let result = generate_tls_key_pair(&mut reproducible_rng(), "common name", &date_in_the_past);
-    assert!(
-        matches!(result, Err(TlsKeyPairAndCertGenerationError::InvalidNotAfterDate { message })
-            if message.eq("'not after' date must not be in the past")
-        )
+    assert_matches!(result, Err(TlsKeyPairAndCertGenerationError::InvalidNotAfterDate { message })
+        if message.eq("'not after' date must not be in the past")
     );
 }
 

@@ -1,5 +1,6 @@
 use super::super::*;
 use crate::{NodeId, PrincipalId};
+use assert_matches::assert_matches;
 
 const NODE_1: u64 = 1;
 const NODE_2: u64 = 2;
@@ -15,7 +16,7 @@ fn should_not_create_empty_receivers() {
 
     let err = result.unwrap_err();
 
-    assert!(matches!(err, IDkgParamsValidationError::ReceiversEmpty));
+    assert_matches!(err, IDkgParamsValidationError::ReceiversEmpty);
 }
 
 #[test]

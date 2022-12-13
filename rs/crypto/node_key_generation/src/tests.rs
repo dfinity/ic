@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
+use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::NodePublicKeyData;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
@@ -161,11 +162,11 @@ fn should_fail_check_keys_locally_if_no_matching_node_signing_secret_key_is_pres
 
     let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(CryptoError::SecretKeyNotFound { algorithm, .. })
         if algorithm == AlgorithmId::Ed25519
-    ));
+    );
 }
 
 #[test]
@@ -198,11 +199,11 @@ fn should_fail_check_keys_locally_if_no_matching_committee_signing_secret_key_is
 
     let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(CryptoError::SecretKeyNotFound { algorithm, .. })
         if algorithm == AlgorithmId::MultiBls12_381
-    ));
+    );
 }
 
 #[test]
@@ -235,11 +236,11 @@ fn should_fail_check_keys_locally_if_no_matching_dkg_dealing_encryption_secret_k
 
     let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(CryptoError::SecretKeyNotFound { algorithm, .. })
         if algorithm == AlgorithmId::Groth20_Bls12_381
-    ));
+    );
 }
 
 #[test]
@@ -280,11 +281,11 @@ fn should_fail_check_keys_locally_for_new_node_if_no_matching_idkg_dealing_encry
 
     let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(CryptoError::SecretKeyNotFound { algorithm, .. })
         if algorithm == AlgorithmId::MegaSecp256k1
-    ));
+    );
 }
 
 #[test]
@@ -314,10 +315,7 @@ fn should_fail_check_keys_locally_if_no_matching_tls_secret_key_is_present() {
 
     let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
 
-    assert!(matches!(
-        result,
-        Err(CryptoError::TlsSecretKeyNotFound { .. })
-    ));
+    assert_matches!(result, Err(CryptoError::TlsSecretKeyNotFound { .. }));
 }
 
 #[test]
@@ -338,11 +336,11 @@ fn should_fail_check_keys_locally_if_idkg_dealing_encryption_public_key_is_missi
 
     let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(CryptoError::MalformedPublicKey { algorithm, internal_error, .. })
         if algorithm == AlgorithmId::MegaSecp256k1 && internal_error.contains("missing iDKG dealing encryption key in local public key store")
-    ));
+    );
 }
 
 #[test]
@@ -357,7 +355,7 @@ fn should_succeed_check_keys_locally_if_all_keys_are_present() {
 
     let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
 
-    assert!(matches!(result, Ok(Some(_))));
+    assert_matches!(result, Ok(Some(_)));
 }
 
 #[test]
@@ -372,7 +370,7 @@ fn should_succeed_check_keys_locally_if_no_keys_are_present() {
 
     let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
 
-    assert!(matches!(result, Ok(None)));
+    assert_matches!(result, Ok(None));
 }
 
 fn all_node_keys_are_present(node_pks: &CurrentNodePublicKeys) -> bool {
@@ -505,10 +503,10 @@ mod idkg {
         fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o400))
             .expect("Could not set the permissions of the temp dir.");
 
-        assert!(matches!(
+        assert_matches!(
             generate_idkg_dealing_encryption_keys(&mut csp),
             Err(IDkgDealingEncryptionKeysGenerationError::TransientInternalError(msg))
             if msg.to_lowercase().contains("secret key store internal error writing protobuf using tmp file: permission denied")
-        ));
+        );
     }
 }

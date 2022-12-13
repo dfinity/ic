@@ -9,6 +9,7 @@ use crate::secret_key_store::test_utils::MockSecretKeyStore;
 use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
 use crate::SecretKeyStore;
+use assert_matches::assert_matches;
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
 use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::{
     RFC8032_ED25519_1, RFC8032_ED25519_SHA_ABC,
@@ -507,24 +508,24 @@ mod multi {
             .expect("Failed to generate key pair with PoP");
 
         // mismathced public key
-        assert!(matches!(
+        assert_matches!(
             csp0.verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key1.clone()),
             Err(CryptoError::PopVerification { .. })
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             csp1.verify_pop(&pop1, AlgorithmId::MultiBls12_381, public_key0.clone()),
             Err(CryptoError::PopVerification { .. })
-        ));
+        );
 
         // mismathced PoP
-        assert!(matches!(
+        assert_matches!(
             csp0.verify_pop(&pop1, AlgorithmId::MultiBls12_381, public_key0),
             Err(CryptoError::PopVerification { .. })
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             csp1.verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key1),
             Err(CryptoError::PopVerification { .. })
-        ));
+        );
     }
 
     #[test]

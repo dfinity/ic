@@ -27,6 +27,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/node_key_generation",
     "//rs/crypto/test_utils",
     "//rs/test_utilities",
+    "@crate_index//:assert_matches",
     "@crate_index//:curve25519-dalek",
     "@crate_index//:openssl",
 ]

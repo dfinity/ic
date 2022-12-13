@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 mod oldest_public_key {
     use super::*;
+    use assert_matches::assert_matches;
     use ic_base_types::PrincipalId;
     use ic_base_types::SubnetId;
     use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
@@ -47,12 +48,12 @@ mod oldest_public_key {
 
         let result = oldest_public_key(&node_id(), &registry, &transcripts);
 
-        assert!(matches!(
+        assert_matches!(
             result,
             Some(Err(
                 IDkgRetainKeysError::TransientInternalError { internal_error }
             )) if internal_error.contains("Transient error")
-        ))
+        );
     }
     #[test]
     fn should_return_internal_error_when_registry_reproducible_error() {
@@ -65,12 +66,12 @@ mod oldest_public_key {
 
         let result = oldest_public_key(&node_id(), &registry, &transcripts);
 
-        assert!(matches!(
+        assert_matches!(
             result,
             Some(Err(
                 IDkgRetainKeysError::InternalError { internal_error }
             )) if internal_error.contains("Internal error")
-        ))
+        );
     }
 
     #[test]
@@ -93,12 +94,12 @@ mod oldest_public_key {
 
         let result = oldest_public_key(&node_id(), &(registry_client as Arc<_>), &transcripts);
 
-        assert!(matches!(
+        assert_matches!(
             result,
             Some(Err(
                 IDkgRetainKeysError::InternalError { internal_error }
             )) if internal_error.contains("MalformedPublicKey")
-        ))
+        );
     }
 
     #[test]

@@ -6,6 +6,7 @@ use crate::sign::tests::{
     mega_encryption_pk_record_with, registry_returning, registry_returning_none, registry_with,
     REG_V1,
 };
+use assert_matches::assert_matches;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, IDkgDealingInternal, MEGaPublicKey};
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
@@ -108,10 +109,10 @@ fn should_fail_on_transcript_id_mismatch() {
 
     let result = verify_complaint(&csp, &registry, &transcript, &complaint, NODE_1);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(IDkgVerifyComplaintError::InvalidArgumentMismatchingTranscriptIDs)
-    ));
+    );
 }
 
 #[test]
@@ -139,11 +140,11 @@ fn should_fail_if_dealing_missing_in_transcript() {
 
     let result = verify_complaint(&csp, &registry, &transcript, &complaint, NODE_1);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(IDkgVerifyComplaintError::InvalidArgumentMissingDealingInTranscript { dealer_id })
           if dealer_id == COMPLAINT_DEALER_ID
-    ));
+    );
 }
 
 #[test]
@@ -177,11 +178,11 @@ fn should_fail_if_complainer_missing_in_transcript() {
 
     let result = verify_complaint(&csp, &registry, &transcript, &complaint, COMPLAINER_ID);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(IDkgVerifyComplaintError::InvalidArgumentMissingComplainerInTranscript { complainer_id })
           if complainer_id == COMPLAINER_ID
-    ));
+    );
 }
 
 #[test]
@@ -210,11 +211,11 @@ fn should_fail_if_deserializing_complaint_fails() {
 
     let result = verify_complaint(&csp, &registry, &transcript, &complaint, NODE_1);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(IDkgVerifyComplaintError::SerializationError { internal_error })
           if internal_error.contains("failed to deserialize complaint")
-    ));
+    );
 }
 
 #[test]
@@ -242,11 +243,11 @@ fn should_fail_if_deserializing_dealing_fails() {
 
     let result = verify_complaint(&csp, &registry, &transcript, &complaint, NODE_1);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(IDkgVerifyComplaintError::SerializationError { internal_error })
           if internal_error.contains("Error deserializing a signed dealing")
-    ));
+    );
 }
 
 #[test]
@@ -279,11 +280,11 @@ fn should_fail_if_complainer_mega_pubkey_not_in_registry() {
         NODE_1,
     );
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(IDkgVerifyComplaintError::ComplainerPublicKeyNotInRegistry { node_id, registry_version })
           if node_id == NODE_1 && registry_version == REG_V1
-    ));
+    );
 }
 
 #[test]
@@ -317,11 +318,11 @@ fn should_fail_if_complainer_mega_pubkey_is_malformed() {
         NODE_1,
     );
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(IDkgVerifyComplaintError::MalformedComplainerPublicKey { node_id, .. })
           if node_id == NODE_1
-    ));
+    );
 }
 
 #[test]
@@ -356,10 +357,10 @@ fn should_fail_if_complainer_mega_pubkey_algorithm_is_unsupported() {
         NODE_1,
     );
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(IDkgVerifyComplaintError::UnsupportedComplainerPublicKeyAlgorithm { .. })
-    ));
+    );
 }
 
 #[test]
@@ -393,10 +394,10 @@ fn should_fail_if_registry_client_returns_error() {
         NODE_1,
     );
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(IDkgVerifyComplaintError::Registry(e)) if e == registry_error
-    ));
+    );
 }
 
 #[test]
@@ -452,7 +453,7 @@ fn should_return_error_if_csp_returns_error() {
 
     let result = verify_complaint(&csp, &registry, &transcript, &complaint, NODE_1);
 
-    assert!(matches!(result, Err(e) if e == csp_error));
+    assert_matches!(result, Err(e) if e == csp_error);
 }
 
 fn node_set(nodes: &[NodeId]) -> BTreeSet<NodeId> {

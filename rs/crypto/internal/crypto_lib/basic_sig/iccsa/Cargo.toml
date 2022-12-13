@@ -19,6 +19,7 @@ simple_asn1 = "0.6.1"
 
 [dev-dependencies]
 # TODO (CRP-912) Replace ic-crypto with ic-crypto-utils-threshold-sig
+assert_matches = "1.5.0"
 ic-crypto = { path = "../../../../../crypto" }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 ic-crypto-test-utils = { path = "../../../../test_utils" }

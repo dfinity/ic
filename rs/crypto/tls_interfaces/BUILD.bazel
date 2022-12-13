@@ -28,6 +28,7 @@ rust_test(
     crate = ":tls_interfaces",
     deps = [
         "//rs/crypto/test_utils",
+        "@crate_index//:assert_matches",
         "@crate_index//:json5",
         "@crate_index//:maplit",
     ],

@@ -25,5 +25,6 @@ rust_test(
     deps = [
         "//rs/crypto/test_utils",
         "//rs/crypto/test_utils/reproducible_rng",
+        "@crate_index//:assert_matches",
     ],
 )

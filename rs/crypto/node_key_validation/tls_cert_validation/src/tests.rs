@@ -1,4 +1,5 @@
 use super::*;
+use assert_matches::assert_matches;
 use chrono::{Duration, Utc};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
@@ -18,9 +19,9 @@ fn should_fail_if_tls_certificate_is_empty() {
 
     let result = validate_tls_certificate(&cert, node_id(1));
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: failed to parse DER")
-    ));
+    );
 }
 
 #[test]
@@ -30,9 +31,9 @@ fn should_fail_if_tls_certificate_has_invalid_der_encoding() {
 
     let result = validate_tls_certificate(&cert, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: failed to parse DER")
-    ));
+    );
 }
 
 #[test]
@@ -42,9 +43,9 @@ fn should_fail_if_tls_certificate_der_encoding_has_remainder() {
 
     let result = validate_tls_certificate(&cert, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: DER not fully consumed when parsing. Remainder: 0x42")
-    ));
+    );
 }
 
 #[test]
@@ -63,9 +64,9 @@ fn should_fail_if_tls_certificate_has_invalid_subject_cn() {
 
     let result = validate_tls_certificate(&cert, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: invalid subject common name (CN): found second common name (CN)")
-    ));
+    );
 }
 
 #[test]
@@ -82,9 +83,9 @@ fn should_fail_if_tls_certificate_subject_cn_is_not_node_id() {
 
     let result = validate_tls_certificate(&cert, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: subject common name (CN) does not match node ID")
-    ));
+    );
 }
 
 #[test]
@@ -103,9 +104,9 @@ fn should_fail_if_tls_certificate_has_invalid_issuer_cn() {
 
     let result = validate_tls_certificate(&cert, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: invalid issuer common name (CN): found second common name (CN)")
-    ));
+    );
 }
 
 #[test]
@@ -122,10 +123,10 @@ fn should_fail_if_tls_certificate_issuer_cn_not_equal_subject_cn() {
 
     let result = validate_tls_certificate(&cert, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: issuer common name (CN) does not match \
                            subject common name (CN)")
-    ));
+    );
 }
 
 #[test]
@@ -142,9 +143,9 @@ fn should_fail_if_tls_certificate_version_is_not_3() {
 
     let result = validate_tls_certificate(&cert, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: X509 version is not 3")
-    ));
+    );
 }
 
 #[test]
@@ -162,10 +163,10 @@ fn should_fail_if_tls_certificate_notbefore_date_is_not_latest_in_two_minutes_fr
 
     let result = validate_tls_certificate(&cert, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: notBefore date")
         && error.contains("is later than two minutes from now")
-    ));
+    );
 }
 
 #[test]
@@ -200,9 +201,9 @@ fn should_fail_if_tls_certificate_notafter_date_is_not_99991231235959z() {
 
     let result = validate_tls_certificate(&cert, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: notAfter date is not RFC 5280 value 99991231235959Z")
-    ));
+    );
 }
 
 #[test]
@@ -219,9 +220,9 @@ fn should_fail_if_tls_certificate_has_expired() {
 
     let result = validate_tls_certificate(&cert, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: notAfter date is not RFC 5280 value 99991231235959Z")
-    ));
+    );
 }
 
 #[test]
@@ -237,9 +238,9 @@ fn should_fail_if_tls_certificate_signature_alg_is_not_ed25519() {
 
     let result = validate_tls_certificate(&cert, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: signature algorithm is not Ed25519 (OID 1.3.101.112)")
-    ));
+    );
 }
 
 #[test]
@@ -262,9 +263,9 @@ fn should_fail_if_tls_certificate_pubkey_is_malformed() {
 
     let result = validate_tls_certificate(&cert_with_invalid_sig, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: conversion to Ed25519 public key failed")
-    ));
+    );
 }
 
 #[test]
@@ -281,9 +282,9 @@ fn should_fail_if_tls_certificate_pubkey_verification_fails() {
 
     let result = validate_tls_certificate(&cert, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: public key verification failed")
-    ));
+    );
 }
 
 #[test]
@@ -306,9 +307,9 @@ fn should_fail_if_tls_certificate_signature_verification_fails() {
 
     let result = validate_tls_certificate(&cert_that_is_not_self_signed, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("invalid TLS certificate: signature verification failed")
-    ));
+    );
 }
 
 #[test]
@@ -325,9 +326,9 @@ fn should_fail_if_tls_certificate_is_ca() {
 
     let result = validate_tls_certificate(&cert, node_id);
 
-    assert!(matches!(result, Err(TlsCertValidationError { error })
+    assert_matches!(result, Err(TlsCertValidationError { error })
         if error.contains("BasicConstraints:CA is True")
-    ));
+    );
 }
 
 fn valid_cert_builder(node_id: NodeId) -> CertBuilder {

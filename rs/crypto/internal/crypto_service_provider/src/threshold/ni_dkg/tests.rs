@@ -10,6 +10,7 @@ use crate::threshold::tests::util::test_threshold_signatures;
 use crate::types as csp_types;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use crate::Csp;
+use assert_matches::assert_matches;
 use fixtures::*;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg as internal_types;
@@ -61,15 +62,15 @@ mod gen_dealing_encryption_key_pair_tests {
         assert!(csp.gen_dealing_encryption_key_pair(node_id).is_ok());
         let result = csp.gen_dealing_encryption_key_pair(node_id);
 
-        assert!(matches!(result,
+        assert_matches!(result,
             Err(CspDkgCreateFsKeyError::InternalError(InternalError { internal_error }))
             if internal_error.contains("ni-dkg dealing encryption public key already set")
-        ));
+        );
 
-        assert!(matches!(csp.gen_dealing_encryption_key_pair(node_id),
+        assert_matches!(csp.gen_dealing_encryption_key_pair(node_id),
             Err(CspDkgCreateFsKeyError::InternalError(InternalError { internal_error }))
             if internal_error.contains("ni-dkg dealing encryption public key already set")
-        ));
+        );
     }
 
     #[test]
@@ -83,10 +84,10 @@ mod gen_dealing_encryption_key_pair_tests {
 
         let result = csp.gen_dealing_encryption_key_pair(NODE_1);
 
-        assert!(matches!(result,
+        assert_matches!(result,
             Err(CspDkgCreateFsKeyError::DuplicateKeyId(error))
             if error.contains("duplicate ni-dkg dealing encryption secret key id: KeyId(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a)")
-        ));
+        );
     }
 
     fn rng() -> impl CryptoRng + Rng {

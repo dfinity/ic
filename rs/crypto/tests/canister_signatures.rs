@@ -1,4 +1,5 @@
 #![allow(clippy::unwrap_used)]
+use assert_matches::assert_matches;
 use ic_crypto::{
     threshold_sig_public_key_from_der, user_public_key_from_bytes, KeyBytesContentType,
 };
@@ -68,11 +69,9 @@ fn should_fail_to_verify_on_wrong_signature() {
 
     let result = temp_crypto.verify_canister_sig(&wrong_signature, &message, &user_pubkey, REG_V1);
 
-    assert!(
-        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+    assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
             if internal_error.contains("certificate verification failed")
             && algorithm == AlgorithmId::IcCanisterSignature
-        )
     );
 }
 
@@ -85,11 +84,9 @@ fn should_fail_to_verify_on_wrong_message() {
 
     let result = temp_crypto.verify_canister_sig(&signature, &wrong_message, &user_pubkey, REG_V1);
 
-    assert!(
-        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+    assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
             if internal_error.contains("the signature tree doesn't contain sig")
             && algorithm == AlgorithmId::IcCanisterSignature
-        )
     );
 }
 
@@ -105,11 +102,9 @@ fn should_fail_to_verify_on_wrong_public_key() {
 
     let result = temp_crypto.verify_canister_sig(&signature, &message, &wrong_pubkey, REG_V1);
 
-    assert!(
-        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+    assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
             if internal_error.contains("the signature tree doesn't contain sig")
             && algorithm == AlgorithmId::IcCanisterSignature
-        )
     );
 }
 
@@ -126,12 +121,10 @@ fn should_fail_to_verify_on_invalid_root_public_key() {
 
     let result = temp_crypto.verify_canister_sig(&signature, &message, &user_pubkey, REG_V1);
 
-    assert!(
-        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+    assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
             if internal_error.contains("Invalid public key")
             && internal_error.contains("certificate verification failed")
             && algorithm == AlgorithmId::IcCanisterSignature
-        )
     );
 }
 
@@ -152,12 +145,10 @@ fn should_fail_to_verify_on_wrong_root_public_key() {
 
     let result = temp_crypto.verify_canister_sig(&signature, &message, &user_pubkey, REG_V1);
 
-    assert!(
-        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+    assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
             if internal_error.contains("Invalid combined threshold signature")
             && internal_error.contains("certificate verification failed")
             && algorithm == AlgorithmId::IcCanisterSignature
-        )
     );
 }
 
@@ -174,10 +165,7 @@ fn should_fail_to_verify_if_root_public_key_not_found_in_registry() {
         registry_version_where_root_pubkey_is_not_available_yet,
     );
 
-    assert!(matches!(
-        result,
-        Err(CryptoError::RootSubnetPublicKeyNotFound { .. })
-    ));
+    assert_matches!(result, Err(CryptoError::RootSubnetPublicKeyNotFound { .. }));
 }
 
 fn test_vec(
