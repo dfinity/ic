@@ -23,6 +23,7 @@ use ic_replicated_state::canister_state::execution_state::{
     SandboxMemory, SandboxMemoryHandle, SandboxMemoryOwner, WasmBinary,
 };
 use ic_replicated_state::{EmbedderCache, ExecutionState, ExportedFunctions, Memory, PageMap};
+use ic_types::ingress::WasmResult;
 use ic_types::{CanisterId, NumInstructions};
 use ic_wasm_types::CanisterModule;
 #[cfg(target_os = "linux")]
@@ -88,6 +89,8 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_sandbox_create_exe_state_deserialize_duration: Histogram,
     sandboxed_execution_sandbox_create_exe_state_deserialize_total_duration: Histogram,
     sandboxed_execution_replica_cache_lookups: IntCounterVec,
+    // Executed message slices by type and status.
+    sandboxed_execution_executed_message_slices: IntCounterVec,
     // TODO(EXC-365): Remove these metrics once we confirm that no module imports these IC0 methods
     // anymore.
     sandboxed_execution_wasm_imports_call_simple: IntCounter,
@@ -258,12 +261,24 @@ impl SandboxedExecutionMetrics {
                 "sandboxed_execution_wasm_imports_mint_cycles",
                 "The number of Wasm modules that import ic0.mint_cycles",
             ),
+            sandboxed_execution_executed_message_slices: metrics_registry.int_counter_vec(
+                "sandboxed_execution_executed_message_slices_total",
+                "Number of executed message slices by type and status.",
+                &["api_type", "status"],
+            ),
         }
     }
 
     fn inc_cache_lookup(&self, label: &str) {
         self.sandboxed_execution_replica_cache_lookups
             .with_label_values(&[label])
+            .inc();
+    }
+
+    /// Helper function to observe executed message slices.
+    fn observe_executed_message_slice(&self, api_type_label: &str, execution_status: &str) {
+        self.sandboxed_execution_executed_message_slices
+            .with_label_values(&[api_type_label, execution_status])
             .inc();
     }
 }
@@ -567,6 +582,8 @@ impl WasmExecutor for SandboxedExecutionController {
         ) {
             Ok((wasm_id, compilation_result)) => (wasm_id, compilation_result),
             Err(err) => {
+                self.metrics
+                    .observe_executed_message_slice(api_type_label, err.as_str());
                 return (None, wasm_execution_error(err, message_instruction_limit));
             }
         };
@@ -1084,6 +1101,8 @@ impl SandboxedExecutionController {
     ) -> WasmExecutionResult {
         let mut exec_output = match result {
             CompletionResult::Paused(slice) => {
+                self.metrics
+                    .observe_executed_message_slice(api_type_label, "Paused");
                 let paused = Box::new(PausedSandboxExecution {
                     canister_id,
                     sandbox_process,
@@ -1096,7 +1115,17 @@ impl SandboxedExecutionController {
                 });
                 return WasmExecutionResult::Paused(slice, paused);
             }
-            CompletionResult::Finished(exec_output) => exec_output,
+            CompletionResult::Finished(exec_output) => {
+                let execution_status = match exec_output.wasm.wasm_result.clone() {
+                    Ok(Some(WasmResult::Reply(_))) => "Success",
+                    Ok(Some(WasmResult::Reject(_))) => "Reject",
+                    Ok(None) => "NoResponse",
+                    Err(e) => e.as_str(),
+                };
+                self.metrics
+                    .observe_executed_message_slice(api_type_label, execution_status);
+                exec_output
+            }
         };
 
         // If sandbox is compromised this value could be larger than the initial limit.
