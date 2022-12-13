@@ -44,6 +44,7 @@ struct SignTxRequest {
     network: Network,
     ecdsa_public_key: ECDSAPublicKey,
     unsigned_tx: tx::UnsignedTransaction,
+    change_output: Option<state::ChangeOutput>,
     outpoint_account: BTreeMap<OutPoint, Account>,
     /// The original requests that we keep around to place back to the queue
     /// if the signature fails.
@@ -202,7 +203,7 @@ async fn submit_pending_requests() {
             main_address,
             fee_millisatoshi_per_vbyte,
         ) {
-            Ok((unsigned_tx, utxos)) => {
+            Ok((unsigned_tx, change_output, utxos)) => {
                 for req in batch.iter() {
                     s.push_in_flight_request(req.block_index, state::InFlightStatus::Signing);
                 }
@@ -210,6 +211,7 @@ async fn submit_pending_requests() {
                 Some(SignTxRequest {
                     key_name: s.ecdsa_key_name.clone(),
                     ecdsa_public_key,
+                    change_output,
                     outpoint_account: filter_output_accounts(s, &unsigned_tx),
                     network: s.btc_network,
                     unsigned_tx,
@@ -294,6 +296,7 @@ async fn submit_pending_requests() {
                                 .collect(),
                             txid,
                             utxos: req.utxos.clone(),
+                            change_output: req.change_output.clone(),
                             submitted_at,
                         });
                         state::mutate_state(|s| {
@@ -301,6 +304,7 @@ async fn submit_pending_requests() {
                                 requests: req.requests,
                                 txid,
                                 used_utxos: req.utxos,
+                                change_output: req.change_output,
                                 submitted_at,
                             });
                         });
@@ -604,7 +608,14 @@ pub fn build_unsigned_transaction(
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
-) -> Result<(tx::UnsignedTransaction, Vec<Utxo>), BuildTxError> {
+) -> Result<
+    (
+        tx::UnsignedTransaction,
+        Option<state::ChangeOutput>,
+        Vec<Utxo>,
+    ),
+    BuildTxError,
+> {
     assert!(!outputs.is_empty());
 
     // The DUST_TRESHOLD parameter should be:
@@ -634,24 +645,26 @@ pub fn build_unsigned_transaction(
     debug_assert!(inputs_value >= amount);
 
     let change = inputs_value - amount;
+    let change_output: Option<state::ChangeOutput> = (change > 0).then(|| {
+        let value = change.max(P2WPKH_DUST_THRESHOLD + 1);
 
-    let base_outputs = outputs.iter().map(|(address, value)| tx::TxOut {
-        address: address.clone(),
-        value: *value,
+        state::ChangeOutput {
+            vout: outputs.len() as u64,
+            value,
+        }
     });
 
-    let tx_outputs: Vec<tx::TxOut> = if change == 0 {
-        base_outputs.collect()
-    } else {
-        let send_to_main = change.max(P2WPKH_DUST_THRESHOLD + 1);
-
-        base_outputs
-            .chain(std::iter::once(tx::TxOut {
-                value: send_to_main,
-                address: main_address.clone(),
-            }))
-            .collect()
-    };
+    let tx_outputs: Vec<tx::TxOut> = outputs
+        .iter()
+        .map(|(address, value)| tx::TxOut {
+            address: address.clone(),
+            value: *value,
+        })
+        .chain(change_output.iter().map(|out| tx::TxOut {
+            value: out.value,
+            address: main_address.clone(),
+        }))
+        .collect();
 
     debug_assert_eq!(
         tx_outputs.iter().map(|out| out.value).sum::<u64>(),
@@ -689,7 +702,7 @@ pub fn build_unsigned_transaction(
         }
     }
 
-    Ok((unsigned_tx, input_utxos))
+    Ok((unsigned_tx, change_output, input_utxos))
 }
 
 /// Distributes an amount across the specified number of shares as fairly as

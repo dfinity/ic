@@ -4,7 +4,7 @@ use crate::{
 };
 use crate::{
     lifecycle::init::InitArgs,
-    state::{CkBtcMinterState, RetrieveBtcRequest, RetrieveBtcStatus},
+    state::{ChangeOutput, CkBtcMinterState, RetrieveBtcRequest, RetrieveBtcStatus},
 };
 use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
@@ -417,7 +417,7 @@ proptest! {
         let total_value = utxos.iter().map(|u| u.value).sum::<u64>();
 
         let target = total_value / 2;
-        let (unsigned_tx, _) = build_unsigned_transaction(
+        let (unsigned_tx, _, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             BitcoinAddress::P2wpkhV0(main_pkhash),
@@ -453,7 +453,7 @@ proptest! {
             .map(|utxo| (utxo.outpoint.clone(), utxo.value))
             .collect();
 
-        let (unsigned_tx, _) = build_unsigned_transaction(
+        let (unsigned_tx, change_output, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             BitcoinAddress::P2wpkhV0(main_pkhash),
@@ -481,6 +481,8 @@ proptest! {
                 },
             ]
         );
+
+        prop_assert_eq!(change_output, Some(ChangeOutput { vout: 1, value: inputs_value - target }));
     }
 
     #[test]

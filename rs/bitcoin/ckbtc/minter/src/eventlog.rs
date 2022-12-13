@@ -1,6 +1,6 @@
 use crate::lifecycle::init::InitArgs;
 use crate::state::{
-    CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, RetrieveBtcRequest,
+    ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, RetrieveBtcRequest,
     SubmittedBtcTransaction,
 };
 use ic_btc_types::Utxo;
@@ -51,6 +51,9 @@ pub enum Event {
         /// UTXOs used for the transaction.
         #[serde(rename = "utxos")]
         utxos: Vec<Utxo>,
+        #[serde(rename = "change")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        change_output: Option<ChangeOutput>,
         /// The IC time at which the minter submitted the transaction.
         #[serde(rename = "submitted_at")]
         submitted_at: u64,
@@ -112,6 +115,7 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                 request_block_indices,
                 txid,
                 utxos,
+                change_output,
                 submitted_at,
             } => {
                 let mut retrieve_btc_requests = Vec::with_capacity(request_block_indices.len());
@@ -131,6 +135,7 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                     requests: retrieve_btc_requests,
                     txid,
                     used_utxos: utxos,
+                    change_output,
                     submitted_at,
                 });
             }
