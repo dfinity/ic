@@ -1065,7 +1065,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.94.0",
             ),
             "wasmtime": crate.spec(
-                version = "^1.0.1",
+                version = "^3.0.1",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1074,10 +1074,10 @@ def external_crates_repository(name, annotations):
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^1.0.1",
+                version = "^3.0.1",
             ),
             "wasmtime-runtime": crate.spec(
-                version = "^1.0.1",
+                version = "^3.0.1",
             ),
             "wast": crate.spec(
                 version = "^48.0.0",

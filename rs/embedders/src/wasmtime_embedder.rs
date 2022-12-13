@@ -46,17 +46,14 @@ pub(crate) const WASM_HEAP_BYTEMAP_MEMORY_NAME: &str = "bytemap_memory";
 
 fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
     match err.downcast::<wasmtime::Trap>() {
-        Ok(trap) => match trap.trap_code() {
-            Some(trap_code) => trap_code_to_hypervisor_error(trap_code),
-            None => HypervisorError::Trapped(TrapCode::Other),
-        },
+        Ok(trap) => trap_code_to_hypervisor_error(trap),
         Err(err) => {
             // The error could be either a compile error or some other error.
             // We have to inspect the error message to distingiush these cases.
             let message = {
                 // We cannot use `format!` here because displaying `err` may fail.
                 let mut output = String::new();
-                match std::fmt::write(&mut output, format_args!("{}", err)) {
+                match std::fmt::write(&mut output, format_args!("{}", err.root_cause())) {
                     Ok(()) => output,
                     Err(_) => "Conversion of Wasmtime error to string failed.".to_string(),
                 }
@@ -80,24 +77,18 @@ fn wasmtime_error_to_hypervisor_error(err: anyhow::Error) -> HypervisorError {
     }
 }
 
-fn trap_code_to_hypervisor_error(trap_code: wasmtime::TrapCode) -> HypervisorError {
-    match trap_code {
-        wasmtime::TrapCode::StackOverflow => HypervisorError::Trapped(TrapCode::StackOverflow),
-        wasmtime::TrapCode::MemoryOutOfBounds => {
-            HypervisorError::Trapped(TrapCode::HeapOutOfBounds)
-        }
-        wasmtime::TrapCode::TableOutOfBounds => {
-            HypervisorError::Trapped(TrapCode::TableOutOfBounds)
-        }
-        wasmtime::TrapCode::BadSignature => {
+fn trap_code_to_hypervisor_error(trap: wasmtime::Trap) -> HypervisorError {
+    match trap {
+        wasmtime::Trap::StackOverflow => HypervisorError::Trapped(TrapCode::StackOverflow),
+        wasmtime::Trap::MemoryOutOfBounds => HypervisorError::Trapped(TrapCode::HeapOutOfBounds),
+        wasmtime::Trap::TableOutOfBounds => HypervisorError::Trapped(TrapCode::TableOutOfBounds),
+        wasmtime::Trap::BadSignature => {
             HypervisorError::ContractViolation(BAD_SIGNATURE_MESSAGE.to_string())
         }
-        wasmtime::TrapCode::IntegerDivisionByZero => {
+        wasmtime::Trap::IntegerDivisionByZero => {
             HypervisorError::Trapped(TrapCode::IntegerDivByZero)
         }
-        wasmtime::TrapCode::UnreachableCodeReached => {
-            HypervisorError::Trapped(TrapCode::Unreachable)
-        }
+        wasmtime::Trap::UnreachableCodeReached => HypervisorError::Trapped(TrapCode::Unreachable),
         _ => {
             // The `wasmtime::TrapCode` enum is marked as #[non_exhaustive]
             // so we have to use the wildcard matching here.

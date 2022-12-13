@@ -89,11 +89,11 @@ impl WasmtimeSignalStack {
     pub fn new() -> Self {
         unsafe {
             let page_size = sysconf(_SC_PAGESIZE) as usize;
-            // 2020-04-21: wasmtime now overwrites the signal stack if the size is less
-            // than 64k. Thus we set it to 64k to avoid that. Current wasmtime work in
-            // progress indicates this behavior will change in the future. We will keep our
-            // own stack until the behavior stabilizes.
-            let signal_stack_size = std::cmp::max(SIGSTKSZ, 64 * 1024);
+            // Wasmtime overwrites the signal stack if the size is less than
+            // 256k. Thus we set it to 256k to avoid that. Current wasmtime work
+            // in progress indicates this behavior will change in the future. We
+            // will keep our own stack until the behavior stabilizes.
+            let signal_stack_size = std::cmp::max(SIGSTKSZ, 256 * 1024);
             debug_assert_eq!(signal_stack_size % page_size, 0);
             let mem_size = page_size + signal_stack_size;
             let mem = mmap(
