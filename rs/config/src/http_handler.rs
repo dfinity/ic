@@ -20,31 +20,16 @@ pub struct Config {
     /// We can serve from at most 'max_outstanding_connections'
     /// live TCP connections. If we are at the limit and a new
     /// TCP connection arrives, we accept and drop it immediately.
-    #[serde(default = "default_max_outstanding_connections")]
     pub max_outstanding_connections: usize,
 
     /// If no bytes are read from a connection for the duration of
     /// 'connection_read_timeout_seconds', then the connection is dropped.
     /// There is no point is setting a timeout on the write bytes since
     /// they are conditioned on the received requests.
-    #[serde(default = "default_connection_read_timeout_seconds")]
     pub connection_read_timeout_seconds: u64,
 
     /// Per request timeout in seconds before the server replies with 504 Gateway Timeout.
-    #[serde(default = "default_request_timeout_seconds")]
     pub request_timeout_seconds: u64,
-}
-
-fn default_max_outstanding_connections() -> usize {
-    20_000
-}
-
-fn default_connection_read_timeout_seconds() -> u64 {
-    1_200 // 20 min
-}
-
-fn default_request_timeout_seconds() -> u64 {
-    300 // 5 min
 }
 
 impl Default for Config {
@@ -55,9 +40,9 @@ impl Default for Config {
                 DEFAULT_PORT,
             ),
             port_file_path: None,
-            max_outstanding_connections: default_max_outstanding_connections(),
-            connection_read_timeout_seconds: default_connection_read_timeout_seconds(),
-            request_timeout_seconds: default_request_timeout_seconds(),
+            max_outstanding_connections: 20_000,
+            connection_read_timeout_seconds: 1_200, // 20 min
+            request_timeout_seconds: 300,           // 5 min
         }
     }
 }
