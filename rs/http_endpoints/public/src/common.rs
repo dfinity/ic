@@ -18,7 +18,7 @@ use serde::Serialize;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::task::Poll;
-use tower::{load_shed::error::Overloaded, BoxError};
+use tower::{load_shed::error::Overloaded, timeout::error::Elapsed, BoxError};
 
 pub const CONTENT_TYPE_HTML: &str = "text/html";
 pub const CONTENT_TYPE_CBOR: &str = "application/cbor";
@@ -126,16 +126,23 @@ pub(crate) fn map_box_error_to_response(err: BoxError) -> Response<Body> {
     if let Some(user_error) = err.downcast_ref::<UserError>() {
         return make_response(user_error.clone());
     }
+
     if err.is::<Overloaded>() {
-        return make_plaintext_response(
+        make_plaintext_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "The service is overloaded.".to_string(),
-        );
+        )
+    } else if err.is::<Elapsed>() {
+        make_plaintext_response(
+            StatusCode::GATEWAY_TIMEOUT,
+            "Request took longer than the deadline.".to_string(),
+        )
+    } else {
+        make_plaintext_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Unexpected error: {}", err),
+        )
     }
-    make_plaintext_response(
-        StatusCode::INTERNAL_SERVER_ERROR,
-        format!("Unexpected error: {}", err),
-    )
 }
 
 /// Add CORS headers to provided Response. In particular we allow
