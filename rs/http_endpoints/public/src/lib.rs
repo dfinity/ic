@@ -87,11 +87,13 @@ use std::{
     time::Duration,
 };
 use tempfile::NamedTempFile;
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio::time::{sleep, timeout, Instant};
+use tokio_io_timeout::TimeoutStream;
 use tower::{
-    limit::GlobalConcurrencyLimitLayer, load_shed::LoadShed, service_fn, util::BoxCloneService,
-    BoxError, Service, ServiceBuilder, ServiceExt,
+    limit::GlobalConcurrencyLimitLayer, service_fn, util::BoxCloneService, BoxError, Service,
+    ServiceBuilder, ServiceExt,
 };
 
 // Constants defining the limits of the HttpHandler.
@@ -368,9 +370,9 @@ pub fn start_server(
         read_state_service,
         health_status_refresher,
     };
-    let main_service = create_main_service(metrics.clone(), http_handler);
+    let main_service = create_main_service(metrics.clone(), config.clone(), http_handler);
 
-    let port_file_path = config.port_file_path;
+    let port_file_path = config.port_file_path.clone();
     // If addr == 0, then a random port will be assigned. In this case it
     // is useful to report the randomly assigned port by writing it to a file.
     let local_addr = tcp_listener.local_addr().unwrap();
@@ -386,8 +388,9 @@ pub fn start_server(
             config.max_outstanding_connections,
         ))
         .service_fn(move |tcp_stream: TcpStream| {
-            serve_connection(
+            handshake_and_serve_connection(
                 log_cl.clone(),
+                config.clone(),
                 main_service.clone(),
                 tcp_stream,
                 tls_handshake.clone(),
@@ -425,12 +428,14 @@ pub fn start_server(
 
 fn create_main_service(
     metrics: HttpHandlerMetrics,
+    config: Config,
     http_handler: HttpHandler,
 ) -> BoxCloneService<Request<Body>, Response<Body>, Infallible> {
     let health_status_refresher = http_handler.health_status_refresher.clone();
     let route_service = service_fn(move |req: RequestWithTimer| {
         let http_handler = http_handler.clone();
-        async move { Ok::<_, Infallible>(make_router(http_handler, req).await) }
+        let config = config.clone();
+        async move { Ok::<_, Infallible>(make_router(http_handler, config, req).await) }
     });
 
     BoxCloneService::new(
@@ -460,8 +465,9 @@ fn create_main_service(
     )
 }
 
-async fn serve_connection(
+async fn handshake_and_serve_connection(
     log: ReplicaLogger,
+    config: Config,
     service: BoxCloneService<Request<Body>, Response<Body>, Infallible>,
     tcp_stream: TcpStream,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
@@ -527,11 +533,21 @@ async fn serve_connection(
                 Ok(tls_stream) => tls_stream,
             };
             metrics.observe_successful_connection_setup(app_layer, connection_start_time);
-            http.serve_connection(tls_stream, service).await
+            serve_connection_with_read_timeout(
+                tls_stream,
+                service,
+                config.connection_read_timeout_seconds,
+            )
+            .await
         }
         AppLayer::Http => {
             metrics.observe_successful_connection_setup(app_layer, connection_start_time);
-            http.serve_connection(tcp_stream, service).await
+            serve_connection_with_read_timeout(
+                tcp_stream,
+                service,
+                config.connection_read_timeout_seconds,
+            )
+            .await
         }
     };
 
@@ -550,6 +566,18 @@ async fn serve_connection(
     Ok(())
 }
 
+async fn serve_connection_with_read_timeout<T: AsyncRead + AsyncWrite + 'static>(
+    stream: T,
+    metrics_svc: BoxCloneService<Request<Body>, Response<Body>, Infallible>,
+    connection_read_timeout_seconds: u64,
+) -> Result<(), hyper::Error> {
+    let http = Http::new();
+    let mut stream = TimeoutStream::new(stream);
+    stream.set_read_timeout(Some(Duration::from_secs(connection_read_timeout_seconds)));
+    let stream = Box::pin(stream);
+    http.serve_connection(stream, metrics_svc).await
+}
+
 type RequestWithTimer = (
     Request<Body>,
     HistogramVecTimer<'static, REQUESTS_NUM_LABELS>,
@@ -561,6 +589,7 @@ type ResponseWithTimer = (
 
 async fn make_router(
     http_handler: HttpHandler,
+    config: Config,
     (mut req, mut timer): RequestWithTimer,
 ) -> ResponseWithTimer {
     let call_service = http_handler.call_service.clone();
@@ -702,8 +731,12 @@ async fn make_router(
             );
         }
     };
+    let mut svc_per_conn = ServiceBuilder::new()
+        .load_shed()
+        .timeout(Duration::from_secs(config.request_timeout_seconds))
+        .service(svc);
     (
-        LoadShed::new(svc)
+        svc_per_conn
             .ready()
             .await
             .expect("The load shedder must always be ready.")

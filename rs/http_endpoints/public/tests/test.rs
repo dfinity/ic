@@ -75,6 +75,7 @@ use tokio::{
     runtime::Runtime,
     time::{sleep, Duration},
 };
+use tower::ServiceExt;
 
 mod common;
 
@@ -103,7 +104,7 @@ async fn create_conn_and_send_request(addr: SocketAddr) -> (SendRequest<Body>, S
 
     let request = Request::builder()
         .method(Method::GET)
-        .uri(format!("http://{}/bad", addr))
+        .uri(format!("http://{}/api/v2/status", addr))
         .body(Body::from(""))
         .expect("Building the request failed.");
     let response = request_sender
@@ -612,7 +613,7 @@ async fn test_max_outstanding_connections() {
     for _i in 0..config.max_outstanding_connections {
         let (request_sender, status_code) = create_conn_and_send_request(addr).await;
         senders.push(request_sender);
-        assert!(status_code == StatusCode::NOT_FOUND);
+        assert!(status_code == StatusCode::OK);
     }
 
     // Expect additional connection to trigger error
@@ -623,4 +624,107 @@ async fn test_max_outstanding_connections() {
         .await
         .expect("tcp client handshake failed");
     assert!(connection.await.err().unwrap().is_incomplete_message());
+}
+
+/// Once no bytes are read for the duration of 'connection_read_timeout_seconds', then
+/// the connection is dropped.
+#[tokio::test]
+async fn test_connection_read_timeout() {
+    let rt_handle = tokio::runtime::Handle::current();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        max_outstanding_connections: 50,
+        connection_read_timeout_seconds: 2,
+        ..Default::default()
+    };
+
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    // Start server
+    start_http_endpoint(
+        rt_handle.clone(),
+        config.clone(),
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+    );
+
+    let (mut request_sender, status_code) = create_conn_and_send_request(addr).await;
+    assert!(status_code == StatusCode::OK);
+
+    sleep(Duration::from_secs(
+        config.connection_read_timeout_seconds + 1,
+    ))
+    .await;
+    assert!(request_sender.ready().await.err().unwrap().is_closed());
+}
+
+/// If the downstream service is stuck return 504.
+#[test]
+fn test_request_timeout() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let request_timeout_seconds = 2;
+    let config = Config {
+        listen_addr: addr,
+        request_timeout_seconds,
+        ..Default::default()
+    };
+
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    let (_, _, mut query_handler) = start_http_endpoint(
+        rt.handle().clone(),
+        config,
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+    );
+
+    let agent = Agent::builder()
+        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .build()
+        .unwrap();
+
+    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
+    let query = QueryBuilder::new(&agent, canister, "test".to_string())
+        .with_effective_canister_id(canister)
+        .with_arg(Vec::new())
+        .sign()
+        .unwrap();
+
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = query_handler.next_request().await.unwrap();
+            sleep(Duration::from_secs(request_timeout_seconds + 1)).await;
+            resp.send_response(HttpQueryResponse::Replied {
+                reply: HttpQueryResponseReply {
+                    arg: Blob("success".into()),
+                },
+            })
+        }
+    });
+
+    rt.block_on(async {
+        loop {
+            let resp = agent
+                .query_signed(query.effective_canister_id, query.signed_query.clone())
+                .await;
+            if let Err(ic_agent::AgentError::HttpError(ref http_error)) = resp {
+                match StatusCode::from_u16(http_error.status).unwrap() {
+                    StatusCode::GATEWAY_TIMEOUT => break,
+                    // the service may be unhealthy due to initialization, retry
+                    StatusCode::SERVICE_UNAVAILABLE => sleep(Duration::from_millis(250)).await,
+                    _ => panic!("Received unexpeceted response: {:?}", resp),
+                }
+            } else {
+                panic!("Received unexpeceted response: {:?}", resp);
+            }
+        }
+    });
 }

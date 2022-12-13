@@ -5985,6 +5985,7 @@ dependencies = [
  "tempfile",
  "threadpool",
  "tokio",
+ "tokio-io-timeout",
  "tower",
  "tower-test",
  "url",
