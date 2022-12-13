@@ -160,6 +160,50 @@ fn greedy_smoke_test() {
     assert_eq!(res[1].value, 6_u64);
 }
 
+#[test]
+fn test_min_change_amount() {
+    let mut available_utxos = BTreeSet::new();
+    available_utxos.insert(Utxo {
+        outpoint: OutPoint {
+            txid: vec![0; 32],
+            vout: 0,
+        },
+        value: 100_000,
+        height: 10,
+    });
+
+    available_utxos.insert(Utxo {
+        outpoint: OutPoint {
+            txid: vec![1; 32],
+            vout: 1,
+        },
+        value: 100_000,
+        height: 10,
+    });
+
+    let minter_addr = BitcoinAddress::P2wpkhV0([0; 20]);
+    let out1_addr = BitcoinAddress::P2wpkhV0([1; 20]);
+    let out2_addr = BitcoinAddress::P2wpkhV0([2; 20]);
+    let fee_per_vbyte = 10000;
+
+    let (tx, change_output, _) = build_unsigned_transaction(
+        &mut available_utxos,
+        vec![(out1_addr, 100_000), (out2_addr, 99_999)],
+        minter_addr,
+        fee_per_vbyte,
+    )
+    .expect("failed to build a transaction");
+
+    assert_eq!(tx.outputs.len(), 3);
+    assert_eq!(
+        change_output,
+        Some(ChangeOutput {
+            vout: 2,
+            value: crate::MIN_CHANGE,
+        })
+    );
+}
+
 fn arb_amount() -> impl Strategy<Value = Satoshi> {
     1..10_000_000_000u64
 }
