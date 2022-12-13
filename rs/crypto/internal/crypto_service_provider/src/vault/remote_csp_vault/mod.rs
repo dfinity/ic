@@ -31,6 +31,7 @@ use std::path::Path;
 use tokio::net::UnixListener;
 
 const FOUR_GIGA_BYTES: usize = 4 * 1024 * 1024 * 1024;
+mod codec;
 mod tarpc_csp_vault_client;
 mod tarpc_csp_vault_server;
 
