@@ -334,7 +334,7 @@ impl<'a> TestState<'a> {
                 self.current = Ok(index);
                 self.created.push((id, instance));
             }
-            Err(e) => self.current = Err(e.to_string()),
+            Err(e) => self.current = Err(error_to_string(e)),
         }
     }
 
@@ -370,7 +370,7 @@ impl<'a> TestState<'a> {
         let mut results = vec![wasmtime::Val::FuncRef(None); result_count];
         function
             .call(&mut self.store, params, &mut results)
-            .map_err(|e| e.to_string())?;
+            .map_err(error_to_string)?;
         Ok(results)
     }
 
@@ -566,7 +566,7 @@ fn run_directive<'a>(
                 wast::WastExecute::Wat(Wat::Module(mut wat)) => test_state
                     .try_create_instance(&wat.encode().unwrap())
                     .map(|_| ())
-                    .map_err(|e| e.to_string()),
+                    .map_err(error_to_string),
                 wast::WastExecute::Wat(Wat::Component(_)) | wast::WastExecute::Get { .. } => {
                     return Ok(())
                 }
@@ -652,13 +652,14 @@ fn run_directive<'a>(
                     message
                 )),
                 Err(e) => {
-                    if e.to_string().contains(message) {
+                    let actual_message = error_to_string(e);
+                    if actual_message.contains(message) {
                         Ok(())
                     } else {
                         Err(format!(
                             "Error for assert_unlinkable at {}: {} did not contain message {}",
                             span_location(span, text, path),
-                            e,
+                            actual_message,
                             message
                         ))
                     }
@@ -733,6 +734,13 @@ fn default_config() -> Config {
     let mut config = Config::default();
     config.cranelift_nan_canonicalization(true);
     config
+}
+
+/// Returns the full text representation of the error.
+/// Note that `e.to_string()` returns only the first level error,
+/// which is not sufficient in many cases.
+fn error_to_string(e: anyhow::Error) -> String {
+    format!("{:?}", e)
 }
 
 /// These tests run on data from the WebAssembly spec testsuite. The suite is not

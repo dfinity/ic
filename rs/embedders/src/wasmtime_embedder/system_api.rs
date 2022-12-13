@@ -9,21 +9,21 @@ use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
 use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions, NumPages, Time};
 
-use wasmtime::{AsContextMut, Caller, Global, Linker, Store, Trap, Val};
+use wasmtime::{AsContextMut, Caller, Global, Linker, Store, Val};
 
 use std::convert::TryFrom;
 
 fn process_err<S: SystemApi>(
     store: &mut impl AsContextMut<Data = StoreData<S>>,
     e: HypervisorError,
-) -> wasmtime::Trap {
-    let t = wasmtime::Trap::new(format! {"{}", e});
+) -> anyhow::Error {
+    let result = anyhow::Error::msg(format! {"{}", e});
     store
         .as_context_mut()
         .data_mut()
         .system_api
         .set_execution_error(e);
-    t
+    result
 }
 
 /// Gets the global variable that stores the number of instructions from `caller`.
@@ -32,7 +32,7 @@ fn get_num_instructions_global<S: SystemApi>(
     caller: &mut Caller<'_, StoreData<S>>,
     log: &ReplicaLogger,
     canister_id: CanisterId,
-) -> Result<Global, Trap> {
+) -> Result<Global, anyhow::Error> {
     match caller.data().num_instructions_global {
         None => {
             error!(
@@ -54,7 +54,7 @@ fn load_value<S: SystemApi>(
     mut caller: &mut Caller<'_, StoreData<S>>,
     log: &ReplicaLogger,
     canister_id: CanisterId,
-) -> Result<i64, Trap> {
+) -> Result<i64, anyhow::Error> {
     match global.get(&mut caller) {
         Val::I64(instructions) => Ok(instructions),
         others => {
@@ -79,7 +79,7 @@ fn store_value<S: SystemApi>(
     mut caller: &mut Caller<'_, StoreData<S>>,
     log: &ReplicaLogger,
     canister_id: CanisterId,
-) -> Result<(), Trap> {
+) -> Result<(), anyhow::Error> {
     if let Err(err) = global.set(&mut caller, Val::I64(num_instructions)) {
         error!(
             log,
@@ -121,7 +121,7 @@ fn charge_for_system_api_call<S: SystemApi>(
     complexity: &ExecutionComplexity,
     dirty_page_cost: NumInstructions,
     stable_memory_dirty_page_limit: NumPages,
-) -> Result<(), Trap> {
+) -> Result<(), anyhow::Error> {
     observe_execution_complexity(
         log,
         canister_id,
@@ -167,7 +167,7 @@ fn charge_direct_fee<S: SystemApi>(
     canister_id: CanisterId,
     caller: &mut Caller<'_, StoreData<S>>,
     num_instructions: NumInstructions,
-) -> Result<(), Trap> {
+) -> Result<(), anyhow::Error> {
     if num_instructions == NumInstructions::from(0) {
         return Ok(());
     }
@@ -241,7 +241,7 @@ fn get_new_stable_dirty_pages<S: SystemApi>(
     caller: &mut Caller<'_, StoreData<S>>,
     offset: u64,
     size: u64,
-) -> Result<(NumPages, NumInstructions), Trap> {
+) -> Result<(NumPages, NumInstructions), anyhow::Error> {
     match caller
         .data()
         .system_api
@@ -259,7 +259,7 @@ fn observe_execution_complexity<S: SystemApi>(
     caller: &mut Caller<'_, StoreData<S>>,
     complexity: &ExecutionComplexity,
     stable_memory_dirty_page_limit: NumPages,
-) -> Result<(), Trap> {
+) -> Result<(), anyhow::Error> {
     #[allow(non_upper_case_globals)]
     const KiB: u64 = 1024;
 
@@ -302,7 +302,7 @@ fn ic0_performance_counter_helper<S: SystemApi>(
     canister_id: CanisterId,
     caller: &mut Caller<'_, StoreData<S>>,
     counter_type: u32,
-) -> Result<u64, Trap> {
+) -> Result<u64, anyhow::Error> {
     match counter_type {
         0 => {
             let num_instructions_global = get_num_instructions_global(caller, log, canister_id)?;
@@ -338,7 +338,7 @@ pub(crate) fn syscalls<S: SystemApi>(
     fn with_memory_and_system_api<S: SystemApi, T>(
         mut caller: &mut Caller<'_, StoreData<S>>,
         f: impl Fn(&mut S, &mut [u8]) -> HypervisorResult<T>,
-    ) -> Result<T, wasmtime::Trap> {
+    ) -> Result<T, anyhow::Error> {
         let result = caller
             .get_export(WASM_HEAP_MEMORY_NAME)
             .ok_or_else(|| {
@@ -394,7 +394,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
-                            wasmtime::Trap::new(format!("ic0::msg_caller_size failed: {}", e))
+                            anyhow::Error::msg(format!("ic0::msg_caller_size failed: {}", e))
                         })
                     })
             }
@@ -408,7 +408,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
-                            wasmtime::Trap::new(format!("ic0::msg_arg_data_size failed: {}", e))
+                            anyhow::Error::msg(format!("ic0::msg_arg_data_size failed: {}", e))
                         })
                     })
             }
@@ -446,7 +446,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
-                            wasmtime::Trap::new(format!("ic0::msg_metohd_name_size failed: {}", e))
+                            anyhow::Error::msg(format!("ic0::msg_metohd_name_size failed: {}", e))
                         })
                     })
             }
@@ -564,7 +564,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
-                            wasmtime::Trap::new(format!("ic0_msg_reject_msg_size failed: {}", e))
+                            anyhow::Error::msg(format!("ic0_msg_reject_msg_size failed: {}", e))
                         })
                     })
             }
@@ -607,7 +607,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
-                            wasmtime::Trap::new(format!("ic0_canister_self_size failed: {}", e))
+                            anyhow::Error::msg(format!("ic0_canister_self_size failed: {}", e))
                         })
                     })
             }
@@ -647,7 +647,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
-                            wasmtime::Trap::new(format!("ic0_controller_size failed: {}", e))
+                            anyhow::Error::msg(format!("ic0_controller_size failed: {}", e))
                         })
                     })
             }
@@ -905,7 +905,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i32::try_from(s).map_err(|e| {
-                            wasmtime::Trap::new(format!("ic0_stable_size failed: {}", e))
+                            anyhow::Error::msg(format!("ic0_stable_size failed: {}", e))
                         })
                     })
             }
@@ -992,7 +992,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i64::try_from(s).map_err(|e| {
-                            wasmtime::Trap::new(format!("ic0_stable64_size failed: {}", e))
+                            anyhow::Error::msg(format!("ic0_stable64_size failed: {}", e))
                         })
                     })
             }
@@ -1134,7 +1134,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i64::try_from(s).map_err(|e| {
-                            wasmtime::Trap::new(format!("ic0_canister_cycle_balance failed: {}", e))
+                            anyhow::Error::msg(format!("ic0_canister_cycle_balance failed: {}", e))
                         })
                     })
             }
@@ -1169,7 +1169,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i64::try_from(s).map_err(|e| {
-                            wasmtime::Trap::new(format!("ic0_msg_cycles_available failed: {}", e))
+                            anyhow::Error::msg(format!("ic0_msg_cycles_available failed: {}", e))
                         })
                     })
             }
@@ -1204,7 +1204,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i64::try_from(s).map_err(|e| {
-                            wasmtime::Trap::new(format!("ic0_msg_cycles_refunded failed: {}", e))
+                            anyhow::Error::msg(format!("ic0_msg_cycles_refunded failed: {}", e))
                         })
                     })
             }
@@ -1371,7 +1371,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     .map_err(|e| process_err(&mut caller, e))
                     .and_then(|s| {
                         i64::try_from(s).map_err(|e| {
-                            wasmtime::Trap::new(format!("ic0_mint_cycles failed: {}", e))
+                            anyhow::Error::msg(format!("ic0_mint_cycles failed: {}", e))
                         })
                     })
             }
