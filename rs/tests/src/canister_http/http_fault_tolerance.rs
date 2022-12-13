@@ -15,11 +15,12 @@ Success::
 1. Http requests succeed in environment where nodes fail.
 
 end::catalog[] */
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::vm_control::IcControl;
+use crate::driver::test_env_api::{retry, READY_WAIT_TIMEOUT, RETRY_BACKOFF};
+use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer};
 use crate::util;
 use crate::{canister_http::lib::*, driver::test_env_api::HasWasm};
+use anyhow::bail;
 use candid::Principal;
 use canister_test::Canister;
 use dfn_candid::candid_one;
@@ -29,36 +30,58 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{CanisterId, PrincipalId};
 use ic_utils::interfaces::ManagementCanister;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
-use slog::{info, warn};
-use std::time::{Duration, Instant};
-
-const EXPIRATION: Duration = Duration::from_secs(180);
-const BACKOFF_DELAY: Duration = Duration::from_secs(5);
+use slog::info;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
 
-    // TODO: adapt the test below to use the env directly
-    // instead of using the deprecated IcHandle and Context.
-    let (handle, ctx) = get_ic_handle_and_ctx(env.clone());
+    let topology = env.topology_snapshot();
 
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    let mut rng = ctx.rng.clone();
 
-    // TODO: change this back to app_node_endpoint
-    let app_endpoints: Vec<_> = handle
-        .as_permutation(&mut rng)
-        .filter(|e| e.subnet.as_ref().map(|s| s.type_of) == Some(SubnetType::Application))
-        .collect();
-    let app_endpoint = app_endpoints.first().expect("no Application nodes.");
-    let app_runtime = util::runtime_from_url(
-        app_endpoint.url.clone(),
-        app_endpoint.effective_canister_id(),
+    // This test needs at least 4 nodes.
+    assert!(
+        topology
+            .subnets()
+            .find(|s| s.subnet_type() == SubnetType::Application)
+            .unwrap()
+            .nodes()
+            .count()
+            > 3
     );
-    rt.block_on(app_endpoint.assert_ready(&ctx));
-    info!(&logger, "NNS endpoint reachable over http.");
 
-    let agent = rt.block_on(util::assert_create_agent(app_endpoint.url.as_str()));
+    let mut app_nodes = topology
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap()
+        .nodes();
+
+    // Select node that should be killed during test.
+    let killed_app_endpoint = app_nodes.next().expect("no Application nodes.");
+    // Select endpoint that will stay healthy throughout test.
+    let healthy_app_endpoint = app_nodes.next().expect("no Application nodes.");
+
+    let app_runtime = util::runtime_from_url(
+        healthy_app_endpoint.get_public_url(),
+        healthy_app_endpoint.effective_canister_id(),
+    );
+
+    // Wait for all endpoints to be ready
+    for endpoint in topology
+        .subnets()
+        .flat_map(|subnet| subnet.nodes())
+        .collect::<Vec<_>>()
+    {
+        endpoint.await_status_is_healthy().unwrap();
+    }
+
+    info!(&logger, "All IC endpoints reachable over http.");
+
+    let agent = rt.block_on(util::assert_create_agent(
+        healthy_app_endpoint.get_public_url().as_str(),
+    ));
 
     info!(&logger, "Installing proxy_canister.");
     let cid: Principal = rt.block_on(async {
@@ -66,7 +89,7 @@ pub fn test(env: TestEnv) {
         let cid = mgr
             .create_canister()
             .as_provisional_create_with_amount(None)
-            .with_effective_canister_id(app_endpoint.effective_canister_id())
+            .with_effective_canister_id(healthy_app_endpoint.effective_canister_id())
             .call_and_wait(util::delay())
             .await
             .expect("failed to create a canister")
@@ -85,6 +108,10 @@ pub fn test(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let log = logger.clone();
+
+    let requests = Arc::new(AtomicUsize::new(0));
+
+    let requests_c = requests.clone();
     let continuous_http_calls = rt.spawn(async move {
         info!(&log, "Starting workload of continued remote HTTP calls.");
         let proxy_canister = Canister::new(
@@ -92,10 +119,13 @@ pub fn test(env: TestEnv) {
             CanisterId::new(PrincipalId::from(cid)).unwrap(),
         );
 
-        // keeping sending http calls as an application node is being killed.
-        // all http requests should still succeed throughout.
+        // Proxy requests store request responses made in a HashMap that
+        // is indexed by url. We generate http requets to httpbin/anything/{n},
+        // which just returns n. All of these requests will be stored in the proxy
+        // canister and we will later check that all of these were successful.
+        let mut n = 0;
         loop {
-            let success_update = proxy_canister
+            let reply = proxy_canister
                 .update_(
                     "send_request",
                     candid_one::<
@@ -104,14 +134,14 @@ pub fn test(env: TestEnv) {
                     >,
                     RemoteHttpRequest {
                         request: CanisterHttpRequestArgs {
-                            url: format!("https://[{webserver_ipv6}]:20443"),
+                            url: format!("https://[{webserver_ipv6}]:20443/anything/{n}"),
                             headers: vec![],
                             method: HttpMethod::GET,
                             body: Some("".as_bytes().to_vec()),
                             transform: Some(TransformContext {
                                 function: TransformFunc(candid::Func {
                                     principal: proxy_canister.canister_id().get().0,
-                                    method: "transform".to_string(),
+                                    method: "deterministic_transform".to_string(),
                                 }),
                                 context: vec![0, 1, 2],
                             }),
@@ -121,98 +151,112 @@ pub fn test(env: TestEnv) {
                     },
                 )
                 .await
-                .expect("Call to proxy canister failed.");
-            match success_update {
-                Ok(r) => {
-                    info!(&log, "Canister http call success {:?}", r);
-                }
-                Err((_, failure)) => {
-                    panic!("Failed to make canister http request: {}", failure);
-                }
-            }
+                .expect("Failed to call proxy canister");
+            info!(&log, "Continuous http request {}: {:?}", n, reply);
+            n += 1;
+            requests_c.store(n, Ordering::SeqCst);
         }
     });
 
     info!(&logger, "Killing one of the node now.");
-    app_endpoints[1].kill_node(ctx.logger.clone());
+    killed_app_endpoint.vm().kill();
 
-    // wait the node is actually killed
+    // Wait the node is actually killed
     let http_client = reqwest::blocking::ClientBuilder::new()
         .build()
         .expect("Could not build reqwest client.");
 
-    let start = Instant::now();
-    while http_client.get(app_endpoints[1].url.clone()).send().is_ok() {
-        if Instant::now() - start > EXPIRATION {
-            panic!(
-                "Failed to kill node. Endpoint {} remained available after timeout is hit.",
-                app_endpoints[1].url
-            );
-        }
-        std::thread::sleep(BACKOFF_DELAY);
-    }
+    let killed_app_endpoint_url = killed_app_endpoint.get_public_url();
+    retry(
+        env.logger(),
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || match http_client.get(killed_app_endpoint_url.clone()).send() {
+            Ok(_) => bail!("Node not yet killed"),
+            Err(_) => Ok("Node not yet killed"),
+        },
+    )
+    .expect("Failed to kill node.");
     info!(&logger, "Node successfully killed");
 
-    // recover the killed node and observe it caught up on state
+    // Recover the killed node and observe it caught up on state
     info!(&logger, "Restarting the killed node now.");
-    app_endpoints[1].start_node(ctx.logger.clone());
-    let restarted_endpoint = &util::runtime_from_url(
-        app_endpoints[1].url.clone(),
-        app_endpoints[1].effective_canister_id(),
+    killed_app_endpoint.vm().start();
+    let healthy_runtime = &util::runtime_from_url(
+        healthy_app_endpoint.get_public_url(),
+        healthy_app_endpoint.effective_canister_id(),
     );
-    let restarted_canister_endpoint = Canister::new(
-        restarted_endpoint,
+    let canister_endpoint = Canister::new(
+        healthy_runtime,
         CanisterId::new(PrincipalId::from(cid)).unwrap(),
     );
-    let start = Instant::now();
+
+    // Wait the node is actually killed
+    info!(&logger, "Waiting for killed node to recover.");
+    let http_client = reqwest::blocking::ClientBuilder::new()
+        .build()
+        .expect("Could not build reqwest client.");
+    let killed_app_endpoint_url = killed_app_endpoint.get_public_url();
+    retry(
+        env.logger(),
+        READY_WAIT_TIMEOUT,
+        RETRY_BACKOFF,
+        || match http_client.get(killed_app_endpoint_url.clone()).send() {
+            Ok(_) => Ok("Node has recovered"),
+            Err(e) => bail!("Killed not is not yet healthy {e}"),
+        },
+    )
+    .expect("Failed to restart killed node.");
+    info!(&logger, "Killed node succesfully recovered.");
+
+    // Make sure that we do at least one additional backgroundi request. This is needed
+    // to make sure that a potential timeout (consensus) issue is collected in the proxy canister.
+    let current_requests_num = requests.load(Ordering::SeqCst);
+    retry(env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
+        if current_requests_num + 1 == requests.load(Ordering::SeqCst) {
+            Ok(())
+        } else {
+            bail!("Waiting for one additional background http request.")
+        }
+    })
+    .expect("Failed to do additional http request after node restart.");
+
+    // Verify that all stored http responses are successfull.
     rt.block_on(async {
-        loop {
-            if Instant::now() - start > EXPIRATION {
-                panic!("Restarted node not able to catch up cached query content before timeout.");
-            }
+        info!(
+            &logger,
+            "Checking {} requests sent by background task.",
+            requests.load(Ordering::SeqCst)
+        );
+        for n in 0..requests.load(Ordering::SeqCst) {
             let waited_query =
-                restarted_canister_endpoint
+                canister_endpoint
                     .query_(
                         "check_response",
                         candid_one::<
                             Option<Result<RemoteHttpResponse, (RejectionCode, String)>>,
                             String,
                         >,
-                        format!("https://[{webserver_ipv6}]:20443"),
+                        format!("https://[{webserver_ipv6}]:20443/anything/{n}"),
                     )
-                    .await;
-
+                    .await
+                    .expect("Failed to call proxy canister.");
             match waited_query {
-                Ok(Some(Ok(queried))) if queried.status == 200 && !queried.body.is_empty() => {
-                    info!(&logger, "Restarted node is caught up!");
-                    break;
+                Some(Ok(queried)) if queried.status == 200 && !queried.body.is_empty() => continue,
+                Some(Ok(queried)) => {
+                    panic!("Unexpected http response {queried:?}.")
                 }
-                Ok(Some(Ok(queried))) => {
-                    warn!(
-                        &logger,
-                        "Http service didn't return 200 response: {:?}", queried
-                    );
-                    tokio::time::sleep(BACKOFF_DELAY).await;
+                Some(Err(e)) => {
+                    panic!("Http request failed {e:?}.")
                 }
-                Ok(None) => {
-                    warn!(&logger, "Request to http endpoint has not been made yet");
-                    tokio::time::sleep(BACKOFF_DELAY).await;
-                }
-                Ok(Some(Err((_, error)))) | Err(error) => {
-                    warn!(
-                        &logger,
-                        "Restarted node hasn't caught up. Got inner error: {error}. Retrying.."
-                    );
-                    tokio::time::sleep(BACKOFF_DELAY).await;
+                None => {
+                    panic!("Request was not made by proxy canister.")
                 }
             }
         }
     });
-    info!(
-        &logger,
-        "Restarted node caught up with cached query content. Success!"
-    );
 
+    info!(&logger, "All requests returned 200. Success.",);
     // now that restarted node is verified returning previous HTTP request correctly,
     // we can abort the continued HTTP calls.
     continuous_http_calls.abort();
