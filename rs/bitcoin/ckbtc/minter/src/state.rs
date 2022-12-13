@@ -54,6 +54,15 @@ pub struct RetrieveBtcRequest {
     pub received_at: u64,
 }
 
+/// A transaction output storing the minter's change.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChangeOutput {
+    /// The index of the output in the transaction.
+    pub vout: u64,
+    /// The value of the output.
+    pub value: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubmittedBtcTransaction {
     /// The original retrieve_btc requests that initiated the transaction.
@@ -64,6 +73,9 @@ pub struct SubmittedBtcTransaction {
     pub used_utxos: Vec<Utxo>,
     /// The IC time at which we submitted the Bitcoin transaction.
     pub submitted_at: u64,
+    /// The tx output from the submitted transaction that the minter owns.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change_output: Option<ChangeOutput>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
