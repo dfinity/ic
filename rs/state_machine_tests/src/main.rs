@@ -6,6 +6,7 @@ use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 use ic_types::{CanisterId, PrincipalId};
 use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
 use std::io::{stdin, stdout, Read, Write};
 use std::time::Duration;
 use Request::*;
@@ -43,7 +44,7 @@ struct AddCyclesArg {
 struct SetStableMemoryArg {
     // raw bytes of the principal
     canister_id: Vec<u8>,
-    data: Vec<u8>,
+    data: ByteBuf,
 }
 
 #[derive(Deserialize)]
@@ -115,7 +116,7 @@ fn main() {
                 as usize;
         debug_print!(&opts, "data size: {}", size);
         let payload = read_bytes(size);
-        debug_print!(&opts, "payload received: {:?}", hex::encode(&payload));
+        debug_print_data(&opts, "payload received", &payload);
         let data: Request = ciborium::from_reader(&payload[..]).unwrap();
         match data {
             RootKey => send_response(
@@ -152,7 +153,7 @@ fn main() {
             SetStableMemory(arg) => {
                 let canister_id =
                     CanisterId::try_from(arg.canister_id).expect("invalid canister id");
-                env.set_stable_memory(canister_id, &arg.data);
+                env.set_stable_memory(canister_id, arg.data.as_ref());
                 send_response((), &opts);
             }
             ReadStableMemory(canister_id) => {
@@ -169,6 +170,17 @@ fn main() {
                 &opts,
             ),
         }
+    }
+}
+
+fn debug_print_data(opts: &Opts, prefix: &str, data: &[u8]) {
+    if opts.debug {
+        let truncated = if data.len() > 512 {
+            hex::encode(&data[..512]) + "..."
+        } else {
+            hex::encode(data)
+        };
+        debug_print!(opts, "{}: {}, length: {:?}", prefix, truncated, data.len());
     }
 }
 
@@ -220,14 +232,13 @@ fn send_response<R: Serialize>(response: R, opts: &Opts) {
     stdout()
         .write_all(&length_bytes)
         .expect("failed to send response length");
-    debug_print!(opts, "length sent: {:?}", hex::encode(length_bytes));
+    debug_print!(opts, "length sent: {:?}", cbor.len());
 
     stdout()
         .write_all(cbor.as_slice())
         .expect("failed to send response");
     stdout().flush().expect("failed to flush stdout");
-
-    debug_print!(opts, "payload sent: {:?}", hex::encode(cbor));
+    debug_print_data(opts, "payload sent", &cbor);
 }
 
 fn into_cbor<R: Serialize>(value: &R) -> Vec<u8> {

@@ -89,16 +89,18 @@ pub use ic_types::{
 };
 use serde::Serialize;
 pub use slog::Level;
-use std::fmt;
+use std::io::stderr;
 use std::str::FromStr;
 use std::string::ToString;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use std::{collections::BTreeMap, convert::TryFrom};
+use std::{fmt, io};
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
 
 struct FakeVerifier;
+
 impl Verifier for FakeVerifier {
     fn validate(
         &self,
@@ -230,6 +232,26 @@ fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
     ser.self_describe().expect("Could not write magic tag.");
     r.serialize(&mut ser).expect("Serialization failed.");
     ser.into_inner()
+}
+
+fn replica_logger() -> ReplicaLogger {
+    use slog::Drain;
+    let log_level = std::env::var("RUST_LOG")
+        .map(|level| Level::from_str(&level).unwrap())
+        .unwrap_or_else(|_| Level::Warning);
+
+    let writer: Box<dyn io::Write + Sync + Send> = if std::env::var("LOG_TO_STDERR").is_ok() {
+        Box::new(stderr())
+    } else {
+        Box::new(slog_term::TestStdoutWriter)
+    };
+    let decorator = slog_term::PlainSyncDecorator::new(writer);
+    let drain = slog_term::FullFormat::new(decorator)
+        .build()
+        .filter_level(log_level)
+        .fuse();
+    let logger = slog::Logger::root(drain, slog::o!());
+    logger.into()
 }
 
 /// Bundles the configuration of a `StateMachine`.
@@ -416,19 +438,7 @@ impl StateMachine {
         ecdsa_keys: Vec<EcdsaKeyId>,
         features: SubnetFeatures,
     ) -> Self {
-        use slog::Drain;
-
-        let log_level = std::env::var("RUST_LOG")
-            .map(|level| Level::from_str(&level).unwrap())
-            .unwrap_or_else(|_| Level::Warning);
-
-        let decorator = slog_term::PlainSyncDecorator::new(slog_term::TestStdoutWriter);
-        let drain = slog_term::FullFormat::new(decorator)
-            .build()
-            .filter_level(log_level)
-            .fuse();
-        let logger = slog::Logger::root(drain, slog::o!());
-        let replica_logger: ReplicaLogger = logger.into();
+        let replica_logger = replica_logger();
 
         let mut node_ids = vec![];
         for id in 0..subnet_size {

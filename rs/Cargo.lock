@@ -8475,6 +8475,7 @@ dependencies = [
  "ic-test-utilities-registry",
  "ic-types",
  "serde",
+ "serde_bytes",
  "serde_cbor",
  "slog",
  "slog-term",
