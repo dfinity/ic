@@ -4,9 +4,10 @@ use candid::{CandidType, Deserialize};
 use certificate_orchestrator_interface::{
     CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError, DispenseTaskResponse,
     EncryptedPair, ExportCertificatesError, ExportCertificatesResponse, GetRegistrationError,
-    GetRegistrationResponse, Id, Name, QueueTaskError, QueueTaskResponse, Registration, State,
-    UpdateRegistrationError, UpdateRegistrationResponse, UploadCertificateError,
-    UploadCertificateResponse, NAME_MAX_LEN,
+    GetRegistrationResponse, Id, ListAllowedPrincipalsError, ListAllowedPrincipalsResponse,
+    ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse, Name, QueueTaskError,
+    QueueTaskResponse, Registration, State, UpdateRegistrationError, UpdateRegistrationResponse,
+    UploadCertificateError, UploadCertificateResponse, NAME_MAX_LEN,
 };
 use ic_cdk::{caller, export::Principal, trap};
 use ic_cdk_macros::{init, query, update};
@@ -311,46 +312,55 @@ fn dispense_task() -> DispenseTaskResponse {
 // ACLs
 
 #[query(name = "listAllowedPrincipals")]
-fn list_allowed_principals() -> Vec<Principal> {
+fn list_allowed_principals() -> ListAllowedPrincipalsResponse {
     if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
-        match err {
-            AuthorizeError::Unauthorized => trap(&err.to_string()),
-            AuthorizeError::UnexpectedError(err) => trap(&err.to_string()),
-        }
+        return ListAllowedPrincipalsResponse::Err(match err {
+            AuthorizeError::Unauthorized => ListAllowedPrincipalsError::Unauthorized,
+            AuthorizeError::UnexpectedError(err) => {
+                ListAllowedPrincipalsError::UnexpectedError(err.to_string())
+            }
+        });
     }
 
-    ALLOWED_PRINCIPALS.with(|m| {
+    ListAllowedPrincipalsResponse::Ok(ALLOWED_PRINCIPALS.with(|m| {
         m.borrow()
             .iter()
             .map(|(k, _)| Principal::from_text(k).unwrap())
             .collect()
-    })
+    }))
 }
 
 #[update(name = "addAllowedPrincipal")]
-fn add_allowed_principal(principal: Principal) {
+fn add_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse {
     if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
-        match err {
-            AuthorizeError::Unauthorized => trap(&err.to_string()),
-            AuthorizeError::UnexpectedError(err) => trap(&err.to_string()),
-        }
+        return ModifyAllowedPrincipalResponse::Err(match err {
+            AuthorizeError::Unauthorized => ModifyAllowedPrincipalError::Unauthorized,
+            AuthorizeError::UnexpectedError(err) => {
+                ModifyAllowedPrincipalError::UnexpectedError(err.to_string())
+            }
+        });
     }
 
-    ALLOWED_PRINCIPALS
-        .with(|m| m.borrow_mut().insert(principal.to_text(), ()))
-        .expect("failed to add allowed principal");
+    if let Err(err) = ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().insert(principal.to_text(), ())) {
+        return ModifyAllowedPrincipalResponse::Err(ModifyAllowedPrincipalError::UnexpectedError(
+            err.to_string(),
+        ));
+    }
+    ModifyAllowedPrincipalResponse::Ok(())
 }
 
 #[update(name = "rmAllowedPrincipal")]
-fn rm_allowed_principal(principal: Principal) {
+fn rm_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse {
     if let Err(err) = ROOT_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
-        match err {
-            AuthorizeError::Unauthorized => trap(&err.to_string()),
-            AuthorizeError::UnexpectedError(err) => trap(&err.to_string()),
-        }
+        return ModifyAllowedPrincipalResponse::Err(match err {
+            AuthorizeError::Unauthorized => ModifyAllowedPrincipalError::Unauthorized,
+            AuthorizeError::UnexpectedError(err) => {
+                ModifyAllowedPrincipalError::UnexpectedError(err.to_string())
+            }
+        });
     }
 
-    ALLOWED_PRINCIPALS
-        .with(|m| m.borrow_mut().remove(&principal.to_text()))
-        .expect("failed to remove allowed principal");
+    ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().remove(&principal.to_text()));
+
+    ModifyAllowedPrincipalResponse::Ok(())
 }
