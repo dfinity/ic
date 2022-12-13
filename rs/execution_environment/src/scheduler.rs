@@ -115,6 +115,7 @@ impl SchedulerImpl {
         &self,
         scheduler_cores: usize,
         current_round: ExecutionRound,
+        accumulated_priority_reset_interval: ExecutionRound,
         canister_states: &mut BTreeMap<CanisterId, CanisterState>,
     ) -> RoundSchedule {
         let number_of_canisters = canister_states.len();
@@ -143,14 +144,14 @@ impl SchedulerImpl {
         // This corresponds to the vector p in the Scheduler Analysis document.
         let mut round_states = Vec::with_capacity(number_of_canisters);
 
-        // Reset the accumulated priorities every 100 rounds (times the multiplier).
+        // Reset the accumulated priorities periodically.
         // We want to reset the scheduler regularly to safely support changes in the set
         // of canisters and their compute allocations.
-        let reset_round = (current_round.get() as i64 % (100 * multiplier)) == 0;
+        let is_reset_round = (current_round.get() % accumulated_priority_reset_interval.get()) == 0;
 
         // Compute the priority of the canisters for this round.
         for (&canister_id, canister) in canister_states.iter_mut() {
-            if reset_round {
+            if is_reset_round {
                 canister.scheduler_state.accumulated_priority = Default::default();
                 canister.scheduler_state.priority_credit = Default::default();
             }
@@ -1394,6 +1395,7 @@ impl Scheduler for SchedulerImpl {
                 let round_schedule = self.apply_scheduling_strategy(
                     self.config.scheduler_cores,
                     current_round,
+                    self.config.accumulated_priority_reset_interval,
                     &mut canisters,
                 );
 
