@@ -87,7 +87,7 @@ withdrawal_address="$(dfx canister call minter get_withdrawal_account)"
 2. Clean the output of the previous command to get the desired format:
 +
 ----
-cleaned_withdrawal_address=$(echo "$(echo "withdrawal_addres" | sed 's/^( //g' | sed 's/ )$//g')" | sed 's/,$//g')
+cleaned_withdrawal_address=$(echo $withdrawal_addres | sed -re 's/^\(|, \)$//g')
 ----
 +
 3. Transfer the ckBTCs you want to unwrap to *cleaned_withdrawal_address* on the ckBTC ledger.
