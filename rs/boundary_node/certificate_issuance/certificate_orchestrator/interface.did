@@ -1,6 +1,6 @@
 type Id = text;
 type Name = text;
-type Canister = text;
+type Canister = principal;
 type Timestamp = nat64;
 
 type State = variant {
@@ -109,6 +109,26 @@ type DispenseTaskResponse = variant {
     Err: DispenseTaskError;
 };
 
+type ModifyAllowedPrincipalError = variant {
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type ModifyAllowedPrincipalResponse = variant {
+    Ok;
+    Err: ModifyAllowedPrincipalError;
+};
+
+type ListAllowedPrincipalsError = variant {
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type LisAllowedPrincipalsResponse = variant {
+    Ok: vec principal;
+    Err: ListAllowedPrincipalsError;
+};
+
 service: (InitArg) -> {
     // Registrations
     createRegistration: (Name, Canister) -> (CreateRegistrationResponse);
@@ -124,7 +144,7 @@ service: (InitArg) -> {
     dispenseTask: () -> (DispenseTaskResponse);
 
     // ACL
-    listAllowedPrincipals: () -> (vec principal) query;
-    addAllowedPrincipal: (principal) -> ();
-    rmAllowedPrincipal: (principal) -> ();
+    listAllowedPrincipals: () -> (LisAllowedPrincipalsResponse) query;
+    addAllowedPrincipal: (principal) -> (ModifyAllowedPrincipalResponse);
+    rmAllowedPrincipal: (principal) -> (ModifyAllowedPrincipalResponse);
 };

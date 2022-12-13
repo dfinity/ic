@@ -215,3 +215,27 @@ pub enum DispenseTaskResponse {
     Ok(Id),
     Err(DispenseTaskError),
 }
+
+#[derive(CandidType, Deserialize)]
+pub enum ModifyAllowedPrincipalError {
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(CandidType, Deserialize)]
+pub enum ModifyAllowedPrincipalResponse {
+    Ok(()),
+    Err(ModifyAllowedPrincipalError),
+}
+
+#[derive(CandidType, Deserialize)]
+pub enum ListAllowedPrincipalsError {
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(CandidType, Deserialize)]
+pub enum ListAllowedPrincipalsResponse {
+    Ok(Vec<Principal>),
+    Err(ListAllowedPrincipalsError),
+}
