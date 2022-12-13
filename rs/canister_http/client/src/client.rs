@@ -5,16 +5,16 @@ use ic_canister_http_service::{
     canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest,
     CanisterHttpSendResponse, HttpHeader, HttpMethod,
 };
-use ic_error_types::RejectCode;
+use ic_error_types::{RejectCode, UserError};
 use ic_ic00_types::{CanisterHttpResponsePayload, TransformArgs};
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_canister_http_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    batch::MAX_CANISTER_HTTP_PAYLOAD_SIZE,
     canister_http::{
-        CanisterHttpMethod, CanisterHttpReject, CanisterHttpRequest, CanisterHttpRequestContext,
-        CanisterHttpResponse, CanisterHttpResponseContent, Transform,
+        validate_http_headers_and_body, CanisterHttpMethod, CanisterHttpReject,
+        CanisterHttpRequest, CanisterHttpRequestContext, CanisterHttpResponse,
+        CanisterHttpResponseContent, Transform, MAX_CANISTER_HTTP_RESPONSE_BYTES,
     },
     messages::{AnonymousQuery, AnonymousQueryResponse, Request},
     CanisterId, NumBytes,
@@ -30,11 +30,6 @@ use tokio::{
 };
 use tonic::{transport::Channel, Code};
 use tower::util::Oneshot;
-
-// Substract 50Kb for consensus overhead (CallbackID, Time, CanisterId, CanisterHttpResponseProof)
-const CANISTER_HTTP_RESPONSE_LIMIT: usize = MAX_CANISTER_HTTP_PAYLOAD_SIZE - 50 * 1024;
-// Hard limit that the canister http adapter enforces on the response.
-const CANISTER_HTTP_ADAPTER_MAX_RESPONSE_SIZE: NumBytes = NumBytes::new(2 * 1024 * 1024);
 
 /// This client is returend if we fail to make connection to canister http adapter.
 pub struct BrokenCanisterHttpClient {}
@@ -149,7 +144,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         CanisterHttpMethod::POST => HttpMethod::Post.into(),
                         CanisterHttpMethod::HEAD => HttpMethod::Head.into(),
                     },
-                    max_response_size_bytes: request_max_response_bytes.unwrap_or(CANISTER_HTTP_ADAPTER_MAX_RESPONSE_SIZE).get(),
+                    max_response_size_bytes: request_max_response_bytes.unwrap_or(NumBytes::new(MAX_CANISTER_HTTP_RESPONSE_BYTES)).get(),
                     headers: request_headers
                         .into_iter()
                         .map(|h| HttpHeader {
@@ -167,10 +162,21 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                 })
                 .and_then(|adapter_response| async move {
 
-                    let adapter_response = adapter_response.into_inner();
+                    let CanisterHttpSendResponse { status, headers, content: body} = adapter_response.into_inner();
+
+                    let canister_http_payload = CanisterHttpResponsePayload{
+                        status: status as u128,
+                        headers: headers.into_iter().map(|HttpHeader { name, value }| {
+                                    ic_ic00_types::HttpHeader { name, value }
+                                }).collect(),
+                        body,
+                    };
+
                     metrics.http_request_duration
-                        .with_label_values(&[&adapter_response.status.to_string()])
+                        .with_label_values(&[&status.to_string()])
                         .observe(adapter_req_timer.elapsed().as_secs_f64());
+
+                    validate_http_headers_and_body(&canister_http_payload.headers, &canister_http_payload.body).map_err(|e| (RejectCode::SysFatal, UserError::from(e).description().to_string()))?;
 
                     // Only apply the transform if a function name is specified
                     let transform_timer = metrics.transform_execution_duration.start_timer();
@@ -178,23 +184,13 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         Some(transform) => {
                             transform_adapter_response(
                                 anonymous_query_handler,
-                                adapter_response,
+                                canister_http_payload,
                                 request_sender,
                                 transform,
                             )
                             .await?
                         }
-                        None => Encode!(&ic_ic00_types::CanisterHttpResponsePayload {
-                            status: adapter_response.status as u128,
-                            headers: adapter_response
-                                .headers
-                                .into_iter()
-                                .map(|HttpHeader { name, value }| {
-                                    ic_ic00_types::HttpHeader { name, value }
-                                })
-                                .collect(),
-                            body: adapter_response.content,
-                        })
+                        None => Encode!(&canister_http_payload)
                         .map_err(|encode_error| {
                             (
                                 RejectCode::SysFatal,
@@ -207,13 +203,13 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                     };
 
                     transform_timer.observe_duration();
-                    if transform_response.len() > CANISTER_HTTP_RESPONSE_LIMIT {
+                    if transform_response.len() > (MAX_CANISTER_HTTP_RESPONSE_BYTES as usize) {
                         let err_msg = match request_transform {
                             Some(_) => format!(
-                                "Transformed http response exceeds limit: {}", CANISTER_HTTP_RESPONSE_LIMIT
+                                "Transformed http response exceeds limit: {}", MAX_CANISTER_HTTP_RESPONSE_BYTES
                             ),
                             None => format!(
-                                "Http response exceeds limit: {}. Apply a transform function to the http response.", CANISTER_HTTP_RESPONSE_LIMIT
+                                "Http response exceeds limit: {}. Apply a transform function to the http response.", MAX_CANISTER_HTTP_RESPONSE_BYTES
                             ),
                         };
                         return Err(
@@ -265,21 +261,10 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
 /// This gives the ability to prune volatile fields before passing the response to consensus.
 async fn transform_adapter_response(
     anonymous_query_handler: AnonymousQueryService,
-    adapter_response: CanisterHttpSendResponse,
+    canister_http_response: CanisterHttpResponsePayload,
     transform_canister: CanisterId,
     transform: &Transform,
 ) -> Result<Vec<u8>, (RejectCode, String)> {
-    // TODO: Protobuf to conversion via from/into trait to avoid having ic00 as a dependency.
-    // CanisterHttpResponsePayload type is part of the public API and need to encode the adapter response into the public API candid.
-    let canister_http_response = CanisterHttpResponsePayload {
-        status: adapter_response.status as u128,
-        headers: adapter_response
-            .headers
-            .into_iter()
-            .map(|HttpHeader { name, value }| ic_ic00_types::HttpHeader { name, value })
-            .collect(),
-        body: adapter_response.content,
-    };
     let transform_args = TransformArgs {
         response: canister_http_response,
         context: transform.context.clone(),
@@ -647,7 +632,7 @@ mod tests {
             println!("{:?}", req);
             rsp.send_response(AnonymousQueryResponse::Replied {
                 reply: ic_types::messages::AnonymousQueryResponseReply {
-                    arg: Blob(vec![0; CANISTER_HTTP_RESPONSE_LIMIT + 1]),
+                    arg: Blob(vec![0; (MAX_CANISTER_HTTP_RESPONSE_BYTES as usize) + 1]),
                 },
             });
         });
@@ -681,7 +666,7 @@ mod tests {
                             RejectCode::SysFatal,
                             format!(
                                 "Transformed http response exceeds limit: {}",
-                                CANISTER_HTTP_RESPONSE_LIMIT
+                                MAX_CANISTER_HTTP_RESPONSE_BYTES
                             )
                         )
                     );
@@ -1011,5 +996,45 @@ mod tests {
             }
         }
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
+    }
+
+    // Test the maximum number of bytes allowed by consensus to represent the serialized HTTP response if no transform is specified.
+    #[tokio::test]
+    async fn test_max_response_size() {
+        use ic_types::batch::MAX_CANISTER_HTTP_PAYLOAD_SIZE;
+        use ic_types::canister_http::{
+            MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH, MAX_CANISTER_HTTP_HEADER_NUM,
+            MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE,
+        };
+        let mut headers: Vec<HttpHeader> = vec![];
+        /*  We produce MAX_CANISTER_HTTP_HEADER_NUM headers of total size equal to MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE,
+            where the i-th header's name and value each have the length n and the form:
+              [8-byte binary encoding of i] [(n - 8) occurrences of the character 'x']
+        */
+        let n = MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE / (2 * MAX_CANISTER_HTTP_HEADER_NUM);
+        assert!(n <= MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH);
+        for i in 0..MAX_CANISTER_HTTP_HEADER_NUM {
+            let h = format!("{:08}{}", i, "x".repeat(n - 8));
+            headers.push(HttpHeader {
+                name: h.clone(),
+                value: h,
+            });
+        }
+        let x = build_mock_canister_http_response_success(
+            420,
+            mock_time(),
+            200,
+            headers,
+            vec![
+                0;
+                (MAX_CANISTER_HTTP_RESPONSE_BYTES as usize) - MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE
+            ],
+        );
+        if let CanisterHttpResponseContent::Success(content) = x.content {
+            // Substract 50Kb for consensus overhead (CallbackID, Time, CanisterId, CanisterHttpResponseProof)
+            assert!(content.len() <= MAX_CANISTER_HTTP_PAYLOAD_SIZE - 50 * 1024);
+        } else {
+            panic!("build_mock_canister_http_response_success should not return this case");
+        }
     }
 }

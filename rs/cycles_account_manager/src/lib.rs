@@ -21,8 +21,8 @@ use ic_logger::{error, info, ReplicaLogger};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, SystemState};
-use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64;
 use ic_types::{
+    canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
     messages::{Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     nominal_cycles::NominalCycles,
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId,
@@ -845,7 +845,7 @@ impl CyclesAccountManager {
         let response_size = match response_size_limit {
             Some(response_size) => response_size.get(),
             // Defaults to maximum response size.
-            None => MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64,
+            None => MAX_CANISTER_HTTP_RESPONSE_BYTES,
         };
         let total_bytes = response_size + request_size.get();
         self.scale_cost(

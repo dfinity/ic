@@ -32,7 +32,7 @@ use ic_ic00_types::{
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities::{mock_time, types::messages::RequestBuilder};
-use ic_types::canister_http::CanisterHttpRequestContext;
+use ic_types::canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_REQUEST_BYTES};
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::{info, Logger};
 use std::convert::TryFrom;
@@ -45,7 +45,9 @@ fn expected_cycle_cost(
     subnet_size: usize,
 ) -> u64 {
     let cm = CyclesAccountManagerBuilder::new().build();
-    let response_size = request.max_response_bytes.unwrap_or(2 * 1024 * 1024);
+    let response_size = request
+        .max_response_bytes
+        .unwrap_or(MAX_CANISTER_HTTP_REQUEST_BYTES);
 
     let dummy_context = CanisterHttpRequestContext::try_from((
         mock_time(),
