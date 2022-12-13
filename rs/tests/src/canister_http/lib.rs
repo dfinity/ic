@@ -80,7 +80,7 @@ pub fn config(env: TestEnv) {
                     http_requests: true,
                     ..SubnetFeatures::default()
                 })
-                .add_nodes(3),
+                .add_nodes(4),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");

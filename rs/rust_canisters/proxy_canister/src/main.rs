@@ -92,6 +92,15 @@ fn transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
 }
 
 #[query]
+fn deterministic_transform(raw: TransformArgs) -> CanisterHttpResponsePayload {
+    let (response, _) = (raw.response, raw.context);
+    let mut transformed = response;
+    transformed.headers = vec![];
+    transformed.body = "deterministic".as_bytes().to_vec();
+    transformed
+}
+
+#[query]
 fn transform_with_context(raw: TransformArgs) -> CanisterHttpResponsePayload {
     let (response, context) = (raw.response, raw.context);
     let mut context = context;
