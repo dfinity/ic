@@ -33,6 +33,11 @@ const MIN_NANOS: u64 = 60 * SEC_NANOS;
 /// a batch transaction.
 pub const MIN_PENDING_REQUESTS: usize = 20;
 
+// Source: ckBTC design doc (go/ckbtc-design).
+const P2WPKH_DUST_THRESHOLD: Satoshi = 294;
+/// The minimum amount of a change output.
+const MIN_CHANGE: u64 = P2WPKH_DUST_THRESHOLD + 1;
+
 #[derive(CandidType, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ECDSAPublicKey {
     pub public_key: Vec<u8>,
@@ -618,14 +623,6 @@ pub fn build_unsigned_transaction(
 > {
     assert!(!outputs.is_empty());
 
-    // The DUST_TRESHOLD parameter should be:
-    // - P2WPKH outputs: 294 Satoshi
-    // - P2TR outputs: 330 Satoshi
-    // - P2SH outputs: 330 Satoshi
-    // - P2PKH outputs: 546 Satoshi
-    // Source: ckBTC design doc (go/ckbtc-design).
-    const P2WPKH_DUST_THRESHOLD: Satoshi = 294;
-
     /// Having a sequence number lower than (0xffffffff - 1) signals the use of replacement by fee.
     /// It allows us to increase the fee of a transaction already sent to the mempool.
     /// The rbf option is used in `resubmit_retrieve_btc`.
@@ -645,14 +642,15 @@ pub fn build_unsigned_transaction(
     debug_assert!(inputs_value >= amount);
 
     let change = inputs_value - amount;
-    let change_output: Option<state::ChangeOutput> = (change > 0).then(|| {
-        let value = change.max(P2WPKH_DUST_THRESHOLD + 1);
-
-        state::ChangeOutput {
-            vout: outputs.len() as u64,
-            value,
-        }
+    let change_output = (change > 0).then(|| state::ChangeOutput {
+        vout: outputs.len() as u64,
+        value: change.max(MIN_CHANGE),
     });
+
+    // If the change is positive but less than MIN_CHANGE, we round it up to
+    // MIN_CHANGE. However, we must remember the extra amount to subtract it
+    // from the outputs together with the fees.
+    let overdraft = MIN_CHANGE.saturating_sub(change);
 
     let tx_outputs: Vec<tx::TxOut> = outputs
         .iter()
@@ -668,7 +666,7 @@ pub fn build_unsigned_transaction(
 
     debug_assert_eq!(
         tx_outputs.iter().map(|out| out.value).sum::<u64>(),
-        inputs_value
+        inputs_value + overdraft
     );
 
     let mut unsigned_tx = tx::UnsignedTransaction {
@@ -694,13 +692,22 @@ pub fn build_unsigned_transaction(
         return Err(BuildTxError::AmountTooLow);
     }
 
-    let fee_shares = distribute(fee, outputs.len() as u64);
+    let fee_shares = distribute(fee + overdraft, outputs.len() as u64);
 
     for (output, fee_share) in unsigned_tx.outputs.iter_mut().zip(fee_shares.iter()) {
         if output.address != main_address {
+            // This code relies heavily on the minimal retrieve_btc amount to be
+            // high enough to cover the fee share and the potential change
+            // overdraft.  If this assumption breaks, we can end up with zero
+            // outputs and fees that are lower than we expected.
             output.value = output.value.saturating_sub(*fee_share);
         }
     }
+
+    debug_assert_eq!(
+        inputs_value,
+        fee + unsigned_tx.outputs.iter().map(|u| u.value).sum::<u64>()
+    );
 
     Ok((unsigned_tx, change_output, input_utxos))
 }
@@ -714,15 +721,11 @@ fn distribute(amount: u64, n: u64) -> Vec<u64> {
         return vec![];
     }
 
-    let avg = amount / n;
-
-    debug_assert!(avg * n <= amount);
+    let (avg, remainder) = (amount / n, amount % n);
 
     // Fill the shares with the average value.
     let mut shares = vec![avg; n as usize];
     // Distribute the remainder across the shares.
-    let remainder = amount - avg * n;
-    debug_assert!(remainder < n);
     for i in 0..remainder {
         shares[i as usize] += 1;
     }
