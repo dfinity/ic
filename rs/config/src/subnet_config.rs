@@ -6,7 +6,7 @@ use std::time::Duration;
 use crate::execution_environment::SUBNET_HEAP_DELTA_CAPACITY;
 use ic_base_types::NumBytes;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{Cycles, NumInstructions};
+use ic_types::{Cycles, ExecutionRound, NumInstructions};
 use serde::{Deserialize, Serialize};
 
 const B: u64 = 1_000_000_000;
@@ -129,6 +129,17 @@ const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
 const DEFAULT_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(1_000);
 const SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD: NumInstructions = NumInstructions::new(0);
 
+/// Accumulated priority reset interval, rounds.
+///
+/// Note, if the interval is too low, the accumulated priority becomes less relevant.
+/// But if the interval is too high, the total accumulated priority might drift
+/// too much from zero, and the newly created canisters might have have a
+/// superior or inferior priority comparing to other canisters on the subnet.
+///
+/// Arbitrary chosen number to reset accumulated priority every ~24 hours on
+/// all subnet types.
+const ACCUMULATED_PRIORITY_RESET_INTERVAL: ExecutionRound = ExecutionRound::new(24 * 3600);
+
 /// The per subnet type configuration for the scheduler component
 #[derive(Clone)]
 pub struct SchedulerConfig {
@@ -216,6 +227,9 @@ pub struct SchedulerConfig {
 
     /// Cost for each newly created dirty page in stable memory.
     pub dirty_page_overhead: NumInstructions,
+
+    /// Accumulated priority reset interval, rounds.
+    pub accumulated_priority_reset_interval: ExecutionRound,
 }
 
 impl SchedulerConfig {
@@ -240,6 +254,7 @@ impl SchedulerConfig {
             heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
+            accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
         }
     }
 
@@ -274,6 +289,7 @@ impl SchedulerConfig {
             // rate-limiting for the system subnets.
             install_code_rate_limit: NumInstructions::from(1_000_000_000_000_000),
             dirty_page_overhead: SYSTEM_SUBNET_DIRTY_PAGE_OVERHEAD,
+            accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
         }
     }
 
@@ -298,6 +314,7 @@ impl SchedulerConfig {
             heap_delta_rate_limit: NumBytes::from(75 * 1024 * 1024),
             install_code_rate_limit: MAX_INSTRUCTIONS_PER_SLICE,
             dirty_page_overhead: DEFAULT_DIRTY_PAGE_OVERHEAD,
+            accumulated_priority_reset_interval: ACCUMULATED_PRIORITY_RESET_INTERVAL,
         }
     }
 
