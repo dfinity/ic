@@ -4,6 +4,7 @@ use crate::keygen::fixtures::multi_bls_test_vector;
 use crate::keygen::utils::node_signing_pk_to_proto;
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
+use assert_matches::assert_matches;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
 use ic_types_test_utils::ids::node_test_id;
 use openssl::x509::X509NameEntries;
@@ -51,15 +52,15 @@ mod gen_node_siging_key_pair_tests {
         assert!(csp.gen_node_signing_key_pair().is_ok());
         let result = csp.gen_node_signing_key_pair();
 
-        assert!(matches!(result,
+        assert_matches!(result,
             Err(CryptoError::InternalError { internal_error })
             if internal_error.contains("node signing public key already set")
-        ));
+        );
 
-        assert!(matches!(csp.gen_node_signing_key_pair(),
+        assert_matches!(csp.gen_node_signing_key_pair(),
             Err(CryptoError::InternalError { internal_error })
             if internal_error.contains("node signing public key already set")
-        ));
+        );
     }
 
     #[test]
@@ -122,10 +123,10 @@ mod gen_key_pair_with_pop_tests {
 
         // the attemtps after the first one should fail
         for _ in 0..5 {
-            assert!(matches!(csp.gen_committee_signing_key_pair(),
+            assert_matches!(csp.gen_committee_signing_key_pair(),
                 Err(CryptoError::InvalidArgument { message })
                 if message.contains("committee signing public key already set")
-            ));
+            );
         }
     }
 }
@@ -163,10 +164,10 @@ mod idkg_create_mega_key_pair_tests {
 
         let result = csp.idkg_gen_dealing_encryption_key_pair();
 
-        assert!(matches!(
+        assert_matches!(
             result,
             Err(CspCreateMEGaKeyError::DuplicateKeyId { key_id }) if key_id == duplicated_key_id
-        ));
+        );
     }
 
     #[test]
@@ -179,10 +180,11 @@ mod idkg_create_mega_key_pair_tests {
 
         let result = csp.idkg_gen_dealing_encryption_key_pair();
 
-        assert!(matches!(
+        assert_matches!(
             result,
-            Err(CspCreateMEGaKeyError::InternalError { internal_error }) if internal_error.to_lowercase().contains("serialization error")
-        ));
+            Err(CspCreateMEGaKeyError::InternalError { internal_error })
+            if internal_error.to_lowercase().contains("serialization error")
+        );
     }
 
     #[test]
@@ -195,10 +197,11 @@ mod idkg_create_mega_key_pair_tests {
 
         let result = csp.idkg_gen_dealing_encryption_key_pair();
 
-        assert!(matches!(
+        assert_matches!(
             result,
-            Err(CspCreateMEGaKeyError::TransientInternalError { internal_error }) if internal_error.to_lowercase().contains("io error")
-        ));
+            Err(CspCreateMEGaKeyError::TransientInternalError { internal_error })
+            if internal_error.to_lowercase().contains("io error")
+        );
     }
 }
 
@@ -382,10 +385,8 @@ mod tls {
         let invalid_not_after = "invalid_not_after_date";
 
         let result = csp.gen_tls_key_pair(node_test_id(NODE_1), invalid_not_after);
-        assert!(
-            matches!(result, Err(CryptoError::InvalidNotAfterDate { message, not_after })
-                if message.eq("invalid X.509 certificate expiration date (not_after)") && not_after.eq(invalid_not_after)
-            )
+        assert_matches!(result, Err(CryptoError::InvalidNotAfterDate { message, not_after })
+            if message.eq("invalid X.509 certificate expiration date (not_after)") && not_after.eq(invalid_not_after)
         );
     }
 
@@ -395,10 +396,8 @@ mod tls {
         let date_in_the_past = "20211004235959Z";
 
         let result = csp.gen_tls_key_pair(node_test_id(NODE_1), date_in_the_past);
-        assert!(
-            matches!(result, Err(CryptoError::InvalidNotAfterDate { message, not_after })
-                if message.eq("'not after' date must not be in the past") && not_after.eq(date_in_the_past)
-            )
+        assert_matches!(result, Err(CryptoError::InvalidNotAfterDate { message, not_after })
+            if message.eq("'not after' date must not be in the past") && not_after.eq(date_in_the_past)
         );
     }
 
@@ -420,11 +419,11 @@ mod tls {
 
         // the attemtps after the first one should fail
         for _ in 0..5 {
-            assert!(matches!(csp
+            assert_matches!(csp
                 .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER),
                 Err(CryptoError::InternalError { internal_error })
                 if internal_error.contains("TLS certificate already set")
-            ));
+            );
         }
     }
 }

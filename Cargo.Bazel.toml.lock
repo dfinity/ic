@@ -146,7 +146,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b894941f818cfdc7ccc4b9e60fa7e53b5042a2e8567270f9147d5591893373a"
 dependencies = [
  "futures-core",
- "paste 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "paste 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "pin-project-lite",
 ]
 
@@ -1096,7 +1096,7 @@ dependencies = [
  "num-bigint 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits",
  "num_enum",
- "paste 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "paste 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "pretty 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_bytes",
@@ -1124,7 +1124,7 @@ dependencies = [
  "num-bigint 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-traits",
  "num_enum",
- "paste 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "paste 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "pretty 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
  "serde_bytes",
@@ -2371,7 +2371,7 @@ dependencies = [
  "parity-wasm",
  "parking_lot 0.12.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "parse_int",
- "paste 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "paste 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "pathdiff",
  "pem 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "pico-args 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -3726,7 +3726,7 @@ dependencies = [
  "leb128",
  "num-bigint 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "once_cell",
- "paste 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "paste 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "semver",
  "serde",
  "serde_bytes",
@@ -3995,9 +3995,9 @@ dependencies = [
 
 [[package]]
 name = "ipnet"
-version = "2.6.0"
+version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec947b7a4ce12e3b87e353abae7ce124d025b6c7d6c5aea5cc0bcf92e9510ded"
+checksum = "11b0d96e660696543b251e58030cf9787df56da39dab19ad60eae7353040917e"
 
 [[package]]
 name = "is-terminal"
@@ -5506,7 +5506,7 @@ checksum = "7d17b78036a60663b797adeaee46f5c9dfebb86948d1255007a1d6be0271ff99"
 dependencies = [
  "instant",
  "lock_api",
- "parking_lot_core 0.8.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "parking_lot_core 0.8.6 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -5521,9 +5521,9 @@ dependencies = [
 
 [[package]]
 name = "parking_lot_core"
-version = "0.8.5"
+version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d76e8e1493bcac0d2766c42737f34458f1c8c50c0d23bcb24ea953affb273216"
+checksum = "60a2cfe6f0ad2bfc16aefa463b497d5c7a5ecd44a23efa72aa342d90177356dc"
 dependencies = [
  "cfg-if 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "instant",
@@ -5567,9 +5567,9 @@ dependencies = [
 
 [[package]]
 name = "paste"
-version = "1.0.9"
+version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1de2e551fb905ac83f73f7aedf2f0cb4a0da7e35efa24a202a936269f1f18e1"
+checksum = "cf1c2c742266c2f1041c914ba65355a83ae8747b05f208319784083583494b4b"
 
 [[package]]
 name = "paste-impl"
@@ -6488,11 +6488,10 @@ checksum = "60a357793950651c4ed0f3f52338f53b2f809f32d83a07f72909fa13e4c6c1e3"
 
 [[package]]
 name = "rayon"
-version = "1.6.0"
+version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e060280438193c554f654141c9ea9417886713b7acd75974c85b18a69a88e0b"
+checksum = "6db3a213adf02b3bcfd2d3846bb41cb22857d131789e01df434fb7e7bc0759b7"
 dependencies = [
- "crossbeam-deque",
  "either",
  "rayon-core",
 ]
@@ -7146,9 +7145,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.149"
+version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "256b9932320c590e707b94576e3cc1f7c9024d0ee6612dfbcf1cb106cbe8e055"
+checksum = "e326c9ec8042f1b5da33252c8a37e9ffbd2c9bef0155215b6e6c80c790e05f91"
 dependencies = [
  "serde_derive",
 ]
@@ -7206,9 +7205,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.149"
+version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4eae9b04cbffdfd550eb462ed33bc6a1b68c935127d008b27444d08380f94e4"
+checksum = "42a3df25b0713732468deadad63ab9da1f1fd75a48a15024b50363f128db627e"
 dependencies = [
  "proc-macro2 1.0.47 (registry+https://github.com/rust-lang/crates.io-index)",
  "quote 1.0.21 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -7478,7 +7477,7 @@ dependencies = [
  "approx",
  "num-complex",
  "num-traits",
- "paste 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "paste 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -9130,7 +9129,7 @@ dependencies = [
  "log",
  "object",
  "once_cell",
- "paste 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "paste 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "psm",
  "rayon",
  "serde",
@@ -9239,7 +9238,7 @@ dependencies = [
  "log",
  "mach",
  "memoffset 0.6.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "paste 1.0.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "paste 1.0.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.8.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "rustix 0.35.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "thiserror",
@@ -9304,9 +9303,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "0.22.5"
+version = "0.22.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "368bfe657969fb01238bb756d351dcade285e0f6fcbd36dcb23359a5169975be"
+checksum = "b6c71e40d7d2c34a5106301fb632274ca37242cd0c9d3e64dbece371a40a2d87"
 dependencies = [
  "webpki 0.22.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]

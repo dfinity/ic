@@ -107,6 +107,7 @@ mod sign {
 mod verify {
     use crate::types::{PublicKeyBytes, SignatureBytes};
     use crate::{new_keypair, sign, verify};
+    use assert_matches::assert_matches;
     use ic_crypto_internal_test_vectors::ecdsa_secp256k1;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::{AlgorithmId, CryptoError};
@@ -179,12 +180,10 @@ mod verify {
         )
         .unwrap();
 
-        assert!(
-            matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
-                     if algorithm == AlgorithmId::EcdsaSecp256k1
-                     && key_bytes == Some(invalid_pk.0)
-                     && re.is_match(&internal_error[..])
-            )
+        assert_matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
+             if algorithm == AlgorithmId::EcdsaSecp256k1
+             && key_bytes == Some(invalid_pk.0)
+             && re.is_match(&internal_error[..])
         );
     }
 
@@ -207,14 +206,12 @@ mod verify {
         let invalid_pk = PublicKeyBytes(modified_key);
 
         let result = verify(&signature, msg, &invalid_pk);
-        assert!(
-            matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
-                     if algorithm == AlgorithmId::EcdsaSecp256k1
-                     && key_bytes == Some(invalid_pk.0)
-                     && internal_error.contains(
-                         ":elliptic curve routines:EC_POINT_set_affine_coordinates:point is not on curve:"
-                     )
-            )
+        assert_matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
+             if algorithm == AlgorithmId::EcdsaSecp256k1
+             && key_bytes == Some(invalid_pk.0)
+             && internal_error.contains(
+                 ":elliptic curve routines:EC_POINT_set_affine_coordinates:point is not on curve:"
+             )
         );
     }
 

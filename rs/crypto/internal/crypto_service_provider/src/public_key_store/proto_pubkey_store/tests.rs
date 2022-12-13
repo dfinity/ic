@@ -4,6 +4,7 @@ use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::read_node_public_keys;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
 use crate::PUBLIC_KEY_STORE_DATA_FILENAME;
+use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
 use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
@@ -70,56 +71,56 @@ fn should_set_pubkeys_if_not_set() {
     let (generated_keys, _temp_dir) = generate_node_keys_in_temp_dir();
 
     assert!(store.node_signing_pubkey().is_none());
-    assert!(matches!(
+    assert_matches!(
         store.set_once_node_signing_pubkey(generated_keys.node_signing_pk.clone().unwrap()),
         Ok(())
-    ));
+    );
     assert_eq!(
         store.node_signing_pubkey(),
         generated_keys.node_signing_pk.as_ref()
     );
 
     assert!(store.committee_signing_pubkey().is_none());
-    assert!(matches!(
+    assert_matches!(
         store.set_once_committee_signing_pubkey(
             generated_keys.committee_signing_pk.clone().unwrap()
         ),
         Ok(())
-    ));
+    );
     assert_eq!(
         store.committee_signing_pubkey(),
         generated_keys.committee_signing_pk.as_ref()
     );
 
     assert!(store.ni_dkg_dealing_encryption_pubkey().is_none());
-    assert!(matches!(
+    assert_matches!(
         store.set_once_ni_dkg_dealing_encryption_pubkey(
             generated_keys.dkg_dealing_encryption_pk.clone().unwrap()
         ),
         Ok(())
-    ));
+    );
     assert_eq!(
         store.ni_dkg_dealing_encryption_pubkey(),
         generated_keys.dkg_dealing_encryption_pk.as_ref()
     );
 
     assert!(store.tls_certificate().is_none());
-    assert!(matches!(
+    assert_matches!(
         store.set_once_tls_certificate(generated_keys.tls_certificate.clone().unwrap()),
         Ok(())
-    ));
+    );
     assert_eq!(
         store.tls_certificate(),
         generated_keys.tls_certificate.as_ref()
     );
 
     assert!(store.idkg_dealing_encryption_pubkeys().is_empty());
-    assert!(matches!(
+    assert_matches!(
         store.set_idkg_dealing_encryption_pubkeys(
             generated_keys.idkg_dealing_encryption_pks.clone()
         ),
         Ok(())
-    ));
+    );
     assert_eq!(
         store.idkg_dealing_encryption_pubkeys(),
         &generated_keys.idkg_dealing_encryption_pks
@@ -134,28 +135,28 @@ fn should_set_non_rotating_pubkeys_only_once() {
     let some_cert = generated_keys.tls_certificate.unwrap();
 
     assert!(store.node_signing_pubkey().is_some());
-    assert!(matches!(
+    assert_matches!(
         store.set_once_node_signing_pubkey(some_pubkey.clone()),
         Err(PublicKeySetOnceError::AlreadySet)
-    ));
+    );
 
     assert!(store.committee_signing_pubkey().is_some());
-    assert!(matches!(
+    assert_matches!(
         store.set_once_committee_signing_pubkey(some_pubkey.clone()),
         Err(PublicKeySetOnceError::AlreadySet)
-    ));
+    );
 
     assert!(store.ni_dkg_dealing_encryption_pubkey().is_some());
-    assert!(matches!(
+    assert_matches!(
         store.set_once_ni_dkg_dealing_encryption_pubkey(some_pubkey),
         Err(PublicKeySetOnceError::AlreadySet)
-    ));
+    );
 
     assert!(store.tls_certificate().is_some());
-    assert!(matches!(
+    assert_matches!(
         store.set_once_tls_certificate(some_cert),
         Err(PublicKeySetOnceError::AlreadySet)
-    ));
+    );
 }
 
 #[test]
@@ -267,9 +268,7 @@ fn should_fail_to_write_without_write_permissions() {
 
     let result = pubkey_store.set_idkg_dealing_encryption_pubkeys(vec![public_key_with(123)]);
 
-    assert!(
-        matches!(result, Err(io_error) if io_error.kind() == std::io::ErrorKind::PermissionDenied)
-    );
+    assert_matches!(result, Err(io_error) if io_error.kind() == std::io::ErrorKind::PermissionDenied);
 
     fs::set_permissions(temp_dir.path(), fs::Permissions::from_mode(0o700)).expect(
         "failed to change permissions of temp_dir so that writing is possible \

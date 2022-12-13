@@ -14,6 +14,7 @@ const ED25519_PK_DER_BASE64: &str = "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqo
 mod keygen {
     use super::*;
     use crate::{public_key_from_der, test_utils::new_keypair};
+    use assert_matches::assert_matches;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::{AlgorithmId, CryptoError};
 
@@ -56,13 +57,11 @@ mod keygen {
 
         let pk_der = hex::decode(COMPRESSED).unwrap();
         let pk_result = public_key_from_der(&pk_der);
-        assert!(
-            matches!(pk_result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes: _, internal_error})
-                     if algorithm == AlgorithmId::EcdsaP256
-                     && internal_error.contains(
-                         "non-canonical encoding"
-                     )
-            )
+        assert_matches!(pk_result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes: _, internal_error})
+             if algorithm == AlgorithmId::EcdsaP256
+             && internal_error.contains(
+                 "non-canonical encoding"
+             )
         );
     }
 }
@@ -122,11 +121,11 @@ mod sign {
 }
 
 mod verify {
-    use ic_crypto_internal_test_vectors::ecdsa_p256;
-
     use crate::api::{der_encoding_from_xy_coordinates, public_key_from_der};
     use crate::types::{PublicKeyBytes, SignatureBytes};
     use crate::{sign, test_utils::new_keypair, verify};
+    use assert_matches::assert_matches;
+    use ic_crypto_internal_test_vectors::ecdsa_p256;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::{AlgorithmId, CryptoError};
     use openssl::sha::sha256;
@@ -183,12 +182,10 @@ mod verify {
         )
         .unwrap();
 
-        assert!(
-            matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
-                     if algorithm == AlgorithmId::EcdsaP256
-                     && key_bytes == Some(invalid_pk.0)
-                     && re.is_match(&internal_error[..])
-            )
+        assert_matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
+             if algorithm == AlgorithmId::EcdsaP256
+             && key_bytes == Some(invalid_pk.0)
+             && re.is_match(&internal_error[..])
         );
     }
 
@@ -212,14 +209,12 @@ mod verify {
         let invalid_pk = PublicKeyBytes(modified_key);
 
         let result = verify(&signature, msg, &invalid_pk);
-        assert!(
-            matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
-                     if algorithm == AlgorithmId::EcdsaP256
-                     && key_bytes == Some(invalid_pk.0)
-                     && internal_error.contains(
-                         ":elliptic curve routines:EC_POINT_set_affine_coordinates:point is not on curve:"
-                     )
-            )
+        assert_matches!(result, Err(CryptoError::MalformedPublicKey{algorithm, key_bytes, internal_error})
+             if algorithm == AlgorithmId::EcdsaP256
+             && key_bytes == Some(invalid_pk.0)
+             && internal_error.contains(
+                 ":elliptic curve routines:EC_POINT_set_affine_coordinates:point is not on curve:"
+             )
         );
     }
 }

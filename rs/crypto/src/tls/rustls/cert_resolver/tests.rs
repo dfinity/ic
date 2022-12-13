@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use crate::tls::rustls::cert_resolver::KeyIncompatibleWithSigSchemeError;
 use crate::tls::rustls::cert_resolver::StaticCertResolver;
+use assert_matches::assert_matches;
 use std::sync::Arc;
 use tokio_rustls::rustls::internal::msgs::enums::SignatureAlgorithm;
 use tokio_rustls::rustls::sign::{CertifiedKey, Signer, SigningKey};
@@ -19,7 +20,7 @@ mod instantiation {
             ))),
         );
         let result = StaticCertResolver::new(certified_key_ecdsa, SignatureScheme::ED25519);
-        assert!(matches!(result, Err(KeyIncompatibleWithSigSchemeError {})));
+        assert_matches!(result, Err(KeyIncompatibleWithSigSchemeError {}));
     }
 }
 
@@ -40,6 +41,7 @@ mod client_side {
         let result = resolver.resolve(&[b"acceptable_issuers"], &[sig_scheme]);
 
         assert!(
+            // not using assert_matches because CertifiedKey does not implement Debug
             // comparing the fields of CertifiedKey because it does not implement Eq
             matches!(result, Some(CertifiedKey { cert, ocsp, sct_list, key: _,})
                 if cert == cert_chain

@@ -84,6 +84,7 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "//rs/test_utilities/registry",
     "//rs/types/types_test_utils",
+    "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:maplit",
     "@crate_index//:mockall_0_8_3",

@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
+use assert_matches::assert_matches;
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
 use ic_crypto_temp_crypto::TempCryptoBuilder;
 use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoComponent};
@@ -199,10 +200,10 @@ mod rotate_idkg_dealing_encryption_keys {
             .crypto
             .rotate_idkg_dealing_encryption_keys(REGISTRY_VERSION_2);
 
-        assert!(matches!(
+        assert_matches!(
             rotated_idkg_key,
             Err(IDkgDealingEncryptionKeyRotationError::LatestLocalRotationTooRecent)
-        ))
+        )
     }
 
     #[test]
@@ -222,10 +223,10 @@ mod rotate_idkg_dealing_encryption_keys {
             .crypto
             .rotate_idkg_dealing_encryption_keys(REGISTRY_VERSION_2);
 
-        assert!(matches!(
+        assert_matches!(
             rotated_idkg_key,
             Err(IDkgDealingEncryptionKeyRotationError::KeyRotationNotEnabled)
-        ));
+        );
     }
 
     #[test]
@@ -249,10 +250,10 @@ mod rotate_idkg_dealing_encryption_keys {
             .crypto
             .rotate_idkg_dealing_encryption_keys(REGISTRY_VERSION_2);
 
-        assert!(matches!(
+        assert_matches!(
             rotated_idkg_key,
             Err(IDkgDealingEncryptionKeyRotationError::KeyRotationNotEnabled)
-        ));
+        );
     }
 
     #[test]
@@ -276,10 +277,10 @@ mod rotate_idkg_dealing_encryption_keys {
             .crypto
             .rotate_idkg_dealing_encryption_keys(REGISTRY_VERSION_2);
 
-        assert!(matches!(
+        assert_matches!(
             rotated_idkg_key,
             Err(IDkgDealingEncryptionKeyRotationError::KeyRotationNotEnabled)
-        ));
+        );
     }
 
     #[test]
@@ -301,10 +302,10 @@ mod rotate_idkg_dealing_encryption_keys {
             .crypto
             .rotate_idkg_dealing_encryption_keys(REGISTRY_VERSION_2);
 
-        assert!(matches!(
+        assert_matches!(
             rotated_idkg_key,
             Err(IDkgDealingEncryptionKeyRotationError::KeyRotationNotEnabled)
-        ));
+        );
     }
 
     #[test]
@@ -326,10 +327,10 @@ mod rotate_idkg_dealing_encryption_keys {
             .crypto
             .rotate_idkg_dealing_encryption_keys(REGISTRY_VERSION_2);
 
-        assert!(matches!(
+        assert_matches!(
             rotated_idkg_key,
             Err(IDkgDealingEncryptionKeyRotationError::KeyRotationNotEnabled)
-        ));
+        );
     }
 
     #[test]
@@ -368,12 +369,12 @@ mod rotate_idkg_dealing_encryption_keys {
 
         let rotated_idkg_key = crypto.rotate_idkg_dealing_encryption_keys(REGISTRY_VERSION_1);
 
-        assert!(matches!(
+        assert_matches!(
             rotated_idkg_key,
             Err(IDkgDealingEncryptionKeyRotationError::RegistryError(
                 RegistryClientError::PollLockFailed { error }
             )) if error.contains("oh no!")
-        ));
+        );
     }
 
     struct Setup {

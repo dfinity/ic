@@ -4734,6 +4734,7 @@ name = "ic-crypto"
 version = "0.8.0"
 dependencies = [
  "arrayvec 0.5.2",
+ "assert_matches",
  "async-trait",
  "base64 0.11.0",
  "bincode",
@@ -4883,6 +4884,7 @@ dependencies = [
 name = "ic-crypto-internal-basic-sig-ecdsa-secp256k1"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "base64 0.11.0",
  "hex",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -4909,6 +4911,7 @@ dependencies = [
 name = "ic-crypto-internal-basic-sig-ecdsa-secp256r1"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "base64 0.11.0",
  "hex",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -4935,6 +4938,7 @@ dependencies = [
 name = "ic-crypto-internal-basic-sig-ed25519"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "base64 0.11.0",
  "curve25519-dalek",
  "ed25519-consensus",
@@ -4964,6 +4968,7 @@ dependencies = [
 name = "ic-crypto-internal-basic-sig-iccsa"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "base64 0.11.0",
  "hex",
  "ic-certification",
@@ -5254,6 +5259,7 @@ dependencies = [
 name = "ic-crypto-internal-tls"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "base64 0.11.0",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-test-utils",
@@ -5287,6 +5293,7 @@ dependencies = [
 name = "ic-crypto-node-key-generation"
 version = "0.1.0"
 dependencies = [
+ "assert_matches",
  "ic-base-types",
  "ic-config",
  "ic-crypto",
@@ -5317,6 +5324,7 @@ dependencies = [
 name = "ic-crypto-node-key-validation"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "curve25519-dalek",
  "hex",
  "ic-base-types",
@@ -5509,6 +5517,7 @@ dependencies = [
 name = "ic-crypto-tls-cert-validation"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "chrono",
  "curve25519-dalek",
  "dfn_core",
@@ -5530,6 +5539,7 @@ dependencies = [
 name = "ic-crypto-tls-interfaces"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "async-trait",
  "ic-crypto-test-utils",
  "ic-protobuf",
@@ -5572,6 +5582,7 @@ dependencies = [
 name = "ic-crypto-utils-basic-sig"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "base64 0.11.0",
  "ed25519-consensus",
  "hex",

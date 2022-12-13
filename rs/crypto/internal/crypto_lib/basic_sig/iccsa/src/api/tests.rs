@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
+use assert_matches::assert_matches;
 use ic_crypto::threshold_sig_public_key_from_der;
 use ic_crypto_internal_test_vectors::iccsa;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
@@ -27,11 +28,9 @@ fn should_fail_to_verify_if_cert_in_signature_is_malformed() {
 
     let result = verify(&msg, sig_with_malformed_cert, pk, &root_pk);
 
-    assert!(
-        matches!(result, Err(CryptoError::MalformedSignature {  algorithm, sig_bytes: _, internal_error})
-            if internal_error.contains("malformed certificate")
-            && algorithm == AlgorithmId::IcCanisterSignature
-        )
+    assert_matches!(result, Err(CryptoError::MalformedSignature {  algorithm, sig_bytes: _, internal_error})
+        if internal_error.contains("malformed certificate")
+        && algorithm == AlgorithmId::IcCanisterSignature
     );
 }
 
@@ -47,11 +46,9 @@ fn should_fail_to_verify_if_signature_cbor_tag_malformed() {
 
     let result = verify(&msg, sig_with_malformed_cbor_tag, pk, &root_pk);
 
-    assert!(
-        matches!(result, Err(CryptoError::MalformedSignature {  algorithm, sig_bytes: _, internal_error})
-            if internal_error.contains("signature CBOR doesn't have a self-describing tag")
-            && algorithm == AlgorithmId::IcCanisterSignature
-        )
+    assert_matches!(result, Err(CryptoError::MalformedSignature {  algorithm, sig_bytes: _, internal_error})
+        if internal_error.contains("signature CBOR doesn't have a self-describing tag")
+        && algorithm == AlgorithmId::IcCanisterSignature
     );
 }
 
@@ -67,11 +64,9 @@ fn should_fail_to_verify_if_signature_has_malformed_cbor() {
 
     let result = verify(&msg, sig_with_malformed_cbor, pk, &root_pk);
 
-    assert!(
-        matches!(result, Err(CryptoError::MalformedSignature {  algorithm, sig_bytes: _, internal_error})
-            if internal_error.contains("failed to parse signature CBOR")
-            && algorithm == AlgorithmId::IcCanisterSignature
-        )
+    assert_matches!(result, Err(CryptoError::MalformedSignature {  algorithm, sig_bytes: _, internal_error})
+        if internal_error.contains("failed to parse signature CBOR")
+        && algorithm == AlgorithmId::IcCanisterSignature
     );
 }
 
@@ -83,11 +78,9 @@ fn should_fail_to_verify_on_wrong_message() {
 
     let result = verify(wrong_msg, sig, pk, &root_pk);
 
-    assert!(
-        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
-            if internal_error.contains("the signature tree doesn't contain sig")
-            && algorithm == AlgorithmId::IcCanisterSignature
-        )
+    assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+        if internal_error.contains("the signature tree doesn't contain sig")
+        && algorithm == AlgorithmId::IcCanisterSignature
     );
 }
 
@@ -103,11 +96,9 @@ fn should_fail_to_verify_if_signature_certificate_verification_fails() {
 
     let result = verify(&msg, corrupted_sig, pk, &root_pk);
 
-    assert!(
-        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
-            if internal_error.contains("certificate verification failed")
-            && algorithm == AlgorithmId::IcCanisterSignature
-        )
+    assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+        if internal_error.contains("certificate verification failed")
+        && algorithm == AlgorithmId::IcCanisterSignature
     );
 }
 
@@ -118,11 +109,9 @@ fn should_fail_to_verify_on_wrong_pubkey() {
 
     let result = verify(&msg, sig, pk, &root_pk);
 
-    assert!(
-        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
-            if internal_error.contains("the signature tree doesn't contain sig")
-            && algorithm == AlgorithmId::IcCanisterSignature
-        )
+    assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+        if internal_error.contains("the signature tree doesn't contain sig")
+        && algorithm == AlgorithmId::IcCanisterSignature
     );
 }
 
@@ -133,11 +122,9 @@ fn should_fail_to_verify_if_public_key_is_malformed() {
 
     let result = verify(&msg, sig, malformed_public_key, &root_pk);
 
-    assert!(
-        matches!(result, Err(CryptoError::MalformedPublicKey {  algorithm, key_bytes: _, internal_error})
-            if internal_error.contains("Malformed")
-            && algorithm == AlgorithmId::IcCanisterSignature
-        )
+    assert_matches!(result, Err(CryptoError::MalformedPublicKey {  algorithm, key_bytes: _, internal_error})
+        if internal_error.contains("Malformed")
+        && algorithm == AlgorithmId::IcCanisterSignature
     );
 }
 
@@ -153,12 +140,10 @@ fn should_fail_to_verify_on_invalid_root_pubkey() {
 
     println!("{:?}", result.clone().err());
 
-    assert!(
-        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
-            if internal_error.contains("Invalid public key")
-            && internal_error.contains("certificate verification failed")
-            && algorithm == AlgorithmId::IcCanisterSignature
-        )
+    assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+        if internal_error.contains("Invalid public key")
+        && internal_error.contains("certificate verification failed")
+        && algorithm == AlgorithmId::IcCanisterSignature
     );
 }
 
@@ -178,12 +163,10 @@ fn should_fail_to_verify_on_wrong_root_pubkey() {
 
     let result = verify(&msg, sig, pk, &wrong_root_pk);
 
-    assert!(
-        matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
-            if internal_error.contains("Invalid combined threshold signature")
-            && internal_error.contains("certificate verification failed")
-            && algorithm == AlgorithmId::IcCanisterSignature
-        )
+    assert_matches!(result, Err(CryptoError::SignatureVerification {  algorithm, public_key_bytes: _, sig_bytes: _, internal_error})
+        if internal_error.contains("Invalid combined threshold signature")
+        && internal_error.contains("certificate verification failed")
+        && algorithm == AlgorithmId::IcCanisterSignature
     );
 }
 

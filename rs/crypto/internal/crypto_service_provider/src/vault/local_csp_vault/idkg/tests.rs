@@ -236,6 +236,7 @@ mod idkg_retain_active_keys {
     use crate::vault::local_csp_vault::idkg::idkg_dealing_encryption_pk_to_proto;
     use crate::vault::local_csp_vault::test_utils::temp_local_csp_server::TempLocalCspVault;
     use crate::LocalCspVault;
+    use assert_matches::assert_matches;
     use ic_crypto_internal_logmon::metrics::CryptoMetrics;
     use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
     use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint};
@@ -255,10 +256,9 @@ mod idkg_retain_active_keys {
             .vault
             .idkg_retain_active_keys(BTreeSet::new(), an_idkg_public_key());
 
-        assert!(
-            matches!(result, Err(IDkgRetainKeysError::InternalError {internal_error}) 
-                if internal_error.contains("Could not find oldest IDKG public key"))
-        )
+        assert_matches!(result, Err(IDkgRetainKeysError::InternalError {internal_error})
+            if internal_error.contains("Could not find oldest IDKG public key")
+        );
     }
 
     #[test]

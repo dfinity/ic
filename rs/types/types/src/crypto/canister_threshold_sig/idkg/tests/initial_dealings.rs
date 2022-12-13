@@ -9,6 +9,7 @@ use crate::crypto::canister_threshold_sig::idkg::{
 use crate::crypto::{BasicSig, BasicSigOf};
 use crate::signature::BasicSignature;
 use crate::NodeId;
+use assert_matches::assert_matches;
 use ic_crypto_test_utils_canister_threshold_sigs::{node_id, set_of_nodes};
 use std::collections::BTreeSet;
 
@@ -290,8 +291,9 @@ fn should_not_deserialize_if_invariants_violated() {
 
     let deserialization_result = serde_cbor::from_slice::<InitialIDkgDealings>(&serialization);
 
-    assert!(matches!(deserialization_result, Err(serde_error)
-        if serde_error.to_string().contains("invariants violated: InvalidTranscriptOperation")));
+    assert_matches!(deserialization_result, Err(serde_error)
+        if serde_error.to_string().contains("invariants violated: InvalidTranscriptOperation")
+    );
 }
 
 fn mock_signed_dealings(

@@ -1,4 +1,5 @@
 #![allow(clippy::unwrap_used)]
+use assert_matches::assert_matches;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils::crypto_for;
 use ic_crypto_test_utils_threshold_sigs::non_interactive::{
@@ -287,10 +288,10 @@ mod non_interactive_distributed_key_generation {
                 .create_dealing(reshare_config.get())
                 .unwrap_err();
 
-            assert!(matches!(
+            assert_matches!(
                 result,
                 DkgCreateDealingError::ThresholdSigningKeyNotInSecretKeyStore(_)
-            ));
+            );
         }
     }
 
@@ -538,10 +539,10 @@ mod non_interactive_distributed_key_generation {
             let result =
                 crypto_for(*dealer, &env.crypto_components).create_dealing(reshare_config.get());
 
-            assert!(matches!(
+            assert_matches!(
                 result,
                 Err(DkgCreateDealingError::FsEncryptionPublicKeyNotInRegistry(_))
-            ));
+            );
         }
     }
 

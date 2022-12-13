@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used)]
 
 mod tls_public_key_cert {
-    use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
-
     use crate::{TlsPublicKeyCert, TlsPublicKeyCertCreationError};
+    use assert_matches::assert_matches;
+    use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 
     #[test]
     fn should_create_certificate_from_valid_x509() {
@@ -92,10 +92,8 @@ mod tls_public_key_cert {
 
         let error = TlsPublicKeyCert::new_from_der(empty_der).unwrap_err();
 
-        assert!(
-            matches!(error, TlsPublicKeyCertCreationError { internal_error }
+        assert_matches!(error, TlsPublicKeyCertCreationError { internal_error }
                 if internal_error.contains("Error parsing DER")
-            )
         );
     }
 
@@ -105,10 +103,8 @@ mod tls_public_key_cert {
 
         let error = TlsPublicKeyCert::new_from_der(malformed_der).unwrap_err();
 
-        assert!(
-            matches!(error, TlsPublicKeyCertCreationError { internal_error }
-                if internal_error.contains("Error parsing DER")
-            )
+        assert_matches!(error, TlsPublicKeyCertCreationError { internal_error }
+            if internal_error.contains("Error parsing DER")
         );
     }
 
@@ -150,9 +146,9 @@ mod tls_public_key_cert {
         let bad_serialized = "{\"certificate_der\":[31,41,59,26]}";
 
         let error: Result<TlsPublicKeyCert, json5::Error> = json5::from_str(bad_serialized);
-        assert!(matches!(error, Err(json5::Error::Message { msg, .. } )
+        assert_matches!(error, Err(json5::Error::Message { msg, .. } )
             if msg.contains("TlsPublicKeyCertCreationError")
-        ));
+        );
     }
 
     #[test]
@@ -177,6 +173,7 @@ mod tls_public_key_cert {
 
 mod allowed_clients {
     use crate::{AllowedClients, AllowedClientsError, SomeOrAllNodes};
+    use assert_matches::assert_matches;
     use ic_types::{NodeId, PrincipalId};
     use maplit::btreeset;
     use std::collections::BTreeSet;
@@ -237,9 +234,9 @@ mod allowed_clients {
     #[test]
     fn should_contain_correct_node_in_some_nodes_new_with_single_node() {
         let nodes = SomeOrAllNodes::new_with_single_node(node_id(1));
-        assert!(matches!(nodes, SomeOrAllNodes::Some (node_set)
+        assert_matches!(nodes, SomeOrAllNodes::Some (node_set)
             if node_set.len() == 1 && node_set.contains(&node_id(1))
-        ));
+        );
     }
 
     fn node_id(id: u64) -> NodeId {

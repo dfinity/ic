@@ -333,6 +333,7 @@ pub mod tests {
         SecretKeyStorePersistenceError,
     };
     use crate::types::CspSecretKey;
+    use assert_matches::assert_matches;
     use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
     use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
     use ic_crypto_internal_multi_sig_bls12381::types::SecretKeyBytes;
@@ -442,10 +443,10 @@ pub mod tests {
             let fs_key = secret_key_store
                 .get(&fs_key_id)
                 .expect("Secret key for FS encryption not found");
-            assert!(matches!(
+            assert_matches!(
                 fs_key,
                 CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(..))
-            ));
+            );
         }
     }
 
@@ -531,13 +532,13 @@ pub mod tests {
         fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o400))
             .expect("Could not set the permissions of the temp dir.");
 
-        assert!(matches!(
+        assert_matches!(
             secret_key_store.insert(key_id, key, None),
             Err(SecretKeyStoreError::PersistenceError(
                 SecretKeyStorePersistenceError::IoError(msg)
             ))
             if msg.to_lowercase().contains("secret key store internal error writing protobuf using tmp file: permission denied")
-        ));
+        );
 
         fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
             "failed to change permissions of temp_dir so that writing is possible \

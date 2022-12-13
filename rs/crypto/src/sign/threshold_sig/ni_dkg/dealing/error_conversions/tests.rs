@@ -1,4 +1,5 @@
 mod create_dealing_error_conversions {
+    use assert_matches::assert_matches;
     use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::MalformedSecretKeyError;
     use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::{
         InvalidArgumentError, KeyNotFoundError, MalformedPublicKeyError, SizeError,
@@ -48,11 +49,11 @@ mod create_dealing_error_conversions {
 
             let result = DkgCreateDealingError::from(csp_error);
 
-            assert!(matches!(
+            assert_matches!(
                 result,
                 DkgCreateDealingError::ThresholdSigningKeyNotInSecretKeyStore(error)
                 if error == key_not_found_error
-            ));
+            );
         }
 
         #[test]

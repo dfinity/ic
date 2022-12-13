@@ -57,7 +57,7 @@ def external_crates_repository(name, annotations):
                 version = "^0.12",
             ),
             "assert_matches": crate.spec(
-                version = "^1.3.0",
+                version = "^1.5.0",
             ),
             "async-recursion": crate.spec(
                 version = "^0.3.2",

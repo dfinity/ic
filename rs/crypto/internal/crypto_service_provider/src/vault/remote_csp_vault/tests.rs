@@ -16,6 +16,7 @@ use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error
 use crate::LocalCspVault;
 use crate::RemoteCspVault;
 use crate::SecretKeyStore;
+use assert_matches::assert_matches;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::setup_listener;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_for_test;
 use rand::SeedableRng;
@@ -84,10 +85,10 @@ mod timeout {
         let node_id = NodeId::from(PrincipalId::new_node_test_id(1u64));
         let gen_key_result = csp_vault.gen_dealing_encryption_key_pair(node_id);
 
-        assert!(matches!(gen_key_result,
+        assert_matches!(gen_key_result,
             Err(CspDkgCreateFsKeyError::TransientInternalError ( internal_error ))
             if internal_error.contains("the request exceeded its deadline")
-        ));
+        );
     }
 }
 

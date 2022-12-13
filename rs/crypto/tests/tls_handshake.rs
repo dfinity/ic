@@ -2,6 +2,7 @@
 use crate::tls_utils::temp_crypto_component_with_tls_keys;
 use crate::tls_utils::test_client::{Client, ClientBuilder};
 use crate::tls_utils::test_server::{Server, ServerBuilder};
+use assert_matches::assert_matches;
 use ic_crypto_test_utils::tls::registry::TlsRegistry;
 use ic_crypto_tls_interfaces::{
     AuthenticatedPeer, TlsClientHandshakeError, TlsServerHandshakeError,
@@ -180,9 +181,9 @@ mod server_allowing_all_nodes {
         let (_client_result, server_result) = new_tokio_runtime()
             .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
-        assert!(matches!(server_result, Ok(AuthenticatedPeer::Node(node_id))
+        assert_matches!(server_result, Ok(AuthenticatedPeer::Node(node_id))
                 if node_id == CLIENT_THAT_CONNECTS
-        ));
+        );
     }
 
     #[test]
@@ -205,9 +206,9 @@ mod server_allowing_all_nodes {
         let (_client_result, server_result) = new_tokio_runtime()
             .block_on(async { tokio::join!(client.run(server.port()), server.run()) });
 
-        assert!(matches!(server_result, Ok(AuthenticatedPeer::Node(node_id))
+        assert_matches!(server_result, Ok(AuthenticatedPeer::Node(node_id))
             if node_id == CLIENT_THAT_CONNECTS_WITHOUT_NODE_RECORD
-        ));
+        );
     }
 }
 

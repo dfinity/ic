@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
+use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
@@ -40,9 +41,9 @@ fn should_fail_if_node_signing_key_is_missing() {
 
     let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
+    assert_matches!(result, Err(KeyValidationError { error })
         if error == "invalid node signing key: key is missing"
-    ));
+    );
 }
 
 #[test]
@@ -59,10 +60,10 @@ fn should_fail_if_node_signing_key_pubkey_conversion_fails() {
 
     let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
+    assert_matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid node signing key: PublicKeyBytesFromProtoError")
         && error.contains("Wrong data length")
-    ));
+    );
 }
 
 #[test]
@@ -87,9 +88,9 @@ fn should_fail_if_node_signing_key_verification_fails() {
 
     let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
+    assert_matches!(result, Err(KeyValidationError { error })
         if error == "invalid node signing key: verification failed"
-    ));
+    );
 }
 
 #[test]
@@ -100,10 +101,10 @@ fn should_fail_if_node_signing_key_is_not_valid_for_the_given_node_id() {
 
     let result = ValidNodePublicKeys::try_from(keys, wrong_node_id);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
+    assert_matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid node signing key")
         && error.contains(format!("key not valid for node ID {}", wrong_node_id).as_str())
-    ));
+    );
 }
 
 #[test]
@@ -116,9 +117,9 @@ fn should_fail_if_committee_signing_key_is_missing() {
 
     let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
+    assert_matches!(result, Err(KeyValidationError { error })
         if error == "invalid committee signing key: key is missing"
-    ));
+    );
 }
 
 #[test]
@@ -133,10 +134,10 @@ fn should_fail_if_committee_signing_key_pubkey_conversion_fails() {
 
     let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
+    assert_matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid committee signing key: PublicKeyBytesFromProtoError")
         && error.contains("Wrong data length")
-    ));
+    );
 }
 
 #[test]
@@ -152,9 +153,9 @@ fn should_fail_if_committee_signing_key_pubkey_is_corrupted() {
 
     let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
+    assert_matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid committee signing key: Malformed MultiBls12_381 public key")
-    ));
+    );
 }
 
 #[test]
@@ -169,10 +170,10 @@ fn should_fail_if_committee_signing_key_pop_conversion_fails() {
 
     let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
+    assert_matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid committee signing key: PopBytesFromProtoError")
         && error.contains("Wrong pop length")
-    ));
+    );
 }
 
 #[test]
@@ -187,9 +188,9 @@ fn should_fail_if_committee_signing_key_pop_is_corrupted() {
 
     let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
+    assert_matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid committee signing key: Malformed MultiBls12_381 PoP")
-    ));
+    );
 }
 
 #[test]
@@ -209,10 +210,10 @@ fn should_fail_if_committee_signing_key_pop_verification_fails() {
 
     let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
+    assert_matches!(result, Err(KeyValidationError { error })
         if error.contains("invalid committee signing key: MultiBls12_381 PoP could not be verified")
         && error.contains("PoP verification failed")
-    ));
+    );
 }
 
 #[test]
@@ -321,9 +322,9 @@ fn should_fail_if_idkg_dealing_encryption_key_is_missing() {
 
     let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
+    assert_matches!(result, Err(KeyValidationError { error })
         if error == "invalid I-DKG dealing encryption key: key is missing"
-    ));
+    );
 }
 
 #[test]
@@ -338,9 +339,9 @@ fn should_fail_if_idkg_dealing_encryption_key_algorithm_unsupported() {
 
     let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
+    assert_matches!(result, Err(KeyValidationError { error })
         if error == "invalid I-DKG dealing encryption key: unsupported algorithm: Some(Unspecified)"
-    ));
+    );
 }
 
 #[test]
@@ -355,8 +356,8 @@ fn should_fail_if_idkg_dealing_encryption_key_is_invalid() {
 
     let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-    assert!(matches!(result, Err(KeyValidationError { error })
-        if error == "invalid I-DKG dealing encryption key: verification failed: InvalidPublicKey"));
+    assert_matches!(result, Err(KeyValidationError { error })
+        if error == "invalid I-DKG dealing encryption key: verification failed: InvalidPublicKey");
 }
 
 /// TLS certificate validation is only smoke tested here. Detailed tests can be
@@ -374,9 +375,9 @@ mod tls_certificate_validation {
 
         let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-        assert!(matches!(result, Err(KeyValidationError { error })
+        assert_matches!(result, Err(KeyValidationError { error })
             if error == "invalid TLS certificate: certificate is missing"
-        ));
+        );
     }
 
     #[test]
@@ -391,9 +392,9 @@ mod tls_certificate_validation {
 
         let result = ValidNodePublicKeys::try_from(keys, node_id);
 
-        assert!(matches!(result, Err(KeyValidationError { error })
+        assert_matches!(result, Err(KeyValidationError { error })
             if error.contains("invalid TLS certificate: failed to parse DER")
-        ));
+        );
     }
 }
 
@@ -408,7 +409,7 @@ mod idkg_dealing_encryption_public_key_validation {
 
         let result = ValidIDkgDealingEncryptionPublicKey::try_from(idkg_de_key.clone());
 
-        assert!(matches!(result, Ok(key) if key.get() == &idkg_de_key));
+        assert_matches!(result, Ok(key) if key.get() == &idkg_de_key);
     }
 
     #[test]
@@ -420,9 +421,9 @@ mod idkg_dealing_encryption_public_key_validation {
 
         let result = ValidIDkgDealingEncryptionPublicKey::try_from(idkg_de_key);
 
-        assert!(matches!(result, Err(KeyValidationError { error })
+        assert_matches!(result, Err(KeyValidationError { error })
             if error == "invalid I-DKG dealing encryption key: unsupported algorithm: Some(Unspecified)"
-        ));
+        );
     }
 
     #[test]
@@ -434,8 +435,9 @@ mod idkg_dealing_encryption_public_key_validation {
 
         let result = ValidIDkgDealingEncryptionPublicKey::try_from(idkg_de_key);
 
-        assert!(matches!(result, Err(KeyValidationError { error })
-        if error == "invalid I-DKG dealing encryption key: verification failed: InvalidPublicKey"));
+        assert_matches!(result, Err(KeyValidationError { error })
+        if error == "invalid I-DKG dealing encryption key: verification failed: InvalidPublicKey"
+        );
     }
 }
 

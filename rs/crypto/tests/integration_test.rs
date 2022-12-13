@@ -1,6 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use crate::keygen_utils::TestKeygenCrypto;
+use assert_matches::assert_matches;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::{CryptoComponent, CryptoTime};
@@ -165,9 +166,7 @@ fn should_fail_check_keys_with_registry_if_no_keys_are_present_in_registry() {
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(
-        matches!(result, Err(CryptoError::PublicKeyNotFound { key_purpose, .. }) if key_purpose == KeyPurpose::NodeSigning)
-    );
+    assert_matches!(result, Err(CryptoError::PublicKeyNotFound { key_purpose, .. }) if key_purpose == KeyPurpose::NodeSigning);
 }
 
 #[test]
@@ -251,9 +250,7 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_key_is_missin
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(
-        matches!(result, Err(CryptoError::PublicKeyNotFound { key_purpose, .. }) if key_purpose == KeyPurpose::IDkgMEGaEncryption)
-    );
+    assert_matches!(result, Err(CryptoError::PublicKeyNotFound { key_purpose, .. }) if key_purpose == KeyPurpose::IDkgMEGaEncryption);
 }
 
 #[test]
@@ -299,7 +296,7 @@ fn should_fail_check_keys_with_registry_if_tls_cert_is_malformed() {
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Err(CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::Tls,
@@ -307,7 +304,7 @@ fn should_fail_check_keys_with_registry_if_tls_cert_is_malformed() {
             internal_error
         })
         if internal_error.contains("Error parsing DER")
-    ));
+    );
 }
 
 #[test]
@@ -641,11 +638,9 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_pubkey_algori
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(
-        matches!(result, Err(CryptoError::MalformedPublicKey { algorithm, internal_error, ..})
+    assert_matches!(result, Err(CryptoError::MalformedPublicKey { algorithm, internal_error, ..})
             if algorithm == AlgorithmId::MegaSecp256k1
             && internal_error.contains("unsupported algorithm")
-        )
     );
 }
 
@@ -667,11 +662,9 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_pubkey_is_mal
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(
-        matches!(result, Err(CryptoError::MalformedPublicKey { algorithm, internal_error, ..})
+    assert_matches!(result, Err(CryptoError::MalformedPublicKey { algorithm, internal_error, ..})
             if algorithm == AlgorithmId::MegaSecp256k1
             && internal_error.contains("malformed")
-        )
     );
 }
 
@@ -692,9 +685,7 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_secret_key_is
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(
-        matches!(result, Err(CryptoError::SecretKeyNotFound { algorithm, ..}) if algorithm == AlgorithmId::MegaSecp256k1)
-    );
+    assert_matches!(result, Err(CryptoError::SecretKeyNotFound { algorithm, ..}) if algorithm == AlgorithmId::MegaSecp256k1);
 }
 
 #[test]
@@ -720,10 +711,10 @@ fn should_return_rotation_needed_from_check_keys_with_registry_if_no_idkg_timest
 
     let result = crypto_component.check_keys_with_registry(REG_V1);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys)
-    ));
+    );
 }
 
 #[test]
@@ -739,10 +730,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_subnet_
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
 }
 
 #[test]
@@ -762,9 +750,7 @@ fn should_fail_check_keys_with_registry_if_no_idkg_key_in_registry() {
     assert!(idkg_dealing_encryption_pk_in_public_key_store.is_some());
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
-    assert!(
-        matches!(result, Err(CryptoError::PublicKeyNotFound { key_purpose, .. }) if key_purpose == KeyPurpose::IDkgMEGaEncryption)
-    );
+    assert_matches!(result, Err(CryptoError::PublicKeyNotFound { key_purpose, .. }) if key_purpose == KeyPurpose::IDkgMEGaEncryption);
 }
 
 /// If this test fails it means that one of AlgorithmId and AlgorithmIdProto structs was updated but not the other.
@@ -878,10 +864,8 @@ fn should_fail_check_keys_with_registry_if_registry_node_signing_key_has_no_matc
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert!(
-        matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
-            if algorithm == AlgorithmId::Ed25519
-        )
+    assert_matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
+        if algorithm == AlgorithmId::Ed25519
     );
 }
 
@@ -916,10 +900,8 @@ fn should_fail_check_keys_with_registry_if_registry_committee_signing_public_key
     registry_client.reload();
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
-    assert!(
-        matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
-            if algorithm == AlgorithmId::MultiBls12_381
-        )
+    assert_matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
+        if algorithm == AlgorithmId::MultiBls12_381
     );
 }
 
@@ -955,10 +937,8 @@ fn should_fail_check_keys_with_registry_if_registry_dkg_dealing_encryption_key_h
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert!(
-        matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
-            if algorithm == AlgorithmId::Groth20_Bls12_381
-        )
+    assert_matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
+        if algorithm == AlgorithmId::Groth20_Bls12_381
     );
 }
 
@@ -1041,10 +1021,7 @@ fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timest
         .unwrap();
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert!(matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
 }
 
 #[test]
@@ -1088,10 +1065,10 @@ fn should_return_rotation_needed_from_check_keys_with_registry_if_idkg_dealing_e
         .unwrap();
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys)
-    ));
+    );
 }
 
 #[test]
@@ -1131,10 +1108,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_key_rot
         .unwrap();
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert!(matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
 }
 
 #[test]
@@ -1174,10 +1148,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_node_not_i
         .unwrap();
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert!(matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
 }
 
 #[test]
@@ -1221,10 +1192,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_k
         .unwrap();
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert!(matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
 }
 
 #[test]
@@ -1267,10 +1235,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_c
         .unwrap();
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert!(matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
 }
 
 #[test]
@@ -1321,11 +1286,11 @@ fn should_return_registration_needed_from_check_keys_with_registry_if_local_idkg
         .unwrap();
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(missing_pk))
           if missing_pk == new_idkg_dealing_encryption_key_to_register
-    ));
+    );
 }
 
 #[test]
@@ -1369,10 +1334,7 @@ fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timest
         .unwrap();
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert!(matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
 }
 
 #[test]
@@ -1412,19 +1374,16 @@ fn should_transition_from_all_keys_registered_to_rotation_needed_with_sys_time_s
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert!(matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    ));
+    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
 
     std::thread::sleep(key_rotation_period + Duration::from_secs(1));
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert!(matches!(
+    assert_matches!(
         result,
         Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys)
-    ));
+    );
 }
 
 fn get_timestamp_from_time(time: Time) -> u64 {

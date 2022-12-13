@@ -30,5 +30,8 @@ rust_library(
 rust_test(
     name = "basic_sig_test",
     crate = ":basic_sig",
-    deps = ["@crate_index//:hex"],
+    deps = [
+        "@crate_index//:assert_matches",
+        "@crate_index//:hex",
+    ],
 )
