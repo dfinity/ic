@@ -669,6 +669,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         xnet_nightly_120_subnets.test(),
                     )]),
                 ),
+                // NOTE: This test is already bazelified, however, stability of the test needs to be explored.
+                // TODO: Provided that test is reliable, make it part of the rc.
                 pot_with_setup(
                     "canister_http_fault_tolerance",
                     canister_http::lib::config,
