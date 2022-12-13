@@ -248,9 +248,6 @@ rust_test(
 system_test(
     name = "replica_determinism_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
@@ -292,9 +289,6 @@ system_test(
 system_test(
     name = "liveness_with_equivocation_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
@@ -303,9 +297,6 @@ system_test(
 system_test(
     name = "request_auth_malicious_replica_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
@@ -314,9 +305,6 @@ system_test(
 system_test(
     name = "tecdsa_complaint_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
@@ -325,9 +313,6 @@ system_test(
 system_test(
     name = "safety_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
@@ -347,9 +332,6 @@ system_test(
 system_test(
     name = "system_subnets_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
@@ -402,9 +384,6 @@ system_test(
 system_test(
     name = "system_api_security_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
