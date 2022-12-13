@@ -93,6 +93,7 @@ rust_test(
         "@crate_index//:lazy_static",
         "@crate_index//:mockall_0_7_2",
         "@crate_index//:proptest",
+        "@crate_index//:slog-async",
     ],
 )
 

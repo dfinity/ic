@@ -7,6 +7,7 @@ use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::test_utils::{MockSecretKeyStore, TempSecretKeyStore};
+use crate::vault::api::BasicSignatureCspVault;
 use crate::vault::api::CspVault;
 use crate::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use crate::vault::test_utils;
@@ -17,6 +18,7 @@ use crate::LocalCspVault;
 use crate::RemoteCspVault;
 use crate::SecretKeyStore;
 use assert_matches::assert_matches;
+use ic_config::logger::Config as LoggerConfig;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::setup_listener;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_for_test;
 use rand::SeedableRng;
@@ -26,7 +28,7 @@ use std::time::Duration;
 
 fn new_remote_csp_vault(rt_handle: &tokio::runtime::Handle) -> Arc<dyn CspVault> {
     let socket_path = start_new_remote_csp_vault_server_for_test(rt_handle);
-    let remote_csp_vault = RemoteCspVault::new(&socket_path, rt_handle.clone())
+    let remote_csp_vault = RemoteCspVault::new_for_test(&socket_path, rt_handle.clone(), None)
         .expect("Could not create RemoteCspVault");
     Arc::new(remote_csp_vault)
 }
@@ -47,9 +49,8 @@ fn new_remote_csp_vault_with_local_csp_vault<
         let _move_temp_dir_here_to_ensure_it_is_not_cleaned_up = sks_dir;
         server.run().await;
     });
-    let remote_csp_vault =
-        RemoteCspVault::new_for_test(&socket_path, rt_handle.clone(), Duration::from_secs(10))
-            .expect("Could not create RemoteCspVault");
+    let remote_csp_vault = RemoteCspVault::new_for_test(&socket_path, rt_handle.clone(), None)
+        .expect("Could not create RemoteCspVault");
     Arc::new(remote_csp_vault)
 }
 
@@ -62,7 +63,7 @@ fn new_csp_vault_for_test_with_timeout(
 ) -> Arc<dyn CspVault> {
     let socket_path = start_new_remote_csp_vault_server_for_test(rt_handle);
     Arc::new(
-        RemoteCspVault::new_for_test(&socket_path, rt_handle.clone(), timeout)
+        RemoteCspVault::new_for_test(&socket_path, rt_handle.clone(), Some(timeout))
             .expect("Could not create RemoteCspVault"),
     )
 }
@@ -1021,5 +1022,46 @@ mod public_seed {
             .collect();
         let csp_vault = new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), vault);
         test_utils::public_seed::should_generate_particular_seeds(csp_vault, expected_seeds);
+    }
+}
+
+mod logging {
+    use super::*;
+    use crate::vault::remote_csp_vault::tests::LoggerConfig;
+    use ic_config::logger::LogTarget;
+    use ic_logger::new_replica_logger_from_config;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn should_log_payload_size_transmitted_over_rpc_socket() {
+        let log_file = NamedTempFile::new().expect("error creating temporary file");
+        let logger_config = LoggerConfig {
+            target: LogTarget::File(log_file.path().to_path_buf()),
+            ..Default::default()
+        };
+        let (logger, guard) = new_replica_logger_from_config(&logger_config);
+        let tokio_rt = new_tokio_runtime();
+        let socket_path = start_new_remote_csp_vault_server_for_test(tokio_rt.handle());
+        let csp_vault = RemoteCspVault::new(&socket_path, tokio_rt.handle().clone(), logger)
+            .expect("failed instantiating remote CSP vault client");
+
+        csp_vault
+            .gen_node_signing_key_pair()
+            .expect("failed to generate keys");
+
+        drop(guard);
+        let log_file_content =
+            std::fs::read_to_string(log_file.path()).expect("failed to read log file");
+        let log_lines: Vec<_> = log_file_content.lines().collect();
+
+        assert_eq!(log_lines.len(), 3);
+        assert!(log_lines[0].contains("DEBG"));
+        assert!(log_lines[0].contains("Instantiated remote CSP vault client"));
+        assert!(log_lines[1].contains("DEBG"));
+        assert!(log_lines[1]
+            .contains("Request to method 'gen_node_signing_key_pair' serialized 37 bytes"));
+        assert!(log_lines[2].contains("DEBG"));
+        assert!(log_lines[2]
+            .contains("Response of method 'gen_node_signing_key_pair' deserialized 38 bytes"));
     }
 }

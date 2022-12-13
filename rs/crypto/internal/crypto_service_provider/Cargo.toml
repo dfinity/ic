@@ -68,3 +68,4 @@ lazy_static = "1.4.0"
 mockall = "0.7.2"
 proptest = "1.0"
 proptest-derive = "0.3.0"
+slog-async = { version = "2.5", features = ["nested-values"] }

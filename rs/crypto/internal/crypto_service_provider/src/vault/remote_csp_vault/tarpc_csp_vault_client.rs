@@ -9,6 +9,7 @@ use crate::vault::api::{
     PublicKeyStoreCspVault, PublicRandomSeedGenerator, PublicRandomSeedGeneratorError,
     SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault,
 };
+use crate::vault::remote_csp_vault::codec::SizeLoggingCodec;
 use crate::vault::remote_csp_vault::{remote_vault_codec_builder, TarpcCspVaultClient};
 use crate::TlsHandshakeCspVault;
 use core::future::Future;
@@ -30,6 +31,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
+use ic_logger::{debug, new_logger, ReplicaLogger};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
@@ -45,6 +47,13 @@ use tarpc::serde_transport;
 use tarpc::tokio_serde::formats::Bincode;
 use tokio::net::UnixStream;
 
+#[cfg(test)]
+use ic_config::logger::Config as LoggerConfig;
+#[cfg(test)]
+use ic_logger::new_replica_logger_from_config;
+#[cfg(test)]
+use slog_async::AsyncGuard;
+
 /// An implementation of `CspVault`-trait that talks to a remote CSP vault.
 #[allow(dead_code)]
 pub struct RemoteCspVault {
@@ -54,6 +63,9 @@ pub struct RemoteCspVault {
     // special, long timeout for RPC calls that should not really timeout.
     long_rpc_timeout: Duration,
     tokio_runtime_handle: tokio::runtime::Handle,
+    logger: ReplicaLogger,
+    #[cfg(test)]
+    _logger_guard: Option<AsyncGuard>,
 }
 
 #[allow(dead_code)]
@@ -83,6 +95,7 @@ impl RemoteCspVault {
     pub fn new(
         socket_path: &Path,
         rt_handle: tokio::runtime::Handle,
+        logger: ReplicaLogger,
     ) -> Result<Self, RemoteCspVaultError> {
         let conn = rt_handle
             .block_on(UnixStream::connect(socket_path))
@@ -92,17 +105,21 @@ impl RemoteCspVault {
             })?;
         let transport = serde_transport::new(
             remote_vault_codec_builder().new_framed(conn),
-            Bincode::default(),
+            SizeLoggingCodec::new(Bincode::default(), new_logger!(&logger)),
         );
         let client = {
             let _enter_guard = rt_handle.enter();
             TarpcCspVaultClient::new(Default::default(), transport).spawn()
         };
+        debug!(logger, "Instantiated remote CSP vault client");
         Ok(RemoteCspVault {
             tarpc_csp_client: client,
             rpc_timeout: DEFAULT_RPC_TIMEOUT,
             long_rpc_timeout: LONG_RPC_TIMEOUT,
             tokio_runtime_handle: rt_handle,
+            logger,
+            #[cfg(test)]
+            _logger_guard: None,
         })
     }
 
@@ -110,11 +127,13 @@ impl RemoteCspVault {
     pub fn new_for_test(
         socket_path: &Path,
         rt_handle: tokio::runtime::Handle,
-        timeout: Duration,
+        override_timeout: Option<Duration>,
     ) -> Result<Self, RemoteCspVaultError> {
-        let mut csp_vault = Self::new(socket_path, rt_handle)?;
-        csp_vault.rpc_timeout = timeout;
-        csp_vault.long_rpc_timeout = timeout;
+        let (logger, guard) = new_replica_logger_from_config(&LoggerConfig::default());
+        let mut csp_vault = Self::new(socket_path, rt_handle, logger)?;
+        csp_vault.rpc_timeout = override_timeout.unwrap_or(DEFAULT_RPC_TIMEOUT);
+        csp_vault.long_rpc_timeout = override_timeout.unwrap_or(LONG_RPC_TIMEOUT);
+        csp_vault._logger_guard = Some(guard);
         Ok(csp_vault)
     }
 }
