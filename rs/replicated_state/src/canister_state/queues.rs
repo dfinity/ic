@@ -651,10 +651,9 @@ impl CanisterQueues {
         let oq_stats_delta =
             OutputQueuesStats::stats_delta(&RequestOrResponse::Response(msg.clone()));
 
-        // As long as we are not garbage collecting output queues, we are guaranteed
-        // that an output queue should exist for pushing responses because one would
-        // have been created when the request (that triggered this response) was
-        // inducted into the induction pool.
+        // Since we make an output queue reservation whenever we induct a request; and
+        // we would never garbage collect a non-empty queue (including one with just a
+        // reservation); we are guaranteed that the output queue exists.
         self.canister_queues
             .get_mut(&msg.originator)
             .expect("pushing response into inexistent output queue")
