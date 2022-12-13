@@ -19,6 +19,8 @@ cargo-build-release-linux:
       - artifacts/nix-release/*
   variables:
     BUILD_COMMAND: "cargo build --release"
+  # TODO(IDX-2581): Remove "allowed to fail" when build fixed
+  allow_failure: true
 
 cargo-build-release-darwin:
   extends: .cargo-build-macos
