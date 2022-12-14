@@ -22,7 +22,6 @@ rust_library(
     version = "0.8.0",
     deps = [
         "//rs/crypto/tree_hash",
-        "//rs/monitoring/metrics_encoder",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/ledger_canister_core",
         "//rs/rosetta-api/ledger_core",
@@ -32,6 +31,7 @@ rust_library(
         "@crate_index//:ciborium",
         "@crate_index//:hex",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-metrics-encoder",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
     ],
@@ -47,7 +47,6 @@ rust_canister(
     service_file = ":icrc1.did",
     deps = [
         ":ledger",
-        "//rs/monitoring/metrics_encoder",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/ledger_canister_core",
         "//rs/rosetta-api/ledger_core",
@@ -56,6 +55,7 @@ rust_canister(
         "@crate_index//:candid",
         "@crate_index//:ciborium",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-metrics-encoder",
         "@crate_index//:num-traits",
     ],
 )
@@ -91,7 +91,6 @@ rust_test(
     },
     deps = [
         ":ledger",
-        "//rs/monitoring/metrics_encoder",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/icrc1/ledger/sm-tests",
         "//rs/rosetta-api/ledger_canister_core",
@@ -103,6 +102,7 @@ rust_test(
         "@crate_index//:candid",
         "@crate_index//:cddl",
         "@crate_index//:hex",
+        "@crate_index//:ic-metrics-encoder",
         "@crate_index//:leb128",
         "@crate_index//:num-traits",
         "@crate_index//:proptest",

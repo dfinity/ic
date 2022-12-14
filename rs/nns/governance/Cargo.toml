@@ -36,7 +36,7 @@ dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
-ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
+ic-metrics-encoder = "1"
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nns-common = { path = "../common" }

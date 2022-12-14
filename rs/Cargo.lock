@@ -6602,7 +6602,9 @@ dependencies = [
 
 [[package]]
 name = "ic-metrics-encoder"
-version = "0.8.0"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8aef00d455eba8b8244a415f073a43042e57da6d09c294485a2b2ebc858c9da2"
 
 [[package]]
 name = "ic-nervous-system-common"

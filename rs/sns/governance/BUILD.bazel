@@ -13,7 +13,6 @@ filegroup(
 
 DEPENDENCIES = [
     "//rs/crypto/sha",
-    "//rs/monitoring/metrics_encoder",
     "//rs/nervous_system/common",
     "//rs/nervous_system/root",
     "//rs/nns/constants",
@@ -38,6 +37,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:comparable",
     "@crate_index//:hex",
+    "@crate_index//:ic-metrics-encoder",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:prost",

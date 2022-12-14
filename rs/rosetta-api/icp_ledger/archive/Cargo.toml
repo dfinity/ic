@@ -15,7 +15,7 @@ dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
-ic-metrics-encoder = { path = "../../../monitoring/metrics_encoder" }
+ic-metrics-encoder = "1"
 ic-nns-constants = { path = "../../../nns/constants" }
 icp-ledger = { path = "../" }
 lazy_static = "1.4.0"

@@ -12,7 +12,6 @@ filegroup(
 
 DEPENDENCIES = [
     "//rs/crypto/sha",
-    "//rs/monitoring/metrics_encoder",
     "//rs/nervous_system/common",
     "//rs/nervous_system/root",
     "//rs/protobuf",
@@ -33,6 +32,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:hex",
+    "@crate_index//:ic-metrics-encoder",
     "@crate_index//:lazy_static",
     "@crate_index//:prost",
     "@crate_index//:rand_0_8_4",

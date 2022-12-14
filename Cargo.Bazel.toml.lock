@@ -2330,6 +2330,7 @@ dependencies = [
  "ic-certified-map",
  "ic-identity-hsm",
  "ic-ledger-types",
+ "ic-metrics-encoder",
  "ic-stable-structures",
  "ic-utils",
  "ic-wasm",
@@ -3693,6 +3694,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-metrics-encoder"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8aef00d455eba8b8244a415f073a43042e57da6d09c294485a2b2ebc858c9da2"
+
+[[package]]
 name = "ic-stable-structures"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4491,9 +4498,9 @@ checksum = "d4d2456c373231a208ad294c33dc5bff30051eafd954cd4caae83a712b12854d"
 
 [[package]]
 name = "linux-raw-sys"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f9f08d8963a6c613f4b1a78f4f4a4dbfadf8e6545b2d72861731e4858b8b47f"
+checksum = "f051f77a7c8e6957c0696eac88f26b0117e54f52d3fc682ab19397a8812846a4"
 
 [[package]]
 name = "local-channel"
@@ -6940,7 +6947,7 @@ dependencies = [
  "errno",
  "io-lifetimes 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc",
- "linux-raw-sys 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "linux-raw-sys 0.1.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "windows-sys 0.42.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 

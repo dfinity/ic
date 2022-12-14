@@ -121,7 +121,6 @@ members = [
   "monitoring/context_logger",
   "monitoring/logger",
   "monitoring/metrics",
-  "monitoring/metrics_encoder",
   "monitoring/pprof",
   "nervous_system/common",
   "nervous_system/common/build_metadata",
