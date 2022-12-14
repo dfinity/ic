@@ -36,12 +36,11 @@ impl ConfigWriter {
     /// FileSd will memoize the calls. Thus, calling this method twice with the
     /// same arguments will have no effect.
     pub fn write_config(
-        &self,
+        &mut self,
         job: JobType,
         target_groups: BTreeSet<TargetGroup>,
     ) -> std::io::Result<()> {
-        let mut last_targets = self.last_targets.clone();
-        let last_job_targets = last_targets.entry(job.to_string()).or_default();
+        let last_job_targets = self.last_targets.entry(job.to_string()).or_default();
         if last_job_targets == &target_groups {
             debug!(
                 self.log,
@@ -69,7 +68,7 @@ impl ConfigWriter {
                 )
             })
         })?;
-        last_targets.insert(job.to_string(), target_groups);
+        self.last_targets.insert(job.to_string(), target_groups);
         Ok(())
     }
 }
