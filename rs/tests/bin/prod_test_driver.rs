@@ -1177,6 +1177,11 @@ fn generate_alerts(
 ) -> HashMap<usize, SlackAlert> {
     let mut alerts: HashMap<usize, SlackAlert> = HashMap::new();
     let mut alert_id: usize = 0;
+    let ic_version_id_datetime_msg = (validated_args.ic_version_id != validated_args.ci_commit_sha)
+        .then_some(format!("; {}.", {
+            validated_args.ic_version_id_date.clone()
+        }))
+        .unwrap_or_else(|| ".".to_string());
     for failed_pot in suite_result
         .children
         .iter()
@@ -1185,7 +1190,7 @@ fn generate_alerts(
         let message = format!(
             r#"Pot `{pot_name}` *failed*. <{ci_job_url}|log>.
 Commit: <{ci_project_url}/-/commit/{ci_commit_sha}|{ci_commit_short_sha}>; {ci_commit_date}.
-IC_VERSION_ID: `{ic_version_id}`; {ic_version_id_date}."#,
+IC_VERSION_ID: `{ic_version_id}`{ic_version_id_datetime_msg}"#,
             pot_name = failed_pot.name,
             ci_job_url = validated_args.ci_job_url,
             ci_project_url = validated_args.ci_project_url,
@@ -1193,7 +1198,6 @@ IC_VERSION_ID: `{ic_version_id}`; {ic_version_id_date}."#,
             ci_commit_short_sha = validated_args.ci_commit_short_sha,
             ci_commit_date = validated_args.ci_commit_date,
             ic_version_id = validated_args.ic_version_id,
-            ic_version_id_date = validated_args.ic_version_id_date
         );
         failed_pot.alert_channels.iter().for_each(|channel| {
             alerts.insert(alert_id, SlackAlert::new(channel.clone(), message.clone()));

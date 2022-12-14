@@ -174,7 +174,10 @@ def get_current_commit_sha() -> str:
 
 
 def get_commit_date(commit_sha: str) -> str:
-    cmd = subprocess.run(["git", "show", "-s", "--format=%cD", f"{commit_sha}"], capture_output=True)
+    cmd = subprocess.run(
+        ["git", "show", "-s", "--format=%cd", "--date=format-local:%a %Y-%m-%d %H:%M:%S %Z", f"{commit_sha}"],
+        capture_output=True,
+    )
     if cmd.returncode == 0:
         datetime = cmd.stdout.decode("UTF-8").strip()
         logging.info(f"commit={commit_sha} datetime: {datetime}")
