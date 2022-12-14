@@ -1211,6 +1211,7 @@ impl Governance {
             source_nns_neuron_id: parent_neuron.source_nns_neuron_id,
             staked_maturity_e8s_equivalent: None,
             auto_stake_maturity: parent_neuron.auto_stake_maturity,
+            vesting_period_seconds: None,
         };
 
         // Add the child neuron's id to the set of neurons with ongoing operations.
@@ -2484,10 +2485,14 @@ impl Governance {
             .neuron_minimum_dissolve_delay_to_vote_seconds
             .expect("NervousSystemParameters must have min_dissolve_delay_for_vote");
 
-        if proposer.dissolve_delay_seconds(now_seconds) < min_dissolve_delay_for_vote {
+        let proposer_dissolve_delay = proposer.dissolve_delay_seconds(now_seconds);
+        if proposer_dissolve_delay < min_dissolve_delay_for_vote {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                "The proposer's dissolve delay is too short, the proposer is not eligible.",
+                format!(
+                    "The proposer's dissolve delay {} is less than the minimum required dissolve delay of {}",
+                    proposer_dissolve_delay, min_dissolve_delay_for_vote
+                ),
             ));
         }
 
@@ -3146,6 +3151,7 @@ impl Governance {
             source_nns_neuron_id: None,
             staked_maturity_e8s_equivalent: None,
             auto_stake_maturity: None,
+            vesting_period_seconds: None,
         };
 
         // This also verifies that there are not too many neurons already.
@@ -3283,6 +3289,7 @@ impl Governance {
                 source_nns_neuron_id: neuron_parameter.source_nns_neuron_id,
                 staked_maturity_e8s_equivalent: None,
                 auto_stake_maturity: None,
+                vesting_period_seconds: None,
             };
 
             // This also verifies that there are not too many neurons already. This is a best effort
@@ -3538,6 +3545,8 @@ impl Governance {
         self.mode()
             .allows_manage_neuron_command_or_err(command, self.is_swap_canister(*caller))?;
 
+        self.check_command_is_valid_if_neuron_is_vesting(&neuron_id, command)?;
+
         // All operations on a neuron exclude each other.
         let _hold = self.lock_neuron_for_command(
             &neuron_id,
@@ -3591,6 +3600,59 @@ impl Governance {
                 .claim_or_refresh_neuron(&neuron_id, claim_or_refresh)
                 .await
                 .map(|_| ManageNeuronResponse::claim_or_refresh_neuron_response(neuron_id)),
+        }
+    }
+
+    /// Returns an error if the given neuron is vesting and the given command cannot be called by
+    /// a vesting neuron
+    fn check_command_is_valid_if_neuron_is_vesting(
+        &self,
+        neuron_id: &NeuronId,
+        command: &manage_neuron::Command,
+    ) -> Result<(), GovernanceError> {
+        use manage_neuron::configure::Operation::*;
+        use manage_neuron::Command::*;
+
+        // If this is a "claim" call, the neuron doesn't exist yet, so we return (because no checks
+        // can be made). A "refresh" call can be made on a vesting neuron, so in this case also
+        // results in returning Ok.
+        if let ClaimOrRefresh(_) = command {
+            return Ok(());
+        }
+
+        let neuron = self.get_neuron_result(neuron_id)?;
+
+        if !neuron.is_vesting(self.env.now()) {
+            return Ok(());
+        }
+
+        let err = |op: &str| -> Result<(), GovernanceError> {
+            Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!("Neuron {} is vesting and cannot call {}", neuron_id, op),
+            ))
+        };
+
+        match command {
+            Configure(configure) => match configure.operation {
+                Some(IncreaseDissolveDelay(_)) => err("IncreaseDissolveDelay"),
+                Some(StartDissolving(_)) => err("StartDissolving"),
+                Some(StopDissolving(_)) => err("StopDissolving"),
+                Some(SetDissolveTimestamp(_)) => err("SetDissolveTimestamp"),
+                Some(ChangeAutoStakeMaturity(_)) => Ok(()),
+                None => Ok(()),
+            },
+            Disburse(_) => err("Disburse"),
+            Split(_) => err("Split"),
+            Follow(_)
+            | MakeProposal(_)
+            | RegisterVote(_)
+            | ClaimOrRefresh(_)
+            | MergeMaturity(_)
+            | DisburseMaturity(_)
+            | AddNeuronPermissions(_)
+            | RemoveNeuronPermissions(_)
+            | StakeMaturity(_) => Ok(()),
         }
     }
 

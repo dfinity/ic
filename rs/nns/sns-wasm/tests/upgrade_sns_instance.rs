@@ -105,6 +105,7 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
                         stake_e8s: 2_000_000_000_000,
                         memo: 0,
                         dissolve_delay_seconds: 15780000, // 6 months
+                        vesting_period_seconds: None,
                     }],
                 }),
             },
@@ -283,6 +284,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
         stake_e8s: 100_000_000,
         memo: 0,
         dissolve_delay_seconds: 15780000, // 6 months
+        vesting_period_seconds: None,
     };
     // We make these to create some extra transactions so an archive will spawn.
     let airdrop_neurons: Vec<NeuronDistribution> =
@@ -313,6 +315,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
                         stake_e8s: 2_000_000_000_000,
                         memo: 0,
                         dissolve_delay_seconds: 15780000, // 6 months
+                        vesting_period_seconds: None,
                     }]
                     .into_iter()
                     .chain(airdrop_neurons)

@@ -153,11 +153,18 @@ impl FractionalDeveloperVotingPower {
         voting_power_percentage_multiplier: u64,
         parameters: &NervousSystemParameters,
     ) -> anyhow::Result<Neuron> {
-        let (principal_id, stake_e8s, subaccount_memo, dissolve_delay_seconds) = (
+        let (
+            principal_id,
+            stake_e8s,
+            subaccount_memo,
+            dissolve_delay_seconds,
+            vesting_period_seconds,
+        ) = (
             neuron_distribution.controller()?,
             neuron_distribution.stake_e8s,
             neuron_distribution.memo,
             neuron_distribution.dissolve_delay_seconds,
+            neuron_distribution.vesting_period_seconds,
         );
 
         let subaccount = compute_neuron_staking_subaccount(principal_id, subaccount_memo);
@@ -188,6 +195,7 @@ impl FractionalDeveloperVotingPower {
             followees: default_followees,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
             voting_power_percentage_multiplier,
+            vesting_period_seconds,
             ..Default::default()
         })
     }
@@ -523,6 +531,7 @@ impl NeuronDistribution {
             stake_e8s: 100_000_000,
             memo: 0,
             dissolve_delay_seconds: ONE_MONTH_SECONDS * 6,
+            vesting_period_seconds: None,
         }
     }
 
@@ -730,6 +739,8 @@ mod test {
         let neuron_2_dissolve_delay = ONE_YEAR_SECONDS;
         let neuron_3_dissolve_delay = 2 * ONE_YEAR_SECONDS;
 
+        let neuron_2_vesting_period_seconds = Some(3 * ONE_YEAR_SECONDS);
+
         let initial_token_distribution = FractionalDeveloperVotingPower {
             developer_distribution: Some(DeveloperDistribution {
                 developer_neurons: vec![
@@ -738,12 +749,14 @@ mod test {
                         stake_e8s: developer_neuron_stake,
                         dissolve_delay_seconds: neuron_1_dissolve_delay,
                         memo: 0,
+                        vesting_period_seconds: None,
                     },
                     NeuronDistribution {
                         controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
                         stake_e8s: developer_neuron_stake,
                         dissolve_delay_seconds: neuron_2_dissolve_delay,
                         memo: 0,
+                        vesting_period_seconds: neuron_2_vesting_period_seconds,
                     },
                 ],
             }),
@@ -760,6 +773,7 @@ mod test {
                     stake_e8s: airdrop_neuron_stake,
                     memo: 0,
                     dissolve_delay_seconds: neuron_3_dissolve_delay,
+                    vesting_period_seconds: None,
                 }],
             }),
         };
@@ -854,6 +868,11 @@ mod test {
             neuron_3.voting_power_percentage_multiplier,
             DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER
         );
+
+        // That they have the expected vesting periods
+        assert_eq!(neuron_1.vesting_period_seconds, None);
+        assert_eq!(neuron_2.vesting_period_seconds, Some(3 * ONE_YEAR_SECONDS));
+        assert_eq!(neuron_3.vesting_period_seconds, None);
     }
 
     #[test]

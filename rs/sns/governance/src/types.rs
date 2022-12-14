@@ -914,6 +914,56 @@ impl NervousSystemFunction {
     }
 }
 
+impl manage_neuron::Command {
+    pub fn increase_dissolve_delay(additional_dissolve_delay_seconds: u32) -> Self {
+        manage_neuron::Command::Configure(manage_neuron::Configure {
+            operation: Some(manage_neuron::configure::Operation::IncreaseDissolveDelay(
+                manage_neuron::IncreaseDissolveDelay {
+                    additional_dissolve_delay_seconds,
+                },
+            )),
+        })
+    }
+
+    pub fn start_dissolving() -> Self {
+        manage_neuron::Command::Configure(manage_neuron::Configure {
+            operation: Some(manage_neuron::configure::Operation::StartDissolving(
+                manage_neuron::StartDissolving {},
+            )),
+        })
+    }
+
+    pub fn stop_dissolving() -> Self {
+        manage_neuron::Command::Configure(manage_neuron::Configure {
+            operation: Some(manage_neuron::configure::Operation::StopDissolving(
+                manage_neuron::StopDissolving {},
+            )),
+        })
+    }
+
+    pub fn set_dissolve_timestamp(dissolve_timestamp_seconds: u64) -> Self {
+        manage_neuron::Command::Configure(manage_neuron::Configure {
+            operation: Some(manage_neuron::configure::Operation::SetDissolveTimestamp(
+                manage_neuron::SetDissolveTimestamp {
+                    dissolve_timestamp_seconds,
+                },
+            )),
+        })
+    }
+
+    pub fn change_auto_stake_maturity(requested_setting_for_auto_stake_maturity: bool) -> Self {
+        manage_neuron::Command::Configure(manage_neuron::Configure {
+            operation: Some(
+                manage_neuron::configure::Operation::ChangeAutoStakeMaturity(
+                    manage_neuron::ChangeAutoStakeMaturity {
+                        requested_setting_for_auto_stake_maturity,
+                    },
+                ),
+            ),
+        })
+    }
+}
+
 impl ManageNeuronResponse {
     pub fn is_err(&self) -> bool {
         matches!(
