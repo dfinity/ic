@@ -1,3 +1,4 @@
+pub mod test_batching;
 pub mod test_get_btc_address;
 pub mod test_get_withdrawal_account;
 pub mod test_heartbeat;

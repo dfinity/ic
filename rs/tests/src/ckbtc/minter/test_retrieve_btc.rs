@@ -55,7 +55,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         let mut minter_canister = create_canister(&runtime).await;
         let minting_user = minter_canister.canister_id().get();
         let ledger_id = install_ledger(&env, &mut ledger_canister, minting_user, &logger).await;
-        let minter_id = install_minter(&env, &mut minter_canister, ledger_id, &logger).await;
+        let minter_id = install_minter(&env, &mut minter_canister, ledger_id, &logger, 0).await;
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
         let agent = assert_create_agent(node.get_public_url().as_str()).await;

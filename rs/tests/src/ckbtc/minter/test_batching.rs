@@ -1,6 +1,7 @@
+use crate::ckbtc::minter::utils::retrieve_btc;
 use crate::ckbtc::minter::utils::{
     ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
-    wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx, wait_for_update_balance,
+    wait_for_finalization_no_new_blocks, wait_for_mempool_change, wait_for_update_balance,
     BTC_MIN_CONFIRMATIONS,
 };
 use crate::{
@@ -21,15 +22,18 @@ use bitcoincore_rpc::{
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
-use ic_ckbtc_minter::eventlog::Event;
-use ic_ckbtc_minter::state::{RetrieveBtcRequest, RetrieveBtcStatus};
+use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
-use ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcArgs;
 use ic_icrc1::endpoints::TransferArg;
 use ic_icrc1_agent::Icrc1Agent;
 use slog::{debug, info};
+use std::time::{Duration, Instant};
 
-pub fn test_heartbeat(env: TestEnv) {
+pub const SHORT_TIMEOUT: Duration = Duration::from_secs(300);
+
+pub const RETRIEVE_REQUESTS_COUNT_TO_BATCH: usize = 20;
+
+pub fn test_batching(env: TestEnv) {
     let logger = env.logger();
     let subnet_app = subnet_app(&env);
     let subnet_sys = subnet_sys(&env);
@@ -55,8 +59,20 @@ pub fn test_heartbeat(env: TestEnv) {
         let mut minter_canister = create_canister(&runtime).await;
         let minting_user = minter_canister.canister_id().get();
         let ledger_id = install_ledger(&env, &mut ledger_canister, minting_user, &logger).await;
-        // Here we put the max_time_in_queue to 0 because we want the minter to send request right away with no batching
-        let minter_id = install_minter(&env, &mut minter_canister, ledger_id, &logger, 0).await;
+
+        // We set the minter with a very long time in the queue parameter so we can add up requests in queue
+        const SEC_NANOS: u64 = 1_000_000_000;
+        const MIN_NANOS: u64 = 60 * SEC_NANOS;
+        let five_hours_nanos = 300 * MIN_NANOS;
+        let minter_id = install_minter(
+            &env,
+            &mut minter_canister,
+            ledger_id,
+            &logger,
+            five_hours_nanos,
+        )
+        .await;
+
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
         let agent = assert_create_agent(node.get_public_url().as_str()).await;
@@ -127,40 +143,75 @@ pub fn test_heartbeat(env: TestEnv) {
 
         info!(&logger, "Call retrieve_btc");
 
-        let retrieve_amount = 99_997_180_u64 - TRANSFER_FEE;
-        let retrieve_response = minter_agent
-            .retrieve_btc(RetrieveBtcArgs {
-                amount: retrieve_amount,
-                address: destination_btc_address.to_string(),
-            })
-            .await
-            .expect("Error while calling retrieve_btc")
-            .expect("Error in retrieve_btc");
+        let retrieve_amount = 10_000_u64;
+        let mut k = 0_usize;
+        let start = Instant::now();
+        let mut block_indexes: Vec<u64> = vec![];
 
-        let retrieve_status = minter_agent
-            .retrieve_btc_status(retrieve_response.block_index)
+        // Let's make 19 retrieve_btc and save the block indexes
+        while k != RETRIEVE_REQUESTS_COUNT_TO_BATCH - 1 {
+            if start.elapsed() >= SHORT_TIMEOUT {
+                panic!("update_balance timeout");
+            };
+            if let Some(block_index) = retrieve_btc(
+                &minter_agent,
+                &logger,
+                retrieve_amount,
+                destination_btc_address.to_string(),
+            )
             .await
-            .expect("failed to call retrieve_btc_status");
+            {
+                block_indexes.push(block_index);
+                k += 1;
+            }
+        }
 
-        assert!(
-            matches!(
-                retrieve_status,
+        assert_eq!(block_indexes, (2..21).collect::<Vec<u64>>());
+
+        // Check that we don't have any tx in the mempool
+        let start = Instant::now();
+        loop {
+            if start.elapsed() >= SHORT_TIMEOUT {
+                panic!("No new utxos in mempool timeout");
+            };
+            match btc_rpc.get_raw_mempool() {
+                Ok(r) => {
+                    assert!(r.is_empty());
+                    break;
+                }
+                Err(e) => {
+                    info!(
+                        &logger,
+                        "[btc rpc] error while calling mempool {}",
+                        e.to_string()
+                    );
+                }
+            };
+        }
+
+        // Check the status of all of the submitted requests
+        for block_index in block_indexes.iter() {
+            assert_eq!(
+                minter_agent
+                    .retrieve_btc_status(*block_index)
+                    .await
+                    .expect("failed to call retrieve_btc_status"),
                 RetrieveBtcStatus::Pending
-                    | RetrieveBtcStatus::Signing
-                    | RetrieveBtcStatus::Sending { .. }
-                    | RetrieveBtcStatus::Submitted { .. }
-            ),
-            "Expected status Submitted or Pending, got {:?}",
-            retrieve_status,
-        );
+            );
+        }
 
-        // Wait for tx to be signed
-        let txid = wait_for_signed_tx(&minter_agent, &logger, retrieve_response.block_index).await;
+        // Let's submit one more tx, this should trigger the transaction batching
+        retrieve_btc(
+            &minter_agent,
+            &logger,
+            retrieve_amount,
+            destination_btc_address.to_string(),
+        )
+        .await;
 
-        // We wait for the heartbeat to send the transaction to the mempool
-        info!(&logger, "Waiting for tx to appear in mempool");
+        // Let's wait for the transaction to appear on the mempool
         let mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
-
+        let txid = mempool_txids[0];
         let btc_txid = Txid::from_hash(Hash::from_slice(&txid).unwrap());
         // Check if we have the txid in the bitcoind mempool
         assert!(
@@ -178,11 +229,12 @@ pub fn test_heartbeat(env: TestEnv) {
             .expect("failed to get tx infos");
 
         // Check that we have the expected fee
-        // We expect this fee because :
-        // - the transaction len should be 141 vbytes
-        // - a fee of 5 satoshis/vbytes
-        // Hence a total fee of 705 satoshis
-        const EXPECTED_FEE: u64 = 705;
+        // You can use the following estimator : https://btc.network/estimate
+        // 1 input and 21 outputs (20 requests and the minter's address)
+        // The fee for the demo is 5 sat/vbyte
+        // Hence, we expect the fee to be 3650
+        // By checking the fee we know that we have the right amount of inputs and outputs
+        const EXPECTED_FEE: u64 = 3650;
         assert_eq!(get_tx_infos.fees.base.as_sat(), EXPECTED_FEE);
 
         // Check that we can modify the fee
@@ -196,48 +248,33 @@ pub fn test_heartbeat(env: TestEnv) {
             &default_btc_address,
         );
 
-        let finalized_txid = wait_for_finalization(
-            &btc_rpc,
-            &minter_agent,
-            &logger,
-            retrieve_response.block_index,
-            &default_btc_address,
-        )
-        .await;
-        assert_eq!(txid, finalized_txid);
+        let finalized_txid =
+            wait_for_finalization_no_new_blocks(&minter_agent, block_indexes[0]).await;
+        // We don't need to check which input has been used as there is only one input in the possession of the minter
+        assert_eq!(txid.as_hash().to_vec(), finalized_txid);
 
-        // Check minter's event log
-        let events = minter_agent
-            .get_events(0, 1000)
-            .await
-            .expect("failed to fetch minter's event log");
+        // We can now check that the destination_btc_address received some utxos
+        let unspent_result = btc_rpc
+            .list_unspent(
+                Some(6),
+                None,
+                Some(&[&destination_btc_address]),
+                Some(true),
+                None,
+            )
+            .expect("failed to get tx infos");
+        let destination_balance = unspent_result
+            .iter()
+            .map(|entry| entry.amount.as_sat())
+            .sum::<u64>();
 
-        assert!(
-            events.iter().any(|e| matches!(
-                e,
-                Event::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
-                    block_index,
-                    ..
-                }) if *block_index == retrieve_response.block_index
-            )),
-            "missing the retrieve request in the event log: {:?}",
-            events
+        // We can check that the destination address has received all the bitcoin
+        assert_eq!(
+            destination_balance,
+            (RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64) * retrieve_amount - EXPECTED_FEE
         );
 
-        assert!(
-            events.iter().any(
-                |e| matches!(e, Event::SentBtcTransaction { txid, .. } if txid == &finalized_txid)
-            ),
-            "missing the tx submission in the event log: {:?}",
-            events
-        );
-
-        assert!(
-            events.iter().any(
-                |e| matches!(e, Event::ConfirmedBtcTransaction { txid } if txid == &finalized_txid)
-            ),
-            "missing the tx confirmation in the event log: {:?}",
-            events
-        );
+        // We also check that the destination address have received 20 utxos
+        assert_eq!(unspent_result.len(), RETRIEVE_REQUESTS_COUNT_TO_BATCH);
     })
 }
