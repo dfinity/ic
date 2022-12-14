@@ -146,6 +146,27 @@ impl CryptoMetrics {
                 .observe(parameter_size as f64);
         }
     }
+
+    pub fn observe_vault_message_size(
+        &self,
+        service_type: ServiceType,
+        message_type: MessageType,
+        domain: MetricsDomain,
+        method_name: &str,
+        size: usize,
+    ) {
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .crypto_vault_message_sizes
+                .with_label_values(&[
+                    &format!("{}", service_type),
+                    &format!("{}", message_type),
+                    &format!("{}", domain),
+                    method_name,
+                ])
+                .observe(size as f64);
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
@@ -166,6 +187,7 @@ pub enum MetricsDomain {
     ThresholdEcdsa,
     IcCanisterSignature,
     PublicSeed,
+    KeyManagement,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
@@ -198,6 +220,18 @@ pub enum KeyRotationResult {
     KeyRotationNotEnabled,
     KeyNotRotated,
     RegistryKeyBadOrMissing,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+pub enum ServiceType {
+    Client,
+    Server,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+pub enum MessageType {
+    Request,
+    Response,
 }
 
 /// Keeps track of the number of node keys. This information is collected and provided to the
@@ -302,6 +336,13 @@ struct Metrics {
     /// The 'parameter_name' indicates the name of the parameter, e.g., `message`.
     /// The 'parameter_size' indicates the size of the parameter in bytes.
     pub crypto_parameter_byte_sizes: HistogramVec,
+
+    /// Histograms of messages' sizes sent between the CSP vault client and server via the RPC socket.
+    /// The observed value is the size of the message in bytes.
+    /// The 'method_name' label indicates the functionality, such as `sign` or `idkg_retain_active_keys`.
+    /// The 'service_type' label indicates whether the observation is made by the `client` or `server`
+    /// The 'message_type' label indicates whether the message is a request or a response.
+    pub crypto_vault_message_sizes: HistogramVec,
 }
 
 impl Display for MetricsDomain {
@@ -333,6 +374,20 @@ impl Display for KeyRotationResult {
 }
 
 impl Display for KeyType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let value: &'static str = self.into();
+        write!(f, "{}", value.to_case(Case::Snake))
+    }
+}
+
+impl Display for ServiceType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let value: &'static str = self.into();
+        write!(f, "{}", value.to_case(Case::Snake))
+    }
+}
+
+impl Display for MessageType {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let value: &'static str = self.into();
         write!(f, "{}", value.to_case(Case::Snake))
@@ -394,6 +449,15 @@ impl Metrics {
                     16000000.0, 20000000.0, 24000000.0, 28000000.0, 30000000.0,
                 ],
                 &["method_name", "parameter_name", "domain", "result"],
+            ),
+            crypto_vault_message_sizes: r.histogram_vec(
+                "crypto_vault_message_sizes",
+                "Byte sizes of crypto vault messages",
+                vec![
+                    1000.0, 10000.0, 100000.0, 1000000.0, 2000000.0, 4000000.0, 8000000.0,
+                    16000000.0, 20000000.0, 24000000.0, 28000000.0, 30000000.0,
+                ],
+                &["service_type", "message_type", "domain", "method_name"],
             ),
         }
     }

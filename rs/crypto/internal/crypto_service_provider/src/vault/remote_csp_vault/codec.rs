@@ -1,6 +1,6 @@
 use crate::vault::remote_csp_vault::TarpcCspVaultRequest;
 use crate::vault::remote_csp_vault::TarpcCspVaultResponse;
-use ic_crypto_internal_logmon::metrics::CryptoMetrics;
+use ic_crypto_internal_logmon::metrics::{CryptoMetrics, MessageType, MetricsDomain, ServiceType};
 use ic_logger::{debug, ReplicaLogger};
 use prost::bytes::{Bytes, BytesMut};
 use std::pin::Pin;
@@ -9,144 +9,288 @@ use tarpc::{ClientMessage, Response};
 use tokio_serde::{Deserializer, Serializer};
 
 /// Wrap a codec (something that implements the traits [`Serializer`] and [`Deserializer`])
-/// to add logging and metrics capabilities to observe the amount of bytes
-/// being serialized or deserialized.
-pub struct SizeLoggingCodec<Codec> {
+/// to observe the result of serialization and deserialization.
+pub struct ObservableCodec<Codec, Observer> {
     inner_codec: Codec,
-    logger: ReplicaLogger,
-    _metrics: Arc<CryptoMetrics>,
+    observer: Observer,
 }
 
-impl<Codec> SizeLoggingCodec<Codec> {
-    pub fn new(codec: Codec, logger: ReplicaLogger) -> Self {
-        SizeLoggingCodec {
+impl<Codec, Observer> ObservableCodec<Codec, Observer> {
+    pub fn new(codec: Codec, observer: Observer) -> Self {
+        ObservableCodec {
             inner_codec: codec,
-            logger,
-            _metrics: Arc::new(CryptoMetrics::none()),
+            observer,
         }
-    }
-
-    // TODO CRP-1835 add metrics
-    fn observe_serialization_result(&self, request: &TarpcCspVaultRequest, result: &Bytes) {
-        debug!(
-            self.logger,
-            "Request to method '{}' serialized {} bytes",
-            method_name_from_request(request),
-            result.len()
-        );
-    }
-
-    // TODO CRP-1835 add metrics
-    fn observe_deserialization_result(&self, src: &BytesMut, result: &TarpcCspVaultResponse) {
-        debug!(
-            self.logger,
-            "Response of method '{}' deserialized {} bytes",
-            method_name_from_response(result),
-            src.len()
-        );
     }
 }
 
-impl<Codec> Serializer<ClientMessage<TarpcCspVaultRequest>> for SizeLoggingCodec<Codec>
+impl<Codec, Observer, S> Serializer<S> for ObservableCodec<Codec, Observer>
 where
-    Codec: Serializer<ClientMessage<TarpcCspVaultRequest>> + Unpin,
+    Codec: Serializer<S> + Unpin,
+    Observer: SerializationObserver<S> + Unpin,
 {
     type Error = Codec::Error;
 
-    fn serialize(
-        mut self: Pin<&mut Self>,
-        item: &ClientMessage<TarpcCspVaultRequest>,
-    ) -> Result<Bytes, Self::Error> {
+    fn serialize(mut self: Pin<&mut Self>, item: &S) -> Result<Bytes, Self::Error> {
         let result = Pin::new(&mut self.inner_codec).serialize(item);
-        if let (Ok(bytes), ClientMessage::Request(request)) = (&result, item) {
-            self.observe_serialization_result(&request.message, bytes);
+        if let Ok(serialized_bytes) = &result {
+            self.observer
+                .observe_serialization_result(item, serialized_bytes);
         }
         result
     }
 }
 
-impl<Codec> Deserializer<Response<TarpcCspVaultResponse>> for SizeLoggingCodec<Codec>
+impl<Codec, Observer, D> Deserializer<D> for ObservableCodec<Codec, Observer>
 where
-    Codec: Deserializer<Response<TarpcCspVaultResponse>> + Unpin,
+    Codec: Deserializer<D> + Unpin,
+    Observer: DeserializationObserver<D> + Unpin,
 {
     type Error = Codec::Error;
 
-    fn deserialize(
-        mut self: Pin<&mut Self>,
-        src: &BytesMut,
-    ) -> Result<Response<TarpcCspVaultResponse>, Self::Error> {
+    fn deserialize(mut self: Pin<&mut Self>, src: &BytesMut) -> Result<D, Self::Error> {
         let result = Pin::new(&mut self.inner_codec).deserialize(src);
-        if let Ok(Response {
-            message: Ok(vault_response),
-            ..
-        }) = &result
-        {
-            self.observe_deserialization_result(src, vault_response);
+        if let Ok(deserialized) = &result {
+            self.observer
+                .observe_deserialization_result(src, deserialized);
         }
         result
     }
 }
 
-fn method_name_from_request(request: &TarpcCspVaultRequest) -> String {
-    type Req = TarpcCspVaultRequest;
-    match request {
-        Req::Sign { .. } => "sign",
-        Req::GenNodeSigningKeyPair { .. } => "gen_node_signing_key_pair",
-        Req::MultiSign { .. } => "multi_sign",
-        Req::GenCommitteeSigningKeyPair { .. } => "gen_committee_signing_key_pair",
-        Req::ThresholdSign { .. } => "threshold_sign",
-        Req::ThresholdKeygenForTest { .. } => "threshold_keygen_for_test",
-        Req::GenDealingEncryptionKeyPair { .. } => "gen_dealing_encryption_key_pair",
-        Req::UpdateForwardSecureEpoch { .. } => "update_forward_secure_epoch",
-        Req::CreateDealing { .. } => "create_dealing",
-        Req::LoadThresholdSigningKey { .. } => "load_threshold_signing_key",
-        Req::RetainThresholdKeysIfPresent { .. } => "retain_threshold_keys_if_present",
-        Req::SksContains { .. } => "sks_contains",
-        Req::PksContains { .. } => "pks_contains",
-        Req::CurrentNodePublicKeys { .. } => "current_node_public_keys",
-        Req::GenTlsKeyPair { .. } => "gen_tls_key_pair",
-        Req::TlsSign { .. } => "tls_sign",
-        Req::IdkgCreateDealing { .. } => "idkg_create_dealing",
-        Req::IdkgVerifyDealingPrivate { .. } => "idkg_verify_dealing_private",
-        Req::IdkgLoadTranscript { .. } => "idkg_load_transcript",
-        Req::IdkgLoadTranscriptWithOpenings { .. } => "idkg_load_transcript_with_openings",
-        Req::IdkgRetainActiveKeys { .. } => "idkg_retain_active_keys",
-        Req::IdkgGenDealingEncryptionKeyPair { .. } => "idkg_gen_dealing_encryption_key_pair",
-        Req::IdkgOpenDealing { .. } => "idkg_open_dealing",
-        Req::EcdsaSignShare { .. } => "ecdsa_sign_share",
-        Req::NewPublicSeed { .. } => "new_public_seed",
-    }
-    .to_string()
+trait SerializationObserver<S> {
+    fn observe_serialization_result(&self, src: &S, result: &Bytes);
 }
 
-fn method_name_from_response(response: &TarpcCspVaultResponse) -> String {
-    type Resp = TarpcCspVaultResponse;
-    match response {
-        Resp::Sign { .. } => "sign",
-        Resp::GenNodeSigningKeyPair { .. } => "gen_node_signing_key_pair",
-        Resp::MultiSign { .. } => "multi_sign",
-        Resp::GenCommitteeSigningKeyPair { .. } => "gen_committee_signing_key_pair",
-        Resp::ThresholdSign { .. } => "threshold_sign",
-        Resp::ThresholdKeygenForTest { .. } => "threshold_keygen_for_test",
-        Resp::GenDealingEncryptionKeyPair { .. } => "gen_dealing_encryption_key_pair",
-        Resp::UpdateForwardSecureEpoch { .. } => "update_forward_secure_epoch",
-        Resp::CreateDealing { .. } => "create_dealing",
-        Resp::LoadThresholdSigningKey { .. } => "load_threshold_signing_key",
-        Resp::RetainThresholdKeysIfPresent { .. } => "retain_threshold_keys_if_present",
-        Resp::SksContains { .. } => "sks_contains",
-        Resp::PksContains { .. } => "pks_contains",
-        Resp::CurrentNodePublicKeys { .. } => "current_node_public_keys",
-        Resp::GenTlsKeyPair { .. } => "gen_tls_key_pair",
-        Resp::TlsSign { .. } => "tls_sign",
-        Resp::IdkgCreateDealing { .. } => "idkg_create_dealing",
-        Resp::IdkgVerifyDealingPrivate { .. } => "idkg_verify_dealing_private",
-        Resp::IdkgLoadTranscript { .. } => "idkg_load_transcript",
-        Resp::IdkgLoadTranscriptWithOpenings { .. } => "idkg_load_transcript_with_openings",
-        Resp::IdkgRetainActiveKeys { .. } => "idkg_retain_active_keys",
-        Resp::IdkgGenDealingEncryptionKeyPair { .. } => "idkg_gen_dealing_encryption_key_pair",
-        Resp::IdkgOpenDealing { .. } => "idkg_open_dealing",
-        Resp::EcdsaSignShare { .. } => "ecdsa_sign_share",
-        Resp::NewPublicSeed { .. } => "new_public_seed",
+trait DeserializationObserver<D> {
+    fn observe_deserialization_result(&self, src: &BytesMut, result: &D);
+}
+
+pub struct CspVaultClientObserver {
+    logger: ReplicaLogger,
+    metrics: Arc<CryptoMetrics>,
+}
+
+impl CspVaultClientObserver {
+    pub fn new(logger: ReplicaLogger, metrics: Arc<CryptoMetrics>) -> Self {
+        Self { logger, metrics }
     }
-    .to_string()
+}
+
+impl SerializationObserver<ClientMessage<TarpcCspVaultRequest>> for CspVaultClientObserver {
+    fn observe_serialization_result(
+        &self,
+        src: &ClientMessage<TarpcCspVaultRequest>,
+        result: &Bytes,
+    ) {
+        if let ClientMessage::Request(request) = src {
+            let vault_method = CspVaultMethod::from(&request.message);
+            let (domain, method_name) = vault_method.detail();
+            let number_of_bytes = result.len();
+            debug!(
+                self.logger,
+                "CSP vault client sent {} bytes (request to '{}')", number_of_bytes, method_name
+            );
+            self.metrics.observe_vault_message_size(
+                ServiceType::Client,
+                MessageType::Request,
+                domain,
+                method_name,
+                number_of_bytes,
+            );
+        }
+    }
+}
+
+impl DeserializationObserver<Response<TarpcCspVaultResponse>> for CspVaultClientObserver {
+    fn observe_deserialization_result(
+        &self,
+        src: &BytesMut,
+        result: &Response<TarpcCspVaultResponse>,
+    ) {
+        if let Response {
+            message: Ok(response),
+            ..
+        } = result
+        {
+            let vault_method = CspVaultMethod::from(response);
+            let (domain, method_name) = vault_method.detail();
+            let number_of_bytes = src.len();
+            debug!(
+                self.logger,
+                "CSP vault client received {} bytes (response of '{}')",
+                number_of_bytes,
+                method_name,
+            );
+            self.metrics.observe_vault_message_size(
+                ServiceType::Client,
+                MessageType::Response,
+                domain,
+                method_name,
+                number_of_bytes,
+            );
+        }
+    }
+}
+
+enum CspVaultMethod {
+    Sign,
+    GenNodeSigningKeyPair,
+    MultiSign,
+    GenCommitteeSigningKeyPair,
+    ThresholdSign,
+    ThresholdKeygenForTest,
+    GenDealingEncryptionKeyPair,
+    UpdateForwardSecureEpoch,
+    CreateDealing,
+    LoadThresholdSigningKey,
+    RetainThresholdKeysIfPresent,
+    SksContains,
+    PksContains,
+    CurrentNodePublicKeys,
+    GenTlsKeyPair,
+    TlsSign,
+    IdkgCreateDealing,
+    IdkgVerifyDealingPrivate,
+    IdkgLoadTranscript,
+    IdkgLoadTranscriptWithOpenings,
+    IdkgRetainActiveKeys,
+    IdkgGenDealingEncryptionKeyPair,
+    IdkgOpenDealing,
+    EcdsaSignShare,
+    NewPublicSeed,
+}
+
+impl CspVaultMethod {
+    fn detail(&self) -> (MetricsDomain, &str) {
+        match self {
+            CspVaultMethod::Sign => (MetricsDomain::BasicSignature, "sign"),
+            CspVaultMethod::GenNodeSigningKeyPair => {
+                (MetricsDomain::BasicSignature, "gen_node_signing_key_pair")
+            }
+            CspVaultMethod::MultiSign => (MetricsDomain::MultiSignature, "multi_sign"),
+            CspVaultMethod::GenCommitteeSigningKeyPair => (
+                MetricsDomain::MultiSignature,
+                "gen_committee_signing_key_pair",
+            ),
+            CspVaultMethod::ThresholdSign => (MetricsDomain::ThresholdSignature, "threshold_sign"),
+            CspVaultMethod::ThresholdKeygenForTest => (
+                MetricsDomain::ThresholdSignature,
+                "threshold_keygen_for_test",
+            ),
+            CspVaultMethod::GenDealingEncryptionKeyPair => (
+                MetricsDomain::NiDkgAlgorithm,
+                "gen_dealing_encryption_key_pair",
+            ),
+            CspVaultMethod::UpdateForwardSecureEpoch => {
+                (MetricsDomain::NiDkgAlgorithm, "update_forward_secure_epoch")
+            }
+            CspVaultMethod::CreateDealing => (MetricsDomain::NiDkgAlgorithm, "create_dealing"),
+            CspVaultMethod::LoadThresholdSigningKey => {
+                (MetricsDomain::NiDkgAlgorithm, "load_threshold_signing_key")
+            }
+            CspVaultMethod::RetainThresholdKeysIfPresent => (
+                MetricsDomain::NiDkgAlgorithm,
+                "retain_threshold_keys_if_present",
+            ),
+            CspVaultMethod::SksContains => (MetricsDomain::KeyManagement, "sks_contains"),
+            CspVaultMethod::PksContains => (MetricsDomain::KeyManagement, "pks_contains"),
+            CspVaultMethod::CurrentNodePublicKeys => {
+                (MetricsDomain::KeyManagement, "current_node_public_keys")
+            }
+            CspVaultMethod::GenTlsKeyPair => (MetricsDomain::TlsHandshake, "gen_tls_key_pair"),
+            CspVaultMethod::TlsSign => (MetricsDomain::TlsHandshake, "tls_sign"),
+            CspVaultMethod::IdkgCreateDealing => {
+                (MetricsDomain::IDkgProtocol, "idkg_create_dealing")
+            }
+            CspVaultMethod::IdkgVerifyDealingPrivate => {
+                (MetricsDomain::IDkgProtocol, "idkg_verify_dealing_private")
+            }
+            CspVaultMethod::IdkgLoadTranscript => {
+                (MetricsDomain::IDkgProtocol, "idkg_load_transcript")
+            }
+            CspVaultMethod::IdkgLoadTranscriptWithOpenings => (
+                MetricsDomain::IDkgProtocol,
+                "idkg_load_transcript_with_openings",
+            ),
+            CspVaultMethod::IdkgRetainActiveKeys => {
+                (MetricsDomain::IDkgProtocol, "idkg_retain_active_keys")
+            }
+            CspVaultMethod::IdkgGenDealingEncryptionKeyPair => (
+                MetricsDomain::IDkgProtocol,
+                "idkg_gen_dealing_encryption_key_pair",
+            ),
+            CspVaultMethod::IdkgOpenDealing => (MetricsDomain::IDkgProtocol, "idkg_open_dealing"),
+            CspVaultMethod::EcdsaSignShare => (MetricsDomain::ThresholdEcdsa, "ecdsa_sign_share"),
+            CspVaultMethod::NewPublicSeed => (MetricsDomain::PublicSeed, "new_public_seed"),
+        }
+    }
+}
+
+impl From<&TarpcCspVaultRequest> for CspVaultMethod {
+    fn from(request: &TarpcCspVaultRequest) -> Self {
+        type Req = TarpcCspVaultRequest;
+        type Method = CspVaultMethod;
+        match request {
+            Req::Sign { .. } => Method::Sign,
+            Req::GenNodeSigningKeyPair { .. } => Method::GenNodeSigningKeyPair,
+            Req::MultiSign { .. } => Method::MultiSign,
+            Req::GenCommitteeSigningKeyPair { .. } => Method::GenCommitteeSigningKeyPair,
+            Req::ThresholdSign { .. } => Method::ThresholdSign,
+            Req::ThresholdKeygenForTest { .. } => Method::ThresholdKeygenForTest,
+            Req::GenDealingEncryptionKeyPair { .. } => Method::GenDealingEncryptionKeyPair,
+            Req::UpdateForwardSecureEpoch { .. } => Method::UpdateForwardSecureEpoch,
+            Req::CreateDealing { .. } => Method::CreateDealing,
+            Req::LoadThresholdSigningKey { .. } => Method::LoadThresholdSigningKey,
+            Req::RetainThresholdKeysIfPresent { .. } => Method::RetainThresholdKeysIfPresent,
+            Req::SksContains { .. } => Method::SksContains,
+            Req::PksContains { .. } => Method::PksContains,
+            Req::CurrentNodePublicKeys { .. } => Method::CurrentNodePublicKeys,
+            Req::GenTlsKeyPair { .. } => Method::GenTlsKeyPair,
+            Req::TlsSign { .. } => Method::TlsSign,
+            Req::IdkgCreateDealing { .. } => Method::IdkgCreateDealing,
+            Req::IdkgVerifyDealingPrivate { .. } => Method::IdkgVerifyDealingPrivate,
+            Req::IdkgLoadTranscript { .. } => Method::IdkgLoadTranscript,
+            Req::IdkgLoadTranscriptWithOpenings { .. } => Method::IdkgLoadTranscriptWithOpenings,
+            Req::IdkgRetainActiveKeys { .. } => Method::IdkgRetainActiveKeys,
+            Req::IdkgGenDealingEncryptionKeyPair { .. } => Method::IdkgGenDealingEncryptionKeyPair,
+            Req::IdkgOpenDealing { .. } => Method::IdkgOpenDealing,
+            Req::EcdsaSignShare { .. } => Method::EcdsaSignShare,
+            Req::NewPublicSeed { .. } => Method::NewPublicSeed,
+        }
+    }
+}
+
+impl From<&TarpcCspVaultResponse> for CspVaultMethod {
+    fn from(response: &TarpcCspVaultResponse) -> Self {
+        type Resp = TarpcCspVaultResponse;
+        type Method = CspVaultMethod;
+        match response {
+            Resp::Sign { .. } => Method::Sign,
+            Resp::GenNodeSigningKeyPair { .. } => Method::GenNodeSigningKeyPair,
+            Resp::MultiSign { .. } => Method::MultiSign,
+            Resp::GenCommitteeSigningKeyPair { .. } => Method::GenCommitteeSigningKeyPair,
+            Resp::ThresholdSign { .. } => Method::ThresholdSign,
+            Resp::ThresholdKeygenForTest { .. } => Method::ThresholdKeygenForTest,
+            Resp::GenDealingEncryptionKeyPair { .. } => Method::GenDealingEncryptionKeyPair,
+            Resp::UpdateForwardSecureEpoch { .. } => Method::UpdateForwardSecureEpoch,
+            Resp::CreateDealing { .. } => Method::CreateDealing,
+            Resp::LoadThresholdSigningKey { .. } => Method::LoadThresholdSigningKey,
+            Resp::RetainThresholdKeysIfPresent { .. } => Method::RetainThresholdKeysIfPresent,
+            Resp::SksContains { .. } => Method::SksContains,
+            Resp::PksContains { .. } => Method::PksContains,
+            Resp::CurrentNodePublicKeys { .. } => Method::CurrentNodePublicKeys,
+            Resp::GenTlsKeyPair { .. } => Method::GenTlsKeyPair,
+            Resp::TlsSign { .. } => Method::TlsSign,
+            Resp::IdkgCreateDealing { .. } => Method::IdkgCreateDealing,
+            Resp::IdkgVerifyDealingPrivate { .. } => Method::IdkgVerifyDealingPrivate,
+            Resp::IdkgLoadTranscript { .. } => Method::IdkgLoadTranscript,
+            Resp::IdkgLoadTranscriptWithOpenings { .. } => Method::IdkgLoadTranscriptWithOpenings,
+            Resp::IdkgRetainActiveKeys { .. } => Method::IdkgRetainActiveKeys,
+            Resp::IdkgGenDealingEncryptionKeyPair { .. } => Method::IdkgGenDealingEncryptionKeyPair,
+            Resp::IdkgOpenDealing { .. } => Method::IdkgOpenDealing,
+            Resp::EcdsaSignShare { .. } => Method::EcdsaSignShare,
+            Resp::NewPublicSeed { .. } => Method::NewPublicSeed,
+        }
+    }
 }

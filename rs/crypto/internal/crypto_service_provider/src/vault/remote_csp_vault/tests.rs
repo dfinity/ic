@@ -1028,6 +1028,7 @@ mod public_seed {
 mod logging {
     use super::*;
     use crate::vault::remote_csp_vault::tests::LoggerConfig;
+    use crate::CryptoMetrics;
     use ic_config::logger::LogTarget;
     use ic_logger::new_replica_logger_from_config;
     use tempfile::NamedTempFile;
@@ -1042,8 +1043,13 @@ mod logging {
         let (logger, guard) = new_replica_logger_from_config(&logger_config);
         let tokio_rt = new_tokio_runtime();
         let socket_path = start_new_remote_csp_vault_server_for_test(tokio_rt.handle());
-        let csp_vault = RemoteCspVault::new(&socket_path, tokio_rt.handle().clone(), logger)
-            .expect("failed instantiating remote CSP vault client");
+        let csp_vault = RemoteCspVault::new(
+            &socket_path,
+            tokio_rt.handle().clone(),
+            logger,
+            Arc::new(CryptoMetrics::none()),
+        )
+        .expect("failed instantiating remote CSP vault client");
 
         csp_vault
             .gen_node_signing_key_pair()
@@ -1059,9 +1065,10 @@ mod logging {
         assert!(log_lines[0].contains("Instantiated remote CSP vault client"));
         assert!(log_lines[1].contains("DEBG"));
         assert!(log_lines[1]
-            .contains("Request to method 'gen_node_signing_key_pair' serialized 37 bytes"));
+            .contains("CSP vault client sent 37 bytes (request to 'gen_node_signing_key_pair')"));
         assert!(log_lines[2].contains("DEBG"));
-        assert!(log_lines[2]
-            .contains("Response of method 'gen_node_signing_key_pair' deserialized 38 bytes"));
+        assert!(log_lines[2].contains(
+            "CSP vault client received 38 bytes (response of 'gen_node_signing_key_pair')"
+        ));
     }
 }

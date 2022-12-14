@@ -231,13 +231,18 @@ impl Csp {
             logger,
             "Proceeding with a remote csp_vault, CryptoConfig: {:?}", config
         );
-        let csp_vault = RemoteCspVault::new(socket_path, rt_handle, new_logger!(&logger))
-            .unwrap_or_else(|e| {
-                panic!(
-                    "Could not connect to CspVault at socket {:?}: {:?}",
-                    socket_path, e
-                )
-            });
+        let csp_vault = RemoteCspVault::new(
+            socket_path,
+            rt_handle,
+            new_logger!(&logger),
+            metrics.clone(),
+        )
+        .unwrap_or_else(|e| {
+            panic!(
+                "Could not connect to CspVault at socket {:?}: {:?}",
+                socket_path, e
+            )
+        });
         Csp {
             csp_vault: Arc::new(csp_vault),
             logger,
