@@ -35,12 +35,14 @@ Not Covered::
 
 end::catalog[] */
 
+use rand_chacha::ChaCha8Rng;
 use slog::info;
 
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
-use crate::util::{get_random_nns_node_endpoint, runtime_from_url};
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+};
+use crate::util::{block_on, runtime_from_url};
 
 use crate::driver::ic::InternetComputer;
 
@@ -67,6 +69,9 @@ use ic_nns_test_utils::governance::submit_external_update_proposal_allowing_erro
 use ic_registry_subnet_type::SubnetType;
 use rand::Rng;
 
+// Seed for a random generator
+const RND_SEED: u64 = 42;
+
 /// A test runs within a given IC configuration. Later on, we really want to
 /// combine tests that are being run in similar environments. Please, keep this
 /// in mind when writing your tests!
@@ -75,34 +80,24 @@ pub fn config(env: TestEnv) {
         .add_fast_single_node_subnet(SubnetType::System)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
-
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     info!(logger, "Installing NNS canisters on the root subnet...");
-    env.topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap()
+    nns_node
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
     info!(&logger, "NNS canisters installed successfully.");
-
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-
-    let mut rng = ctx.rng.clone();
-
-    // choose a random endpoint from the nns subnet
-    let endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    rt.block_on(async move {
-        endpoint.assert_ready(ctx).await;
-        let nns = runtime_from_url(endpoint.url.clone(), endpoint.effective_canister_id());
-
+    block_on(async move {
         // Voting method calls of the governance canister by an entity other than
         // the neuron holders are rejected
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
@@ -121,7 +116,7 @@ pub fn test(env: TestEnv) {
             )
             .await
             .expect("cannot obtain neuron_info?");
-        info!(ctx.logger, "neuron info {:?}", n);
+        info!(logger, "neuron info {:?}", n);
 
         // Observe a reject for "manage_neuron(MakeProposal)" when
         // called from a principal not being owner, here the test identity.
@@ -134,6 +129,7 @@ pub fn test(env: TestEnv) {
 
         // Observe a reject for "forward_vote" when called from
         // a principal not being owner, here the test identity.
+        let mut rng: ChaCha8Rng = rand::SeedableRng::seed_from_u64(RND_SEED);
         let fake_proposal_id = ProposalId(rng.gen());
         let vote_reject = forward_vote(
             &governance,
@@ -195,7 +191,7 @@ pub fn test(env: TestEnv) {
 
         // Set up proposal by neuron1 and vote with neuron2, expecting success.
         let proposal_id = submit_proposal_by_neuron1(&nns).await;
-        info!(ctx.logger, "proposal_id {}", proposal_id);
+        info!(logger, "proposal_id {}", proposal_id);
 
         let vote_result = forward_vote(
             &governance,
@@ -301,7 +297,7 @@ pub fn test(env: TestEnv) {
             .await
             .expect("query failed?");
         info!(
-            ctx.logger,
+            logger,
             "get_pending_proposals({:?}): {:?}", proposal_id, proposals
         );
         let proposal: &ProposalInfo = proposals
@@ -365,7 +361,7 @@ pub fn test(env: TestEnv) {
             .expect("get_full_neuron rejected?")
             .stake_e8s();
         info!(
-            ctx.logger,
+            logger,
             "funds_before: {:?} funds_after: {:?}", funds_before, funds_after
         );
         assert!(funds_before > funds_after);

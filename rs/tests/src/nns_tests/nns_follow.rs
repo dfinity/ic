@@ -26,10 +26,11 @@ NotCovered:
 
 end::catalog[] */
 
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
-use crate::util::{get_random_nns_node_endpoint, runtime_from_url};
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+};
+use crate::util::{block_on, runtime_from_url};
 
 use crate::driver::ic::InternetComputer;
 
@@ -53,41 +54,36 @@ use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use rand::Rng;
+use rand_chacha::ChaCha8Rng;
 use slog::info;
 use std::collections::HashSet;
+
+// Seed for a random generator
+const RND_SEED: u64 = 42;
 
 pub fn config(env: TestEnv) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
-
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     info!(logger, "Installing NNS canisters on the root subnet...");
-    env.topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap()
+    nns_node
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
-    info!(&logger, "NNS canisters installed successfully.");
-
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-
-    let mut rng = ctx.rng.clone();
-
-    let endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    rt.block_on(async move {
-        endpoint.assert_ready(ctx).await;
-        let nns = runtime_from_url(endpoint.url.clone(), endpoint.effective_canister_id());
-
+    info!(logger, "NNS canisters installed successfully.");
+    block_on(async move {
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
         let valid_topic = Topic::ParticipantManagement as i32;
 
@@ -99,7 +95,7 @@ pub fn test(env: TestEnv) {
             (NeuronId(TEST_NEURON_3_ID), &TEST_NEURON_3_OWNER_KEYPAIR);
 
         // expect everything working
-        let result = setup_following(&ctx.logger, &governance, n2, n1, valid_topic)
+        let result = setup_following(&logger, &governance, n2, n1, valid_topic)
             .await
             .command
             .unwrap();
@@ -108,13 +104,13 @@ pub fn test(env: TestEnv) {
             manage_neuron_response::Command::Follow(manage_neuron_response::FollowResponse {})
         );
 
-        let followees = obtain_followees(&ctx.logger, &governance, n2, valid_topic).await;
+        let followees = obtain_followees(&logger, &governance, n2, valid_topic).await;
         // At this point n2 has one followee (n1).
         assert_eq!(followees, vec![n1.0]);
 
         // self-follow: expect success (this is somewhat weird,
         // but nothing nefarious, as cycles in the following graph get broken)
-        let result = setup_following(&ctx.logger, &governance, n2, n2, valid_topic)
+        let result = setup_following(&logger, &governance, n2, n2, valid_topic)
             .await
             .command
             .unwrap();
@@ -123,15 +119,16 @@ pub fn test(env: TestEnv) {
             manage_neuron_response::Command::Follow(manage_neuron_response::FollowResponse {})
         );
 
-        let followees = obtain_followees(&ctx.logger, &governance, n2, valid_topic).await;
+        let followees = obtain_followees(&logger, &governance, n2, valid_topic).await;
         // At this point n2 has one followee (itself).
         assert_eq!(followees, vec![n2.0]);
 
         // Note: the chances to hit a real topic is minuscule with a random
         //       number from the below range. At least we don't use magics.
         // expect reject
+        let mut rng: ChaCha8Rng = rand::SeedableRng::seed_from_u64(RND_SEED);
         let invalid_topic = rng.gen_range(i32::MAX - 10000..i32::MAX);
-        let reject = setup_following(&ctx.logger, &governance, n2, n1, invalid_topic)
+        let reject = setup_following(&logger, &governance, n2, n1, invalid_topic)
             .await
             .command
             .unwrap();
@@ -143,7 +140,7 @@ pub fn test(env: TestEnv) {
         // expect reject
         let n2_not_authz: (ic_nns_common::types::NeuronId, &Ed25519KeyPair) =
             (NeuronId(TEST_NEURON_2_ID), &TEST_NEURON_3_OWNER_KEYPAIR);
-        let reject = setup_following(&ctx.logger, &governance, n2_not_authz, n1, valid_topic)
+        let reject = setup_following(&logger, &governance, n2_not_authz, n1, valid_topic)
             .await
             .command
             .unwrap();
@@ -157,7 +154,7 @@ pub fn test(env: TestEnv) {
         let fake_neuron_id: u64 = rng.gen_range(0..u64::MAX);
         let n_fake: (ic_nns_common::types::NeuronId, &Ed25519KeyPair) =
             (NeuronId(fake_neuron_id), &TEST_NEURON_2_OWNER_KEYPAIR);
-        let reject = setup_following(&ctx.logger, &governance, n_fake, n1, valid_topic)
+        let reject = setup_following(&logger, &governance, n_fake, n1, valid_topic)
             .await
             .command
             .unwrap();
@@ -171,7 +168,7 @@ pub fn test(env: TestEnv) {
         // NeuronIdOrSubaccount. We accept this here because currently there is
         // no guarding against orphaned neuron Ids in `governance` either.
         // Deleting neurons (a planned feature) may also create orphaned Ids.
-        let accept = setup_following(&ctx.logger, &governance, n2, n_fake, valid_topic)
+        let accept = setup_following(&logger, &governance, n2, n_fake, valid_topic)
             .await
             .command
             .unwrap();
@@ -180,38 +177,32 @@ pub fn test(env: TestEnv) {
             manage_neuron_response::Command::Follow(manage_neuron_response::FollowResponse {})
         );
 
-        let followees = obtain_followees(&ctx.logger, &governance, n2, valid_topic).await;
+        let followees = obtain_followees(&logger, &governance, n2, valid_topic).await;
         // At this point n2 has one followee (the non-existing neuron).
         assert_eq!(followees, vec![n_fake.0]);
 
         // clearing is always expected to work
-        clear_followees(&ctx.logger, &governance, n2, valid_topic).await;
-        assert_no_followees(&ctx.logger, &governance, n2, valid_topic).await;
+        clear_followees(&logger, &governance, n2, valid_topic).await;
+        assert_no_followees(&logger, &governance, n2, valid_topic).await;
 
         // adding mixed (valid and invalid) followees is currently accepted
-        let accept = setup_followees(
-            &ctx.logger,
-            &governance,
-            n2,
-            vec![n_fake.0, n1.0],
-            valid_topic,
-        )
-        .await
-        .command
-        .unwrap();
+        let accept = setup_followees(&logger, &governance, n2, vec![n_fake.0, n1.0], valid_topic)
+            .await
+            .command
+            .unwrap();
 
         assert_eq!(
             accept,
             manage_neuron_response::Command::Follow(manage_neuron_response::FollowResponse {})
         );
 
-        let followees = obtain_followees(&ctx.logger, &governance, n2, valid_topic).await;
+        let followees = obtain_followees(&logger, &governance, n2, valid_topic).await;
         // At this point n2 has two followees (the non-existing neuron and n1).
         assert_eq!(followees, vec![n_fake.0, n1.0]);
 
         // adding duplicated followees is currently accepted
         let accept = setup_followees(
-            &ctx.logger,
+            &logger,
             &governance,
             n2,
             vec![n1.0, n1.0, n1.0],
@@ -226,26 +217,25 @@ pub fn test(env: TestEnv) {
             manage_neuron_response::Command::Follow(manage_neuron_response::FollowResponse {})
         );
 
-        let followees = obtain_followees(&ctx.logger, &governance, n2, valid_topic).await;
+        let followees = obtain_followees(&logger, &governance, n2, valid_topic).await;
         // At this point n2 has three duplicated followees.
         assert_eq!(followees, vec![n1.0, n1.0, n1.0]);
 
         // clearing again
-        clear_followees(&ctx.logger, &governance, n2, valid_topic).await;
-        assert_no_followees(&ctx.logger, &governance, n2, valid_topic).await;
+        clear_followees(&logger, &governance, n2, valid_topic).await;
+        assert_no_followees(&logger, &governance, n2, valid_topic).await;
 
         // make a proposal via n2 before setting up followees
-        let proposal =
-            submit_proposal(&ctx.logger, &governance, n2, NnsFunction::NnsRootUpgrade).await;
+        let proposal = submit_proposal(&logger, &governance, n2, NnsFunction::NnsRootUpgrade).await;
 
-        let votes = check_votes(&ctx.logger, &governance, proposal).await;
+        let votes = check_votes(&logger, &governance, proposal).await;
         assert_eq!(votes, 140_400_410);
-        let ballot_n2 = check_ballots(&ctx.logger, &governance, proposal, &n2).await;
+        let ballot_n2 = check_ballots(&logger, &governance, proposal, &n2).await;
         assert_eq!(ballot_n2, (140_400_410, Vote::Yes));
 
         // now make n1 follow n2
         let result = setup_following(
-            &ctx.logger,
+            &logger,
             &governance,
             n1,
             n2,
@@ -260,28 +250,28 @@ pub fn test(env: TestEnv) {
         );
 
         // voting doesn't get propagated by mutating the following graph
-        let votes = check_votes(&ctx.logger, &governance, proposal).await;
+        let votes = check_votes(&logger, &governance, proposal).await;
         assert_eq!(votes, 140_400_410);
-        let ballot_n1 = check_ballots(&ctx.logger, &governance, proposal, &n1).await;
+        let ballot_n1 = check_ballots(&logger, &governance, proposal, &n1).await;
         assert_eq!(ballot_n1, (1_404_004_106, Vote::Unspecified));
-        let ballot_n2 = check_ballots(&ctx.logger, &governance, proposal, &n2).await;
+        let ballot_n2 = check_ballots(&logger, &governance, proposal, &n2).await;
         assert_eq!(ballot_n2, (140_400_410, Vote::Yes));
 
         // re-vote explicitly, still no change
-        cast_vote(&ctx.logger, &governance, n2, proposal).await;
-        let votes = check_votes(&ctx.logger, &governance, proposal).await;
+        cast_vote(&logger, &governance, n2, proposal).await;
+        let votes = check_votes(&logger, &governance, proposal).await;
         assert_eq!(votes, 140_400_410);
 
         // n1 needs to vote explicitly
-        cast_vote(&ctx.logger, &governance, n1, proposal).await;
-        let votes = check_votes(&ctx.logger, &governance, proposal).await;
+        cast_vote(&logger, &governance, n1, proposal).await;
+        let votes = check_votes(&logger, &governance, proposal).await;
         assert_eq!(votes, 1_544_404_516);
-        let ballot_n1 = check_ballots(&ctx.logger, &governance, proposal, &n1).await;
+        let ballot_n1 = check_ballots(&logger, &governance, proposal, &n1).await;
         assert_eq!(ballot_n1, (1_404_004_106, Vote::Yes));
 
         // now set up n3 follows n2 and n2 follows n1 (the latter gives circularity)
         let result1 = setup_following(
-            &ctx.logger,
+            &logger,
             &governance,
             n3,
             n2,
@@ -295,7 +285,7 @@ pub fn test(env: TestEnv) {
             manage_neuron_response::Command::Follow(manage_neuron_response::FollowResponse {})
         );
         let result2 = setup_following(
-            &ctx.logger,
+            &logger,
             &governance,
             n2,
             n1,
@@ -310,28 +300,27 @@ pub fn test(env: TestEnv) {
         );
 
         // make another proposal via n2 now that followees are set up
-        let proposal =
-            submit_proposal(&ctx.logger, &governance, n2, NnsFunction::NnsRootUpgrade).await;
+        let proposal = submit_proposal(&logger, &governance, n2, NnsFunction::NnsRootUpgrade).await;
 
         // verify that all three neurons did vote
-        let votes = check_votes(&ctx.logger, &governance, proposal).await;
+        let votes = check_votes(&logger, &governance, proposal).await;
         assert_eq!(votes, 1_404_004_106 + 140_400_410 + 14_040_040);
-        let ballot_n1 = check_ballots(&ctx.logger, &governance, proposal, &n1).await;
+        let ballot_n1 = check_ballots(&logger, &governance, proposal, &n1).await;
         assert_eq!(ballot_n1, (1_404_004_106, Vote::Yes));
-        let ballot_n2 = check_ballots(&ctx.logger, &governance, proposal, &n2).await;
+        let ballot_n2 = check_ballots(&logger, &governance, proposal, &n2).await;
         assert_eq!(ballot_n2, (140_400_410, Vote::Yes));
-        let ballot_n3 = check_ballots(&ctx.logger, &governance, proposal, &n3).await;
+        let ballot_n3 = check_ballots(&logger, &governance, proposal, &n3).await;
         assert_eq!(ballot_n3, (14_040_040, Vote::Yes));
 
         // Split n1 and build a follow chain like this:
         // n2 -> n1a -> n3 -> n1
-        let n1a_id = split_neuron(&ctx.logger, &governance, n1, 500_000_000).await;
+        let n1a_id = split_neuron(&logger, &governance, n1, 500_000_000).await;
 
         let n1a: (ic_nns_common::types::NeuronId, &Ed25519KeyPair) =
             (n1a_id, &TEST_NEURON_1_OWNER_KEYPAIR);
 
         setup_following_asserting(
-            &ctx.logger,
+            &logger,
             &governance,
             n2,
             n1a,
@@ -341,27 +330,27 @@ pub fn test(env: TestEnv) {
 
         // at this point n2 is not influential
         let influential = get_neuron_ids(&governance, n1a.1).await;
-        info!(&ctx.logger, "influential (before): {:?}", influential);
+        info!(logger, "influential (before): {:?}", influential);
         assert_eq!(influential.len(), 2);
         assert!(influential.contains(&n1a_id));
         assert!(influential.contains(&n1.0));
 
         // same following, different topic
-        setup_following_asserting(&ctx.logger, &governance, n2, n1a, Topic::NeuronManagement).await;
+        setup_following_asserting(&logger, &governance, n2, n1a, Topic::NeuronManagement).await;
 
         // at this point n2 becomes influential (a `NeuronManagement` follower to n1a)
         let influential = get_neuron_ids(&governance, n1a.1).await;
-        info!(&ctx.logger, "influential (n2 added): {:?}", influential);
+        info!(logger, "influential (n2 added): {:?}", influential);
         assert_eq!(influential.len(), 3);
         assert!(influential.contains(&n1a_id));
         assert!(influential.contains(&n1.0));
         assert!(influential.contains(&n2.0));
 
         // change following, in `NeuronManagement` topic
-        setup_following_asserting(&ctx.logger, &governance, n3, n1a, Topic::NeuronManagement).await;
+        setup_following_asserting(&logger, &governance, n3, n1a, Topic::NeuronManagement).await;
         // at this point n3 becomes influential (a `NeuronManagement` follower to n1a)
         let influential = get_neuron_ids(&governance, n1a.1).await;
-        info!(&ctx.logger, "influential (n3 added): {:?}", influential);
+        info!(logger, "influential (n3 added): {:?}", influential);
         assert_eq!(influential.len(), 4);
         assert!(influential.contains(&n1a_id));
         assert!(influential.contains(&n1.0));
@@ -369,18 +358,18 @@ pub fn test(env: TestEnv) {
         assert!(influential.contains(&n3.0));
 
         // change following, in `NeuronManagement` topic
-        setup_following_asserting(&ctx.logger, &governance, n2, n3, Topic::NeuronManagement).await;
+        setup_following_asserting(&logger, &governance, n2, n3, Topic::NeuronManagement).await;
         // at this point n2 ceases to be influential (as a `NeuronManagement` follower
         // to n1a)
         let influential = get_neuron_ids(&governance, n1a.1).await;
-        info!(&ctx.logger, "influential (n2 removed): {:?}", influential);
+        info!(logger, "influential (n2 removed): {:?}", influential);
         assert_eq!(influential.len(), 3);
         assert!(influential.contains(&n1a_id));
         assert!(influential.contains(&n1.0));
         assert!(influential.contains(&n3.0));
 
         setup_following_asserting(
-            &ctx.logger,
+            &logger,
             &governance,
             n1a,
             n3,
@@ -389,7 +378,7 @@ pub fn test(env: TestEnv) {
         .await;
 
         setup_following_asserting(
-            &ctx.logger,
+            &logger,
             &governance,
             n3,
             n1,
@@ -399,19 +388,18 @@ pub fn test(env: TestEnv) {
 
         // fire off a new proposal by n1, and see all neurons voting
         // immediately along the chain
-        let proposal =
-            submit_proposal(&ctx.logger, &governance, n1, NnsFunction::NnsRootUpgrade).await;
+        let proposal = submit_proposal(&logger, &governance, n1, NnsFunction::NnsRootUpgrade).await;
 
         // verify that all four neurons did vote
-        let votes = check_votes(&ctx.logger, &governance, proposal).await;
+        let votes = check_votes(&logger, &governance, proposal).await;
         assert_eq!(votes, 702_002_052 + 701_988_012 + 140_400_410 + 14_040_040);
-        let ballot_n1 = check_ballots(&ctx.logger, &governance, proposal, &n1).await;
+        let ballot_n1 = check_ballots(&logger, &governance, proposal, &n1).await;
         assert_eq!(ballot_n1, (702_002_052, Vote::Yes));
-        let ballot_n1a = check_ballots(&ctx.logger, &governance, proposal, &n1a).await;
+        let ballot_n1a = check_ballots(&logger, &governance, proposal, &n1a).await;
         assert_eq!(ballot_n1a, (701_988_012, Vote::Yes));
-        let ballot_n2 = check_ballots(&ctx.logger, &governance, proposal, &n2).await;
+        let ballot_n2 = check_ballots(&logger, &governance, proposal, &n2).await;
         assert_eq!(ballot_n2, (140_400_410, Vote::Yes));
-        let ballot_n3 = check_ballots(&ctx.logger, &governance, proposal, &n3).await;
+        let ballot_n3 = check_ballots(&logger, &governance, proposal, &n3).await;
         assert_eq!(ballot_n3, (14_040_040, Vote::Yes));
     });
 }

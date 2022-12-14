@@ -22,14 +22,13 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
-use crate::nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed};
-use crate::{
-    nns::vote_execute_proposal_assert_failed,
-    util::{self, block_on},
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
 };
+use crate::nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed};
+use crate::util::runtime_from_url;
+use crate::{nns::vote_execute_proposal_assert_failed, util::block_on};
 use ic_base_types::PrincipalId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::NnsFunction;
@@ -50,35 +49,28 @@ pub fn config(env: TestEnv) {
         .with_unassigned_nodes(1)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    env.topology_snapshot()
+        .unassigned_nodes()
+        .for_each(|node| node.await_can_login_as_admin_via_ssh().unwrap());
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
-
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     info!(logger, "Installing NNS canisters on the root subnet...");
-    env.topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap()
+    nns_node
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
     info!(&logger, "NNS canisters installed successfully.");
-
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-
-    // Assert that necessary endpoints are reachable.
-    let mut rng = ctx.rng.clone();
-    let nns_endpoint = util::get_random_nns_node_endpoint(&handle, &mut rng);
-    block_on(nns_endpoint.assert_ready(ctx));
-    let unassigned_node_endpoint = util::get_random_unassigned_node_endpoint(&handle, &mut rng);
-    block_on(unassigned_node_endpoint.assert_ready(ctx));
-
-    // Get the governance canister for sending proposals to.
-    let nns_runtime = util::runtime_from_url(
-        nns_endpoint.url.clone(),
-        nns_endpoint.effective_canister_id(),
-    );
+    // get IDs of all unassigned nodes
+    let unassigned_node_id = topology.unassigned_nodes().next().unwrap().node_id;
     let governance_canister = canister_test::Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
 
     block_on(async {
@@ -87,7 +79,7 @@ pub fn test(env: TestEnv) {
             &governance_canister,
             NnsFunction::RemoveNodes,
             RemoveNodesPayload {
-                node_ids: vec![nns_endpoint.node_id],
+                node_ids: vec![nns_node.node_id],
             },
         )
         .await;
@@ -102,7 +94,7 @@ pub fn test(env: TestEnv) {
             &governance_canister,
             NnsFunction::RemoveNodes,
             RemoveNodesPayload {
-                node_ids: vec![unassigned_node_endpoint.node_id],
+                node_ids: vec![unassigned_node_id],
             },
         )
         .await;
@@ -112,7 +104,7 @@ pub fn test(env: TestEnv) {
             &governance_canister,
             NnsFunction::RemoveNodes,
             RemoveNodesPayload {
-                node_ids: vec![unassigned_node_endpoint.node_id],
+                node_ids: vec![unassigned_node_id],
             },
         )
         .await;
@@ -121,7 +113,7 @@ pub fn test(env: TestEnv) {
             proposal_id,
             format!(
                 "Aborting node removal: Node Id {} not found in the registry",
-                unassigned_node_endpoint.node_id
+                unassigned_node_id
             ),
         )
         .await;

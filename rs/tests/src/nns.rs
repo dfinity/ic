@@ -51,6 +51,7 @@ use registry_canister::mutations::{
     do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
 };
 use slog::info;
+use slog::Logger;
 use std::convert::TryFrom;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -298,7 +299,7 @@ async fn update_subnet_replica_version(
 ///
 /// Eventually returns whether the proposal has been executed.
 pub async fn await_proposal_execution(
-    ctx: &ic_fondue::pot::Context,
+    log: &Logger,
     governance: &Canister<'_>,
     proposal_id: ProposalId,
     retry_delay: Duration,
@@ -309,7 +310,7 @@ pub async fn await_proposal_execution(
     loop {
         i += 1;
         info!(
-            ctx.logger,
+            log,
             "Attempt #{} of obtaining final execution status for {:?}", i, proposal_id
         );
 
@@ -320,21 +321,21 @@ pub async fn await_proposal_execution(
         match ProposalStatus::from_i32(proposal_info.status).unwrap() {
             ProposalStatus::Open => {
                 // This proposal is still open
-                info!(ctx.logger, "{:?} is open...", proposal_id,)
+                info!(log, "{:?} is open...", proposal_id,)
             }
             ProposalStatus::Adopted => {
                 // This proposal is adopted but not yet executed
-                info!(ctx.logger, "{:?} is adopted...", proposal_id,)
+                info!(log, "{:?} is adopted...", proposal_id,)
             }
             ProposalStatus::Executed => {
                 // This proposal is already executed
-                info!(ctx.logger, "{:?} has been executed.", proposal_id,);
+                info!(log, "{:?} has been executed.", proposal_id,);
                 return true;
             }
             other_status => {
                 // This proposal will not be executed
                 info!(
-                    ctx.logger,
+                    log,
                     "{:?} could not be adopted: {:?}", proposal_id, other_status
                 );
                 return false;

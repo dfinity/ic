@@ -18,10 +18,11 @@ end::catalog[] */
 
 use slog::info;
 
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
-use crate::util::{get_random_nns_node_endpoint, runtime_from_url};
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+};
+use crate::util::{block_on, runtime_from_url};
 
 use crate::driver::ic::InternetComputer;
 
@@ -42,33 +43,25 @@ pub fn config(env: TestEnv) {
         .add_fast_single_node_subnet(SubnetType::System)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
-
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     info!(logger, "Installing NNS canisters on the root subnet...");
-    env.topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap()
+    nns_node
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
     info!(&logger, "NNS canisters installed successfully.");
-
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-
-    let mut rng = ctx.rng.clone();
-    let endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    rt.block_on(async move {
-        endpoint.assert_ready(ctx).await;
-        let nns = runtime_from_url(endpoint.url.clone(), endpoint.effective_canister_id());
-
+    block_on(async move {
         let lifeline = Canister::new(&nns, LIFELINE_CANISTER_ID);
-
         let root_status: CanisterStatusResult = lifeline
             .update_(
                 "canister_status",
@@ -77,7 +70,7 @@ pub fn test(env: TestEnv) {
             )
             .await
             .unwrap();
-        info!(ctx.logger, "root_status {:?}", root_status);
+        info!(logger, "root_status {:?}", root_status);
 
         // due to NNS1-402 an empty list will do, it is ignored anyway
         let methods_authz: Vec<MethodAuthzInfo> = vec![];

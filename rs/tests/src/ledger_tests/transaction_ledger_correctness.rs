@@ -20,12 +20,12 @@ Not Covered:: Ledger archives, Timestamps, Mint & Burn, Subaccounts
 
 end::catalog[] */
 
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
-use crate::util::{
-    create_agent, get_random_nns_node_endpoint, get_random_non_root_node_endpoint, runtime_from_url,
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
 };
+use crate::util::{block_on, runtime_from_url};
+use rand_chacha::ChaCha8Rng;
 use slog::info;
 
 use crate::driver::ic::InternetComputer;
@@ -46,7 +46,10 @@ use icp_ledger::{
     Operation, Tokens, Transaction, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE,
 };
 use quickcheck::{Arbitrary, Gen};
-use rand::{Rng, SeedableRng};
+use rand::Rng;
+
+// Seed for a random generator
+const RND_SEED: u64 = 42;
 
 /* Runbook::
 . Setup NNS with a ledger canister tracking test neurons' account
@@ -65,55 +68,42 @@ pub fn config(env: TestEnv) {
         .add_fast_single_node_subnet(SubnetType::Application)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
-    info!(logger, "Installing NNS canisters...");
-    env.topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap()
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    info!(logger, "Installing NNS canisters ...");
+    nns_node
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
-
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-
-    // create a testing plan
-    let mut rng = ctx.rng.clone();
+    info!(logger, "NNS canisters installed successfully");
+    let app_node = topology
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap()
+        .nodes()
+        .next()
+        .unwrap();
+    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+    let app_runtime = runtime_from_url(app_node.get_public_url(), app_node.effective_canister_id());
+    let mut rng: ChaCha8Rng = rand::SeedableRng::seed_from_u64(RND_SEED);
     let plan = create_plan(&mut rng);
     info!(logger, "plan is {:?}", plan);
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    rt.block_on(async move {
-        let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-        nns_endpoint.assert_ready(ctx).await;
+    block_on(async move {
         // upgrade the minting canister
-        let nns = runtime_from_url(
-            nns_endpoint.url.clone(),
-            nns_endpoint.effective_canister_id(),
-        );
-        holder::upgrade(&nns, &LIFELINE_CANISTER_ID).await;
-
-        let root_endpoint = get_random_non_root_node_endpoint(&handle, &mut rng);
-        root_endpoint.assert_ready(ctx).await;
-        let rt = runtime_from_url(
-            root_endpoint.url.clone(),
-            root_endpoint.effective_canister_id(),
-        );
-        let agent = create_agent(root_endpoint.url.as_str())
-            .await
-            .expect("could not create agent?");
-
-        let re_seed: [u8; 32] = rng.gen();
-        let mut rng = rand_chacha::ChaCha8Rng::from_seed(re_seed);
-
+        holder::upgrade(&nns_runtime, &LIFELINE_CANISTER_ID).await;
         let plan = populate_plan(
-            &rt,
-            &agent,
-            root_endpoint.effective_canister_id(),
+            &app_runtime,
+            &app_agent,
+            app_node.effective_canister_id(),
             &plan,
             &mut rng,
         )
@@ -126,7 +116,7 @@ pub fn test(env: TestEnv) {
 
         // run the actions
         info!(logger, "running these actions now: {:?}", actions);
-        run_actions(&nns, &rt, &actions).await;
+        run_actions(&nns_runtime, &app_runtime, &actions).await;
     });
 }
 
