@@ -663,6 +663,15 @@ impl Neuron {
 
         Ok(RemovePermissionsStatus::SomePermissionTypesRemoved)
     }
+
+    /// Returns true if this neuron is vesting, false otherwise
+    pub fn is_vesting(&self, now: u64) -> bool {
+        self.vesting_period_seconds
+            .map(|vesting_period_seconds| {
+                self.created_timestamp_seconds + vesting_period_seconds >= now
+            })
+            .unwrap_or_default()
+    }
 }
 
 /// A neuron's ID that is defined as the neuron's subaccount on the ledger canister.
@@ -722,6 +731,22 @@ impl PartialOrd for NeuronId {
 mod tests {
     use super::*;
     use proptest::prelude::proptest;
+
+    #[test]
+    fn test_is_vesting() {
+        let mut neuron = Neuron {
+            created_timestamp_seconds: 3400,
+            ..Default::default()
+        };
+
+        assert!(!neuron.is_vesting(0));
+        assert!(!neuron.is_vesting(10000));
+        neuron.vesting_period_seconds = Some(600);
+        assert!(neuron.is_vesting(3600));
+        assert!(neuron.is_vesting(4000));
+        assert!(!neuron.is_vesting(4001));
+        assert!(!neuron.is_vesting(10000));
+    }
 
     #[test]
     fn test_voting_power_fully_boosted() {

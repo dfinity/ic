@@ -17,6 +17,7 @@ use ic_sns_governance::{
         neuron::{DissolveState, Followees},
         GetNeuron, Governance as GovernanceProto, GovernanceError, ManageNeuron,
         ManageNeuronResponse, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+        NeuronPermissionList,
     },
     types::{Environment, HeapGrowthPotential},
 };
@@ -86,21 +87,27 @@ impl ICRC1Ledger for LedgerFixture {
             .accounts
             .get(&to)
             .ok_or_else(|| NervousSystemError::new_with_message("Target account doesn't exist"))?;
-        let from_e8s = ledger_fixture_state
-            .accounts
-            .get_mut(&from_account)
-            .ok_or_else(|| NervousSystemError::new_with_message("Source account doesn't exist"))?;
 
-        let requested_e8s = amount_e8s + fee_e8s;
+        // If this is not a minting transfer, deduct the funds being transfered from the subaccount
+        if from_subaccount.is_some() {
+            let from_e8s = ledger_fixture_state
+                .accounts
+                .get_mut(&from_account)
+                .ok_or_else(|| {
+                    NervousSystemError::new_with_message("Source account doesn't exist")
+                })?;
 
-        if *from_e8s < requested_e8s {
-            return Err(NervousSystemError::new_with_message(format!(
-                "Insufficient funds. Available {} requested {}",
-                *from_e8s, requested_e8s
-            )));
+            let requested_e8s = amount_e8s + fee_e8s;
+
+            if *from_e8s < requested_e8s {
+                return Err(NervousSystemError::new_with_message(format!(
+                    "Insufficient funds. Available {} requested {}",
+                    *from_e8s, requested_e8s
+                )));
+            }
+
+            *from_e8s -= requested_e8s;
         }
-
-        *from_e8s -= requested_e8s;
 
         *ledger_fixture_state.accounts.entry(to).or_default() += amount_e8s;
 
@@ -202,6 +209,7 @@ pub struct NeuronBuilder {
     dissolve_state: Option<DissolveState>,
     followees: BTreeMap<u64, Followees>,
     voting_power_percentage_multiplier: u64,
+    vesting_period_seconds: Option<u64>,
 }
 
 impl From<Neuron> for NeuronBuilder {
@@ -221,6 +229,7 @@ impl From<Neuron> for NeuronBuilder {
             dissolve_state: neuron.dissolve_state,
             followees: neuron.followees,
             voting_power_percentage_multiplier: neuron.voting_power_percentage_multiplier,
+            vesting_period_seconds: neuron.vesting_period_seconds,
         }
     }
 }
@@ -238,6 +247,7 @@ impl NeuronBuilder {
             dissolve_state: None,
             followees: BTreeMap::new(),
             voting_power_percentage_multiplier: 100,
+            vesting_period_seconds: None,
         }
     }
 
@@ -253,6 +263,7 @@ impl NeuronBuilder {
             dissolve_state: None,
             followees: BTreeMap::new(),
             voting_power_percentage_multiplier: 100,
+            vesting_period_seconds: None,
         }
     }
 
@@ -283,9 +294,8 @@ impl NeuronBuilder {
             dissolve_state: self.dissolve_state,
             followees: self.followees,
             voting_power_percentage_multiplier: self.voting_power_percentage_multiplier,
-            source_nns_neuron_id: None,
-            staked_maturity_e8s_equivalent: None,
-            auto_stake_maturity: None,
+            vesting_period_seconds: self.vesting_period_seconds,
+            ..Default::default()
         }
     }
 
@@ -349,6 +359,11 @@ impl NeuronBuilder {
 
     pub fn add_followees(mut self, function_id: u64, followees: Followees) -> Self {
         self.followees.insert(function_id, followees);
+        self
+    }
+
+    pub fn set_vesting_period(mut self, seconds: u64) -> Self {
+        self.vesting_period_seconds = Some(seconds);
         self
     }
 }
@@ -589,6 +604,23 @@ impl GovernanceCanisterFixture {
     pub fn get_nervous_system_parameters(&self) -> &NervousSystemParameters {
         self.governance.proto.parameters.as_ref().unwrap()
     }
+
+    pub fn configure_neuron(
+        &mut self,
+        target_neuron: &NeuronId,
+        operation: manage_neuron::configure::Operation,
+        caller: &PrincipalId,
+    ) -> Result<manage_neuron_response::ConfigureResponse, GovernanceError> {
+        let command = manage_neuron::Command::Configure(manage_neuron::Configure {
+            operation: Some(operation),
+        });
+        let response = self.manage_neuron(target_neuron, command, caller);
+        match response.command.unwrap() {
+            manage_neuron_response::Command::Configure(response) => Ok(response),
+            manage_neuron_response::Command::Error(e) => Err(e),
+            _ => panic!("Unexpected command response when configuring the neuron"),
+        }
+    }
 }
 
 pub type LedgerTransform = Box<dyn FnOnce(Box<dyn ICRC1Ledger>) -> Box<dyn ICRC1Ledger>>;
@@ -801,6 +833,19 @@ impl GovernanceCanisterFixtureBuilder {
             TargetLedger::Icp => &mut self.icp_ledger_builder,
             TargetLedger::Sns => &mut self.sns_ledger_builder,
         }
+    }
+
+    pub fn with_neuron_grantable_permissions(
+        mut self,
+        neuron_permission_list: NeuronPermissionList,
+    ) -> Self {
+        let mut parameters = self
+            .governance
+            .parameters
+            .unwrap_or_else(|| NervousSystemParameters::with_default_values());
+        parameters.neuron_grantable_permissions = Some(neuron_permission_list);
+        self.governance.parameters = Some(parameters);
+        self
     }
 }
 

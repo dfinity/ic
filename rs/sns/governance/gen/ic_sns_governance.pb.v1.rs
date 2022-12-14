@@ -111,6 +111,16 @@ pub struct Neuron {
     /// automatically staked and will contribute to the neuron's voting power.
     #[prost(bool, optional, tag = "16")]
     pub auto_stake_maturity: ::core::option::Option<bool>,
+    /// The duration that this neuron is vesting.
+    ///
+    /// A neuron that is vesting is non-dissolving and cannot start dissolving until the vesting duration has elapsed.
+    /// Vesting can be used to lock a neuron more than the max allowed dissolve delay. This allows devs and members of
+    /// a particular SNS instance to prove their long-term commitment to the community. For example, the max dissolve delay
+    /// for a particular SNS instance might be 1 year, but the devs of the project may set their vesting duration to 3
+    /// years and dissolve delay to 1 year in order to prove that they are making a minimum 4 year commitment to the
+    /// project.
+    #[prost(uint64, optional, tag = "17")]
+    pub vesting_period_seconds: ::core::option::Option<u64>,
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
     ///

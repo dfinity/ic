@@ -40,6 +40,7 @@ type NeuronDistribution = record {
   dissolve_delay_seconds : nat64;
   memo : nat64;
   stake_e8s : nat64;
+  vesting_period_seconds : opt nat64;
 };
 type Result = variant { Error : SnsWasmError; Hash : vec nat8 };
 type SnsCanisterIds = record {
