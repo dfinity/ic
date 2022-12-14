@@ -736,8 +736,6 @@ impl CyclesAccountManager {
     }
 
     /// Adds `cycles` worth of cycles to the canister's balance.
-    /// The cycles balance added in a single go is limited to u64::max_value()
-    /// Returns the amount of cycles that does not fit in the balance.
     pub fn add_cycles(&self, cycles_balance: &mut Cycles, cycles_to_add: Cycles) {
         *cycles_balance += cycles_to_add;
     }
