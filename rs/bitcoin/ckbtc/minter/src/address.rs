@@ -14,14 +14,17 @@ const BTC_MAINNET_P2SH_PREFIX: u8 = 5;
 const BTC_TESTNET_PREFIX: u8 = 111;
 const BTC_TESTNET_P2SH_PREFIX: u8 = 196;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BitcoinAddress {
     /// Pay to witness public key hash address.
     /// See BIP-173.
+    #[serde(rename = "p2wpkh_v0")]
     P2wpkhV0([u8; 20]),
     /// Pay to public key hash address.
+    #[serde(rename = "p2pkh")]
     P2pkh([u8; 20]),
     /// Pay to script hash address.
+    #[serde(rename = "p2sh")]
     P2sh([u8; 20]),
 }
 

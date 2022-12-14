@@ -7,7 +7,13 @@ use ic_btc_types::Utxo;
 use ic_icrc1::Account;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(candid::CandidType, Deserialize)]
+pub struct GetEventsArg {
+    pub start: u64,
+    pub length: u64,
+}
+
+#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Event {
     /// Indicates the minter initialization with the specified arguments.  Must be
     /// the first event in the event log.
@@ -51,7 +57,8 @@ pub enum Event {
         /// UTXOs used for the transaction.
         #[serde(rename = "utxos")]
         utxos: Vec<Utxo>,
-        #[serde(rename = "change")]
+        /// The output with the minter's change, if any.
+        #[serde(rename = "change_output")]
         #[serde(skip_serializing_if = "Option::is_none")]
         change_output: Option<ChangeOutput>,
         /// The IC time at which the minter submitted the transaction.

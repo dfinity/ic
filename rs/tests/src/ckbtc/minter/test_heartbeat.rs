@@ -21,7 +21,8 @@ use bitcoincore_rpc::{
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
-use ic_ckbtc_minter::state::RetrieveBtcStatus;
+use ic_ckbtc_minter::eventlog::Event;
+use ic_ckbtc_minter::state::{RetrieveBtcRequest, RetrieveBtcStatus};
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
 use ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcArgs;
 use ic_icrc1::endpoints::TransferArg;
@@ -203,5 +204,39 @@ pub fn test_heartbeat(env: TestEnv) {
         )
         .await;
         assert_eq!(txid, finalized_txid);
+
+        // Check minter's event log
+        let events = minter_agent
+            .get_events(0, 1000)
+            .await
+            .expect("failed to fetch minter's event log");
+
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                Event::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
+                    block_index,
+                    ..
+                }) if *block_index == retrieve_response.block_index
+            )),
+            "missing the retrieve request in the event log: {:?}",
+            events
+        );
+
+        assert!(
+            events.iter().any(
+                |e| matches!(e, Event::SentBtcTransaction { txid, .. } if txid == &finalized_txid)
+            ),
+            "missing the tx submission in the event log: {:?}",
+            events
+        );
+
+        assert!(
+            events.iter().any(
+                |e| matches!(e, Event::ConfirmedBtcTransaction { txid } if txid == &finalized_txid)
+            ),
+            "missing the tx confirmation in the event log: {:?}",
+            events
+        );
     })
 }

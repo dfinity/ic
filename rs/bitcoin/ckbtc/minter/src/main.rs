@@ -12,7 +12,10 @@ use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult},
 };
-use ic_ckbtc_minter::{eventlog::Event, storage};
+use ic_ckbtc_minter::{
+    eventlog::{Event, GetEventsArg},
+    storage,
+};
 use ic_icrc1::Account;
 
 #[init]
@@ -132,6 +135,17 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     } else {
         HttpResponseBuilder::not_found().build()
     }
+}
+
+#[candid_method(query)]
+#[query]
+fn get_events(args: GetEventsArg) -> Vec<Event> {
+    const MAX_EVENTS_PER_QUERY: usize = 2000;
+
+    storage::events()
+        .skip(args.start as usize)
+        .take(MAX_EVENTS_PER_QUERY.min(args.length as usize))
+        .collect()
 }
 
 #[cfg(feature = "self_check")]
