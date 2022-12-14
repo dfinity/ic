@@ -427,6 +427,9 @@ impl CyclesAccountManagerConfig {
             /// different subnet which is not a system subnet. There is an
             /// explicit exception for requests originating from the NNS when the
             /// charging occurs.
+            /// Costs:
+            /// - zero cost if called from NNS subnet
+            /// - non-zero cost if called from any other subnet which is not NNS subnet
             ecdsa_signature_fee: ECDSA_SIGNATURE_FEE,
             http_request_baseline_fee: Cycles::new(0),
             http_request_per_byte_fee: Cycles::new(0),

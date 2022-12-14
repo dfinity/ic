@@ -313,6 +313,8 @@ pub struct StateMachineBuilder {
     checkpoints_enabled: bool,
     subnet_type: SubnetType,
     subnet_size: usize,
+    nns_subnet_id: SubnetId,
+    subnet_id: SubnetId,
     use_cost_scaling_flag: bool,
     ecdsa_keys: Vec<EcdsaKeyId>,
     features: SubnetFeatures,
@@ -320,6 +322,7 @@ pub struct StateMachineBuilder {
 
 impl StateMachineBuilder {
     pub fn new() -> Self {
+        let own_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
         Self {
             state_dir: TempDir::new().expect("failed to create a temporary directory"),
             nonce: 0,
@@ -329,6 +332,8 @@ impl StateMachineBuilder {
             subnet_type: SubnetType::System,
             use_cost_scaling_flag: false,
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
+            nns_subnet_id: own_subnet_id,
+            subnet_id: own_subnet_id,
             ecdsa_keys: Vec::new(),
             features: SubnetFeatures::default(),
         }
@@ -371,6 +376,17 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_nns_subnet_id(self, nns_subnet_id: SubnetId) -> Self {
+        Self {
+            nns_subnet_id,
+            ..self
+        }
+    }
+
+    pub fn with_subnet_id(self, subnet_id: SubnetId) -> Self {
+        Self { subnet_id, ..self }
+    }
+
     pub fn with_use_cost_scaling_flag(self, use_cost_scaling_flag: bool) -> Self {
         Self {
             use_cost_scaling_flag,
@@ -397,6 +413,8 @@ impl StateMachineBuilder {
             self.checkpoints_enabled,
             self.subnet_type,
             self.subnet_size,
+            self.nns_subnet_id,
+            self.subnet_id,
             self.use_cost_scaling_flag,
             self.ecdsa_keys,
             self.features,
@@ -434,6 +452,8 @@ impl StateMachine {
         checkpoints_enabled: bool,
         subnet_type: SubnetType,
         subnet_size: usize,
+        nns_subnet_id: SubnetId,
+        subnet_id: SubnetId,
         use_cost_scaling_flag: bool,
         ecdsa_keys: Vec<EcdsaKeyId>,
         features: SubnetFeatures,
@@ -455,8 +475,6 @@ impl StateMachine {
             ),
         };
 
-        let nns_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
-        let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
         let (registry_data_provider, registry_client) = make_nodes_registry(
             nns_subnet_id,
             subnet_id,
