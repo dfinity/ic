@@ -19,14 +19,13 @@ end::catalog[] */
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     retry, retry_async, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
     NnsInstallationExt, SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
 use crate::driver::universal_vm::UniversalVms;
-use crate::util::{self, *};
+use crate::util::{block_on, UniversalCanister};
 use crate::{
     driver::ic::{InternetComputer, Subnet},
     driver::universal_vm::UniversalVm,
@@ -50,7 +49,7 @@ const UNIVERSAL_VM_NAME: &str = "btc-node";
 
 pub fn config(env: TestEnv) {
     env.ensure_group_setup_created();
-
+    let logger = env.logger();
     // Regtest bitcoin node listens on 18444
     // docker bitcoind image uses 8332 for the rpc server
     // https://en.bitcoinwiki.org/wiki/Running_Bitcoind
@@ -109,6 +108,13 @@ docker run  --name=bitcoind-node -d \
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    info!(logger, "Checking readiness of all nodes ...");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
+    info!(logger, "All nodes are ready");
 }
 
 fn get_bitcoind_log(env: &TestEnv) {
@@ -138,12 +144,6 @@ fn get_bitcoind_log(env: &TestEnv) {
 
 pub fn get_balance(env: TestEnv) {
     let logger = env.logger();
-    info!(&logger, "Checking readiness of all nodes...");
-    for subnet in env.topology_snapshot().subnets() {
-        for node in subnet.nodes() {
-            node.await_status_is_healthy().unwrap();
-        }
-    }
 
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
 
@@ -163,10 +163,9 @@ pub fn get_balance(env: TestEnv) {
 
     // Create a wallet.
     // Retry since the bitcoind VM might not be up yet.
-    let logger_c = logger.clone();
     let btc_rpc_c = btc_rpc.clone();
     retry(
-        logger_c,
+        logger.clone(),
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
         move || match btc_rpc_c.create_wallet("mywallet", None, None, None, None) {
@@ -190,34 +189,25 @@ pub fn get_balance(env: TestEnv) {
     // so in total the balance of the address without setting `any min_confirmations`
     // should be 50 * 101 = 5050 bitcoin or 505000000000 satoshis.
     let expected_balance_in_satoshis = 5050_0000_0000_u64;
-
-    // Install NNS canisters
-    info!(logger, "Installing NNS canisters...");
-    env.topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap()
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    info!(logger, "Installing NNS canisters ...");
+    nns_node
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    // TODO: adapt the test below to use the env directly
-    // instead of using the deprecated IcHandle and Context.
-    let (handle, ctx) = get_ic_handle_and_ctx(env.clone());
-    let mut rng = ctx.rng.clone();
-
-    let app_endpoint = util::get_random_application_node_endpoint(&handle, &mut rng);
-    rt.block_on(app_endpoint.assert_ready(&ctx));
-
-    info!(&logger, "App endpoint reachable over http.");
-
-    let res = rt.block_on(async {
-        let agent = assert_create_agent(app_endpoint.url.as_str()).await;
+    info!(logger, "NNS canisters installed successfully");
+    let app_node = topology
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap()
+        .nodes()
+        .next()
+        .unwrap();
+    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+    let res = block_on(async {
         let canister = UniversalCanister::new_with_retries(
-            &agent,
-            app_endpoint.effective_canister_id(),
+            &app_agent,
+            app_node.effective_canister_id(),
             &logger,
         )
         .await;

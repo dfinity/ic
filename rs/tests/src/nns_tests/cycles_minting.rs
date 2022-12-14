@@ -1,16 +1,14 @@
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
-use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
+use crate::driver::test_env::{HasIcPrepDir, TestEnv};
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+};
 use crate::nns::{
     change_subnet_type_assignment, change_subnet_type_assignment_with_failure,
     get_governance_canister, set_authorized_subnetwork_list,
     set_authorized_subnetwork_list_with_failure, submit_external_proposal_with_test_id,
     update_subnet_type, update_xdr_per_icp,
 };
-use crate::util::{
-    assert_all_ready, get_random_application_node_endpoint, get_random_nns_node_endpoint,
-    get_random_node_endpoint_of_subnet, runtime_from_url,
-};
+use crate::util::{block_on, runtime_from_url};
 
 use crate::driver::ic::InternetComputer;
 use canister_test::{Canister, Project, Wasm};
@@ -66,6 +64,11 @@ pub fn config(env: TestEnv) {
         .add_fast_single_node_subnet(SubnetType::Application)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 pub fn config_with_multiple_app_subnets(env: TestEnv) {
@@ -76,6 +79,11 @@ pub fn config_with_multiple_app_subnets(env: TestEnv) {
         .add_fast_single_node_subnet(SubnetType::Application)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 // TODO(EXC-1168): cleanup after cost scaling is fully implemented.
@@ -91,43 +99,31 @@ fn scale_cycles(cycles: Cycles) -> Cycles {
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
-
-    info!(logger, "Installing NNS canisters on the root subnet...");
-    env.topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap()
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    nns_node
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
-    info!(&logger, "NNS canisters installed successfully.");
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-
-    rt.block_on(async move {
-        let mut rng = ctx.rng.clone();
-
-        let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-        nns_endpoint.assert_ready(ctx).await;
-
-        let nns = runtime_from_url(
-            nns_endpoint.url.clone(),
-            nns_endpoint.effective_canister_id(),
-        );
-
+    let app_node = topology
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap()
+        .nodes()
+        .next()
+        .unwrap();
+    block_on(async move {
         let agent_client = HttpClient::new();
-        let tst = TestAgent::new(&nns_endpoint.url, &agent_client);
+        let tst = TestAgent::new(&nns_node.get_public_url(), &agent_client);
         let user1 = UserHandle::new(
-            &nns_endpoint.url,
+            &nns_node.get_public_url(),
             &agent_client,
             &TEST_USER1_KEYPAIR,
             LEDGER_CANISTER_ID,
             CYCLES_MINTING_CANISTER_ID,
         );
         let user2 = UserHandle::new(
-            &nns_endpoint.url,
+            &nns_node.get_public_url(),
             &agent_client,
             &TEST_USER2_KEYPAIR,
             LEDGER_CANISTER_ID,
@@ -195,9 +191,8 @@ pub fn test(env: TestEnv) {
             xdr_permyriad_per_icp
         );
 
-        let pk_bytes = handle
-            .ic_prep_working_dir
-            .as_ref()
+        let pk_bytes = env
+            .prep_dir("")
             .unwrap()
             .root_public_key()
             .expect("failed to read threshold sig PK bytes");
@@ -287,17 +282,10 @@ pub fn test(env: TestEnv) {
 
         /* Register a subnet. */
         info!(logger, "registering subnets");
-        let app_subnets: Vec<_> = handle
-            .as_permutation(&mut rng)
-            .filter(|ep| ep.subnet.as_ref().map(|s| s.type_of) == Some(SubnetType::Application))
+        let app_subnet_ids: Vec<_> = topology
+            .subnets()
+            .filter_map(|s| (s.subnet_type() == SubnetType::Application).then_some(s.subnet_id))
             .collect();
-        assert_all_ready(app_subnets.as_slice(), ctx).await;
-
-        let app_subnet_ids: Vec<_> = app_subnets
-            .into_iter()
-            .map(|e| e.subnet.as_ref().expect("unassigned node not permitted").id)
-            .collect();
-
         set_authorized_subnetwork_list(&nns, None, app_subnet_ids.clone())
             .await
             .unwrap();
@@ -506,22 +494,17 @@ pub fn test(env: TestEnv) {
 
         let nonce_size = 8; // see RemoteTestRuntime::get_nonce_vec
 
-        let application_endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-        application_endpoint.assert_ready(ctx).await;
-
-        let new_canister_status: CanisterStatusResult = runtime_from_url(
-            application_endpoint.url.clone(),
-            application_endpoint.effective_canister_id(),
-        )
-        .get_management_canister_with_effective_canister_id(new_canister_id.into())
-        .update_from_sender(
-            "canister_status",
-            candid_one,
-            CanisterIdRecord::from(new_canister_id),
-            &Sender::from_keypair(&controller_user_keypair),
-        )
-        .await
-        .unwrap();
+        let new_canister_status: CanisterStatusResult =
+            runtime_from_url(app_node.get_public_url(), app_node.effective_canister_id())
+                .get_management_canister_with_effective_canister_id(new_canister_id.into())
+                .update_from_sender(
+                    "canister_status",
+                    candid_one,
+                    CanisterIdRecord::from(new_canister_id),
+                    &Sender::from_keypair(&controller_user_keypair),
+                )
+                .await
+                .unwrap();
 
         assert_eq!(new_canister_status.controller(), controller_pid);
         let config = CyclesAccountManagerConfig::application_subnet();
@@ -583,22 +566,17 @@ pub fn test(env: TestEnv) {
 
             let nonce_size = 8; // see RemoteTestRuntime::get_nonce_vec
 
-            let application_endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-            application_endpoint.assert_ready(ctx).await;
-
-            let new_canister_status: CanisterStatusResult = runtime_from_url(
-                application_endpoint.url.clone(),
-                application_endpoint.effective_canister_id(),
-            )
-            .get_management_canister_with_effective_canister_id(new_canister_id.into())
-            .update_from_sender(
-                "canister_status",
-                candid_one,
-                CanisterIdRecord::from(new_canister_id),
-                &Sender::from_keypair(&controller_user_keypair),
-            )
-            .await
-            .unwrap();
+            let new_canister_status: CanisterStatusResult =
+                runtime_from_url(app_node.get_public_url(), app_node.effective_canister_id())
+                    .get_management_canister_with_effective_canister_id(new_canister_id.into())
+                    .update_from_sender(
+                        "canister_status",
+                        candid_one,
+                        CanisterIdRecord::from(new_canister_id),
+                        &Sender::from_keypair(&controller_user_keypair),
+                    )
+                    .await
+                    .unwrap();
 
             assert_eq!(new_canister_status.controller(), controller_pid);
             let config = CyclesAccountManagerConfig::application_subnet();
@@ -627,17 +605,10 @@ pub fn test(env: TestEnv) {
 
         /* Override the list of subnets for a specific controller. */
         info!(logger, "registering subnets override");
-        let system_subnets: Vec<_> = handle
-            .as_permutation(&mut rng)
-            .filter(|ep| ep.subnet.as_ref().map(|s| s.type_of) == Some(SubnetType::System))
+        let system_subnet_ids: Vec<_> = topology
+            .subnets()
+            .filter_map(|s| (s.subnet_type() == SubnetType::System).then_some(s.subnet_id))
             .collect();
-        assert_all_ready(system_subnets.as_slice(), ctx).await;
-
-        let system_subnet_ids = system_subnets
-            .iter()
-            .map(|x| x.subnet.clone().expect("unassigned node not permitted").id)
-            .collect();
-
         set_authorized_subnetwork_list(&nns, Some(controller_pid), system_subnet_ids)
             .await
             .unwrap();
@@ -829,33 +800,17 @@ pub fn test(env: TestEnv) {
 
 pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
     let logger = env.logger();
-
-    info!(logger, "Installing NNS canisters on the root subnet...");
-    env.topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap()
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    nns_node
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
-    info!(&logger, "NNS canisters installed successfully.");
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-
-    rt.block_on(async move {
-        let mut rng = ctx.rng.clone();
-
-        let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-        nns_endpoint.assert_ready(ctx).await;
-
-        let nns = runtime_from_url(nns_endpoint.url.clone(), nns_endpoint.effective_canister_id());
-
+    block_on(async move {
         let agent_client = HttpClient::new();
-        let tst = TestAgent::new(&nns_endpoint.url, &agent_client);
+        let tst = TestAgent::new(&nns_node.get_public_url(), &agent_client);
         let user1 = UserHandle::new(
-            &nns_endpoint.url,
+            &nns_node.get_public_url(),
             &agent_client,
             &TEST_USER1_KEYPAIR,
             LEDGER_CANISTER_ID,
@@ -899,19 +854,11 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
 
         // Register an authorized subnet and additionally assign a subnet to a type.
         info!(logger, "registering subnets");
-        let app_subnets: Vec<_> = handle
-            .as_permutation(&mut rng)
-            .filter(|ep| ep.subnet.as_ref().map(|s| s.type_of) == Some(SubnetType::Application))
+        let app_subnet_ids: Vec<_> = topology
+            .subnets()
+            .filter_map(|s| (s.subnet_type() == SubnetType::Application).then_some(s.subnet_id))
             .collect();
-        assert_all_ready(app_subnets.as_slice(), ctx).await;
-
-        let app_subnet_ids: Vec<_> = app_subnets
-            .into_iter()
-            .map(|e| e.subnet.as_ref().expect("unassigned node not permitted").id)
-            .collect();
-
         let type1 = "Type1".to_string();
-
         let authorized_subnet = app_subnet_ids[0];
         let subnet_of_type1 = app_subnet_ids[1];
 
@@ -964,32 +911,42 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
             .await
             .unwrap();
 
-        let node_on_authorized_subnet =
-            get_random_node_endpoint_of_subnet(&handle, authorized_subnet, &mut rng);
-        let node_on_type1_subnet =
-            get_random_node_endpoint_of_subnet(&handle, subnet_of_type1, &mut rng);
-
-        let _status: CanisterStatusResult = runtime_from_url(node_on_authorized_subnet.url.clone(), node_on_authorized_subnet.effective_canister_id())
-            .get_management_canister_with_effective_canister_id(canister_on_authorized_subnet.into())
-            .update_from_sender(
-                "canister_status",
-                candid_one,
-                CanisterIdRecord::from(canister_on_authorized_subnet),
-                &Sender::from_keypair(&controller_user_keypair),
-            )
-            .await
+        let node_on_authorized_subnet = topology
+            .subnets()
+            .find_map(|s| (s.subnet_id == authorized_subnet).then_some(s.nodes().next().unwrap()))
+            .unwrap();
+        let node_on_type1_subnet = topology
+            .subnets()
+            .find_map(|s| (s.subnet_id == subnet_of_type1).then_some(s.nodes().next().unwrap()))
             .unwrap();
 
-        let _status: CanisterStatusResult = runtime_from_url(node_on_type1_subnet.url.clone(), node_on_type1_subnet.effective_canister_id())
-            .get_management_canister_with_effective_canister_id(canister_on_type1_subnet.into())
-            .update_from_sender(
-                "canister_status",
-                candid_one,
-                CanisterIdRecord::from(canister_on_type1_subnet),
-                &Sender::from_keypair(&controller_user_keypair),
-            )
-            .await
-            .unwrap();
+        let _status: CanisterStatusResult = runtime_from_url(
+            node_on_authorized_subnet.get_public_url(),
+            node_on_authorized_subnet.effective_canister_id(),
+        )
+        .get_management_canister_with_effective_canister_id(canister_on_authorized_subnet.into())
+        .update_from_sender(
+            "canister_status",
+            candid_one,
+            CanisterIdRecord::from(canister_on_authorized_subnet),
+            &Sender::from_keypair(&controller_user_keypair),
+        )
+        .await
+        .unwrap();
+
+        let _status: CanisterStatusResult = runtime_from_url(
+            node_on_type1_subnet.get_public_url(),
+            node_on_type1_subnet.effective_canister_id(),
+        )
+        .get_management_canister_with_effective_canister_id(canister_on_type1_subnet.into())
+        .update_from_sender(
+            "canister_status",
+            candid_one,
+            CanisterIdRecord::from(canister_on_type1_subnet),
+            &Sender::from_keypair(&controller_user_keypair),
+        )
+        .await
+        .unwrap();
     });
 }
 

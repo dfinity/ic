@@ -1,8 +1,7 @@
 use std::convert::TryFrom;
 
 use candid::{Encode, Nat, Principal};
-use canister_test::{Canister, PrincipalId, RemoteTestRuntime, Runtime};
-use ic_canister_client::{Agent, Sender};
+use canister_test::{Canister, PrincipalId};
 use ic_icrc1::Account;
 use ic_icrc1_agent::{CallMode, Icrc1Agent, TransferArg, Value};
 use ic_icrc1_ledger::InitArgs;
@@ -13,12 +12,13 @@ use icp_ledger::ArchiveOptions;
 use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
-        pot_dsl::{get_ic_handle_and_ctx, par, pot_with_setup, sys_t, Pot},
+        pot_dsl::{par, pot_with_setup, sys_t, Pot},
         test_env::TestEnv,
-        test_env_api::{HasDependencies, HasGroupSetup},
+        test_env_api::{
+            HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+        },
     },
-    nns::first_root_endpoint,
-    util::assert_create_agent,
+    util::{assert_create_agent, block_on, runtime_from_url},
 };
 
 pub fn icrc1_agent_test_pot() -> Pot {
@@ -35,27 +35,25 @@ pub fn config(env: TestEnv) {
         .add_subnet(Subnet::fast_single_node(SubnetType::Application))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 pub fn test(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    rt.block_on(async move {
-        let endpoint = first_root_endpoint(&handle);
-        endpoint.assert_ready(ctx).await;
-        let runtime = Runtime::Remote(RemoteTestRuntime {
-            agent: Agent::new(
-                endpoint.url.clone(),
-                Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
-            ),
-            effective_canister_id: endpoint.effective_canister_id(),
-        });
-
-        let agent = assert_create_agent(endpoint.url.as_str()).await;
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap();
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let nns_agent = nns_node.with_default_agent(|agent| async move { agent });
+    block_on(async move {
         let minting_user = PrincipalId::new_user_test_id(100);
-        let user1 = PrincipalId::try_from(agent.get_principal().unwrap().as_ref()).unwrap();
+        let user1 = PrincipalId::try_from(nns_agent.get_principal().unwrap().as_ref()).unwrap();
         let user2 = PrincipalId::new_user_test_id(102);
         let account1 = Account {
             owner: user1,
@@ -69,7 +67,7 @@ pub fn test(env: TestEnv) {
             owner: minting_user,
             subaccount: None,
         };
-        let mut ledger = runtime
+        let mut ledger = nns_runtime
             .create_canister_max_cycles_with_retries()
             .await
             .expect("Unable to create canister");
@@ -97,7 +95,7 @@ pub fn test(env: TestEnv) {
         // test
 
         let agent = Icrc1Agent {
-            agent: assert_create_agent(endpoint.url.as_str()).await,
+            agent: assert_create_agent(nns_node.get_public_url().as_str()).await,
             ledger_canister_id: Principal::try_from_slice(ledger.canister_id().as_ref()).unwrap(),
         };
 

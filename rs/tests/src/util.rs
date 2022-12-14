@@ -1227,12 +1227,6 @@ pub(crate) fn to_principal_id(principal: &Principal) -> PrincipalId {
     PrincipalId::try_from(principal.as_slice()).unwrap()
 }
 
-pub(crate) async fn assert_all_ready(endpoints: &[&IcEndpoint], ctx: &ic_fondue::pot::Context) {
-    for &e in endpoints {
-        e.assert_ready(ctx).await;
-    }
-}
-
 pub async fn agent_observes_canister_module(agent: &Agent, canister_id: &Principal) -> bool {
     let status = ManagementCanister::create(agent)
         .canister_status(canister_id)

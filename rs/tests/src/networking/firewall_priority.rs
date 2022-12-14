@@ -26,18 +26,17 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, SshSession, ADMIN,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationExt,
+    SshSession, ADMIN,
 };
 use crate::nns::{
     await_proposal_execution, submit_external_proposal_with_test_id,
     vote_execute_proposal_assert_executed,
 };
-use crate::util::{self, block_on, get_random_nns_node_endpoint};
+use crate::util::{self, block_on};
 use candid::CandidType;
-use ic_fondue::ic_manager::IcEndpoint;
 use ic_nns_governance::pb::v1::NnsFunction;
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
@@ -46,7 +45,7 @@ use registry_canister::mutations::firewall::{
     compute_firewall_ruleset_hash, AddFirewallRulesPayload, RemoveFirewallRulesPayload,
     UpdateFirewallRulesPayload,
 };
-use slog::info;
+use slog::{info, Logger};
 use ssh2::Session;
 use std::io::{self, Read, Write};
 use std::time::Duration;
@@ -69,47 +68,48 @@ pub fn config(env: TestEnv) {
         .add_subnet(Subnet::fast(SubnetType::Application, 2))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 pub fn override_firewall_rules_with_priority(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-
     let log = env.logger();
-    let mut rng = ctx.rng.clone();
-
-    info!(log, "Installing NNS canisters on the root subnet...");
-    env.topology_snapshot()
+    let topology = env.topology_snapshot();
+    let nns_node = env
+        .topology_snapshot()
         .root_subnet()
         .nodes()
         .next()
+        .unwrap();
+    let toggle_endpoint = topology
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap()
+        .nodes()
+        .next()
+        .unwrap();
+    info!(log, "Installing NNS canisters on the root subnet...");
+    nns_node
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
     info!(&log, "NNS canisters installed successfully.");
 
-    let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-    let app_endpoints: Vec<_> = handle
-        .as_permutation(&mut rng)
-        .filter(|e| e.subnet.as_ref().map(|s| s.type_of) == Some(SubnetType::Application))
-        .collect();
-
-    let toggle_endpoint = app_endpoints[0];
-    let mut toggle_metrics_url = toggle_endpoint.url.clone();
+    let mut toggle_metrics_url = toggle_endpoint.get_public_url();
     toggle_metrics_url.set_port(Some(9090)).unwrap();
-    let mut toggle_9091_url = toggle_endpoint.url.clone();
+    let mut toggle_9091_url = toggle_endpoint.get_public_url();
     toggle_9091_url.set_port(Some(9091)).unwrap();
-    let mut toggle_xnet_url = toggle_endpoint.url.clone();
+    let mut toggle_xnet_url = toggle_endpoint.get_public_url();
     toggle_xnet_url.set_port(Some(2497)).unwrap();
 
     info!(log, "Firewall priority test is starting");
 
-    // await for app node to be ready
-    block_on(toggle_endpoint.assert_ready(ctx));
-
     // assert before a new rule is added, port 9090 is available
     assert!(get_request_succeeds(&toggle_metrics_url));
     // assert port 8080 is available
-    assert!(get_request_succeeds(&toggle_endpoint.url));
+    assert!(get_request_succeeds(&toggle_endpoint.get_public_url()));
 
     info!(
         log,
@@ -117,7 +117,7 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
     );
 
     // Set the default rules in the registry for the first time
-    block_on(set_default_registry_rules(ctx, nns_endpoint));
+    block_on(set_default_registry_rules(&log, &nns_node));
 
     info!(
         log,
@@ -128,7 +128,8 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
         &log,
         &|| {
             // assert that ports 9090 and 8080 are still available
-            get_request_succeeds(&toggle_metrics_url) && get_request_succeeds(&toggle_endpoint.url)
+            get_request_succeeds(&toggle_metrics_url)
+                && get_request_succeeds(&toggle_endpoint.get_public_url())
         },
         INITIAL_WAIT,
         BACKOFF_DELAY,
@@ -160,8 +161,8 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
         vec![],
     );
     block_on(execute_proposal(
-        ctx,
-        nns_endpoint,
+        &log,
+        &nns_node,
         Proposal::Add(proposal, NnsFunction::AddFirewallRules),
     ));
 
@@ -170,7 +171,8 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
         &log,
         &|| {
             // assert port 9090 is now turned off
-            !get_request_succeeds(&toggle_metrics_url) && get_request_succeeds(&toggle_endpoint.url)
+            !get_request_succeeds(&toggle_metrics_url)
+                && get_request_succeeds(&toggle_endpoint.get_public_url())
         },
         INITIAL_WAIT,
         BACKOFF_DELAY,
@@ -194,8 +196,8 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
     );
     node_rules = vec![new_rule, node_rules[0].clone()];
     block_on(execute_proposal(
-        ctx,
-        nns_endpoint,
+        &log,
+        &nns_node,
         Proposal::Add(proposal, NnsFunction::AddFirewallRules),
     ));
 
@@ -224,8 +226,8 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
     );
     node_rules = vec![node_rules[1].clone()];
     block_on(execute_proposal(
-        ctx,
-        nns_endpoint,
+        &log,
+        &nns_node,
         Proposal::Remove(proposal, NnsFunction::RemoveFirewallRules),
     ));
 
@@ -258,8 +260,8 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
     );
     node_rules = vec![updated_rule];
     block_on(execute_proposal(
-        ctx,
-        nns_endpoint,
+        &log,
+        &nns_node,
         Proposal::Update(proposal, NnsFunction::UpdateFirewallRules),
     ));
 
@@ -283,7 +285,7 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
 
     // Update the existing node-specific rule to block port {http}
     let mut updated_rule = node_rules[0].clone();
-    updated_rule.ports = vec![toggle_endpoint.url.port().unwrap().into()];
+    updated_rule.ports = vec![toggle_endpoint.get_public_url().port().unwrap().into()];
     let proposal = prepare_update_rules_proposal(
         FirewallRulesScope::Node(toggle_endpoint.node_id),
         vec![updated_rule],
@@ -291,8 +293,8 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
         node_rules,
     );
     block_on(execute_proposal(
-        ctx,
-        nns_endpoint,
+        &log,
+        &nns_node,
         Proposal::Update(proposal, NnsFunction::UpdateFirewallRules),
     ));
 
@@ -302,7 +304,7 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
         &log,
         &|| {
             // assert port 8080 is now turned off
-            !get_request_succeeds(&toggle_endpoint.url)
+            !get_request_succeeds(&toggle_endpoint.get_public_url())
         },
         INITIAL_WAIT,
         BACKOFF_DELAY,
@@ -322,11 +324,13 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
     let session = node.block_on_ssh_session(ADMIN).unwrap();
     info!(
         log,
-        "Calling curl {} from node {}", toggle_endpoint.url, node.node_id
+        "Calling curl {} from node {}",
+        toggle_endpoint.get_public_url(),
+        node.node_id
     );
     let res = execute_ssh_command(
         &session,
-        format!("timeout 10s curl {}", toggle_endpoint.url),
+        format!("timeout 10s curl {}", toggle_endpoint.get_public_url()),
     );
     assert_eq!(res.unwrap(), 0);
 
@@ -348,7 +352,7 @@ fn execute_ssh_command(session: &Session, ssh_command: String) -> Result<i32, io
     Ok(channel.exit_status()?)
 }
 
-async fn set_default_registry_rules(ctx: &ic_fondue::pot::Context, nns_endpoint: &IcEndpoint) {
+async fn set_default_registry_rules(log: &Logger, nns_node: &IcNodeSnapshot) {
     let firewall_config = util::get_config().firewall.unwrap();
     let default_rules = firewall_config.default_rules.clone();
     let proposal = prepare_add_rules_proposal(
@@ -358,16 +362,16 @@ async fn set_default_registry_rules(ctx: &ic_fondue::pot::Context, nns_endpoint:
         vec![],
     );
     execute_proposal(
-        ctx,
-        nns_endpoint,
+        log,
+        nns_node,
         Proposal::Add(proposal, NnsFunction::AddFirewallRules),
     )
     .await;
 }
 
 async fn execute_proposal<T: Clone + CandidType>(
-    ctx: &ic_fondue::pot::Context,
-    nns_endpoint: &IcEndpoint,
+    log: &Logger,
+    nns_node: &IcNodeSnapshot,
     proposal: Proposal<T>,
 ) {
     let (proposal_payload, function) = match proposal {
@@ -375,10 +379,7 @@ async fn execute_proposal<T: Clone + CandidType>(
         Proposal::Remove(payload, func) => (payload, func),
         Proposal::Update(payload, func) => (payload, func),
     };
-    let nns = util::runtime_from_url(
-        nns_endpoint.url.clone(),
-        nns_endpoint.effective_canister_id(),
-    );
+    let nns = util::runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance = crate::nns::get_governance_canister(&nns);
     let proposal_id =
         submit_external_proposal_with_test_id(&governance, function, proposal_payload.clone())
@@ -386,7 +387,7 @@ async fn execute_proposal<T: Clone + CandidType>(
     vote_execute_proposal_assert_executed(&governance, proposal_id).await;
 
     // wait until proposal is executed
-    await_proposal_execution(ctx, &governance, proposal_id, BACKOFF_DELAY, WAIT_TIMEOUT).await;
+    await_proposal_execution(log, &governance, proposal_id, BACKOFF_DELAY, WAIT_TIMEOUT).await;
 }
 
 fn get_request_succeeds(url: &Url) -> bool {

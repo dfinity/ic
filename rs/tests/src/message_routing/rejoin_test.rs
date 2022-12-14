@@ -17,12 +17,11 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::HasGroupSetup;
-use crate::driver::vm_control::IcControl;
-use crate::util::{assert_all_ready, assert_create_agent, block_on, UniversalCanister};
-use ic_fondue::{ic_manager::IcEndpoint, iterator::PermOf};
+use crate::driver::test_env_api::{
+    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
+};
+use crate::util::{block_on, UniversalCanister};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::info;
@@ -44,58 +43,57 @@ pub fn config(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    info!(&ctx.logger, "Checking readiness of all nodes...");
-    block_on(assert_all_ready(
-        handle
-            .public_api_endpoints
-            .iter()
-            .collect::<Vec<&IcEndpoint>>()
-            .as_slice(),
-        ctx,
-    ));
-
-    let mut rng = ctx.rng.clone();
-    let mut perm = PermOf::new(&handle.public_api_endpoints, &mut rng);
-    let node = perm.next().unwrap();
+    let mut nodes = env.topology_snapshot().root_subnet().nodes();
+    let node = nodes.next().unwrap();
+    let rejoin_node = nodes.next().unwrap();
     info!(
-        &ctx.logger,
-        "All nodes are ready. Installing universal canister on random node: {}...", node.url
+        logger,
+        "Installing universal canister on a node {} ...",
+        node.get_public_url()
     );
-    let agent = block_on(assert_create_agent(node.url.as_str()));
+    let agent = node.with_default_agent(|agent| async move { agent });
     let universal_canister = block_on(UniversalCanister::new_with_retries(
         &agent,
         node.effective_canister_id(),
         &logger,
     ));
 
-    let rejoin_node = perm.next().unwrap();
-    info!(&ctx.logger, "Killing random node: {}...", rejoin_node.url);
-    rejoin_node.kill_node(ctx.logger.clone());
+    info!(
+        logger,
+        "Killing a node: {} ...",
+        rejoin_node.get_public_url()
+    );
+    rejoin_node.vm().kill();
 
-    info!(&ctx.logger, "Making some canister update calls...");
+    info!(logger, "Making some canister update calls ...");
     for i in 0..3 * DKG_INTERVAL {
         store_and_read_stable(i.to_string().as_bytes(), &universal_canister);
     }
 
-    info!(&ctx.logger, "Killing {} nodes...", ALLOWED_FAILURES);
-    for node_to_kill in perm.take(ALLOWED_FAILURES) {
-        info!(&ctx.logger, "Killing node {}...", node_to_kill.url);
-        node_to_kill.kill_node(ctx.logger.clone());
+    info!(logger, "Killing {} nodes ...", ALLOWED_FAILURES);
+    for _ in 0..ALLOWED_FAILURES {
+        let node = nodes.next().unwrap();
+        info!(logger, "Killing node {} ...", node.get_public_url());
+        node.vm().kill();
     }
 
-    info!(&ctx.logger, "Starting the first killed node again...");
-    let _rejoin_node = &rejoin_node.start_node(ctx.logger.clone());
+    info!(logger, "Starting the first killed node again...");
+    rejoin_node.vm().start();
 
     let delay: Duration = NOTARY_DELAY.mul_f64(5.0 * DKG_INTERVAL as f64);
-    info!(&ctx.logger, "Sleeping for {:?}...", delay);
+    info!(logger, "Sleeping for {:?} ...", delay);
     std::thread::sleep(delay);
 
-    info!(&ctx.logger, "Checking for subnet progress...");
+    info!(logger, "Checking for subnet progress...");
     let message = b"This beautiful prose should be persisted for future generations";
     store_and_read_stable(message, &universal_canister);
 }

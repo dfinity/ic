@@ -1,9 +1,10 @@
-use slog::info;
+use slog::{info, Logger};
 
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasTopologySnapshot, IcNodeContainer, NnsInstallationExt};
-use crate::util::{get_random_nns_node_endpoint, runtime_from_url};
+use crate::driver::test_env_api::{
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+};
+use crate::util::{block_on, runtime_from_url};
 
 use crate::driver::ic::InternetComputer;
 use ic_nns_governance::pb::v1::{GovernanceError, NeuronInfo};
@@ -24,6 +25,11 @@ pub fn config(env: TestEnv) {
         .add_fast_single_node_subnet(SubnetType::System)
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 /// This is a simple example (proof of concept) of how the Proptest framework
@@ -37,35 +43,23 @@ pub fn config(env: TestEnv) {
 /// `async` methods. Also, the `proptest!` macro cannot be used in this context
 /// because it is intended for unit tests (i.e. with `#[test]` annotation)
 pub fn test(env: TestEnv) {
-    let logger = env.logger();
-
-    info!(logger, "Installing NNS canisters on the root subnet...");
-    env.topology_snapshot()
-        .root_subnet()
-        .nodes()
-        .next()
-        .unwrap()
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    info!(log, "Installing NNS canisters on the root subnet...");
+    nns_node
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
-    info!(&logger, "NNS canisters installed successfully.");
-
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-
-    let mut rng = ctx.rng.clone();
-    let endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    rt.block_on(async move {
-        endpoint.assert_ready(ctx).await;
-        let nns = runtime_from_url(endpoint.url.clone(), endpoint.effective_canister_id());
-
+    info!(log, "NNS canisters installed successfully.");
+    block_on(async move {
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
 
         let mut runner = TestRunner::default();
         for _ in 0..256 {
             let neuron_id = Box::new((0..u64::MAX).new_tree(&mut runner).unwrap());
             assert!(
-                get_neuron_returns_not_found_error(&governance, ctx, neuron_id.current()).await
+                get_neuron_returns_not_found_error(&governance, &log, neuron_id.current()).await
             );
             // If the assertion fails, it would be possible to apply 'shrinking'
             // to find the 'simplest' input that causes a failure. We could do
@@ -77,13 +71,10 @@ pub fn test(env: TestEnv) {
 
 async fn get_neuron_returns_not_found_error(
     governance: &Canister<'_>,
-    ctx: &ic_fondue::pot::Context,
+    log: &Logger,
     neuron_id: u64,
 ) -> bool {
-    info!(
-        ctx.logger,
-        "getting neuron info for neuron id {:?}", neuron_id
-    );
+    info!(log, "getting neuron info for neuron id {:?}", neuron_id);
     let result = governance
         .query_(
             "get_neuron_info",

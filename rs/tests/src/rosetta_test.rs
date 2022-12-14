@@ -25,9 +25,12 @@ use icp_ledger::{
 };
 
 use crate::driver::ic::InternetComputer;
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{HasDependencies, HasGroupSetup, NnsCanisterEnvVars};
+use crate::driver::test_env_api::{
+    HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    NnsCanisterEnvVars,
+};
+use crate::util::block_on;
 use canister_test::{Canister, RemoteTestRuntime, Runtime};
 use dfn_protobuf::protobuf;
 use ic_canister_client::Sender;
@@ -76,12 +79,19 @@ pub fn config(env: TestEnv) {
         //.add_subnet(Subnet::new(SubnetType::System).add_nodes(2))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
+    env.topology_snapshot().subnets().for_each(|subnet| {
+        subnet
+            .nodes()
+            .for_each(|node| node.await_status_is_healthy().unwrap())
+    });
 }
 
 /// No changes to the IC environment
 pub fn test_everything(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env.clone());
-
+    let log = env.logger();
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    // let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let minting_address = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), None);
 
     let (acc_a, kp_a, _pk_a, _pid_a) = make_user(100);
@@ -114,7 +124,7 @@ pub fn test_everything(env: TestEnv) {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-    let mut neuron_tests = NeuronTestsSetup::new(2000, ctx.logger.clone());
+    let mut neuron_tests = NeuronTestsSetup::new(2000, log.clone());
     neuron_tests.add(
         &mut ledger_balances,
         "Test disburse",
@@ -453,57 +463,61 @@ pub fn test_everything(env: TestEnv) {
         ..Default::default()
     };
 
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    rt.block_on(async move {
-        let endpoint = handle.public_api_endpoints.first().expect("no endpoints");
-        endpoint.assert_ready(ctx).await;
-        let node_url = endpoint.url.clone();
+    block_on(async move {
         //let ic_agent = assert_create_agent(node_url.as_str()).await;
-        let agent = ic_canister_client::Agent::new(
-            node_url.clone(),
+        let nns_agent = ic_canister_client::Agent::new(
+            nns_node.get_public_url(),
             Sender::from_keypair(&ic_test_identity::TEST_IDENTITY_KEYPAIR),
         );
-        let root_key = agent.root_key().await.unwrap().unwrap();
-        let remote_runtime = Runtime::Remote(RemoteTestRuntime { agent, effective_canister_id: endpoint.effective_canister_id() });
+        let root_key = nns_agent.root_key().await.unwrap().unwrap();
+        let remote_runtime = Runtime::Remote(RemoteTestRuntime {
+            agent: nns_agent,
+            effective_canister_id: nns_node.effective_canister_id(),
+        });
 
         // Reserve the registry canister to ensure that the governance
         // and ledger canisters have the right canister ID.
-        let dummy_canister = remote_runtime.create_canister_max_cycles_with_retries().await.unwrap();
+        let dummy_canister = remote_runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .unwrap();
         assert_eq!(dummy_canister.canister_id(), REGISTRY_CANISTER_ID);
 
-        env.set_nns_canisters_env_vars().expect("Failed to set environment variables pointing to the NNS canisters WASMs!");
+        env.set_nns_canisters_env_vars()
+            .expect("Failed to set environment variables pointing to the NNS canisters WASMs!");
 
-        info!(&ctx.logger, "Installing governance canister");
-        let governance_future = set_up_governance_canister(&remote_runtime, governance_canister_init);
+        info!(log, "Installing governance canister");
+        let governance_future =
+            set_up_governance_canister(&remote_runtime, governance_canister_init);
 
         let governance = governance_future.await;
-        info!(&ctx.logger, "Governance canister installed");
+        info!(log, "Governance canister installed");
         assert_eq!(governance.canister_id(), GOVERNANCE_CANISTER_ID);
 
-        info!(&ctx.logger, "Installing ledger canister for governance");
-        let ledger_for_governance_future = set_up_ledger_canister(&remote_runtime, ledger_canister_for_governance_payload);
+        info!(log, "Installing ledger canister for governance");
+        let ledger_for_governance_future =
+            set_up_ledger_canister(&remote_runtime, ledger_canister_for_governance_payload);
 
-        info!(&ctx.logger, "Installing ledger canister");
+        info!(log, "Installing ledger canister");
         let ledger_future = set_up_ledger_canister(&remote_runtime, ledger_canister_payload);
 
         let ledger_for_governance = ledger_for_governance_future.await;
-        info!(&ctx.logger, "Ledger canister installed");
+        info!(log, "Ledger canister installed");
         assert_eq!(ledger_for_governance.canister_id(), LEDGER_CANISTER_ID);
 
         let ledger = ledger_future.await;
-        info!(&ctx.logger, "Ledger canister installed");
+        info!(log, "Ledger canister installed");
 
         let balance = get_balance(&ledger, acc1).await;
         assert_eq!(balance, Tokens::from_e8s(100_000_000_001));
 
         let (_cert, tip_idx) = get_tip(&ledger).await;
 
-        info!(&ctx.logger, "Starting rosetta-api");
+        info!(log, "Starting rosetta-api");
         let rosetta_api_bin_path = rosetta_api_bin_path(&env);
         let mut rosetta_api_serv = RosettaApiHandle::start(
             rosetta_api_bin_path.clone(),
-            node_url.clone(),
+            nns_node.get_public_url(),
             8099,
             ledger.canister_id(),
             governance.canister_id(),
@@ -531,60 +545,72 @@ pub fn test_everything(env: TestEnv) {
             Tokens::from_e8s(100_000_000_001)
         );
 
-        info!(&ctx.logger, "Test metadata suggested fee");
-        let metadata = rosetta_api_serv.construction_metadata(None, None).await
-            .unwrap().unwrap();
-        assert_eq!(metadata.suggested_fee.unwrap()[0].value, format!("{}", FEE.get_e8s()));
+        info!(log, "Test metadata suggested fee");
+        let metadata = rosetta_api_serv
+            .construction_metadata(None, None)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            metadata.suggested_fee.unwrap()[0].value,
+            format!("{}", FEE.get_e8s())
+        );
 
         // Some more advanced tests
-        info!(&ctx.logger, "Test derive endpoint");
+        info!(log, "Test derive endpoint");
         test_derive(&rosetta_api_serv).await;
-        info!(&ctx.logger, "Test make transaction");
+        info!(log, "Test make transaction");
         test_make_transaction(&rosetta_api_serv, &ledger, acc_a, Arc::clone(&kp_a)).await;
-        info!(&ctx.logger, "Test wrong key");
+        info!(log, "Test wrong key");
         test_wrong_key(&rosetta_api_serv, acc_a, Arc::clone(&kp_a)).await;
-        info!(&ctx.logger, "Test no funds");
+        info!(log, "Test no funds");
         test_no_funds(&rosetta_api_serv, Arc::clone(&kp_a)).await;
-        info!(&ctx.logger, "Test configurable ingress window");
+        info!(log, "Test configurable ingress window");
         test_ingress_window(&rosetta_api_serv, Arc::clone(&kp_a)).await;
-        info!(&ctx.logger, "Test multiple transfers");
+        info!(log, "Test multiple transfers");
         test_multiple_transfers(&rosetta_api_serv, &ledger, acc_b, Arc::clone(&kp_b)).await;
-        info!(&ctx.logger, "Test multiple transfers (fail)");
+        info!(log, "Test multiple transfers (fail)");
         test_multiple_transfers_fail(&rosetta_api_serv, &ledger, acc_b, Arc::clone(&kp_b)).await;
 
         // Rosetta-cli tests
         let cli_json = PathBuf::from(format!("{}/rosetta_cli.json", rosetta_workspace_path(&env)));
-        let cli_ros = PathBuf::from(format!("{}/rosetta_workflows.ros", rosetta_workspace_path(&env)));
+        let cli_ros = PathBuf::from(format!(
+            "{}/rosetta_workflows.ros",
+            rosetta_workspace_path(&env)
+        ));
         let conf = rosetta_api_serv.generate_rosetta_cli_config(&cli_json, &cli_ros);
-        info!(&ctx.logger, "Running rosetta-cli check:construction");
+        info!(log, "Running rosetta-cli check:construction");
         rosetta_cli_construction_check(&env, &conf);
-        info!(&ctx.logger, "check:construction finished successfully");
+        info!(log, "check:construction finished successfully");
 
-        info!(&ctx.logger, "Running rosetta-cli check:data");
+        info!(log, "Running rosetta-cli check:data");
         rosetta_cli_data_check(&env, &conf);
-        info!(&ctx.logger, "check:data finished successfully");
+        info!(log, "check:data finished successfully");
 
         // Finish up. (calling stop is optional because it would be called on drop, but
         // this way it's more explicit what is happening)
         rosetta_api_serv.stop();
 
-
         let (_cert, tip_idx) = get_tip(&ledger).await;
-        info!(&ctx.logger, "Starting rosetta-api again to see if it properly fetches blocks in batches from all the archives");
+        info!(log, "Starting rosetta-api again to see if it properly fetches blocks in batches from all the archives");
         let mut rosetta_api_serv = RosettaApiHandle::start(
             rosetta_api_bin_path.clone(),
-            node_url.clone(),
+            nns_node.get_public_url(),
             8101,
             ledger.canister_id(),
             governance.canister_id(),
             rosetta_workspace_path(&env),
             Some(&root_key),
-        ).await;
+        )
+        .await;
 
         rosetta_api_serv.wait_for_tip_sync(tip_idx).await.unwrap();
 
         let net_status = rosetta_api_serv.network_status().await.unwrap().unwrap();
-        assert_eq!(net_status.current_block_identifier.index as u64, tip_idx, "Newly started rosetta-api did not fetch all the blocks from the ledger properly");
+        assert_eq!(
+            net_status.current_block_identifier.index as u64, tip_idx,
+            "Newly started rosetta-api did not fetch all the blocks from the ledger properly"
+        );
         rosetta_api_serv.stop();
 
         // this test starts rosetta-api with wrong canister id
@@ -592,124 +618,408 @@ pub fn test_everything(env: TestEnv) {
         // but we stopped the previous one to be on the safe side and
         // avoid potential problems unrelated to this test
         info!(
-            &ctx.logger,
+            log,
             "Test wrong canister id (expected rosetta-api sync errors in logs)"
         );
-        test_wrong_canister_id(&env, node_url.clone(), None).await;
-        info!(&ctx.logger, "Test wrong canister id finished");
+        test_wrong_canister_id(&env, nns_node.get_public_url(), None).await;
+        info!(log, "Test wrong canister id finished");
 
         let (_cert, tip_idx) = get_tip(&ledger_for_governance).await;
 
-        info!(&ctx.logger, "Starting rosetta-api with default fee");
+        info!(log, "Starting rosetta-api with default fee");
         let mut rosetta_api_serv = RosettaApiHandle::start(
             rosetta_api_bin_path,
-            node_url,
+            nns_node.get_public_url(),
             8100,
             ledger_for_governance.canister_id(),
             governance.canister_id(),
             rosetta_workspace_path(&env),
             Some(&root_key),
         )
-            .await;
+        .await;
 
         rosetta_api_serv.wait_for_tip_sync(tip_idx).await.unwrap();
 
-        info!(&ctx.logger, "Neuron management tests");
+        info!(log, "Neuron management tests");
         // Test against prepopulated neurons
-        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, neuron, ..} = neuron_tests.get_neuron_for_test("Test disburse");
-        test_disburse(&rosetta_api_serv, &ledger_for_governance, account_id, key_pair.into(), neuron_subaccount_identifier, None, None, &neuron).await.unwrap();
+        let NeuronInfo {
+            account_id,
+            key_pair,
+            neuron_subaccount_identifier,
+            neuron,
+            ..
+        } = neuron_tests.get_neuron_for_test("Test disburse");
+        test_disburse(
+            &rosetta_api_serv,
+            &ledger_for_governance,
+            account_id,
+            key_pair.into(),
+            neuron_subaccount_identifier,
+            None,
+            None,
+            &neuron,
+        )
+        .await
+        .unwrap();
         // Test against prepopulated neurons (raw)
-        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, neuron, ..} = neuron_tests.get_neuron_for_test("Test raw JSON disburse");
-        test_disburse_raw(&rosetta_api_serv, &ledger_for_governance, account_id, key_pair.into(), neuron_subaccount_identifier, None, None, &neuron).await.unwrap();
+        let NeuronInfo {
+            account_id,
+            key_pair,
+            neuron_subaccount_identifier,
+            neuron,
+            ..
+        } = neuron_tests.get_neuron_for_test("Test raw JSON disburse");
+        test_disburse_raw(
+            &rosetta_api_serv,
+            &ledger_for_governance,
+            account_id,
+            key_pair.into(),
+            neuron_subaccount_identifier,
+            None,
+            None,
+            &neuron,
+        )
+        .await
+        .unwrap();
 
-        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, neuron, ..} = neuron_tests.get_neuron_for_test("Test disburse to custom recipient");
+        let NeuronInfo {
+            account_id,
+            key_pair,
+            neuron_subaccount_identifier,
+            neuron,
+            ..
+        } = neuron_tests.get_neuron_for_test("Test disburse to custom recipient");
         let (recipient, _, _, _) = make_user(102);
-        test_disburse(&rosetta_api_serv, &ledger_for_governance, account_id, key_pair.into(), neuron_subaccount_identifier, None, Some(recipient), &neuron).await.unwrap();
+        test_disburse(
+            &rosetta_api_serv,
+            &ledger_for_governance,
+            account_id,
+            key_pair.into(),
+            neuron_subaccount_identifier,
+            None,
+            Some(recipient),
+            &neuron,
+        )
+        .await
+        .unwrap();
 
-        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, neuron, ..} = neuron_tests.get_neuron_for_test("Test disburse before neuron is dissolved (fail)");
-        test_disburse(&rosetta_api_serv, &ledger_for_governance, account_id, key_pair.into(), neuron_subaccount_identifier, None, None, &neuron).await.unwrap_err();
+        let NeuronInfo {
+            account_id,
+            key_pair,
+            neuron_subaccount_identifier,
+            neuron,
+            ..
+        } = neuron_tests.get_neuron_for_test("Test disburse before neuron is dissolved (fail)");
+        test_disburse(
+            &rosetta_api_serv,
+            &ledger_for_governance,
+            account_id,
+            key_pair.into(),
+            neuron_subaccount_identifier,
+            None,
+            None,
+            &neuron,
+        )
+        .await
+        .unwrap_err();
 
-        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, neuron, ..} = neuron_tests.get_neuron_for_test("Test disburse an amount");
-        test_disburse(&rosetta_api_serv, &ledger_for_governance, account_id, key_pair.into(), neuron_subaccount_identifier, Some(Tokens::new(5, 0).unwrap()), None, &neuron).await.unwrap();
+        let NeuronInfo {
+            account_id,
+            key_pair,
+            neuron_subaccount_identifier,
+            neuron,
+            ..
+        } = neuron_tests.get_neuron_for_test("Test disburse an amount");
+        test_disburse(
+            &rosetta_api_serv,
+            &ledger_for_governance,
+            account_id,
+            key_pair.into(),
+            neuron_subaccount_identifier,
+            Some(Tokens::new(5, 0).unwrap()),
+            None,
+            &neuron,
+        )
+        .await
+        .unwrap();
 
-        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, neuron, ..} = neuron_tests.get_neuron_for_test("Test disburse an amount full stake");
-        test_disburse(&rosetta_api_serv, &ledger_for_governance, account_id, key_pair.into(), neuron_subaccount_identifier, Some(Tokens::new(10, 0).unwrap()), None, &neuron).await.unwrap();
+        let NeuronInfo {
+            account_id,
+            key_pair,
+            neuron_subaccount_identifier,
+            neuron,
+            ..
+        } = neuron_tests.get_neuron_for_test("Test disburse an amount full stake");
+        test_disburse(
+            &rosetta_api_serv,
+            &ledger_for_governance,
+            account_id,
+            key_pair.into(),
+            neuron_subaccount_identifier,
+            Some(Tokens::new(10, 0).unwrap()),
+            None,
+            &neuron,
+        )
+        .await
+        .unwrap();
 
-        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, neuron, ..} = neuron_tests.get_neuron_for_test("Test disburse more than staked amount (fail)");
-        test_disburse(&rosetta_api_serv, &ledger_for_governance, account_id, key_pair.into(), neuron_subaccount_identifier, Some(Tokens::new(11, 0).unwrap()), None, &neuron).await.unwrap_err();
+        let NeuronInfo {
+            account_id,
+            key_pair,
+            neuron_subaccount_identifier,
+            neuron,
+            ..
+        } = neuron_tests.get_neuron_for_test("Test disburse more than staked amount (fail)");
+        test_disburse(
+            &rosetta_api_serv,
+            &ledger_for_governance,
+            account_id,
+            key_pair.into(),
+            neuron_subaccount_identifier,
+            Some(Tokens::new(11, 0).unwrap()),
+            None,
+            &neuron,
+        )
+        .await
+        .unwrap_err();
 
-        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, ..} = neuron_tests.get_neuron_for_test("Test set dissolve timestamp to a prior timestamp (fail)");
-        test_set_dissolve_timestamp_in_the_past_fail(&rosetta_api_serv, account_id, key_pair.into(), neuron_subaccount_identifier).await;
+        let NeuronInfo {
+            account_id,
+            key_pair,
+            neuron_subaccount_identifier,
+            ..
+        } = neuron_tests
+            .get_neuron_for_test("Test set dissolve timestamp to a prior timestamp (fail)");
+        test_set_dissolve_timestamp_in_the_past_fail(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.into(),
+            neuron_subaccount_identifier,
+        )
+        .await;
 
-        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, ..} = neuron_tests.get_neuron_for_test("Test set dissolve timestamp to 5000 seconds from now");
+        let NeuronInfo {
+            account_id,
+            key_pair,
+            neuron_subaccount_identifier,
+            ..
+        } = neuron_tests
+            .get_neuron_for_test("Test set dissolve timestamp to 5000 seconds from now");
         let timestamp = Seconds::from(std::time::SystemTime::now() + Duration::from_secs(5000));
         let key_pair = Arc::new(key_pair);
-        test_set_dissolve_timestamp(&rosetta_api_serv, account_id, key_pair.clone(), timestamp, neuron_subaccount_identifier).await;
-        info!(&ctx.logger, "Test set dissolve timestamp to 5 seconds from now again");
-        test_set_dissolve_timestamp(&rosetta_api_serv, account_id, key_pair.clone(), timestamp, neuron_subaccount_identifier).await;
+        test_set_dissolve_timestamp(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.clone(),
+            timestamp,
+            neuron_subaccount_identifier,
+        )
+        .await;
+        info!(
+            log,
+            "Test set dissolve timestamp to 5 seconds from now again"
+        );
+        test_set_dissolve_timestamp(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.clone(),
+            timestamp,
+            neuron_subaccount_identifier,
+        )
+        .await;
         // Note that this is an incorrect usage, but no error is returned.
         // we would like this to fail, but to make the above case work we have to swallow these errors.
-        info!(&ctx.logger, "Test set dissolve timestamp to less than it's currently set to (we would like this to fail)");
-        test_set_dissolve_timestamp(&rosetta_api_serv, account_id, key_pair.clone(), timestamp, neuron_subaccount_identifier).await;
+        info!(log, "Test set dissolve timestamp to less than it's currently set to (we would like this to fail)");
+        test_set_dissolve_timestamp(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.clone(),
+            timestamp,
+            neuron_subaccount_identifier,
+        )
+        .await;
 
-        info!(&ctx.logger, "Test set dissolve timestamp to a prior timestamp (fail)");
-        test_set_dissolve_timestamp_in_the_past_fail(&rosetta_api_serv, account_id, key_pair.clone(), neuron_subaccount_identifier).await;
+        info!(
+            log,
+            "Test set dissolve timestamp to a prior timestamp (fail)"
+        );
+        test_set_dissolve_timestamp_in_the_past_fail(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.clone(),
+            neuron_subaccount_identifier,
+        )
+        .await;
 
-        let NeuronInfo {account_id, key_pair, public_key, neuron_subaccount_identifier, neuron_account, ..} = neuron_tests.get_neuron_for_test("Test start dissolving neuron");
+        let NeuronInfo {
+            account_id,
+            key_pair,
+            public_key,
+            neuron_subaccount_identifier,
+            neuron_account,
+            ..
+        } = neuron_tests.get_neuron_for_test("Test start dissolving neuron");
         let key_pair = Arc::new(key_pair);
-        test_start_dissolve(&rosetta_api_serv, account_id, key_pair.clone(), neuron_subaccount_identifier).await.unwrap();
-        let neuron_info = rosetta_api_serv.account_balance_neuron(neuron_account, None, Some((public_key, neuron_subaccount_identifier)), false).await.unwrap().unwrap().metadata.unwrap();
+        test_start_dissolve(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.clone(),
+            neuron_subaccount_identifier,
+        )
+        .await
+        .unwrap();
+        let neuron_info = rosetta_api_serv
+            .account_balance_neuron(
+                neuron_account,
+                None,
+                Some((public_key, neuron_subaccount_identifier)),
+                false,
+            )
+            .await
+            .unwrap()
+            .unwrap()
+            .metadata
+            .unwrap();
         assert_eq!(neuron_info.state, NeuronState::Dissolving);
 
-        info!(&ctx.logger, "Test start dissolving neuron again");
-        test_start_dissolve(&rosetta_api_serv, account_id, key_pair.clone(), neuron_subaccount_identifier).await.unwrap();
-        info!(&ctx.logger, "Test stop dissolving neuron");
-        test_stop_dissolve(&rosetta_api_serv, account_id, key_pair.clone(), neuron_subaccount_identifier).await.unwrap();
-        info!(&ctx.logger, "Test stop dissolving neuron again");
-        test_stop_dissolve(&rosetta_api_serv, account_id, key_pair.clone(), neuron_subaccount_identifier).await.unwrap();
-        info!(&ctx.logger, "Test restart dissolving neuron");
-        test_start_dissolve(&rosetta_api_serv, account_id, key_pair.clone(), neuron_subaccount_identifier).await.unwrap();
+        info!(log, "Test start dissolving neuron again");
+        test_start_dissolve(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.clone(),
+            neuron_subaccount_identifier,
+        )
+        .await
+        .unwrap();
+        info!(log, "Test stop dissolving neuron");
+        test_stop_dissolve(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.clone(),
+            neuron_subaccount_identifier,
+        )
+        .await
+        .unwrap();
+        info!(log, "Test stop dissolving neuron again");
+        test_stop_dissolve(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.clone(),
+            neuron_subaccount_identifier,
+        )
+        .await
+        .unwrap();
+        info!(log, "Test restart dissolving neuron");
+        test_start_dissolve(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.clone(),
+            neuron_subaccount_identifier,
+        )
+        .await
+        .unwrap();
 
-        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, ..} = neuron_tests.get_neuron_for_test("Test re-start dissolving a dissolved neuron");
+        let NeuronInfo {
+            account_id,
+            key_pair,
+            neuron_subaccount_identifier,
+            ..
+        } = neuron_tests.get_neuron_for_test("Test re-start dissolving a dissolved neuron");
         let key_pair = Arc::new(key_pair);
-        test_start_dissolve(&rosetta_api_serv, account_id, key_pair.clone(), neuron_subaccount_identifier).await.unwrap();
-        info!(&ctx.logger, "Test stop dissolving a dissolved neuron");
-        test_stop_dissolve(&rosetta_api_serv, account_id, key_pair.clone(), neuron_subaccount_identifier).await.unwrap();
+        test_start_dissolve(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.clone(),
+            neuron_subaccount_identifier,
+        )
+        .await
+        .unwrap();
+        info!(log, "Test stop dissolving a dissolved neuron");
+        test_stop_dissolve(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.clone(),
+            neuron_subaccount_identifier,
+        )
+        .await
+        .unwrap();
 
         // Hotkey.
-        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, ..} = neuron_tests.get_neuron_for_test("Test add hotkey");
+        let NeuronInfo {
+            account_id,
+            key_pair,
+            neuron_subaccount_identifier,
+            ..
+        } = neuron_tests.get_neuron_for_test("Test add hotkey");
         let key_pair = Arc::new(key_pair);
-        test_add_hot_key(&rosetta_api_serv, account_id, key_pair.clone(), neuron_subaccount_identifier).await.unwrap();
-        let neuron_info= neuron_tests.get_neuron_for_test("Test remove hotkey");
+        test_add_hot_key(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.clone(),
+            neuron_subaccount_identifier,
+        )
+        .await
+        .unwrap();
+        let neuron_info = neuron_tests.get_neuron_for_test("Test remove hotkey");
         test_remove_hotkey(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
 
-        test_start_dissolve(&rosetta_api_serv, account_id, key_pair, neuron_subaccount_identifier).await.unwrap();
-        let NeuronInfo {account_id, key_pair, neuron_subaccount_identifier, ..} = neuron_tests.get_neuron_for_test("Test start dissolving neuron before delay has been set");
+        test_start_dissolve(
+            &rosetta_api_serv,
+            account_id,
+            key_pair,
+            neuron_subaccount_identifier,
+        )
+        .await
+        .unwrap();
+        let NeuronInfo {
+            account_id,
+            key_pair,
+            neuron_subaccount_identifier,
+            ..
+        } = neuron_tests
+            .get_neuron_for_test("Test start dissolving neuron before delay has been set");
         // Note that this is an incorrect usage, but no error is returned.
         // Start and Stop operations never fail, even when they have no affect.
-        test_start_dissolve(&rosetta_api_serv, account_id, key_pair.into(), neuron_subaccount_identifier).await.unwrap();
+        test_start_dissolve(
+            &rosetta_api_serv,
+            account_id,
+            key_pair.into(),
+            neuron_subaccount_identifier,
+        )
+        .await
+        .unwrap();
 
-        let neuron_info= neuron_tests.get_neuron_for_test("Test spawn neuron with enough maturity");
+        let neuron_info =
+            neuron_tests.get_neuron_for_test("Test spawn neuron with enough maturity");
         test_spawn(&rosetta_api_serv, &ledger_for_governance, neuron_info, None).await;
-        let neuron_info= neuron_tests.get_neuron_for_test("Test spawn neuron with not enough maturity");
+        let neuron_info =
+            neuron_tests.get_neuron_for_test("Test spawn neuron with not enough maturity");
         test_spawn_invalid(&rosetta_api_serv, neuron_info).await;
-        let neuron_info= neuron_tests.get_neuron_for_test("Test spawn neuron with partial maturity");
-        test_spawn(&rosetta_api_serv, &ledger_for_governance, neuron_info, Some(75)).await;
+        let neuron_info =
+            neuron_tests.get_neuron_for_test("Test spawn neuron with partial maturity");
+        test_spawn(
+            &rosetta_api_serv,
+            &ledger_for_governance,
+            neuron_info,
+            Some(75),
+        )
+        .await;
 
-        let neuron_info= neuron_tests.get_neuron_for_test("Test merge all neuron maturity");
+        let neuron_info = neuron_tests.get_neuron_for_test("Test merge all neuron maturity");
         test_merge_maturity_all(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
-        let neuron_info= neuron_tests.get_neuron_for_test("Test merge partial neuron maturity");
+        let neuron_info = neuron_tests.get_neuron_for_test("Test merge partial neuron maturity");
         test_merge_maturity_partial(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
-        let neuron_info= neuron_tests.get_neuron_for_test("Test merge neuron maturity invalid");
+        let neuron_info = neuron_tests.get_neuron_for_test("Test merge neuron maturity invalid");
         test_merge_maturity_invalid(&rosetta_api_serv, neuron_info).await;
 
         // Neuron info.
-        let neuron_info= neuron_tests.get_neuron_for_test("Test get neuron info");
+        let neuron_info = neuron_tests.get_neuron_for_test("Test get neuron info");
         test_neuron_info(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
-        let neuron_info= neuron_tests.get_neuron_for_test("Test get neuron info with hotkey");
+        let neuron_info = neuron_tests.get_neuron_for_test("Test get neuron info with hotkey");
         test_neuron_info_with_hotkey(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
-        let neuron_info= neuron_tests.get_neuron_for_test("Test get neuron info with hotkey raw");
-        test_neuron_info_with_hotkey_raw(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
+        let neuron_info = neuron_tests.get_neuron_for_test("Test get neuron info with hotkey raw");
+        test_neuron_info_with_hotkey_raw(&rosetta_api_serv, &ledger_for_governance, neuron_info)
+            .await;
 
         // Follow.
         let neuron_info = neuron_tests.get_neuron_for_test("Test follow");
@@ -721,17 +1031,31 @@ pub fn test_everything(env: TestEnv) {
         let neuron_info = neuron_tests.get_neuron_for_test("Test follow too many");
         test_follow_too_many(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
 
-        info!(&ctx.logger, "Test staking");
+        info!(log, "Test staking");
         let _ = test_staking(&rosetta_api_serv, acc_b, Arc::clone(&kp_b)).await;
-        info!(&ctx.logger, "Test staking (raw JSON)");
+        info!(log, "Test staking (raw JSON)");
         let _ = test_staking_raw(&rosetta_api_serv, acc_b, Arc::clone(&kp_b)).await;
-        info!(&ctx.logger, "Test staking failure");
+        info!(log, "Test staking failure");
         test_staking_failure(&rosetta_api_serv, acc_b, Arc::clone(&kp_b)).await;
 
-        info!(&ctx.logger, "Test staking flow");
-        test_staking_flow(&rosetta_api_serv, &ledger_for_governance, acc_b, Arc::clone(&kp_b), Seconds(one_year_from_now)).await;
-        info!(&ctx.logger, "Test staking flow two txns");
-        test_staking_flow_two_txns(&rosetta_api_serv, &ledger_for_governance, acc_b, Arc::clone(&kp_b), Seconds(one_year_from_now)).await;
+        info!(log, "Test staking flow");
+        test_staking_flow(
+            &rosetta_api_serv,
+            &ledger_for_governance,
+            acc_b,
+            Arc::clone(&kp_b),
+            Seconds(one_year_from_now),
+        )
+        .await;
+        info!(log, "Test staking flow two txns");
+        test_staking_flow_two_txns(
+            &rosetta_api_serv,
+            &ledger_for_governance,
+            acc_b,
+            Arc::clone(&kp_b),
+            Seconds(one_year_from_now),
+        )
+        .await;
 
         rosetta_api_serv.stop();
     });
