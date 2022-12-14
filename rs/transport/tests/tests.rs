@@ -148,8 +148,8 @@ fn test_send_big_message_succeeds(use_h2: bool) {
         );
 
         // Testing message size of 30MB - this is currently largest we'd expect
-        let msg_1 = TransportPayload(vec![0xa; 30000000]);
-        let msg_2 = TransportPayload(vec![0xb; 30000000]);
+        let msg_1 = TransportPayload(vec![0xa; 100000000]);
+        let msg_2 = TransportPayload(vec![0xb; 100000000]);
         let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
 
         // A sends message to B
@@ -324,7 +324,6 @@ fn test_drain_send_queue_impl(use_h2: bool) {
     });
 }
 
-// [Incomplete]
 /*
 Test connection and message sending at a larger scale:
 Creates peer A and connect it to 3 other peers (B-D)
@@ -443,8 +442,8 @@ fn setup_message_ack_event_handler(
     let (event_handler, mut handle) = create_mock_event_handler();
 
     rt.spawn(async move {
-        loop {
-            let (event, rsp) = handle.next_request().await.unwrap();
+        while let Some(res) = handle.next_request().await {
+            let (event, rsp) = res;
             match event {
                 TransportEvent::Message(msg) => {
                     connected.send(msg.payload).await.expect("Channel busy");
@@ -467,8 +466,8 @@ fn setup_blocking_event_handler(
     let (event_handler, mut handle) = create_mock_event_handler();
 
     rt.spawn(async move {
-        loop {
-            let (event, rsp) = handle.next_request().await.unwrap();
+        while let Some(res) = handle.next_request().await {
+            let (event, rsp) = res;
             match event {
                 TransportEvent::Message(msg) => {
                     sender

@@ -137,16 +137,14 @@ pub(crate) fn setup_peer_up_ack_event_handler(
 ) -> TransportEventHandler {
     let (event_handler, mut handle) = create_mock_event_handler();
     rt.spawn(async move {
-        loop {
-            if let Some(req) = handle.next_request().await {
-                let (event, rsp) = req;
-                if let TransportEvent::PeerUp(_) = event {
-                    connected
-                        .try_send(true)
-                        .expect("Channel capacity should not be reached");
-                }
-                rsp.send_response(());
+        while let Some(req) = handle.next_request().await {
+            let (event, rsp) = req;
+            if let TransportEvent::PeerUp(_) = event {
+                connected
+                    .try_send(true)
+                    .expect("Channel capacity should not be reached");
             }
+            rsp.send_response(());
         }
     });
     event_handler
