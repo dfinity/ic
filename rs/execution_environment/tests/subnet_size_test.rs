@@ -17,7 +17,9 @@ use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_
 use ic_types::canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES};
-use ic_types::{CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId};
+use ic_types::{
+    CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId,
+};
 use std::time::Duration;
 use std::{convert::TryFrom, str::FromStr};
 
@@ -353,7 +355,12 @@ fn simulate_execute_canister_heartbeat_cost(subnet_type: SubnetType, subnet_size
 /// Simulates `execute_round` to get the cost of executing signing with ECDSA.
 /// Payment is done via attaching cycles to request and the cost is subtracted from it
 /// after executing the message.
-fn simulate_sign_with_ecdsa_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
+fn simulate_sign_with_ecdsa_cost(
+    subnet_type: SubnetType,
+    subnet_size: usize,
+    nns_subnet_id: SubnetId,
+    subnet_id: SubnetId,
+) -> Cycles {
     let ecdsa_key = EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
         name: "key_id_secp256k1".to_string(),
@@ -362,6 +369,8 @@ fn simulate_sign_with_ecdsa_cost(subnet_type: SubnetType, subnet_size: usize) ->
         .with_use_cost_scaling_flag(true)
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
+        .with_nns_subnet_id(nns_subnet_id)
+        .with_subnet_id(subnet_id)
         .with_ecdsa_key(ecdsa_key.clone())
         .build();
     // Create canister with initial cycles for some unrelated costs (eg. ingress induction, heartbeat).
@@ -715,6 +724,10 @@ fn calculate_one_gib_per_second_cost(
 //
 // Simulated and calculated costs may carry calculation error, that has to be ignored in assertions.
 // Eg. simulated cost may lose precision when is composed from several other integer costs (accumulated error).
+//
+// a = scale(x) + err_x + scale(y) + err_y + scale(z) + err_z
+// b = scale(x + y + z) + err_xyz
+// err_x + err_y + err_z != err_xyz
 fn is_almost_eq(a: Cycles, b: Cycles) -> bool {
     let a = a.get();
     let b = b.get();
@@ -1153,45 +1166,84 @@ fn test_subnet_size_execute_heartbeat_default_cost() {
 }
 
 #[test]
-fn test_subnet_size_sign_with_ecdsa_cost() {
-    let subnet_type = SubnetType::Application;
-    let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size;
-    let reference_cost = calculate_sign_with_ecdsa_cost(&config, reference_subnet_size);
+fn test_subnet_size_sign_with_ecdsa_non_zero_cost() {
+    // This test is testing non-zero cost of ECDSA signature, which happens in 2 cases:
+    // - when called from application subnet
+    // - when called from system subnet that is not NNS subnet
+    let nns_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
+    let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(2));
+    // Own subnet and NNS subnet IDs must be different.
+    assert_ne!(nns_subnet_id, subnet_id);
 
-    // Check default cost.
-    assert_eq!(
-        simulate_sign_with_ecdsa_cost(subnet_type, reference_subnet_size),
-        reference_cost
-    );
+    for subnet_type in [SubnetType::Application, SubnetType::System] {
+        let config = get_cycles_account_manager_config(subnet_type);
+        let reference_subnet_size = config.reference_subnet_size;
+        let reference_cost = calculate_sign_with_ecdsa_cost(&config, reference_subnet_size);
 
-    // Check if cost is increasing with subnet size.
-    assert!(
-        simulate_sign_with_ecdsa_cost(subnet_type, 1)
-            < simulate_sign_with_ecdsa_cost(subnet_type, 2)
-    );
-    assert!(
-        simulate_sign_with_ecdsa_cost(subnet_type, 11)
-            < simulate_sign_with_ecdsa_cost(subnet_type, 12)
-    );
-    assert!(
-        simulate_sign_with_ecdsa_cost(subnet_type, 101)
-            < simulate_sign_with_ecdsa_cost(subnet_type, 102)
-    );
-    assert!(
-        simulate_sign_with_ecdsa_cost(subnet_type, 1_001)
-            < simulate_sign_with_ecdsa_cost(subnet_type, 1_002)
-    );
+        // Check default cost.
+        assert_eq!(
+            simulate_sign_with_ecdsa_cost(
+                subnet_type,
+                reference_subnet_size,
+                nns_subnet_id,
+                subnet_id
+            ),
+            reference_cost
+        );
 
-    // Check linear scaling.
-    let reference_subnet_size = config.reference_subnet_size;
-    let reference_cost = simulate_sign_with_ecdsa_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
-        let simulated_cost = simulate_sign_with_ecdsa_cost(subnet_type, subnet_size);
-        let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
+        // Check if cost is increasing with subnet size.
         assert!(
-            is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={subnet_size}"
+            simulate_sign_with_ecdsa_cost(subnet_type, 1, nns_subnet_id, subnet_id)
+                < simulate_sign_with_ecdsa_cost(subnet_type, 2, nns_subnet_id, subnet_id)
+        );
+        assert!(
+            simulate_sign_with_ecdsa_cost(subnet_type, 11, nns_subnet_id, subnet_id)
+                < simulate_sign_with_ecdsa_cost(subnet_type, 12, nns_subnet_id, subnet_id)
+        );
+        assert!(
+            simulate_sign_with_ecdsa_cost(subnet_type, 101, nns_subnet_id, subnet_id)
+                < simulate_sign_with_ecdsa_cost(subnet_type, 102, nns_subnet_id, subnet_id)
+        );
+        assert!(
+            simulate_sign_with_ecdsa_cost(subnet_type, 1_001, nns_subnet_id, subnet_id)
+                < simulate_sign_with_ecdsa_cost(subnet_type, 1_002, nns_subnet_id, subnet_id)
+        );
+
+        // Check linear scaling.
+        let reference_subnet_size = config.reference_subnet_size;
+        let reference_cost = simulate_sign_with_ecdsa_cost(
+            subnet_type,
+            reference_subnet_size,
+            nns_subnet_id,
+            subnet_id,
+        );
+        for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+            let simulated_cost =
+                simulate_sign_with_ecdsa_cost(subnet_type, subnet_size, nns_subnet_id, subnet_id);
+            let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
+            assert!(
+                is_almost_eq(simulated_cost, calculated_cost),
+                "subnet_type={subnet_type:?}, subnet_size={subnet_size}, subnet_id={subnet_id}, nns_subnet_id={nns_subnet_id}",
+            );
+        }
+    }
+}
+
+#[test]
+fn test_subnet_size_sign_with_ecdsa_zero_cost() {
+    // This test is testing zero cost of ECDSA signature, which happens only when called from NNS subnet.
+    let subnet_type = SubnetType::System;
+    let nns_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
+    let subnet_id = nns_subnet_id;
+    // Own subnet and NNS subnet IDs must be the same.
+    assert_eq!(nns_subnet_id, subnet_id);
+
+    // Check that the cost is zero independently of the subnet size.
+    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+        assert_eq!(
+            simulate_sign_with_ecdsa_cost(subnet_type, subnet_size, nns_subnet_id, subnet_id),
+            Cycles::zero(),
+            "subnet_type={subnet_type:?}, subnet_size={subnet_size}, subnet_id={subnet_id}, nns_subnet_id={nns_subnet_id}"
         );
     }
 }
@@ -1380,30 +1432,6 @@ fn test_subnet_size_system_subnet_has_zero_cost() {
         assert_eq!(
             simulate_create_canister_cost(subnet_type, subnet_size),
             Cycles::zero(),
-            "subnet_size={subnet_size}"
-        );
-    }
-}
-
-#[test]
-fn test_subnet_size_system_subnet_non_zero_cost() {
-    let subnet_type = SubnetType::System;
-
-    // Check linear scaling.
-    let config = get_cycles_account_manager_config(subnet_type);
-    let reference_subnet_size = config.reference_subnet_size;
-    let reference_cost = simulate_sign_with_ecdsa_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
-        let simulated_cost = simulate_sign_with_ecdsa_cost(subnet_type, subnet_size);
-        let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
-
-        // The ECDSA signature fee is the fee charged when creating a
-        // signature on system subnet. The request likely came from a
-        // different subnet which is not a system subnet. There is an
-        // explicit exception for requests originating from the NNS when the
-        // charging occurs.
-        assert!(
-            is_almost_eq(simulated_cost, calculated_cost),
             "subnet_size={subnet_size}"
         );
     }
