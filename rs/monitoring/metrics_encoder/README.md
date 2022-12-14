@@ -1,0 +1,1 @@
+The metrics encoder has been moved to https://github.com/dfinity/metrics-encoder and is available via crates.io: https://crates.io/crates/ic-metrics-encoder.

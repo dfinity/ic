@@ -12,7 +12,6 @@ filegroup(
 
 DEPENDENCIES = [
     "//rs/crypto/sha",
-    "//rs/monitoring/metrics_encoder",
     "//rs/nns/constants",
     "//rs/nervous_system/common",
     "//rs/rust_canisters/dfn_candid",
@@ -28,6 +27,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-metrics-encoder",
     "@crate_index//:maplit",
     "@crate_index//:prost",
     "@crate_index//:serde",

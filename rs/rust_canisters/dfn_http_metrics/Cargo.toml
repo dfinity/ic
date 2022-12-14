@@ -7,5 +7,5 @@ edition = "2021"
 dfn_candid = { path = "../dfn_candid" }
 dfn_core = { path = "../dfn_core" }
 dfn_http = { path = "../dfn_http" }
-ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
+ic-metrics-encoder = "1"
 serde_bytes = "0.11"

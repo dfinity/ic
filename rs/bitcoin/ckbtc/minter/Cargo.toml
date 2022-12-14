@@ -27,7 +27,7 @@ ic-ic00-types = { path = "../../../types/ic00_types" }
 ic-icrc1 = { path = "../../../rosetta-api/icrc1" }
 ic-icrc1-client-cdk = { path = "../../../rosetta-api/icrc1/client/cdk" }
 ic-ledger-core = { path = "../../../rosetta-api/ledger_core" }
-ic-metrics-encoder = { path = "../../../monitoring/metrics_encoder" }
+ic-metrics-encoder = "1"
 ic-stable-structures = "0.1.2"
 lazy_static = "1.4.0"
 num-traits = "0.2.14"

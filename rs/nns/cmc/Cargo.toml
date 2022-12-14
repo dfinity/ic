@@ -18,7 +18,7 @@ ic-crypto-getrandom-for-wasm = { path = "../../crypto/getrandom_for_wasm" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
 ic-ic00-types = {path = "../../types/ic00_types"}
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
-ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
+ic-metrics-encoder = "1"
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }

@@ -23,7 +23,7 @@ ic-crypto-node-key-validation = { path = "../../crypto/node_key_validation" }
 ic-crypto-sha = {path = "../../crypto/sha/"}
 ic-crypto-utils-basic-sig = { path = "../../crypto/utils/basic_sig" }
 ic-ic00-types = { path = "../../types/ic00_types" }
-ic-metrics-encoder = { path = "../../monitoring/metrics_encoder" }
+ic-metrics-encoder = "1"
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nns-common = { path = "../../nns/common" }
