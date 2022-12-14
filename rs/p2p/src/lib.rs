@@ -100,8 +100,6 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::subnet::v1::GossipConfig;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{NodeId, SubnetId};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -181,7 +179,7 @@ pub fn start_p2p(
         node_id,
         log.clone(),
         &metrics_registry,
-        event_handler::ChannelConfig::new(),
+        event_handler::ChannelConfig::default(),
         gossip.clone(),
     );
     transport.set_event_handler(BoxCloneService::new(event_handler));
@@ -231,20 +229,6 @@ pub(crate) mod advert_utils {
             };
             action.map(|action| GossipAdvertSendRequest { advert, action })
         }
-    }
-}
-
-/// Fetch the Gossip configuration from the registry.
-pub fn fetch_gossip_config(
-    registry_client: Arc<dyn RegistryClient>,
-    subnet_id: SubnetId,
-) -> GossipConfig {
-    if let Ok(Some(Some(gossip_config))) =
-        registry_client.get_gossip_config(subnet_id, registry_client.get_latest_version())
-    {
-        gossip_config
-    } else {
-        ic_types::p2p::build_default_gossip_config()
     }
 }
 
