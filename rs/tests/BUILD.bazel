@@ -500,6 +500,23 @@ system_test(
 )
 
 system_test(
+    name = "ckbtc_minter_batching",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "allow_to_fail",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+            "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+        ],
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
     name = "icrc1_agent_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

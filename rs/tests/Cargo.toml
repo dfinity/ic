@@ -182,6 +182,10 @@ name = "ic-systest-ckbtc-minter-basics-test"
 path = "bin/ckbtc_minter_basics_test.rs"
 
 [[bin]]
+name = "ic-systest-ckbtc-batching"
+path = "bin/ckbtc_minter_batching.rs"
+
+[[bin]]
 name = "ic-systest-icrc1-agent-test"
 path = "bin/icrc1_agent_test.rs"
 

@@ -18,6 +18,5 @@ fn main() -> Result<()> {
         // )
         .add_test(systest!(ckbtc::agent::test_ckbtc_minter_agent))
         .execute_from_args()?;
-
     Ok(())
 }

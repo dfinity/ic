@@ -33,6 +33,7 @@ use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
+use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
 use ic_ckbtc_minter::updates::update_balance::{
     UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult,
 };
@@ -45,8 +46,10 @@ use std::time::{Duration, Instant};
 
 pub const UNIVERSAL_VM_NAME: &str = "btc-node";
 
-pub const TIMEOUT_30S: Duration = Duration::from_secs(300);
-pub const RETRIEVE_BTC_STATUS_TIMEOUT: Duration = Duration::from_secs(600);
+/// The timeout for operations that we expect to complete fast.
+pub const SHORT_TIMEOUT: Duration = Duration::from_secs(300);
+/// The timeout for slow operations.
+pub const LONG_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// The default value of minimum confirmations on the Bitcoin server.
 pub const BTC_MIN_CONFIRMATIONS: u64 = 6;
@@ -80,7 +83,7 @@ pub fn generate_blocks(btc_client: &Client, logger: &Logger, nb_blocks: u64, add
 }
 
 /// Wait for the expected balance to be available at the given btc address.
-/// Timeout after TIMEOUT_30S if the expected balance is not reached.
+/// Timeout after SHORT_TIMEOUT if the expected balance is not reached.
 pub async fn wait_for_bitcoin_balance<'a>(
     canister: &UniversalCanister<'a>,
     logger: &Logger,
@@ -90,7 +93,7 @@ pub async fn wait_for_bitcoin_balance<'a>(
     let mut balance = 0;
     let start = Instant::now();
     while balance != expected_balance_in_satoshis {
-        if start.elapsed() >= TIMEOUT_30S {
+        if start.elapsed() >= SHORT_TIMEOUT {
             panic!("update_balance timeout");
         };
         balance = get_bitcoin_balance(canister, btc_address).await;
@@ -102,11 +105,11 @@ pub async fn wait_for_bitcoin_balance<'a>(
 }
 
 /// Wait until we have a tx in btc mempool
-/// Timeout after TIMEOUT_30S if the minter doesn't successfully find a new tx in the timeframe.
+/// Timeout after SHORT_TIMEOUT if the minter doesn't successfully find a new tx in the timeframe.
 pub async fn wait_for_mempool_change(btc_rpc: &Client, logger: &Logger) -> Vec<Txid> {
     let start = Instant::now();
     loop {
-        if start.elapsed() >= TIMEOUT_30S {
+        if start.elapsed() >= SHORT_TIMEOUT {
             panic!("No new utxos in mempool timeout");
         };
         match btc_rpc.get_raw_mempool() {
@@ -143,7 +146,7 @@ pub async fn self_check(minter: &CkBtcMinterAgent) -> Result<(), String> {
 /// # Panics
 ///
 /// This function panics if:
-/// * The transfer didn't finalize after `RETRIEVE_BTC_STATUS_TIMEOUT`.
+/// * The transfer didn't finalize after `LONG_TIMEOUT`.
 /// * The minter rejected the retrieval because the amount was too low to cover the fees.
 pub async fn wait_for_signed_tx(
     ckbtc_minter_agent: &CkBtcMinterAgent,
@@ -152,7 +155,7 @@ pub async fn wait_for_signed_tx(
 ) -> [u8; 32] {
     let start = Instant::now();
     loop {
-        if start.elapsed() >= RETRIEVE_BTC_STATUS_TIMEOUT {
+        if start.elapsed() >= LONG_TIMEOUT {
             panic!("No new signed tx emitted by minter");
         };
         self_check(ckbtc_minter_agent)
@@ -190,7 +193,7 @@ pub async fn wait_for_signed_tx(
 /// # Panics
 ///
 /// This function panics if:
-/// * The transfer didn't finalize after `RETRIEVE_BTC_STATUS_TIMEOUT`.
+/// * The transfer didn't finalize after `LONG_TIMEOUT`.
 /// * The minter rejected the retrieval because the amount was too low to cover the fees.
 pub async fn wait_for_finalization(
     btc_client: &Client,
@@ -201,10 +204,10 @@ pub async fn wait_for_finalization(
 ) -> [u8; 32] {
     let start = Instant::now();
     loop {
-        if start.elapsed() >= RETRIEVE_BTC_STATUS_TIMEOUT {
+        if start.elapsed() >= LONG_TIMEOUT {
             panic!(
                 "Retrieve btc request {} did not finalize in {:?}",
-                block_index, RETRIEVE_BTC_STATUS_TIMEOUT
+                block_index, LONG_TIMEOUT
             );
         };
         self_check(ckbtc_minter_agent)
@@ -237,8 +240,39 @@ pub async fn wait_for_finalization(
     }
 }
 
+pub async fn wait_for_finalization_no_new_blocks(
+    ckbtc_minter_agent: &CkBtcMinterAgent,
+    block_index: u64,
+) -> [u8; 32] {
+    let start = Instant::now();
+    loop {
+        if start.elapsed() >= LONG_TIMEOUT {
+            panic!(
+                "Retrieve btc request {} did not finalize in {:?}",
+                block_index, LONG_TIMEOUT
+            );
+        };
+        self_check(ckbtc_minter_agent)
+            .await
+            .expect("ckBTC minter is not healthy");
+        match ckbtc_minter_agent
+            .retrieve_btc_status(block_index)
+            .await
+            .expect("failed to call retrieve_btc_status")
+        {
+            RetrieveBtcStatus::Confirmed { txid } => {
+                return txid;
+            }
+            RetrieveBtcStatus::AmountTooLow => {
+                panic!("The minter rejected retrieve request {}", block_index);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Wait for the minter to find new utxos
-/// Timeout after TIMEOUT_30S if the minter doesn't find new utxos in the time limit.
+/// Timeout after SHORT_TIMEOUT if the minter doesn't find new utxos in the time limit.
 pub async fn wait_for_update_balance(
     ckbtc_minter_agent: &CkBtcMinterAgent,
     logger: &Logger,
@@ -251,7 +285,7 @@ pub async fn wait_for_update_balance(
         .await
         .expect("Error while calling update_balance");
     while update_result.is_err() {
-        if start.elapsed() >= TIMEOUT_30S {
+        if start.elapsed() >= SHORT_TIMEOUT {
             panic!("update_balance timeout");
         };
         update_result = ckbtc_minter_agent
@@ -363,6 +397,44 @@ pub async fn assert_account_balance(agent: &Icrc1Agent, account: &Account, expec
             .await
             .expect("Error while calling balance_of")
     );
+}
+
+pub async fn retrieve_btc(
+    minter_agent: &CkBtcMinterAgent,
+    logger: &Logger,
+    retrieve_amount: u64,
+    destination_btc_address: String,
+) -> Option<u64> {
+    let start = Instant::now();
+    loop {
+        if start.elapsed() >= SHORT_TIMEOUT {
+            panic!("update_balance timeout");
+        };
+        match minter_agent
+            .retrieve_btc(RetrieveBtcArgs {
+                amount: retrieve_amount,
+                address: destination_btc_address.clone(),
+            })
+            .await
+        {
+            Ok(result) => match result {
+                Ok(retrieve_btc_ok) => {
+                    return Some(retrieve_btc_ok.block_index);
+                }
+                Err(RetrieveBtcError::TemporarilyUnavailable(msg)) => {
+                    info!(
+                        &logger,
+                        "retrieve_btc endpoint is unavailable ({}), retrying ...", msg
+                    );
+                }
+                Err(err) => panic!("[retrieve_btc] unexpected error : {:?}", err),
+            },
+            Err(_) => info!(
+                &logger,
+                "Error while calling retrieve_btc endpoint with the agent, retrying ..."
+            ),
+        };
+    }
 }
 
 /// Verify that a mint transaction exists on the ledger at given block.
@@ -492,7 +564,7 @@ pub fn ensure_wallet(btc_rpc: &Client, logger: &Logger) {
     let mut wallets: Vec<String> = vec![];
     let start = Instant::now();
     while wallets.is_empty() {
-        if start.elapsed() >= TIMEOUT_30S {
+        if start.elapsed() >= SHORT_TIMEOUT {
             panic!("list_wallets timeout");
         };
         match btc_rpc.list_wallets() {
@@ -512,7 +584,7 @@ pub fn ensure_wallet(btc_rpc: &Client, logger: &Logger) {
             warning: None,
         };
         while res.name.is_empty() {
-            if start.elapsed() >= TIMEOUT_30S {
+            if start.elapsed() >= SHORT_TIMEOUT {
                 panic!("create_wallet timeout");
             };
             match btc_rpc.create_wallet("mywallet", None, None, None, None) {
