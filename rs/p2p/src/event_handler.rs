@@ -76,13 +76,13 @@ use crate::{
 use ic_interfaces_transport::{TransportEvent, TransportMessage};
 use ic_logger::{debug, info, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::subnet::v1::GossipConfig};
+use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_types::{artifact::AdvertClass, artifact::ArtifactFilter, p2p::GossipAdvert, NodeId};
 use parking_lot::RwLock;
 use std::{
     cmp::max,
     collections::BTreeMap,
-    convert::{Infallible, TryInto},
+    convert::Infallible,
     fmt::Debug,
     future::Future,
     pin::Pin,
@@ -147,9 +147,7 @@ struct FlowWorker {
     threadpool: Arc<Mutex<ThreadPool>>,
     /// The semaphore map used to make sure not a single peer can
     /// flood the this peer.
-    sem_map: Arc<RwLock<BTreeMap<NodeId, Arc<Semaphore>>>>,
-    /// The max number of inflight request for each peer.
-    max_inflight_requests: usize,
+    sem: Arc<Semaphore>,
 }
 
 impl FlowWorker {
@@ -167,8 +165,7 @@ impl FlowWorker {
             flow_type_name,
             metrics,
             threadpool: Arc::new(Mutex::new(threadpool)),
-            sem_map: Arc::new(RwLock::new(BTreeMap::new())),
-            max_inflight_requests,
+            sem: Arc::new(Semaphore::new(max(1, max_inflight_requests))),
         }
     }
 
@@ -186,8 +183,8 @@ impl FlowWorker {
             .with_label_values(&[self.flow_type_name])
             .start_timer();
 
-        let sem = self.insert_peer_semaphore_if_missing(node_id);
         // Acquiring a permit must always succeed because we never close the semaphore.
+        let sem = self.sem.clone();
         let permit = match sem.clone().try_acquire_owned() {
             Ok(permit) => permit,
             Err(_) => {
@@ -205,21 +202,6 @@ impl FlowWorker {
             let _send_timer = send_timer;
             consume_message_fn(msg, node_id);
         });
-    }
-
-    fn insert_peer_semaphore_if_missing(&self, node_id: NodeId) -> Arc<Semaphore> {
-        if let Some(sem) = self.sem_map.read().get(&node_id) {
-            return sem.clone();
-        }
-        let mut sem_map = self.sem_map.write();
-        match sem_map.entry(node_id) {
-            std::collections::btree_map::Entry::Vacant(e) => {
-                let sem = Arc::new(Semaphore::new(max(1, self.max_inflight_requests)));
-                e.insert(sem.clone());
-                sem
-            }
-            std::collections::btree_map::Entry::Occupied(e) => e.get().clone(),
-        }
     }
 }
 
@@ -252,6 +234,10 @@ pub(crate) const MAX_ADVERT_BUFFER: usize = 100_000;
 pub(crate) const MAX_TRANSPORT_BUFFER: usize = 1000;
 /// The maximum number of buffered retransmission requests.
 pub(crate) const MAX_RETRANSMISSION_BUFFER: usize = 1000;
+/// The maximum number of buffered chunks.
+pub(crate) const MAX_CHUNK_BUFFER: usize = 100;
+/// The maximum number of buffered chunk requests.
+pub(crate) const MAX_CHUNK_REQUEST_BUFFER: usize = 100;
 
 /// The channel configuration, containing the maximum number of messages for
 /// each flow type.
@@ -262,19 +248,15 @@ pub(crate) struct ChannelConfig {
 }
 
 /// A `GossipConfig` can be converted into a `ChannelConfig`.
-impl From<GossipConfig> for ChannelConfig {
+impl ChannelConfig {
     /// The function converts a `GossipConfig` to a `ChannelConfig`.
-    fn from(gossip_config: GossipConfig) -> Self {
-        let max_outstanding_buffer = gossip_config
-            .max_artifact_streams_per_peer
-            .try_into()
-            .unwrap();
+    pub(crate) fn new() -> Self {
         Self {
             map: FlowType::iter()
                 .map(|flow_type| match flow_type {
                     FlowType::Advert => (flow_type, MAX_ADVERT_BUFFER),
-                    FlowType::Request => (flow_type, max_outstanding_buffer),
-                    FlowType::Chunk => (flow_type, max_outstanding_buffer),
+                    FlowType::Request => (flow_type, MAX_CHUNK_REQUEST_BUFFER),
+                    FlowType::Chunk => (flow_type, MAX_CHUNK_BUFFER),
                     FlowType::Retransmission => (flow_type, MAX_RETRANSMISSION_BUFFER),
                     FlowType::Transport => (flow_type, MAX_TRANSPORT_BUFFER),
                 })
@@ -664,7 +646,7 @@ pub mod tests {
         node_id: NodeId,
         gossip: GossipArc,
     ) -> (AsyncTransportEventHandlerImpl, AdvertBroadcaster) {
-        let mut channel_config = ChannelConfig::from(ic_types::p2p::build_default_gossip_config());
+        let mut channel_config = ChannelConfig::new();
         channel_config
             .map
             .insert(FlowType::Advert, advert_max_depth);

@@ -158,7 +158,6 @@ pub fn start_p2p(
     node_id: NodeId,
     subnet_id: SubnetId,
     transport_config: TransportConfig,
-    gossip_config: GossipConfig,
     registry_client: Arc<dyn RegistryClient>,
     transport: Arc<dyn Transport>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
@@ -182,7 +181,7 @@ pub fn start_p2p(
         node_id,
         log.clone(),
         &metrics_registry,
-        event_handler::ChannelConfig::from(gossip_config),
+        event_handler::ChannelConfig::new(),
         gossip.clone(),
     );
     transport.set_event_handler(BoxCloneService::new(event_handler));

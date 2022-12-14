@@ -37,7 +37,7 @@ use ic_interfaces_state_manager::StateManager;
 use ic_interfaces_transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_p2p::{fetch_gossip_config, start_p2p, AdvertBroadcaster, P2PThreadJoiner};
+use ic_p2p::{start_p2p, AdvertBroadcaster, P2PThreadJoiner};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
@@ -118,7 +118,6 @@ pub fn create_networking_stack(
         ic_interfaces_canister_http_adapter_client::CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
 ) -> (IngressIngestionService, P2PThreadJoiner) {
-    let gossip_config = fetch_gossip_config(registry_client.clone(), subnet_id);
     let advert_subscriber = AdvertBroadcaster::new(log.clone(), &metrics_registry);
 
     // Now we setup the Artifact Pools and the manager.
@@ -178,7 +177,6 @@ pub fn create_networking_stack(
         node_id,
         subnet_id,
         transport_config,
-        gossip_config,
         registry_client,
         transport,
         artifact_pools.consensus_pool_cache.clone(),
