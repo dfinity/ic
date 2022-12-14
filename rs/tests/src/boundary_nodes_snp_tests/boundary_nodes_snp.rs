@@ -7,10 +7,10 @@ use crate::driver::{
     // TODO: Uncomment this once spm41 is fixed for virsh
     //farm::HostFeature,
     ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResources},
-    test_env::TestEnv,
+    test_env::{SshKeyGen, TestEnv},
     test_env_api::{
-        retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
-        RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+        retry_async, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+        NnsInstallationExt, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
     },
 };
 
@@ -40,6 +40,9 @@ fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32),
 }
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
+
     let logger = env.logger();
 
     InternetComputer::new()

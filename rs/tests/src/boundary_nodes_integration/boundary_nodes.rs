@@ -20,11 +20,11 @@ use crate::{
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
         ic::{InternetComputer, Subnet},
-        test_env::TestEnv,
+        test_env::{SshKeyGen, TestEnv},
         test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm, IcNodeContainer,
-            NnsInstallationExt, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            retry_async, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm,
+            IcNodeContainer, NnsInstallationExt, RetrieveIpv4Addr, SshSession, ADMIN,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
     util::{assert_create_agent, delay},
@@ -49,6 +49,7 @@ use slog::{error, info, Logger};
 use tokio::runtime::Runtime;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
+const COUNTER_CANISTER_WAT: &[u8] = include_bytes!("../counter.wat");
 
 struct PanicHandler {
     env: TestEnv,
@@ -156,6 +157,9 @@ async fn create_canister(
 }
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
+
     let logger = env.logger();
 
     InternetComputer::new()
@@ -305,12 +309,15 @@ pub fn canister_test(env: TestEnv) {
         info!(&logger, "Creating replica agent...");
         let agent = assert_create_agent(install_node.as_ref().unwrap().0.as_str()).await;
 
-        let counter_canister = env.load_wasm("rs/workload_generator/src/counter.wat");
-
         info!(&logger, "installing canister");
-        let canister_id = create_canister(&agent, install_node.unwrap().1, &counter_canister, None)
-            .await
-            .expect("Could not create counter canister");
+        let canister_id = create_canister(
+            &agent,
+            install_node.unwrap().1,
+            wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+            None,
+        )
+        .await
+        .expect("Could not create counter canister");
 
         info!(&logger, "created canister={canister_id}");
 
@@ -1507,7 +1514,6 @@ pub fn direct_to_replica_test(env: TestEnv) {
     }));
 
     futs.push(rt.spawn({
-        let env = env.clone();
         let logger = logger.clone();
         let client = client.clone();
         let install_url = install_url.clone();
@@ -1518,13 +1524,15 @@ pub fn direct_to_replica_test(env: TestEnv) {
             info!(&logger, "creating management agent");
             let agent = assert_create_agent(install_url.as_str()).await;
 
-            info!(&logger, "loading wasm");
-            let wasm = env.load_wasm("rs/workload_generator/src/counter.wat");
-
             info!(&logger, "creating canister");
-            let cid = create_canister(&agent, effective_canister_id, &wasm, None)
-                .await
-                .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
+            let cid = create_canister(
+                &agent,
+                effective_canister_id,
+                wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+                None,
+            )
+            .await
+            .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             // Wait for the canister to finish installing
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -1550,7 +1558,6 @@ pub fn direct_to_replica_test(env: TestEnv) {
     }));
 
     futs.push(rt.spawn({
-        let env = env.clone();
         let logger = logger.clone();
         let client = client;
         let install_url = install_url;
@@ -1561,13 +1568,15 @@ pub fn direct_to_replica_test(env: TestEnv) {
             info!(&logger, "creating management agent");
             let agent = assert_create_agent(install_url.as_str()).await;
 
-            info!(&logger, "loading wasm");
-            let wasm = env.load_wasm("rs/workload_generator/src/counter.wat");
-
             info!(&logger, "creating canister");
-            let cid = create_canister(&agent, effective_canister_id, &wasm, None)
-                .await
-                .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
+            let cid = create_canister(
+                &agent,
+                effective_canister_id,
+                wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+                None,
+            )
+            .await
+            .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             // Wait for the canister to finish installing
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -1657,13 +1666,15 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
             info!(&logger, "creating management agent");
             let agent = assert_create_agent(install_url.as_str()).await;
 
-            info!(&logger, "loading wasm");
-            let wasm = env.load_wasm("rs/workload_generator/src/counter.wat");
-
             info!(&logger, "creating canister");
-            let cid = create_canister(&agent, effective_canister_id, &wasm, None)
-                .await
-                .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
+            let cid = create_canister(
+                &agent,
+                effective_canister_id,
+                wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+                None,
+            )
+            .await
+            .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             // Wait for the canister to finish installing
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -1840,7 +1851,6 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
     }));
 
     futs.push(rt.spawn({
-        let env = env.clone();
         let logger = logger.clone();
         let client = client.clone();
         let install_url = install_url.clone();
@@ -1851,13 +1861,15 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             info!(&logger, "creating management agent");
             let agent = assert_create_agent(install_url.as_str()).await;
 
-            info!(&logger, "loading wasm");
-            let wasm = env.load_wasm("rs/workload_generator/src/counter.wat");
-
             info!(&logger, "creating canister");
-            let cid = create_canister(&agent, effective_canister_id, &wasm, None)
-                .await
-                .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
+            let cid = create_canister(
+                &agent,
+                effective_canister_id,
+                wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+                None,
+            )
+            .await
+            .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             // Wait for the canister to finish installing
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -1886,7 +1898,6 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
     }));
 
     futs.push(rt.spawn({
-        let env = env.clone();
         let logger = logger.clone();
         let client = client;
         let install_url = install_url;
@@ -1897,13 +1908,15 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             info!(&logger, "creating management agent");
             let agent = assert_create_agent(install_url.as_str()).await;
 
-            info!(&logger, "loading wasm");
-            let wasm = env.load_wasm("rs/workload_generator/src/counter.wat");
-
             info!(&logger, "creating canister");
-            let cid = create_canister(&agent, effective_canister_id, &wasm, None)
-                .await
-                .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
+            let cid = create_canister(
+                &agent,
+                effective_canister_id,
+                wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+                None,
+            )
+            .await
+            .map_err(|err| anyhow!(format!("failed to create canister: {}", err)))?;
 
             // Wait for the canister to finish installing
             tokio::time::sleep(Duration::from_secs(5)).await;
