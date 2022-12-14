@@ -157,7 +157,7 @@ generate_release_notes_template() {
 
     CANISTER_CODE_LOCATION=$(get_canister_code_location "$CANISTER_NAME")
     ESCAPED_IC_REPO=$(printf '%s\n' "$IC_REPO" | sed -e 's/[]\/$*.^[]/\\&/g')
-    RELATIVE_CODE_LOCATION=".$(echo "$CANISTER_CODE_LOCATION" | sed "s/$ESCAPED_IC_REPO//")"
+    RELATIVE_CODE_LOCATION="$(echo "$CANISTER_CODE_LOCATION" | sed "s/$ESCAPED_IC_REPO/./g")"
 
     OUTPUT=$(
         cat <<EOF
@@ -172,7 +172,7 @@ TODO ADD FEATURE NOTES
 ## Release Notes
 \`\`\`
 \$ git log --format="%C(auto) %h %s" $LAST_COMMIT..$NEXT_COMMIT --  $RELATIVE_CODE_LOCATION
-$(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- "$CANISTER_CODE_LOCATION")
+$(git log --format="%C(auto) %h %s" "$LAST_COMMIT".."$NEXT_COMMIT" -- $CANISTER_CODE_LOCATION)
 \`\`\`
 ## Wasm Verification
 Verify that the hash of the gzipped WASM matches the proposed hash.
@@ -202,7 +202,7 @@ get_canister_code_location() {
     # Map of locations
     code_location__registry="$RUST_DIR/registry/canister"
     code_location__governance="$RUST_DIR/nns/governance"
-    code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister"
+    code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister $RUST_DIR/rosetta-api/icp_ledger"
     code_location__root="$RUST_DIR/nns/handlers/root"
     code_location__cycles_minting="$RUST_DIR/nns/cmc"
     code_location__lifeline="$RUST_DIR/nns/handlers/lifeline"
@@ -502,7 +502,13 @@ _canister_download_name_for_sns_canister_type() {
 _canister_download_name_for_nns_canister_type() {
     local CANISTER_TYPE=$1
 
-    [ "$CANISTER_TYPE" != "lifeline" ] && echo "$CANISTER_TYPE"-canister || echo "$CANISTER_TYPE"
+    if [ "$CANISTER_TYPE" == "lifeline" ]; then
+        echo "$CANISTER_TYPE"
+    elif [ "$CANISTER_NAME" == "ledger" ]; then
+        echo "ledger-canister_notify-method"
+    else
+        echo "$CANISTER_TYPE"-canister
+    fi
 }
 
 ungzip() {
