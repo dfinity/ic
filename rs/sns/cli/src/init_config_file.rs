@@ -1029,10 +1029,6 @@ mod test {
 
     impl SnsInitialTokenDistributionConfig {
         pub fn with_test_values() -> Self {
-            let mut logo_path =
-                std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
-            logo_path.push("test.png");
-
             Self {
                 initial_token_distribution: Some(FDVP(FractionalDeveloperVotingPower {
                     ..Default::default()
@@ -1043,10 +1039,6 @@ mod test {
 
     impl SnsCliInitConfig {
         pub fn with_test_values() -> Self {
-            let mut logo_path =
-                std::path::PathBuf::from(&std::env::var("CARGO_MANIFEST_DIR").unwrap());
-            logo_path.push("test.png");
-
             Self {
                 sns_ledger: SnsLedgerConfig::with_test_values(),
                 sns_governance: SnsGovernanceConfig::with_test_values(),
