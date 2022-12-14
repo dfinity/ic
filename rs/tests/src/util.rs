@@ -4,6 +4,8 @@ use anyhow::bail;
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
 use dfn_protobuf::{protobuf, ProtoBuf};
+use futures::future::{select_all, try_join_all};
+use futures::FutureExt;
 use ic_agent::export::Principal;
 use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, Agent, AgentError, Identity, RequestId,
@@ -32,6 +34,7 @@ use itertools::Itertools;
 use on_wire::FromWire;
 use rand_chacha::ChaCha8Rng;
 use slog::{debug, info};
+use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::{
     convert::{TryFrom, TryInto},
     fmt::Debug,
@@ -40,6 +43,8 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
+use tokio::net::{TcpSocket, TcpStream};
 use tokio::runtime::Runtime as TRuntime;
 use url::Url;
 
@@ -1316,4 +1321,70 @@ pub fn get_config() -> ConfigOptional {
     let cfg = cfg.replace("{{ nns_url }}", "http://www.fakeurl.com/");
     let cfg = cfg.replace("{{ malicious_behavior }}", "null");
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
+}
+
+/// A stream of logs from one or multiple nodes
+pub struct LogStream {
+    nodes: Vec<(IcNodeSnapshot, Lines<BufReader<TcpStream>>)>,
+}
+
+impl LogStream {
+    /// Open a new [`LogStream`] on the nodes
+    pub async fn open(nodes: impl Iterator<Item = IcNodeSnapshot>) -> std::io::Result<Self> {
+        let addrs = nodes
+            .map(|node| {
+                let addr = match node.get_ip_addr() {
+                    IpAddr::V6(x) => x,
+                    IpAddr::V4(_ip) => panic!(),
+                };
+                Self::open_stream(addr).map(|result| result.map(|ep| (node, ep)))
+            })
+            .collect::<Vec<_>>();
+
+        let nodes = try_join_all(addrs).await?;
+        Ok(Self { nodes })
+    }
+
+    /// Read the next line of the logs
+    pub async fn read(&mut self) -> std::io::Result<Option<(IcNodeSnapshot, String)>> {
+        select_all(self.nodes.iter_mut().map(|(node, ep)| {
+            Box::pin(ep.next_line().map(move |result| {
+                result.map(|maybe_line| maybe_line.map(|line| (node.clone(), line)))
+            }))
+        }))
+        .await
+        .0
+    }
+
+    /// Wait for a specific predicate to be true before continuing
+    pub async fn wait_until<P>(&mut self, predicate: P) -> std::io::Result<()>
+    where
+        P: Fn(&IcNodeSnapshot, &str) -> bool,
+    {
+        while let Some((node, line)) = self.read().await? {
+            if predicate(&node, &line) {
+                return Ok(());
+            }
+        }
+
+        // NOTE: We should never reach the end of the log stream while waiting for a log line
+        Err(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "Log stream ended unexpectedly",
+        ))
+    }
+
+    /// Open a stream the the node specified by the [`Ipv6Addr`]
+    async fn open_stream(ip_addr: Ipv6Addr) -> std::io::Result<Lines<BufReader<TcpStream>>> {
+        let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, 19531, 0, 0));
+        let socket = TcpSocket::new_v6()?;
+        let mut stream = socket.connect(socket_addr).await?;
+
+        stream.write_all(b"GET /entries?follow HTTP/1.1\n").await?;
+        stream.write_all(b"Accept: application/json\n").await?;
+        stream.write_all(b"Range: entries=:-1:\n\r\n\r").await?;
+
+        let bf = BufReader::new(stream);
+        Ok(bf.lines())
+    }
 }
