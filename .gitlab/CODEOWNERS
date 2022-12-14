@@ -199,6 +199,8 @@
 /rs/test_utilities/src/wasm_instance.rs         @dfinity-lab/teams/runtime-owners
 /rs/tests/                              @dfinity-lab/teams/ic-testing-verification
 /rs/tests/bin/basic_health_test.rs        @dfinity-lab/teams/ic-testing-verification
+/rs/tests/bin/boundary_node_integration_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
+/rs/tests/bin/boundary_nodes_snp_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
 /rs/tests/bin/btc_get_balance_test.rs     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
 /rs/tests/bin/canister_http_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /rs/tests/bin/ckbtc_minter_basics_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
@@ -221,6 +223,7 @@
 /rs/tests/bin/two_third_latency_test.rs   @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/basic_health_test.rs      @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/boundary_nodes_integration/     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification
+/rs/tests/src/boundary_nodes_snp_tests/     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/btc_integration/          @dfinity-lab/teams/execution-owners
 /rs/tests/src/canister_http/       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /rs/tests/src/canister_http/basic_http.rs  @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners

@@ -342,10 +342,13 @@ def populate_dependencies_dir(
         ("ic-os/guestos/dev/disk-img.tar.zst.sha256", ic_os_img_sha256),
         ("ic-os/guestos/dev/upload_update-img_update-img.tar.zst.proxy-cache-url", ic_os_update_img_url),
         ("ic-os/guestos/dev/update-img.tar.zst.sha256", ic_os_update_img_sha256),
-        ("ic-os/boundary-guestos/boundary_node_img_url", boundary_node_img_url),
-        ("ic-os/boundary-guestos/boundary_node_img_sha256", boundary_node_img_sha256),
-        ("ic-os/boundary-guestos/boundary_node_snp_img_url", boundary_node_snp_img_url),
-        ("ic-os/boundary-guestos/boundary_node_snp_img_sha256", boundary_node_snp_img_sha256),
+        ("ic-os/boundary-guestos/envs/dev/upload_disk-img_disk-img.tar.zst.proxy-cache-url", boundary_node_img_url),
+        ("ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.sha256", boundary_node_img_sha256),
+        (
+            "ic-os/boundary-guestos/envs/dev-sev/upload_disk-img_disk-img.tar.zst.proxy-cache-url",
+            boundary_node_snp_img_url,
+        ),
+        ("ic-os/boundary-guestos/envs/dev-sev/disk-img.tar.zst.sha256", boundary_node_snp_img_sha256),
     ]
 
     for (file_rel_path, content) in files_with_content:

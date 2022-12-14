@@ -296,6 +296,15 @@ fn create_and_upload_config_disk_image(
         cmd.arg("--nns_public_key").arg(nns_public_key);
     }
 
+    let key = "PATH";
+    let old_path = match std::env::var(key) {
+        Ok(val) => val,
+        Err(e) => {
+            bail!("couldn't interpret {}: {}", key, e)
+        }
+    };
+    cmd.env("PATH", format!("{}:{}", "/usr/sbin", old_path));
+
     let output = cmd.output()?;
 
     std::io::stdout().write_all(&output.stdout)?;

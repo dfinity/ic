@@ -183,6 +183,15 @@ rust_test(
     deps = DEPENDENCIES,
 )
 
+BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
+    "//ic-os/boundary-guestos/envs/dev:hash_and_upload_disk-img",
+    "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
+]
+
+BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS = [
+    "//ic-os/boundary-guestos/envs/dev-sev:hash_and_upload_disk-img",
+]
+
 GUESTOS_RUNTIME_DEPS = [
     "//ic-os/guestos/dev:hash_and_upload_disk-img",
     "//ic-os/guestos/dev:hash_and_upload_update-img",
@@ -591,5 +600,26 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
+    name = "boundary_node_integration_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
+        "//rs/tests/test_canisters/http_counter",
+        "//rs/tests/test_canisters/kv_store",
+    ],
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
+    name = "boundary_nodes_snp_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )

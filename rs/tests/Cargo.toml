@@ -256,3 +256,11 @@ path = "bin/upgrade_compatibility_test.rs"
 [[bin]]
 name = "ic-systest-two-third-latency"
 path = "bin/two_third_latency_test.rs"
+
+[[bin]]
+name = "ic-systest-boundary-node-integration"
+path = "bin/boundary_node_integration_test.rs"
+
+[[bin]]
+name = "ic-systest-boundary-node-snp"
+path = "bin/boundary_nodes_snp_test.rs"

@@ -669,26 +669,28 @@ impl<T: HasDependencies> HasIcDependencies for T {
     }
 
     fn get_boundary_node_snp_img_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/boundary-guestos/boundary_node_snp_img_url";
+        let dep_rel_path =
+            "ic-os/boundary-guestos/envs/dev-sev/upload_disk-img_disk-img.tar.zst.proxy-cache-url";
         let result = self.read_dependency_to_string(dep_rel_path)?;
         Ok(Url::parse(&result)?)
     }
 
     fn get_boundary_node_snp_img_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/boundary-guestos/boundary_node_snp_img_sha256";
+        let dep_rel_path = "ic-os/boundary-guestos/envs/dev-sev/disk-img.tar.zst.sha256";
         let sha256 = self.read_dependency_to_string(dep_rel_path)?;
         bail_if_sha256_invalid(&sha256, "boundary_node_snp_img_sha256")?;
         Ok(sha256)
     }
 
     fn get_boundary_node_img_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/boundary-guestos/boundary_node_img_url";
+        let dep_rel_path =
+            "ic-os/boundary-guestos/envs/dev/upload_disk-img_disk-img.tar.zst.proxy-cache-url";
         let url = self.read_dependency_to_string(dep_rel_path)?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_boundary_node_img_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/boundary-guestos/boundary_node_img_sha256";
+        let dep_rel_path = "ic-os/boundary-guestos/envs/dev/disk-img.tar.zst.sha256";
         let sha256 = self.read_dependency_to_string(dep_rel_path)?;
         bail_if_sha256_invalid(&sha256, "boundary_node_img_sha256")?;
         Ok(sha256)
