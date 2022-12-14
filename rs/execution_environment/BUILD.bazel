@@ -121,6 +121,7 @@ rust_test(
 
 rust_test_suite(
     name = "execution_environment_misc_integration_tests",
+    size = "large",
     srcs = glob(["tests/*.rs"]),
     aliases = ALIASES,
     data = DATA,
