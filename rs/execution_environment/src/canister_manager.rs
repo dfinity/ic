@@ -1210,8 +1210,7 @@ impl CanisterManager {
             None => self.config.default_provisional_cycles_balance,
         };
 
-        self.cycles_account_manager
-            .add_cycles(canister.system_state.balance_mut(), cycles_amount);
+        *canister.system_state.balance_mut() += cycles_amount;
 
         Ok(())
     }

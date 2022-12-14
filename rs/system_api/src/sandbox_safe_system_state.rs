@@ -516,8 +516,7 @@ impl SandboxSafeSystemState {
 
     pub(super) fn refund_cycles(&mut self, cycles: Cycles) {
         let mut new_balance = self.cycles_balance();
-        self.cycles_account_manager
-            .add_cycles(&mut new_balance, cycles);
+        new_balance += cycles;
         self.update_balance_change(new_balance);
     }
 
@@ -553,8 +552,7 @@ impl SandboxSafeSystemState {
             .entry(call_context_id)
             .or_insert_with(Cycles::zero) += amount_to_accept;
 
-        self.cycles_account_manager
-            .add_cycles(&mut new_balance, amount_to_accept);
+        new_balance += amount_to_accept;
 
         self.update_balance_change(new_balance);
         amount_to_accept

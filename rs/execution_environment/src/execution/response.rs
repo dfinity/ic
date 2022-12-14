@@ -184,10 +184,7 @@ impl ResponseHelper {
     /// These are the only state changes to the initial canister state before
     /// executing Wasm code.
     fn apply_initial_refunds(&mut self, round: &RoundContext) {
-        round.cycles_account_manager.add_cycles(
-            self.canister.system_state.balance_mut(),
-            self.refund_for_sent_cycles,
-        );
+        *self.canister.system_state.balance_mut() += self.refund_for_sent_cycles;
         // The `refund_cycles()` is similar to `add_cycles()` but it
         // additionally fixes up the cycles-burned metric.
         round.cycles_account_manager.refund_cycles(

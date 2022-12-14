@@ -217,31 +217,6 @@ fn withdraw_cycles_with_not_enough_balance_returns_error() {
 }
 
 #[test]
-fn add_cycles_does_not_overflow_when_no_balance_limit() {
-    // When there is not `max_cycles_per_canister`,
-    // Cycles is capped by u128::MAX
-    let cycles_balance_expected = Cycles::zero();
-    let mut system_state = SystemStateBuilder::new()
-        .initial_cycles(cycles_balance_expected)
-        .build();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    assert_eq!(system_state.balance(), cycles_balance_expected);
-
-    let amount = Cycles::from(u128::MAX / 2);
-    cycles_account_manager.add_cycles(system_state.balance_mut(), amount);
-    assert_eq!(system_state.balance(), amount);
-
-    cycles_account_manager.add_cycles(system_state.balance_mut(), amount);
-    assert_eq!(system_state.balance(), Cycles::from(u128::MAX - 1));
-
-    cycles_account_manager.add_cycles(system_state.balance_mut(), Cycles::new(1));
-    assert_eq!(system_state.balance(), Cycles::from(u128::MAX));
-
-    cycles_account_manager.add_cycles(system_state.balance_mut(), Cycles::new(100));
-    assert_eq!(system_state.balance(), Cycles::from(u128::MAX));
-}
-
-#[test]
 fn verify_no_cycles_charged_for_message_execution_on_system_subnets() {
     let subnet_size = SMALL_APP_SUBNET_MAX_SIZE;
     let mut system_state = SystemStateBuilder::new().build();

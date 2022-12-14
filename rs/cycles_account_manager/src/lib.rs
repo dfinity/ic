@@ -735,11 +735,6 @@ impl CyclesAccountManager {
         Ok(())
     }
 
-    /// Adds `cycles` worth of cycles to the canister's balance.
-    pub fn add_cycles(&self, cycles_balance: &mut Cycles, cycles_to_add: Cycles) {
-        *cycles_balance += cycles_to_add;
-    }
-
     /// Mints `amount_to_mint` [`Cycles`].
     ///
     /// # Errors
@@ -758,7 +753,7 @@ impl CyclesAccountManager {
             );
             Err(CyclesAccountManagerError::ContractViolation(error_str))
         } else {
-            self.add_cycles(cycles_balance, amount_to_mint);
+            *cycles_balance += amount_to_mint;
             Ok(())
         }
     }
