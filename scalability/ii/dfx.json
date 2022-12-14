@@ -1,0 +1,15 @@
+{
+  "canisters": {
+    "internet_identity": {
+	"type": "custom",
+	"candid": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity.did",
+	"wasm": "https://github.com/dfinity/internet-identity/releases/latest/download/internet_identity_test.wasm"
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": ""
+    }
+  },
+  "version": 1
+}

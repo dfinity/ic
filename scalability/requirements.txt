@@ -11,6 +11,6 @@ six>=1.16.0
 termcolor>=1.1.0
 absl-py>=0.14.1
 toml
-git+https://github.com/rocklabs-io/ic-py@d363572b7dbd0c8e935ae6fa783fe472a5967cad#egg=ic-py
+git+https://github.com/rocklabs-io/ic-py@383403a50ff3d9664655fb23af2db12e98334c54#egg=ic-py
 uuid
 pydot
