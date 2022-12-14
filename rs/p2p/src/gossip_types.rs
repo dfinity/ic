@@ -24,14 +24,6 @@ pub(crate) struct GossipChunkRequest {
     pub(crate) chunk_id: ChunkId,
 }
 
-/// A re-transmission request. A filter is used to restrict the set of
-/// adverts that are to be returned as a response to this request.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct GossipRetransmissionRequest {
-    /// The artifact filter used to restrict the set of returned adverts.
-    pub(crate) filter: ArtifactFilter,
-}
-
 /// A *Gossip* chunk, identified by its artifact ID and chunk ID.
 /// It contains the actual chunk data in an artifact chunk.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

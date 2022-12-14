@@ -74,11 +74,16 @@ use crate::{
     metrics::FlowWorkerMetrics,
 };
 use ic_interfaces_transport::{TransportEvent, TransportMessage};
-use ic_logger::{debug, info, replica_logger::ReplicaLogger, warn};
+use ic_logger::{debug, error, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
-use ic_types::{artifact::AdvertClass, artifact::ArtifactFilter, p2p::GossipAdvert, NodeId};
+use ic_types::{
+    artifact::{AdvertClass, ArtifactFilter, ArtifactTag},
+    p2p::GossipAdvert,
+    NodeId,
+};
 use parking_lot::RwLock;
+use prometheus::IntCounterVec;
 use std::{
     cmp::max,
     collections::BTreeMap,
@@ -230,35 +235,24 @@ pub(crate) struct AsyncTransportEventHandlerImpl {
 
 /// The maximum number of buffered adverts.
 pub(crate) const MAX_ADVERT_BUFFER: usize = 100_000;
-/// The maximum number of buffered *Transport* notification messages.
-pub(crate) const MAX_TRANSPORT_BUFFER: usize = 1000;
-/// The maximum number of buffered retransmission requests.
-pub(crate) const MAX_RETRANSMISSION_BUFFER: usize = 1000;
-/// The maximum number of buffered chunks.
-pub(crate) const MAX_CHUNK_BUFFER: usize = 100;
-/// The maximum number of buffered chunk requests.
-pub(crate) const MAX_CHUNK_REQUEST_BUFFER: usize = 100;
 
 /// The channel configuration, containing the maximum number of messages for
 /// each flow type.
-#[derive(Default)]
 pub(crate) struct ChannelConfig {
     /// The map from flow type to the maximum number of buffered messages.
     map: BTreeMap<FlowType, usize>,
 }
 
-/// A `GossipConfig` can be converted into a `ChannelConfig`.
-impl ChannelConfig {
-    /// The function converts a `GossipConfig` to a `ChannelConfig`.
-    pub(crate) fn new() -> Self {
+impl Default for ChannelConfig {
+    fn default() -> Self {
         Self {
             map: FlowType::iter()
                 .map(|flow_type| match flow_type {
                     FlowType::Advert => (flow_type, MAX_ADVERT_BUFFER),
-                    FlowType::Request => (flow_type, MAX_CHUNK_REQUEST_BUFFER),
-                    FlowType::Chunk => (flow_type, MAX_CHUNK_BUFFER),
-                    FlowType::Retransmission => (flow_type, MAX_RETRANSMISSION_BUFFER),
-                    FlowType::Transport => (flow_type, MAX_TRANSPORT_BUFFER),
+                    FlowType::Request => (flow_type, 100),
+                    FlowType::Chunk => (flow_type, 100),
+                    FlowType::Retransmission => (flow_type, 1000),
+                    FlowType::Transport => (flow_type, 1000),
                 })
                 .collect(),
         }
@@ -462,6 +456,7 @@ pub struct AdvertBroadcaster {
     advert_builder: AdvertRequestBuilder,
     sem: Arc<Semaphore>,
     started: Arc<(Mutex<bool>, Condvar)>,
+    dropped_adverts: IntCounterVec,
 }
 
 #[allow(clippy::mutex_atomic)]
@@ -472,6 +467,12 @@ impl AdvertBroadcaster {
             .thread_name("P2P_Advert_Thread".into())
             .build();
 
+        let dropped_adverts = metrics_registry.int_counter_vec(
+            "p2p_dropped_adverts_by_sender_total",
+            "Total number of artifact advertisements dropped at the sender, grouped by artifact id.",
+            &["type"],
+        );
+
         Self {
             log,
             threadpool,
@@ -480,6 +481,7 @@ impl AdvertBroadcaster {
             advert_builder: AdvertRequestBuilder::new(metrics_registry),
             sem: Arc::new(Semaphore::new(MAX_ADVERT_BUFFER)),
             started: Arc::new((Mutex::new(false), Condvar::new())),
+            dropped_adverts,
         }
     }
 
@@ -498,6 +500,7 @@ impl AdvertBroadcaster {
             started = cvar.wait(started).unwrap();
         }
 
+        let artifact_id_label = ArtifactTag::from(&advert.artifact_id).into();
         // Translate the advert request to internal format
         let advert_request = match self.advert_builder.build(advert, advert_class) {
             Some(request) => request,
@@ -512,9 +515,13 @@ impl AdvertBroadcaster {
                 });
             }
             Err(TryAcquireError::Closed) => {
-                info!(self.log, "Send advert channel closed");
+                error!(self.log, "Send advert channel closed");
             }
-            _ => (),
+            _ => {
+                self.dropped_adverts
+                    .with_label_values(&[artifact_id_label])
+                    .inc();
+            }
         };
     }
 }
@@ -646,7 +653,7 @@ pub mod tests {
         node_id: NodeId,
         gossip: GossipArc,
     ) -> (AsyncTransportEventHandlerImpl, AdvertBroadcaster) {
-        let mut channel_config = ChannelConfig::new();
+        let mut channel_config = ChannelConfig::default();
         channel_config
             .map
             .insert(FlowType::Advert, advert_max_depth);

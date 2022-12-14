@@ -67,6 +67,7 @@ use ic_interfaces_transport::{Transport, TransportChannelId};
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     artifact::ArtifactFilter, chunkable::ArtifactChunk, crypto::CryptoHash, p2p::GossipAdvert,
     NodeId, SubnetId,
@@ -215,7 +216,7 @@ impl GossipImpl {
             artifact_manager.as_ref(),
             DownloadPrioritizerMetrics::new(metrics_registry),
         ));
-        let gossip_config = crate::fetch_gossip_config(registry_client.clone(), subnet_id);
+        let gossip_config = fetch_gossip_config(registry_client.clone(), subnet_id);
         let gossip = GossipImpl {
             artifact_manager,
             log: log.clone(),
@@ -358,5 +359,19 @@ impl Gossip for GossipImpl {
     /// holistic refresh of IC state.
     fn on_gossip_timer(&self) {
         self.on_timer();
+    }
+}
+
+/// Fetch the Gossip configuration from the registry.
+fn fetch_gossip_config(
+    registry_client: Arc<dyn RegistryClient>,
+    subnet_id: SubnetId,
+) -> GossipConfig {
+    if let Ok(Some(Some(gossip_config))) =
+        registry_client.get_gossip_config(subnet_id, registry_client.get_latest_version())
+    {
+        gossip_config
+    } else {
+        ic_types::p2p::build_default_gossip_config()
     }
 }
