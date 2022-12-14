@@ -43,12 +43,17 @@ impl Iterator for EventIterator {
 
             match events.read_entry(self.pos, &mut self.buf) {
                 Ok(()) => {
-                    self.pos += 1;
+                    self.pos = self.pos.saturating_add(1);
                     Some(decode_event(&self.buf))
                 }
                 Err(NoSuchEntry) => None,
             }
         })
+    }
+
+    fn nth(&mut self, n: usize) -> Option<Event> {
+        self.pos = self.pos.saturating_add(n);
+        self.next()
     }
 }
 

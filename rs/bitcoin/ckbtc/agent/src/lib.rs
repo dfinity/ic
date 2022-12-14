@@ -1,5 +1,6 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
+use ic_ckbtc_minter::eventlog::{Event, GetEventsArg};
 use ic_ckbtc_minter::queries::RetrieveBtcStatusRequest;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::{
@@ -113,5 +114,14 @@ impl CkBtcMinterAgent {
             RetrieveBtcStatusRequest { block_index },
         )
         .await
+    }
+
+    pub async fn get_events(
+        &self,
+        start: u64,
+        length: u64,
+    ) -> Result<Vec<Event>, CkBtcMinterAgentError> {
+        self.query("get_events", GetEventsArg { start, length })
+            .await
     }
 }

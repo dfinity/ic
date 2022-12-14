@@ -118,6 +118,38 @@ type RetrieveBtcStatus = variant {
     Confirmed : record { txid : blob };
 };
 
+type Utxo = record {
+    outpoint : record { txid : blob; vout : nat32 };
+    value : nat64;
+    height : nat32;
+};
+
+type BitcoinAddress = variant {
+    p2wpkh_v0 : blob;
+    p2pkh : blob;
+    p2sh : blob;
+};
+
+type Event = variant {
+    init : InitArgs;
+    received_utxos : record { to_account : Account; utxos : vec Utxo };
+    accepted_retrieve_btc_request : record {
+        amount : nat64;
+        address : BitcoinAddress;
+        block_index : nat64;
+        received_at : nat64;
+    };
+    removed_retrieve_btc_request : record { block_index : nat64 };
+    sent_transaction : record {
+        requests : vec nat64;
+        txid : blob;
+        utxos : vec Utxo;
+        change_output : opt record { vout : nat32; value : nat32 };
+        submitted_at : nat64;
+    };
+    confirmed_transaction : record { txid : blob };
+};
+
 service : (InitArgs) -> {
     // Section "Wrap BTC" {{{
 
@@ -161,4 +193,18 @@ service : (InitArgs) -> {
     retrieve_btc_status : (record { block_index : nat64 }) -> (RetrieveBtcStatus) query;
 
     // }}} Section "Unwrap BTC"
+
+    // Section "Event log" {{{
+
+    // The minter keeps track of all state modifications in an internal event log.
+    //
+    // This method returns an list of events in the specified range.
+    // The minter can return less events than requested. The result is
+    // an empty vector if the start position is greater than the total
+    // number of events.
+    //
+    // NOTE: this method exists for debugging purposes.
+    // The ckBTC minter authors do not guarantee backward compatibility for this method.
+    get_events : (record { start: nat64; length : nat64 }) -> (vec Event) query;
+    // }}} Section "Event log"
 }

@@ -22,6 +22,7 @@ use ic_ckbtc_minter::updates::{
     get_withdrawal_account::compute_subaccount,
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
 };
+use ic_ckbtc_minter::{eventlog::Event, state::RetrieveBtcRequest};
 use ic_icrc1::endpoints::TransferArg;
 use ic_icrc1::Account;
 use ic_icrc1_agent::Icrc1Agent;
@@ -161,6 +162,19 @@ pub fn test_retrieve_btc(env: TestEnv) {
             .expect("Error while calling retrieve_btc")
             .expect("Error in retrieve_btc");
         assert_eq!(2, retrieve_result.block_index);
+
+        let events = minter_agent
+            .get_events(0, 1000)
+            .await
+            .expect("failed to fetch minter's event log");
+        assert!(
+            events.iter().any(|e| matches!(
+                e,
+                Event::AcceptedRetrieveBtcRequest(RetrieveBtcRequest { block_index: 2, .. })
+            )),
+            "missing accepted_retrieve_btc_request event in the log: {:?}",
+            events
+        );
 
         info!(&logger, "Call retrieve_btc with insufficient funds");
         let retrieve_result = minter_agent

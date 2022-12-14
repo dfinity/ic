@@ -46,7 +46,7 @@ thread_local! {
 }
 
 // A pending retrieve btc request
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RetrieveBtcRequest {
     pub amount: u64,
     pub address: BitcoinAddress,
@@ -55,7 +55,7 @@ pub struct RetrieveBtcRequest {
 }
 
 /// A transaction output storing the minter's change.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChangeOutput {
     /// The index of the output in the transaction.
     pub vout: u64,
