@@ -2600,10 +2600,14 @@ impl Governance {
         // Create a new proposal ID for this proposal.
         let proposal_num = self.next_proposal_id();
         let proposal_id = ProposalId { id: proposal_num };
+
+        // Compute whether the proposal is eligible for rewards
         let is_eligible_for_rewards = self
             .nervous_system_parameters()
             .voting_rewards_parameters
-            .is_some();
+            .as_ref()
+            .expect("NervousSystemParameters::voting_rewards_parameters must be set")
+            .rewards_enabled();
         // Create the proposal.
         let mut proposal_data = ProposalData {
             action: u64::from(action),
@@ -3836,6 +3840,15 @@ impl Governance {
                     return;
                 }
             };
+
+        if !voting_rewards_parameters.rewards_enabled() {
+            println!(
+                "{}WARNING: distribute_rewards called even though \
+                 rewards are not enabled for voting_rewards_parameters.",
+                log_prefix(),
+            );
+            return;
+        }
 
         let most_recent_round: u64 = voting_rewards_parameters
             .most_recent_round(self.env.now(), self.proto.genesis_timestamp_seconds);
@@ -5248,7 +5261,6 @@ mod tests {
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
         );
-
         // Step 1.3: Record original last_reward_event. That way, we can detect
         // changes (there aren't supposed to be any).
         let original_latest_reward_event = governance.proto.latest_reward_event.clone();
@@ -5359,6 +5371,198 @@ mod tests {
             neuron.maturity_e8s_equivalent, final_latest_reward_event.distributed_e8s_equivalent,
             "neuron = {:#?}",
             neuron,
+        );
+    }
+
+    #[tokio::test]
+    async fn test_proposal_not_eligible_for_rewards_when_reward_rate_0() {
+        // Step 1: Prepare the world, i.e. Governance.
+        let principal_id = PrincipalId::new_user_test_id(8807);
+        let neuron_id = NeuronId {
+            id: vec![249, 83, 240, 16],
+        };
+        let neuron = Neuron {
+            id: Some(neuron_id.clone()),
+            permissions: vec![NeuronPermission {
+                principal: Some(principal_id),
+                permission_type: NeuronPermissionType::all(),
+            }],
+            cached_neuron_stake_e8s: 100 * E8,
+            aging_since_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(365 * SECONDS_PER_DAY)),
+            ..Default::default()
+        };
+
+        let mut governance = Governance::new(
+            GovernanceProto {
+                neurons: btreemap! {
+                    neuron_id.to_string() => neuron,
+                },
+                mode: governance::Mode::Normal as i32,
+                parameters: Some(NervousSystemParameters {
+                    voting_rewards_parameters: Some(VotingRewardsParameters {
+                        initial_reward_rate_basis_points: Some(0),
+                        final_reward_rate_basis_points: Some(0),
+                        ..VotingRewardsParameters::with_default_values()
+                    }),
+                    ..NervousSystemParameters::with_default_values()
+                }),
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(NativeEnvironment::new(Some(CanisterId::from(1000)))),
+            Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
+        );
+
+        // Step 2: Run code under test.
+        let proposal_id = governance
+            .make_proposal(
+                &neuron_id,
+                &principal_id,
+                &Proposal {
+                    action: Some(Action::Motion(Motion {
+                        motion_text: "Make a change".to_string(),
+                    })),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        // Step 3: Inspect results.
+        let proposal_data = governance.get_proposal_data(proposal_id).unwrap();
+        assert!(!proposal_data.is_eligible_for_rewards, "is_eligible_for_rewards should be false since initial_reward_rate_basis_points is 0 and final_reward_rate_basis_points is 0");
+    }
+
+    #[tokio::test]
+    async fn test_proposal_eligible_for_rewards_when_initial_reward_rate_not_0() {
+        // Step 1: Prepare the world, i.e. Governance.
+        let principal_id = PrincipalId::new_user_test_id(8807);
+        let neuron_id = NeuronId {
+            id: vec![249, 83, 240, 16],
+        };
+        let neuron = Neuron {
+            id: Some(neuron_id.clone()),
+            permissions: vec![NeuronPermission {
+                principal: Some(principal_id),
+                permission_type: NeuronPermissionType::all(),
+            }],
+            cached_neuron_stake_e8s: 100 * E8,
+            aging_since_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(365 * SECONDS_PER_DAY)),
+            ..Default::default()
+        };
+
+        let mut governance = Governance::new(
+            GovernanceProto {
+                neurons: btreemap! {
+                    neuron_id.to_string() => neuron,
+                },
+                mode: governance::Mode::Normal as i32,
+                parameters: Some(NervousSystemParameters {
+                    voting_rewards_parameters: Some(VotingRewardsParameters {
+                        initial_reward_rate_basis_points: Some(1),
+                        final_reward_rate_basis_points: Some(0),
+                        ..VotingRewardsParameters::with_default_values()
+                    }),
+                    ..NervousSystemParameters::with_default_values()
+                }),
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(NativeEnvironment::new(Some(CanisterId::from(1000)))),
+            Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
+        );
+
+        // Step 2: Run code under test.
+        let proposal_id = governance
+            .make_proposal(
+                &neuron_id,
+                &principal_id,
+                &Proposal {
+                    action: Some(Action::Motion(Motion {
+                        motion_text: "Make a change".to_string(),
+                    })),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        // Step 3: Inspect results.
+        let proposal_data = governance.get_proposal_data(proposal_id).unwrap();
+        assert!(
+            proposal_data.is_eligible_for_rewards,
+            "is_eligible_for_rewards should be true since initial_reward_rate_basis_points is 1"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_proposal_eligible_for_rewards_when_both_reward_rate_not_0() {
+        // Step 1: Prepare the world, i.e. Governance.
+        let principal_id = PrincipalId::new_user_test_id(8807);
+        let neuron_id = NeuronId {
+            id: vec![249, 83, 240, 16],
+        };
+        let neuron = Neuron {
+            id: Some(neuron_id.clone()),
+            permissions: vec![NeuronPermission {
+                principal: Some(principal_id),
+                permission_type: NeuronPermissionType::all(),
+            }],
+            cached_neuron_stake_e8s: 100 * E8,
+            aging_since_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(365 * SECONDS_PER_DAY)),
+            ..Default::default()
+        };
+
+        let mut governance = Governance::new(
+            GovernanceProto {
+                neurons: btreemap! {
+                    neuron_id.to_string() => neuron,
+                },
+                mode: governance::Mode::Normal as i32,
+                parameters: Some(NervousSystemParameters {
+                    voting_rewards_parameters: Some(VotingRewardsParameters {
+                        initial_reward_rate_basis_points: Some(1),
+                        final_reward_rate_basis_points: Some(1),
+                        ..VotingRewardsParameters::with_default_values()
+                    }),
+                    ..NervousSystemParameters::with_default_values()
+                }),
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(NativeEnvironment::new(Some(CanisterId::from(1000)))),
+            Box::new(DoNothingLedger {}),
+            Box::new(DoNothingLedger {}),
+        );
+
+        // Step 2: Run code under test.
+        let proposal_id = governance
+            .make_proposal(
+                &neuron_id,
+                &principal_id,
+                &Proposal {
+                    action: Some(Action::Motion(Motion {
+                        motion_text: "Make a change".to_string(),
+                    })),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        // Step 3: Inspect results.
+        let proposal_data = governance.get_proposal_data(proposal_id).unwrap();
+        assert!(
+            proposal_data.is_eligible_for_rewards,
+            "is_eligible_for_rewards should be true since final_reward_rate_basis_points is 1"
         );
     }
 

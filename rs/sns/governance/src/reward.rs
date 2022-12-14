@@ -322,6 +322,7 @@ impl VotingRewardsParameters {
             final_reward_rate_basis_points: Some(0),
         }
     }
+
     /// Any empty fields of `self` are overwritten with the corresponding fields of `base`.
     pub fn inherit_from(&self, base: &Self) -> Self {
         Self {
@@ -336,6 +337,13 @@ impl VotingRewardsParameters {
                 .final_reward_rate_basis_points
                 .or(base.final_reward_rate_basis_points),
         }
+    }
+
+    pub fn rewards_enabled(&self) -> bool {
+        let initial_is_zero = self.initial_reward_rate_basis_points.unwrap() == 0;
+        let final_is_zero = self.final_reward_rate_basis_points.unwrap() == 0;
+        let both_are_zero = initial_is_zero && final_is_zero;
+        !both_are_zero
     }
 }
 
