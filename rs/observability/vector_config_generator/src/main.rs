@@ -8,14 +8,15 @@ use humantime::parse_duration;
 use ic_async_utils::shutdown_signal;
 use ic_metrics::MetricsRegistry;
 use regex::Regex;
+use service_discovery::registry_sync::sync_local_registry;
 use service_discovery::{
     job_types::{JobType, NodeOS},
-    mainnet_registry::{create_local_store_from_changelog, get_mainnet_delta_6d_c1},
     metrics::Metrics,
     poll_loop::make_poll_loop,
     IcServiceDiscoveryImpl,
 };
 use slog::{info, o, Drain, Logger};
+use url::Url;
 
 use crate::config_writer_loop::config_writer_loop;
 
@@ -42,7 +43,12 @@ fn main() -> Result<()> {
 
     info!(log, "Starting vector-config-generator");
     let mercury_dir = cli_args.targets_dir.join("mercury");
-    let _store = create_local_store_from_changelog(mercury_dir, get_mainnet_delta_6d_c1());
+    rt.block_on(sync_local_registry(
+        log.clone(),
+        mercury_dir,
+        cli_args.nns_url,
+        cli_args.skip_sync,
+    ));
 
     let jobs = get_jobs();
 
@@ -157,6 +163,24 @@ Regex used to filter the node IDs
 "#
     )]
     filter_node_id_regex: Option<Regex>,
+
+    #[clap(
+        long = "nns-url",
+        default_value = "https://ic0.app",
+        help = r#"
+NNS-url to use for syncing the registry version.
+"#
+    )]
+    nns_url: Url,
+
+    #[clap(
+        long = "skip-sync",
+        help = r#"
+If specified to true the local version of registry will be used.
+Possible only if the version is not a ZERO_REGISTRY_VERSION
+"#
+    )]
+    skip_sync: bool,
 }
 impl CliArgs {
     fn validate(self) -> Result<Self> {

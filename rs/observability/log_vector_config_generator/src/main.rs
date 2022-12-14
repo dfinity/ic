@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::vec;
-use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use crate::config_writer_loop::config_writer_loop;
 use anyhow::{bail, Result};
@@ -8,18 +8,13 @@ use clap::Parser;
 use futures_util::FutureExt;
 use humantime::parse_duration;
 use ic_async_utils::shutdown_signal;
-use ic_config::metrics::Config as MetricsConfig;
-use ic_config::metrics::Exporter;
-use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_metrics::MetricsRegistry;
 use service_discovery::job_types::{JobType, NodeOS};
+use service_discovery::registry_sync::sync_local_registry;
 use service_discovery::IcServiceDiscoveryImpl;
-use service_discovery::{
-    mainnet_registry::{create_local_store_from_changelog, get_mainnet_delta_6d_c1},
-    metrics::Metrics,
-    poll_loop::make_poll_loop,
-};
+use service_discovery::{metrics::Metrics, poll_loop::make_poll_loop};
 use slog::{info, o, Drain, Logger};
+use url::Url;
 
 mod config_writer;
 mod config_writer_loop;
@@ -35,16 +30,12 @@ fn main() -> Result<()> {
 
     info!(log, "Starting mercury ...");
     let mercury_dir = cli_args.targets_dir.join("mercury");
-    // Unless the user does *not* want to target mercury and the respective
-    // directory does not already exist, create the target directory and store
-    // the mercury registry in there ...
-    if !mercury_dir.is_dir() {
-        info!(
-            log,
-            "Writing mercury registry up to version 0x6d1c to {:?} ", mercury_dir
-        );
-        let _store = create_local_store_from_changelog(mercury_dir, get_mainnet_delta_6d_c1());
-    }
+    rt.block_on(sync_local_registry(
+        log.clone(),
+        mercury_dir,
+        cli_args.nns_url,
+        cli_args.skip_sync,
+    ));
 
     info!(log, "Starting IcServiceDiscovery ...");
     let ic_discovery = Arc::new(IcServiceDiscoveryImpl::new(
@@ -61,7 +52,7 @@ fn main() -> Result<()> {
         ic_discovery.clone(),
         stop_signal_rcv.clone(),
         cli_args.poll_interval,
-        Metrics::new(metrics_registry.clone()),
+        Metrics::new(metrics_registry),
         Some(update_signal_sender),
     );
 
@@ -85,24 +76,7 @@ fn main() -> Result<()> {
     let config_join_handle = std::thread::spawn(config_generator_loop);
     handles.push(config_join_handle);
 
-    info!(
-        log,
-        "Metrics are exposed on {}.", cli_args.metrics_listen_addr
-    );
-    let exporter_config = MetricsConfig {
-        exporter: Exporter::Http(cli_args.metrics_listen_addr),
-        ..Default::default()
-    };
-    let metrics_endpoint = MetricsHttpEndpoint::new_insecure(
-        rt.handle().clone(),
-        exporter_config,
-        metrics_registry,
-        &log,
-    );
-
     rt.block_on(shutdown_signal);
-
-    std::mem::drop(metrics_endpoint);
 
     for handle in handles {
         stop_signal_sender.send(())?;
@@ -159,16 +133,6 @@ The HTTP-request timeout used when quering for registry updates.
     registry_query_timeout: Duration,
 
     #[clap(
-        long = "metrics-listen-addr",
-        default_value = "[::]:9099",
-        help = r#"
-The listen address on which metrics for this service should be exposed.
-
-"#
-    )]
-    metrics_listen_addr: SocketAddr,
-
-    #[clap(
         long = "logs-target-filter",
         help = r#"
 A filter of the format `<key>=<value>`. If specified and --pull-gatewayd-logs is
@@ -195,6 +159,24 @@ https://www.freedesktop.org/software/systemd/man/systemd-journal-gatewayd.servic
 "#
     )]
     vector_config_dir: PathBuf,
+
+    #[clap(
+        long = "nns-url",
+        default_value = "https://ic0.app",
+        help = r#"
+NNS-url to use for syncing the registry version.
+"#
+    )]
+    nns_url: Url,
+
+    #[clap(
+        long = "skip-sync",
+        help = r#"
+If specified to true the local version of registry will be used.
+Possible only if the version is not a ZERO_REGISTRY_VERSION
+"#
+    )]
+    skip_sync: bool,
 }
 
 impl CliArgs {

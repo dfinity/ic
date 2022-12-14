@@ -21,7 +21,7 @@ pub fn config_writer_loop(
     vector_config_dir: PathBuf,
 ) -> impl FnMut() {
     move || {
-        let config_writer =
+        let mut config_writer =
             ConfigWriter::new(vector_config_dir.clone(), filter.clone(), log.clone());
         loop {
             let targets = match discovery.get_target_groups(job) {

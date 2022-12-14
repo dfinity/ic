@@ -45,6 +45,7 @@ pub mod job_types;
 pub mod mainnet_registry;
 pub mod metrics;
 pub mod poll_loop;
+pub mod registry_sync;
 pub mod rest_api;
 pub mod service_discovery_record;
 
