@@ -50,7 +50,7 @@ class Test_Experiment(TestCase):
 
         misc.parse_command_line_args()
 
-        ssh.run_all_ssh_in_parallel = Mock()
+        ssh.run_all_ssh_in_parallel = Mock(return_value=[0, 0])
         ssh.scp_in_parallel = Mock()
 
         # Mock functions that won't work without a proper IC deployment
@@ -68,7 +68,7 @@ class Test_Experiment(TestCase):
         ExperimentMock._WorkloadExperiment__check_workload_generator_installed = Mock(return_value=True)
         ExperimentMock.get_ic_version = MagicMock(return_value="42")
         ExperimentMock._WorkloadExperiment__wait_for_quiet = MagicMock(return_value=None)
-        Workload.fetch_results = Mock(return_value=[0, 0])
+        Workload.fetch_results = Mock(return_value=["common/tests/summary_file_sample.json"] * 2)
 
         exp = ExperimentMock()
         exp.canister_ids = {"canistername": ["canisterid"]}

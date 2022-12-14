@@ -23,7 +23,8 @@ sys.path.append(
 import ictools  # noqa
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_boolean("clean", False, "Set true to do a clean Bazel build")
+gflags.DEFINE_boolean("clean", False, "Set true to do a clean Bazel build.")
+gflags.DEFINE_boolean("second_testnet", False, "Set true to boot a second testnet.")
 
 
 def get_ic_root():
@@ -123,7 +124,6 @@ def main(argv):
 
     t_start = time.time()
     version, download_url, sha256sum = build_icos()
-    input("Hit enter to confirm .. ")
     duration_build = time.time() - t_start
     print(f"Duration for building: {duration_build}")
 
@@ -131,25 +131,27 @@ def main(argv):
 
     # Basically the suite will pick the first application subnetwork to target.
     target_instance = farm.Farm("../artifacts/release", [1, 1], version)
-    wg_instance = farm.Farm("../artifacts/release", [1], version)
+    if FLAGS.second_testnet:
+        wg_instance = farm.Farm("../artifacts/release", [1], version)
 
     try:
         # We should really deploy those concurrently.
         target_ip = deploy_farm(target_instance, download_url, sha256sum, install_nns=True, num_vcpus={1: 48})
-        wg_ip = deploy_farm(wg_instance, download_url, sha256sum)
-        print(
-            (
-                "IC workload experiments: "
-                + colored(
-                    (
-                        f"--targets={target_instance.ic_node_ipv6s[1][0]} --workload_generator_machines={wg_ip} "
-                        f"--testnet=none --wg_testnet=none --no_prometheus=True --no_instrument=True "
-                        f"--nns_url=http://[{target_ip}]:8080"
-                    ),
-                    "red",
+        if FLAGS.second_testnet:
+            wg_ip = deploy_farm(wg_instance, download_url, sha256sum)
+            print(
+                (
+                    "IC workload experiments: "
+                    + colored(
+                        (
+                            f"--targets={target_instance.ic_node_ipv6s[1][0]} --workload_generator_machines={wg_ip} "
+                            f"--testnet=none --wg_testnet=none --no_prometheus=True --no_instrument=True "
+                            f"--nns_url=http://[{target_ip}]:8080"
+                        ),
+                        "red",
+                    )
                 )
             )
-        )
         print(
             (
                 "IC base experiments: "
@@ -178,7 +180,8 @@ def main(argv):
 
     finally:
         target_instance.delete_farm_group()
-        wg_instance.delete_farm_group()
+        if FLAGS.second_testnet:
+            wg_instance.delete_farm_group()
 
 
 if __name__ == "__main__":
