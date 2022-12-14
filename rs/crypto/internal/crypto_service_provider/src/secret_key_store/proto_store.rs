@@ -5,7 +5,6 @@ use crate::key_id::KeyId;
 use crate::secret_key_store::{
     Scope, SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
 };
-use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
 use crate::types::CspSecretKey;
 use hex::{FromHex, ToHex};
 use ic_config::crypto::CryptoConfig;
@@ -22,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
 
-const CURRENT_SKS_VERSION: u32 = 2;
+const CURRENT_SKS_VERSION: u32 = 3;
 
 fn key_id_from_hex(key_id_hex: &str) -> KeyId {
     KeyId::from_hex(key_id_hex).unwrap_or_else(|_| panic!("Error parsing hex KeyId {}", key_id_hex))
@@ -83,76 +82,54 @@ impl ProtoSecretKeyStore {
         }
     }
 
-    // TODO(CRP-532): remove support for the legacy format in a few weeks after
-    // merging.
     fn migrate_to_current_version(sks_proto: pb::SecretKeyStore) -> SecretKeys {
         match sks_proto.version {
-            3 => ProtoSecretKeyStore::sks_proto_to_secret_keys(&sks_proto),
-            CURRENT_SKS_VERSION => {
-                let mut secret_keys = SecretKeys::new();
-                for (key_id_hex, sk_proto) in sks_proto.key_id_to_secret_key_v1.iter() {
-                    let key_id = key_id_from_hex(key_id_hex);
-                    let csp_key = Self::parse_csp_secret_key(&sk_proto.csp_secret_key, &key_id);
-                    let scope = match &csp_key {
-                        CspSecretKey::MEGaEncryptionK256(_) => {
-                            let _ensure_scope_is_valid = Self::parse_scope(&sk_proto.scope);
-                            Some(IDKG_MEGA_SCOPE)
-                        }
-                        _ => Self::parse_scope(&sk_proto.scope),
-                    };
-                    secret_keys.insert(key_id, (csp_key, scope));
-                }
-                secret_keys
-            }
-            0 => {
-                let mut secret_keys = SecretKeys::new();
-                for (key_id_string, key_bytes) in sks_proto.key_id_to_csp_secret_key.iter() {
-                    let key_id = KeyId::try_from(key_id_string.as_str()).unwrap_or_else(|err| {
-                        panic!("Failed to create KeyId: {}", err);
-                    });
-                    let mut csp_key = Self::parse_csp_secret_key(key_bytes, &key_id);
-                    if let CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20_Bls12_381(
-                        key_set,
-                    )) = &csp_key
-                    {
-                        let key_set_with_pop = convert_keyset_to_keyset_with_pop(key_set.clone());
-                        csp_key = CspSecretKey::FsEncryption(
-                            CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set_with_pop),
-                        );
-                    }
-                    let maybe_scope: Option<Scope> = match csp_key {
-                        CspSecretKey::FsEncryption(_) => Some(NIDKG_FS_SCOPE),
-                        CspSecretKey::ThresBls12_381(_) => Some(NIDKG_THRESHOLD_SCOPE),
-                        _ => None,
-                    };
-                    secret_keys.insert(key_id, (csp_key, maybe_scope));
-                }
-                secret_keys
+            CURRENT_SKS_VERSION => ProtoSecretKeyStore::sks_proto_to_secret_keys(&sks_proto),
+            2 => {
+                let secret_keys_from_disk =
+                    ProtoSecretKeyStore::sks_proto_to_secret_keys(&sks_proto);
+                Self::migrate_sks_from_v2_to_v3(secret_keys_from_disk)
             }
             1 => {
-                let mut secret_keys = SecretKeys::new();
-                for (key_id_hex, sk_proto) in sks_proto.key_id_to_secret_key_v1.iter() {
-                    let key_id = key_id_from_hex(key_id_hex);
-                    let mut csp_key = Self::parse_csp_secret_key(&sk_proto.csp_secret_key, &key_id);
-                    if let CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20_Bls12_381(
-                        key_set,
-                    )) = &csp_key
-                    {
-                        let key_set_with_pop = convert_keyset_to_keyset_with_pop(key_set.clone());
-                        csp_key = CspSecretKey::FsEncryption(
-                            CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set_with_pop),
-                        );
-                    }
-                    let maybe_scope = Self::parse_scope(&sk_proto.scope);
-                    secret_keys.insert(key_id, (csp_key, maybe_scope));
-                }
-                secret_keys
+                let secret_keys_from_disk =
+                    ProtoSecretKeyStore::sks_proto_to_secret_keys(&sks_proto);
+                let sks_v2 = Self::migrate_sks_from_v1_to_v2(secret_keys_from_disk);
+                Self::migrate_sks_from_v2_to_v3(sks_v2)
             }
             _ => panic!(
                 "Unsupported SecretKeyStore-proto version: {}",
                 sks_proto.version
             ),
         }
+    }
+
+    fn migrate_sks_from_v2_to_v3(existing_secret_keys: SecretKeys) -> SecretKeys {
+        let mut migrated_secret_keys = SecretKeys::new();
+        for (key_id, (csp_key, scope)) in existing_secret_keys.into_iter() {
+            let migrated_scope = match &csp_key {
+                CspSecretKey::MEGaEncryptionK256(_) => Some(IDKG_MEGA_SCOPE),
+                _ => scope,
+            };
+            migrated_secret_keys.insert(key_id, (csp_key, migrated_scope));
+        }
+        migrated_secret_keys
+    }
+
+    fn migrate_sks_from_v1_to_v2(existing_secret_keys: SecretKeys) -> SecretKeys {
+        let mut migrated_secret_keys = SecretKeys::new();
+        for (key_id, (csp_key, scope)) in existing_secret_keys.into_iter() {
+            let migrated_secret_key = match &csp_key {
+                CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20_Bls12_381(key_set)) => {
+                    let key_set_with_pop = convert_keyset_to_keyset_with_pop(key_set.clone());
+                    CspSecretKey::FsEncryption(CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(
+                        key_set_with_pop,
+                    ))
+                }
+                _ => csp_key,
+            };
+            migrated_secret_keys.insert(key_id, (migrated_secret_key, scope));
+        }
+        migrated_secret_keys
     }
 
     fn parse_csp_secret_key(key_bytes: &[u8], key_id: &KeyId) -> CspSecretKey {
@@ -184,7 +161,7 @@ impl ProtoSecretKeyStore {
     }
 
     fn ensure_version_is_supported(version: u32) {
-        let supported_versions = vec![CURRENT_SKS_VERSION, 3];
+        let supported_versions = vec![1, 2, CURRENT_SKS_VERSION];
         if !supported_versions.contains(&version) {
             panic!("Unexpected SecretKeyStore-proto version: {}", version)
         }
@@ -451,13 +428,19 @@ pub mod tests {
     }
 
     #[test]
-    fn should_downgrade_secret_key_store_to_current_sks_version() {
-        //TODO CRP-1806: remove this test when version bumped to 3
-        //TODO CRP-1806: change `supported_versions` to only contain CURRENT_SKS_VERSION
-        assert_eq!(CURRENT_SKS_VERSION, 2);
+    fn should_upgrade_secret_key_store_to_current_sks_version() {
         let (_temp_dir, mut secret_key_store) =
-            open_existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V3);
+            open_existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V2);
+        write_secret_key_store_to_disk(&mut secret_key_store);
 
+        assert_secret_key_store_proto_has_correct_version(
+            secret_key_store.proto_file_path(),
+            &SecretKeyStoreVersion::V3,
+        );
+    }
+
+    //Generate dummy key to ensure that SKS is written to disk
+    fn write_secret_key_store_to_disk(secret_key_store: &mut ProtoSecretKeyStore) {
         let seed = 42;
         let (key_id, secret_key) = (make_key_id(seed), make_secret_key(seed));
         secret_key_store
@@ -471,10 +454,6 @@ pub mod tests {
         assert_eq!(
             secret_key_store.get(&key_id).expect("could not read SKS"),
             secret_key
-        );
-        assert_secret_key_store_proto_has_correct_version(
-            secret_key_store.proto_file_path(),
-            &SecretKeyStoreVersion::V2,
         );
     }
 
@@ -492,29 +471,30 @@ pub mod tests {
     }
 
     #[test]
-    fn should_be_idempotent_when_opening_v2_secret_key_store() {
-        let (temp_dir, secret_key_store) =
-            open_existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V2);
-        let secret_keys_after_first_migration =
-            with_read_lock(&secret_key_store.keys, |keys| Some(keys.clone()));
+    fn should_be_idempotent_when_opening_secret_key_store() {
+        for version in SecretKeyStoreVersion::all_versions() {
+            let (temp_dir, secret_key_store) = open_existing_secret_key_store_in_temp_dir(&version);
+            let secret_keys_after_first_opening =
+                with_read_lock(&secret_key_store.keys, |keys| Some(keys.clone()));
 
-        let secret_key_store = ProtoSecretKeyStore::open(
-            temp_dir.path(),
-            secret_key_store
-                .proto_file_path()
-                .file_name()
-                .expect("missing file name")
-                .to_str()
-                .expect("invalid UTF-8 characters"),
-            None,
-        );
-        let secret_keys_after_second_migration =
-            with_read_lock(&secret_key_store.keys, |keys| Some(keys.clone()));
+            let secret_key_store = ProtoSecretKeyStore::open(
+                temp_dir.path(),
+                secret_key_store
+                    .proto_file_path()
+                    .file_name()
+                    .expect("missing file name")
+                    .to_str()
+                    .expect("invalid UTF-8 characters"),
+                None,
+            );
+            let secret_keys_after_second_opening =
+                with_read_lock(&secret_key_store.keys, |keys| Some(keys.clone()));
 
-        assert_eq!(
-            secret_keys_after_first_migration,
-            secret_keys_after_second_migration
-        );
+            assert_eq!(
+                secret_keys_after_first_opening,
+                secret_keys_after_second_opening
+            );
+        }
     }
 
     #[test]
