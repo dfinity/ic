@@ -10,7 +10,7 @@ use std::{
 use tokio::{runtime::Handle as RtHandle, task::JoinHandle};
 
 use super::{
-    event::{Event, EventSubscriberFactory, TaskId},
+    event::{BroadcastingEventSubscriberFactory, Event, TaskId},
     task::{Task, TaskHandle},
 };
 
@@ -18,7 +18,7 @@ pub struct TimeoutTask {
     spawned: AtomicBool,
     rt: RtHandle,
     duration: Duration,
-    sub_fact: Arc<dyn EventSubscriberFactory>,
+    sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
     task_id: TaskId,
 }
 
@@ -26,7 +26,7 @@ impl TimeoutTask {
     pub fn new(
         rt: RtHandle,
         duration: Duration,
-        sub_fact: Arc<dyn EventSubscriberFactory>,
+        sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
         task_id: TaskId,
     ) -> Self {
         Self {
@@ -44,7 +44,7 @@ impl Task for TimeoutTask {
         if self.spawned.fetch_or(true, Ordering::Relaxed) {
             panic!("respawned already spawned task `{}`", self.task_id);
         }
-        let mut sub = self.sub_fact.create_subscriber();
+        let mut sub = self.sub_fact.create_broadcasting_subscriber();
         (sub)(Event::task_spawned(self.task_id.clone()));
         let stopped = Arc::new(AtomicBool::default());
         let jh = self.rt.spawn({
@@ -77,13 +77,17 @@ impl Task for TimeoutTask {
         std::thread::sleep(self.duration);
         Ok(())
     }
+
+    fn task_id(&self) -> TaskId {
+        self.task_id.clone()
+    }
 }
 
 pub struct TimeoutTaskHandle {
     /// This boolean prevents and outside stop/fail signal from being propagated
     /// when the task finished.
     finished: Arc<AtomicBool>,
-    sub_fact: Arc<dyn EventSubscriberFactory>,
+    sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
     task_id: TaskId,
     jh: JoinHandle<()>,
 }
@@ -91,7 +95,7 @@ pub struct TimeoutTaskHandle {
 impl TaskHandle for TimeoutTaskHandle {
     fn fail(&self) {
         self.jh.abort();
-        let mut sub = self.sub_fact.create_subscriber();
+        let mut sub = self.sub_fact.create_broadcasting_subscriber();
         if !self.finished.fetch_or(true, Ordering::Relaxed) {
             (sub)(Event::task_failed(
                 self.task_id.clone(),
@@ -102,7 +106,7 @@ impl TaskHandle for TimeoutTaskHandle {
 
     fn stop(&self) {
         self.jh.abort();
-        let mut sub = self.sub_fact.create_subscriber();
+        let mut sub = self.sub_fact.create_broadcasting_subscriber();
         if !self.finished.fetch_or(true, Ordering::Relaxed) {
             (sub)(Event::task_stopped(self.task_id.clone()));
         }

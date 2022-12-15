@@ -16,31 +16,31 @@ use tokio::{runtime::Handle as RtHandle, task::JoinHandle};
 
 use super::{
     context::GroupContext,
-    dsl::ChildFn,
-    event::EventSubscriberFactory,
+    dsl::SubprocessFn,
+    event::BroadcastingEventSubscriberFactory,
     event::{Event, TaskId},
     process::{KillFn, Process},
     task::{Task, TaskHandle},
 };
 
-pub struct ChildTask {
+pub struct SubprocessTask {
     task_id: TaskId,
     rt: RtHandle,
     // To execute the function within an `catch_unwind`, it must be FnOnce.
     // Thus, `f` needs to be moved out of the object when executed.
-    f: Arc<Mutex<Option<Box<dyn ChildFn>>>>,
+    f: Arc<Mutex<Option<Box<dyn SubprocessFn>>>>,
     spawned: AtomicBool,
     group_ctx: GroupContext,
-    sub_fact: Arc<dyn EventSubscriberFactory>,
+    sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
 }
 
-impl ChildTask {
-    pub fn new<F: ChildFn>(
+impl SubprocessTask {
+    pub fn new<F: SubprocessFn>(
         task_id: TaskId,
         rt: RtHandle,
         f: F,
         group_ctx: GroupContext,
-        sub_fact: Arc<dyn EventSubscriberFactory>,
+        sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
     ) -> Self {
         Self {
             task_id,
@@ -53,7 +53,7 @@ impl ChildTask {
     }
 }
 
-impl Task for ChildTask {
+impl Task for SubprocessTask {
     fn spawn(&self) -> Box<dyn super::task::TaskHandle> {
         if self.spawned.swap(true, Ordering::Relaxed) {
             panic!("Respawned already spawned task '{}'", self.task_id);
@@ -68,8 +68,10 @@ impl Task for ChildTask {
             .arg("ABC")
             .arg("XYZ");
 
-        let mut sub = self.sub_fact.create_subscriber();
+        let mut sub = self.sub_fact.create_broadcasting_subscriber();
         (sub)(Event::task_spawned(self.task_id.clone()));
+
+        info!(self.group_ctx.log(), "Spawning {:?} ...", child_cmd);
 
         let (proc, kill) = self.rt.block_on(Process::new(
             self.task_id.clone(),
@@ -92,14 +94,24 @@ impl Task for ChildTask {
                 let mut task_state = task_state.lock().unwrap();
                 let event = match &*task_state {
                     TaskState::Running(_) => {
-                        if exit_code.is_err() {
-                            Event::task_failed(
-                                task_id,
-                                "Task '{task_id}' failed with exit code: {exit_code:?}."
-                                    .to_string(),
-                            )
-                        } else {
-                            Event::task_stopped(task_id)
+                        match exit_code {
+                            // exit_code.code() should be Some, unless an external signal will fail the subprocess.
+                            // In that case, we should fail the parent process.
+                            Ok(exit_code) => match exit_code.code() {
+                                Some(code) if code == 0 => Event::task_stopped(task_id),
+                                Some(code) => Event::task_failed(
+                                    task_id.clone(),
+                                    format!("Task {} failed with exit code: {:?}.", task_id, code),
+                                ),
+                                None => Event::task_failed(
+                                    task_id,
+                                    "The process was signaled externally (no exit code available)"
+                                        .to_string(),
+                                ),
+                            },
+                            Err(e) => {
+                                Event::task_failed(task_id, format!("System API failure: {:?}", e))
+                            }
                         }
                     }
                     // If either a stop or a failure was requested by the
@@ -136,7 +148,11 @@ impl Task for ChildTask {
             .unwrap()
             .take()
             .expect("Task was already executed!");
-        panic_to_result(catch_unwind(move || (f)()))
+        panic_to_result(catch_unwind(f))
+    }
+
+    fn task_id(&self) -> TaskId {
+        self.task_id.clone()
     }
 }
 

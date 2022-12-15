@@ -13,6 +13,7 @@ impl<I: TaskIdT, T: FnMut(NodeEvent<I>) + Send + Sync> AgSubscriber<I> for T {}
 /// When a node A changes state, every action connecting this node to another
 /// node is taken if the state of A meets the condition assocated with that
 /// action.
+#[derive(Debug)]
 pub struct ActionGraph<T> {
     // invariant: nodes.len() == task_identifiers.len()
     nodes: Vec<Node>,
@@ -39,16 +40,21 @@ impl<T: TaskIdT> ActionGraph<T> {
         // indicates that a node has reached the given condition.
         let mut workset = VecDeque::new();
 
-        // println!("effect({}, {:?}) START", node_idx, effect);
+        // println!("1 effect({}, {:?}) START", node_idx, effect);
         // self.nodes.iter().for_each(|n| println!("{:?}", n));
 
         let (new_state, cond) = self.nodes[node_idx].apply_effect(effect);
         self.nodes[node_idx] = new_state;
         if let Some(cond) = cond {
             workset.push_back((node_idx, cond));
+            // println!("1.1 effect({}, {:?}) START", node_idx, effect);
         }
 
+        // println!("2 effect({}, {:?}) START", node_idx, effect);
+
         while let Some((node_idx, cond)) = workset.pop_front() {
+            // println!("3 effect({}, {:?}) START", node_idx, cond);
+
             // We search for the index of the action with _lowest priority_ that
             // matches the source node and the condition.
             let a_idx = match self
@@ -60,6 +66,8 @@ impl<T: TaskIdT> ActionGraph<T> {
                 Err(idx) => idx,
             };
 
+            // println!("4 effect({}, {:?}) START", node_idx, cond);
+
             // While there is an action that matches the source and condition,
             // apply the action. Because the actions are ordered by source,
             // condition and priority first, we are guaranteed to visit actions
@@ -67,10 +75,11 @@ impl<T: TaskIdT> ActionGraph<T> {
             while let Some(a) = self.actions.get(a_idx) {
                 let source = a.source;
                 let target = a.target;
+                // println!("1 taking action {:?}", a);
                 if source != node_idx || a.condition != cond {
                     break;
                 }
-                println!("taking action {:?}", a);
+                // println!("2 taking action {:?}", a);
                 // Remove the action from the list of actions guarantees that
                 // the action is never taken twice.
 

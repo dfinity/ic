@@ -148,12 +148,19 @@ pub fn new_task_scheduler(
                 action_graph.stop(node_handle, &mut action_graph_subs)
             }
             EventPayload::StartSchedule => {
+                println!("Processing event EventPayload::StartSchedule ...");
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                println!("(changed) Processing event EventPayload::StartSchedule ...");
                 // Start the state machine. As a result, in the first loop
                 // iteration, only tasks get spawned.
+                println!("A action_graph: {:?}", action_graph);
                 action_graph.start(&mut action_graph_subs);
+                println!("B action_graph: {:?}", action_graph);
             }
             _ => return,
         };
+
+        println!("C action_graph: {:?}", action_graph);
 
         // Spawn, stop, or fail tasks in the order in which the action graph
         // tells us to do so.
@@ -161,6 +168,7 @@ pub fn new_task_scheduler(
             let node_handle = c.handle;
             let tid = node_handle.id();
             let action_type = c.event_type;
+            println!("Processing {:?} {:?} ...", action_type, tid);
             use super::action_graph::NodeEventType::*;
             match action_type {
                 Start => {
