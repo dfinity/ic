@@ -347,8 +347,8 @@ http_archive(
     name = "ic-hs",
     build_file_content = """
 package(default_visibility = ["//visibility:public"])
-filegroup(name = "artifacts", srcs = glob(["bin/*", "test-data/*"]), visibility = ["//visibility:public"])
+filegroup(name = "artifacts", srcs = glob(["build/*", "test-data/*"]), visibility = ["//visibility:public"])
       """,
-    sha256 = "12af7afae6a99decaf56f06aec35299280fe092a3a8d4660e53f34d6da649830",
-    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-0.0.1-c863b6ef-x86_64-linux.tar.gz"],
+    sha256 = "f1279374ed0ddc6a4f33ed4f8b2c527ec004d1a9a7e9e814edd5506cb80a09e6",
+    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-8384593e-x86_64-linux.tar.gz"],
 )

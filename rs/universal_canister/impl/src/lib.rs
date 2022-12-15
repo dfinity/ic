@@ -103,5 +103,8 @@ try_from_u8!(
         */
         StableFill64 = 72,
         CanisterVersion = 73,
+        /* TODO(VER-1997): enable this code
+        TrapIfNeq = 74,
+        */
     }
 );
