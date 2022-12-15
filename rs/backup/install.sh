@@ -20,12 +20,9 @@ UPDATE_FILE="${TMP_DIR}/${UPDATE_FILE_NAME}"
 NNS_URL="https://ic0.app"
 PUBLIC_KEY_NAME="ic_public_key.pem"
 PUBLIC_KEY_FILE="${TMP_DIR}/${PUBLIC_KEY_NAME}"
-NODES_SYNCING=5
-SYNCING_PERIOD=1800 # 1/2 hour
-REPLAY_PERIOD=14400 # 4 hours
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="e9edb10f3ac3dde0d357e54580fae6df91f2b358"
+DEFAULT_BUILD_ID="8e95ccf420880508de6d74a0f0ebc04ad082bba9"
 echo "Enter the BUILD_ID of the proper ic-backup version:"
 echo "(default: ${DEFAULT_BUILD_ID}):"
 read BUILD_ID
@@ -92,22 +89,7 @@ read -r -d '' CONFIG <<-EOM
     "ssh_private_key": "${BACKUP_HOME}/.ssh/id_ed25519_backup",
     "disk_threshold_warn": 75,
     "slack_token": "<INSERT SLACK TOKEN>",
-    "subnets": [
-        {
-            "subnet_id": "<INSERT 1. SUBNET_ID>",
-            "initial_replica_version": "<INSERT REPLICA_VERSION>",
-            "nodes_syncing": ${NODES_SYNCING},
-            "sync_period_secs": ${SYNCING_PERIOD},
-            "replay_period_secs": ${REPLAY_PERIOD}
-        },
-        {
-            "subnet_id": "<INSERT 2. SUBNET_ID>",
-            "initial_replica_version": "<INSERT REPLICA_VERSION>",
-            "nodes_syncing": ${NODES_SYNCING},
-            "sync_period_secs": ${SYNCING_PERIOD},
-            "replay_period_secs": ${REPLAY_PERIOD}
-        }
-    ]
+    "subnets": []
 }
 EOM
 
@@ -164,9 +146,7 @@ rm -rf ${TMP_DIR}
 echo
 echo
 echo
-echo "Please edit the config file ${CONFIG_FILE_NAME} placed in ${WORK_DIR}"
-echo
-echo "then initialise subnet backups with an existing execution state by running this command:"
+echo "Please initialise subnet backups by running this command:"
 echo "${WORK_DIR}/ic-backup --config-file ${WORK_DIR}/config.json5 init"
 echo
 echo "finaly start the backup service with this command:"
