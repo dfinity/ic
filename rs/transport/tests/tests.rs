@@ -34,24 +34,25 @@ const NODE_ID_4: NodeId = NODE_4;
 const TRANSPORT_CHANNEL_ID: u32 = 1234;
 
 #[test]
-fn test_start_connection_between_two_peers() {
-    test_start_connection_between_two_peers_impl(false);
-    test_start_connection_between_two_peers_impl(true);
+fn test_basic_conn_legacy() {
+    test_basic_conn_impl(false);
 }
 
-fn test_start_connection_between_two_peers_impl(use_h2: bool) {
+#[test]
+fn test_basic_conn_h2() {
+    test_basic_conn_impl(true);
+}
+
+// Test scenario: Two peers connect to each other, later one of them disconnects.
+// Test expectation: Each peer should receive a PeerUp event, the peer that didn't
+// issue the 'stop_connection' should receive a PeerDown event.
+fn test_basic_conn_impl(use_h2: bool) {
     with_test_replica_logger(|logger| {
         let registry_version = REG_V1;
-
         let rt = tokio::runtime::Runtime::new().unwrap();
-
-        let (peer_a_sender, mut peer_a_receiver) = channel(1);
-        let event_handler_1 = setup_peer_up_ack_event_handler(rt.handle().clone(), peer_a_sender);
-
-        let (peer_b_sender, mut peer_b_receiver) = channel(1);
-        let event_handler_2 = setup_peer_up_ack_event_handler(rt.handle().clone(), peer_b_sender);
-
-        let (_control_plane_1, _control_plane_2) = start_connection_between_two_peers(
+        let (event_handler_1, mut handle_1) = create_mock_event_handler();
+        let (event_handler_2, mut handle_2) = create_mock_event_handler();
+        let (_control_plane_1, control_plane_2) = start_connection_between_two_peers(
             rt.handle().clone(),
             logger,
             registry_version,
@@ -61,8 +62,29 @@ fn test_start_connection_between_two_peers_impl(use_h2: bool) {
             use_h2,
         );
 
-        assert_eq!(peer_a_receiver.blocking_recv(), Some(true));
-        assert_eq!(peer_b_receiver.blocking_recv(), Some(true));
+        rt.block_on(async {
+            match handle_1.next_request().await {
+                Some((TransportEvent::PeerUp(_), resp)) => {
+                    resp.send_response(());
+                }
+                _ => panic!("Unexpected event"),
+            }
+            match handle_2.next_request().await {
+                Some((TransportEvent::PeerUp(_), resp)) => {
+                    resp.send_response(());
+                }
+                _ => panic!("Unexpected event"),
+            }
+        });
+        control_plane_2.stop_connection(&NODE_1);
+        rt.block_on(async {
+            match handle_1.next_request().await {
+                Some((TransportEvent::PeerDown(_), resp)) => {
+                    resp.send_response(());
+                }
+                _ => panic!("Unexpected event"),
+            }
+        });
     });
 }
 

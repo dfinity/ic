@@ -27,8 +27,8 @@ pub fn get_free_localhost_port() -> std::io::Result<u16> {
     let socket = TcpSocket::new_v4()?;
     // This allows transport to bind to this address,
     //  even though the socket is already bound.
-    socket.set_reuseport(true)?;
-    socket.set_reuseaddr(true)?;
+    socket.set_reuseport(false)?;
+    socket.set_reuseaddr(false)?;
     socket.bind("127.0.0.1:0".parse().unwrap())?;
     Ok(socket.local_addr()?.port())
 }
