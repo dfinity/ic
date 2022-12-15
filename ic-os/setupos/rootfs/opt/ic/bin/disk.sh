@@ -35,11 +35,13 @@ function purge_partitions() {
 }
 
 function setup_storage() {
+    system_drive=$(find_first_drive)
+
     # Create PVs on each additional drive
     large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
     for drive in $(echo ${large_drives[@]}); do
-        # Avoid creating PV on main disk
-        if [ "/dev/${drive}" == "/dev/nvme0n1" ]; then
+        # Avoid creating PV on system drive
+        if [ "/dev/${drive}" == "/dev/${system_drive}" ]; then
             continue
         fi
 
