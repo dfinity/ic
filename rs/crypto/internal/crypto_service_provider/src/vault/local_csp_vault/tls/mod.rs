@@ -12,6 +12,7 @@ use ic_crypto_internal_tls::keygen::{
 };
 use ic_crypto_secrets_containers::{SecretArray, SecretVec};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
+use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::crypto::AlgorithmId;
 use ic_types::NodeId;
 use openssl::asn1::Asn1Time;
@@ -30,11 +31,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: 
         not_after: &str,
     ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
         let start_time = self.metrics.now();
-        let (sk, cert) = self.gen_tls_key_pair_internal(node, not_after)?;
-        let result = self
-            .store_tls_secret_key(&cert, sk)
-            .and_then(|_key_id| self.store_tls_certificate(&cert).map(|()| cert));
-
+        let result = self.gen_tls_key_pair_internal(node, not_after);
         self.metrics.observe_duration_seconds(
             MetricsDomain::TlsHandshake,
             MetricsScope::Local,
@@ -101,35 +98,11 @@ fn ed25519_secret_key_bytes_from_der(
 impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
     LocalCspVault<R, S, C, P>
 {
-    fn store_tls_secret_key(
-        &self,
-        cert: &TlsPublicKeyCert,
-        secret_key: TlsEd25519SecretKeyDerBytes,
-    ) -> Result<KeyId, CspTlsKeygenError> {
-        let key_id = KeyId::from(cert);
-        self.store_secret_key(key_id, CspSecretKey::TlsEd25519(secret_key), None)?;
-        Ok(key_id)
-    }
-
-    fn store_tls_certificate(&self, cert: &TlsPublicKeyCert) -> Result<(), CspTlsKeygenError> {
-        self.public_key_store_write_lock()
-            .set_once_tls_certificate(cert.clone().to_proto())
-            .map_err(|e| match e {
-                PublicKeySetOnceError::AlreadySet => CspTlsKeygenError::InternalError {
-                    internal_error: "TLS certificate already set".to_string(),
-                },
-                PublicKeySetOnceError::Io(io_error) => CspTlsKeygenError::TransientInternalError {
-                    internal_error: format!("IO error: {}", io_error),
-                },
-            })?;
-        Ok(())
-    }
-
     fn gen_tls_key_pair_internal(
         &self,
         node: NodeId,
         not_after: &str,
-    ) -> Result<(TlsEd25519SecretKeyDerBytes, TlsPublicKeyCert), CspTlsKeygenError> {
+    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
         let common_name = &node.get().to_string()[..];
         let not_after_asn1 = Asn1Time::from_str_x509(not_after).map_err(|_| {
             CspTlsKeygenError::InvalidNotAfterDate {
@@ -137,7 +110,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 not_after: not_after.to_string(),
             }
         })?;
-
         let (cert, secret_key) =
             generate_tls_key_pair_der(&mut *self.rng_write_lock(), common_name, &not_after_asn1)
                 .map_err(
@@ -148,10 +120,44 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         }
                     },
                 )?;
-
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes)
             .expect("generated X509 certificate has malformed DER encoding");
-        Ok((secret_key, x509_pk_cert))
+
+        let key_id = KeyId::from(&x509_pk_cert);
+        let secret_key = CspSecretKey::TlsEd25519(secret_key);
+        let cert_proto = x509_pk_cert.to_proto();
+        self.store_tls_key_pair(key_id, secret_key, cert_proto)?;
+
+        Ok(x509_pk_cert)
+    }
+
+    fn store_tls_key_pair(
+        &self,
+        key_id: KeyId,
+        secret_key: CspSecretKey,
+        cert_proto: X509PublicKeyCert,
+    ) -> Result<(), CspTlsKeygenError> {
+        let (mut sks_write_lock, mut pks_write_lock) = self.sks_and_pks_write_locks();
+        sks_write_lock
+            .insert(key_id, secret_key, None)
+            .map_err(CspTlsKeygenError::from)
+            .and_then(|()| {
+                pks_write_lock
+                    .set_once_tls_certificate(cert_proto)
+                    .map_err(|e| match e {
+                        PublicKeySetOnceError::AlreadySet => CspTlsKeygenError::InternalError {
+                            internal_error: "TLS certificate already set".to_string(),
+                        },
+                        PublicKeySetOnceError::Io(io_error) => {
+                            CspTlsKeygenError::TransientInternalError {
+                                internal_error: format!(
+                                    "IO error persisting TLS certificate: {}",
+                                    io_error
+                                ),
+                            }
+                        }
+                    })
+            })
     }
 
     fn tls_sign_internal(

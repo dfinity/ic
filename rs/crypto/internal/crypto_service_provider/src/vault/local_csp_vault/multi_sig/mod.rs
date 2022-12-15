@@ -10,6 +10,7 @@ use crate::vault::api::{
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_multi_sig_bls12381 as multi_bls12381;
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use rand::{CryptoRng, Rng};
 
@@ -41,18 +42,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         &self,
     ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
         let start_time = self.metrics.now();
-
-        let (sk, pk_and_pop) = self.gen_multi_bls12381_keypair_with_pop()?;
-        let sk_id = KeyId::from(&pk_and_pop.0);
-
-        let result = self
-            .store_secret_key(sk_id, sk, None)
-            .map_err(CspMultiSignatureKeygenError::from)
-            .and_then(|_| {
-                self.store_committee_signing_public_key(&pk_and_pop)
-                    .map(|()| pk_and_pop)
-            });
-
+        let result = self.gen_committee_signing_key_pair_internal();
         self.metrics.observe_duration_seconds(
             MetricsDomain::MultiSignature,
             MetricsScope::Local,
@@ -61,6 +51,52 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             start_time,
         );
         result
+    }
+}
+
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    LocalCspVault<R, S, C, P>
+{
+    fn gen_committee_signing_key_pair_internal(
+        &self,
+    ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
+        let (secret_key, pk_and_pop) = self.gen_multi_bls12381_keypair_with_pop()?;
+        let key_id = KeyId::from(&pk_and_pop.0);
+        let committee_public_key_proto = committee_signing_pk_to_proto(pk_and_pop.clone());
+        self.store_committee_signing_key_pair(key_id, secret_key, committee_public_key_proto)?;
+        Ok(pk_and_pop)
+    }
+
+    fn store_committee_signing_key_pair(
+        &self,
+        key_id: KeyId,
+        secret_key: CspSecretKey,
+        committee_public_key_proto: PublicKey,
+    ) -> Result<(), CspMultiSignatureKeygenError> {
+        let (mut sks_write_lock, mut pks_write_lock) = self.sks_and_pks_write_locks();
+        sks_write_lock
+            .insert(key_id, secret_key, None)
+            .map_err(CspMultiSignatureKeygenError::from)
+            .and_then(|()| {
+                pks_write_lock
+                    .set_once_committee_signing_pubkey(committee_public_key_proto)
+                    .map_err(|e| match e {
+                        PublicKeySetOnceError::AlreadySet => {
+                            CspMultiSignatureKeygenError::InternalError {
+                                internal_error: "committee signing public key already set"
+                                    .to_string(),
+                            }
+                        }
+                        PublicKeySetOnceError::Io(io_error) => {
+                            CspMultiSignatureKeygenError::TransientInternalError {
+                                internal_error: format!(
+                                    "IO error persisting committee signing public key: {}",
+                                    io_error
+                                ),
+                            }
+                        }
+                    })
+            })
     }
 }
 
@@ -98,25 +134,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             }),
         };
         result
-    }
-
-    fn store_committee_signing_public_key(
-        &self,
-        public_key: &(CspPublicKey, CspPop),
-    ) -> Result<(), CspMultiSignatureKeygenError> {
-        self.public_key_store_write_lock()
-            .set_once_committee_signing_pubkey(committee_signing_pk_to_proto(public_key.clone()))
-            .map_err(|e| match e {
-                PublicKeySetOnceError::AlreadySet => CspMultiSignatureKeygenError::InternalError {
-                    internal_error: "committee signing public key already set".to_string(),
-                },
-                PublicKeySetOnceError::Io(io_error) => {
-                    CspMultiSignatureKeygenError::TransientInternalError {
-                        internal_error: format!("IO error: {}", io_error),
-                    }
-                }
-            })?;
-        Ok(())
     }
 
     fn gen_multi_bls12381_keypair_with_pop(

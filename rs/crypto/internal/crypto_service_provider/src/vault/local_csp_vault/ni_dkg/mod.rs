@@ -10,6 +10,7 @@ use crate::KeyId;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
+use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateFsKeyError;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as ni_dkg_clib;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::SecretKey;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
@@ -21,6 +22,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_internal_types::NodeIndex;
 use ic_logger::debug;
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, NumberOfNodes};
 use rand::{CryptoRng, Rng};
@@ -35,60 +37,18 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     fn gen_dealing_encryption_key_pair(
         &self,
         node_id: NodeId,
-    ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), ni_dkg_errors::CspDkgCreateFsKeyError>
-    {
+    ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError> {
         debug!(self.logger; crypto.method_name => "gen_dealing_encryption_key_pair");
-
-        // Get state
-        let seed = Seed::from_rng(&mut *self.rng_write_lock());
-        // Call lib:
-        let key_set = ni_dkg_clib::create_forward_secure_key_pair(seed, node_id.get().as_slice());
-
-        // Generalise over fs key variants:
-        let public_key = CspFsEncryptionPublicKey::Groth20_Bls12_381(key_set.public_key);
-        let pop = CspFsEncryptionPop::Groth20WithPop_Bls12_381(key_set.pop);
-        let key_set = CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set);
-
-        // Update state:
-        self.store_secret_key(
-            KeyId::from(&public_key),
-            CspSecretKey::FsEncryption(key_set),
-            None,
-        )
-        .map_err(|e| match e {
-            SecretKeyStoreError::DuplicateKeyId(key_id) => {
-                ni_dkg_errors::CspDkgCreateFsKeyError::DuplicateKeyId(
-                    format!("duplicate ni-dkg dealing encryption secret key id: {}", key_id))
-            },
-            SecretKeyStoreError::PersistenceError(io_error) => {
-                ni_dkg_errors::CspDkgCreateFsKeyError::TransientInternalError(
-                    format!("error persisting ni-dkg dealing encryption secret key: {}", io_error),
-                )
-            }
-        })
-        .and_then(|()| {
-            self.public_key_store_write_lock()
-                .set_once_ni_dkg_dealing_encryption_pubkey(dkg_dealing_encryption_pk_to_proto(
-                    public_key,
-                    pop,
-                ))
-                .map_err(|e| match e {
-                    PublicKeySetOnceError::AlreadySet => {
-                        ni_dkg_errors::CspDkgCreateFsKeyError::InternalError(
-                            ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError {
-                            internal_error: "ni-dkg dealing encryption public key already set"
-                                .to_string(),
-                        })
-                    }
-                    PublicKeySetOnceError::Io(io_error) => {
-                        ni_dkg_errors::CspDkgCreateFsKeyError::TransientInternalError(
-                            format!("error persisting ni-dkg dealing encryption public key: {}", io_error),
-                        )
-                    }
-                })
-        })?;
-        // FIN:
-        Ok((public_key, pop))
+        let start_time = self.metrics.now();
+        let result = self.gen_dealing_encryption_key_pair_internal(node_id);
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::NiDkgAlgorithm,
+            MetricsScope::Local,
+            "gen_dealing_encryption_key_pair",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        result
     }
 
     fn update_forward_secure_epoch(
@@ -187,6 +147,63 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             start_time,
         );
         Ok(())
+    }
+}
+
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    LocalCspVault<R, S, C, P>
+{
+    fn gen_dealing_encryption_key_pair_internal(
+        &self,
+        node_id: NodeId,
+    ) -> Result<(CspFsEncryptionPublicKey, CspFsEncryptionPop), CspDkgCreateFsKeyError> {
+        let seed = self.generate_seed();
+        let (public_key, pop, key_set) = gen_dealing_encryption_key_pair_from_seed(node_id, seed);
+        let key_id = KeyId::from(&public_key);
+        let secret_key = CspSecretKey::FsEncryption(key_set);
+        let public_key_proto = dkg_dealing_encryption_pk_to_proto(public_key, pop);
+        self.store_dealing_encryption_key_pair(key_id, secret_key, public_key_proto)?;
+        Ok((public_key, pop))
+    }
+
+    fn store_dealing_encryption_key_pair(
+        &self,
+        key_id: KeyId,
+        secret_key: CspSecretKey,
+        public_key_proto: PublicKey,
+    ) -> Result<(), CspDkgCreateFsKeyError> {
+        let (mut sks_write_lock, mut pks_write_lock) = self.sks_and_pks_write_locks();
+        sks_write_lock
+            .insert(key_id, secret_key, None)
+            .map_err(|e| match e {
+                SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                    CspDkgCreateFsKeyError::DuplicateKeyId(
+                        format!("duplicate ni-dkg dealing encryption secret key id: {}", key_id))
+                },
+                SecretKeyStoreError::PersistenceError(io_error) => {
+                    CspDkgCreateFsKeyError::TransientInternalError(
+                        format!("error persisting ni-dkg dealing encryption secret key: {}", io_error),
+                    )
+                }
+            })
+            .and_then(|()| {
+                pks_write_lock
+                    .set_once_ni_dkg_dealing_encryption_pubkey(public_key_proto)
+                    .map_err(|e| match e {
+                        PublicKeySetOnceError::AlreadySet => {
+                            CspDkgCreateFsKeyError::InternalError(
+                                ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError {
+                                    internal_error: "ni-dkg dealing encryption public key already set"
+                                        .to_string(),
+                                })
+                        }
+                        PublicKeySetOnceError::Io(io_error) => {
+                            CspDkgCreateFsKeyError::TransientInternalError(
+                                format!("error persisting ni-dkg dealing encryption public key: {}", io_error),
+                            )
+                        }
+                    })
+            })
     }
 }
 
@@ -402,4 +419,19 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         };
         result
     }
+}
+
+fn gen_dealing_encryption_key_pair_from_seed(
+    node_id: NodeId,
+    seed: Seed,
+) -> (
+    CspFsEncryptionPublicKey,
+    CspFsEncryptionPop,
+    CspFsEncryptionKeySet,
+) {
+    let key_set = ni_dkg_clib::create_forward_secure_key_pair(seed, node_id.get().as_slice());
+    let public_key = CspFsEncryptionPublicKey::Groth20_Bls12_381(key_set.public_key);
+    let pop = CspFsEncryptionPop::Groth20WithPop_Bls12_381(key_set.pop);
+    let key_set = CspFsEncryptionKeySet::Groth20WithPop_Bls12_381(key_set);
+    (public_key, pop, key_set)
 }

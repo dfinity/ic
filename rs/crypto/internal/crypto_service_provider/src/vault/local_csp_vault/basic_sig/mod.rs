@@ -10,6 +10,7 @@ use crate::vault::api::{
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::AlgorithmId;
 use rand::{CryptoRng, Rng};
 
@@ -39,17 +40,46 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
     fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
         let start_time = self.metrics.now();
+        let result = self.gen_node_signing_key_pair_internal();
+        self.metrics.observe_duration_seconds(
+            MetricsDomain::BasicSignature,
+            MetricsScope::Local,
+            "gen_node_signing_key_pair",
+            MetricsResult::from(&result),
+            start_time,
+        );
+        result
+    }
+}
 
+impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
+    LocalCspVault<R, S, C, P>
+{
+    fn gen_node_signing_key_pair_internal(
+        &self,
+    ) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
         let (sk_bytes, pk_bytes) = ed25519::keypair_from_rng(&mut *self.rng_write_lock());
-        let sk = CspSecretKey::Ed25519(sk_bytes);
-        let pk = CspPublicKey::Ed25519(pk_bytes);
+        let secret_key = CspSecretKey::Ed25519(sk_bytes);
+        let public_key = CspPublicKey::Ed25519(pk_bytes);
+        let key_id = KeyId::from(&public_key);
+        let public_key_proto = node_signing_pk_to_proto(public_key.clone());
+        self.store_node_signing_key_pair(key_id, secret_key, public_key_proto)?;
+        Ok(public_key)
+    }
 
-        let result = self
-            .store_secret_key(KeyId::from(&pk), sk, None)
+    fn store_node_signing_key_pair(
+        &self,
+        key_id: KeyId,
+        secret_key: CspSecretKey,
+        public_key_proto: PublicKey,
+    ) -> Result<(), CspBasicSignatureKeygenError> {
+        let (mut sks_write_lock, mut pks_write_lock) = self.sks_and_pks_write_locks();
+        sks_write_lock
+            .insert(key_id, secret_key, None)
             .map_err(CspBasicSignatureKeygenError::from)
             .and_then(|()| {
-                self.public_key_store_write_lock()
-                    .set_once_node_signing_pubkey(node_signing_pk_to_proto(pk.clone()))
+                pks_write_lock
+                    .set_once_node_signing_pubkey(public_key_proto)
                     .map_err(|e| match e {
                         PublicKeySetOnceError::AlreadySet => {
                             CspBasicSignatureKeygenError::InternalError {
@@ -58,20 +88,14 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         }
                         PublicKeySetOnceError::Io(io_error) => {
                             CspBasicSignatureKeygenError::TransientInternalError {
-                                internal_error: format!("IO error: {}", io_error),
+                                internal_error: format!(
+                                    "IO error persisting node signing public key: {}",
+                                    io_error
+                                ),
                             }
                         }
                     })
-            });
-
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::BasicSignature,
-            MetricsScope::Local,
-            "gen_node_signing_key_pair",
-            MetricsResult::from(&result),
-            start_time,
-        );
-        result.map(|()| pk)
+            })
     }
 }
 

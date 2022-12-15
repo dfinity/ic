@@ -13,17 +13,14 @@ mod tests;
 mod threshold_sig;
 mod tls;
 
-use crate::key_id::KeyId;
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
-use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
-use crate::types::CspSecretKey;
+use crate::secret_key_store::SecretKeyStore;
 use crate::CspRwLock;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_types::scope::Scope;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
@@ -220,25 +217,12 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         self.public_key_store.read()
     }
 
-    fn public_key_store_write_lock(&self) -> RwLockWriteGuard<'_, P> {
-        self.public_key_store.write()
-    }
-
     fn canister_sks_write_lock(&self) -> RwLockWriteGuard<'_, C> {
         self.canister_secret_key_store.write()
     }
 
     fn canister_sks_read_lock(&self) -> RwLockReadGuard<'_, C> {
         self.canister_secret_key_store.read()
-    }
-
-    fn store_secret_key(
-        &self,
-        key_id: KeyId,
-        csp_secret_key: CspSecretKey,
-        scope: Option<Scope>,
-    ) -> Result<(), SecretKeyStoreError> {
-        self.sks_write_lock().insert(key_id, csp_secret_key, scope)
     }
 
     fn generate_seed(&self) -> Seed {
