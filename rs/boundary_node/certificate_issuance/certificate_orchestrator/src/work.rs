@@ -107,7 +107,10 @@ impl Dispense for Dispenser {
                 }
             };
 
-            let (id, _) = tasks.borrow_mut().pop().unwrap();
+            let id = match tasks.borrow_mut().pop() {
+                None => return Err(DispenseError::NoTasksAvailable),
+                Some((id, _)) => id,
+            };
 
             // TODO(or.ricon): Mark task as being in-progress
 
