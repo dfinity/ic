@@ -4647,6 +4647,7 @@ dependencies = [
  "num-traits",
  "proptest",
  "ripemd",
+ "scopeguard",
  "serde",
  "serde_bytes",
  "simple_asn1 0.6.2",

@@ -4,6 +4,7 @@ use candid::{CandidType, Deserialize};
 use ic_btc_types::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
 use ic_canister_log::log;
 use ic_icrc1::Account;
+use scopeguard::{guard, ScopeGuard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet};
@@ -260,6 +261,12 @@ async fn submit_pending_requests() {
             hex::encode(tx::encode_into(&req.unsigned_tx, Vec::new()))
         );
 
+        // This guard ensures that we return pending requests and UTXOs back to
+        // the state if the signing or sending a transaction fails or panics.
+        let requests_guard = guard((req.requests, req.utxos), |(reqs, utxos)| {
+            undo_sign_request(reqs, utxos);
+        });
+
         let txid = req.unsigned_tx.txid();
 
         match sign_transaction(
@@ -272,7 +279,7 @@ async fn submit_pending_requests() {
         {
             Ok(signed_tx) => {
                 state::mutate_state(|s| {
-                    for retrieve_req in req.requests.iter() {
+                    for retrieve_req in requests_guard.0.iter() {
                         s.push_in_flight_request(
                             retrieve_req.block_index,
                             state::InFlightStatus::Sending { txid },
@@ -292,23 +299,24 @@ async fn submit_pending_requests() {
                             "[heartbeat]: successfully sent transaction {}",
                             hex::encode(txid)
                         );
+
+                        // Defuse the guard because we sent the transaction
+                        // successfully.
+                        let (requests, utxos) = ScopeGuard::into_inner(requests_guard);
+
                         let submitted_at = ic_cdk::api::time();
                         storage::record_event(&eventlog::Event::SentBtcTransaction {
-                            request_block_indices: req
-                                .requests
-                                .iter()
-                                .map(|r| r.block_index)
-                                .collect(),
+                            request_block_indices: requests.iter().map(|r| r.block_index).collect(),
                             txid,
-                            utxos: req.utxos.clone(),
+                            utxos: utxos.clone(),
                             change_output: req.change_output.clone(),
                             submitted_at,
                         });
                         state::mutate_state(|s| {
                             s.push_submitted_transaction(state::SubmittedBtcTransaction {
-                                requests: req.requests,
+                                requests,
                                 txid,
-                                used_utxos: req.utxos,
+                                used_utxos: utxos,
                                 change_output: req.change_output,
                                 submitted_at,
                             });
@@ -320,13 +328,11 @@ async fn submit_pending_requests() {
                             "[heartbeat]: failed to send a bitcoin transaction: {}",
                             err
                         );
-                        undo_sign_request(req.requests, req.utxos);
                     }
                 }
             }
             Err(err) => {
                 log!(P0, "[heartbeat]: failed to sign a BTC transaction: {}", err);
-                undo_sign_request(req.requests, req.utxos);
             }
         }
     }
@@ -637,7 +643,15 @@ pub fn build_unsigned_transaction(
         return Err(BuildTxError::NotEnoughFunds);
     }
 
-    let inputs_value = input_utxos.iter().map(|u| u.value).sum::<u64>();
+    // This guard returns the selected UTXOs back to the available_utxos set if
+    // we fail to build the transaction.
+    let utxos_guard = guard(input_utxos, |utxos| {
+        for utxo in utxos {
+            minter_utxos.insert(utxo);
+        }
+    });
+
+    let inputs_value = utxos_guard.iter().map(|u| u.value).sum::<u64>();
 
     debug_assert!(inputs_value >= amount);
 
@@ -670,7 +684,7 @@ pub fn build_unsigned_transaction(
     );
 
     let mut unsigned_tx = tx::UnsignedTransaction {
-        inputs: input_utxos
+        inputs: utxos_guard
             .iter()
             .map(|utxo| tx::UnsignedInput {
                 previous_output: utxo.outpoint.clone(),
@@ -686,9 +700,6 @@ pub fn build_unsigned_transaction(
     let fee = (tx_vsize as u64 * fee_per_vbyte) / 1000;
 
     if fee > amount {
-        for utxo in input_utxos {
-            minter_utxos.insert(utxo);
-        }
         return Err(BuildTxError::AmountTooLow);
     }
 
@@ -709,7 +720,11 @@ pub fn build_unsigned_transaction(
         fee + unsigned_tx.outputs.iter().map(|u| u.value).sum::<u64>()
     );
 
-    Ok((unsigned_tx, change_output, input_utxos))
+    Ok((
+        unsigned_tx,
+        change_output,
+        ScopeGuard::into_inner(utxos_guard),
+    ))
 }
 
 /// Distributes an amount across the specified number of shares as fairly as

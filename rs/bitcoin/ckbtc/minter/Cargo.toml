@@ -32,6 +32,7 @@ ic-stable-structures = "0.1.2"
 lazy_static = "1.4.0"
 num-traits = "0.2.14"
 ripemd = "0.1.1"
+scopeguard = "1.1.0"
 serde = "1.0.136"
 serde_bytes = "0.11"
 

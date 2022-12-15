@@ -774,6 +774,9 @@ def external_crates_repository(name, annotations):
             "scoped_threadpool": crate.spec(
                 version = "0.1.*",
             ),
+            "scopeguard": crate.spec(
+                version = "^1.1.0",
+            ),
             "semver": crate.spec(
                 version = "^1.0.9",
                 features = [

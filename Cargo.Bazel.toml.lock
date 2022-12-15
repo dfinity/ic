@@ -2433,6 +2433,7 @@ dependencies = [
  "rustversion",
  "rusty-fork",
  "scoped_threadpool",
+ "scopeguard",
  "semver",
  "serde",
  "serde-bytes-repr",
