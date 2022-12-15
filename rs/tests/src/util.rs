@@ -13,14 +13,13 @@ use ic_agent::{
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_config::ConfigOptional;
 use ic_constants::MAX_INGRESS_TTL;
-use ic_fondue::ic_manager::{IcEndpoint, IcHandle};
 use ic_ic00_types::{CanisterStatusResult, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_test_utils::governance::upgrade_nns_canister_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
-use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+use ic_types::{CanisterId, Cycles, PrincipalId};
 use ic_universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
@@ -32,7 +31,6 @@ use icp_ledger::{
 };
 use itertools::Itertools;
 use on_wire::FromWire;
-use rand_chacha::ChaCha8Rng;
 use slog::{debug, info};
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::{
@@ -775,10 +773,6 @@ pub fn create_delay(throttle_duration: u64, timeout: u64) -> garcon::Delay {
         .build()
 }
 
-pub fn get_random_node_endpoint<'a>(handle: &'a IcHandle, rng: &mut ChaCha8Rng) -> &'a IcEndpoint {
-    handle.as_permutation(rng).next().unwrap()
-}
-
 pub fn get_nns_node(topo_snapshot: &TopologySnapshot) -> IcNodeSnapshot {
     let nns_node = topo_snapshot.root_subnet().nodes().next().unwrap();
     nns_node.await_status_is_healthy().unwrap();
@@ -798,130 +792,6 @@ pub fn get_app_subnet_and_node(
         .expect("there is no application node");
     app_node.await_status_is_healthy().unwrap();
     (app_subnet, app_node)
-}
-
-pub fn get_random_nns_node_endpoint<'a>(
-    handle: &'a IcHandle,
-    rng: &mut ChaCha8Rng,
-) -> &'a IcEndpoint {
-    // NOTE: Root subnet and NNS subnet are currently the same.
-    get_random_root_node_endpoint(handle, rng)
-}
-
-pub fn get_random_root_node_endpoint<'a>(
-    handle: &'a IcHandle,
-    rng: &mut ChaCha8Rng,
-) -> &'a IcEndpoint {
-    handle
-        .as_permutation(rng)
-        .find(|ep| ep.is_root_subnet)
-        .unwrap()
-}
-
-pub fn get_random_non_root_node_endpoint<'a>(
-    handle: &'a IcHandle,
-    rng: &mut ChaCha8Rng,
-) -> &'a IcEndpoint {
-    handle
-        .as_permutation(rng)
-        .find(|ep| !ep.is_root_subnet)
-        .unwrap()
-}
-
-pub fn get_random_non_nns_node_endpoint<'a>(
-    handle: &'a IcHandle,
-    rng: &mut ChaCha8Rng,
-) -> &'a IcEndpoint {
-    // NOTE: Root subnet and NNS subnet are currently the same.
-    get_random_non_root_node_endpoint(handle, rng)
-}
-
-pub fn get_random_application_node_endpoint<'a>(
-    handle: &'a IcHandle,
-    rng: &mut ChaCha8Rng,
-) -> &'a IcEndpoint {
-    get_random_node_endpoint_of_init_subnet_type(handle, SubnetType::Application, rng)
-}
-
-pub fn get_random_verified_app_node_endpoint<'a>(
-    handle: &'a IcHandle,
-    rng: &mut ChaCha8Rng,
-) -> &'a IcEndpoint {
-    get_random_node_endpoint_of_init_subnet_type(handle, SubnetType::VerifiedApplication, rng)
-}
-
-pub fn get_random_system_node_endpoint<'a>(
-    handle: &'a IcHandle,
-    rng: &mut ChaCha8Rng,
-) -> &'a IcEndpoint {
-    get_random_node_endpoint_of_init_subnet_type(handle, SubnetType::System, rng)
-}
-
-pub fn get_random_system_but_not_nns_node_endpoint<'a>(
-    handle: &'a IcHandle,
-    rng: &mut ChaCha8Rng,
-) -> &'a IcEndpoint {
-    handle
-        .as_permutation(rng)
-        .find(|ep| {
-            ep.subnet.as_ref().map(|s| s.type_of) == Some(SubnetType::System) && !ep.is_root_subnet
-        })
-        .unwrap()
-}
-
-pub fn get_random_node_endpoint_of_init_subnet_type<'a>(
-    handle: &'a IcHandle,
-    subnet_type: SubnetType,
-    rng: &mut ChaCha8Rng,
-) -> &'a IcEndpoint {
-    handle
-        .as_permutation(rng)
-        .find(|ep| ep.subnet.as_ref().map(|s| s.type_of) == Some(subnet_type))
-        .unwrap()
-}
-
-pub fn get_random_node_endpoint_of_subnet<'a>(
-    handle: &'a IcHandle,
-    subnet_id: SubnetId,
-    rng: &mut ChaCha8Rng,
-) -> &'a IcEndpoint {
-    handle
-        .as_permutation(rng)
-        .find(|ep| ep.subnet.as_ref().map(|s| s.id) == Some(subnet_id))
-        .unwrap()
-}
-
-pub fn get_other_subnet_nodes<'a>(
-    handle: &'a IcHandle,
-    endpoint: &'a IcEndpoint,
-) -> Vec<&'a IcEndpoint> {
-    handle
-        .public_api_endpoints
-        .iter()
-        .filter(|ep| {
-            ep.subnet.is_some()
-                && ep.subnet_id() == endpoint.subnet_id()
-                && ep.node_id != endpoint.node_id
-        })
-        .collect()
-}
-
-pub fn get_random_unassigned_node_endpoint<'a>(
-    handle: &'a IcHandle,
-    rng: &mut ChaCha8Rng,
-) -> &'a IcEndpoint {
-    handle
-        .as_permutation(rng)
-        .find(|ep| ep.subnet.is_none())
-        .unwrap()
-}
-
-pub fn get_unassinged_nodes_endpoints(handle: &IcHandle) -> Vec<&IcEndpoint> {
-    handle
-        .public_api_endpoints
-        .iter()
-        .filter(|ep| ep.subnet.is_none())
-        .collect()
 }
 
 // This indirectly asserts a non-zero finalization rate of the subnet:

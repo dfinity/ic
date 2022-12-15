@@ -5,21 +5,24 @@ Goal:: Test the robustness of the replica by sending invalid requests to its HTT
 
 
 end::catalog[] */
-use crate::{
-    driver::{pot_dsl::get_ic_handle_and_ctx, test_env::TestEnv},
-    util,
+use crate::driver::{
+    test_env::TestEnv,
+    test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
 };
 use ic_base_types::CanisterId;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
 };
 use rand::RngCore;
+use rand_chacha::ChaCha8Rng;
 use reqwest::StatusCode;
 use std::time::{Duration, SystemTime};
 
+const RND_SEED: u64 = 42;
+
 const ENDPOINTS: &[&str; 3] = &["call", "query", "read_state"];
 
-pub fn test(env: TestEnv) {
+pub fn malicious_input_test(env: TestEnv) {
     test_invalid_content_type(env.clone());
     test_invalid_get_requests(env.clone());
     test_garbage_payload(env.clone());
@@ -29,18 +32,15 @@ pub fn test(env: TestEnv) {
 
 // Endpoints reject requests without the "application/cbor" content type.
 fn test_invalid_content_type(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
+    let node_url = env.get_first_healthy_node_snapshot().get_public_url();
     let client = reqwest::blocking::Client::new();
-    let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
-    util::block_on(endpoint.assert_ready(ctx));
     let canister_id = CanisterId::from_u64(123456789);
     for e in ENDPOINTS {
         // Specifying a bogus content type should result in a 415.
         let res = client
             .post(&format!(
                 "{}api/v2/canister/{}/{}",
-                endpoint.url, canister_id, e
+                node_url, canister_id, e
             ))
             .header("Content-Type", "application/abc")
             .send()
@@ -48,20 +48,14 @@ fn test_invalid_content_type(env: TestEnv) {
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
         // Not specifying a content type should also result in a 400.
-        let res = client
-            .post(&format!("{}{}", endpoint.url, e))
-            .send()
-            .unwrap();
+        let res = client.post(&format!("{}{}", node_url, e)).send().unwrap();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
 }
 
 // Endpoints reject get requests.
 fn test_invalid_get_requests(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
-    util::block_on(endpoint.assert_ready(ctx));
+    let node_url = env.get_first_healthy_node_snapshot().get_public_url();
     let client = reqwest::blocking::Client::new();
 
     let canister_id = CanisterId::from_u64(123456789);
@@ -69,7 +63,7 @@ fn test_invalid_get_requests(env: TestEnv) {
         let res = client
             .get(&format!(
                 "{}api/v2/canister/{}/{}",
-                endpoint.url, canister_id, e
+                node_url, canister_id, e
             ))
             .send()
             .unwrap();
@@ -79,10 +73,8 @@ fn test_invalid_get_requests(env: TestEnv) {
 
 // Endpoints reject garbage payloads.
 fn test_garbage_payload(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
-    util::block_on(endpoint.assert_ready(ctx));
+    let mut rng: ChaCha8Rng = rand::SeedableRng::seed_from_u64(RND_SEED);
+    let node_url = env.get_first_healthy_node_snapshot().get_public_url();
     let client = reqwest::blocking::Client::new();
 
     let garbage_payload = {
@@ -97,7 +89,7 @@ fn test_garbage_payload(env: TestEnv) {
         let res = client
             .post(&format!(
                 "{}api/v2/canister/{}/{}",
-                endpoint.url, canister_id, e
+                node_url, canister_id, e
             ))
             .header("Content-Type", "application/cbor")
             .body(garbage_payload.clone())
@@ -108,10 +100,8 @@ fn test_garbage_payload(env: TestEnv) {
 }
 
 fn test_valid_query_followed_by_garbage(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
-    util::block_on(endpoint.assert_ready(ctx));
+    let mut rng: ChaCha8Rng = rand::SeedableRng::seed_from_u64(RND_SEED);
+    let node_url = env.get_first_healthy_node_snapshot().get_public_url();
     let client = reqwest::blocking::Client::new();
 
     let canister_id = CanisterId::from_u64(123456789);
@@ -145,7 +135,7 @@ fn test_valid_query_followed_by_garbage(env: TestEnv) {
     let res = client
         .post(&format!(
             "{}api/v2/canister/{}/query",
-            endpoint.url, canister_id
+            node_url, canister_id
         ))
         .header("Content-Type", "application/cbor")
         .body(body)
@@ -155,10 +145,8 @@ fn test_valid_query_followed_by_garbage(env: TestEnv) {
 }
 
 fn test_valid_update_followed_by_garbage(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
-    util::block_on(endpoint.assert_ready(ctx));
+    let mut rng: ChaCha8Rng = rand::SeedableRng::seed_from_u64(RND_SEED);
+    let node_url = env.get_first_healthy_node_snapshot().get_public_url();
     let client = reqwest::blocking::Client::new();
 
     let canister_id = CanisterId::from_u64(123456789);
@@ -190,10 +178,7 @@ fn test_valid_update_followed_by_garbage(env: TestEnv) {
     body.extend(garbage_payload);
 
     let res = client
-        .post(&format!(
-            "{}api/v2/canister/{}/call",
-            endpoint.url, canister_id
-        ))
+        .post(&format!("{}api/v2/canister/{}/call", node_url, canister_id))
         .header("Content-Type", "application/cbor")
         .body(body)
         .send()

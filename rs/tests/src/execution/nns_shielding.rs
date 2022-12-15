@@ -2,8 +2,8 @@
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use crate::{types::*, util::CYCLES_LIMIT_PER_CANISTER, util::*};
 use candid::{Decode, Encode, Principal};
 use ic_agent::AgentError;
@@ -47,18 +47,17 @@ const MINT_CYCLES: &str = r#"(module
               )"#;
 
 pub fn mint_cycles_not_supported_on_system_subnet(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    rt.block_on(async move {
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let nns_agent = nns_node.build_default_agent();
+    block_on(async move {
         let wasm = wabt::wat2wasm(MINT_CYCLES).unwrap();
-        let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-        nns_endpoint.assert_ready(ctx).await;
-
-        let nns_agent = assert_create_agent(nns_endpoint.url.as_str()).await;
-        let nns_canister_id: Principal =
-            create_and_install_with_cycles(&nns_agent, nns_endpoint.effective_canister_id(), wasm.as_slice(), *INITIAL_CYCLES).await;
+        let nns_canister_id: Principal = create_and_install_with_cycles(
+            &nns_agent,
+            nns_node.effective_canister_id(),
+            wasm.as_slice(),
+            *INITIAL_CYCLES,
+        )
+        .await;
 
         let before_balance = get_balance(&nns_canister_id, &nns_agent).await;
         assert_balance_equals(
@@ -90,19 +89,13 @@ pub fn mint_cycles_not_supported_on_system_subnet(env: TestEnv) {
 
 pub fn mint_cycles_not_supported_on_application_subnet(env: TestEnv) {
     let initial_cycles = CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    rt.block_on(async move {
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
+    block_on(async move {
         let wasm = wabt::wat2wasm(MINT_CYCLES).unwrap();
-        let endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-        endpoint.assert_ready(ctx).await;
-
-        let agent = assert_create_agent(endpoint.url.as_str()).await;
         let canister_id: Principal = create_and_install_with_cycles(
             &agent,
-            endpoint.effective_canister_id(),
+            app_node.effective_canister_id(),
             wasm.as_slice(),
             initial_cycles * 3u64,
         )
@@ -142,18 +135,12 @@ pub fn mint_cycles_not_supported_on_application_subnet(env: TestEnv) {
 
 pub fn no_cycle_balance_limit_on_nns_subnet(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    rt.block_on(async move {
-        let endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-        endpoint.assert_ready(ctx).await;
-        let agent = assert_create_agent(endpoint.url.as_str()).await;
-
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let agent = nns_node.build_default_agent();
+    block_on(async move {
         let canister_a = UniversalCanister::new_with_cycles_with_retries(
             &agent,
-            endpoint.effective_canister_id(),
+            nns_node.effective_canister_id(),
             CYCLES_LIMIT_PER_CANISTER * 3u64,
             &logger,
         )
@@ -219,26 +206,24 @@ pub fn config() -> InternetComputer {
 /// on the NNS subnet.
 pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    let mut rng = ctx.rng.clone();
-    rt.block_on(async move {
+    let ver_app_node = env.get_first_healthy_verified_application_node_snapshot();
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let sys_node = env.get_first_healthy_system_node_snapshot();
+    let sys_no_nns_node = env.get_first_healthy_system_but_not_nns_node_snapshot();
+    let ver_app_agent = ver_app_node.build_default_agent();
+    let app_agent = app_node.build_default_agent();
+    let sys_no_nns_agent = sys_no_nns_node.build_default_agent();
+    block_on(async move {
         // Check that canisters on verified app subnets cannot create canisters on other
         // subnets.
-        let verified_app_endpoint = get_random_verified_app_node_endpoint(&handle, &mut rng);
-        verified_app_endpoint.assert_ready(ctx).await;
-        let agent = assert_create_agent(verified_app_endpoint.url.as_str()).await;
-
         let uni_can = UniversalCanister::new_with_cycles_with_retries(
-            &agent,
-            verified_app_endpoint.effective_canister_id(),
+            &ver_app_agent,
+            ver_app_node.effective_canister_id(),
             900_000_000_000_000_u64,
             &logger,
         )
         .await;
-        let other_subnet = get_random_application_node_endpoint(&handle, &mut rng)
-            .subnet_id()
-            .unwrap();
+        let other_subnet = app_node.subnet_id().unwrap();
         let res = uni_can
             .forward_with_cycles_to(
                 &other_subnet.get().into(),
@@ -254,9 +239,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
             });
         assert_reject(res, RejectCode::CanisterReject);
 
-        let other_subnet = get_random_system_node_endpoint(&handle, &mut rng)
-            .subnet_id()
-            .unwrap();
+        let other_subnet = sys_node.subnet_id().unwrap();
         let res = uni_can
             .forward_with_cycles_to(
                 &other_subnet.get().into(),
@@ -273,20 +256,14 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
         assert_reject(res, RejectCode::CanisterReject);
 
         // Check that canisters on app subnets cannot create canisters on other subnets.
-        let app_endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-        app_endpoint.assert_ready(ctx).await;
-        let agent = assert_create_agent(app_endpoint.url.as_str()).await;
-
         let uni_can = UniversalCanister::new_with_cycles_with_retries(
-            &agent,
-            app_endpoint.effective_canister_id(),
+            &app_agent,
+            app_node.effective_canister_id(),
             900_000_000_000_000_u64,
             &logger,
         )
         .await;
-        let other_subnet = get_random_verified_app_node_endpoint(&handle, &mut rng)
-            .subnet_id()
-            .unwrap();
+        let other_subnet = ver_app_node.subnet_id().unwrap();
         let res = uni_can
             .forward_with_cycles_to(
                 &other_subnet.get().into(),
@@ -302,9 +279,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
             });
         assert_reject(res, RejectCode::CanisterReject);
 
-        let other_subnet = get_random_system_node_endpoint(&handle, &mut rng)
-            .subnet_id()
-            .unwrap();
+        let other_subnet = sys_node.subnet_id().unwrap();
         let res = uni_can
             .forward_with_cycles_to(
                 &other_subnet.get().into(),
@@ -322,20 +297,14 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
 
         // Check that canisters on system subnets excluding NNS cannot create canisters
         // on other subnets.
-        let app_endpoint = get_random_system_but_not_nns_node_endpoint(&handle, &mut rng);
-        app_endpoint.assert_ready(ctx).await;
-        let agent = assert_create_agent(app_endpoint.url.as_str()).await;
-
         let uni_can = UniversalCanister::new_with_cycles_with_retries(
-            &agent,
-            app_endpoint.effective_canister_id(),
+            &sys_no_nns_agent,
+            sys_no_nns_node.effective_canister_id(),
             900_000_000_000_000_u64,
             &logger,
         )
         .await;
-        let other_subnet = get_random_verified_app_node_endpoint(&handle, &mut rng)
-            .subnet_id()
-            .unwrap();
+        let other_subnet = ver_app_node.subnet_id().unwrap();
         let res = uni_can
             .forward_with_cycles_to(
                 &other_subnet.get().into(),
@@ -351,9 +320,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
             });
         assert_reject(res, RejectCode::CanisterReject);
 
-        let other_subnet = get_random_application_node_endpoint(&handle, &mut rng)
-            .subnet_id()
-            .unwrap();
+        let other_subnet = app_node.subnet_id().unwrap();
         let res = uni_can
             .forward_with_cycles_to(
                 &other_subnet.get().into(),
@@ -375,24 +342,18 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
 /// canister.
 pub fn nns_canister_attempt_to_create_canister_on_another_subnet_succeeds(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    let mut rng = ctx.rng.clone();
-    rt.block_on(async move {
-        let nns_endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-        nns_endpoint.assert_ready(ctx).await;
-        let agent = assert_create_agent(nns_endpoint.url.as_str()).await;
-
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let non_nns_node = env.get_first_healthy_non_nns_node_snapshot();
+    let agent = nns_node.build_default_agent();
+    block_on(async move {
         let uni_can = UniversalCanister::new_with_cycles_with_retries(
             &agent,
-            nns_endpoint.effective_canister_id(),
+            nns_node.effective_canister_id(),
             900_000_000_000_000_u64,
             &logger,
         )
         .await;
-        let other_subnet = get_random_non_nns_node_endpoint(&handle, &mut rng)
-            .subnet_id()
-            .unwrap();
+        let other_subnet = non_nns_node.subnet_id().unwrap();
         uni_can
             .forward_with_cycles_to(
                 &other_subnet.get().into(),
@@ -414,20 +375,14 @@ pub fn nns_canister_attempt_to_create_canister_on_another_subnet_succeeds(env: T
 /// canister installed on an application subnet.
 pub fn app_canister_attempt_initiating_dkg_fails(env: TestEnv) {
     let logger = env.logger();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-
-    rt.block_on(async move {
-        let endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-        endpoint.assert_ready(ctx).await;
-        let agent = assert_create_agent(endpoint.url.as_str()).await;
-
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
+    block_on(async move {
         let node_ids: Vec<_> = (0..4).map(node_test_id).collect();
         let request = SetupInitialDKGArgs::new(node_ids, RegistryVersion::from(2));
 
         let uni_can =
-            UniversalCanister::new_with_retries(&agent, endpoint.effective_canister_id(), &logger)
+            UniversalCanister::new_with_retries(&agent, app_node.effective_canister_id(), &logger)
                 .await;
         let res = uni_can
             .forward_to(

@@ -19,10 +19,10 @@ use crate::driver::{
     test_env::TestEnv,
     test_env_api::HasGroupSetup,
 };
-use ic_fondue::ic_instance::{LegacyInternetComputer, Subnet as LegacySubnet};
 use ic_registry_subnet_type::SubnetType;
 
 pub fn config_system_verified_application_subnets(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
@@ -31,29 +31,12 @@ pub fn config_system_verified_application_subnets(env: TestEnv) {
         .expect("failed to setup IC under test");
 }
 
-pub fn legacy_config_system_verified_application_subnets() -> LegacyInternetComputer {
-    LegacyInternetComputer::new()
-        .add_subnet(LegacySubnet::fast_single_node(SubnetType::System))
-        .add_subnet(LegacySubnet::fast_single_node(
-            SubnetType::VerifiedApplication,
-        ))
-        .add_subnet(LegacySubnet::fast_single_node(SubnetType::Application))
-}
-
 pub fn config_system_verified_subnets(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-}
-
-pub fn legacy_config_system_verified_subnets() -> LegacyInternetComputer {
-    LegacyInternetComputer::new()
-        .add_subnet(LegacySubnet::fast_single_node(SubnetType::System))
-        .add_subnet(LegacySubnet::fast_single_node(
-            SubnetType::VerifiedApplication,
-        ))
 }
 
 pub fn config_many_system_subnets(env: TestEnv) {
@@ -65,15 +48,6 @@ pub fn config_many_system_subnets(env: TestEnv) {
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-}
-
-// A special configuration for testing memory capacity limits.
-pub fn legacy_config_memory_capacity() -> LegacyInternetComputer {
-    LegacyInternetComputer::new().add_subnet(
-        LegacySubnet::fast_single_node(SubnetType::System)
-            // A tiny memory capacity
-            .with_memory_capacity(20 * 1024 * 1024 /* 20 MiB */),
-    )
 }
 
 // A special configuration for testing the maximum number of canisters on a

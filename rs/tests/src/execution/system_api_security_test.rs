@@ -157,8 +157,9 @@ pub fn malicious_inputs(env: TestEnv) {
         )
     });
 
+    let agent = node.build_default_agent();
+
     block_on(async move {
-        let agent = assert_create_agent(node.get_public_url().as_str()).await;
         let mgr = ManagementCanister::create(&agent);
         let canister_id = mgr
             .create_canister()
@@ -409,8 +410,9 @@ pub fn malicious_intercanister_calls(env: TestEnv) {
         )
     });
 
+    let agent = node.build_default_agent();
+
     block_on(async move {
-        let agent = assert_create_agent(node.get_public_url().as_str()).await;
         let canister_b =
             create_and_install(&agent, node.effective_canister_id(), &canister_b_wasm).await;
 

@@ -12,11 +12,11 @@ pub fn general_execution_pot() -> Pot {
         par(vec![
             sys_t(
                 "request_signature_test",
-                execution::request_signature_test::test
+                execution::request_signature_test::request_signature_test
             ),
             sys_t(
                 "malicious_input_test",
-                execution::malicious_input::test
+                execution::malicious_input::malicious_input_test
             ),
             sys_t(
                 "test_raw_rand_api",

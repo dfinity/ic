@@ -3,9 +3,9 @@ end::catalog[] */
 
 use std::time::{Duration, Instant};
 
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
-use crate::util;
+use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use crate::util::{self, block_on};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_universal_canister::{call_args, wasm};
 use ic_utils::call::AsyncCall;
@@ -15,27 +15,22 @@ const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(40);
 
 pub fn canister_heartbeat_is_called_at_regular_intervals(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent_nns = nns_node.build_default_agent();
+    let agent_app = app_node.build_default_agent();
+    block_on({
         async move {
-            let nns_endpoint = util::get_random_nns_node_endpoint(&handle, &mut rng);
-            nns_endpoint.assert_ready(ctx).await;
-            let agent_nns = util::assert_create_agent(nns_endpoint.url.as_str()).await;
             let canister_on_nns = util::UniversalCanister::new_with_retries(
                 &agent_nns,
-                nns_endpoint.effective_canister_id(),
+                nns_node.effective_canister_id(),
                 &logger,
             )
             .await;
 
-            let app_endpoint = util::get_random_application_node_endpoint(&handle, &mut rng);
-            app_endpoint.assert_ready(ctx).await;
-            let agent_app = util::assert_create_agent(app_endpoint.url.as_str()).await;
             let canister_on_app = util::UniversalCanister::new_with_retries(
                 &agent_app,
-                app_endpoint.effective_canister_id(),
+                app_node.effective_canister_id(),
                 &logger,
             )
             .await;
@@ -71,20 +66,15 @@ pub fn canister_heartbeat_is_called_at_regular_intervals(env: TestEnv) {
 
 pub fn stopping_a_canister_with_a_heartbeat_succeeds(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = util::assert_create_agent(endpoint.url.as_str()).await;
-
             // Create and then stop the canister.
             // NOTE: The universal canister exposes a heartbeat.
             let canister = util::UniversalCanister::new_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                node.effective_canister_id(),
                 &logger,
             )
             .await;
@@ -99,24 +89,19 @@ pub fn stopping_a_canister_with_a_heartbeat_succeeds(env: TestEnv) {
 
 pub fn canister_heartbeat_can_call_another_canister(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = util::assert_create_agent(endpoint.url.as_str()).await;
-
             let canister_a = util::UniversalCanister::new_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                node.effective_canister_id(),
                 &logger,
             )
             .await;
             let canister_b = util::UniversalCanister::new_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                node.effective_canister_id(),
                 &logger,
             )
             .await;
@@ -157,37 +142,28 @@ pub fn canister_heartbeat_can_call_another_canister(env: TestEnv) {
 
 pub fn canister_heartbeat_can_call_multiple_canisters_xnet(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = node.build_default_agent();
+    let agent_app = app_node.build_default_agent();
+    block_on({
         async move {
-            let endpoint_nns = util::get_random_node_endpoint(&handle, &mut rng);
-            endpoint_nns.assert_ready(ctx).await;
-            let agent_nns = util::assert_create_agent(endpoint_nns.url.as_str()).await;
-
-            let endpoint_application =
-                util::get_random_application_node_endpoint(&handle, &mut rng);
-            endpoint_application.assert_ready(ctx).await;
-            let agent_application =
-                util::assert_create_agent(endpoint_application.url.as_str()).await;
-
             // Canisters are installed across different subnets to test xnet.
             let canister_a = util::UniversalCanister::new_with_retries(
-                &agent_nns,
-                endpoint_nns.effective_canister_id(),
+                &agent,
+                node.effective_canister_id(),
                 &logger,
             )
             .await;
             let canister_b = util::UniversalCanister::new_with_retries(
-                &agent_application,
-                endpoint_application.effective_canister_id(),
+                &agent_app,
+                app_node.effective_canister_id(),
                 &logger,
             )
             .await;
             let canister_c = util::UniversalCanister::new_with_retries(
-                &agent_application,
-                endpoint_application.effective_canister_id(),
+                &agent_app,
+                app_node.effective_canister_id(),
                 &logger,
             )
             .await;
@@ -244,17 +220,13 @@ pub fn canister_heartbeat_can_call_multiple_canisters_xnet(env: TestEnv) {
 
 pub fn canister_heartbeat_cannot_reply(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = util::assert_create_agent(endpoint.url.as_str()).await;
             let canister = util::UniversalCanister::new_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                node.effective_canister_id(),
                 &logger,
             )
             .await;
@@ -284,27 +256,22 @@ pub fn canister_heartbeat_cannot_reply(env: TestEnv) {
 /// wasm module is installed on C.  We try to stop A and it should stop.
 pub fn canister_heartbeat_can_stop(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = util::get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = util::assert_create_agent(endpoint.url.as_str()).await;
-
             let mgr = ManagementCanister::create(&agent);
 
             let canister_a = util::UniversalCanister::new_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                node.effective_canister_id(),
                 &logger,
             )
             .await;
             let canister_c = mgr
                 .create_canister()
                 .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(endpoint.effective_canister_id())
+                .with_effective_canister_id(node.effective_canister_id())
                 .call_and_wait(util::delay())
                 .await
                 .unwrap()

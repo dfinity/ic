@@ -268,3 +268,7 @@ path = "bin/boundary_node_integration_test.rs"
 [[bin]]
 name = "ic-systest-boundary-node-snp"
 path = "bin/boundary_nodes_snp_test.rs"
+
+[[bin]]
+name = "ic-systest-general-execution"
+path = "bin/general_execution_test.rs"

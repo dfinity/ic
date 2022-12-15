@@ -1,10 +1,7 @@
 //! Contains methods and structs that support settings up the NNS.
 use crate::driver::test_env_api::HasPublicApiUrl;
 use crate::driver::test_env_api::IcNodeSnapshot;
-use crate::{
-    driver::test_env_api::install_nns_canisters,
-    util::{block_on, create_agent, runtime_from_url},
-};
+use crate::util::{create_agent, runtime_from_url};
 use candid::CandidType;
 use canister_test::{Canister, Runtime};
 use cycles_minting_canister::{
@@ -15,10 +12,6 @@ use dfn_candid::candid_one;
 use ic_base_types::NodeId;
 use ic_canister_client::Sender;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_fondue::{
-    ic_instance::node_software_version::NodeSoftwareVersion,
-    ic_manager::{IcEndpoint, IcHandle},
-};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
@@ -32,13 +25,11 @@ use ic_nns_test_utils::{governance::get_proposal_info, ids::TEST_NEURON_1_ID};
 use ic_prep_lib::subnet_configuration::{self, duration_to_millis};
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_helpers::deserialize_registry_value;
-use ic_registry_keys::{get_node_record_node_id, make_subnet_list_record_key};
-use ic_registry_local_store::{LocalStoreImpl, LocalStoreReader};
+use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::{p2p, CanisterId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};
-use prost::Message;
+use ic_types::{p2p, CanisterId, PrincipalId, ReplicaVersion, SubnetId};
 use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
@@ -57,236 +48,12 @@ use std::time::Duration;
 use tokio::time::sleep;
 use url::Url;
 
-/// Installation of NNS Canisters.
-
-pub trait NnsExt {
-    fn install_nns_canisters(&self, handle: &IcHandle, nns_test_neurons_present: bool);
-
-    /// Convenience method to bless a software update using the binaries
-    /// available on the $PATH.
-    ///
-    /// Generates a new `ReplicaVersionRecord` with replica version `version`.
-    /// Depending on `package_content`, only `orchestrator`, only `replica`, or
-    /// both, will be updated with the given version. The binaries that are
-    /// referenced in the update are the same that are used as the initial
-    /// replica version.
-    ///
-    /// This function can only succeed if the NNS with test neurons have been
-    /// installed on the root subnet.
-    fn bless_replica_version(
-        &self,
-        handle: &IcHandle,
-        node_implementation_version: NodeSoftwareVersion,
-        package_content: UpgradeContent,
-    );
-
-    /// Update the subnet given by the subnet index `subnet_index` (enumerated
-    /// in order in which they were added) to version `version`.
-    ///
-    /// This function can only succeed if the NNS with test neurons have been
-    /// installed on the root subnet.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if the index is out of bounds wrt. to the
-    /// subnets that were _initially_ added to the IC; subnets that were added
-    /// after bootstrapping the IC are not supported.
-    fn update_subnet_by_idx(&self, handle: &IcHandle, subnet_index: usize, version: ReplicaVersion);
-
-    /// Waits for a given software version `version` to become available on the
-    /// subnet with subnet index `subnet_index`.
-    ///
-    /// This method assumes that only one application subnet is present and that
-    /// that subnet is being updated.
-    fn await_status_change(
-        &self,
-        endpoint: &IcEndpoint,
-        retry_delay: Duration,
-        timeout: Duration,
-        acceptance_criterium: impl Fn(&ic_agent::agent::status::Status) -> bool,
-    ) -> bool;
-
-    /// Removes nodes from their subnet.
-    fn remove_nodes(&self, handle: &IcHandle, node_ids: &[NodeId]);
-
-    /// A list of all nodes that were registered with the initial registry (i.e.
-    /// at bootstrap).
-    fn initial_node_ids(&self, handle: &IcHandle) -> Vec<NodeId> {
-        let ic_prep_dir = handle
-            .ic_prep_working_dir
-            .as_ref()
-            .expect("ic_prep_working_dir is not set.");
-
-        LocalStoreImpl::new(ic_prep_dir.registry_local_store_path().as_path())
-            .get_changelog_since_version(RegistryVersion::from(0))
-            .expect("Could not fetch changelog.")
-            .iter()
-            .flat_map(|c| c.iter())
-            .filter_map(|km| {
-                km.value
-                    .as_ref()
-                    .map(|_| &km.key)
-                    .and_then(|s| get_node_record_node_id(s))
-            })
-            .map(NodeId::from)
-            .collect()
-    }
-
-    fn initial_unassigned_node_endpoints(&self, handle: &IcHandle) -> Vec<IcEndpoint> {
-        handle
-            .public_api_endpoints
-            .iter()
-            .filter(|ep| ep.subnet.is_none())
-            .cloned()
-            .collect::<Vec<IcEndpoint>>()
-    }
-}
-
-impl NnsExt for ic_fondue::pot::Context {
-    fn install_nns_canisters(&self, handle: &IcHandle, nns_test_neurons_present: bool) {
-        let mut is_installed = self.is_nns_installed.lock().unwrap();
-        let endpoint = first_root_endpoint(handle);
-        block_on(async move {
-            endpoint.assert_ready(self).await;
-        });
-        if is_installed.eq(&false) {
-            install_nns_canisters(
-                &self.logger,
-                endpoint.url.clone(),
-                handle.ic_prep_working_dir.as_ref().unwrap(),
-                nns_test_neurons_present,
-            );
-            *is_installed = true;
-        }
-    }
-
-    fn await_status_change(
-        &self,
-        endpoint: &IcEndpoint,
-        retry_delay: Duration,
-        timeout: Duration,
-        acceptance_criterium: impl Fn(&ic_agent::agent::status::Status) -> bool,
-    ) -> bool {
-        block_on(async move {
-            endpoint.assert_ready(self).await;
-            await_replica_status_change(self, endpoint, retry_delay, timeout, acceptance_criterium)
-                .await
-        })
-    }
-
-    fn bless_replica_version(
-        &self,
-        handle: &IcHandle,
-        impl_version: NodeSoftwareVersion,
-        _package_content: UpgradeContent,
-    ) {
-        let replica_version = impl_version.replica_version;
-        let root_url = first_root_url(handle);
-        block_on(async move {
-            let rt = runtime_from_url(root_url, REGISTRY_CANISTER_ID.into());
-            add_replica_version(&rt, replica_version)
-                .await
-                .expect("adding replica version failed.");
-        });
-    }
-
-    fn update_subnet_by_idx(
-        &self,
-        handle: &IcHandle,
-        subnet_index: usize,
-        version: ReplicaVersion,
-    ) {
-        // get the subnet id of the subnet with index subnet index
-        let reg_path = handle
-            .ic_prep_working_dir
-            .as_ref()
-            .unwrap()
-            .registry_local_store_path();
-        let local_store = LocalStoreImpl::new(&reg_path);
-        let changelog = local_store
-            .get_changelog_since_version(RegistryVersion::from(0))
-            .expect("Could not read registry.");
-
-        // The initial registry may only contain a single version.
-        let bytes = changelog
-            .first()
-            .expect("Empty changelog")
-            .iter()
-            .find_map(|k| {
-                if k.key == make_subnet_list_record_key() {
-                    Some(k.value.clone().expect("Subnet list not set"))
-                } else {
-                    None
-                }
-            })
-            .expect("Subnet list not found");
-        let subnet_list_record =
-            SubnetListRecord::decode(&bytes[..]).expect("Could not decode subnet list record.");
-        let subnet_id = SubnetId::from(
-            PrincipalId::try_from(&subnet_list_record.subnets[subnet_index][..]).unwrap(),
-        );
-
-        let url = first_root_url(handle);
-        // send the update proposal
-        block_on(async move {
-            let rt = runtime_from_url(url, REGISTRY_CANISTER_ID.into());
-            update_subnet_replica_version(&rt, subnet_id, version.to_string())
-                .await
-                .expect("updating subnet failed");
-        });
-    }
-
-    fn remove_nodes(&self, handle: &IcHandle, node_ids: &[NodeId]) {
-        let rt = tokio::runtime::Runtime::new().expect("Tokio runtime failed to create");
-        rt.block_on(async move {
-            remove_nodes(handle, node_ids).await.unwrap();
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum UpgradeContent {
     All,
     Orchestrator,
     Replica,
 }
-
-pub fn first_root_url(ic_handle: &IcHandle) -> Url {
-    first_root_endpoint(ic_handle).url.clone()
-}
-
-pub fn first_root_endpoint(ic_handle: &IcHandle) -> &IcEndpoint {
-    ic_handle
-        .public_api_endpoints
-        .iter()
-        .find(|i| i.is_root_subnet)
-        .expect("empty iterator")
-}
-
-/// Send an update-call to the governance-canister on the NNS asking for Subnet
-/// `subnet_id` to be updated to replica with version id `replica_version_id`.
-async fn update_subnet_replica_version(
-    nns_api: &'_ Runtime,
-    subnet_id: SubnetId,
-    replica_version_id: String,
-) -> Result<(), String> {
-    let governance_canister = get_governance_canister(nns_api);
-    let proposal_payload = UpdateSubnetReplicaVersionPayload {
-        subnet_id: subnet_id.get(),
-        replica_version_id,
-    };
-
-    let proposal_id = submit_external_proposal_with_test_id(
-        &governance_canister,
-        NnsFunction::UpdateSubnetReplicaVersion,
-        proposal_payload,
-    )
-    .await;
-
-    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
-    Ok(())
-}
-
 /// Detect whether a proposal is executed within `timeout`.
 ///
 /// # Arguments
@@ -355,78 +122,6 @@ pub async fn await_proposal_execution(
     }
 }
 
-/// Detect whether a replica's status becomes acceptable within `timeout`.
-///
-/// # Arguments
-///
-/// * `ctx`                  - Fondue context
-/// * `endpoint`             - Endpoint of a subnet
-/// * `retry_delay`          - Duration between polling attempts
-/// * `timeout`              - Duration after which we give up (returning false)
-/// * `acceptance_criterium` - Predicate determining whether the current status
-///   is accepted
-///
-/// Eventually returns whether the replica status has changed as specified via
-/// `acceptance_criterium`.
-pub async fn await_replica_status_change(
-    ctx: &ic_fondue::pot::Context,
-    endpoint: &IcEndpoint,
-    retry_delay: Duration,
-    timeout: Duration,
-    acceptance_criterium: impl Fn(&ic_agent::agent::status::Status) -> bool,
-) -> bool {
-    let start_time = std::time::Instant::now();
-    let mut i = 0usize;
-    loop {
-        i += 1;
-        info!(
-            ctx.logger,
-            "Attempt #{} of detecting replica status change", i
-        );
-
-        let status = get_replica_status(endpoint)
-            .await
-            .expect("Could not obtain new agent status");
-
-        if acceptance_criterium(&status) {
-            info!(
-                ctx.logger,
-                " status change has been accepted.\nNew status:\n{:?}", status
-            );
-            return true;
-        }
-
-        if std::time::Instant::now()
-            .duration_since(start_time)
-            .gt(&timeout)
-        {
-            // Give up
-            info!(
-                ctx.logger,
-                " did not detect status change within {:?}.\nStatus remains:\n{:?}",
-                timeout,
-                status
-            );
-            return false;
-        } else {
-            // Continue polling with delay
-            sleep(retry_delay).await;
-        }
-    }
-}
-
-/// Obtain the status of a replica via its `endpoint`.
-///
-/// Eventually returns the status of the replica.
-async fn get_replica_status(
-    endpoint: &IcEndpoint,
-) -> Result<ic_agent::agent::status::Status, ic_agent::AgentError> {
-    match create_agent(endpoint.url.as_ref()).await {
-        Ok(agent) => agent.status().await,
-        Err(e) => Err(e),
-    }
-}
-
 /// Obtain the status of a replica via its `endpoint`.
 ///
 /// Eventually returns the status of the replica.
@@ -442,18 +137,6 @@ async fn get_replica_status_from_snapshot(
 /// Obtain the software version of a replica via its `endpoint`.
 ///
 /// Eventually returns the replica software version.
-pub async fn get_software_version(endpoint: &IcEndpoint) -> Option<ReplicaVersion> {
-    match get_replica_status(endpoint).await {
-        Ok(status) => status
-            .impl_version
-            .map(|v| ReplicaVersion::try_from(v).unwrap()),
-        Err(_) => None,
-    }
-}
-
-/// Obtain the software version of a replica via its `endpoint`.
-///
-/// Eventually returns the replica software version.
 pub async fn get_software_version_from_snapshot(
     endpoint: &IcNodeSnapshot,
 ) -> Option<ReplicaVersion> {
@@ -463,34 +146,6 @@ pub async fn get_software_version_from_snapshot(
             .map(|v| ReplicaVersion::try_from(v).unwrap()),
         Err(_) => None,
     }
-}
-
-/// Adds the given `ReplicaVersionRecord` to the registry and returns the
-/// registry version after the update.
-async fn add_replica_version(nns_api: &'_ Runtime, version: ReplicaVersion) -> Result<(), String> {
-    let governance_canister = get_governance_canister(nns_api);
-    let proposal_payload = BlessReplicaVersionPayload {
-        replica_version_id: version.to_string(),
-        binary_url: "".into(),
-        sha256_hex: "".into(),
-        node_manager_binary_url: "".into(),
-        node_manager_sha256_hex: "".into(),
-        release_package_url: "".to_string(),
-        release_package_sha256_hex: "".to_string(),
-        release_package_urls: None,
-        guest_launch_measurement_sha256_hex: None,
-    };
-
-    let proposal_id: ProposalId = submit_external_proposal_with_test_id(
-        &governance_canister,
-        NnsFunction::BlessReplicaVersion,
-        proposal_payload,
-    )
-    .await;
-
-    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
-
-    Ok(())
 }
 
 pub async fn update_xdr_per_icp(
@@ -611,11 +266,6 @@ pub async fn change_subnet_type_assignment_with_failure(
     .await;
 
     vote_execute_proposal_assert_failed(&governance_canister, proposal_id, error).await;
-}
-
-async fn remove_nodes(handle: &IcHandle, node_ids: &[NodeId]) -> Result<(), String> {
-    let root_url = first_root_url(handle);
-    remove_nodes_via_endpoint(root_url, node_ids).await
 }
 
 pub async fn add_nodes_to_subnet(

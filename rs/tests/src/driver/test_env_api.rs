@@ -149,8 +149,6 @@ use ic_agent::{Agent, AgentError};
 use ic_base_types::PrincipalId;
 use ic_canister_client::Agent as InternalAgent;
 use ic_canister_client::Sender;
-use ic_fondue::ic_manager::handle::READY_RESPONSE_TIMEOUT;
-use ic_fondue::ic_manager::{FarmInfo, IcEndpoint, IcHandle, IcSubnet, RuntimeDescriptor};
 use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
@@ -189,6 +187,7 @@ pub const READY_WAIT_TIMEOUT: Duration = Duration::from_secs(500);
 pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
+const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
 
@@ -445,10 +444,9 @@ impl IcNodeSnapshot {
         })
     }
 
-    pub fn effective_canister_id(&self) -> PrincipalId {
-        let registry_version = self.local_registry.get_latest_version();
-        let subnet_id: Option<SubnetId> = self
-            .local_registry
+    pub fn subnet_id(&self) -> Option<SubnetId> {
+        let registry_version = self.registry_version;
+        self.local_registry
             .get_subnet_ids(registry_version)
             .unwrap_result()
             .into_iter()
@@ -457,12 +455,15 @@ impl IcNodeSnapshot {
                     .get_node_ids_on_subnet(*subnet_id, registry_version)
                     .unwrap_result()
                     .contains(&self.node_id)
-            });
-        match subnet_id {
+            })
+    }
+
+    pub fn effective_canister_id(&self) -> PrincipalId {
+        match self.subnet_id() {
             Some(subnet_id) => {
                 let canister_ranges = self
                     .local_registry
-                    .get_subnet_canister_ranges(registry_version, subnet_id)
+                    .get_subnet_canister_ranges(self.registry_version, subnet_id)
                     .expect("Could not deserialize optional routing table from local registry.")
                     .expect("Optional routing table is None in local registry.");
                 match canister_ranges.get(0) {
@@ -556,6 +557,77 @@ impl HasTopologySnapshot for TestEnv {
     }
 }
 
+pub trait GetFirstHealthyNodeSnapshot {
+    fn get_first_healthy_node_snapshot_where<F: Fn(&SubnetSnapshot) -> bool>(
+        &self,
+        subnet_pred: F,
+    ) -> IcNodeSnapshot;
+
+    fn get_first_healthy_node_snapshot(&self) -> IcNodeSnapshot;
+    fn get_first_healthy_application_node_snapshot(&self) -> IcNodeSnapshot;
+    fn get_first_healthy_system_node_snapshot(&self) -> IcNodeSnapshot;
+    fn get_first_healthy_verified_application_node_snapshot(&self) -> IcNodeSnapshot;
+    fn get_first_healthy_nns_node_snapshot(&self) -> IcNodeSnapshot;
+    fn get_first_healthy_non_nns_node_snapshot(&self) -> IcNodeSnapshot;
+    fn get_first_healthy_system_but_not_nns_node_snapshot(&self) -> IcNodeSnapshot;
+}
+
+impl<T: HasTopologySnapshot> GetFirstHealthyNodeSnapshot for T {
+    fn get_first_healthy_node_snapshot_where<F: Fn(&SubnetSnapshot) -> bool>(
+        &self,
+        subnet_pred: F,
+    ) -> IcNodeSnapshot {
+        let random_node = self
+            .topology_snapshot()
+            .subnets()
+            .filter(subnet_pred)
+            .flat_map(|subnet| subnet.nodes())
+            .next()
+            .expect("Expected there to be at least one node!");
+        random_node.await_status_is_healthy().unwrap_or_else(|e| {
+            panic!(
+                "Expected random node {:?} to be healthy but got error {e:?}",
+                random_node.node_id
+            )
+        });
+        random_node
+    }
+    fn get_first_healthy_node_snapshot(&self) -> IcNodeSnapshot {
+        self.get_first_healthy_node_snapshot_where(|_| true)
+    }
+    fn get_first_healthy_application_node_snapshot(&self) -> IcNodeSnapshot {
+        self.get_first_healthy_node_snapshot_where(|s| s.subnet_type() == SubnetType::Application)
+    }
+    fn get_first_healthy_system_node_snapshot(&self) -> IcNodeSnapshot {
+        self.get_first_healthy_node_snapshot_where(|s| s.subnet_type() == SubnetType::System)
+    }
+    fn get_first_healthy_verified_application_node_snapshot(&self) -> IcNodeSnapshot {
+        self.get_first_healthy_node_snapshot_where(|s| {
+            s.subnet_type() == SubnetType::VerifiedApplication
+        })
+    }
+    fn get_first_healthy_nns_node_snapshot(&self) -> IcNodeSnapshot {
+        let root_subnet_id = get_root_subnet_id_from_snapshot(self);
+        self.get_first_healthy_node_snapshot_where(|s| s.subnet_id == root_subnet_id)
+    }
+    fn get_first_healthy_non_nns_node_snapshot(&self) -> IcNodeSnapshot {
+        let root_subnet_id = get_root_subnet_id_from_snapshot(self);
+        self.get_first_healthy_node_snapshot_where(|s| s.subnet_id != root_subnet_id)
+    }
+    fn get_first_healthy_system_but_not_nns_node_snapshot(&self) -> IcNodeSnapshot {
+        let root_subnet_id = get_root_subnet_id_from_snapshot(self);
+        self.get_first_healthy_node_snapshot_where(|s| {
+            s.subnet_type() == SubnetType::System && s.subnet_id != root_subnet_id
+        })
+    }
+}
+
+fn get_root_subnet_id_from_snapshot<T: HasTopologySnapshot>(env: &T) -> SubnetId {
+    let ts = env.topology_snapshot();
+    ts.local_registry
+        .get_root_subnet_id(ts.registry_version)
+        .unwrap_result()
+}
 pub trait HasRegistryLocalStore {
     fn registry_local_store_path(&self, name: &str) -> Option<PathBuf>;
 }
@@ -734,65 +806,6 @@ impl HasGroupSetup for TestEnv {
             )
             .unwrap();
         }
-    }
-}
-
-/// Construct `IcHandle` for backwards compatibility with the older test API.
-pub trait IcHandleConstructor {
-    fn ic_handle(&self) -> Result<IcHandle>;
-}
-
-impl IcHandleConstructor for TestEnv {
-    fn ic_handle(&self) -> Result<IcHandle> {
-        let pot_setup = GroupSetup::read_attribute(self);
-        let farm_base_url = self.get_farm_url()?;
-        let ts = self.topology_snapshot();
-
-        let mut nodes = vec![];
-        for s in ts.subnets() {
-            for n in s.nodes() {
-                nodes.push((n, Some(s.clone())));
-            }
-        }
-        for n in ts.unassigned_nodes() {
-            nodes.push((n, None));
-        }
-
-        let mut public_api_endpoints = vec![];
-        let started_at = Instant::now();
-        let root_subnet_id = ts
-            .local_registry
-            .get_root_subnet_id(ts.registry_version)
-            .unwrap_result();
-        for (n, s) in nodes {
-            public_api_endpoints.push(IcEndpoint {
-                node_id: n.node_id,
-                url: n.get_public_url(),
-                metrics_url: n.get_metrics_url(),
-                subnet: s.clone().map(|s| IcSubnet {
-                    id: s.subnet_id,
-                    type_of: s.subnet_type(),
-                    canister_ranges: ts.subnet_canister_ranges(s.subnet_id),
-                }),
-                started_at,
-                runtime_descriptor: RuntimeDescriptor::Vm(FarmInfo {
-                    group_name: pot_setup.farm_group_name.clone(),
-                    vm_name: n.node_id.to_string(),
-                    url: farm_base_url.clone(),
-                }),
-                is_root_subnet: s.map_or(false, |s| s.subnet_id == root_subnet_id),
-            });
-        }
-
-        let prep_dir = match self.prep_dir("") {
-            Some(p) => p,
-            None => bail!("No prep dir specified for no-name IC"),
-        };
-        Ok(IcHandle {
-            public_api_endpoints,
-            malicious_public_api_endpoints: vec![],
-            ic_prep_working_dir: Some(prep_dir),
-        })
     }
 }
 

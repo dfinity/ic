@@ -16,9 +16,9 @@ Runbook::
 
 end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
-use crate::driver::test_env::TestEnv;
-use crate::util::{block_on, get_random_root_node_endpoint, runtime_from_url};
+use crate::driver::test_env::{HasIcPrepDir, TestEnv};
+use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use crate::util::{block_on, runtime_from_url};
 use hyper::{
     service::{make_service_fn, service_fn},
     Body, Request, Response,
@@ -49,13 +49,10 @@ pub fn config(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let root_subnet_endpoint = get_random_root_node_endpoint(&handle, &mut rng);
-    block_on(root_subnet_endpoint.assert_ready(ctx));
-
-    let pk_bytes = handle
-        .ic_prep_working_dir
+    let logger = env.logger();
+    let root_node = env.get_first_healthy_nns_node_snapshot();
+    let pk_bytes = env
+        .prep_dir("")
         .as_ref()
         .unwrap()
         .root_public_key()
@@ -63,11 +60,9 @@ pub fn test(env: TestEnv) {
     let pk = threshold_sig_public_key_from_der(&pk_bytes[..])
         .expect("failed to decode threshold sig PK");
 
-    let rt = tokio::runtime::Runtime::new().unwrap();
-
     // Describes a proxy server that replaces all occurrences of "Good" with "Evil".
     let make_mitm = make_service_fn({
-        let root_url = root_subnet_endpoint.url.clone();
+        let root_url = root_node.get_public_url();
         move |_conn| {
             let root_url = root_url.clone();
             async move {
@@ -107,11 +102,11 @@ pub fn test(env: TestEnv) {
         }
     });
 
-    rt.block_on(async {
+    block_on(async {
         let proxy_server =
             hyper::server::Server::bind(&SocketAddr::from(([127, 0, 0, 1], 0))).serve(make_mitm);
         info!(
-            ctx.logger,
+            logger,
             "Started a MITM proxy on {}",
             proxy_server.local_addr()
         );
@@ -122,13 +117,13 @@ pub fn test(env: TestEnv) {
         });
 
         let runtime = runtime_from_url(
-            root_subnet_endpoint.url.clone(),
-            root_subnet_endpoint.effective_canister_id(),
+            root_node.get_public_url(),
+            root_node.effective_canister_id(),
         );
 
-        info!(ctx.logger, "creating a new registry canister...");
+        info!(logger, "creating a new registry canister...");
         let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
-        info!(ctx.logger, "installing registry canister...");
+        info!(logger, "installing registry canister...");
         let registry_init_payload = RegistryCanisterInitPayloadBuilder::new()
             .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
             // Populate registry with some data
@@ -138,9 +133,9 @@ pub fn test(env: TestEnv) {
             })
             .build();
         install_registry_canister(&mut canister, registry_init_payload).await;
-        let client = RegistryCanister::new(vec![root_subnet_endpoint.url.clone()]);
+        let client = RegistryCanister::new(vec![root_node.get_public_url()]);
 
-        info!(ctx.logger, "validating registry contents...");
+        info!(logger, "validating registry contents...");
         // Check that the registry indeed contains the data
         let value = client
             .get_value(b"IC".to_vec(), None)
@@ -149,7 +144,7 @@ pub fn test(env: TestEnv) {
 
         assert_eq!(value, (b"Good".to_vec(), 2));
 
-        info!(ctx.logger, "fetching certified deltas...");
+        info!(logger, "fetching certified deltas...");
         // Check that deltas pass verification
         let (changes, version, time_v1) = client.get_certified_changes_since(1, &pk).await.unwrap();
         assert_eq!(changes.len(), 1);
