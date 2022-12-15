@@ -211,7 +211,7 @@ mod tests {
             // We will perform identical writes to wasm module's heap and this buffer.
             let mut test_heap = vec![0; TEST_HEAP_SIZE_BYTES];
             // Use SIGSEGV tracking and later compare against /proc/pic/pagemap.
-            let mut page_map = PageMap::default();
+            let mut page_map = PageMap::new_for_testing();
             let mut dirty_pages: BTreeSet<u64> = BTreeSet::new();
 
             for write in &writes {
@@ -232,7 +232,7 @@ mod tests {
                         &embedder_cache,
                         &[],
                         &Memory::new(page_map.clone(), NumWasmPages::from(0)),
-                        &Memory::new(PageMap::default(), NumWasmPages::from(0)),
+                        &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                         modification_tracking,
                         api,
                     )
@@ -380,8 +380,8 @@ mod tests {
                     canister_test_id(1),
                     &cache,
                     &[],
-                    &Memory::new(PageMap::default(), NumWasmPages::from(0)),
-                    &Memory::new(PageMap::default(), NumWasmPages::from(0)),
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     ModificationTracking::Ignore,
                     api,
                 )
@@ -601,8 +601,8 @@ mod tests {
                 canister_test_id(1),
                 &cache,
                 &[],
-                &Memory::new(PageMap::default(), NumWasmPages::from(0)),
-                &Memory::new(PageMap::default(), NumWasmPages::from(0)),
+                &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                 ModificationTracking::Track,
                 api,
             )

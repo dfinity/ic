@@ -254,7 +254,7 @@ impl Memory {
 impl Default for Memory {
     fn default() -> Self {
         Self {
-            page_map: PageMap::default(),
+            page_map: PageMap::new(),
             size: NumWasmPages::from(0),
             sandbox_memory: SandboxMemory::new(),
         }

@@ -130,11 +130,11 @@ impl WasmtimeInstanceBuilder {
                 &compiled,
                 &self.globals,
                 &Memory::new(
-                    PageMap::default(),
+                    PageMap::new_for_testing(),
                     ic_replicated_state::NumWasmPages::from(0),
                 ),
                 &Memory::new(
-                    PageMap::default(),
+                    PageMap::new_for_testing(),
                     ic_replicated_state::NumWasmPages::from(0),
                 ),
                 ModificationTracking::Track,

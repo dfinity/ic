@@ -297,7 +297,7 @@ impl WasmExecutor for WasmExecutorImpl {
         self.observe_metrics(&serialized_module.imports_details);
         let exported_functions = serialized_module.exported_functions.clone();
         let wasm_metadata = serialized_module.wasm_metadata.clone();
-        let mut wasm_page_map = PageMap::default();
+        let mut wasm_page_map = PageMap::new();
 
         let (globals, _wasm_page_delta, wasm_memory_size) = get_initial_globals_and_memory(
             &serialized_module.data_segments,
@@ -779,7 +779,7 @@ pub fn get_initial_globals_and_memory(
         embedder_cache,
         &[],
         &Memory::new(wasm_page_map.clone(), NumWasmPages::from(0)),
-        &Memory::new(PageMap::default(), NumWasmPages::from(0)),
+        &Memory::new(PageMap::new(), NumWasmPages::from(0)),
         ModificationTracking::Ignore,
         system_api,
     ) {

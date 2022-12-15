@@ -5,7 +5,7 @@ use ic_sys::{PageIndex, PAGE_SIZE};
 
 #[test]
 fn test_page_validation_zero_page() {
-    let page_allocator = Arc::new(PageAllocatorInner::default());
+    let page_allocator = Arc::new(PageAllocatorInner::new_for_testing());
     let contents = [0u8; PAGE_SIZE];
     let pages = PageAllocatorInner::allocate(&page_allocator, &[(PageIndex::new(0), &contents)]);
     assert_eq!(pages[0].1 .0.validation.non_zero_word_index, 0);
@@ -14,7 +14,7 @@ fn test_page_validation_zero_page() {
 
 #[test]
 fn test_page_validation_non_zero_first_byte() {
-    let page_allocator = Arc::new(PageAllocatorInner::default());
+    let page_allocator = Arc::new(PageAllocatorInner::new_for_testing());
     let mut contents = [0u8; PAGE_SIZE];
     contents[0] = 42;
     let pages = PageAllocatorInner::allocate(&page_allocator, &[(PageIndex::new(0), &contents)]);
@@ -24,7 +24,7 @@ fn test_page_validation_non_zero_first_byte() {
 
 #[test]
 fn test_page_validation_non_zero_second_byte() {
-    let page_allocator = Arc::new(PageAllocatorInner::default());
+    let page_allocator = Arc::new(PageAllocatorInner::new_for_testing());
     let mut contents = [0u8; PAGE_SIZE];
     contents[1] = 42;
     let pages = PageAllocatorInner::allocate(&page_allocator, &[(PageIndex::new(0), &contents)]);
@@ -34,7 +34,7 @@ fn test_page_validation_non_zero_second_byte() {
 
 #[test]
 fn test_page_validation_non_zero_last_byte() {
-    let page_allocator = Arc::new(PageAllocatorInner::default());
+    let page_allocator = Arc::new(PageAllocatorInner::new_for_testing());
     let mut contents = [0u8; PAGE_SIZE];
     contents[PAGE_SIZE - 1] = 42;
     let pages = PageAllocatorInner::allocate(&page_allocator, &[(PageIndex::new(0), &contents)]);
@@ -47,7 +47,7 @@ fn test_page_validation_non_zero_last_byte() {
 
 #[test]
 fn test_page_validation_non_zero_middle_byte() {
-    let page_allocator = Arc::new(PageAllocatorInner::default());
+    let page_allocator = Arc::new(PageAllocatorInner::new_for_testing());
     let mut contents = [0u8; PAGE_SIZE];
     contents[PAGE_SIZE / 2 - 1] = 42;
     let pages = PageAllocatorInner::allocate(&page_allocator, &[(PageIndex::new(0), &contents)]);

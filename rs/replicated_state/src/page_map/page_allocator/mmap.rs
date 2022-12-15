@@ -136,12 +136,6 @@ impl PageInner {
 #[derive(Debug)]
 pub struct PageAllocatorInner(Mutex<Option<MmapBasedPageAllocatorCore>>);
 
-impl Default for PageAllocatorInner {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl PageAllocatorInner {
     // See the comments of the corresponding method in `PageAllocator`.
     pub fn allocate(
@@ -237,11 +231,14 @@ impl PageAllocatorInner {
     }
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::new_without_default))]
 impl PageAllocatorInner {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self(Mutex::new(None))
     }
-
+    pub fn new_for_testing() -> Self {
+        PageAllocatorInner::new()
+    }
     fn open(
         id: PageAllocatorId,
         file_descriptor: FileDescriptor,

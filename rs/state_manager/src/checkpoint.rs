@@ -412,7 +412,7 @@ fn load_or_create_pagemap(path: &Path, height: Height) -> Result<PageMap, Persis
     if path.exists() {
         PageMap::open(path, height)
     } else {
-        Ok(PageMap::default())
+        Ok(PageMap::new())
     }
 }
 
@@ -465,7 +465,7 @@ mod tests {
     fn one_page_of(byte: u8) -> Memory {
         let contents = [byte; PAGE_SIZE];
         let delta = &[(PageIndex::from(0), &contents)];
-        let mut page_map = PageMap::new();
+        let mut page_map = PageMap::new_for_testing();
         page_map.update(delta);
         Memory::new(page_map, NumWasmPages::from(1))
     }

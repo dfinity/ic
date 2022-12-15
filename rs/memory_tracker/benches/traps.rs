@@ -44,7 +44,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
         bench.iter_with_setup(
             // Setup input data for measurement
             || {
-                let page_map = PageMap::new();
+                let page_map = PageMap::new_for_testing();
                 BenchData {
                     ptr,
                     tracker: SigsegvMemoryTracker::new(
@@ -92,7 +92,7 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
         bench.iter_with_setup(
             // Setup input data for measurement
             || {
-                let page_map = PageMap::new();
+                let page_map = PageMap::new_for_testing();
                 let data = BenchData {
                     ptr,
                     tracker: SigsegvMemoryTracker::new(

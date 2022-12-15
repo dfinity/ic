@@ -386,7 +386,7 @@ impl WasmtimeEmbedder {
                                 MemorySigSegvInfo {
                                     instance_memory,
                                     current_memory_size_in_pages,
-                                    page_map: PageMap::default(),
+                                    page_map: PageMap::new(),
                                     dirty_page_tracking: DirtyPageTracking::Ignore,
                                 },
                             );

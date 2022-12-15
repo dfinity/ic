@@ -228,7 +228,7 @@ mod tests {
         );
         let wasm_binary = WasmBinary::new(CanisterModule::new(vec![]));
         let wasm_binary_hash = wasm_binary.binary.module_hash();
-        let wasm_memory = Memory::new(PageMap::default(), NumWasmPages::from(2));
+        let wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::from(2));
 
         let metadata = btreemap! {
             String::from("dummy1") => CustomSection {

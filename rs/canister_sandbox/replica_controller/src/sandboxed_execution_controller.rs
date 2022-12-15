@@ -690,7 +690,7 @@ impl WasmExecutor for SandboxedExecutionController {
 
         // Steps 1, 2, 3, 4 are performed by the sandbox process.
         let wasm_id = WasmId::new();
-        let wasm_page_map = PageMap::default();
+        let wasm_page_map = PageMap::new();
         let next_wasm_memory_id = MemoryId::new();
 
         let (memory_modifications, exported_globals, serialized_module, compilation_result) =

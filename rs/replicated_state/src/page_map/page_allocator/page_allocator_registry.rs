@@ -88,10 +88,10 @@ mod tests {
     #[test]
     fn lookup_or_insert_with() {
         let id1 = PageAllocatorId::default();
-        let pa1 = Arc::new(PageAllocatorInner::default());
+        let pa1 = Arc::new(PageAllocatorInner::new_for_testing());
 
         let id2 = PageAllocatorId::default();
-        let pa2 = Arc::new(PageAllocatorInner::default());
+        let pa2 = Arc::new(PageAllocatorInner::new_for_testing());
 
         PageAllocatorRegistry::lookup_or_insert_with(&id1, || Arc::clone(&pa1));
         PageAllocatorRegistry::lookup_or_insert_with(&id2, || Arc::clone(&pa2));
@@ -106,7 +106,7 @@ mod tests {
 
         drop(pa2);
 
-        let pa4 = Arc::new(PageAllocatorInner::default());
+        let pa4 = Arc::new(PageAllocatorInner::new_for_testing());
 
         // Since we dropped `pa2`, this lookup returns `pa4`.
         let pa5 = PageAllocatorRegistry::lookup_or_insert_with(&id2, || Arc::clone(&pa4));
@@ -126,7 +126,7 @@ mod tests {
     fn compact() {
         for _ in 0..1000 {
             let id1 = PageAllocatorId::default();
-            let pa1 = Arc::new(PageAllocatorInner::default());
+            let pa1 = Arc::new(PageAllocatorInner::new_for_testing());
             PageAllocatorRegistry::lookup_or_insert_with(&id1, || pa1);
         }
         assert!(PageAllocatorRegistry::number_of_entries() < 10);
