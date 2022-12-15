@@ -5644,7 +5644,6 @@ dependencies = [
  "ic-crypto-internal-csp",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
- "ic-interfaces",
  "ic-types",
 ]
 
