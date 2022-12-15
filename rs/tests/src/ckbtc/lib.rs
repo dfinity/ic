@@ -22,7 +22,6 @@ use ic_btc_types::Network;
 use ic_canister_client::Sender;
 use ic_ckbtc_minter::lifecycle::init::InitArgs as CkbtcMinterInitArgs;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
-use ic_fondue::pot::log::Logger;
 use ic_icrc1::Account;
 use ic_icrc1_ledger::InitArgs;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
@@ -38,7 +37,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-use slog::{debug, info};
+use slog::{debug, info, Logger};
 
 pub(crate) const TEST_KEY_LOCAL: &str = "dfx_test_key";
 

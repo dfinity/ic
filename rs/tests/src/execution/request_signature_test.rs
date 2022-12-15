@@ -1,15 +1,12 @@
 /* tag::catalog[]
 end::catalog[] */
-use crate::driver::ic::InternetComputer;
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use crate::util::{
-    agent_with_identity, assert_create_agent, delay, get_random_node_endpoint,
-    random_ed25519_identity, UniversalCanister,
+    agent_with_identity, block_on, delay, random_ed25519_identity, UniversalCanister,
 };
 use ic_agent::export::Principal;
 use ic_agent::{identity::AnonymousIdentity, Identity, Signature};
-use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
 };
@@ -17,28 +14,18 @@ use ic_universal_canister::wasm;
 use slog::{debug, info};
 use std::time::{Duration, SystemTime};
 
-pub fn config(env: TestEnv) {
-    InternetComputer::new()
-        .add_fast_single_node_subnet(SubnetType::System)
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-}
-
-pub fn test(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
-    rt.block_on({
-        let logger = ctx.logger.clone();
+pub fn request_signature_test(env: TestEnv) {
+    let logger = env.logger();
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            debug!(ctx.logger, "Selected replica"; "url" => format!("{}", endpoint.url));
+            let node_url = node.get_public_url();
+            debug!(logger, "Selected replica"; "url" => format!("{}", node_url));
 
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister = UniversalCanister::new_with_retries(&agent, endpoint.effective_canister_id(), &logger).await;
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             debug!(
                 logger,
@@ -51,7 +38,7 @@ pub fn test(env: TestEnv) {
                 "Testing valid requests from the anonymous user. Should succeed."
             );
             test_valid_request_succeeds(
-                endpoint.url.as_str(),
+                node_url.as_str(),
                 AnonymousIdentity,
                 canister.canister_id(),
             )
@@ -62,7 +49,7 @@ pub fn test(env: TestEnv) {
                 "Testing valid requests from an ECDSA identity. Should succeed."
             );
             test_valid_request_succeeds(
-                endpoint.url.as_str(),
+                node_url.as_str(),
                 random_ecdsa_identity(),
                 canister.canister_id(),
             )
@@ -73,7 +60,7 @@ pub fn test(env: TestEnv) {
                 "Testing valid requests from an Ed25519 identity. Should succeed."
             );
             test_valid_request_succeeds(
-                endpoint.url.as_str(),
+                node_url.as_str(),
                 random_ed25519_identity(),
                 canister.canister_id(),
             )
@@ -84,7 +71,7 @@ pub fn test(env: TestEnv) {
                 "Testing request from an ECDSA identity but with missing signature. Should fail."
             );
             test_request_with_empty_signature_fails(
-                endpoint.url.as_str(),
+                node_url.as_str(),
                 random_ecdsa_identity(),
                 canister.canister_id(),
             )
@@ -95,7 +82,7 @@ pub fn test(env: TestEnv) {
                 "Testing request from an ed25519 identity but with missing signature. Should fail."
             );
             test_request_with_empty_signature_fails(
-                endpoint.url.as_str(),
+                node_url.as_str(),
                 random_ed25519_identity(),
                 canister.canister_id(),
             )
@@ -106,7 +93,7 @@ pub fn test(env: TestEnv) {
                 "Testing request from an ECDSA identity signed by an ed25519 identity. Should fail."
             );
             test_request_signed_by_another_identity_fails(
-                endpoint.url.as_str(),
+                node_url.as_str(),
                 random_ecdsa_identity(),
                 random_ed25519_identity(),
                 canister.canister_id(),
@@ -118,7 +105,7 @@ pub fn test(env: TestEnv) {
                 "Testing request from an ed25519 identity signed by an ECDSA identity. Should fail."
             );
             test_request_signed_by_another_identity_fails(
-                endpoint.url.as_str(),
+                node_url.as_str(),
                 random_ed25519_identity(),
                 random_ecdsa_identity(),
                 canister.canister_id(),
@@ -130,7 +117,7 @@ pub fn test(env: TestEnv) {
                 "Testing request from an ed25519 identity signed by another ed25519 identity. Should fail."
             );
             test_request_signed_by_another_identity_fails(
-                endpoint.url.as_str(),
+                node_url.as_str(),
                 random_ed25519_identity(),
                 random_ed25519_identity(),
                 canister.canister_id(),
@@ -142,7 +129,7 @@ pub fn test(env: TestEnv) {
                 "Testing request from an ECDSA identity signed by another ECDSA identity. Should fail."
             );
             test_request_signed_by_another_identity_fails(
-                endpoint.url.as_str(),
+                node_url.as_str(),
                 random_ecdsa_identity(),
                 random_ecdsa_identity(),
                 canister.canister_id(),
@@ -154,7 +141,7 @@ pub fn test(env: TestEnv) {
                 "Testing request from an ECDSA identity but with an ed25519 sender. Should fail."
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
-                endpoint.url.as_str(),
+                node_url.as_str(),
                 random_ecdsa_identity(),
                 random_ed25519_identity(),
                 canister.canister_id(),
@@ -166,7 +153,7 @@ pub fn test(env: TestEnv) {
                 "Testing request from an ed25519 identity but with wrong (ECDSA) identity. Should fail."
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
-                endpoint.url.as_str(),
+                node_url.as_str(),
                 random_ed25519_identity(),
                 random_ecdsa_identity(),
                 canister.canister_id(),
@@ -178,7 +165,7 @@ pub fn test(env: TestEnv) {
                 "Testing request from an ed25519 identity but with wrong (ed25519) identity. Should fail."
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
-                endpoint.url.as_str(),
+                node_url.as_str(),
                 random_ed25519_identity(),
                 random_ed25519_identity(),
                 canister.canister_id(),
@@ -190,7 +177,7 @@ pub fn test(env: TestEnv) {
                 "Testing request from an ECDSA identity but with wrong (ECDSA) identity. Should fail."
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
-                endpoint.url.as_str(),
+                node_url.as_str(),
                 random_ecdsa_identity(),
                 random_ecdsa_identity(),
                 canister.canister_id(),

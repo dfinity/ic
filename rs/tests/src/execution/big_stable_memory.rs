@@ -1,5 +1,8 @@
 use crate::{
-    driver::{pot_dsl::get_ic_handle_and_ctx, test_env::TestEnv},
+    driver::{
+        test_env::TestEnv,
+        test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
+    },
     types::RejectCode,
     util::*,
 };
@@ -7,18 +10,13 @@ use ic_universal_canister::wasm;
 use ic_utils::interfaces::ManagementCanister;
 
 pub fn can_access_big_stable_memory(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
             let canister = UniversalCanister::new_with_64bit_stable_memory(
                 &agent,
-                endpoint.effective_canister_id(),
+                node.effective_canister_id(),
             )
             .await
             .unwrap();
@@ -49,18 +47,13 @@ pub fn can_access_big_stable_memory(env: TestEnv) {
 }
 
 pub fn can_handle_out_of_bounds_access(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
             let canister = UniversalCanister::new_with_64bit_stable_memory(
                 &agent,
-                endpoint.effective_canister_id(),
+                node.effective_canister_id(),
             )
             .await
             .unwrap();
@@ -91,18 +84,13 @@ pub fn can_handle_out_of_bounds_access(env: TestEnv) {
 }
 
 pub fn can_handle_overflows_when_indexing_stable_memory(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
             let canister = UniversalCanister::new_with_64bit_stable_memory(
                 &agent,
-                endpoint.effective_canister_id(),
+                node.effective_canister_id(),
             )
             .await
             .unwrap();
@@ -133,20 +121,15 @@ pub fn can_handle_overflows_when_indexing_stable_memory(env: TestEnv) {
 }
 
 pub fn can_access_big_heap_and_big_stable_memory(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
             let mgr = ManagementCanister::create(&agent);
             let canister_id = mgr
                 .create_canister()
                 .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(endpoint.effective_canister_id())
+                .with_effective_canister_id(node.effective_canister_id())
                 .call_and_wait(delay())
                 .await
                 .unwrap()
@@ -234,21 +217,15 @@ pub fn can_access_big_heap_and_big_stable_memory(env: TestEnv) {
 }
 
 pub fn canister_traps_if_32_bit_api_used_on_big_memory(env: TestEnv) {
-    let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
             // Create a canister that uses 32-bit stable memory.
             let canister = UniversalCanister::new_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
-                &logger,
+                node.effective_canister_id(),
+                &env.logger(),
             )
             .await;
 

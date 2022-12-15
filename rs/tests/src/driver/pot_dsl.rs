@@ -9,13 +9,8 @@ use crate::driver::{
     farm::HostFeature,
     ic::{InternetComputer, VmAllocationStrategy, VmResources},
     test_env::TestEnv,
-    test_env_api::IcHandleConstructor,
 };
-use ic_fondue::{
-    ic_manager::IcHandle,
-    pot::{Context, FondueTestFn},
-    slack::{Alertable, SlackChannel},
-};
+use ic_fondue::slack::{Alertable, SlackChannel};
 use serde::{Deserialize, Serialize};
 
 pub trait PotSetupFn: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static {}
@@ -73,30 +68,6 @@ pub fn seq(tests: Vec<Test>) -> TestSet {
 
 pub fn par(tests: Vec<Test>) -> TestSet {
     TestSet::Parallel(tests.into_iter().map(TestSet::Single).collect())
-}
-
-pub fn t<F>(name: &str, test: F) -> Test
-where
-    F: FondueTestFn<IcHandle>,
-{
-    Test {
-        name: name.to_string(),
-        execution_mode: ExecutionMode::Run,
-        f: Box::new(|test_env: TestEnv| {
-            let (ic_handle, test_ctx) = get_ic_handle_and_ctx(test_env);
-            (test)(ic_handle, &test_ctx);
-        }),
-    }
-}
-
-pub fn get_ic_handle_and_ctx(test_env: TestEnv) -> (IcHandle, Context) {
-    let log = test_env.logger();
-    let rng = rand::SeedableRng::seed_from_u64(42);
-    let test_ctx = Context::new(rng, log);
-    let ic_handle = test_env
-        .ic_handle()
-        .expect("Could not create ic handle from test env");
-    (ic_handle, test_ctx)
 }
 
 pub fn sys_t<F>(name: &str, test: F) -> Test

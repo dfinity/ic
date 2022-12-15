@@ -28,8 +28,8 @@ AKA:: Testcase 2.4
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::pot_dsl::get_ic_handle_and_ctx;
 use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use crate::types::*;
 use crate::util::*;
 use candid::{Decode, Encode};
@@ -37,7 +37,6 @@ use futures::future::join_all;
 use ic_agent::export::Principal;
 use ic_agent::identity::Identity;
 use ic_agent::AgentError;
-use ic_fondue::ic_manager::IcHandle;
 use ic_ic00_types::{
     CanisterSettingsArgs, CanisterStatusResultV2, CreateCanisterArgs, EmptyBlob, Payload,
 };
@@ -49,14 +48,10 @@ use ic_utils::interfaces::{management_canister::builders::InstallMode, Managemen
 use reqwest::StatusCode;
 
 pub fn create_canister_via_ingress_fails(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
             let mgr = ManagementCanister::create(&agent);
             assert_http_submit_fails(mgr.create_canister().call().await, StatusCode::FORBIDDEN);
         }
@@ -65,23 +60,15 @@ pub fn create_canister_via_ingress_fails(env: TestEnv) {
 
 pub fn create_canister_via_canister_succeeds(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
             // Create a canister for the user using the provisional API.
             // This universal canister acts as the user's wallet canister.
-            let wallet_canister = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let wallet_canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             // User requests from its wallet to create a new canister.
             let canister_id = create_canister_via_canister(&wallet_canister)
@@ -109,21 +96,13 @@ pub fn create_canister_via_canister_succeeds(env: TestEnv) {
 
 pub fn create_canister_with_controller_and_controllers_fails(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
-            let canister_a = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let canister_a =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             assert_reject(
                 canister_a
@@ -151,21 +130,13 @@ pub fn create_canister_with_controller_and_controllers_fails(env: TestEnv) {
 
 pub fn update_settings_with_controller_and_controllers_fails(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
-            let canister_a = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let canister_a =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             let canister_b = canister_a
                 .update(wasm().call(management::create_canister(
@@ -198,20 +169,13 @@ pub fn update_settings_with_controller_and_controllers_fails(env: TestEnv) {
 
 pub fn create_canister_with_one_controller(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let canister_a =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             let canister_b = canister_a
                 .update(
@@ -250,31 +214,21 @@ pub fn create_canister_with_one_controller(env: TestEnv) {
 
 pub fn update_settings_multiple_controllers(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
             let user = random_ed25519_identity();
             let user_principal = user.sender().unwrap();
-            let agent = agent_with_identity(endpoint.url.as_str(), user)
+            let agent = agent_with_identity(node.get_public_url().as_str(), user)
                 .await
                 .unwrap();
             let mgr = ManagementCanister::create(&agent);
-            let canister_a = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
-            let canister_b = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let canister_a =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+            let canister_b =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             // A creates C
             let canister_c = canister_a
@@ -392,20 +346,13 @@ pub fn update_settings_multiple_controllers(env: TestEnv) {
 
 pub fn create_canister_with_no_controllers(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let canister_a =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             let canister_b = canister_a
                 .update(
@@ -437,26 +384,16 @@ pub fn create_canister_with_no_controllers(env: TestEnv) {
 
 pub fn create_canister_with_multiple_controllers(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
-            let canister_b = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let canister_a =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+            let canister_b =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             let controllers = vec![canister_a.canister_id(), canister_b.canister_id()];
 
@@ -527,20 +464,13 @@ pub fn create_canister_with_multiple_controllers(env: TestEnv) {
 
 pub fn create_canister_with_too_many_controllers_fails(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-            let canister_a = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let canister_a =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
             let mut controllers = vec![];
 
             // Setting more than maximum number of controllers allowed.
@@ -548,7 +478,7 @@ pub fn create_canister_with_too_many_controllers_fails(env: TestEnv) {
                 controllers.push(
                     UniversalCanister::new_with_retries(
                         &agent,
-                        endpoint.effective_canister_id(),
+                        node.effective_canister_id(),
                         &logger,
                     )
                     .await
@@ -574,29 +504,22 @@ pub fn create_canister_with_too_many_controllers_fails(env: TestEnv) {
 
 pub fn managing_a_canister_with_wrong_controller_fails(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
             let user1 = random_ed25519_identity();
-            let agent1 = agent_with_identity(endpoint.url.as_str(), user1)
+            let agent1 = agent_with_identity(node.get_public_url().as_str(), user1)
                 .await
                 .unwrap();
 
             // Create a canister for the user using the provisional API.
-            let wallet_canister = UniversalCanister::new_with_retries(
-                &agent1,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let wallet_canister =
+                UniversalCanister::new_with_retries(&agent1, node.effective_canister_id(), &logger)
+                    .await;
 
             // User2 tries to manage the canister and fails.
             let user2 = random_ed25519_identity();
-            let agent2 = agent_with_identity(endpoint.url.as_str(), user2)
+            let agent2 = agent_with_identity(node.get_public_url().as_str(), user2)
                 .await
                 .unwrap();
             let mgr = ManagementCanister::create(&agent2);
@@ -648,23 +571,16 @@ pub fn managing_a_canister_with_wrong_controller_fails(env: TestEnv) {
 
 pub fn delete_stopped_canister_succeeds(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
             let mgr = ManagementCanister::create(&agent);
 
             // Create a canister for the user using the provisional API.
-            let canister = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             // Stop the canister
             mgr.stop_canister(&canister.canister_id())
@@ -691,23 +607,16 @@ pub fn delete_stopped_canister_succeeds(env: TestEnv) {
 
 pub fn delete_running_canister_fails(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
             let mgr = ManagementCanister::create(&agent);
 
             // Create a canister for the user using the provisional API.
-            let canister = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             // Delete the canister.
             let res = mgr
@@ -724,20 +633,16 @@ pub fn delete_running_canister_fails(env: TestEnv) {
 /// Try to install a canister with a large wasm but a small memory allocation.
 /// It should be rejected.
 pub fn canister_large_wasm_small_memory_allocation(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
             let mgr = ManagementCanister::create(&agent);
 
             let canister_id = mgr
                 .create_canister()
                 .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(endpoint.effective_canister_id())
+                .with_effective_canister_id(app_node.effective_canister_id())
                 .with_memory_allocation(1u64)
                 .call_and_wait(delay())
                 .await
@@ -765,20 +670,16 @@ pub fn canister_large_initial_memory_small_memory_allocation(env: TestEnv) {
               (export "canister_query hi" (func $hi)))"#,
     )
     .unwrap();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
             let mgr = ManagementCanister::create(&agent);
 
             let canister_id = mgr
                 .create_canister()
                 .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(endpoint.effective_canister_id())
+                .with_effective_canister_id(app_node.effective_canister_id())
                 .call_and_wait(delay())
                 .await
                 .expect("Couldn't create canister with provisional API.")
@@ -818,18 +719,14 @@ pub fn canister_large_initial_memory_small_memory_allocation(env: TestEnv) {
 /// "user" initiates each step separately.
 pub fn canister_can_manage_other_canister(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let agent = nns_node.build_default_agent();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
         async move {
-            let endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
             let canister_a = UniversalCanister::new_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                nns_node.effective_canister_id(),
                 &logger,
             )
             .await;
@@ -874,18 +771,13 @@ pub fn canister_can_manage_other_canister(env: TestEnv) {
 /// step.
 pub fn canister_can_manage_other_canister_batched(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let agent = nns_node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
             let canister_a = UniversalCanister::new_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                nns_node.effective_canister_id(),
                 &logger,
             )
             .await;
@@ -933,9 +825,8 @@ pub fn config_compute_allocation(env: TestEnv) {
 /// canister (which acts as the wallet canister).
 pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
     // See the corresponding field in the execution environment config.
     let allocatable_compute_capacity_in_percent = 50;
     // Note: the DTS scheduler requires at least 2 scheduler cores
@@ -945,16 +836,12 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
             * allocatable_compute_capacity_in_percent
             / 100;
     const MAX_COMP_ALLOC: Option<u64> = Some(99);
-    rt.block_on(async move {
+    block_on(async move {
         let mut canister_principals = Vec::new();
-        let endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-        endpoint.assert_ready(ctx).await;
-        let agent = assert_create_agent(endpoint.url.as_str()).await;
-
         let cans = join_all((0..app_sched_cores).map(|_| {
             UniversalCanister::new_with_params_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                app_node.effective_canister_id(),
                 MAX_COMP_ALLOC,
                 Some(std::u64::MAX as u128),
                 None,
@@ -969,7 +856,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
         // Installing the app_sched_cores + 1st canister should fail.
         let can = UniversalCanister::new_with_params(
             &agent,
-            endpoint.effective_canister_id(),
+            app_node.effective_canister_id(),
             MAX_COMP_ALLOC,
             Some(std::u64::MAX as u128),
             None,
@@ -1001,7 +888,7 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
         // Create universal canister with 'best effort' compute allocation of `0`.
         let uni_can = UniversalCanister::new_with_params_with_retries(
             &agent,
-            endpoint.effective_canister_id(),
+            app_node.effective_canister_id(),
             Some(0),
             Some(std::u64::MAX as u128),
             None,
@@ -1062,20 +949,17 @@ pub fn total_compute_allocation_cannot_be_exceeded(env: TestEnv) {
 
 // TODO(EXC-186): Enable this test.
 pub fn canisters_with_low_balance_are_deallocated(env: TestEnv) {
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     rt.block_on({
         async move {
-            let endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
             let mgr = ManagementCanister::create(&agent);
 
             let canister_id = mgr
                 .create_canister()
                 .as_provisional_create_with_amount(Some(0))
-                .with_effective_canister_id(endpoint.effective_canister_id())
+                .with_effective_canister_id(app_node.effective_canister_id())
                 .call_and_wait(delay())
                 .await
                 .expect("Couldn't create canister with provisional API.")
@@ -1104,22 +988,15 @@ pub fn canisters_with_low_balance_are_deallocated(env: TestEnv) {
 }
 
 // TODO(EXC-186): Enable this test.
-pub fn canisters_are_deallocated_when_their_balance_falls(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
+pub fn canisters_are_deallocated_when_their_balance_falls(env: TestEnv) {
     #[derive(candid::CandidType)]
     struct Argument {
         canister_id: Principal,
     }
-
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_application_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
             let mgr = ManagementCanister::create(&agent);
 
             let initial_cycles = 10_000_000_000_000u64;
@@ -1128,9 +1005,9 @@ pub fn canisters_are_deallocated_when_their_balance_falls(
 
             let canister_a = UniversalCanister::new_with_cycles_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                app_node.effective_canister_id(),
                 initial_cycles,
-                &ctx.logger,
+                &env.logger(),
             )
             .await;
 
@@ -1178,21 +1055,13 @@ pub fn canisters_are_deallocated_when_their_balance_falls(
 
 fn create_canister_test(env: TestEnv, payload: Vec<u8>) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
-            let canister_a = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let canister_a =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             canister_a
                 .forward_with_cycles_to(
@@ -1249,23 +1118,16 @@ pub fn create_canister_with_settings(env: TestEnv) {
 }
 
 /// Sending no `settings` field
-pub fn provisional_create_canister_with_no_settings(
-    handle: IcHandle,
-    ctx: &ic_fondue::pot::Context,
-) {
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+pub fn provisional_create_canister_with_no_settings(env: TestEnv) {
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
             // Create a canister for the user.
             let mgr = ManagementCanister::create(&agent);
             mgr.create_canister()
                 .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(endpoint.effective_canister_id())
+                .with_effective_canister_id(node.effective_canister_id())
                 .call_and_wait(delay())
                 .await
                 .unwrap_or_else(|err| {
@@ -1277,21 +1139,13 @@ pub fn provisional_create_canister_with_no_settings(
 
 pub fn create_canister_with_freezing_threshold(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
-            let canister = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             for valid_value in [u64::MAX, 0].iter() {
                 // Create the canister with the freezing threshold set.
@@ -1343,21 +1197,13 @@ pub fn create_canister_with_freezing_threshold(env: TestEnv) {
 
 pub fn create_canister_with_invalid_freezing_threshold_fails(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
-            let canister = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             for invalid_value in [
                 candid::Nat::from(u128::MAX),
@@ -1388,27 +1234,14 @@ pub fn create_canister_with_invalid_freezing_threshold_fails(env: TestEnv) {
 /// different subnets and they can still control each other.
 pub fn controller_and_controllee_on_different_subnets(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let ver_app_node = env.get_first_healthy_verified_application_node_snapshot();
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let combinations = vec![
+        (ver_app_node.clone(), app_node.clone()),
+        (app_node, ver_app_node),
+    ];
+    block_on({
         async move {
-            let endpoint_0 = get_random_verified_app_node_endpoint(&handle, &mut rng);
-            endpoint_0.assert_ready(ctx).await;
-            let endpoint_1 = get_random_application_node_endpoint(&handle, &mut rng);
-            endpoint_1.assert_ready(ctx).await;
-
-            let combinations = vec![
-                (
-                    (endpoint_0.url.clone(), endpoint_0.effective_canister_id()),
-                    (endpoint_1.url.clone(), endpoint_1.effective_canister_id()),
-                ),
-                (
-                    (endpoint_1.url.clone(), endpoint_1.effective_canister_id()),
-                    (endpoint_0.url.clone(), endpoint_0.effective_canister_id()),
-                ),
-            ];
-
             async fn install_via_cr(
                 cr: &UniversalCanister<'_>,
                 target: Principal,
@@ -1422,14 +1255,22 @@ pub fn controller_and_controllee_on_different_subnets(env: TestEnv) {
                 .await
             }
 
-            for ((cr, cr_ecid), (ce, ce_ecid)) in combinations {
-                let controller_agent = assert_create_agent(cr.as_str()).await;
-                let controllee_agent = assert_create_agent(ce.as_str()).await;
+            for (cr_node, ce_node) in combinations {
+                let controller_agent = cr_node.build_default_agent_async().await;
+                let controllee_agent = ce_node.build_default_agent_async().await;
 
-                let controller =
-                    UniversalCanister::new_with_retries(&controller_agent, cr_ecid, &logger).await;
-                let controllee =
-                    UniversalCanister::new_with_retries(&controllee_agent, ce_ecid, &logger).await;
+                let controller = UniversalCanister::new_with_retries(
+                    &controller_agent,
+                    cr_node.effective_canister_id(),
+                    &logger,
+                )
+                .await;
+                let controllee = UniversalCanister::new_with_retries(
+                    &controllee_agent,
+                    ce_node.effective_canister_id(),
+                    &logger,
+                )
+                .await;
 
                 // before setting the controller, this call must fail.
                 assert_reject(
@@ -1470,27 +1311,22 @@ pub fn controller_and_controllee_on_different_subnets(env: TestEnv) {
 
 pub fn refunds_after_uninstall_are_refunded(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    // Choosing an NNS subnet since they aren't charged, so
+    // testing cycle balances is easier.
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let agent = nns_node.build_default_agent();
+    block_on({
         async move {
-            // Choosing an NNS subnet since they aren't charged, so
-            // testing cycle balances is easier.
-            let endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
             let canister_a = UniversalCanister::new_with_cycles_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                nns_node.effective_canister_id(),
                 100u64,
                 &logger,
             )
             .await;
             let canister_b = UniversalCanister::new_with_cycles_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                nns_node.effective_canister_id(),
                 100u64,
                 &logger,
             )
@@ -1552,41 +1388,33 @@ pub fn refunds_after_uninstall_are_refunded(env: TestEnv) {
 /// subnet to be 3.
 pub fn creating_canisters_fails_if_limit_of_allowed_canisters_is_reached(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
             let mgr = ManagementCanister::create(&agent);
             // Create 3 canisters when 3 are allowed, should succeed.
             mgr.create_canister()
                 .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(endpoint.effective_canister_id())
+                .with_effective_canister_id(node.effective_canister_id())
                 .call_and_wait(delay())
                 .await
                 .unwrap();
             mgr.create_canister()
                 .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(endpoint.effective_canister_id())
+                .with_effective_canister_id(node.effective_canister_id())
                 .call_and_wait(delay())
                 .await
                 .unwrap();
-            let canister = UniversalCanister::new_with_retries(
-                &agent,
-                endpoint.effective_canister_id(),
-                &logger,
-            )
-            .await;
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
 
             // Attempt to create a fourth canister when only 3 are allowed, should fail.
             let res = mgr
                 .create_canister()
                 .as_provisional_create_with_amount(None)
-                .with_effective_canister_id(endpoint.effective_canister_id())
+                .with_effective_canister_id(node.effective_canister_id())
                 .call_and_wait(delay())
                 .await;
             assert_reject(res, RejectCode::SysFatal);

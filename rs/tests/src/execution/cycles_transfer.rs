@@ -2,7 +2,10 @@
 end::catalog[] */
 
 use crate::{
-    driver::{pot_dsl::get_ic_handle_and_ctx, test_env::TestEnv},
+    driver::{
+        test_env::TestEnv,
+        test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl},
+    },
     types::RejectCode,
     util::*,
 };
@@ -11,20 +14,15 @@ use ic_universal_canister::{call_args, wasm};
 
 pub fn can_transfer_cycles_from_a_canister_to_another(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-    rt.block_on({
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let agent = nns_node.build_default_agent();
+    block_on({
         async move {
-            let endpoint = get_random_nns_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
-
             // Create a canister, called "Alice", using the provisional API. Alice will
             // receive some cycles.
             let alice = UniversalCanister::new_with_cycles_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                nns_node.effective_canister_id(),
                 100_000_000u64,
                 &logger,
             )
@@ -34,7 +32,7 @@ pub fn can_transfer_cycles_from_a_canister_to_another(env: TestEnv) {
             // some cycles to Alice.
             let bob = UniversalCanister::new_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                nns_node.effective_canister_id(),
                 &logger,
             )
             .await;
@@ -74,19 +72,14 @@ pub fn can_transfer_cycles_from_a_canister_to_another(env: TestEnv) {
 
 pub fn trapping_with_large_blob_does_not_cause_cycles_underflow(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
-    let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
+    let ver_app_node = env.get_first_healthy_verified_application_node_snapshot();
+    let agent = ver_app_node.build_default_agent();
     let initial_balance = 123_000_000_000_000u64;
-    rt.block_on({
+    block_on({
         async move {
-            let endpoint = get_random_verified_app_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
             let canister = UniversalCanister::new_with_cycles_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                ver_app_node.effective_canister_id(),
                 initial_balance,
                 &logger,
             )
@@ -111,19 +104,15 @@ pub fn trapping_with_large_blob_does_not_cause_cycles_underflow(env: TestEnv) {
 
 pub fn rejecting_with_large_blob_does_not_cause_cycles_underflow(env: TestEnv) {
     let logger = env.logger();
-    let (handle, ref ctx) = get_ic_handle_and_ctx(env);
-    let mut rng = ctx.rng.clone();
+    let ver_app_node = env.get_first_healthy_verified_application_node_snapshot();
+    let agent = ver_app_node.build_default_agent();
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
     let initial_balance = 123_000_000_000_000u64;
     rt.block_on({
         async move {
-            let endpoint = get_random_verified_app_node_endpoint(&handle, &mut rng);
-            endpoint.assert_ready(ctx).await;
-
-            let agent = assert_create_agent(endpoint.url.as_str()).await;
             let canister = UniversalCanister::new_with_cycles_with_retries(
                 &agent,
-                endpoint.effective_canister_id(),
+                ver_app_node.effective_canister_id(),
                 initial_balance,
                 &logger,
             )

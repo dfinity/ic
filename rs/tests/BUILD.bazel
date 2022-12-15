@@ -640,3 +640,14 @@ system_test(
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
+
+system_test(
+    name = "general_execution_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "allow_to_fail",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
