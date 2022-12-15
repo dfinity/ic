@@ -185,23 +185,21 @@ EOF
 
     mkdir -p ${CONFIG_TMP}/ssh_authorized_keys
 
-    for file in admin backup readonly; do
-        (
-            cat <<EOF
+    (
+        cat <<EOF
 # Please insert your SSH public keys here.
 #
 # Each line of the file must only contain one key. For details on the format,
 # please consult 'man authorized_keys'.
 #
 EOF
-        ) >"${CONFIG_TMP}/ssh_authorized_keys/${file}"
-    done
+    ) >"${CONFIG_TMP}/ssh_authorized_keys/admin"
 
     # Fix timestamps for reproducible build
     touch -t ${TOUCH_TIMESTAMP} \
         ${CONFIG_TMP}/config.ini \
         ${CONFIG_TMP}/ssh_authorized_keys \
-        ${CONFIG_TMP}/ssh_authorized_keys/{admin,backup,readonly}
+        ${CONFIG_TMP}/ssh_authorized_keys/admin
 
     cd ${TMP_DIR}
     # tar flags set for build determinism
