@@ -507,7 +507,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                 .checked_mul(1_000_000)
                 .expect("should not happen before around 580 years"),
         );
-        let current_time = self.time_source.get_current_time();
+        let current_time = self.time_source.get_relative_time();
         current_time > time_of_registration + key_rotation_period
     }
 }

@@ -15,6 +15,7 @@
 mod common;
 mod keygen;
 mod sign;
+pub mod time;
 mod tls;
 
 pub use sign::utils::{
@@ -25,6 +26,7 @@ pub use sign::utils::{
 pub use sign::{get_mega_pubkey, get_tecdsa_master_public_key, MegaKeyFromRegistryError};
 
 use crate::sign::ThresholdSigDataStoreImpl;
+use crate::time::CurrentSystemTimeSource;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::NodePublicKeyData;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
@@ -32,7 +34,7 @@ use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_generation::derive_node_id;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces::crypto::{BasicSigner, KeyManager, ThresholdSigVerifierByPublicKey};
-use ic_interfaces::time_source::{SysTimeSource, TimeSource};
+use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -40,7 +42,7 @@ use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::consensus::CatchUpContentProtobufBytes;
 use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
 use ic_types::messages::MessageId;
-use ic_types::{NodeId, RegistryVersion, Time};
+use ic_types::{NodeId, RegistryVersion};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use rand::{CryptoRng, Rng};
 use std::fmt;
@@ -101,7 +103,7 @@ pub struct CryptoComponentFatClient<C: CryptoServiceProvider> {
     node_id: NodeId,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
-    time_source: Arc<dyn CryptoTime>,
+    time_source: Arc<dyn TimeSource>,
 }
 
 /// A `ThresholdSigDataStore` that is wrapped by a `RwLock`.
@@ -166,9 +168,9 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             csp,
             registry_client,
             node_id,
-            logger,
+            logger: new_logger!(&logger),
             metrics: Arc::new(CryptoMetrics::none()),
-            time_source: Arc::new(SysTimeSource::new()),
+            time_source: Arc::new(CurrentSystemTimeSource::new(logger)),
         }
     }
 }
@@ -262,9 +264,9 @@ impl CryptoComponentFatClient<Csp> {
             csp,
             registry_client,
             node_id,
-            logger,
+            logger: new_logger!(&logger),
             metrics,
-            time_source: Arc::new(SysTimeSource::new()),
+            time_source: Arc::new(CurrentSystemTimeSource::new(logger)),
         };
         crypto_component.collect_and_store_key_count_metrics(latest_registry_version);
         crypto_component
@@ -281,7 +283,7 @@ impl CryptoComponentFatClient<Csp> {
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
         logger: ReplicaLogger,
-        time_source: Arc<dyn CryptoTime>,
+        time_source: Arc<dyn TimeSource>,
     ) -> Self {
         let metrics = Arc::new(CryptoMetrics::none());
         CryptoComponentFatClient {
@@ -384,16 +386,5 @@ fn get_log_id(logger: &ReplicaLogger, module_path: &'static str) -> u64 {
         ic_types::time::current_time().as_nanos_since_unix_epoch()
     } else {
         0
-    }
-}
-
-pub trait CryptoTime: Send + Sync + TimeSource {
-    fn get_current_time(&self) -> Time;
-}
-
-impl CryptoTime for SysTimeSource {
-    fn get_current_time(&self) -> Time {
-        self.update_time().expect("Cannot update crypto time");
-        self.get_relative_time()
     }
 }
