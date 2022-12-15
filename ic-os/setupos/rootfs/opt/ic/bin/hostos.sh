@@ -9,11 +9,13 @@ PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 function install_hostos() {
     echo "* Installing HostOS disk-image..."
 
+    target_drive=$(find_first_drive)
+
     size=$(tar --list -v -f /data/host-os.img.tar.gz disk.img | cut -d ' ' -f 3)
     size="${size:=0}"
 
-    tar xzOf /data/host-os.img.tar.gz disk.img | pv -f -s "$size" | dd of="/dev/nvme0n1" bs=10M
-    log_and_reboot_on_error "${?}" "Unable to install HostOS disk-image on drive: /dev/nvme0n1"
+    tar xzOf /data/host-os.img.tar.gz disk.img | pv -f -s "$size" | dd of="/dev/${target_drive}" bs=10M
+    log_and_reboot_on_error "${?}" "Unable to install HostOS disk-image on drive: /dev/${target_drive}"
 
     sync
     log_and_reboot_on_error "${?}" "Unable to synchronize cached writes to persistent storage."
@@ -22,13 +24,19 @@ function install_hostos() {
 function configure_efi() {
     echo "* Configuring EFI..."
 
+    target_drive=$(find_first_drive)
+    partition_prefix=""
+    if [[ "${target_drive}" = nvme* ]]; then
+        partition_prefix="p"
+    fi
+
     bootnum=$(efibootmgr --verbose | grep "IC-OS" | sed 's/Boot\([0-9A-F]*\).*/\1/')
     for b in ${bootnum}; do
         efibootmgr --delete-bootnum --bootnum ${b} >/dev/null 2>&1
         log_and_reboot_on_error "${?}" "Unable to delete existing 'IC-OS' boot entry."
     done
 
-    efibootmgr --create --gpt --disk "/dev/nvme0n1p1" --loader "\EFI\BOOT\BOOTX64.EFI" --label "IC-OS" >/dev/null 2>&1
+    efibootmgr --create --gpt --disk "/dev/${target_drive}${partition_prefix}1" --loader "\EFI\BOOT\BOOTX64.EFI" --label "IC-OS" >/dev/null 2>&1
     log_and_reboot_on_error "${?}" "Unable to create 'IC-OS' boot entry."
 
     efibootmgr --remove-dups >/dev/null 2>&1
@@ -41,21 +49,23 @@ function configure_efi() {
 function resize_partition() {
     echo "* Resizing partition..."
 
+    target_drive=$(find_first_drive)
+
     # Repair header at end of disk
-    sgdisk --move-second-header /dev/nvme0n1 >/dev/null 2>&1
-    log_and_reboot_on_error "${?}" "Unable to extend GPT data structures: /dev/nvme0n1"
+    sgdisk --move-second-header "/dev/${target_drive}" >/dev/null 2>&1
+    log_and_reboot_on_error "${?}" "Unable to extend GPT data structures: /dev/${target_drive}"
 
     # Extend the LVM partition to fill disk
-    parted -s --align optimal /dev/nvme0n1 "resizepart 3 100%" >/dev/null 2>&1
-    log_and_reboot_on_error "${?}" "Unable to resize partition: /dev/nvme0n1p3"
+    parted -s --align optimal "/dev/${target_drive}" "resizepart 3 100%" >/dev/null 2>&1
+    log_and_reboot_on_error "${?}" "Unable to resize partition: /dev/${target_drive}${partition_prefix}3"
 
     # Check and update PVs
     pvscan >/dev/null 2>&1
     log_and_reboot_on_error "${?}" "Unable scan physical volumes."
 
     # Extend PV to the end of LVM partition
-    pvresize /dev/nvme0n1p3 >/dev/null 2>&1
-    log_and_reboot_on_error "${?}" "Unable to resize physical volume: /dev/nvme0n1p3"
+    pvresize "/dev/${target_drive}${partition_prefix}3" >/dev/null 2>&1
+    log_and_reboot_on_error "${?}" "Unable to resize physical volume: /dev/${target_drive}${partition_prefix}3"
 
     # Check and update VGs
     vgscan >/dev/null 2>&1
@@ -71,7 +81,7 @@ function resize_partition() {
     for drive in $(echo ${large_drives[@]}); do
         count=$((count + 1))
         # Avoid adding PV of main disk
-        if [ "/dev/${drive}" == "/dev/nvme0n1" ]; then
+        if [ "/dev/${drive}" == "/dev/${target_drive}" ]; then
             continue
         fi
 

@@ -23,17 +23,13 @@ GEN2_MINIMUM_CPU_THREADS=64
 # 510 GiB (Gibibyte)
 MINIMUM_MEMORY_SIZE=547608330240
 
-SYSTEM_DISK_NAME="nvme0n1"
-# 2900 GiB (Gibibyte)
-MINIMUM_SYSTEM_DISK_SIZE=3113851289600
-
-GEN2_DATA_DISK_NAMES=("nvme0n1" "nvme1n1" "nvme2n1" "nvme3n1" "nvme4n1")
-# 6.4TB
-GEN2_MINIMUM_DATA_DISK_SIZE=6400000000000
+# Gen2 has 5 * 6.4 TB drives = 32TB
+GEN2_MINIMUM_DISK_SIZE=6400000000000
+GEN2_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 
 # Dell 10 3.2TB and SuperMicro has 5 7.4 TB drives = 32TB
-GEN1_MINIMUM_DATA_DISK_SIZE=3200000000000
-GEN1_MINIMUM_AGGREGATE_DATA_DISK_SIZE=32000000000000
+GEN1_MINIMUM_DISK_SIZE=3200000000000
+GEN1_MINIMUM_AGGREGATE_DISK_SIZE=32000000000000
 
 function read_variables() {
     # Read limited set of keys. Be extra-careful quoting values as it could
@@ -205,27 +201,8 @@ function verify_memory() {
     fi
 }
 
-function verify_system_disk() {
-    echo "* Verifying system disk..."
-
-    test -b "/dev/${SYSTEM_DISK_NAME}"
-    log_and_reboot_on_error "${?}" "Drive '/dev/${SYSTEM_DISK_NAME}' not found. Are all drives correctly installed?"
-
-    local disk="$(lsblk --bytes --json /dev/${SYSTEM_DISK_NAME})"
-    log_and_reboot_on_error "${?}" "Unable to fetch disk information."
-
-    local size=$(echo ${disk} | jq -r --arg logicalname "${SYSTEM_DISK_NAME}" '.[][] | select(.name==$logicalname) | .size')
-    log_and_reboot_on_error "${?}" "Unable to extract disk size."
-
-    if [ "${size}" -gt "${MINIMUM_SYSTEM_DISK_SIZE}" ]; then
-        echo "  Disk size (${size} bytes) meets system requirements."
-    else
-        log_and_reboot_on_error "1" "Disk size (${size} bytes/${MINIMUM_SYSTEM_DISK_SIZE}) does NOT meet system requirements."
-    fi
-}
-
-function verify_gen1_data_disks() {
-    size=0
+function verify_gen1_disks() {
+    aggregate_size=0
     large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
     for drive in $(echo ${large_drives[@]}); do
         test -b "/dev/${drive}"
@@ -237,50 +214,56 @@ function verify_gen1_data_disks() {
         local disk_size=$(echo ${disk} | jq -r --arg logicalname "${drive}" '.[][] | select(.name==$logicalname) | .size')
         log_and_reboot_on_error "${?}" "Unable to extract disk size."
 
-        if [ "${disk_size}" -gt "${GEN1_MINIMUM_DATA_DISK_SIZE}" ]; then
+        if [ "${disk_size}" -gt "${GEN1_MINIMUM_DISK_SIZE}" ]; then
             echo "  Disk size (${disk_size} bytes) meets system requirements."
         else
-            log_and_reboot_on_error "1" "Disk size (${disk_size} bytes/${GEN1_MINIMUM_DATA_DISK_SIZE}) does NOT meet system requirements."
+            log_and_reboot_on_error "1" "Disk size (${disk_size} bytes/${GEN1_MINIMUM_DISK_SIZE}) does NOT meet system requirements."
         fi
-        size=$((size + disk_size))
+        aggregate_size=$((aggregate_size + disk_size))
     done
-    if [ "${size}" -gt "${GEN1_MINIMUM_AGGREGATE_DATA_DISK_SIZE}" ]; then
-        echo "  Aggregate Data Disk size (${size} bytes) meets system requirements."
+    if [ "${aggregate_size}" -gt "${GEN1_MINIMUM_AGGREGATE_DISK_SIZE}" ]; then
+        echo "  Aggregate Disk size (${aggregate_size} bytes) meets system requirements."
     else
-        log_and_reboot_on_error "1" "Aggregate Data Disk size (${size} bytes/${GEN1_MINIMUM_AGGREGATE_DATA_DISK_SIZE}) does NOT meet system requirements."
+        log_and_reboot_on_error "1" "Aggregate Disk size (${aggregate_size} bytes/${GEN1_MINIMUM_AGGREGATE_DISK_SIZE}) does NOT meet system requirements."
     fi
 }
 
-function verify_gen2_data_disks() {
-    for i in ${GEN2_DATA_DISK_NAMES[@]}; do
+function verify_gen2_disks() {
+    aggregate_size=0
+    large_drives=($(lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*'))
+    for drive in $(echo ${large_drives[@]}); do
 
-        echo "* Verifying data disk ${i}"
+        echo "* Verifying disk ${drive}"
 
-        test -b "/dev/${i}"
-        log_and_reboot_on_error "${?}" "Drive '/dev/${i}' not found. Are all drives correctly installed?"
+        test -b "/dev/${drive}"
+        log_and_reboot_on_error "${?}" "Drive '/dev/${drive}' not found. Are all drives correctly installed?"
 
-        local disk="$(lsblk --bytes --json /dev/${i})"
+        local disk="$(lsblk --bytes --json /dev/${drive})"
         log_and_reboot_on_error "${?}" "Unable to fetch disk information."
 
-        local size=$(echo ${disk} | jq -r --arg logicalname "${i}" '.[][] | select(.name==$logicalname) | .size')
+        local disk_size=$(echo ${disk} | jq -r --arg logicalname "${drive}" '.[][] | select(.name==$logicalname) | .size')
         log_and_reboot_on_error "${?}" "Unable to extract disk size."
 
-        if [ "${size}" -gt "${GEN2_MINIMUM_DATA_DISK_SIZE}" ]; then
-            echo "  Disk size (${size} bytes) meets system requirements."
+        if [ "${disk_size}" -gt "${GEN2_MINIMUM_DISK_SIZE}" ]; then
+            echo "  Disk size (${disk_size} bytes) meets system requirements."
         else
-            log_and_reboot_on_error "1" "Disk size (${size} bytes/${GEN2_MINIMUM_DATA_DISK_SIZE}) does NOT meet system requirements."
+            log_and_reboot_on_error "1" "Disk size (${disk_size} bytes/${GEN2_MINIMUM_DISK_SIZE}) does NOT meet system requirements."
         fi
+        aggregate_size=$((aggregate_size + disk_size))
     done
-    # The aggregate size is a function of the fixed (5) count and the GEN2_MINIMUM_DATA_DISK_SIZE so we
-    # do not need to check it explicitly.
+    if [ "${aggregate_size}" -gt "${GEN2_MINIMUM_AGGREGATE_DISK_SIZE}" ]; then
+        echo "  Aggregate Disk size (${aggregate_size} bytes) meets system requirements."
+    else
+        log_and_reboot_on_error "1" "Aggregate Disk size (${aggregate_size} bytes/${GEN2_MINIMUM_AGGREGATE_DISK_SIZE}) does NOT meet system requirements."
+    fi
 }
 
-function verify_data_disks() {
-    echo "* Verifying data disks..."
+function verify_disks() {
+    echo "* Verifying disks..."
     if [[ ${GENERATION} == 1 ]]; then
-        verify_gen1_data_disks
+        verify_gen1_disks
     else
-        verify_gen2_data_disks
+        verify_gen2_disks
     fi
 }
 
@@ -293,8 +276,7 @@ main() {
         check_generation
         verify_cpu
         verify_memory
-        verify_system_disk
-        verify_data_disks
+        verify_disks
     else
         echo "* DEVELOPMENT MODE: hardware NOT verified"
     fi

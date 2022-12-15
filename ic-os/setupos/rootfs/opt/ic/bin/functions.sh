@@ -53,13 +53,6 @@ function log_end() {
     echo " "
 }
 
-function detect_skew() {
-    OEM=$(ipmitool mc info | sed -e 's/^Manufacturer ID[^0-9]*\([0-9]*\)/\1/' -e t -e d)
-    log_and_reboot_on_error "${?}" "Unable to identify variant of machine."
-
-    if [ "${OEM}" == "674" ]; then
-        echo "dell"
-    elif [ "${OEM}" == "10876" ]; then
-        echo "supermicro"
-    fi
+function find_first_drive() {
+    lsblk -nld -o NAME,SIZE | grep 'T$' | grep -o '^\S*' | sort | head -n 1
 }
