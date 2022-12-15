@@ -41,7 +41,7 @@ mod gen_dealing_encryption_key_pair_tests {
         assert_eq!(
             key_id,
             KeyId::from(hex_to_32_bytes(
-                "527ee4634b9361c9bde5e16cbf10f7586095ea877463dc4a14ee4c4a186d33e4"
+                "9887c340bb30d8436bc3d06e162bce60e0493d4e77ca8ad4d10c28016371fe90"
             )),
         );
 
