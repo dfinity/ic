@@ -13,7 +13,7 @@ use super::constants;
 
 use slog::info;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GroupContext {
     pub exec_path: PathBuf,
     pub group_dir: PathBuf,
@@ -120,11 +120,7 @@ impl GroupContext {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum Command {
-    RunGroup,
-    RunTask { task_name: String },
-}
+pub type Command = String;
 
 #[derive(Debug)]
 pub struct ProcessContext {

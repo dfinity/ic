@@ -35,3 +35,9 @@ fn test_scenario_with_setup_panic_fails() {
     let result = execute_test_driver_with_scenario("test_with_setup_panic");
     assert!(result.is_err())
 }
+
+#[test]
+fn test_that_runs_out_of_time() {
+    let result = execute_test_driver_with_scenario("test_that_runs_out_of_time");
+    assert!(result.is_err())
+}

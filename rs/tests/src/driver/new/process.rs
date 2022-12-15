@@ -15,7 +15,7 @@ use tokio::{
 pub trait KillFn: FnOnce() + Send + Sync {}
 impl<T: FnOnce() + Send + Sync> KillFn for T {}
 
-use super::event::{Event, EventSubscriber, EventSubscriberFactory, TaskId};
+use super::event::{BroadcastingEventSubscriberFactory, Event, EventSubscriber, TaskId};
 pub struct Process {
     child: Child,
     stdout_jh: JoinHandle<()>,
@@ -26,7 +26,7 @@ impl Process {
     pub async fn new(
         task_id: TaskId,
         cmd: Command,
-        sub_fact: Arc<dyn EventSubscriberFactory>,
+        sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
     ) -> (Self, impl FnOnce()) {
         let mut cmd: AsyncCommand = cmd.into();
         cmd.stdin(Stdio::piped());
@@ -36,18 +36,22 @@ impl Process {
         // When the `Process` object is dropped, the child is sent a kill
         // signal.
         cmd.kill_on_drop(true);
-        let mut child = cmd.spawn().expect("Could not spawn child.");
+
+        println!("AsyncCommand: {:?}", cmd);
+        let mut child = cmd.spawn().expect("Spawning subprocess should succeed");
+        println!("Child: {:?}", child);
+
         let stdout = child.stdout.take().unwrap();
         let stdout_jh = task::spawn(Self::listen_on_channel(
             task_id.clone(),
-            sub_fact.create_subscriber(),
+            sub_fact.create_broadcasting_subscriber(),
             ChannelName::StdOut,
             stdout,
         ));
         let stderr = child.stderr.take().unwrap();
         let stderr_jh = task::spawn(Self::listen_on_channel(
             task_id,
-            sub_fact.create_subscriber(),
+            sub_fact.create_broadcasting_subscriber(),
             ChannelName::StdErr,
             stderr,
         ));
@@ -152,8 +156,8 @@ mod tests {
     // here.
     struct SubscriberFactorySender(Sender<Event>);
 
-    impl EventSubscriberFactory for SubscriberFactorySender {
-        fn create_subscriber(&self) -> Box<dyn EventSubscriber> {
+    impl BroadcastingEventSubscriberFactory for SubscriberFactorySender {
+        fn create_broadcasting_subscriber(&self) -> Box<dyn EventSubscriber> {
             let new_sender = self.0.clone();
 
             Box::new(move |evt: Event| new_sender.send(evt).expect("Could not send event!"))

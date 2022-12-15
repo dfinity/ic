@@ -24,6 +24,23 @@ pub enum Plan<T> {
     },
 }
 
+impl<T: std::fmt::Debug> std::fmt::Debug for Plan<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Plan::Supervised {
+                supervisor,
+                ordering,
+                children,
+            } => write!(
+                f,
+                "Plan::Supervised< supervisor={:?}, ordering={:?}, children={:?} >",
+                supervisor, ordering, children
+            ),
+            Plan::Leaf { task } => write!(f, "Plan::Leaf< task={:?} >", task),
+        }
+    }
+}
+
 impl<T> Plan<T> {
     pub fn capacity(&self) -> usize {
         match self {
@@ -35,6 +52,49 @@ impl<T> Plan<T> {
             },
             Plan::Leaf { .. } => 1,
         }
+    }
+
+    pub fn map<S, F>(&self, f: &F) -> Plan<S>
+    where
+        F: Fn(&T) -> S,
+    {
+        match self {
+            Plan::Supervised {
+                supervisor,
+                ordering,
+                children,
+            } => Plan::Supervised {
+                supervisor: f(supervisor),
+                ordering: ordering.clone(),
+                children: children
+                    .iter()
+                    .map(|ch| ch.map(f))
+                    .collect::<Vec<Plan<S>>>(),
+            },
+            Plan::Leaf { task } => Plan::Leaf { task: f(task) },
+        }
+    }
+
+    fn flatten_rec(self, buf: &mut Vec<T>) {
+        match self {
+            Plan::Supervised {
+                supervisor,
+                ordering: _,
+                children,
+            } => {
+                buf.push(supervisor);
+                children
+                    .into_iter()
+                    .for_each(move |child| child.flatten_rec(buf));
+            }
+            Plan::Leaf { task } => buf.push(task),
+        }
+    }
+
+    pub fn flatten(self) -> Vec<T> {
+        let mut buf: Vec<T> = Vec::new();
+        self.flatten_rec(&mut buf);
+        buf
     }
 }
 

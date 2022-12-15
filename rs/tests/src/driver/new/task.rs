@@ -10,7 +10,7 @@ use std::sync::{
     Arc,
 };
 
-use super::event::{Event, EventSubscriberFactory, TaskId};
+use super::event::{BroadcastingEventSubscriberFactory, Event, TaskId};
 
 pub trait TaskIdT: Clone + PartialEq + Eq + Send + Sync + std::fmt::Debug {}
 impl<T: Clone + PartialEq + Eq + Send + Sync + std::fmt::Debug> TaskIdT for T {}
@@ -23,6 +23,14 @@ pub trait Task: Send + Sync {
 
     /// Execute the task, consuming the current thread.
     fn execute(&self) -> Result<(), String>;
+
+    fn task_id(&self) -> TaskId;
+}
+
+impl std::fmt::Debug for dyn Task {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Task< task_id={:?} >", self.task_id())
+    }
 }
 
 pub trait TaskHandle: Send + Sync {
@@ -40,11 +48,11 @@ pub trait TaskHandle: Send + Sync {
 pub struct EmptyTask {
     spawned: AtomicBool,
     task_id: TaskId,
-    sub_fact: Arc<dyn EventSubscriberFactory>,
+    sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
 }
 
 impl EmptyTask {
-    pub fn new(sub_fact: Arc<dyn EventSubscriberFactory>, task_id: TaskId) -> Self {
+    pub fn new(sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>, task_id: TaskId) -> Self {
         Self {
             spawned: Default::default(),
             task_id,
@@ -56,10 +64,10 @@ impl EmptyTask {
 impl Task for EmptyTask {
     fn spawn(&self) -> Box<dyn TaskHandle> {
         if self.spawned.fetch_or(true, Ordering::Relaxed) {
-            panic!("Respawn already spawned task.");
+            panic!("Cannot respawn already spawned task.");
         }
 
-        let mut sub = self.sub_fact.create_subscriber();
+        let mut sub = self.sub_fact.create_broadcasting_subscriber();
         (sub)(Event::task_spawned(self.task_id.clone()));
 
         Box::new(EmptyTaskHandle {
@@ -72,12 +80,16 @@ impl Task for EmptyTask {
     fn execute(&self) -> Result<(), String> {
         Ok(())
     }
+
+    fn task_id(&self) -> TaskId {
+        self.task_id.clone()
+    }
 }
 
 pub struct EmptyTaskHandle {
     task_id: TaskId,
     stopped: AtomicBool,
-    sub_fact: Arc<dyn EventSubscriberFactory>,
+    sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
 }
 
 impl TaskHandle for EmptyTaskHandle {
@@ -85,7 +97,7 @@ impl TaskHandle for EmptyTaskHandle {
         if self.stopped.fetch_or(true, Ordering::Relaxed) {
             return;
         }
-        let mut sub = self.sub_fact.create_subscriber();
+        let mut sub = self.sub_fact.create_broadcasting_subscriber();
         (sub)(Event::task_failed(
             self.task_id.clone(),
             "Empty Task failed.".to_string(),
@@ -96,7 +108,7 @@ impl TaskHandle for EmptyTaskHandle {
         if self.stopped.fetch_or(true, Ordering::Relaxed) {
             return;
         }
-        let mut sub = self.sub_fact.create_subscriber();
+        let mut sub = self.sub_fact.create_broadcasting_subscriber();
         (sub)(Event::task_stopped(self.task_id.clone()));
     }
 }

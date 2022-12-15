@@ -47,11 +47,11 @@ impl TestFunction {
     }
 }
 
-pub trait ChildFn: FnOnce() + UnwindSafe + Send + Sync + 'static {}
-impl<T: FnOnce() + UnwindSafe + Send + Sync + 'static> ChildFn for T {}
+pub trait SubprocessFn: FnOnce() + UnwindSafe + Send + Sync + 'static {}
+impl<T: FnOnce() + UnwindSafe + Send + Sync + 'static> SubprocessFn for T {}
 
-// Create a ChildFn from source and target environment.
-fn lift<P, R, F: SysTestFn>(logger: Logger, source_env: P, target_env: R, f: F) -> impl ChildFn
+// Create a SubprocessFn from source and target environment.
+fn lift<P, R, F: SysTestFn>(logger: Logger, source_env: P, target_env: R, f: F) -> impl SubprocessFn
 where
     P: AsRef<Path>,
     R: AsRef<Path>,

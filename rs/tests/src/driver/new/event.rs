@@ -1,4 +1,8 @@
-use std::time::SystemTime;
+use std::{
+    ops::DerefMut,
+    sync::{Arc, Mutex},
+    time::SystemTime,
+};
 
 use crossbeam_channel::{bounded, select, unbounded, Sender};
 use utils::thread::JoinOnDrop;
@@ -77,8 +81,12 @@ impl<T: FnMut(Event) + Send + Sync> EventSubscriber for T {}
 /// EventSubscriber cannot be cloned in general. Thus, in cases where a
 /// subscriber needs to subscribe to objects that are generated dynamically, a
 /// SubscriberFactory can be used.
-pub trait EventSubscriberFactory: Send + Sync {
-    fn create_subscriber(&self) -> Box<dyn EventSubscriber>;
+pub trait BroadcastingEventSubscriberFactory: Send + Sync {
+    fn create_broadcasting_subscriber(&self) -> Box<dyn EventSubscriber>;
+
+    fn broadcast(&self, event: Event) {
+        (self.create_broadcasting_subscriber())(event)
+    }
 }
 
 /// Broadcast incoming events to multiple outgoing channels.
@@ -94,16 +102,26 @@ pub struct EventBroadcaster {
     // The sending end of the drop channel is declared first. Thus, it will get
     // dropped before the drop_handler is dropped.
     stop: Sender<()>,
+
+    subscribers: Arc<Mutex<Vec<Box<dyn EventSubscriber>>>>,
+
     // On drop, this will wait on the join handle of the background thread.
     _drop_handler: JoinOnDrop<()>,
 }
 
 impl EventBroadcaster {
-    pub fn start(mut subscribers: Vec<Box<dyn EventSubscriber>>) -> Self {
+    pub fn subscribe(&self, whom: Box<dyn EventSubscriber>) {
+        let mut write_lock = self.subscribers.lock().unwrap();
+        write_lock.push(whom);
+    }
+
+    pub fn start() -> Self {
         let (events, event_rcv) = unbounded::<Event>();
         // let's establish a rendez-vous channel to send the stop signal
         let (stop, stop_rcv) = bounded::<()>(0);
+        let subscribers: Arc<Mutex<Vec<Box<dyn EventSubscriber>>>> = Arc::new(Mutex::new(vec![]));
         let join_handle = std::thread::spawn({
+            let subscribers = subscribers.clone();
             move || {
                 loop {
                     let evt = select! {
@@ -116,7 +134,8 @@ impl EventBroadcaster {
                         },
                         recv(stop_rcv) -> _ => break,
                     };
-                    for sub in &mut subscribers {
+                    let mut lock = subscribers.lock().unwrap();
+                    for sub in lock.deref_mut().iter_mut() {
                         (sub)(evt.clone());
                     }
                 }
@@ -127,6 +146,7 @@ impl EventBroadcaster {
         Self {
             events,
             stop,
+            subscribers,
             _drop_handler,
         }
     }
@@ -136,8 +156,8 @@ impl EventBroadcaster {
     }
 }
 
-impl EventSubscriberFactory for EventBroadcaster {
-    fn create_subscriber(&self) -> Box<dyn EventSubscriber> {
+impl BroadcastingEventSubscriberFactory for EventBroadcaster {
+    fn create_broadcasting_subscriber(&self) -> Box<dyn EventSubscriber> {
         let event_recv = self.events.clone();
         let es = move |evt: Event| {
             event_recv.send(evt).expect("Could not send event!");
@@ -155,8 +175,8 @@ pub mod test_utils {
     // here.
     pub struct SubscriberFactorySender(Sender<Event>);
 
-    impl EventSubscriberFactory for SubscriberFactorySender {
-        fn create_subscriber(&self) -> Box<dyn EventSubscriber> {
+    impl BroadcastingEventSubscriberFactory for SubscriberFactorySender {
+        fn create_broadcasting_subscriber(&self) -> Box<dyn EventSubscriber> {
             let new_sender = self.0.clone();
 
             Box::new(move |evt: Event| new_sender.send(evt).expect("Could not send event!"))
@@ -164,7 +184,7 @@ pub mod test_utils {
     }
 
     /// Create a SubscriberFactory that is backed by a crossbeam channel.
-    pub fn create_subfact() -> (Arc<dyn EventSubscriberFactory>, Receiver<Event>) {
+    pub fn create_subfact() -> (Arc<dyn BroadcastingEventSubscriberFactory>, Receiver<Event>) {
         let (evt_send, evt_recv) = unbounded();
         (Arc::new(SubscriberFactorySender(evt_send)), evt_recv)
     }
