@@ -121,9 +121,9 @@ mod rotate_idkg_dealing_encryption_keys {
     use ic_base_types::{NodeId, PrincipalId, SubnetId};
     use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
     use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
-    use ic_crypto_temp_crypto::FastForwardCryptoTimeSource;
     use ic_protobuf::registry::crypto::v1::PublicKey;
     use ic_registry_keys::make_crypto_node_key;
+    use ic_test_utilities::FastForwardTimeSource;
 
     const REGISTRY_VERSION_1: RegistryVersion = RegistryVersion::new(1);
     const REGISTRY_VERSION_2: RegistryVersion = RegistryVersion::new(2);
@@ -380,7 +380,7 @@ mod rotate_idkg_dealing_encryption_keys {
     struct Setup {
         registry_data: Arc<ProtoRegistryDataProvider>,
         registry_client: Arc<FakeRegistryClient>,
-        time_source: Arc<FastForwardCryptoTimeSource>,
+        time_source: Arc<FastForwardTimeSource>,
         crypto: TempCryptoComponent,
     }
 
@@ -418,7 +418,7 @@ mod rotate_idkg_dealing_encryption_keys {
             let registry_data = Arc::new(ProtoRegistryDataProvider::new());
             let registry_client =
                 Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-            let time_source = FastForwardCryptoTimeSource::new();
+            let time_source = FastForwardTimeSource::new();
             let mut crypto_builder = temp_crypto_builder()
                 .with_keys(node_keys_to_generate)
                 .with_registry_client_and_data(

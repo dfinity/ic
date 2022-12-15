@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
-use ic_crypto::{CryptoComponent, CryptoComponentFatClient, CryptoTime};
+use ic_crypto::time::CurrentSystemTimeSource;
+use ic_crypto::{CryptoComponent, CryptoComponentFatClient};
 use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
@@ -20,10 +21,10 @@ use ic_interfaces::crypto::{
     ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
     ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
-use ic_interfaces::time_source::{SysTimeSource, TimeSource};
+use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
-use ic_logger::ReplicaLogger;
+use ic_logger::{new_logger, ReplicaLogger};
 use ic_protobuf::registry::crypto::v1::{EcdsaCurve, EcdsaKeyId, PublicKey as PublicKeyProto};
 use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetListRecord, SubnetRecord, SubnetType};
 use ic_registry_client_fake::FakeRegistryClient;
@@ -60,12 +61,11 @@ use ic_types::crypto::{
     UserPublicKey,
 };
 use ic_types::signature::BasicSignatureBatch;
-use ic_types::time::UNIX_EPOCH;
-use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId, Time};
+use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::ops::Deref;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
 use tokio::net::{TcpStream, UnixListener};
@@ -135,7 +135,7 @@ pub struct TempCryptoBuilder {
     connected_remote_vault: Option<Arc<TempCspVaultServer>>,
     temp_dir_source: Option<PathBuf>,
     logger: Option<ReplicaLogger>,
-    time_source: Option<Arc<dyn CryptoTime>>,
+    time_source: Option<Arc<dyn TimeSource>>,
     ecdsa_subnet_config: Option<EcdsaSubnetConfig>,
 }
 
@@ -212,7 +212,7 @@ impl TempCryptoBuilder {
         self
     }
 
-    pub fn with_time_source(mut self, time_source: Arc<dyn CryptoTime>) -> Self {
+    pub fn with_time_source(mut self, time_source: Arc<dyn TimeSource>) -> Self {
         self.time_source = Some(time_source);
         self
     }
@@ -362,7 +362,7 @@ impl TempCryptoBuilder {
         let logger = self.logger.unwrap_or_else(no_op_logger);
         let time_source = self
             .time_source
-            .unwrap_or_else(|| Arc::new(SysTimeSource::new()));
+            .unwrap_or_else(|| Arc::new(CurrentSystemTimeSource::new(new_logger!(&logger))));
         let crypto_component = CryptoComponent::new_with_fake_node_id(
             &config,
             opt_vault_client_runtime_handle,
@@ -1121,55 +1121,4 @@ fn csp_for_config(
         None,
         Arc::new(CryptoMetrics::none()),
     )
-}
-
-/// A pure implementation of [TimeSource] that requires manual
-/// fast forward to advance time.
-pub struct FastForwardCryptoTimeSource(RwLock<TickCryptoTimeData>);
-
-struct TickCryptoTimeData {
-    current_time: Time,
-}
-
-/// Error when time update is not monotone.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct CryptoTimeNotMonotoneError;
-
-impl FastForwardCryptoTimeSource {
-    pub fn new() -> Arc<FastForwardCryptoTimeSource> {
-        Arc::new(FastForwardCryptoTimeSource(RwLock::new(
-            TickCryptoTimeData {
-                current_time: UNIX_EPOCH,
-            },
-        )))
-    }
-
-    /// Set the time to a new value, only when the given time is greater than
-    /// or equal to the current time. Return error otherwise.
-    pub fn set_time(&self, time: Time) -> Result<(), CryptoTimeNotMonotoneError> {
-        let data = &mut self.0.write().unwrap();
-        if time >= data.current_time {
-            data.current_time = time;
-            Ok(())
-        } else {
-            Err(CryptoTimeNotMonotoneError)
-        }
-    }
-
-    /// Reset the time to start value.
-    pub fn reset(&self) {
-        self.0.write().unwrap().current_time = UNIX_EPOCH;
-    }
-}
-
-impl TimeSource for FastForwardCryptoTimeSource {
-    fn get_relative_time(&self) -> Time {
-        self.0.read().unwrap().current_time
-    }
-}
-
-impl CryptoTime for FastForwardCryptoTimeSource {
-    fn get_current_time(&self) -> Time {
-        self.0.read().unwrap().current_time
-    }
 }
