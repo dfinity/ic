@@ -1369,7 +1369,6 @@ impl Governance {
     /// - The neuron is locked for exclusive use (ALL manage_neuron operation lock the neuron)
     /// - The neuron is controlled by `caller`
     /// - The neuron has some maturity to stake.
-    /// - The neuron is not in spawning state.
     pub fn stake_maturity_of_neuron(
         &mut self,
         id: &NeuronId,
