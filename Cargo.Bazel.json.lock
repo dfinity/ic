@@ -1,5 +1,5 @@
 {
-  "checksum": "19643b54bc9995ac8f39f268947b0a25959dbc702fb2f3f0e8757a15b3f00887",
+  "checksum": "c2c42d96910851b2d950829e46a391f6cec08eb3b0ba54869dc293ce40d5beb9",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12718,6 +12718,10 @@
             {
               "id": "scoped_threadpool 0.1.9",
               "target": "scoped_threadpool"
+            },
+            {
+              "id": "scopeguard 1.1.0",
+              "target": "scopeguard"
             },
             {
               "id": "semver 1.0.14",
@@ -38072,6 +38076,10 @@
       "common_attrs": {
         "compile_data_glob": [
           "**"
+        ],
+        "crate_features": [
+          "default",
+          "use_std"
         ],
         "edition": "2015",
         "version": "1.1.0"
