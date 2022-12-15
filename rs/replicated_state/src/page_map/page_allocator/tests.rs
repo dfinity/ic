@@ -17,7 +17,7 @@ fn duplicate_file_descriptors(
 
 #[test]
 fn test_page_allocation() {
-    let page_allocator: PageAllocator = PageAllocator::default();
+    let page_allocator: PageAllocator = PageAllocator::new_for_testing();
     let page_0 = (PageIndex::new(0), &[0u8; PAGE_SIZE]);
     let page_1 = (PageIndex::new(1), &[1u8; PAGE_SIZE]);
     let page_2 = (PageIndex::new(2), &[2u8; PAGE_SIZE]);
@@ -32,8 +32,8 @@ fn test_page_allocation() {
 
 #[test]
 fn test_multiple_page_allocators() {
-    let page_allocator_1: PageAllocator = PageAllocator::default();
-    let page_allocator_2: PageAllocator = PageAllocator::default();
+    let page_allocator_1: PageAllocator = PageAllocator::new_for_testing();
+    let page_allocator_2: PageAllocator = PageAllocator::new_for_testing();
     let page = (PageIndex::new(1), &[1u8; PAGE_SIZE]);
     let pages_1 = page_allocator_1.allocate(&[page]);
     let pages_2 = page_allocator_2.allocate(&[page]);
@@ -58,7 +58,7 @@ fn test_page_serialization() {
 
 #[test]
 fn test_page_deserialize_twice() {
-    let page_allocator: PageAllocator = PageAllocator::default();
+    let page_allocator: PageAllocator = PageAllocator::new_for_testing();
     let page = (PageIndex::new(1), &[1u8; PAGE_SIZE]);
     page_allocator.allocate(&[page]);
 

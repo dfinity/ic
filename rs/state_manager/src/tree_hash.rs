@@ -167,7 +167,7 @@ mod tests {
                 INITIAL_CYCLES,
                 NumSeconds::from(100_000),
             );
-            let mut wasm_memory = Memory::new(PageMap::default(), NumWasmPages::from(2));
+            let mut wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::from(2));
             wasm_memory
                 .page_map
                 .update(&[(PageIndex::from(1), &[0u8; PAGE_SIZE])]);

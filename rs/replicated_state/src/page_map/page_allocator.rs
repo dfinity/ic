@@ -67,13 +67,15 @@ impl Clone for PageAllocator {
     }
 }
 
-impl Default for PageAllocator {
-    fn default() -> PageAllocator {
-        PageAllocator(Arc::new(PageAllocatorInner::default()))
-    }
-}
-
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::new_without_default))]
 impl PageAllocator {
+    pub fn new() -> Self {
+        Self(Arc::new(PageAllocatorInner::new()))
+    }
+
+    pub fn new_for_testing() -> Self {
+        Self(Arc::new(PageAllocatorInner::new_for_testing()))
+    }
     /// Allocates multiple pages with the given contents.
     ///
     /// The provided page count must match exactly the number of items in the

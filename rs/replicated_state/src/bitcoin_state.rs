@@ -164,10 +164,10 @@ impl UtxoSet {
                 BitcoinNetwork::Testnet => Network::Testnet,
                 BitcoinNetwork::Regtest => Network::Regtest,
             },
-            utxos_small: PageMap::default(),
-            utxos_medium: PageMap::default(),
+            utxos_small: PageMap::new(),
+            utxos_medium: PageMap::new(),
             utxos_large: BTreeMap::default(),
-            address_outpoints: PageMap::default(),
+            address_outpoints: PageMap::new(),
         }
     }
 }

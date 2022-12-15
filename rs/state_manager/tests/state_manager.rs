@@ -2423,7 +2423,7 @@ fn can_get_dirty_pages() {
     fn drop_page_map(state: &mut ReplicatedState, canister_id: CanisterId) {
         let canister_state = state.canister_state_mut(&canister_id).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
-        execution_state.wasm_memory.page_map = PageMap::default();
+        execution_state.wasm_memory.page_map = PageMap::new_for_testing();
     }
 
     state_manager_test(|metrics, state_manager| {
@@ -3107,7 +3107,7 @@ fn can_reset_memory() {
         // Wipe data and write different data
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
         let execution_state = canister_state.execution_state.as_mut().unwrap();
-        execution_state.wasm_memory = Memory::new(PageMap::new(), NumWasmPages::new(0));
+        execution_state.wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
         execution_state.wasm_memory.page_map.update(&[
             (PageIndex::new(1), &[100u8; PAGE_SIZE]),
             (PageIndex::new(100), &[100u8; PAGE_SIZE]),
@@ -3165,7 +3165,7 @@ fn can_reset_memory() {
         );
 
         // Wipe data completely
-        execution_state.wasm_memory = Memory::new(PageMap::new(), NumWasmPages::new(0));
+        execution_state.wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::new(0));
 
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
 

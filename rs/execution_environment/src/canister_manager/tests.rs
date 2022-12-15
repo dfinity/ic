@@ -1481,7 +1481,7 @@ fn reinstall_clears_stable_memory() {
             .unwrap()
             .stable_memory
             .size = NumWasmPages::new(1);
-        let mut buf = page_map::Buffer::new(PageMap::default());
+        let mut buf = page_map::Buffer::new(PageMap::new_for_testing());
         buf.write(&[1; 10], 0);
         canister
             .execution_state

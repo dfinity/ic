@@ -44,7 +44,7 @@ fn duplicate_file_descriptors(
 
 #[test]
 fn can_debug_display_a_page_map() {
-    let page_map = PageMap::new();
+    let page_map = PageMap::new_for_testing();
     assert_eq!(format!("{:?}", page_map), "{}");
 }
 
@@ -58,7 +58,7 @@ fn can_create_an_empty_checkpoint() {
 
 #[test]
 fn empty_page_map_returns_zeroed_pages() {
-    let page_map = PageMap::new();
+    let page_map = PageMap::new_for_testing();
     let page = page_map.get_page(PageIndex::new(1));
     assert_eq!(page.len(), PAGE_SIZE);
     assert!(page.iter().all(|b| *b == 0));
@@ -66,7 +66,7 @@ fn empty_page_map_returns_zeroed_pages() {
 
 #[test]
 fn can_update_a_page_map() {
-    let mut page_map = PageMap::new();
+    let mut page_map = PageMap::new_for_testing();
     let ones = [1u8; PAGE_SIZE];
     let twos = [2u8; PAGE_SIZE];
 
@@ -84,7 +84,7 @@ fn can_update_a_page_map() {
 
 #[test]
 fn new_delta_wins_on_update() {
-    let mut page_map = PageMap::new();
+    let mut page_map = PageMap::new_for_testing();
     let page_1 = [1u8; PAGE_SIZE];
     let page_2 = [2u8; PAGE_SIZE];
 
@@ -114,7 +114,7 @@ fn persisted_map_is_equivalent_to_the_original() {
         .map(|(i, page)| (PageIndex::new(i as u64), *page))
         .collect();
 
-    let mut base_map = PageMap::default();
+    let mut base_map = PageMap::new_for_testing();
     base_map.update(base_pages.as_slice());
     base_map.persist_delta(&heap_file).unwrap();
 
@@ -154,7 +154,7 @@ fn can_persist_and_load_an_empty_page_map() {
         .unwrap();
     let heap_file = tmp.path().join("heap");
 
-    let original_map = PageMap::default();
+    let original_map = PageMap::new_for_testing();
     original_map.persist_delta(&heap_file).unwrap();
     let persisted_map =
         PageMap::open(&heap_file, Height::new(0)).expect("opening an empty page map must succeed");
@@ -195,7 +195,7 @@ fn can_use_buffer_to_modify_page_map() {
     let page_1 = [1u8; PAGE_SIZE];
     let page_3 = [3u8; PAGE_SIZE];
     let pages = &[(PageIndex::new(1), &page_1), (PageIndex::new(3), &page_3)];
-    let mut page_map = PageMap::default();
+    let mut page_map = PageMap::new_for_testing();
     page_map.update(pages);
 
     let n = 4 * PAGE_SIZE;
@@ -227,7 +227,7 @@ fn can_use_buffer_to_modify_page_map() {
 
 #[test]
 fn serialize_empty_page_map() {
-    let original_page_map = PageMap::default();
+    let original_page_map = PageMap::new_for_testing();
     let serialized_page_map = duplicate_file_descriptors(original_page_map.serialize());
     let deserialized_page_map = PageMap::deserialize(serialized_page_map).unwrap();
     assert_equal_page_maps(&original_page_map, &deserialized_page_map);
@@ -235,7 +235,7 @@ fn serialize_empty_page_map() {
 
 #[test]
 fn serialize_page_map() {
-    let mut replica = PageMap::default();
+    let mut replica = PageMap::new_for_testing();
     // The replica process sends the page map to the sandbox process.
     let serialized_page_map = duplicate_file_descriptors(replica.serialize());
     let mut sandbox = PageMap::deserialize(serialized_page_map).unwrap();
@@ -257,7 +257,7 @@ fn serialize_page_map() {
 
 #[test]
 fn write_amplification_is_calculated_correctly() {
-    let allocator: PageAllocator = Default::default();
+    let allocator: PageAllocator = PageAllocator::new_for_testing();
 
     let page = [1u8; PAGE_SIZE];
 
@@ -308,7 +308,7 @@ fn write_and_verify_dirty_pages(buf: &mut Buffer, src: &[u8], offset: usize) -> 
 /// count.
 #[test]
 fn buffer_entire_first_page_write() {
-    let mut buf = Buffer::new(PageMap::new());
+    let mut buf = Buffer::new(PageMap::new_for_testing());
     assert_eq!(
         1,
         write_and_verify_dirty_pages(&mut buf, &[0; PAGE_SIZE], 0)
@@ -319,14 +319,14 @@ fn buffer_entire_first_page_write() {
 /// Single write to first page is dirty, later write doesn't increase count.
 #[test]
 fn buffer_single_byte_first_page_write() {
-    let mut buf = Buffer::new(PageMap::new());
+    let mut buf = Buffer::new(PageMap::new_for_testing());
     assert_eq!(1, write_and_verify_dirty_pages(&mut buf, &[0; 1], 0));
     assert_eq!(0, write_and_verify_dirty_pages(&mut buf, &[0; 1], 1));
 }
 
 #[test]
 fn buffer_write_single_byte_each_page() {
-    let mut buf = Buffer::new(PageMap::new());
+    let mut buf = Buffer::new(PageMap::new_for_testing());
     assert_eq!(1, write_and_verify_dirty_pages(&mut buf, &[0; 1], 0));
     assert_eq!(
         1,
@@ -345,7 +345,7 @@ fn buffer_write_single_byte_each_page() {
 #[test]
 fn buffer_write_unaligned_multiple_pages() {
     const NUM_PAGES: u64 = 3;
-    let mut buf = Buffer::new(PageMap::new());
+    let mut buf = Buffer::new(PageMap::new_for_testing());
     assert_eq!(
         NUM_PAGES + 1,
         write_and_verify_dirty_pages(&mut buf, &[0; (NUM_PAGES as usize) * PAGE_SIZE], 24)
@@ -354,7 +354,7 @@ fn buffer_write_unaligned_multiple_pages() {
 
 #[test]
 fn buffer_write_empty_slice() {
-    let mut buf = Buffer::new(PageMap::new());
+    let mut buf = Buffer::new(PageMap::new_for_testing());
     assert_eq!(0, write_and_verify_dirty_pages(&mut buf, &[0; 0], 10_000));
 }
 
@@ -371,7 +371,7 @@ fn calc_dirty_pages_matches_actual_change() {
                 let size = (MAX_STABLE_MEMORY_IN_BYTES - offset).min(size);
                 let src = vec![0; size as usize];
                 // Start with a buffer that has some initial dirty pages
-                let mut buffer = Buffer::new(PageMap::new());
+                let mut buffer = Buffer::new(PageMap::new_for_testing());
                 buffer.write(&[1; 10 * PAGE_SIZE], 5 * PAGE_SIZE + 10);
                 buffer.write(&[3; 16], 44 * PAGE_SIZE);
 

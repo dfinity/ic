@@ -30,7 +30,7 @@ fn bench_allocator(c: &mut Criterion<ProcessTime>) {
                 thread_pool.get_mut().scoped(|scope| {
                     for _ in 0..NUM_THREADS {
                         scope.execute(|| {
-                            let allocator = Arc::new(PageAllocator::default());
+                            let allocator = Arc::new(PageAllocator::new());
                             // Allocate multiple times to simulate multiple rounds per checkpoint.
                             for _ in 0..NUM_ALLOCATIONS {
                                 let pages = PageAllocator::allocate(&allocator, &pages[..]);

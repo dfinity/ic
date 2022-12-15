@@ -1565,7 +1565,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
         subnet_available_memory,
-        Memory::new(PageMap::default(), NumWasmPages::new(1 << 32)),
+        Memory::new(PageMap::new_for_testing(), NumWasmPages::new(1 << 32)),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );

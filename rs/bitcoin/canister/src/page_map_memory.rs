@@ -15,7 +15,7 @@ pub struct PageMapMemory {
 
 impl Default for PageMapMemory {
     fn default() -> Self {
-        Self::new(PageMap::default())
+        Self::new(PageMap::new())
     }
 }
 

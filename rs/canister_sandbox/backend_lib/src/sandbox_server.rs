@@ -568,9 +568,9 @@ mod tests {
             .unwrap();
         assert!(rep.0.is_ok());
 
-        let wasm_memory = PageMap::default();
+        let wasm_memory = PageMap::new_for_testing();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
-        let stable_memory = PageMap::default();
+        let stable_memory = PageMap::new_for_testing();
         let stable_memory_id = open_memory(&srv, &stable_memory, 0);
 
         // First time around, issue an update to increase the counter.
@@ -649,9 +649,9 @@ mod tests {
             .unwrap();
         assert!(rep.0.is_ok());
 
-        let mut wasm_memory = PageMap::default();
+        let mut wasm_memory = PageMap::new_for_testing();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
-        let stable_memory = PageMap::default();
+        let stable_memory = PageMap::new_for_testing();
         let stable_memory_id = open_memory(&srv, &stable_memory, 0);
 
         // Issue a write of bytes [1, 2, 3, 4] at address 16.
@@ -709,9 +709,9 @@ mod tests {
             .unwrap();
         assert!(rep.0.is_ok());
 
-        let wasm_memory = PageMap::default();
+        let wasm_memory = PageMap::new_for_testing();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
-        let stable_memory = PageMap::default();
+        let stable_memory = PageMap::new_for_testing();
         let stable_memory_id = open_memory(&srv, &stable_memory, 0);
 
         let next_wasm_memory_id = MemoryId::new();
@@ -794,9 +794,9 @@ mod tests {
             .unwrap();
         assert!(rep.0.is_ok());
 
-        let wasm_memory = PageMap::default();
+        let wasm_memory = PageMap::new_for_testing();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
-        let stable_memory = PageMap::default();
+        let stable_memory = PageMap::new_for_testing();
         let stable_memory_id = open_memory(&srv, &stable_memory, 0);
 
         // First time around, issue an update to increase the counter.
@@ -835,9 +835,9 @@ mod tests {
 
         // Now re-issue the same call but with the previous cache on.
 
-        let wasm_memory = PageMap::default();
+        let wasm_memory = PageMap::new_for_testing();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
-        let stable_memory = PageMap::default();
+        let stable_memory = PageMap::new_for_testing();
         let stable_memory_id = open_memory(&srv, &stable_memory, 0);
 
         // First time around, issue an update to increase the counter.
@@ -914,9 +914,9 @@ mod tests {
             .unwrap();
         assert!(rep.0.is_ok());
 
-        let wasm_memory = PageMap::default();
+        let wasm_memory = PageMap::new_for_testing();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
-        let mut stable_memory = PageMap::default();
+        let mut stable_memory = PageMap::new_for_testing();
         let stable_memory_id = open_memory(&srv, &stable_memory, 1);
 
         // Issue a write of bytes [1, 2, 3, 4] at address 16 in stable memory.
@@ -974,9 +974,9 @@ mod tests {
             .unwrap();
         assert!(rep.0.is_ok());
 
-        let wasm_memory = PageMap::default();
+        let wasm_memory = PageMap::new_for_testing();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
-        let stable_memory = PageMap::default();
+        let stable_memory = PageMap::new_for_testing();
         let stable_memory_id = open_memory(&srv, &stable_memory, 1);
 
         let next_wasm_memory_id = MemoryId::new();
@@ -1043,9 +1043,9 @@ mod tests {
             .unwrap();
         assert!(rep.0.is_ok());
 
-        let mut wasm_memory = PageMap::default();
+        let mut wasm_memory = PageMap::new_for_testing();
         let parent_wasm_memory_id = open_memory(&srv, &wasm_memory, 1);
-        let stable_memory = PageMap::default();
+        let stable_memory = PageMap::new_for_testing();
         let parent_stable_memory_id = open_memory(&srv, &stable_memory, 0);
 
         let child_wasm_memory_id = MemoryId::new();
@@ -1144,9 +1144,9 @@ mod tests {
             .unwrap();
         assert!(rep.0.is_ok());
 
-        let wasm_memory = PageMap::default();
+        let wasm_memory = PageMap::new_for_testing();
         let parent_wasm_memory_id = open_memory(&srv, &wasm_memory, 0);
-        let mut stable_memory = PageMap::default();
+        let mut stable_memory = PageMap::new_for_testing();
         let parent_stable_memory_id = open_memory(&srv, &stable_memory, 1);
 
         let child_wasm_memory_id = MemoryId::new();
@@ -1270,9 +1270,9 @@ mod tests {
             .unwrap();
         assert!(rep.0.is_ok(), "{:?}", rep);
 
-        let wasm_memory = PageMap::default();
+        let wasm_memory = PageMap::new_for_testing();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 1);
-        let stable_memory = PageMap::default();
+        let stable_memory = PageMap::new_for_testing();
         let stable_memory_id = open_memory(&srv, &stable_memory, 1);
 
         let child_wasm_memory_id = MemoryId::new();
@@ -1389,9 +1389,9 @@ mod tests {
             .unwrap();
         assert!(rep.0.is_ok());
 
-        let wasm_memory = PageMap::default();
+        let wasm_memory = PageMap::new_for_testing();
         let wasm_memory_id = open_memory(&srv, &wasm_memory, 1);
-        let stable_memory = PageMap::default();
+        let stable_memory = PageMap::new_for_testing();
         let stable_memory_id = open_memory(&srv, &stable_memory, 1);
 
         let child_wasm_memory_id = MemoryId::new();

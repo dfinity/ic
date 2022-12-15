@@ -287,7 +287,7 @@ pub enum MemoryRegion<'a> {
 ///
 /// `PageMap` is designed to be cheap to copy so that heap can be easily
 /// versioned.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct PageMap {
     /// The checkpoint that is used for all the pages that can not be found in
     /// the `page_delta`.
@@ -315,12 +315,32 @@ pub struct PageMap {
     page_allocator: PageAllocator,
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(clippy::new_without_default))]
 impl PageMap {
     /// Creates a new page map that always returns zeroed pages.
     pub fn new() -> Self {
         // Ensure that the hardcoded constant matches the OS page size.
         assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
-        Default::default()
+        Self {
+            checkpoint: Default::default(),
+            base_height: Default::default(),
+            page_delta: Default::default(),
+            round_delta: Default::default(),
+            has_stripped_round_deltas: false,
+            page_allocator: PageAllocator::new(),
+        }
+    }
+
+    /// Creates a new page map for testing purposes.
+    pub fn new_for_testing() -> Self {
+        Self {
+            checkpoint: Default::default(),
+            base_height: Default::default(),
+            page_delta: Default::default(),
+            round_delta: Default::default(),
+            has_stripped_round_deltas: false,
+            page_allocator: PageAllocator::new_for_testing(),
+        }
     }
 
     /// Creates a page map backed by the provided heap file.
@@ -334,7 +354,7 @@ impl PageMap {
             page_delta: Default::default(),
             round_delta: Default::default(),
             has_stripped_round_deltas: false,
-            page_allocator: Default::default(),
+            page_allocator: PageAllocator::new(),
         })
     }
 
@@ -474,7 +494,7 @@ impl PageMap {
             std::mem::take(&mut self.page_delta);
             std::mem::take(&mut self.round_delta);
         }
-        std::mem::take(&mut self.page_allocator);
+        self.page_allocator = PageAllocator::new();
     }
 
     /// Removes the round delta from this page map.
@@ -607,9 +627,9 @@ impl PageMap {
 
 impl From<&[u8]> for PageMap {
     fn from(bytes: &[u8]) -> Self {
-        let mut buf = Buffer::new(PageMap::default());
+        let mut buf = Buffer::new(PageMap::new());
         buf.write(bytes, 0);
-        let mut page_map = PageMap::default();
+        let mut page_map = PageMap::new();
         page_map.update(&buf.dirty_pages().collect::<Vec<_>>());
         page_map
     }
