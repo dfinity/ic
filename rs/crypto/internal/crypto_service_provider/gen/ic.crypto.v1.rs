@@ -10,10 +10,6 @@ pub struct SecretKeyV1 {
 /// SecretKeyStore stores secret keys.
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SecretKeyStore {
-    /// Mapping from KeyId to serialised CspSecretKey.
-    #[prost(map = "string, bytes", tag = "1")]
-    pub key_id_to_csp_secret_key:
-        ::std::collections::HashMap<::prost::alloc::string::String, ::prost::alloc::vec::Vec<u8>>,
     /// Version of SecretKeyStore
     #[prost(uint32, tag = "2")]
     pub version: u32,
