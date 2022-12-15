@@ -12,7 +12,7 @@ message SecretKeyV1 {
 // SecretKeyStore stores secret keys.
 message SecretKeyStore {
   // Mapping from KeyId to serialised CspSecretKey.
-  map<string, bytes> key_id_to_csp_secret_key = 1;
+  reserved "key_id_to_csp_secret_key"; reserved 1;
 
   // Version of SecretKeyStore
   uint32 version = 2;
