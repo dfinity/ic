@@ -578,7 +578,7 @@ system_test(
 symlink_dir(
     name = "ic-hs",
     targets = {
-        "@ic-hs//:bin/ic-ref-test": "ic-ref-test",
+        "@ic-hs//:build/ic-ref-test": "ic-ref-test",
         "@ic-hs//:test-data/universal-canister.wasm": "universal-canister.wasm",
     },
 )

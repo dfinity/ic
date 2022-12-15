@@ -15,13 +15,15 @@ use std::process::{Command, Stdio};
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 
+const REPLICATION_FACTOR: usize = 2;
+
 const EXCLUDED: &[&str] = &[
     // to start with something that is always false
     "(1 == 0)",
     // tECDSA is not enabled in the test yet
     "$0 ~ /tECDSA/",
-    // the replica does not yet check that the effective canister id is valid
-    "$0 ~ /wrong effective canister id/",
+    // the replica does not yet check that the effective canister id is valid in all cases
+    "$0 ~ /wrong effective canister id.in mangement call/",
     "$0 ~ /access denied two status to different canisters/",
     // the replica does not implement proofs of path non-existence
     "$0 ~ /non-existence proofs for non-existing request id/",
@@ -70,7 +72,7 @@ pub fn config_with_subnet_type(env: TestEnv, subnet_type: SubnetType) {
                     http_requests: true,
                     ..SubnetFeatures::default()
                 })
-                .add_nodes(1),
+                .add_nodes(REPLICATION_FACTOR),
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
@@ -127,7 +129,7 @@ pub fn test_subnet(env: TestEnv, subnet_type: SubnetType) {
         }
     };
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let httpbin = format!("https://[{webserver_ipv6}]:20443");
+    let httpbin = format!("[{webserver_ipv6}]:20443");
     let ic_ref_test_path = env
         .get_dependency_path("rs/tests/ic-hs/ic-ref-test")
         .into_os_string()
@@ -139,16 +141,23 @@ pub fn test_subnet(env: TestEnv, subnet_type: SubnetType) {
         }
         SubnetType::System => [EXCLUDED.to_vec(), vec!["$0 ~ /only_application/"]].concat(),
     };
-    with_endpoint(node, httpbin, ic_ref_test_path, log, excl);
+    with_endpoint(node, subnet_type, httpbin, ic_ref_test_path, log, excl);
 }
 
 pub fn with_endpoint(
     endpoint: IcNodeSnapshot,
+    subnet_type: SubnetType,
     httpbin: String,
     ic_ref_test_path: String,
     log: Logger,
     excluded_tests: Vec<&str>,
 ) {
+    let subnet_type_str = match subnet_type {
+        SubnetType::VerifiedApplication => "verified_application",
+        SubnetType::Application => "application",
+        SubnetType::System => "system",
+    };
+    let test_subnet_config = format!("({},{})", subnet_type_str, REPLICATION_FACTOR);
     let status = Command::new(ic_ref_test_path)
         .arg("-j12")
         .arg("--pattern")
@@ -157,6 +166,10 @@ pub fn with_endpoint(
         .arg(endpoint.get_public_url().to_string())
         .arg("--httpbin")
         .arg(&httpbin)
+        .arg("--ecid")
+        .arg(endpoint.effective_canister_id().to_string())
+        .arg("--test-subnet-config")
+        .arg(test_subnet_config)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()

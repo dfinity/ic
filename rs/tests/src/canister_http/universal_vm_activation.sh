@@ -3,6 +3,8 @@
 ############ Configures Universal VM to run httpbin service on HTTP and HTTPS ############
 ##########################################################################################
 
+# TODO(VER-2052): the docker image for httpbin has a smaller size and is built from source
+
 # 1 - read ipv6 and ipv4 of current node
 ipv6=""
 while true; do
@@ -32,15 +34,7 @@ done
 export ipv4
 echo "IPv4 is $ipv4"
 
-# 2 - setting up httpbin on port 80
-docker run \
-    --rm \
-    -d \
-    -p 20080:80 \
-    --name httpbin \
-    registry.gitlab.com/dfinity-lab/open/public-docker-registry/kennethreitz/httpbin
-
-# 3 - generate ipv6 service cert with root cert and key, using `minica`
+# 2 - generate ipv6 service cert with root cert and key, using `minica`
 mkdir certs
 cd certs
 cp /config/cert.pem minica.pem
@@ -56,17 +50,13 @@ docker run \
 mv $ipv6 ipv6 # updateing service certificate folder name so it can be fed to ssl-proxy container
 chmod -R 755 ipv6
 
-# 4 - initiate `ssl-proxy` container on port 443, attach it to `httpbin` container, supply the service
-# cert and key generated in step #2.
+# 3 - setting up httpbin on port 20443
+# TODO(VER-2052): the docker image for httpbin has a smaller size and is built from source
+
 docker run \
     --rm \
     -d \
-    --name ssl-proxy \
-    --link httpbin \
-    -p 20443:443 \
-    -v "$(pwd)/ipv6":/etc/nginx/certs \
-    -e TARGET_HOST="httpbin" \
-    -e TARGET_PORT="80" \
-    -e SSL_PORT="443" \
-    -e DOMAIN="[$ipv6]" \
-    registry.gitlab.com/dfinity-lab/open/public-docker-registry/fsouza/docker-ssl-proxy
+    -p 20443:80 \
+    -v "$(pwd)/ipv6":/certs \
+    --name httpbin \
+    registry.gitlab.com/dfinity-lab/open/public-docker-registry/mraszyk/httpbin
