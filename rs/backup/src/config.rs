@@ -1,7 +1,7 @@
 use ic_config::{ConfigSource, ConfigValidate};
 use ic_types::{ReplicaVersion, SubnetId};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{fs::File, io::Write, path::PathBuf};
 use url::Url;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,7 +46,8 @@ impl ConfigValidate for Config {
         if self.disk_threshold_warn > 100 {
             return Err("Disk threshhold warning value is > 100".to_string());
         }
-        if self.subnets.is_empty() {
+        // we accept no subnets in the config at the initial stage only
+        if self.subnets.is_empty() && self.slack_token != "<INSERT SLACK TOKEN>" {
             return Err("No subnet configured for backup!".to_string());
         }
         Ok(self)
@@ -59,5 +60,13 @@ impl Config {
             .load()
             .map_err(|e| e.to_string())?;
         Ok(config)
+    }
+    pub fn save_config(&self, config_path: PathBuf) -> Result<(), String> {
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|err| format!("Error serializing config: {:?}", err))?;
+        let mut file = File::create(config_path)
+            .map_err(|err| format!("Error creating config file: {:?}", err))?;
+        file.write_all(json.as_bytes())
+            .map_err(|err| format!("Error writing config: {:?}", err))
     }
 }
