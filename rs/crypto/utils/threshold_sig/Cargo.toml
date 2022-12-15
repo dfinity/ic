@@ -8,7 +8,6 @@ description = "Utils for threshold signatures"
 base64 = "0.11.0"
 ic-crypto-internal-threshold-sig-bls12381 = { path = "../../internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
-ic-interfaces = { path = "../../../interfaces"}
 ic-types = { path = "../../../types/types"}
 
 [dev-dependencies]
