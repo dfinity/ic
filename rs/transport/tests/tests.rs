@@ -1,9 +1,8 @@
 mod common;
 
 use common::{
-    create_mock_event_handler, get_free_localhost_port, setup_peer_up_ack_event_handler,
-    setup_test_peer, temp_crypto_component_with_tls_keys_in_registry, RegistryAndDataProvider,
-    REG_V1,
+    create_mock_event_handler, get_free_localhost_port, setup_test_peer,
+    temp_crypto_component_with_tls_keys_in_registry, RegistryAndDataProvider, REG_V1,
 };
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
@@ -623,4 +622,23 @@ fn trigger_and_test_send_queue_full(
     assert_eq!(res2, Err(TransportError::SendQueueFull(normal_msg)));
 
     (peer_a, _peer_b, messages_sent)
+}
+
+fn setup_peer_up_ack_event_handler(
+    rt: tokio::runtime::Handle,
+    connected: Sender<bool>,
+) -> TransportEventHandler {
+    let (event_handler, mut handle) = create_mock_event_handler();
+    rt.spawn(async move {
+        while let Some(req) = handle.next_request().await {
+            let (event, rsp) = req;
+            if let TransportEvent::PeerUp(_) = event {
+                connected
+                    .try_send(true)
+                    .expect("Channel capacity should not be reached");
+            }
+            rsp.send_response(());
+        }
+    });
+    event_handler
 }

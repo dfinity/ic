@@ -15,7 +15,6 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::net::TcpSocket;
-use tokio::sync::mpsc::Sender;
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
 
@@ -129,23 +128,4 @@ pub fn create_mock_event_handler() -> (TransportEventHandler, Handle<TransportEv
         }
     });
     (BoxCloneService::new(infallible_service), handle)
-}
-
-pub(crate) fn setup_peer_up_ack_event_handler(
-    rt: tokio::runtime::Handle,
-    connected: Sender<bool>,
-) -> TransportEventHandler {
-    let (event_handler, mut handle) = create_mock_event_handler();
-    rt.spawn(async move {
-        while let Some(req) = handle.next_request().await {
-            let (event, rsp) = req;
-            if let TransportEvent::PeerUp(_) = event {
-                connected
-                    .try_send(true)
-                    .expect("Channel capacity should not be reached");
-            }
-            rsp.send_response(());
-        }
-    });
-    event_handler
 }
