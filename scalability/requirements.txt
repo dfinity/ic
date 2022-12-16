@@ -14,3 +14,4 @@ toml
 git+https://github.com/rocklabs-io/ic-py@383403a50ff3d9664655fb23af2db12e98334c54#egg=ic-py
 uuid
 pydot
+matplotlib==3.6.2
