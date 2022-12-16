@@ -5,7 +5,6 @@ use ic_artifact_pool::{consensus_pool, dkg_pool, ecdsa_pool};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::consensus::pool_reader::PoolReader;
 use ic_consensus::{certification::CertifierImpl, consensus::ConsensusImpl, dkg};
-use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
@@ -101,17 +100,13 @@ fn consensus_produces_expected_batches() {
             replica_config.subnet_id,
             vec![(1, SubnetRecordBuilder::from(&[node_test_id(0)]).build())],
         );
-        let summary = ic_consensus::dkg::make_genesis_summary(
-            &*registry_client,
-            replica_config.subnet_id,
-            None,
-        );
+        let summary = dkg::make_genesis_summary(&*registry_client, replica_config.subnet_id, None);
         let consensus_pool = Arc::new(RwLock::new(
             consensus_pool::ConsensusPoolImpl::new_from_cup_without_bytes(
                 subnet_id,
                 make_genesis(summary),
                 pool_config.clone(),
-                ic_metrics::MetricsRegistry::new(),
+                MetricsRegistry::new(),
                 no_op_logger(),
             ),
         ));
@@ -179,11 +174,9 @@ fn consensus_produces_expected_batches() {
             metrics_registry,
         );
         driver.step(time.as_ref()); // this stops before notary timeout expires after making 1st block
-        time.set_time(time.get_relative_time() + Duration::from_millis(2000))
-            .unwrap();
+        time.advance_time(Duration::from_millis(2000));
         driver.step(time.as_ref()); // this stops before notary timeout expires after making 2nd block
-        time.set_time(time.get_relative_time() + Duration::from_millis(2000))
-            .unwrap();
+        time.advance_time(Duration::from_millis(2000));
         driver.step(time.as_ref()); // this stops before notary timeout expires after making 3rd block
         let batches = router.batches.read().unwrap().clone();
         *router.batches.write().unwrap() = Vec::new();
