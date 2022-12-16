@@ -106,10 +106,14 @@ class Es:
             if size > 0:
                 eprint(f"Found index {index} with {size} documents tagged {tag}")
                 result.append(index)
-                assert_with_trace(tag not in self.stat["raw_logs"], f"duplicate tag {tag}")
                 # Save statistics:
                 # total number of raw log messages sent to Elasticsearch
-                self.stat["raw_logs"][tag] = size
+                if tag in self.stat["raw_logs"]:
+                    # Multiple ES indices containing logs tagged with this group
+                    # This happens, e.g., when a test spans beyond one date
+                    self.stat["raw_logs"][tag] += size
+                else:
+                    self.stat["raw_logs"][tag] = size
 
         return result
 
@@ -180,7 +184,7 @@ class Es:
                 # Save statistics:
                 # total number of raw log messages sent to Elasticsearch
                 tag = f"mainnet--{index}"
-                assert_with_trace(tag not in self.stat["raw_logs"], "duplicate tag")
+                assert_with_trace(tag not in self.stat["raw_logs"], f"duplicate mainnet index {index}")
                 self.stat["raw_logs"][tag] = size
             else:
                 msg = f"WARNING: MAINNET index {index} is empty"

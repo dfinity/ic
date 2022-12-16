@@ -369,7 +369,7 @@ class Pipeline:
             len(groups) > 0
         ), "check if system tests are running via https://grafana.dfinity.systems/d/uwEFG_yGk/testing-dashboard"
 
-        eprint("Starting policy monitoring ...")
+        eprint(f"Starting policy monitoring for groups {', '.join(groups.keys())} ...")
 
         # Ensure that groups are processed in a deterministic order
         det_groups = list(map(lambda x: x[1], sorted(groups.items(), key=lambda x: x[0])))

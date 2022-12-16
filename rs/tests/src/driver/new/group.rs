@@ -1,10 +1,7 @@
 #![allow(dead_code)]
 #[rustfmt::skip]
 
-use std::{
-    collections::{btree_map::Entry, BTreeMap},
-    path::PathBuf,
-};
+use std::path::PathBuf;
 
 use crate::driver::{
     new::{
@@ -31,13 +28,12 @@ use tokio::runtime::{Handle, Runtime};
 
 use crate::driver::new::{subprocess_task::SubprocessTask, task::Task, timeout::TimeoutTask};
 use std::{
+    iter::once,
     sync::Arc,
     time::{Duration, SystemTime},
 };
 
 use slog::{debug, info, Logger};
-
-const PLAN_STRATEGY_FLAT: bool = true;
 
 #[derive(Parser, Debug)]
 pub struct CliArgs {
@@ -54,9 +50,6 @@ impl CliArgs {
         Ok(self)
     }
 }
-
-/// A shortcut to represent the type of an event subscriber
-pub type Subs = Arc<dyn BroadcastingEventSubscriberFactory>;
 
 #[derive(clap::Args, Clone, Debug)]
 pub struct GroupDir {
@@ -90,9 +83,203 @@ pub enum SystemTestsSubcommand {
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
 
+/// A shortcut to represent the type of an event subscriber
+pub type Subs = Arc<dyn BroadcastingEventSubscriberFactory>;
+
+pub struct ComposeContext {
+    group_ctx: GroupContext,
+    empty_task_counter: usize,
+    subs: Subs,
+    logger: Logger,
+    timeout_per_test: Duration,
+}
+
+fn subproc(
+    rh: &Handle,
+    task_name: &str,
+    target_fn: impl SubprocessFn,
+    ctx: &mut ComposeContext,
+) -> SubprocessTask {
+    debug!(ctx.group_ctx.log(), "subproc(task_name={})", &task_name);
+    SubprocessTask::new(
+        task_name.to_string(),
+        rh.clone(),
+        target_fn,
+        ctx.group_ctx.clone(),
+        ctx.subs.clone(),
+    )
+}
+
+fn timed(
+    rh: &Handle,
+    plan: Plan<Box<dyn Task>>,
+    timeout: Duration,
+    ctx: &mut ComposeContext,
+) -> Plan<Box<dyn Task>> {
+    debug!(
+        ctx.logger,
+        "timed(plan={:?}, timeout={:?})", &plan, &timeout
+    );
+    let timeout_task = TimeoutTask::new(
+        rh.clone(),
+        timeout,
+        ctx.subs.clone(),
+        format!("timeout_of_{}", plan.root_task_id()),
+    );
+    Plan::Supervised {
+        supervisor: Box::from(timeout_task) as Box<dyn Task>,
+        ordering: EvalOrder::Sequential, // the order is irrelevant since there is only one child
+        children: vec![plan],
+    }
+}
+
+fn compose(
+    root_task: Option<Box<dyn Task>>,
+    ordering: EvalOrder,
+    children: Vec<Plan<Box<dyn Task>>>,
+    ctx: &mut ComposeContext,
+) -> Plan<Box<dyn Task>> {
+    debug!(
+        ctx.logger,
+        "compose(root={:?}, ordering={:?}, children={:?})", &root_task, &ordering, &children
+    );
+    let root_task = match root_task {
+        Some(task) => task,
+        None => {
+            let empty_task = Box::from(EmptyTask::new(
+                ctx.subs.clone(),
+                format!("empty_task_{}", ctx.empty_task_counter),
+            ));
+            ctx.empty_task_counter += 1;
+            empty_task
+        }
+    };
+    Plan::Supervised {
+        supervisor: root_task,
+        ordering,
+        children,
+    }
+}
+
+fn compose_par(
+    root_task: Option<Box<dyn Task>>,
+    first: Plan<Box<dyn Task>>,
+    second: Plan<Box<dyn Task>>,
+    ctx: &mut ComposeContext,
+) -> Plan<Box<dyn Task>> {
+    compose(root_task, EvalOrder::Parallel, vec![first, second], ctx)
+}
+
+fn compose_seq(
+    root_task: Option<Box<dyn Task>>,
+    first: Plan<Box<dyn Task>>,
+    second: Plan<Box<dyn Task>>,
+    ctx: &mut ComposeContext,
+) -> Plan<Box<dyn Task>> {
+    compose(root_task, EvalOrder::Sequential, vec![first, second], ctx)
+}
+
+fn get_setup_env(gctx: GroupContext) -> TestEnv {
+    info!(gctx.log(), "get_setup_env()");
+    let process_ctx = ProcessContext::new(gctx, "setup".to_string()).unwrap();
+    process_ctx.group_context.create_setup_env().unwrap()
+}
+
+fn get_env(gctx: GroupContext, task_id: String) -> TestEnv {
+    info!(gctx.log(), "get_env(task_id={})", &task_id);
+    let process_ctx = ProcessContext::new(gctx, task_id.clone()).unwrap();
+    process_ctx.group_context.create_test_env(&task_id).unwrap()
+}
+
+pub enum SystemTestSubGroup {
+    Multiple {
+        tasks: Vec<SystemTestSubGroup>,
+        ordering: EvalOrder,
+    },
+    Singleton {
+        task_fn: Box<dyn SysTestFn>,
+        task_name: String,
+    },
+}
+
+impl Default for SystemTestSubGroup {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SystemTestSubGroup {
+    pub fn new() -> Self {
+        Self::Multiple {
+            tasks: vec![],
+            ordering: EvalOrder::Parallel,
+        }
+    }
+
+    pub fn add_test(self, test: TestFunction) -> Self {
+        let task_name = String::from(test.name());
+        let singleton = Self::Singleton {
+            task_fn: test.f(),
+            task_name,
+        };
+        match self {
+            Self::Multiple { tasks, .. } if tasks.is_empty() => {
+                // This case is only to support the builder pattern
+                singleton
+            }
+            Self::Multiple { tasks, ordering } => Self::Multiple {
+                tasks: tasks.into_iter().chain(once(singleton)).collect(),
+                ordering,
+            },
+            sub_group @ Self::Singleton { .. } => {
+                Self::Multiple {
+                    tasks: once(sub_group).chain(once(singleton)).collect(),
+                    ordering: EvalOrder::Parallel, // TOOD: generalize this
+                }
+            }
+        }
+    }
+
+    pub fn into_plan(self, rh: &Handle, ctx: &mut ComposeContext) -> Plan<Box<dyn Task>> {
+        match self {
+            SystemTestSubGroup::Multiple { tasks, ordering } => compose(
+                None,
+                ordering,
+                tasks
+                    .into_iter()
+                    .map(|sub_group| sub_group.into_plan(rh, ctx))
+                    .collect(),
+                ctx,
+            ),
+            SystemTestSubGroup::Singleton { task_fn, task_name } => {
+                let logger = ctx.logger.clone();
+                let task_name = task_name;
+                let closure = {
+                    let task_name = task_name.clone();
+                    let group_ctx = ctx.group_ctx.clone();
+                    move || {
+                        debug!(logger, ">>> task_fn({})", task_name);
+                        let env = get_env(group_ctx, task_name);
+                        task_fn(env)
+                    }
+                };
+                let task = subproc(rh, &task_name, closure, ctx);
+                timed(
+                    rh,
+                    Plan::Leaf {
+                        task: Box::from(task),
+                    },
+                    ctx.timeout_per_test,
+                    ctx,
+                )
+            }
+        }
+    }
+}
+
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
-    tests: BTreeMap<String, Box<dyn SysTestFn>>,
+    tests: Vec<SystemTestSubGroup>,
     timeout_per_test: Option<Duration>,
 }
 
@@ -129,14 +316,30 @@ impl SystemTestGroup {
     }
 
     pub fn add_test(mut self, test: TestFunction) -> Self {
-        let test_name = String::from(test.name());
-
-        if let e @ Entry::Vacant(_) = self.tests.entry(test_name.clone()) {
-            e.or_insert_with(|| Box::new(test.f()));
-        } else {
-            panic!("redeclared test with name '{}'", test_name)
-        }
+        let task_name = String::from(test.name());
+        self.tests.push(SystemTestSubGroup::Singleton {
+            task_fn: test.f(),
+            task_name,
+        });
         self
+    }
+
+    fn add_group(mut self, sub_group: SystemTestSubGroup, ordering: EvalOrder) -> Self {
+        self.tests.push(match sub_group {
+            SystemTestSubGroup::Multiple { tasks, .. } => {
+                SystemTestSubGroup::Multiple { tasks, ordering }
+            }
+            _ => sub_group,
+        });
+        self
+    }
+
+    pub fn add_parallel(self, sub_group: SystemTestSubGroup) -> Self {
+        self.add_group(sub_group, EvalOrder::Parallel)
+    }
+
+    pub fn add_sequential(self, sub_group: SystemTestSubGroup) -> Self {
+        self.add_group(sub_group, EvalOrder::Sequential)
     }
 
     pub fn with_timeout_per_test(mut self, t: Duration) -> Self {
@@ -152,111 +355,17 @@ impl SystemTestGroup {
     ) -> Result<Plan<Box<dyn Task>>> {
         info!(group_ctx.log(), "SystemTestGroup.make_plan");
 
-        let timeout_per_test = self.timeout_per_test.unwrap_or(DEFAULT_TIMEOUT_PER_TEST);
-
-        struct ComposeContext {
-            group_ctx: GroupContext,
-            empty_root_task_counter: usize,
-            subs: Subs,
-            logger: Logger,
-        }
-
         let mut compose_ctx = ComposeContext {
             group_ctx: group_ctx.clone(),
-            empty_root_task_counter: 0,
+            empty_task_counter: 0,
             subs: subs.clone(),
             logger: group_ctx.logger().clone(),
+            timeout_per_test: self.timeout_per_test.unwrap_or(DEFAULT_TIMEOUT_PER_TEST),
         };
-
-        fn subproc(
-            rh: &Handle,
-            task_name: &str,
-            target_fn: impl SubprocessFn,
-            ctx: &mut ComposeContext,
-        ) -> SubprocessTask {
-            debug!(ctx.group_ctx.log(), "SystemTestGroup.make_plan.subproc");
-            SubprocessTask::new(
-                task_name.to_string(),
-                rh.clone(),
-                target_fn,
-                ctx.group_ctx.clone(),
-                ctx.subs.clone(),
-            )
-        }
-
-        fn timed(
-            rh: &Handle,
-            plan: Plan<Box<dyn Task>>,
-            timeout: Duration,
-            ctx: &mut ComposeContext,
-        ) -> Plan<Box<dyn Task>> {
-            debug!(ctx.logger, "SystemTestGroup.make_plan.timed");
-            let timeout_task = TimeoutTask::new(
-                rh.clone(),
-                timeout,
-                ctx.subs.clone(),
-                format!("timeout_of_{}", plan.root_task_id()),
-            );
-            Plan::Supervised {
-                supervisor: Box::from(timeout_task) as Box<dyn Task>,
-                ordering: EvalOrder::Sequential, // the order is irrelevant since there is only one child
-                children: vec![plan],
-            }
-        }
 
         // The ID of the root task is needed outside this function for awaiting when the plan execution finishes.
         let root_task =
             Box::from(EmptyTask::new(subs.clone(), ROOT_TASK_ID.to_string())) as Box<dyn Task>;
-
-        fn compose(
-            root_task: Option<Box<dyn Task>>,
-            ordering: EvalOrder,
-            children: Vec<Plan<Box<dyn Task>>>,
-            ctx: &mut ComposeContext,
-        ) -> Plan<Box<dyn Task>> {
-            let root_task = match root_task {
-                Some(task) => task,
-                None => {
-                    let empty_root_task = Box::from(EmptyTask::new(
-                        ctx.subs.clone(),
-                        format!("empty_root_task_{}", ctx.empty_root_task_counter),
-                    ));
-                    ctx.empty_root_task_counter += 1;
-                    empty_root_task
-                }
-            };
-            Plan::Supervised {
-                supervisor: root_task,
-                ordering,
-                children,
-            }
-        }
-
-        fn compose_par(
-            root_task: Option<Box<dyn Task>>,
-            first: Plan<Box<dyn Task>>,
-            second: Plan<Box<dyn Task>>,
-            ctx: &mut ComposeContext,
-        ) -> Plan<Box<dyn Task>> {
-            debug!(ctx.logger, "SystemTestGroup.make_plan.compose_par");
-            compose(root_task, EvalOrder::Parallel, vec![first, second], ctx)
-        }
-
-        fn compose_seq(
-            root_task: Option<Box<dyn Task>>,
-            first: Plan<Box<dyn Task>>,
-            second: Plan<Box<dyn Task>>,
-            ctx: &mut ComposeContext,
-        ) -> Plan<Box<dyn Task>> {
-            debug!(ctx.logger, "SystemTestGroup.make_plan.compose_seq");
-            compose(root_task, EvalOrder::Sequential, vec![first, second], ctx)
-        }
-
-        fn get_env(gctx: GroupContext, task_id: String) -> TestEnv {
-            info!(gctx.log(), "SystemTestGroup.make_plan.get_env");
-            let process_ctx = ProcessContext::new(gctx, task_id).unwrap();
-            process_ctx.group_context.create_setup_env().unwrap()
-        }
 
         let setup_plan = {
             let logger = group_ctx.logger().clone();
@@ -268,7 +377,7 @@ impl SystemTestGroup {
                 task_name,
                 move || {
                     debug!(logger, ">>> setup_fn");
-                    let env = get_env(group_ctx, "setup".to_string());
+                    let env = get_setup_env(group_ctx);
                     setup_fn(env)
                 },
                 &mut compose_ctx,
@@ -278,79 +387,31 @@ impl SystemTestGroup {
                 Plan::Leaf {
                     task: Box::from(setup_task),
                 },
-                timeout_per_test,
+                compose_ctx.timeout_per_test,
                 &mut compose_ctx,
             )
         };
 
-        let plan = if PLAN_STRATEGY_FLAT {
-            compose(
-                Some(root_task),
-                EvalOrder::Sequential,
-                std::iter::once(setup_plan)
-                    .chain(self.tests.into_iter().map(|(task_name, target_fn)| {
-                        let logger = group_ctx.logger().clone();
-                        let task_name = task_name;
-                        let closure = {
-                            let task_name = task_name.clone();
-                            let group_ctx = group_ctx.clone();
-                            move || {
-                                debug!(logger, ">>> task_fn({})", task_name);
-                                let env = get_env(group_ctx, task_name);
-                                target_fn(env)
-                            }
-                        };
-                        let task = subproc(rh, &task_name, closure, &mut compose_ctx);
-                        timed(
-                            rh,
-                            Plan::Leaf {
-                                task: Box::from(task),
-                            },
-                            timeout_per_test,
-                            &mut compose_ctx,
-                        )
-                    }))
-                    .collect::<Vec<Plan<Box<dyn Task>>>>(),
-                &mut compose_ctx,
-            )
-        } else {
-            let group_ctx = group_ctx.clone();
-            let plan = self
-                .tests
-                .into_iter()
-                .fold(setup_plan, |p, (task_name, target_fn)| {
-                    let closure = {
-                        let logger = group_ctx.logger().clone();
-                        let group_ctx = group_ctx.clone();
-                        let task_name = task_name.clone();
-                        move || {
-                            debug!(logger, ">>> task_fn({})", task_name);
-                            let env = get_env(group_ctx, task_name);
-                            target_fn(env)
-                        }
-                    };
-                    let task = subproc(rh, &task_name, closure, &mut compose_ctx);
-                    let new_plan = timed(
-                        rh,
-                        Plan::Leaf {
-                            task: Box::from(task),
-                        },
-                        timeout_per_test,
-                        &mut compose_ctx,
-                    );
-                    compose_seq(None, p, new_plan, &mut compose_ctx)
-                });
-            Plan::Supervised {
-                supervisor: root_task,
-                ordering: EvalOrder::Sequential, // the order is irrelevant since there is only one child
-                children: vec![plan],
-            }
-        };
-
+        let plan = compose(
+            Some(root_task),
+            EvalOrder::Sequential,
+            std::iter::once(setup_plan)
+                .chain(
+                    self.tests
+                        .into_iter()
+                        .map(|sub_group| sub_group.into_plan(rh, &mut compose_ctx)),
+                )
+                .collect::<Vec<Plan<Box<dyn Task>>>>(),
+            &mut compose_ctx,
+        );
         Ok(plan)
     }
 
     pub fn execute_from_args(self) -> Result<()> {
+        // TODO: check preconditions:
+        // 1. there exists at least one test after setup
+        // 2. all sub-groups are non-empty
+
         // Step 0
         let args = CliArgs::parse().validate()?;
 
@@ -377,9 +438,19 @@ impl SystemTestGroup {
 
         // Step 6 -- create a task table, consuming the plan
         let mut table = TaskTable::new();
+        let mut duplicate_tasks: Option<String> = None;
         plan.flatten().into_iter().for_each(|task| {
-            table.insert(task.task_id(), task);
+            let tid = task.task_id();
+            if table.insert(tid.clone(), task).is_some() {
+                duplicate_tasks = Some(tid)
+            }
         });
+        if let Some(duplicate_task_id) = duplicate_tasks {
+            bail!(format!(
+                "test function {} specified more than once",
+                duplicate_task_id
+            ))
+        }
         info!(group_ctx.log(), "Generated task table: {:?}", table);
 
         // Step 7 -- handle the sub-command
@@ -449,7 +520,7 @@ impl SystemTestGroup {
                         group_ctx.log(),
                         "{} (exit code 1 as there were {} failure(s))", msg, report.num_failures
                     );
-                    bail!(format!("{} tests failed", report.num_failures))
+                    bail!(format!("{} test(s) failed", report.num_failures))
                 } else {
                     info!(
                         group_ctx.log(),
