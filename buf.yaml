@@ -20,6 +20,3 @@ lint:
 breaking:
   use:
     - WIRE
-
-  ignore:
-    - ic_ledger/pb/v1/types.proto
