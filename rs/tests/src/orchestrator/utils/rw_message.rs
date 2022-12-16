@@ -216,7 +216,20 @@ pub(crate) fn install_nns_and_message_canisters(topology: TopologySnapshot) {
 
 fn check_or_init_ic(topology: TopologySnapshot, install_canisters: bool) {
     let logger = topology.test_env().logger();
-
+    // Perfrom IC checks prior to canister installation.
+    // 1. Check that all subnet nodes are healthy.
+    topology.subnets().for_each(|subnet| {
+        subnet.nodes().for_each(|node| {
+            node.await_status_is_healthy()
+                .expect("Node's status endpoint didn't report healthy")
+        })
+    });
+    // 2. Check that all unassigned nodes (if any) are healthy.
+    topology.unassigned_nodes().for_each(|node| {
+        node.await_can_login_as_admin_via_ssh()
+            .expect("Timeout while waiting for all unassigned nodes to be healthy");
+    });
+    info!(logger, "IC is healthy and ready.");
     if install_canisters {
         topology
             .root_subnet()
@@ -227,13 +240,9 @@ fn check_or_init_ic(topology: TopologySnapshot, install_canisters: bool) {
             .expect("NNS canisters not installed");
         info!(logger, "NNS canisters are installed.");
     }
-
     topology.subnets().for_each(|subnet| {
         if subnet.subnet_id != topology.root_subnet_id() {
             subnet.nodes().for_each(|node| {
-                // make sure node is healty
-                node.await_status_is_healthy()
-                    .expect("Timeout while waiting for all subnets to be healthy");
                 // make sure the node is participating in a subnet
                 if install_canisters {
                     cert_state_makes_progress_with_retries(
@@ -247,10 +256,4 @@ fn check_or_init_ic(topology: TopologySnapshot, install_canisters: bool) {
             });
         }
     });
-
-    topology.unassigned_nodes().for_each(|node| {
-        node.await_can_login_as_admin_via_ssh()
-            .expect("Timeout while waiting for all unassigned nodes to be healthy");
-    });
-    info!(logger, "IC is healthy and ready.");
 }
