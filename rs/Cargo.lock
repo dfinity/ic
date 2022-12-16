@@ -5900,68 +5900,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-fondue"
-version = "0.8.0"
-dependencies = [
- "anyhow",
- "bincode",
- "canister-test",
- "chrono",
- "crossbeam-channel",
- "either",
- "flate2",
- "fs_extra",
- "futures",
- "hex",
- "humantime 2.1.0",
- "ic-agent",
- "ic-base-types",
- "ic-config",
- "ic-crypto-sha",
- "ic-interfaces-registry",
- "ic-nns-init",
- "ic-prep",
- "ic-protobuf",
- "ic-registry-client",
- "ic-registry-client-helpers",
- "ic-registry-local-registry",
- "ic-registry-provisional-whitelist",
- "ic-registry-routing-table",
- "ic-registry-subnet-features",
- "ic-registry-subnet-type",
- "ic-replica",
- "ic-test-identity",
- "ic-test-utilities",
- "ic-types",
- "ic-utils 0.8.0",
- "lazy_static",
- "libc",
- "mio 0.7.14",
- "nix 0.23.1",
- "nonblock",
- "pico-args 0.3.4",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
- "regex",
- "reqwest",
- "retain_mut",
- "serde",
- "serde_cbor",
- "serde_json",
- "serde_millis",
- "signal-hook 0.3.14",
- "signal-hook-mio",
- "slog",
- "slog-async",
- "slog-term",
- "ssh2",
- "tempfile",
- "thiserror",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "ic-http-endpoints-metrics"
 version = "0.8.0"
 dependencies = [
@@ -9677,7 +9615,7 @@ dependencies = [
  "itertools",
  "lalrpop-util",
  "petgraph",
- "pico-args 0.4.2",
+ "pico-args",
  "regex",
  "regex-syntax",
  "string_cache",
@@ -10456,23 +10394,10 @@ dependencies = [
  "kernel32-sys",
  "libc",
  "log",
- "miow 0.2.2",
+ "miow",
  "net2",
  "slab",
  "winapi 0.2.8",
-]
-
-[[package]]
-name = "mio"
-version = "0.7.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8067b404fe97c70829f082dec8bcf4f71225d7eaea1d8645349cb76fa06205cc"
-dependencies = [
- "libc",
- "log",
- "miow 0.3.7",
- "ntapi",
- "winapi 0.3.9",
 ]
 
 [[package]]
@@ -10509,15 +10434,6 @@ dependencies = [
  "net2",
  "winapi 0.2.8",
  "ws2_32-sys",
-]
-
-[[package]]
-name = "miow"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9f1c5b025cda876f66ef43a113f91ebc9f4ccef34843000e0adf6ebbab84e21"
-dependencies = [
- "winapi 0.3.9",
 ]
 
 [[package]]
@@ -10766,15 +10682,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nonblock"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "796141c8358fc4ce8cbe66b71b57c52eb510ee13289695e43db6843d6f202173"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "normalize-line-endings"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10795,15 +10702,6 @@ dependencies = [
  "mio 0.6.23",
  "mio-extras",
  "walkdir",
- "winapi 0.3.9",
-]
-
-[[package]]
-name = "ntapi"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c28774a7fd2fbb4f0babd8237ce554b73af68021b5f695a3cebd6c59bac0980f"
-dependencies = [
  "winapi 0.3.9",
 ]
 
@@ -11558,12 +11456,6 @@ checksum = "b6796ad771acdc0123d2a88dc428b5e38ef24456743ddb1744ed628f9815c096"
 dependencies = [
  "siphasher",
 ]
-
-[[package]]
-name = "pico-args"
-version = "0.3.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28b9b4df73455c861d7cbf8be42f01d3b373ed7f02e378d55fa84eafc6f638b1"
 
 [[package]]
 name = "pico-args"
@@ -12622,12 +12514,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "retain_mut"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4389f1d5789befaf6029ebd9f7dac4af7f7e3d61b69d4f30e2ac02b57e7712b0"
-
-[[package]]
 name = "rfc6979"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13413,7 +13299,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29ad2e15f37ec9a6cc544097b78a1ec90001e9f71b81338ca39f430adaca99af"
 dependencies = [
  "libc",
- "mio 0.7.14",
  "mio 0.8.5",
  "signal-hook 0.3.14",
 ]
@@ -14134,7 +14019,6 @@ dependencies = [
  "ic-crypto-sha",
  "ic-crypto-tree-hash",
  "ic-cup-explorer",
- "ic-fondue",
  "ic-http-utils",
  "ic-ic00-types",
  "ic-icrc1",

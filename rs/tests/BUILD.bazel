@@ -24,7 +24,6 @@ DEPENDENCIES = [
     "//rs/crypto/tree_hash",
     "//rs/cup_explorer",
     "//rs/http_utils",
-    "//rs/ic_fondue",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/nervous_system/common",

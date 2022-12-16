@@ -296,7 +296,6 @@
         - 'rs/tests/bin/*'
         - 'rs/tests/tests_e2e/*'
         - 'rs/tests/src/driver/*'
-        - 'rs/ic_fondue/*'
         - '/ic/gitlab-ci/src/test_results/*'
         - '/ic/gitlab-ci/src/notify_slack/*'
     - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'

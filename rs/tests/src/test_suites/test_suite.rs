@@ -1,11 +1,10 @@
 use std::time::Duration;
 
-use ic_fondue::slack::Alertable;
 use tokio::time::sleep;
 
 use crate::{
     driver::{
-        pot_dsl::{par, pot_with_setup, suite, sys_t, Suite},
+        pot_dsl::{par, pot_with_setup, suite, sys_t, Alertable, Suite},
         test_env::TestEnv,
     },
     util::block_on,

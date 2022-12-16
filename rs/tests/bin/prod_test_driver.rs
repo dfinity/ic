@@ -1,9 +1,4 @@
 use clap::Parser;
-use ic_fondue::{
-    pot::execution::TestResult,
-    result::{propagate_children_results_to_parents, TestResultNode},
-    slack::{Alertable, SlackAlert},
-};
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
     btc_integration, canister_http, ckbtc, consensus, driver::driver_setup::initialize_env,

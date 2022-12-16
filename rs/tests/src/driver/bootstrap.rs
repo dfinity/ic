@@ -4,14 +4,7 @@ use std::convert::Into;
 use std::net::IpAddr;
 use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, process::Command};
 
-use crate::driver::farm::FarmResult;
-use crate::driver::ic::{InternetComputer, Node};
-use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::{HasDependencies, HasIcDependencies, NodesInfo};
 use ic_base_types::NodeId;
-use ic_fondue::ic_instance::{
-    node_software_version::NodeSoftwareVersion, port_allocator::AddrType,
-};
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
     node::{InitializedNode, NodeConfiguration, NodeIndex},
@@ -25,9 +18,18 @@ use std::io::Write;
 use std::thread::{self, JoinHandle};
 use url::Url;
 
-use super::config::NODES_INFO;
-use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
-use super::resource::AllocatedVm;
+use crate::driver::{
+    config::NODES_INFO,
+    driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
+    farm::Farm,
+    farm::FarmResult,
+    ic::{InternetComputer, Node},
+    node_software_version::NodeSoftwareVersion,
+    port_allocator::AddrType,
+    resource::AllocatedVm,
+    test_env::{HasIcPrepDir, TestEnv},
+    test_env_api::{HasDependencies, HasIcDependencies, NodesInfo},
+};
 
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
@@ -169,8 +171,6 @@ pub fn init_ic(
 
     Ok(ic_config.initialize()?)
 }
-
-use crate::driver::farm::Farm;
 
 pub fn setup_and_start_vms(
     initialized_ic: &InitializedIc,

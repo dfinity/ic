@@ -4,7 +4,11 @@ use crate::driver::{
     config,
     driver_setup::DriverContext,
     farm::{Farm, GroupSpec},
-    pot_dsl::{ExecutionMode, Pot, Suite, Test, TestPath, TestSet},
+    pot_dsl::{
+        ExecutionMode, Pot, Suite, Test, TestPath, TestResult, TestResultNode, TestSet,
+        TestSuiteContract,
+    },
+    prometheus_vm::HasPrometheus,
     test_env::{HasTestPath, TestEnv, TestEnvAttribute},
     test_env_api::HasIcDependencies,
     test_setup::GroupSetup,
@@ -12,11 +16,8 @@ use crate::driver::{
 use anyhow::{bail, Result};
 use crossbeam_channel::{bounded, Receiver, RecvTimeoutError, Sender};
 use crossbeam_utils::sync::WaitGroup;
-use ic_fondue::result::*;
 use rayon::{ScopeFifo, ThreadPoolBuilder};
 use slog::{error, info, warn, Logger};
-
-use super::prometheus_vm::HasPrometheus;
 
 // This function has a `dry-run` execution concept for the test suite.
 // Namely, it generates a test suite contract, where all tests, pots, and the suite itself are labeled

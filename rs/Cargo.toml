@@ -99,7 +99,6 @@ members = [
   "http_endpoints/public",
   "http_endpoints/metrics",
   "http_utils",
-  "ic_fondue",
   "ic_p8s_service_discovery",
   "ic_p8s_service_discovery/log",
   "identity",
