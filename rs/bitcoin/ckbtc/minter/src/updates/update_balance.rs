@@ -1,6 +1,4 @@
-use crate::eventlog::Event;
 use crate::logs::P1;
-use crate::storage::record_event;
 use candid::{CandidType, Deserialize, Nat};
 use ic_base_types::PrincipalId;
 use ic_btc_types::GetUtxosError;
@@ -129,18 +127,13 @@ pub async fn update_balance(
         new_utxos.len()
     );
 
-    let block_index: u64 = mint(satoshis_to_mint, caller_account.clone()).await?;
+    let mint_txid = mint(satoshis_to_mint, caller_account.clone()).await?;
 
-    record_event(&Event::ReceivedUtxos {
-        to_account: caller_account.clone(),
-        utxos: new_utxos.clone(),
-    });
-
-    state::mutate_state(|s| s.add_utxos(caller_account, new_utxos));
+    state::mutate_state(|s| state::audit::add_utxos(s, Some(mint_txid), caller_account, new_utxos));
 
     Ok(UpdateBalanceResult {
         amount: satoshis_to_mint,
-        block_index,
+        block_index: mint_txid,
     })
 }
 

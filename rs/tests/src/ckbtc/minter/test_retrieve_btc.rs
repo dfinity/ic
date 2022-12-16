@@ -18,11 +18,11 @@ use bitcoincore_rpc::RpcApi;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
+use ic_ckbtc_minter::state::{eventlog::Event, RetrieveBtcRequest};
 use ic_ckbtc_minter::updates::{
     get_withdrawal_account::compute_subaccount,
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
 };
-use ic_ckbtc_minter::{eventlog::Event, state::RetrieveBtcRequest};
 use ic_icrc1::endpoints::TransferArg;
 use ic_icrc1::Account;
 use ic_icrc1_agent::Icrc1Agent;

@@ -24,6 +24,12 @@ pub enum Event {
     /// The minter emits this event _after_ it minted ckBTC.
     #[serde(rename = "received_utxos")]
     ReceivedUtxos {
+        /// The index of the transaction that mints ckBTC corresponding to the
+        /// received UTXOs.
+        #[serde(rename = "mint_txid")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        mint_txid: Option<u64>,
+        /// That minter's account owning the UTXOs.
         #[serde(rename = "to_account")]
         to_account: Account,
         #[serde(rename = "utxos")]
@@ -101,7 +107,9 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
             Event::Init(args) => {
                 state.reinit(args);
             }
-            Event::ReceivedUtxos { to_account, utxos } => state.add_utxos(to_account, utxos),
+            Event::ReceivedUtxos {
+                to_account, utxos, ..
+            } => state.add_utxos(to_account, utxos),
             Event::AcceptedRetrieveBtcRequest(req) => {
                 state.pending_retrieve_btc_requests.push(req);
             }

@@ -13,7 +13,7 @@ use ic_ckbtc_minter::updates::{
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult},
 };
 use ic_ckbtc_minter::{
-    eventlog::{Event, GetEventsArg},
+    state::eventlog::{Event, GetEventsArg},
     storage,
 };
 use ic_icrc1::Account;
@@ -38,7 +38,7 @@ fn ok_or_die(result: Result<(), String>) {
 /// Checks that ckBTC minter state internally consistent.
 #[cfg(feature = "self_check")]
 fn check_invariants() -> Result<(), String> {
-    use ic_ckbtc_minter::eventlog::replay;
+    use ic_ckbtc_minter::state::eventlog::replay;
 
     read_state(|s| {
         s.check_invariants()?;

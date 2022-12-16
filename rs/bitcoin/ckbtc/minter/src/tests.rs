@@ -188,13 +188,33 @@ fn test_min_change_amount() {
 
     let (tx, change_output, _) = build_unsigned_transaction(
         &mut available_utxos,
-        vec![(out1_addr, 100_000), (out2_addr, 99_999)],
-        minter_addr,
+        vec![(out1_addr.clone(), 100_000), (out2_addr.clone(), 99_999)],
+        minter_addr.clone(),
         fee_per_vbyte,
     )
     .expect("failed to build a transaction");
 
+    let fee = fake_sign(&tx).vsize() as u64 * fee_per_vbyte / 1000;
+
     assert_eq!(tx.outputs.len(), 3);
+    let fee_share = (fee + crate::MIN_CHANGE - 1) / 2;
+    assert_eq!(
+        &tx.outputs,
+        &[
+            tx::TxOut {
+                address: out1_addr,
+                value: 100_000 - fee_share,
+            },
+            tx::TxOut {
+                address: out2_addr,
+                value: 99_999 - fee_share,
+            },
+            tx::TxOut {
+                address: minter_addr,
+                value: crate::MIN_CHANGE,
+            }
+        ]
+    );
     assert_eq!(
         change_output,
         Some(ChangeOutput {
@@ -202,6 +222,39 @@ fn test_min_change_amount() {
             value: crate::MIN_CHANGE,
         })
     );
+}
+
+#[test]
+fn test_no_zero_outputs() {
+    let mut available_utxos = BTreeSet::new();
+    available_utxos.insert(Utxo {
+        outpoint: OutPoint {
+            txid: vec![0; 32],
+            vout: 0,
+        },
+        value: 100_000,
+        height: 10,
+    });
+
+    let minter_addr = BitcoinAddress::P2wpkhV0([0; 20]);
+    let out1_addr = BitcoinAddress::P2wpkhV0([1; 20]);
+    let out2_addr = BitcoinAddress::P2wpkhV0([2; 20]);
+    let fee_per_vbyte = 10000;
+
+    assert_eq!(
+        build_unsigned_transaction(
+            &mut available_utxos,
+            vec![(out1_addr, 99_900), (out2_addr.clone(), 100)],
+            minter_addr,
+            fee_per_vbyte,
+        ),
+        Err(BuildTxError::ZeroOutput {
+            address: out2_addr,
+            amount: 100
+        })
+    );
+
+    assert_eq!(available_utxos.len(), 1);
 }
 
 fn arb_amount() -> impl Strategy<Value = Satoshi> {

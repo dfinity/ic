@@ -1,5 +1,5 @@
-use crate::eventlog::replay;
 use crate::logs::P0;
+use crate::state::eventlog::replay;
 use crate::state::replace_state;
 use crate::storage::{count_events, events};
 use ic_canister_log::log;

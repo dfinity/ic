@@ -21,7 +21,7 @@ use bitcoincore_rpc::{
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
-use ic_ckbtc_minter::eventlog::Event;
+use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::{RetrieveBtcRequest, RetrieveBtcStatus};
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
 use ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcArgs;
