@@ -8,26 +8,29 @@ use ic_tests::boundary_nodes_integration::boundary_nodes::{
     nginx_valid_config_test, reboot_test, redirect_http_to_https_test, redirect_to_dashboard_test,
     redirect_to_non_raw_test, seo_test, sw_test,
 };
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::new::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_tests::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(config)
-        .add_test(systest!(canister_test))
-        .add_test(systest!(http_canister_test))
-        .add_test(systest!(nginx_valid_config_test))
+        .add_parallel(
+            SystemTestSubGroup::new()
+                .add_test(systest!(canister_test))
+                .add_test(systest!(http_canister_test))
+                .add_test(systest!(nginx_valid_config_test))
+                .add_test(systest!(redirect_http_to_https_test))
+                .add_test(systest!(redirect_to_dashboard_test))
+                .add_test(systest!(redirect_to_non_raw_test))
+                .add_test(systest!(sw_test))
+                .add_test(systest!(icx_proxy_test))
+                .add_test(systest!(direct_to_replica_test))
+                .add_test(systest!(direct_to_replica_rosetta_test))
+                .add_test(systest!(direct_to_replica_options_test))
+                .add_test(systest!(seo_test)),
+        )
         .add_test(systest!(denylist_test))
         .add_test(systest!(canister_allowlist_test))
-        .add_test(systest!(redirect_http_to_https_test))
-        .add_test(systest!(redirect_to_dashboard_test))
-        .add_test(systest!(redirect_to_non_raw_test))
-        .add_test(systest!(sw_test))
-        .add_test(systest!(icx_proxy_test))
-        .add_test(systest!(direct_to_replica_test))
-        .add_test(systest!(direct_to_replica_options_test))
-        .add_test(systest!(direct_to_replica_rosetta_test))
-        .add_test(systest!(seo_test))
         .add_test(systest!(reboot_test))
         .execute_from_args()?;
 
