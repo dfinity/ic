@@ -4,6 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
+chrono = "0.4.19"
 clap = { version = "3.1.6", features = ["derive"] }
 ic-config = { path = "../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
@@ -20,7 +21,10 @@ reqwest = "0.11.1"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_json = "1.0.54"
 serde_millis = "0.1.1"
-slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+slog = { version = "2.5.2", features = [
+    "nested-values",
+    "release_max_level_debug",
+] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
 tokio = { version = "1.15.0", features = ["full"] }

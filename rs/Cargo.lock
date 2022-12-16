@@ -4032,6 +4032,7 @@ dependencies = [
 name = "ic-backup"
 version = "0.8.0"
 dependencies = [
+ "chrono",
  "clap 3.2.23",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
