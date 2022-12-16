@@ -26,7 +26,7 @@ string_flag(
     visibility = ["//visibility:public"],
 )
 
-# Generates version.txt file that contains the value of `--ic_version` flag if set, otherwise git sha if the working tree is clean, otherwise <git sha>-<timestamp>.
+# Generates version.txt file that contains the value of `--ic_version` flag if set, otherwise <git sha>-<timestamp>.
 # It has to be tagged as `no-cache` as bazel treats version_file as never changing.
 ic_version_or_git_sha(
     name = "version.txt",

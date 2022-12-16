@@ -21,13 +21,8 @@ do
     esac
 done < "@@VERSION_FILE@@"
 
-# Support builds from repos with local changes.
-if [ "${GIT_TREE_STATUS}" != 'Clean' ]
-then
-  TREE_VERSION="${TREE_VERSION}-${BUILD_TIMESTAMP}"
-fi
-
-: ${VERSION:="${TREE_VERSION}"}
+# Set the version to "{git sha}-{build timestamp}" unconditionally unles it explicitly set (using --ic_version arg) to avoid conflicts with CI.
+: ${VERSION:="${TREE_VERSION}-${BUILD_TIMESTAMP}"}
 
 # rclone reads the $(dirname $f) to get file attribuates.
 # Therefore symlink should be resolved.
