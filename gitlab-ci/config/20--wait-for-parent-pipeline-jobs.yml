@@ -50,8 +50,8 @@ wait-for-bazel-test-all:
   extends:
     - .wait-for-parent-pipeline-job
 
-wait-for-bazel-test-all-macos:
+wait-for-bazel-build-macos:
   extends:
     - .wait-for-parent-pipeline-job
   variables:
-    JOB_NAME: "bazel-test-all-macos"
+    JOB_NAME: "bazel-build-macos"

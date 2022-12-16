@@ -108,23 +108,8 @@ def upload_artifacts(**kwargs):
     """
 
     tags = kwargs.get("tags", [])
-    for tag in ["requires-network", "manual"]:
+    for tag in ["requires-network", "upload"]:
         if tag not in tags:
             tags.append(tag)
     kwargs["tags"] = tags
     _upload_artifacts(**kwargs)
-
-def urls_test(name, inputs, tags = ["manual"]):
-    # https://github.com/bazelbuild/bazel/issues/6783S
-    native.sh_library(
-        name = name + "_wrapped",
-        data = inputs,
-        tags = tags,
-    )
-    native.sh_test(
-        name = name,
-        tags = tags + ["requires-network"],
-        srcs = ["//gitlab-ci/src/artifacts:urls_test.sh"],
-        args = ["$(rootpaths :{})".format(name + "_wrapped")],
-        data = [":" + name + "_wrapped"],
-    )

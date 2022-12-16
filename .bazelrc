@@ -63,7 +63,7 @@ build --flag_alias=s3_endpoint=//gitlab-ci/src/artifacts:s3_endpoint
 
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
-build --build_tag_filters="-system_test"
+build --build_tag_filters="-system_test,-upload"
 test --test_tag_filters="-system_test,-post_master,-allow_to_fail"
 test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test,-allow_to_fail"
@@ -74,7 +74,7 @@ test --test_env=RUST_BACKTRACE=full
 
 test:precommit --build_tests_only --test_tag_filters="smoke"
 
-test:systest --test_output=streamed --test_tag_filters= --s3_endpoint=https://s3-upload.zh1-idx2.dfinity.network
+test:systest --test_output=streamed --test_tag_filters= --build_tag_filters= --s3_endpoint=https://s3-upload.zh1-idx2.dfinity.network
 
 # For sandboxed actions, mount an empty, writable directory at this absolute path
 # (if supported by the sandboxing implementation, ignored otherwise).
@@ -86,10 +86,13 @@ test --test_timeout=-1,-1,1200,-1 # timeout in seconds for short, moderate(defau
 #test:ci --config=alltests
 
 build:ci --noremote_local_fallback
+build:ci --build_tag_filters="-system_test"
 build:ci --remote_upload_local_results # Whether to upload locally executed action results to the remote cache.
 
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild
+build:macos_ci --compilation_mode=fastbuild
+build:macos_ci --build_tag_filters="-system_test"
 
 # Run `bazel build ... --config=local` if you don't have access to the buildfarm infrastructure.
 build:local --remote_cache=

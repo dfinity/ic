@@ -3,7 +3,7 @@ A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 """
 
 load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
-load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts", "urls_test")
+load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
@@ -470,11 +470,6 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         tags = ["manual"],
     )
 
-    urls_test(
-        name = "upload_disk-img_test",
-        inputs = [":upload_disk-img"],
-    )
-
     output_files(
         name = "disk-img-url",
         target = ":upload_disk-img",
@@ -788,11 +783,6 @@ def boundary_node_icos_build(name, mode = None, sev = False, visibility = None):
         ],
         visibility = ["//visibility:public"],
         tags = ["manual"],
-    )
-
-    urls_test(
-        name = "upload_disk-img_test",
-        inputs = [":upload_disk-img"],
     )
 
     output_files(
