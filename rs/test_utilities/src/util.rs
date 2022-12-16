@@ -2,6 +2,7 @@ use ic_interfaces::time_source::{TimeNotMonotoneError, TimeSource};
 use ic_types::time::{Time, UNIX_EPOCH};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::Duration;
 
 // A mock object that wraps a queue
 #[derive(Default)]
@@ -67,6 +68,12 @@ impl FastForwardTimeSource {
         }
     }
 
+    /// Advance time by the given [`Duration`].
+    pub fn advance_time(&self, duration: Duration) {
+        let data = &mut self.0.write().unwrap();
+        data.current_time += duration;
+    }
+
     /// Reset the time to start value.
     pub fn reset(&self) {
         self.0.write().unwrap().current_time = UNIX_EPOCH;
@@ -81,9 +88,9 @@ impl TimeSource for FastForwardTimeSource {
 
 /// Execute the provided closure on a separate thread, but with a timeout.
 /// Return true if the action completed successfully and false otherwise.
-pub fn with_timeout<T>(timeout: std::time::Duration, action: T) -> bool
+pub fn with_timeout<T>(timeout: Duration, action: T) -> bool
 where
-    T: FnOnce() + std::marker::Send + 'static,
+    T: FnOnce() + Send + 'static,
 {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {

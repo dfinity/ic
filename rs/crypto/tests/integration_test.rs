@@ -992,8 +992,7 @@ fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timest
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let time = FastForwardTimeSource::new();
-    time.set_time(time.get_relative_time() + Duration::from_millis(2000))
-        .unwrap();
+    time.advance_time(Duration::from_millis(2000));
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
         .with_registry_client_and_data(
@@ -1017,8 +1016,7 @@ fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timest
     );
     registry_client.reload();
 
-    time.set_time(time.get_relative_time() + Duration::from_millis(2000))
-        .unwrap();
+    time.advance_time(Duration::from_millis(2000));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
     assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
@@ -1030,8 +1028,7 @@ fn should_return_rotation_needed_from_check_keys_with_registry_if_idkg_dealing_e
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let time = FastForwardTimeSource::new();
-    time.set_time(time.get_relative_time() + Duration::from_millis(2000))
-        .unwrap();
+    time.advance_time(Duration::from_millis(2000));
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
         .with_registry_client_and_data(
@@ -1061,8 +1058,7 @@ fn should_return_rotation_needed_from_check_keys_with_registry_if_idkg_dealing_e
     );
     registry_client.reload();
 
-    time.set_time(time.get_relative_time() + TWO_WEEKS + Duration::from_secs(1))
-        .unwrap();
+    time.advance_time(TWO_WEEKS + Duration::from_secs(1));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
     assert_matches!(
@@ -1076,8 +1072,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_key_rot
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let time = FastForwardTimeSource::new();
-    time.set_time(time.get_relative_time() + Duration::from_millis(2000))
-        .unwrap();
+    time.advance_time(Duration::from_millis(2000));
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
         .with_registry_client_and_data(
@@ -1104,8 +1099,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_key_rot
     registry_client.reload();
 
     // Set the current time such that the keys should be rotated if the configuration is set accordingly
-    time.set_time(time.get_relative_time() + TWO_WEEKS + Duration::from_secs(1))
-        .unwrap();
+    time.advance_time(TWO_WEEKS + Duration::from_secs(1));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
     assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
@@ -1116,8 +1110,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_node_not_i
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let time = FastForwardTimeSource::new();
-    time.set_time(time.get_relative_time() + Duration::from_millis(2000))
-        .unwrap();
+    time.advance_time(Duration::from_millis(2000));
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
         .with_registry_client_and_data(
@@ -1144,8 +1137,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_node_not_i
     registry_client.reload();
 
     // Set the current time such that the keys should be rotated if the configuration is set accordingly
-    time.set_time(time.get_relative_time() + TWO_WEEKS + Duration::from_secs(1))
-        .unwrap();
+    time.advance_time(TWO_WEEKS + Duration::from_secs(1));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
     assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
@@ -1156,8 +1148,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_k
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let time = FastForwardTimeSource::new();
-    time.set_time(time.get_relative_time() + Duration::from_millis(2000))
-        .unwrap();
+    time.advance_time(Duration::from_millis(2000));
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
         .with_registry_client_and_data(
@@ -1188,8 +1179,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_k
     registry_client.reload();
 
     // Set the current time such that the keys should be rotated if the configuration is set accordingly
-    time.set_time(time.get_relative_time() + TWO_WEEKS + Duration::from_secs(1))
-        .unwrap();
+    time.advance_time(TWO_WEEKS + Duration::from_secs(1));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
     assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
@@ -1200,8 +1190,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_c
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let time = FastForwardTimeSource::new();
-    time.set_time(time.get_relative_time() + Duration::from_millis(2000))
-        .unwrap();
+    time.advance_time(Duration::from_millis(2000));
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
         .with_registry_client_and_data(
@@ -1231,8 +1220,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_c
     registry_client.reload();
 
     // Set the current time such that the keys should be rotated if the configuration is set accordingly
-    time.set_time(time.get_relative_time() + TWO_WEEKS + Duration::from_secs(1))
-        .unwrap();
+    time.advance_time(TWO_WEEKS + Duration::from_secs(1));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
     assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
@@ -1244,8 +1232,7 @@ fn should_return_registration_needed_from_check_keys_with_registry_if_local_idkg
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let time = FastForwardTimeSource::new();
-    time.set_time(time.get_relative_time() + Duration::from_millis(2000))
-        .unwrap();
+    time.advance_time(Duration::from_millis(2000));
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
         .with_registry_client_and_data(
@@ -1276,14 +1263,12 @@ fn should_return_registration_needed_from_check_keys_with_registry_if_local_idkg
     );
     registry_client.reload();
 
-    time.set_time(time.get_relative_time() + Duration::from_secs(60 * 60 * 24 * 15))
-        .unwrap();
+    time.advance_time(Duration::from_secs(60 * 60 * 24 * 15));
     let new_idkg_dealing_encryption_key_to_register = crypto_component
         .rotate_idkg_dealing_encryption_keys(REG_V2)
         .expect("Error rotating iDKG encryption key");
 
-    time.set_time(time.get_relative_time() + Duration::from_secs(60 * 60 * 24))
-        .unwrap();
+    time.advance_time(Duration::from_secs(60 * 60 * 24));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
     assert_matches!(
@@ -1299,8 +1284,7 @@ fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timest
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let time = FastForwardTimeSource::new();
-    time.set_time(time.get_relative_time() + Duration::from_millis(2000))
-        .unwrap();
+    time.advance_time(Duration::from_millis(2000));
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
         .with_registry_client_and_data(
@@ -1330,8 +1314,7 @@ fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timest
     );
     registry_client.reload();
 
-    time.set_time(time.get_relative_time() + TWO_WEEKS - Duration::from_secs(1))
-        .unwrap();
+    time.advance_time(TWO_WEEKS - Duration::from_secs(1));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
     assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));

@@ -168,9 +168,7 @@ where
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let time_source = FastForwardTimeSource::new();
             // Set initial time to non-zero
-            time_source
-                .set_time(mock_time() + Duration::from_secs(1))
-                .unwrap();
+            time_source.advance_time(Duration::from_secs(1));
             let (history, ingress_hist_reader) = SimulatedIngressHistory::new(time_source.clone());
             let history = Arc::new(history);
             let history_cl = history.clone();
@@ -206,12 +204,12 @@ where
                 node_test_id(VALIDATOR_NODE_ID),
             ));
             let mut state_manager = MockStateManager::new();
-            state_manager.expect_get_state_at().return_const(Ok(
-                ic_interfaces_state_manager::Labeled::new(
+            state_manager
+                .expect_get_state_at()
+                .return_const(Ok(Labeled::new(
                     Height::new(0),
                     Arc::new(ReplicatedStateBuilder::default().build()),
-                ),
-            ));
+                )));
 
             let metrics_registry = MetricsRegistry::new();
             let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
@@ -254,9 +252,8 @@ fn prepare(time_source: &dyn TimeSource, duration: Duration, num: usize) -> Vec<
     let mut rng = rand::thread_rng();
     (0..num)
         .map(|i| {
-            let expiry = std::time::Duration::from_millis(
-                rng.gen::<u64>() % ((max_expiry - now).as_millis() as u64),
-            );
+            let expiry =
+                Duration::from_millis(rng.gen::<u64>() % ((max_expiry - now).as_millis() as u64));
             SignedIngressBuilder::new()
                 .method_payload(vec![0; PAYLOAD_SIZE])
                 .nonce(i as u64)
@@ -340,9 +337,7 @@ fn handle_ingress(criterion: &mut Criterion) {
                                 if now >= start + time_span {
                                     break;
                                 }
-                                time_source
-                                    .set_time(now + Duration::from_millis(200))
-                                    .unwrap();
+                                time_source.advance_time(Duration::from_millis(200));
                             }
                             elapsed += bench_start.elapsed();
                         }
