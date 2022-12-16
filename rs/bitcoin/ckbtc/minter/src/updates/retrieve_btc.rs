@@ -1,5 +1,3 @@
-use crate::eventlog::Event;
-use crate::storage::record_event;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_icrc1::{
@@ -13,7 +11,7 @@ use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::comp
 use crate::{
     address::{BitcoinAddress, ParseAddressError},
     guard::{retrieve_btc_guard, GuardError},
-    state::{mutate_state, read_state, RetrieveBtcRequest},
+    state::{self, mutate_state, read_state, RetrieveBtcRequest},
 };
 
 const MAX_CONCURRENT_PENDING_REQUESTS: usize = 1000;
@@ -98,9 +96,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         received_at: ic_cdk::api::time(),
     };
 
-    record_event(&Event::AcceptedRetrieveBtcRequest(request.clone()));
-
-    mutate_state(|s| s.pending_retrieve_btc_requests.push(request));
+    mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request));
 
     assert_eq!(
         crate::state::RetrieveBtcStatus::Pending,

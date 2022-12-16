@@ -11,7 +11,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub mod address;
 pub mod dashboard;
-pub mod eventlog;
 pub mod guard;
 pub mod lifecycle;
 mod logs;
@@ -104,12 +103,7 @@ async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress)
         None => utxos,
     });
 
-    storage::record_event(&eventlog::Event::ReceivedUtxos {
-        to_account: main_account.clone(),
-        utxos: new_utxos.clone(),
-    });
-
-    state::mutate_state(|s| s.add_utxos(main_account.clone(), new_utxos));
+    state::mutate_state(|s| state::audit::add_utxos(s, None, main_account.clone(), new_utxos));
 }
 
 /// Returns an estimate for transaction fees in millisatoshi per vbyte.  Returns
@@ -227,7 +221,7 @@ async fn submit_pending_requests() {
             }
             Err(BuildTxError::AmountTooLow) => {
                 log!(P0,
-                    "[heartbeat]: dropping a request for BTC amount {} to {} too low to cover the fees",
+                    "[heartbeat]: dropping requests for total BTC amount {} to addresses {} (too low to cover the fees)",
                     batch.iter().map(|req| req.amount).sum::<u64>(),
                     batch.iter().map(|req| req.address.display(s.btc_network)).collect::<Vec<_>>().join(",")
                 );
@@ -235,11 +229,30 @@ async fn submit_pending_requests() {
                 // There is no point in retrying the request because the
                 // amount is too low.
                 for request in batch {
-                    s.push_finalized_request(state::FinalizedBtcRetrieval {
-                        request,
-                        state: state::FinalizedStatus::AmountTooLow,
-                    });
+                    state::audit::remove_retrieve_btc_request(s, request);
                 }
+                None
+            }
+            Err(BuildTxError::ZeroOutput { address, amount }) => {
+                log!(P0,
+                    "[heartbeat]: dropping a request for BTC amount {} to {} (too low to cover the fees)",
+                     amount, address.display(s.btc_network)
+                );
+
+                let mut requests_to_put_back = vec![];
+                for request in batch {
+                    if request.address == address && request.amount == amount {
+                        // Finalize the request that we cannot fulfill.
+                        state::audit::remove_retrieve_btc_request(s, request);
+                    } else {
+                        // Keep the rest of the requests in the batch, we will
+                        // try to build a new transaction on the next heartbeat.
+                        requests_to_put_back.push(request);
+                    }
+                }
+
+                s.push_from_in_flight_to_pending_requests(requests_to_put_back);
+
                 None
             }
             Err(BuildTxError::NotEnoughFunds) => {
@@ -302,24 +315,19 @@ async fn submit_pending_requests() {
 
                         // Defuse the guard because we sent the transaction
                         // successfully.
-                        let (requests, utxos) = ScopeGuard::into_inner(requests_guard);
+                        let (requests, used_utxos) = ScopeGuard::into_inner(requests_guard);
 
-                        let submitted_at = ic_cdk::api::time();
-                        storage::record_event(&eventlog::Event::SentBtcTransaction {
-                            request_block_indices: requests.iter().map(|r| r.block_index).collect(),
-                            txid,
-                            utxos: utxos.clone(),
-                            change_output: req.change_output.clone(),
-                            submitted_at,
-                        });
                         state::mutate_state(|s| {
-                            s.push_submitted_transaction(state::SubmittedBtcTransaction {
-                                requests,
-                                txid,
-                                used_utxos: utxos,
-                                change_output: req.change_output,
-                                submitted_at,
-                            });
+                            state::audit::sent_transaction(
+                                s,
+                                state::SubmittedBtcTransaction {
+                                    requests,
+                                    txid,
+                                    used_utxos,
+                                    change_output: req.change_output,
+                                    submitted_at: ic_cdk::api::time(),
+                                },
+                            );
                         });
                     }
                     Err(err) => {
@@ -417,8 +425,7 @@ async fn finalize_requests() {
             continue;
         }
 
-        storage::record_event(&eventlog::Event::ConfirmedBtcTransaction { txid: req.txid });
-        state::mutate_state(|s| s.finalize_transaction(&req.txid));
+        state::mutate_state(|s| state::audit::confirm_transaction(s, &req.txid));
 
         let now = ic_cdk::api::time();
 
@@ -569,8 +576,15 @@ pub enum BuildTxError {
     /// The minter does not have enough UTXOs to make the transfer
     /// Try again later after pending transactions have settled.
     NotEnoughFunds,
-    /// The amount is too low to pay the transfer fee.
+    /// The withdrawal amount is too low to pay the transfer fee.
     AmountTooLow,
+    /// Withdrawal amount of at least one request is too low to cover its share
+    /// of the fees.  Similar to `AmountTooLow`, but applies to a single
+    /// request in a batch.
+    ZeroOutput {
+        address: BitcoinAddress,
+        amount: u64,
+    },
 }
 
 /// Builds a transaction that moves BTC to the specified destination accounts
@@ -664,7 +678,11 @@ pub fn build_unsigned_transaction(
     // If the change is positive but less than MIN_CHANGE, we round it up to
     // MIN_CHANGE. However, we must remember the extra amount to subtract it
     // from the outputs together with the fees.
-    let overdraft = MIN_CHANGE.saturating_sub(change);
+    let overdraft = if change == 0 {
+        0
+    } else {
+        MIN_CHANGE.saturating_sub(change)
+    };
 
     let tx_outputs: Vec<tx::TxOut> = outputs
         .iter()
@@ -707,10 +725,12 @@ pub fn build_unsigned_transaction(
 
     for (output, fee_share) in unsigned_tx.outputs.iter_mut().zip(fee_shares.iter()) {
         if output.address != main_address {
-            // This code relies heavily on the minimal retrieve_btc amount to be
-            // high enough to cover the fee share and the potential change
-            // overdraft.  If this assumption breaks, we can end up with zero
-            // outputs and fees that are lower than we expected.
+            if output.value <= *fee_share {
+                return Err(BuildTxError::ZeroOutput {
+                    address: output.address.clone(),
+                    amount: output.value,
+                });
+            }
             output.value = output.value.saturating_sub(*fee_share);
         }
     }

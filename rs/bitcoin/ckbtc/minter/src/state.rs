@@ -8,6 +8,9 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
 };
 
+pub mod audit;
+pub mod eventlog;
+
 use crate::lifecycle::init::InitArgs;
 use crate::{address::BitcoinAddress, ECDSAPublicKey};
 use candid::{Deserialize, Principal};
@@ -240,7 +243,8 @@ impl CkBtcMinterState {
         Ok(())
     }
 
-    pub fn add_utxos(&mut self, account: Account, utxos: Vec<Utxo>) {
+    // public for only for tests
+    pub(crate) fn add_utxos(&mut self, account: Account, utxos: Vec<Utxo>) {
         if utxos.is_empty() {
             return;
         }
@@ -368,7 +372,7 @@ impl CkBtcMinterState {
         }
     }
 
-    pub fn finalize_transaction(&mut self, txid: &[u8; 32]) {
+    fn finalize_transaction(&mut self, txid: &[u8; 32]) {
         if let Some(pos) = self
             .submitted_transactions
             .iter()
@@ -389,7 +393,7 @@ impl CkBtcMinterState {
     }
 
     /// Removes a pending retrive_btc request with the specified block index.
-    pub fn remove_pending_request(&mut self, block_index: u64) -> Option<RetrieveBtcRequest> {
+    fn remove_pending_request(&mut self, block_index: u64) -> Option<RetrieveBtcRequest> {
         match self
             .pending_retrieve_btc_requests
             .iter()
@@ -465,7 +469,7 @@ impl CkBtcMinterState {
     ///
     /// This function panics if there is a pending retrieve_btc request with the
     /// same identifier.
-    pub fn push_finalized_request(&mut self, req: FinalizedBtcRetrieval) {
+    fn push_finalized_request(&mut self, req: FinalizedBtcRetrieval) {
         assert!(!self.has_pending_request(req.request.block_index));
 
         if self.finalized_requests.len() >= MAX_FINALIZED_REQUESTS {

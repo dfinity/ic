@@ -1,7 +1,7 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_ckbtc_minter::eventlog::{Event, GetEventsArg};
 use ic_ckbtc_minter::queries::RetrieveBtcStatusRequest;
+use ic_ckbtc_minter::state::eventlog::{Event, GetEventsArg};
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
