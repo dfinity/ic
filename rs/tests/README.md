@@ -101,14 +101,14 @@ IC_VERSION_ID=<version> ./run-system-tests.py \
 If you have further questions, please contact the testing team on #eng-testing.
 
 ### How can I run system tests in Bazel? (experimental)
-**IMPORTANT**: Bazel runs of the system tests are not yet fully standardized and are therefore discouraged. T&V team is working actively on the [bazelification](https://docs.google.com/document/d/1RGyvOkRluFsqroDmyM9hfr37VG-nCrTOrutQnStJsco/edit#heading=h.fcajjuvgc2dn) of all system tests. However, currently we strongly encourage developers to only use the [conventional approach](#how-can-i-run-system-tests) for launching system tests. If in **strong** need, try to use an *experimental* way of launching a bazelified system test. 
+**IMPORTANT**: Bazel runs of the system tests are not yet fully standardized and are therefore discouraged. T&V team is working actively on the [bazelification](https://docs.google.com/document/d/1RGyvOkRluFsqroDmyM9hfr37VG-nCrTOrutQnStJsco/edit#heading=h.fcajjuvgc2dn) of all system tests. However, currently we strongly encourage developers to only use the [conventional approach](#how-can-i-run-system-tests) for launching system tests. If in **strong** need, try to use an *experimental* way of launching a bazelified system test.
 Namely, login to the docker container:
 ```
 /ic$ ./gitlab-ci/tools/docker-run --bazel
 ```
 To launch a test target (`my_test_target` in this case) within the docker run:
 ```
-docker$ bazel test //rs/tests:my_test_target --test_output=streamed --cache_test_results=no --test_tag_filters="system_test" --s3_endpoint=https://s3-upload.zh1-idx1.dfinity.network
+docker$ bazel test --config=systest //rs/tests:my_test_target
 ```
 
 # How to write a system test
