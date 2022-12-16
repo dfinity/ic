@@ -22,7 +22,7 @@ fn test_single_transient_failure_of_tls_client_handshake_legacy() {
 
 #[test]
 fn test_single_transient_failure_of_tls_client_handshake_h2() {
-    //    test_single_transient_failure_of_tls_client_handshake_impl(true);
+    test_single_transient_failure_of_tls_client_handshake_impl(true);
 }
 
 fn test_single_transient_failure_of_tls_client_handshake_impl(use_h2: bool) {
@@ -164,7 +164,7 @@ fn test_single_transient_failure_of_tls_server_handshake_legacy() {
 }
 #[test]
 fn test_single_transient_failure_of_tls_server_handshake_h2() {
-    //    test_single_transient_failure_of_tls_server_handshake_impl(true);
+    test_single_transient_failure_of_tls_server_handshake_impl(true);
 }
 
 fn test_single_transient_failure_of_tls_server_handshake_impl(use_h2: bool) {

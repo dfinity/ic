@@ -158,6 +158,7 @@ pub enum StreamReadError {
     Failed(std::io::Error),
     TimeOut,
     H2ReceiveStreamFailure(String),
+    EndOfStream,
 }
 
 // Wrapper around SendStream to ensure that we only send data if there is available capacity,
@@ -232,8 +233,8 @@ impl H2Reader {
                         .flow_control()
                         .release_capacity(chunk.len());
                 }
-                // If stream returns empty frame, continue polling
-                Ok(None) => {}
+                // None means the stream is exhausted
+                Ok(None) => return Err(StreamReadError::EndOfStream),
                 Ok(Some(Err(h2_error))) => {
                     return Err(StreamReadError::H2ReceiveStreamFailure(format!(
                         "{:?} for {:?}",
@@ -385,6 +386,9 @@ pub(crate) struct Connected {
     /// The write task handle
     pub write_task: JoinHandle<()>,
 
+    ///
+    pub h2_conn: Option<JoinHandle<()>>,
+
     /// Our role
     pub role: ConnectionRole,
 }
@@ -473,11 +477,14 @@ impl Debug for ConnectionState {
 
 impl Drop for ConnectionState {
     fn drop(&mut self) {
-        match &self {
+        match self {
             Self::Connecting(state) => state.connecting_task.abort(),
             Self::Connected(state) => {
                 state.read_task.abort();
                 state.write_task.abort();
+                if let Some(h2_conn) = state.h2_conn.take() {
+                    h2_conn.abort();
+                }
             }
             _ => (),
         }
@@ -531,6 +538,7 @@ mod tests {
             peer_addr: "127.0.0.1:8080".parse().unwrap(),
             read_task,
             write_task,
+            h2_conn: None,
             role,
         })
     }
