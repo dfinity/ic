@@ -1290,8 +1290,7 @@ impl ExecutionEnvironment {
 
             Some(canister_state) => {
                 let cycles = msg.take_cycles();
-                self.cycles_account_manager
-                    .add_cycles(canister_state.system_state.balance_mut(), cycles);
+                *canister_state.system_state.balance_mut() += cycles;
                 if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                     info!(
                         self.log,

@@ -279,10 +279,7 @@ fn mint_cycles_large_value() {
         .canister_id(CYCLES_MINTING_CANISTER_ID)
         .build();
 
-    cycles_account_manager.add_cycles(
-        system_state.balance_mut(),
-        Cycles::from(1_000_000_000_000_000_u128),
-    );
+    *system_state.balance_mut() += Cycles::from(1_000_000_000_000_000_u128);
 
     let api_type = ApiTypeBuilder::build_update_api();
     let mut api = get_system_api(api_type, &system_state, cycles_account_manager);

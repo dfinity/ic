@@ -2244,7 +2244,7 @@ fn install_canister_with_query_allocation() {
 
 #[test]
 fn deposit_cycles_succeeds_with_enough_cycles() {
-    with_setup(|canister_manager, _, _| {
+    with_setup(|_, _, _| {
         let canister_id = canister_test_id(0);
         let sender = canister_test_id(1).get();
         let mut canister = get_running_canister_with_args(canister_id, sender, *INITIAL_CYCLES);
@@ -2252,9 +2252,7 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
         let cycles_balance_before = canister.system_state.balance();
         let cycles = Cycles::new(100);
 
-        canister_manager
-            .cycles_account_manager
-            .add_cycles(canister.system_state.balance_mut(), cycles);
+        *canister.system_state.balance_mut() += cycles;
 
         // Assert that state has changed
         assert_eq!(
