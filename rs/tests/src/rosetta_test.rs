@@ -2882,21 +2882,19 @@ async fn test_merge_maturity(
     .expect("failed to merge neuron maturity");
 
     // Check merge maturity results.
-    // We expect one transaction to happen.
-    let expected_idx = tip_idx + 1;
+    // We expect no transaction to happen, as staking *does not* mint new tokens.
+    let expected_idx = tip_idx;
     if let Some(h) = res.last_block_index() {
         assert_eq!(h, expected_idx);
     }
     // Wait for Rosetta sync.
     ros.wait_for_tip_sync(expected_idx).await.unwrap();
     let balance_after = get_balance(ledger, neuron_acc).await;
-    let maturity = 420_000_000;
-    let transferred_maturity = (maturity * percent.unwrap_or(100) as u64) / 100;
 
     assert_eq!(
-        balance_before.get_e8s() + transferred_maturity,
+        balance_before.get_e8s(),
         balance_after.get_e8s(),
-        "Neuron balance should have increased after merge maturity operation."
+        "Neuron balance should have not increased after redirecting merge_maturity to stake_maturity."
     );
 
     // We should get the same results with Rosetta call (step not required though).
@@ -2904,7 +2902,7 @@ async fn test_merge_maturity(
         ros,
         ledger,
         &neuron_acc,
-        Tokens::from_e8s(balance_before.get_e8s() + transferred_maturity),
+        Tokens::from_e8s(balance_before.get_e8s()),
     )
     .await;
 }

@@ -110,7 +110,7 @@ pub mod fixtures;
 
 use fixtures::{principal, NNSBuilder, NeuronBuilder};
 #[cfg(feature = "test")]
-use fixtures::{prorated_neuron_age, LedgerBuilder, NNSStateChange, ProposalNeuronBehavior, NNS};
+use fixtures::{LedgerBuilder, NNSStateChange, ProposalNeuronBehavior, NNS};
 
 // Using a `pub mod` works around spurious dead code warnings; see
 // https://github.com/rust-lang/rust/issues/46379
@@ -8385,7 +8385,10 @@ fn assert_merge_maturity_executes_as_expected_new(
     assert_eq!(merged_maturity, expected_merged_maturity);
 
     let expected_resulting_maturity = neuron.maturity_e8s_equivalent - merged_maturity;
-    let expected_resulting_stake = neuron.cached_neuron_stake_e8s + merged_maturity;
+    let expected_regular_stake = neuron.cached_neuron_stake_e8s;
+    let expected_total_stake = neuron.cached_neuron_stake_e8s
+        + neuron.staked_maturity_e8s_equivalent.unwrap_or(0)
+        + merged_maturity;
     let post_merge_account_balance = nns.get_neuron_stake(&neuron);
     let merged_neuron = nns.get_neuron(id);
 
@@ -8395,14 +8398,23 @@ fn assert_merge_maturity_executes_as_expected_new(
     );
     assert_eq!(
         merged_neuron.cached_neuron_stake_e8s,
-        expected_resulting_stake
+        expected_regular_stake,
+    );
+    assert_eq!(
+        merged_neuron.cached_neuron_stake_e8s
+            + merged_neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
+        expected_total_stake
     );
     assert_eq!(
         merged_neuron.cached_neuron_stake_e8s,
         post_merge_account_balance
     );
 
-    assert!(neuron.aging_since_timestamp_seconds < merged_neuron.aging_since_timestamp_seconds);
+    // When *staking* maturity, we do not change the age of the neuron.
+    assert_eq!(
+        neuron.aging_since_timestamp_seconds,
+        merged_neuron.aging_since_timestamp_seconds
+    );
 }
 
 proptest! {
@@ -8412,6 +8424,7 @@ proptest! {
 fn test_merge_maturity_of_neuron_new(start in 56u64..56_000_000,
                                      supply in 100_000_000u64..400_000_000,
                                      stake in 100_000_000u64..5_000_000_000_000_000,
+                                     staked_maturity in 100_000_000u64..5_000_000_000,
                                      fees in 100_000_000u64..100_000_000_000,
                                      // maturity must be <= stake
                                      maturity in 25_000_000u64..100_000_000) {
@@ -8424,7 +8437,8 @@ fn test_merge_maturity_of_neuron_new(start in 56u64..56_000_000,
             NeuronBuilder::new(100, stake, principal(1))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
                 .set_neuron_fees(fees)
-                .set_maturity(maturity),
+                .set_maturity(maturity)
+                .set_staked_maturity(staked_maturity),
         )
         .set_economics(NetworkEconomics {
             neuron_minimum_stake_e8s: 100_000_000,
@@ -8458,53 +8472,35 @@ fn test_merge_maturity_of_neuron_new(start in 56u64..56_000_000,
     // merged, just in three steps so that we can check the progress.
 
     // Assert that 10% of a neuron's maturity can be merged successfully
-    let mut current_stake = stake;
+    let mut current_staked_maturity = staked_maturity;
     let mut maturity_left = maturity;
-    let mut aging_since = start;
     assert_merge_maturity_executes_as_expected_new(&mut nns, &id, &controller, 10, maturity_left / 10);
-    aging_since = prorated_neuron_age(aging_since, current_stake, current_stake + (maturity_left / 10), nns.now());
-    current_stake += maturity_left / 10;
+    current_staked_maturity += maturity_left / 10;
     maturity_left -= maturity_left / 10;
 
     // Assert that 50% of a neuron's maturity can be merged successfully
     assert_merge_maturity_executes_as_expected_new(&mut nns, &id, &controller, 50, maturity_left / 2);
-    aging_since = prorated_neuron_age(aging_since, current_stake, current_stake + (maturity_left / 2), nns.now());
-    current_stake += maturity_left / 2;
+    current_staked_maturity += maturity_left / 2;
     maturity_left -= maturity_left / 2;
 
     // Assert that 100% of a neuron's maturity can be merged successfully
     assert_merge_maturity_executes_as_expected_new(&mut nns, &id, &controller, 100, maturity_left);
-    aging_since = prorated_neuron_age(aging_since, current_stake, current_stake + maturity_left, nns.now());
-    current_stake += maturity_left;
+    current_staked_maturity += maturity_left;
     maturity_left -= maturity_left;
 
-    assert_eq!(current_stake, stake + maturity);
+    assert_eq!(current_staked_maturity, staked_maturity + maturity);
     assert_eq!(maturity_left, 0);
-
-    // Assert that merging a neuron with no maturity fails
-    assert!(nns.merge_maturity(&id, &controller, 10).is_err());
 
     prop_assert_changes!(nns, Changed::Changed(vec![
         NNSStateChange::Now(U64Change(
             start,
             start + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS + 1,
         )),
-        NNSStateChange::Accounts(vec![
-            MapChange::Changed(
-                nns.get_neuron_account_id(100),
-                U64Change(stake, stake + maturity)
-            ),
-            MapChange::Changed(
-                LedgerBuilder::minting_account(),
-                U64Change(supply, supply - maturity),
-            ),
-        ]),
         NNSStateChange::GovernanceProto(vec![GovernanceChange::Neurons(vec![MapChange::Changed(
             100,
             vec![
-                NeuronChange::CachedNeuronStakeE8S(U64Change(stake, current_stake)),
-                NeuronChange::AgingSinceTimestampSeconds(U64Change(start, aging_since)),
                 NeuronChange::MaturityE8SEquivalent(U64Change(maturity, maturity_left)),
+                NeuronChange::StakedMaturityE8SEquivalent(OptionChange::BothSome(U64Change(staked_maturity, current_staked_maturity))),
             ],
         )])]),
     ]));
@@ -8586,9 +8582,6 @@ fn test_merge_maturity_of_neuron(
         decrement_maturity(100),
         &driver,
     )?;
-
-    // Assert that merging a neuron with no maturity fails
-    prop_assert!(merge_maturity(&mut gov, id, &controller, 10).is_err());
 }
 
 }
@@ -8612,7 +8605,10 @@ fn assert_merge_maturity_executes_as_expected(
     let merged_maturity = response.merged_maturity_e8s;
     prop_assert_eq!(merged_maturity, expected_merged_maturity);
     let expected_resulting_maturity = neuron.maturity_e8s_equivalent - merged_maturity;
-    let expected_resulting_stake = neuron.cached_neuron_stake_e8s + merged_maturity;
+    let expected_regular_stake = neuron.cached_neuron_stake_e8s;
+    let expected_total_stake = neuron.cached_neuron_stake_e8s
+        + neuron.staked_maturity_e8s_equivalent.unwrap_or(0)
+        + merged_maturity;
     let post_merge_account_balance = driver
         .account_balance(account)
         .now_or_never()
@@ -8626,15 +8622,22 @@ fn assert_merge_maturity_executes_as_expected(
     );
     prop_assert_eq!(
         merged_neuron.cached_neuron_stake_e8s,
-        expected_resulting_stake
+        expected_regular_stake
+    );
+    prop_assert_eq!(
+        merged_neuron.cached_neuron_stake_e8s
+            + merged_neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
+        expected_total_stake
     );
     prop_assert_eq!(
         merged_neuron.cached_neuron_stake_e8s,
         post_merge_account_balance
     );
 
-    prop_assert!(
-        neuron.aging_since_timestamp_seconds < merged_neuron.aging_since_timestamp_seconds
+    // When *staking* maturity, we do not change the age of the neuron.
+    prop_assert_eq!(
+        neuron.aging_since_timestamp_seconds,
+        merged_neuron.aging_since_timestamp_seconds
     );
 
     Ok(())
