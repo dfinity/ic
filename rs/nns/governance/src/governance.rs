@@ -3454,6 +3454,22 @@ impl Governance {
         Ok(child_nid)
     }
 
+    pub fn redirect_merge_maturity_to_stake_maturity(
+        &mut self,
+        id: &NeuronId,
+        caller: &PrincipalId,
+        merge_maturity: &manage_neuron::MergeMaturity,
+    ) -> Result<MergeMaturityResponse, GovernanceError> {
+        let stake_maturity = manage_neuron::StakeMaturity {
+            percentage_to_stake: Some(merge_maturity.percentage_to_merge),
+        };
+        let stake_result = self.stake_maturity_of_neuron(id, caller, &stake_maturity);
+        match stake_result {
+            Ok((_stake_response, merge_response)) => Ok(merge_response),
+            Err(e) => Err(e),
+        }
+    }
+
     /// Merges the maturity of a neuron into the neuron's stake.
     ///
     /// This method allows a neuron controller to merge the currently
@@ -3585,7 +3601,7 @@ impl Governance {
         id: &NeuronId,
         caller: &PrincipalId,
         stake_maturity: &manage_neuron::StakeMaturity,
-    ) -> Result<StakeMaturityResponse, GovernanceError> {
+    ) -> Result<(StakeMaturityResponse, MergeMaturityResponse), GovernanceError> {
         let neuron = self.get_neuron(id)?.clone();
 
         if neuron.state(self.env.now()) == NeuronState::Spawning {
@@ -3642,11 +3658,19 @@ impl Governance {
                 .unwrap_or(0)
                 .saturating_add(maturity_to_stake),
         );
+        let staked_maturity_e8s = neuron.staked_maturity_e8s_equivalent.unwrap_or(0);
+        let new_stake_e8s = neuron.cached_neuron_stake_e8s + staked_maturity_e8s;
 
-        Ok(StakeMaturityResponse {
-            maturity_e8s: neuron.maturity_e8s_equivalent,
-            staked_maturity_e8s: neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
-        })
+        Ok((
+            StakeMaturityResponse {
+                maturity_e8s: neuron.maturity_e8s_equivalent,
+                staked_maturity_e8s,
+            },
+            MergeMaturityResponse {
+                merged_maturity_e8s: maturity_to_stake,
+                new_stake_e8s,
+            },
+        ))
     }
 
     /// Disburse part of the stake of a neuron into a new neuron, possibly
@@ -6521,12 +6545,11 @@ impl Governance {
                 .await
                 .map(ManageNeuronResponse::spawn_response),
             Some(manage_neuron::Command::MergeMaturity(m)) => self
-                .merge_maturity_of_neuron(&id, caller, m)
-                .await
+                .redirect_merge_maturity_to_stake_maturity(&id, caller, m)
                 .map(ManageNeuronResponse::merge_maturity_response),
             Some(manage_neuron::Command::StakeMaturity(s)) => self
                 .stake_maturity_of_neuron(&id, caller, s)
-                .map(ManageNeuronResponse::stake_maturity_response),
+                .map(|(response, _)| ManageNeuronResponse::stake_maturity_response(response)),
             Some(manage_neuron::Command::Split(s)) => self
                 .split_neuron(&id, caller, s)
                 .await

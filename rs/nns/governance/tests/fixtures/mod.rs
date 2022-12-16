@@ -180,6 +180,7 @@ pub struct NeuronBuilder {
     age_timestamp: Option<u64>,
     created_seconds: Option<u64>,
     maturity: u64,
+    staked_maturity: u64,
     neuron_fees: u64,
     dissolve_state: Option<neuron::DissolveState>,
     followees: HashMap<i32, neuron::Followees>,
@@ -203,6 +204,7 @@ impl From<Neuron> for NeuronBuilder {
             },
             created_seconds: Some(neuron.created_timestamp_seconds),
             maturity: neuron.maturity_e8s_equivalent,
+            staked_maturity: neuron.staked_maturity_e8s_equivalent.unwrap_or(0),
             neuron_fees: neuron.neuron_fees_e8s,
             dissolve_state: neuron.dissolve_state,
             followees: neuron.followees,
@@ -224,6 +226,7 @@ impl NeuronBuilder {
             age_timestamp: None,
             created_seconds: None,
             maturity: 0,
+            staked_maturity: 0,
             neuron_fees: 0,
             dissolve_state: None,
             followees: HashMap::new(),
@@ -243,6 +246,7 @@ impl NeuronBuilder {
             age_timestamp: None,
             created_seconds: None,
             maturity: 0,
+            staked_maturity: 0,
             neuron_fees: 0,
             dissolve_state: None,
             followees: HashMap::new(),
@@ -278,6 +282,10 @@ impl NeuronBuilder {
         self
     }
 
+    pub fn set_staked_maturity(mut self, staked_maturity: u64) -> Self {
+        self.staked_maturity = staked_maturity;
+        self
+    }
     pub fn set_creation_timestamp(mut self, secs: u64) -> Self {
         self.created_seconds = Some(secs);
         self
@@ -348,6 +356,11 @@ impl NeuronBuilder {
                 },
             },
             maturity_e8s_equivalent: self.maturity,
+            staked_maturity_e8s_equivalent: if self.staked_maturity == 0 {
+                None
+            } else {
+                Some(self.staked_maturity)
+            },
             dissolve_state: self.dissolve_state,
             kyc_verified: self.kyc_verified,
             not_for_profit: self.not_for_profit,
