@@ -7,6 +7,7 @@ use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{ReplicaVersion, SubnetId};
 
+use chrono::{DateTime, Utc};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use slog::{error, info, warn, Logger};
@@ -540,6 +541,12 @@ impl BackupHelper {
             Err(e.to_string())
         } else {
             info!(self.log, "State archived!");
+            let now: DateTime<Utc> = Utc::now();
+            let now_str = format!("{}\n", now.to_rfc2822());
+            let mut file = File::create(archive_dir.join("archiving_timestamp.txt"))
+                .map_err(|err| format!("Error creating timestamp file: {:?}", err))?;
+            file.write_all(now_str.as_bytes())
+                .map_err(|err| format!("Error writing timestamp: {:?}", err))?;
 
             match (
                 self.get_disk_stats(DiskStats::Space),

@@ -400,8 +400,8 @@ fn sync_subnet(m: Arc<BackupManager>, i: usize) {
         if sync_last_time.elapsed() > b.sync_period {
             match b.backup_helper.collect_nodes(b.nodes_syncing) {
                 Ok(nodes) => {
+                    m.set_value(subnet_id, |s, v| s.sync_last_time = v, Instant::now());
                     b.backup_helper.sync_files(&nodes);
-                    m.set_value(subnet_id, |s, v| s.sync_last_time = v, Instant::now())
                 }
                 Err(e) => error!(m.log, "Error fetching subnet node list: {:?}", e),
             }
@@ -420,11 +420,11 @@ fn replay_subnets(m: Arc<BackupManager>) {
                 let subnet_id = &b.backup_helper.subnet_id;
                 let replay_last_time = m.get_value(subnet_id, |s| s.replay_last_time);
                 if replay_last_time.elapsed() > b.replay_period {
+                    m.set_value(subnet_id, |s, v| s.replay_last_time = v, Instant::now());
                     let current_replica_version =
                         m.get_value(subnet_id, |s| s.replica_version.clone());
                     let new_replica_version = b.backup_helper.replay(current_replica_version);
                     m.set_value(subnet_id, |s, v| s.replica_version = v, new_replica_version);
-                    m.set_value(subnet_id, |s, v| s.replay_last_time = v, Instant::now());
                 }
             }
         }
