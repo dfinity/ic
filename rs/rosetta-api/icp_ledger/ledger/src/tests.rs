@@ -777,7 +777,7 @@ fn test_transaction_hash_consistency() {
     let transaction_hash = transaction.hash();
     let hash_string = transaction_hash.to_string();
     assert_eq!(
-        hash_string, "f39130181586ea3d166185104114d7697d1e18af4f65209a53627f39b2fa0996",
+        hash_string, "07ecc748dfb8d81c259a368c4492f136aa56c6c4caa1a0b2c95b21439230bf57",
         "Transaction hash must be stable."
     );
 }

@@ -24,7 +24,6 @@ type BlockIndex = nat64;
 
 type Transaction = record {
     memo : Memo;
-    icrc1_memo: opt blob;
     operation : opt Operation;
     created_at_time : TimeStamp;
 };

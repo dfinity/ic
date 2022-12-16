@@ -295,6 +295,8 @@ pub struct Account {
 pub struct Transaction {
     #[prost(message, optional, tag = "4")]
     pub memo: ::core::option::Option<Memo>,
+    #[prost(message, optional, tag = "7")]
+    pub icrc1_memo: ::core::option::Option<Icrc1Memo>,
     /// obsolete
     #[prost(message, optional, tag = "5")]
     pub created_at: ::core::option::Option<BlockIndex>,
@@ -365,6 +367,11 @@ pub struct Subaccount {
 pub struct Memo {
     #[prost(uint64, tag = "1")]
     pub memo: u64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Icrc1Memo {
+    #[prost(bytes = "vec", tag = "1")]
+    pub memo: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(
     Eq,

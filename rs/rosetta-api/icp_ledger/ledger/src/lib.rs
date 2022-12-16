@@ -69,7 +69,7 @@ pub struct Ledger {
     // accounts with lowest balances are removed
     accounts_overflow_trim_quantity: usize,
     pub minting_account_id: Option<AccountIdentifier>,
-    pub minting_account_icrc1: Option<Account>,
+    pub icrc1_minting_account: Option<Account>,
     // This is a set of BlockIndexs that have been notified
     #[serde(default)]
     pub blocks_notified: IntMap<()>,
@@ -181,7 +181,7 @@ impl Default for Ledger {
             maximum_number_of_accounts: 28_000_000,
             accounts_overflow_trim_quantity: 100_000,
             minting_account_id: None,
-            minting_account_icrc1: None,
+            icrc1_minting_account: None,
             blocks_notified: IntMap::new(),
             transaction_window: Duration::from_secs(24 * 60 * 60),
             transactions_by_hash: BTreeMap::new(),
@@ -228,6 +228,7 @@ impl Ledger {
             Transaction {
                 operation,
                 memo,
+                icrc1_memo: None,
                 // TODO(FI-349): preserve created_at_time and memo the caller specified.
                 created_at_time: created_at_time.or(Some(now)),
             },
@@ -272,7 +273,7 @@ impl Ledger {
         &mut self,
         initial_values: HashMap<AccountIdentifier, Tokens>,
         minting_account: AccountIdentifier,
-        minting_account_icrc1: Option<Account>,
+        icrc1_minting_account: Option<Account>,
         timestamp: TimeStamp,
         transaction_window: Option<Duration>,
         send_whitelist: HashSet<CanisterId>,
@@ -284,7 +285,7 @@ impl Ledger {
         self.token_name = token_name.unwrap_or_else(|| "Internet Computer".to_string());
         self.balances.token_pool = Tokens::MAX;
         self.minting_account_id = Some(minting_account);
-        self.minting_account_icrc1 = minting_account_icrc1;
+        self.icrc1_minting_account = icrc1_minting_account;
         if let Some(t) = transaction_window {
             self.transaction_window = t;
         }
