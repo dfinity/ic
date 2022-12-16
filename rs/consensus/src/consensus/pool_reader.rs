@@ -312,7 +312,7 @@ impl<'a> PoolReader<'a> {
         self.cache.summary_block()
     }
 
-    /// Get the greatest height of CatchUpPackage.
+    /// Get the height of highest CatchUpPackage.
     pub fn get_catch_up_height(&self) -> Height {
         self.get_highest_catch_up_package().height()
     }

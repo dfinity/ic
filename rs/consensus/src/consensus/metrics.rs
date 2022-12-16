@@ -537,6 +537,7 @@ pub struct PurgerMetrics {
     pub unvalidated_pool_purge_height: IntGauge,
     pub validated_pool_purge_height: IntGauge,
     pub replicated_state_purge_height: IntGauge,
+    pub replicated_state_purge_height_disk: IntGauge,
 }
 
 impl PurgerMetrics {
@@ -552,7 +553,11 @@ impl PurgerMetrics {
             ),
             replicated_state_purge_height: metrics_registry.int_gauge(
                 "replicated_state_purge_height",
-                "The height below which replicated states are purged",
+                "The height below which in-memory replicated states are purged",
+            ),
+            replicated_state_purge_height_disk: metrics_registry.int_gauge(
+                "replicated_state_purge_height_disk",
+                "The height below which on-disk replicated states (checkpoints) are purged",
             ),
         }
     }
