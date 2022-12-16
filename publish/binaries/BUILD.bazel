@@ -2,13 +2,21 @@ load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 
-NOSTRIP_BINARIES = {
+LINUX_ONLY = [
+    "vsock_agent",
+    "prod-test-driver",
+]
+
+NO_STRIP = [
+    "canister_sandbox",
+    "ic-btc-adapter",
+    "replica",
+]
+
+BINARIES = {
     "canister_sandbox": "//rs/canister_sandbox",
     "ic-btc-adapter": "//rs/bitcoin/adapter:ic-btc-adapter",
     "replica": "//rs/replica",
-}
-
-STRIP_BINARIES = {
     "boundary-node-control-plane": "//rs/boundary_node/control_plane:boundary-node-control-plane",
     "boundary-node-prober": "//rs/boundary_node/prober:boundary-node-prober",
     "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
@@ -43,17 +51,17 @@ STRIP_BINARIES = {
 
 [release_nostrip_binary(
     name = name,
-    binary = NOSTRIP_BINARIES[name],
+    binary = BINARIES[name],
     visibility = [
         "//ic-os/guestos/dev:__pkg__",
         "//ic-os/guestos/dev-malicious:__pkg__",
         "//ic-os/guestos/prod:__pkg__",
     ],
-) for name in NOSTRIP_BINARIES]
+) for name in BINARIES if name in NO_STRIP]
 
 [release_strip_binary(
     name = name,
-    binary = STRIP_BINARIES[name],
+    binary = BINARIES[name],
     visibility = [
         "//ic-os/boundary-guestos/envs/dev:__pkg__",
         "//ic-os/boundary-guestos/envs/dev-sev:__pkg__",
@@ -63,31 +71,44 @@ STRIP_BINARIES = {
         "//ic-os/guestos/dev-malicious:__pkg__",
         "//ic-os/guestos/prod:__pkg__",
     ],
-) for name in STRIP_BINARIES]
+) for name in BINARIES if name not in NO_STRIP]
 
 [
     gzip_compress(
         name = name + ".gz",
         srcs = [name],
     )
-    for name in NOSTRIP_BINARIES
-]
-
-[
-    gzip_compress(
-        name = name + ".gz",
-        srcs = [name],
-    )
-    for name in STRIP_BINARIES
+    for name in BINARIES
 ]
 
 filegroup(
     name = "binaries",
-    srcs = [name + ".gz" for name in NOSTRIP_BINARIES] + [name + ".gz" for name in STRIP_BINARIES],
+    srcs = select({
+        "@platforms//os:linux": [name + ".gz" for name in BINARIES],
+        "@platforms//os:osx": [name + ".gz" for name in BINARIES if name not in LINUX_ONLY],
+    }),
 )
 
 upload_artifacts(
     name = "upload",
     inputs = [":binaries"],
+    remote_subdir = "binaries/" + select({
+        "@platforms//cpu:x86_64": "x86_64",
+        "@platforms//cpu:arm64": "arm64",
+        "//conditions:default": "unknown",
+    }) + "-" + select({
+        "@platforms//os:linux": "linux",
+        "@platforms//os:osx": "darwin",
+        "//conditions:default": "unknown",
+    }),
+)
+
+# https://dfinity.atlassian.net/browse/IDX-2599
+# various places in the source code, and possibly other repositories reference
+# the legacy upload path. Unwinding it without a will involve an unpredictable amount of time.
+upload_artifacts(
+    name = "legacy_upload",
+    inputs = [":binaries"],
     remote_subdir = "release",
+    target_compatible_with = ["@platforms//os:linux"],
 )

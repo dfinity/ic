@@ -77,7 +77,6 @@ bazel-test-all:
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going"
     BAZEL_TARGETS: "//..."
-    BAZEL_UPLOAD_TARGETS: "//..."
 
 # VER-1818: bazelified system tests should not block pre-master pipelines, as they run on a new (WIP) test driver implementation.
 bazel-test-all-allow-to-fail:
@@ -87,7 +86,6 @@ bazel-test-all-allow-to-fail:
   variables:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --test_tag_filters=allow_to_fail"
     BAZEL_TARGETS: "//..."
-    BAZEL_UPLOAD_TARGETS: "//..."
 
 .scheduled-bazel-system-test:
   extends:
@@ -147,7 +145,7 @@ bazel-test-all-rebuild:
     BAZEL_COMMAND: "build"
     BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
 
-bazel-test-all-macos:
+bazel-build-macos:
   extends:
     - .build-env-base
     - .bazel-test-all
@@ -157,16 +155,15 @@ bazel-test-all-macos:
   variables:
     BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${CI_CONCURRENT_ID}"
     BAZEL_COMMAND: "build"
-    BAZEL_TARGETS: "//rs/..."
-    BAZEL_UPLOAD_TARGETS: "//publish/sdk/..."
-    BAZEL_EXTRA_ARGS: "--config dev"
+    BAZEL_EXTRA_ARGS: "--config macos_ci"
+    BAZEL_TARGETS: "//rs/... //publish/binaries/... //publish/sdk/..."
 
 bazel-cache-perf-test-macos:
   extends:
-    - bazel-test-all-macos
+    - bazel-build-macos
     - .bazel-rules-post-master
   needs:
-    - bazel-test-all-macos
+    - bazel-build-macos
 
 bazel-cargo-test-parity:
   extends:

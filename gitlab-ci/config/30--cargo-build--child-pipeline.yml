@@ -21,12 +21,3 @@ cargo-build-release-linux:
     BUILD_COMMAND: "cargo build --release"
   # TODO(IDX-2581): Remove "allowed to fail" when build fixed
   allow_failure: true
-
-cargo-build-release-darwin:
-  extends: .cargo-build-macos
-  artifacts:
-    paths:
-      - artifacts/nix-release/*
-  variables:
-    BUILD_COMMAND: "cargo build --release"
-    BUILD_COMMAND_POST: "cd ${CI_PROJECT_DIR}/gitlab-ci/src && python3 -m artifacts.collect_build_binaries artifacts/nix-release; cd ${CI_PROJECT_DIR} && gitlab-ci/src/artifacts/rclone_upload.py --version='$CI_COMMIT_SHA' 'artifacts/nix-release' nix-release/x86_64-darwin"

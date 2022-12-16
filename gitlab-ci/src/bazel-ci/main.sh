@@ -11,11 +11,6 @@ AWS_CREDS="${HOME}/.aws/credentials"
 mkdir -p "$(dirname "${AWS_CREDS}")"
 ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
 
-upload_target_args=""
-if [ -n "${BAZEL_UPLOAD_TARGETS:-}" ]; then
-    upload_target_args=$(bazel query "kind(upload_artifacts, $BAZEL_UPLOAD_TARGETS)")
-fi
-
 ic_version_rc_only="redacted"
 if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
@@ -32,6 +27,5 @@ buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" "${CI_JOB_NAME}-bazel-cmd" 
     --ic_version_rc_only="${ic_version_rc_only}" \
     ${BAZEL_EXTRA_ARGS} \
     ${BAZEL_TARGETS} \
-    ${upload_target_args} \
     2>&1 \
     | perl -pe 'BEGIN { select(STDOUT); $| = 1 } s/(.*Streaming build results to:.*)/\o{33}[92m$1\o{33}[0m/'
