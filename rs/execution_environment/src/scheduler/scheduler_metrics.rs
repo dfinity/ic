@@ -13,6 +13,9 @@ use crate::metrics::{
 };
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
+pub(crate) const SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN: &str =
+    "scheduler_compute_allocation_invariant_broken";
+pub(crate) const SCHEDULER_CORES_INVARIANT_BROKEN: &str = "scheduler_cores_invariant_broken";
 pub(crate) const SUBNET_MEMORY_USAGE_INVARIANT_BROKEN: &str =
     "scheduler_subnet_memory_usage_invariant_broken";
 
@@ -74,6 +77,8 @@ pub(super) struct SchedulerMetrics {
     pub(super) old_open_call_contexts: IntGaugeVec,
     pub(super) canisters_with_old_open_call_contexts: IntGaugeVec,
     pub(super) canister_invariants: IntCounter,
+    pub(super) scheduler_compute_allocation_invariant_broken: IntCounter,
+    pub(super) scheduler_cores_invariant_broken: IntCounter,
     pub(super) subnet_memory_usage_invariant: IntCounter,
     pub(super) total_canister_balance: Gauge,
     pub(super) canister_paused_execution: Histogram,
@@ -523,6 +528,8 @@ impl SchedulerMetrics {
                 &["age"]
             ),
             canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),
+            scheduler_compute_allocation_invariant_broken: metrics_registry.error_counter(SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN),
+            scheduler_cores_invariant_broken: metrics_registry.error_counter(SCHEDULER_CORES_INVARIANT_BROKEN),
             subnet_memory_usage_invariant: metrics_registry.error_counter(SUBNET_MEMORY_USAGE_INVARIANT_BROKEN),
             total_canister_balance: metrics_registry.gauge(
                 "scheduler_canister_balance_cycles_total",

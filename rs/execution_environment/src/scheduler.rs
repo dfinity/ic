@@ -62,6 +62,34 @@ pub(crate) mod test_utilities;
 #[cfg(test)]
 pub(crate) mod tests;
 
+/// Debug assert a condition, increase an error counter, and log the error.
+///
+/// Example usage:
+///
+/// ```ignore
+/// debug_assert_or_critical_error!(a > b, metric, logger, "{} > {}", a, b);
+/// ```
+///
+/// Which is equivalent to:
+///
+/// ```ignore
+/// if !(a > b) {
+///     debug_assert!(a > b);
+///     metric.inc();
+///     error!(logger, "{} > {}", a, b)
+/// }
+/// ```
+macro_rules! debug_assert_or_critical_error {
+    // debug_assert_or_critical_error!(a > b, metric, logger, "{} > {}", a, b);
+    ($cond:expr, $metric:expr, $($arg:tt)*) => {{
+        if !($cond) {
+            debug_assert!($cond);
+            $metric.inc();
+            error!($($arg)*);
+        }
+    }};
+}
+
 ////////////////////////////////////////////////////////////////////////
 /// Scheduler Implementation
 
@@ -113,6 +141,7 @@ impl SchedulerImpl {
     /// section about [Scheduler and AccumulatedPriority] in types/src/lib.rs
     fn apply_scheduling_strategy(
         &self,
+        logger: &ReplicaLogger,
         scheduler_cores: usize,
         current_round: ExecutionRound,
         accumulated_priority_reset_interval: ExecutionRound,
@@ -175,7 +204,15 @@ impl SchedulerImpl {
         }
         // Assert there is at least `1%` of free capacity to distribute across canisters.
         // It's guaranteed by `validate_compute_allocation()`
-        debug_assert!(total_compute_allocation_percent < compute_capacity_percent);
+        debug_assert_or_critical_error!(
+            total_compute_allocation_percent < compute_capacity_percent,
+            self.metrics.scheduler_compute_allocation_invariant_broken,
+            logger,
+            "{}: Total compute allocation {}% must be less than compute capacity {}%",
+            SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN,
+            total_compute_allocation_percent,
+            compute_capacity_percent
+        );
 
         // Free capacity per canister in multiplied percent.
         // Note, to avoid division by zero when there are no canisters
@@ -213,6 +250,26 @@ impl SchedulerImpl {
         // by the `multiplier`.
         let long_execution_cores = ((long_executions_compute_allocation + 100 * multiplier - 1)
             / (100 * multiplier)) as usize;
+        // If there are long executions, the `long_execution_cores` must be non-zero.
+        debug_assert_or_critical_error!(
+            number_of_long_executions == 0 || long_execution_cores > 0,
+            self.metrics.scheduler_cores_invariant_broken,
+            logger,
+            "{}: Number of long execution cores {} must be more than 0",
+            SCHEDULER_CORES_INVARIANT_BROKEN,
+            long_execution_cores,
+        );
+        // As one scheduler core is reserved, the `long_execution_cores` is always
+        // less than `scheduler_cores`
+        debug_assert_or_critical_error!(
+            long_execution_cores < scheduler_cores,
+            self.metrics.scheduler_cores_invariant_broken,
+            logger,
+            "{}: Number of long execution cores {} must be less than scheduler cores {}",
+            SCHEDULER_CORES_INVARIANT_BROKEN,
+            long_execution_cores,
+            scheduler_cores
+        );
 
         self.order_canister_round_states(&mut round_states);
 
@@ -1393,6 +1450,7 @@ impl Scheduler for SchedulerImpl {
             round_schedule = {
                 let mut canisters = state.take_canister_states();
                 let round_schedule = self.apply_scheduling_strategy(
+                    &round_log,
                     self.config.scheduler_cores,
                     current_round,
                     self.config.accumulated_priority_reset_interval,
