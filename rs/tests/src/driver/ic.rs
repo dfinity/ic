@@ -1,13 +1,13 @@
-use super::bootstrap::{init_ic, setup_and_start_vms};
-use super::farm::HostFeature;
-use super::resource::{allocate_resources, get_resource_request, ResourceGroup};
-use super::test_env::{TestEnv, TestEnvAttribute};
-use super::test_env_api::HasIcDependencies;
-use crate::driver::farm::Farm;
-use crate::driver::test_env_api::HasRegistryLocalStore;
-use crate::driver::test_setup::GroupSetup;
+use crate::driver::{
+    bootstrap::{init_ic, setup_and_start_vms},
+    farm::{Farm, HostFeature},
+    node_software_version::NodeSoftwareVersion,
+    resource::{allocate_resources, get_resource_request, ResourceGroup},
+    test_env::{TestEnv, TestEnvAttribute},
+    test_env_api::{HasIcDependencies, HasRegistryLocalStore},
+    test_setup::GroupSetup,
+};
 use anyhow::Result;
-use ic_fondue::ic_instance::node_software_version::NodeSoftwareVersion;
 use ic_prep_lib::node::NodeSecretKeyStore;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_protobuf::registry::subnet::v1::GossipConfig;

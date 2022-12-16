@@ -7,6 +7,8 @@ pub mod evaluation;
 pub mod farm;
 pub mod ic;
 pub mod new;
+pub mod node_software_version;
+pub mod port_allocator;
 pub mod pot_dsl;
 pub mod prometheus_vm;
 pub mod resource;

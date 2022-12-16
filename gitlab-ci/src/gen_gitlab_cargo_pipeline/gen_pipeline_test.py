@@ -272,7 +272,6 @@ def test_log_rdeps():
         "ic-embedders": "ic-canister-sandbox-common",
         "ic-error-types": "candid",
         "ic-execution-environment": "candid",
-        "ic-fondue": "canister-test",
         "ic-http-handler": "candid",
         "ic-ic00-types": "candid",
         "ic-ingress-manager": "ic-artifact-pool",

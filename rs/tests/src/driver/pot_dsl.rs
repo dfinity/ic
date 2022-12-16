@@ -2,7 +2,7 @@ use std::{
     fmt::Display,
     panic::{catch_unwind, UnwindSafe},
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crate::driver::{
@@ -10,7 +10,6 @@ use crate::driver::{
     ic::{InternetComputer, VmAllocationStrategy, VmResources},
     test_env::TestEnv,
 };
-use ic_fondue::slack::{Alertable, SlackChannel};
 use serde::{Deserialize, Serialize};
 
 pub trait PotSetupFn: FnOnce(TestEnv) + UnwindSafe + Send + Sync + 'static {}
@@ -262,6 +261,132 @@ pub struct Suite {
     pub name: String,
     pub pots: Vec<Pot>,
     pub alert_channels: Vec<SlackChannel>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+/// A tree-like structure containing execution plan of the test suite.
+pub struct TestSuiteContract {
+    pub name: String,
+    pub is_skipped: bool,
+    pub alert_channels: Vec<SlackChannel>,
+    pub children: Vec<TestSuiteContract>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum TestResult {
+    Passed,
+    Failed(String),
+    Skipped,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+/// A tree-like structure containing statistics on how much time it took to
+/// complete a node and all its children, i.e. threads spawned from the node.
+pub struct TestResultNode {
+    pub name: String,
+    #[serde(with = "serde_millis")]
+    pub started_at: Instant,
+    pub duration: Duration,
+    pub result: TestResult,
+    pub children: Vec<TestResultNode>,
+    pub alert_channels: Vec<SlackChannel>,
+}
+
+impl Default for TestResultNode {
+    fn default() -> Self {
+        Self {
+            name: String::default(),
+            started_at: Instant::now(),
+            duration: Duration::default(),
+            result: TestResult::Skipped,
+            children: vec![],
+            alert_channels: vec![],
+        }
+    }
+}
+
+impl TestResult {
+    pub fn failed_with_message(message: &str) -> TestResult {
+        TestResult::Failed(message.to_string())
+    }
+}
+
+impl From<&TestSuiteContract> for TestResultNode {
+    fn from(contract: &TestSuiteContract) -> Self {
+        let result = if contract.is_skipped {
+            TestResult::Skipped
+        } else {
+            TestResult::Failed("".to_string())
+        };
+        Self {
+            name: contract.name.clone(),
+            children: contract.children.iter().map(TestResultNode::from).collect(),
+            result,
+            alert_channels: contract.alert_channels.clone(),
+            ..Default::default()
+        }
+    }
+}
+
+pub fn infer_parent_result(children: &[TestResultNode]) -> TestResult {
+    if children.iter().all(|t| t.result == TestResult::Skipped) {
+        return TestResult::Skipped;
+    }
+    if children
+        .iter()
+        .any(|t| matches!(t.result, TestResult::Failed(_)))
+    {
+        TestResult::failed_with_message("")
+    } else {
+        TestResult::Passed
+    }
+}
+
+pub fn propagate_children_results_to_parents(root: &mut TestResultNode) {
+    if root.children.is_empty() {
+        return;
+    }
+    root.children
+        .iter_mut()
+        .for_each(propagate_children_results_to_parents);
+    root.result = infer_parent_result(&root.children);
+    root.started_at = root
+        .children
+        .iter()
+        .map(|child| child.started_at)
+        .min()
+        .unwrap();
+    root.duration = root
+        .children
+        .iter()
+        .map(|child| child.duration)
+        .max()
+        .unwrap();
+}
+
+pub trait Alertable {
+    fn with_alert<T: Into<SlackChannel>>(self, channel: T) -> Self;
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct SlackChannel(String);
+
+impl From<&str> for SlackChannel {
+    fn from(name: &str) -> Self {
+        Self(name.to_string())
+    }
+}
+
+#[derive(Serialize)]
+pub struct SlackAlert {
+    channel: SlackChannel,
+    message: String,
+}
+
+impl SlackAlert {
+    pub fn new(channel: SlackChannel, message: String) -> Self {
+        Self { channel, message }
+    }
 }
 
 impl Alertable for Suite {

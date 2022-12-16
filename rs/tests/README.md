@@ -253,22 +253,6 @@ For example, to run all the `pre-master` system tests use:
 
 Note: This requires the commit to be built by CI/CD, i.e. it must be pushed to the remote and an MR has to be created. If the script can't find artifacts for the current commit, it will fail.
 
-### Pots and Tests
-
-In `fondue`, tests are organized in _pots_ of two different kinds:
-
-- *Composable* pots consist of multiple individual tests that run against the
-	same environment configuration. This means we pay the price of setting up a
-	bunch of nodes only once. The disadvantage is that these tests receive a
-	read-only `IcHandle` object, which does not enable the test author to change
-	its environment (i.e., start new replicas, stop replicas, etc). Note that
-	altering the state of the nodes is allowed — think of installing a canister,
-	for instance.  You can think of an `IcHandle` as a vector of HTTP endpoints.
-
-- *Isolated* pots consists in a _single_ test that runs against a given
-	environment. This single test, however, receives a `IcManager` instead of a
-	`IcManager::handle()`; hence, it is allowed to perform arbitrary changes in
-	its environment.
 
 ### My test is failing/flaky, what do I do?
 
@@ -280,26 +264,6 @@ Go to the end of the page for info on the CLI arguments.
 If you are running the script within nix-shell on Linux and run out of disk space, `export TMPDIR=` might solve this issue for you.
 In particular, the `nix-shell` command run in Ubuntu 20.04 sets the `TMPDIR` variable to `/run/user/1000`, which might correspond to a disk partition that is be too small for storing all the artifacts produced by the tests. To mitigate the problem, one could run, e.g., `export TMPDIR=/tmp`.
 
-
-### Filtering
-
-Often, we might want to run just one specific test, or we might
-want to skip certain tests. We can do so by passing a filter
-as the last argument to `system-tests` or as an argument to `--skip`.
-
-To run all tests that contain the string "basic" in their name we run:
-
-```
-$ ./setup-and-cargo-test.sh -- basic
-```
-
-This will run `basic_health_test` and `canister_lifecycle_basic_test`.
-Now, say that we do not want to run the steps that have `delete` in their
-names:
-
-```
-$ ./setup-and-cargo-test.sh -- --skip delete basic
-```
 ### Running Docker Containers in system-tests
 
 Docker containers can be run in Universal VMs. Search for calls of "UniversalVm::new" to see examples on how to set that up.
