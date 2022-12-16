@@ -34,11 +34,10 @@ use ic_logger::{info, warn};
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::sync::Weak;
-use tokio::io::AsyncRead;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant};
-use tower::Service;
+use tower::{BoxError, Service};
 
 // DEQUEUE_BYTES is the number of bytes which we will attempt to dequeue and
 // aggregate before sending to the network via write_all(). Tokio currently
@@ -422,9 +421,11 @@ pub(crate) async fn create_connected_state(
             peer_addr,
             read_task,
             write_task,
+            h2_conn: None,
             role,
         })
     } else {
+        // TODO figure out if we need a timeout for the two functions below
         match role {
             ConnectionRole::Client => {
                 create_connected_state_for_h2_client(
@@ -468,88 +469,51 @@ pub(crate) async fn create_connected_state_for_h2_client(
     data_plane_metrics: DataPlaneMetrics,
     weak_self: Weak<TransportImpl>,
     rt_handle: tokio::runtime::Handle,
-) -> Result<Connected, Box<dyn std::error::Error + Send + Sync>> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    let rt_handle_clone = rt_handle.clone();
-    let rt_handle_clone2 = rt_handle.clone();
+) -> Result<Connected, BoxError> {
+    let (h2, connection) = h2::client::Builder::new()
+        .initial_window_size(H2_WINDOW_SIZE)
+        .initial_connection_window_size(H2_WINDOW_SIZE)
+        .max_frame_size(H2_FRAME_SIZE)
+        .handshake(tls_stream)
+        .await?;
 
-    rt_handle.clone().spawn(async move {
-        match h2::client::Builder::new()
-            .initial_window_size(H2_WINDOW_SIZE)
-            .initial_connection_window_size(H2_WINDOW_SIZE)
-            .max_frame_size(H2_FRAME_SIZE)
-            .handshake(tls_stream)
-            .await
-        {
-            Ok((mut client, connection)) => {
-                // This needs to be running before we send a request for server to accept the request
-                rt_handle.clone().spawn(async move {
-                    if (connection.await).is_err() {
-                        // TODO handle error
-                    }
-                });
-                let request = http::Request::new(());
-
-                // accept the first request
-                match client.send_request(request, false) {
-                    Ok((response, send_stream)) => {
-                        match response.await {
-                            Ok(response) => {
-                                let recv_stream = response.into_body();
-
-                                if tx.send((send_stream, recv_stream)).is_err() {
-                                    // TODO: We need to handle the error.
-                                }
-                            }
-                            Err(_) => {
-                                drop(tx);
-                            }
-                        }
-                    }
-                    Err(_) => {
-                        // TODO metrics
-                        drop(tx);
-                    }
-                }
-            }
-            Err(_) => {
-                // TODO metrics
-                drop(tx);
-            }
-        }
+    let h2_conn = rt_handle.spawn(async move {
+        let _ = connection.await;
     });
+    let mut h2 = h2.ready().await?;
+    // to support multiple channels the code below needs to be wrapped in a loop and we should have static number
+    // of channels
+    let request = http::Request::new(());
+    let (response_fut, send_stream) = h2.send_request(request, false)?;
+    let recv_stream = response_fut.await?.into_body();
 
-    match rx.await {
-        Ok((send_stream, recv_stream)) => {
-            let write_task = spawn_write_task(
-                peer_id,
-                channel_id,
-                send_queue_reader,
-                ChannelWriter::new_with_h2_send_stream(send_stream),
-                data_plane_metrics.clone(),
-                weak_self.clone(),
-                rt_handle_clone,
-            );
+    let write_task = spawn_write_task(
+        peer_id,
+        channel_id,
+        send_queue_reader,
+        ChannelWriter::new_with_h2_send_stream(send_stream),
+        data_plane_metrics.clone(),
+        weak_self.clone(),
+        rt_handle.clone(),
+    );
 
-            let read_task = spawn_read_task(
-                peer_id,
-                channel_id,
-                event_handler,
-                ChannelReader::new_with_h2_recv_stream(recv_stream),
-                data_plane_metrics,
-                weak_self,
-                rt_handle_clone2,
-            );
+    let read_task = spawn_read_task(
+        peer_id,
+        channel_id,
+        event_handler,
+        ChannelReader::new_with_h2_recv_stream(recv_stream),
+        data_plane_metrics,
+        weak_self,
+        rt_handle.clone(),
+    );
 
-            Ok(Connected {
-                peer_addr,
-                read_task,
-                write_task,
-                role: ConnectionRole::Client,
-            })
-        }
-        Err(_) => Err("Client handshake failed".into()),
-    }
+    Ok(Connected {
+        peer_addr,
+        read_task,
+        write_task,
+        h2_conn: Some(h2_conn),
+        role: ConnectionRole::Client,
+    })
 }
 
 pub(crate) async fn create_connected_state_for_h2_server(
@@ -562,83 +526,50 @@ pub(crate) async fn create_connected_state_for_h2_server(
     data_plane_metrics: DataPlaneMetrics,
     weak_self: Weak<TransportImpl>,
     rt_handle: tokio::runtime::Handle,
-) -> Result<Connected, Box<dyn std::error::Error + Send + Sync>> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    rt_handle.clone().spawn(async move {
-        match h2::server::Builder::new()
-            .initial_window_size(H2_WINDOW_SIZE)
-            .initial_connection_window_size(H2_WINDOW_SIZE)
-            .max_frame_size(H2_FRAME_SIZE)
-            .handshake(tls_stream)
-            .await
-        {
-            Ok(mut connection) => {
-                // accept the first request
-                if let Some(res) = connection.accept().await {
-                    match res {
-                        Ok((request, mut respond)) => {
-                            let response = http::Response::new(());
-                            // TODO: We need to handle the error.
-                            match respond.send_response(response, false) {
-                                Ok(send_stream) => {
-                                    let recv_stream = request.into_body();
+) -> Result<Connected, BoxError> {
+    let mut h2 = h2::server::Builder::new()
+        .initial_window_size(H2_WINDOW_SIZE)
+        .initial_connection_window_size(H2_WINDOW_SIZE)
+        .max_frame_size(H2_FRAME_SIZE)
+        .handshake(tls_stream)
+        .await?;
 
-                                    if tx.send((send_stream, recv_stream)).is_err() {
-                                        // TODO: We need to handle the error.
-                                    }
-                                    // do nothing with other requests for now
-                                    while connection.accept().await.is_some() {}
-                                }
-                                Err(_) => {
-                                    // TODO metrics
-                                    drop(tx);
-                                }
-                            }
-                        }
-                        Err(_) => {
-                            // TODO metrics
-                            drop(tx);
-                        }
-                    }
-                }
-            }
-            Err(_) => {
-                // TODO metrics
-                drop(tx);
-            }
-        }
-    });
+    // accept the first request
+    let (request, mut respond) = h2
+        .accept()
+        .await
+        .ok_or_else(|| BoxError::from("no incoming"))??;
+    let response = http::Response::new(());
+    let send_stream = respond.send_response(response, false)?;
+    let recv_stream = request.into_body();
 
-    match rx.await {
-        Ok(res) => {
-            let (send_stream, recv_stream) = res;
-            let write_task = spawn_write_task(
-                peer_id,
-                channel_id,
-                send_queue_reader,
-                ChannelWriter::new_with_h2_send_stream(send_stream),
-                data_plane_metrics.clone(),
-                weak_self.clone(),
-                rt_handle.clone(),
-            );
+    // Once we have multiple streams we would accepts more streams.
+    let h2_conn = rt_handle.spawn(async move { while let Some(Ok(_)) = h2.accept().await {} });
+    let write_task = spawn_write_task(
+        peer_id,
+        channel_id,
+        send_queue_reader,
+        ChannelWriter::new_with_h2_send_stream(send_stream),
+        data_plane_metrics.clone(),
+        weak_self.clone(),
+        rt_handle.clone(),
+    );
 
-            let read_task = spawn_read_task(
-                peer_id,
-                channel_id,
-                event_handler,
-                ChannelReader::new_with_h2_recv_stream(recv_stream),
-                data_plane_metrics,
-                weak_self,
-                rt_handle,
-            );
+    let read_task = spawn_read_task(
+        peer_id,
+        channel_id,
+        event_handler,
+        ChannelReader::new_with_h2_recv_stream(recv_stream),
+        data_plane_metrics,
+        weak_self,
+        rt_handle,
+    );
 
-            Ok(Connected {
-                peer_addr,
-                read_task,
-                write_task,
-                role: ConnectionRole::Server,
-            })
-        }
-        Err(_) => Err("Server handshake failed".into()),
-    }
+    Ok(Connected {
+        peer_addr,
+        read_task,
+        write_task,
+        h2_conn: Some(h2_conn),
+        role: ConnectionRole::Server,
+    })
 }

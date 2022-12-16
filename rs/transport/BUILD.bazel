@@ -67,6 +67,5 @@ rust_test_suite_with_extra_srcs(
         exclude = ["tests/common/**"],
     ),
     extra_srcs = glob(["tests/common/**"]),
-    flaky = True,
     deps = [":transport"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
