@@ -20,7 +20,7 @@ use ic_embedders::{
     CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_error_types::UserError;
-use ic_ic00_types::{CanisterInstallMode, InstallCodeArgs, Method, Payload};
+use ic_ic00_types::{CanisterInstallMode, CanisterStatusType, InstallCodeArgs, Method, Payload};
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
     RegistryExecutionSettings, Scheduler, WasmExecutionOutput,
@@ -168,6 +168,7 @@ impl SchedulerTest {
             MemoryAllocation::BestEffort,
             None,
             None,
+            None,
         )
     }
 
@@ -183,6 +184,7 @@ impl SchedulerTest {
         memory_allocation: MemoryAllocation,
         system_task: Option<SystemMethod>,
         time_of_last_allocation_charge: Option<Time>,
+        status: Option<CanisterStatusType>,
     ) -> CanisterId {
         let canister_id = self.next_canister_id();
         let wasm_source = system_task
@@ -199,6 +201,7 @@ impl SchedulerTest {
             .with_wasm(wasm_source.clone())
             .with_freezing_threshold(100)
             .with_time_of_last_allocation_charge(time_of_last_allocation_charge)
+            .with_status(status.unwrap_or(CanisterStatusType::Running))
             .build();
         let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
         canister_state.execution_state = Some(

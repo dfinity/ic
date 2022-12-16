@@ -7,13 +7,14 @@ use crate::scheduler::test_utilities::{on_response, other_side};
 use candid::Encode;
 use ic_btc_types::NetworkInRequest;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfigs};
-use ic_ic00_types::{BitcoinGetBalanceArgs, CanisterIdRecord, EmptyBlob, Method, Payload as _};
+use ic_ic00_types::{
+    BitcoinGetBalanceArgs, CanisterIdRecord, CanisterStatusType, EmptyBlob, Method, Payload as _,
+};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::CanisterQueuesTesting;
-use ic_replicated_state::CanisterStatus;
 
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_test_utilities::{
@@ -690,6 +691,7 @@ fn only_charge_for_allocation_after_specified_duration() {
         MemoryAllocation::Reserved(NumBytes::from(bytes_per_cycle)),
         None,
         Some(initial_time),
+        None,
     );
 
     // Don't charge because the time since the last charge is too small.
@@ -766,6 +768,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
             MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
             None,
             Some(initial_time),
+            None,
         );
     }
     test.set_time(
@@ -811,6 +814,7 @@ fn dont_charge_allocations_for_long_running_canisters() {
         MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
+        None,
     );
     let paused_canister = test.create_canister_with(
         Cycles::new(initial_cycles),
@@ -818,6 +822,7 @@ fn dont_charge_allocations_for_long_running_canisters() {
         MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
+        None,
     );
     test.canister_state_mut(paused_canister)
         .system_state
@@ -1267,6 +1272,7 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterHeartbeat),
         None,
+        None,
     );
     test.send_ingress(canister, ingress(1));
     test.send_ingress(canister, ingress(1));
@@ -1285,6 +1291,7 @@ fn execute_global_timer_once_per_round_in_system_subnet() {
         ComputeAllocation::zero(),
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterGlobalTimer),
+        None,
         None,
     );
     test.set_canister_global_timer(canister, Time::from_nanos_since_unix_epoch(1));
@@ -1306,6 +1313,7 @@ fn global_timer_is_not_scheduled_if_not_expired() {
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterGlobalTimer),
         None,
+        None,
     );
     test.set_canister_global_timer(canister, Time::from_nanos_since_unix_epoch(2));
     test.set_time(Time::from_nanos_since_unix_epoch(1));
@@ -1325,6 +1333,45 @@ fn global_timer_is_not_scheduled_if_global_timer_method_is_not_exported() {
         MemoryAllocation::BestEffort,
         None,
         None,
+        None,
+    );
+    test.set_canister_global_timer(canister, Time::from_nanos_since_unix_epoch(1));
+    test.set_time(Time::from_nanos_since_unix_epoch(1));
+
+    test.send_ingress(canister, ingress(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 1.0);
+}
+
+#[test]
+fn heartbeat_is_not_scheduled_if_the_canister_is_stopped() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        Some(SystemMethod::CanisterHeartbeat),
+        None,
+        Some(CanisterStatusType::Stopped),
+    );
+
+    test.send_ingress(canister, ingress(1));
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.round_inner.messages.get_sample_sum(), 1.0);
+}
+
+#[test]
+fn global_timer_is_not_scheduled_if_the_canister_is_stopped() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        Some(SystemMethod::CanisterGlobalTimer),
+        None,
+        Some(CanisterStatusType::Stopped),
     );
     test.set_canister_global_timer(canister, Time::from_nanos_since_unix_epoch(1));
     test.set_time(Time::from_nanos_since_unix_epoch(1));
@@ -1358,6 +1405,7 @@ fn execute_heartbeat_before_messages() {
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterHeartbeat),
         None,
+        None,
     );
     test.send_ingress(canister, ingress(1));
     test.send_ingress(canister, ingress(1));
@@ -1388,6 +1436,7 @@ fn execute_global_timer_before_messages() {
         ComputeAllocation::zero(),
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterGlobalTimer),
+        None,
         None,
     );
     test.set_canister_global_timer(canister, Time::from_nanos_since_unix_epoch(1));
@@ -1426,6 +1475,7 @@ fn test_drain_subnet_messages_with_some_long_running_canisters() {
                 Cycles::new(1_000_000_000_000),
                 ComputeAllocation::zero(),
                 MemoryAllocation::BestEffort,
+                None,
                 None,
                 None,
             );
@@ -1520,6 +1570,7 @@ fn test_drain_subnet_messages_no_long_running_canisters() {
                 MemoryAllocation::BestEffort,
                 None,
                 None,
+                None,
             );
             let arg = Encode!(&CanisterIdRecord::from(local_canister)).unwrap();
             test.inject_call_to_ic00(
@@ -1564,6 +1615,7 @@ fn test_drain_subnet_messages_all_long_running_canisters() {
                 Cycles::new(1_000_000_000_000),
                 ComputeAllocation::zero(),
                 MemoryAllocation::BestEffort,
+                None,
                 None,
                 None,
             );
@@ -1619,6 +1671,7 @@ fn execute_multiple_heartbeats() {
             ComputeAllocation::zero(),
             MemoryAllocation::BestEffort,
             Some(SystemMethod::CanisterHeartbeat),
+            None,
             None,
         );
         for _ in 0..number_of_messages_per_canister {
@@ -1710,6 +1763,7 @@ fn can_record_metrics_for_a_round() {
             Cycles::new(1_000_000_000_000_000),
             ComputeAllocation::try_from(compute_allocation).unwrap(),
             MemoryAllocation::BestEffort,
+            None,
             None,
             None,
         );
@@ -2121,12 +2175,14 @@ fn heartbeat_metrics_are_recorded() {
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterHeartbeat),
         None,
+        None,
     );
     let canister1 = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterHeartbeat),
+        None,
         None,
     );
     test.expect_heartbeat(canister0, instructions(100));
@@ -2400,6 +2456,7 @@ fn scheduler_maintains_canister_order() {
             MemoryAllocation::BestEffort,
             None,
             None,
+            None,
         );
         // The last canister does not have any messages.
         if i != 4 {
@@ -2491,6 +2548,7 @@ fn construct_scheduler_for_prop_test(
             } else {
                 None
             },
+            None,
             None,
         );
         test.canister_state_mut(canister)
@@ -3419,6 +3477,7 @@ fn dts_update_and_heartbeat() {
         ComputeAllocation::zero(),
         MemoryAllocation::BestEffort,
         Some(SystemMethod::CanisterHeartbeat),
+        None,
         None,
     );
     test.expect_heartbeat(canister, instructions(200));

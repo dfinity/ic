@@ -22,8 +22,8 @@ use ic_interfaces::{
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    bitcoin_state::BitcoinState, canister_state::NextExecution, CanisterState, ExecutionTask,
-    InputQueueType, NetworkTopology, ReplicatedState,
+    bitcoin_state::BitcoinState, canister_state::NextExecution, CanisterState, CanisterStatus,
+    ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
@@ -470,6 +470,12 @@ impl SchedulerImpl {
                 .start_timer();
             let now = state.time();
             for canister in state.canisters_iter_mut() {
+                // Do not add `Heartbeat` or `GlobalTimer` for stopped canisters
+                // as they should not be executing any more messages.
+                if canister.system_state.status == CanisterStatus::Stopped {
+                    continue;
+                }
+
                 let global_timer_has_reached_deadline =
                     canister.system_state.global_timer.has_reached_deadline(now);
                 match canister.next_execution() {
