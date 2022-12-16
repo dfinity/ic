@@ -53,7 +53,7 @@ use std::{
 #[allow(clippy::too_many_arguments)]
 fn init(
     minting_account: AccountIdentifier,
-    minting_account_icrc1: Option<Account>,
+    icrc1_minting_account: Option<Account>,
     initial_values: HashMap<AccountIdentifier, Tokens>,
     max_message_size_bytes: Option<usize>,
     transaction_window: Option<Duration>,
@@ -70,7 +70,7 @@ fn init(
     LEDGER.write().unwrap().from_init(
         initial_values,
         minting_account,
-        minting_account_icrc1,
+        icrc1_minting_account,
         dfn_core::api::now().into(),
         transaction_window,
         send_whitelist,
@@ -436,7 +436,7 @@ fn icrc1_balance_of(acc: Account) -> Nat {
 
 #[candid_method(query, rename = "icrc1_minting_account")]
 fn icrc1_minting_account() -> Option<Account> {
-    LEDGER.read().unwrap().minting_account_icrc1.clone()
+    LEDGER.read().unwrap().icrc1_minting_account.clone()
 }
 
 #[candid_method(query, rename = "transfer_fee")]
@@ -513,7 +513,7 @@ fn icrc1_decimals() -> u8 {
 fn canister_init(arg: LedgerCanisterInitPayload) {
     init(
         arg.minting_account,
-        arg.minting_account_icrc1,
+        arg.icrc1_minting_account,
         arg.initial_values,
         arg.max_message_size_bytes,
         arg.transaction_window,
@@ -1044,5 +1044,24 @@ mod tests {
                 )
             });
         }
+    }
+    // FI-510 Backwards compatibility testing for Candid and Protobuf
+    #[test]
+    fn check_candid_interface_backwards_compatibility() {
+        candid::export_service!();
+        let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        let old_candid_file = manifest_dir.join("./ledger_candid_backwards_compatible.did");
+        let new_candid_file = manifest_dir.join("../ledger.did");
+        service_compatible(
+            CandidSource::File(new_candid_file.as_path()),
+            CandidSource::File(old_candid_file.as_path()),
+        )
+        .unwrap_or_else(|e| {
+            panic!(
+                "the ledger interface is not backwards compatible {}: {:?}",
+                new_candid_file.display(),
+                e
+            )
+        });
     }
 }

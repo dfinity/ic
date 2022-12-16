@@ -263,7 +263,6 @@ fn archive_blocks_small_test() {
 
         println!("[test] installing ledger canister");
         let minting_account = create_sender(0);
-
         let ledger: canister_test::Canister = {
             let payload = LedgerCanisterInitPayload::builder()
                 .minting_account(
@@ -367,7 +366,6 @@ fn archive_blocks_small_test() {
             )
             .await
             .expect("ledger proxy call failed");
-
         Ok(())
     })
 }

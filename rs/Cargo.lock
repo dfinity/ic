@@ -6506,6 +6506,8 @@ dependencies = [
  "log4rs",
  "rand 0.8.5",
  "rand_distr",
+ "serde",
+ "serde_bytes",
  "tempfile",
  "tokio",
 ]

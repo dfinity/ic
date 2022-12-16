@@ -1,11 +1,10 @@
+use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
 use ic_types::PrincipalId;
 use icp_ledger::{
     AccountIdentifier, Block, BlockIndex, Memo, Operation, Tokens, Transaction,
     DEFAULT_TRANSFER_FEE,
 };
-
-use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use rand_distr::Distribution;
@@ -120,9 +119,11 @@ impl Scribe {
         let amount = Tokens::from_e8s(amount);
         self.transactions.push_back(Trans::Buy(uid, amount));
         *self.balance_book.get_mut(&uid).unwrap() += amount;
+        let memo = self.next_message();
         let transaction = Transaction {
             operation: Operation::Mint { to: uid, amount },
-            memo: self.next_message(),
+            memo,
+            icrc1_memo: None,
             created_at_time: Some(self.time().into()),
         };
         self.balance_history.push_back(self.balance_book.clone());
@@ -133,9 +134,11 @@ impl Scribe {
         let amount = Tokens::from_e8s(amount);
         self.transactions.push_back(Trans::Sell(uid, amount));
         *self.balance_book.get_mut(&uid).unwrap() -= amount;
+        let memo = self.next_message();
         let transaction = Transaction {
             operation: Operation::Burn { from: uid, amount },
-            memo: self.next_message(),
+            memo,
+            icrc1_memo: None,
             created_at_time: Some(self.time().into()),
         };
         self.balance_history.push_back(self.balance_book.clone());
@@ -148,7 +151,7 @@ impl Scribe {
             .push_back(Trans::Transfer(src, dst, amount));
         *self.balance_book.get_mut(&src).unwrap() -= (amount + DEFAULT_TRANSFER_FEE).unwrap();
         *self.balance_book.get_mut(&dst).unwrap() += amount;
-
+        let memo = self.next_message();
         let transaction = Transaction {
             operation: Operation::Transfer {
                 from: src,
@@ -156,7 +159,8 @@ impl Scribe {
                 amount,
                 fee: DEFAULT_TRANSFER_FEE,
             },
-            memo: self.next_message(),
+            memo,
+            icrc1_memo: None,
             created_at_time: Some(self.time().into()),
         };
         self.balance_history.push_back(self.balance_book.clone());

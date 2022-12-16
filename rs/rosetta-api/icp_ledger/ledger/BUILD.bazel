@@ -34,6 +34,7 @@ rust_library(
         "@crate_index//:intmap",
         "@crate_index//:lazy_static",
         "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
     ],
 )
@@ -70,6 +71,7 @@ LEDGER_CANISTER_DEPS = [
 LEDGER_CANISTER_DATA = [
     "//rs/rosetta-api/icp_ledger:ledger.did",
     "//rs/rosetta-api/icp_ledger/ledger:icrc1_tmp.did",
+    "//rs/rosetta-api/icp_ledger/ledger:ledger_candid_backwards_compatible.did",
 ]
 
 LEDGER_CANISTER_RUSTC_ENV = {

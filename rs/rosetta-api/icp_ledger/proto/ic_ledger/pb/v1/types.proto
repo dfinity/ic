@@ -242,6 +242,7 @@ message Transaction {
     Send send = 3;
   }
   Memo memo = 4;
+  Icrc1Memo icrc1_memo = 7;
   BlockIndex created_at = 5; // obsolete
   TimeStamp created_at_time = 6;
 }
@@ -282,7 +283,11 @@ message Subaccount {
 message Memo {
   option (ic_base_types.pb.v1.tui_signed_message) = true;
   uint64 memo = 1       [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
+}
 
+message Icrc1Memo {
+  option (ic_base_types.pb.v1.tui_signed_message) = true;
+  bytes memo = 1       [(ic_base_types.pb.v1.tui_signed_display_q2_2021) = true];
 }
 
 message TimeStamp {

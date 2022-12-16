@@ -11,6 +11,7 @@ use ic_ledger_core::{
 };
 use on_wire::{FromWire, IntoWire};
 use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
@@ -116,7 +117,7 @@ where
 pub struct Transaction {
     pub operation: Operation,
     pub memo: Memo,
-
+    pub icrc1_memo: Option<ByteBuf>,
     /// The time this transaction was created.
     pub created_at_time: Option<TimeStamp>,
 }
@@ -133,6 +134,7 @@ impl LedgerTransaction for Transaction {
         Self {
             operation: Operation::Burn { from, amount },
             memo: memo.map(Memo).unwrap_or_default(),
+            icrc1_memo: None,
             created_at_time,
         }
     }
@@ -173,6 +175,7 @@ impl Transaction {
         Transaction {
             operation,
             memo,
+            icrc1_memo: None,
             created_at_time: Some(created_at_time),
         }
     }
@@ -198,6 +201,7 @@ impl Block {
         let transaction = Transaction {
             operation,
             memo,
+            icrc1_memo: None,
             created_at_time: Some(created_at_time),
         };
         Ok(Self::from_transaction(parent_hash, transaction, timestamp))
@@ -277,7 +281,7 @@ impl Default for TransferFee {
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct LedgerCanisterInitPayload {
     pub minting_account: AccountIdentifier,
-    pub minting_account_icrc1: Option<Account>,
+    pub icrc1_minting_account: Option<Account>,
     pub initial_values: HashMap<AccountIdentifier, Tokens>,
     pub max_message_size_bytes: Option<usize>,
     pub transaction_window: Option<Duration>,
@@ -296,7 +300,7 @@ impl LedgerCanisterInitPayload {
 
 pub struct LedgerCanisterInitPayloadBuilder {
     minting_account: Option<AccountIdentifier>,
-    minting_account_icrc1: Option<Account>,
+    icrc1_minting_account: Option<Account>,
     initial_values: HashMap<AccountIdentifier, Tokens>,
     max_message_size_bytes: Option<usize>,
     transaction_window: Option<Duration>,
@@ -311,7 +315,7 @@ impl LedgerCanisterInitPayloadBuilder {
     fn new() -> Self {
         Self {
             minting_account: None,
-            minting_account_icrc1: None,
+            icrc1_minting_account: None,
             initial_values: Default::default(),
             max_message_size_bytes: None,
             transaction_window: None,
@@ -328,8 +332,8 @@ impl LedgerCanisterInitPayloadBuilder {
         self
     }
 
-    pub fn minting_account_icrc1(mut self, minting_account: Account) -> Self {
-        self.minting_account_icrc1 = Some(minting_account);
+    pub fn icrc1_minting_account(mut self, minting_account: Account) -> Self {
+        self.icrc1_minting_account = Some(minting_account);
         self
     }
 
@@ -389,7 +393,7 @@ impl LedgerCanisterInitPayloadBuilder {
 
         Ok(LedgerCanisterInitPayload {
             minting_account,
-            minting_account_icrc1: self.minting_account_icrc1,
+            icrc1_minting_account: self.icrc1_minting_account,
             initial_values: self.initial_values,
             max_message_size_bytes: self.max_message_size_bytes,
             transaction_window: self.transaction_window,
@@ -611,6 +615,7 @@ impl From<Operation> for CandidOperation {
 pub struct CandidTransaction {
     pub operation: CandidOperation,
     pub memo: Memo,
+    pub icrc1_memo: Option<ByteBuf>,
     pub created_at_time: TimeStamp,
 }
 
@@ -633,6 +638,7 @@ impl From<Block> for CandidBlock {
             parent_hash: parent_hash.map(|h| h.into_bytes()),
             transaction: CandidTransaction {
                 memo: transaction.memo,
+                icrc1_memo: transaction.icrc1_memo,
                 operation: transaction.operation.into(),
                 created_at_time: transaction.created_at_time.unwrap_or(timestamp),
             },

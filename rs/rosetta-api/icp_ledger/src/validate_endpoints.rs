@@ -10,6 +10,7 @@ use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, CanisterIdError};
 use ic_ledger_core::block::HASH_LENGTH;
 use protobuf::cycles_notification_response::Response;
+use serde_bytes::ByteBuf;
 use std::convert::{TryFrom, TryInto};
 
 /// The point of this file is to validate protobufs as they're received and turn
@@ -568,6 +569,10 @@ impl ToProto for Transaction {
             Some(m) => Memo(m.memo),
             None => Memo(0),
         };
+        let icrc1_memo = match pb.icrc1_memo {
+            Some(m) => Some(ByteBuf::from(m.memo)),
+            None => None,
+        };
         let created_at_time: Option<TimeStamp> = pb.created_at_time.map(timestamp_from_proto);
         let operation = match pb.transfer.ok_or("This block has no transaction")? {
             PTransfer::Burn(protobuf::Burn {
@@ -603,6 +608,7 @@ impl ToProto for Transaction {
         Ok(Transaction {
             operation,
             memo,
+            icrc1_memo,
             created_at_time,
         })
     }
@@ -610,9 +616,11 @@ impl ToProto for Transaction {
     fn into_proto(self) -> Self::Proto {
         let Transaction {
             memo,
+            icrc1_memo,
             created_at_time,
             operation,
         } = self;
+        let icrc1_memo_proto = icrc1_memo.map(|b| protobuf::Icrc1Memo { memo: b.to_vec() });
         let transfer = match operation {
             Operation::Burn { from, amount } => PTransfer::Burn(protobuf::Burn {
                 from: Some(from.into_proto()),
@@ -638,6 +646,7 @@ impl ToProto for Transaction {
         };
         protobuf::Transaction {
             memo: Some(protobuf::Memo { memo: memo.0 }),
+            icrc1_memo: icrc1_memo_proto,
             created_at: None,
             created_at_time: created_at_time.map(timestamp_into_proto),
             transfer: Some(transfer),
