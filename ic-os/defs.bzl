@@ -59,7 +59,7 @@ def _set_dockerfile_arg_default(ctx):
     Set a default value for an `ARG` in a Dockerfile, by adding the value to a temporary file, and using that to build with.
     """
     dockerfile_out = ctx.actions.declare_file("Dockerfile." + ctx.label.name)
-    command = "<{input} sed 's/^ARG {name}=$/&\\\\/; T; r {default}' >{output}".format(
+    command = " sed 's/^ARG {name}=$/&\\\\/; /ARG {name}=\\\\$/r {default}' {input} >{output}".format(
         name = ctx.attr.arg_name,
         default = ctx.file.arg_default_file.path,
         input = ctx.file.dockerfile_in.path,
