@@ -96,15 +96,15 @@ fn downgrade_test(env: TestEnv, subnet_type: SubnetType) {
     ));
 
     if is_bazel {
-        let sha256 = env
-            .read_dependency_to_string("ic-os/guestos/dev/update-img.tar.zst.sha256")
-            .unwrap();
+        let sha256 = env.get_ic_os_update_img_sha256().unwrap();
+        let upgrade_url = env.get_ic_os_update_img_url().unwrap();
         block_on(bless_replica_version(
             &nns_node,
             &original_branch_version,
             UpdateImageType::ImageTest,
             &logger,
             &sha256,
+            vec![upgrade_url.to_string()],
         ));
     } else {
         // TODO: [VER-1818]

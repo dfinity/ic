@@ -61,7 +61,7 @@ pub fn init_ic(
     let initial_replica_version = test_env.get_initial_replica_version()?;
     info!(
         logger,
-        "Replica Version that is passed in: {:?}", &initial_replica_version
+        "Replica Version that is passed is: {:?}", &initial_replica_version
     );
     let initial_replica = ic
         .initial_version
@@ -168,6 +168,8 @@ pub fn init_ic(
         ic.ssh_readonly_access_to_unassigned_nodes.clone(),
         /* guest_launch_measurement_sha256_hex= */ None,
     );
+
+    info!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
     Ok(ic_config.initialize()?)
 }

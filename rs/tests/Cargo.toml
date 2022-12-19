@@ -253,10 +253,6 @@ name = "test-driver-e2e-scenarios"
 path = "bin/test_driver_e2e_scenarios.rs"
 
 [[bin]]
-name = "ic-systest-upgrade-compatibility"
-path = "bin/upgrade_compatibility_test.rs"
-
-[[bin]]
 name = "ic-systest-two-third-latency"
 path = "bin/two_third_latency_test.rs"
 
@@ -271,3 +267,11 @@ path = "bin/boundary_nodes_snp_test.rs"
 [[bin]]
 name = "ic-systest-general-execution"
 path = "bin/general_execution_test.rs"
+
+[[bin]]
+name = "ic-systest-downgrade-app-subnet-with-ecdsa"
+path = "bin/downgrade_app_subnet_with_ecdsa_test.rs"
+
+[[bin]]
+name = "ic-systest-upgrade-downgrade-app-subnet"
+path = "bin/upgrade_downgrade_app_subnet_test.rs"
