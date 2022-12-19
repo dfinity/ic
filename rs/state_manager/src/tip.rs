@@ -121,46 +121,47 @@ pub fn spawn_tip_thread(
                                 });
                         }
                         TipRequest::TipToCheckpoint { height, sender } => {
-                            let _timer =
-                                request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
-                            let tip = tip_handler.tip(height);
-                            let _cp_ref = match tip {
-                                Err(err) => {
-                                    sender
-                                        .send(Err(err))
-                                        .expect("Failed to return TipToCheckpoint error");
-                                    continue;
-                                }
-                                Ok(tip) => {
-                                    let cp_or_err = state_layout.scratchpad_to_checkpoint(
-                                        tip,
-                                        height,
-                                        Some(&mut thread_pool),
-                                    );
-                                    match cp_or_err {
-                                        Err(err) => {
-                                            sender
-                                                .send(Err(err))
-                                                .expect("Failed to return TipToCheckpoint error");
-                                            continue;
-                                        }
-                                        Ok(cp) => {
-                                            let cp_ref = CheckpointRef::new(
-                                                log.clone(),
-                                                metrics.clone(),
-                                                state_layout.clone(),
-                                                height,
-                                            );
-                                            sender
-                                                .send(Ok((cp_ref.clone(), cp)))
-                                                .expect("Failed to return TipToCheckpoint result");
-                                            cp_ref
+                            let _cp_ref = {
+                                let _timer =
+                                    request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
+                                let tip = tip_handler.tip(height);
+                                match tip {
+                                    Err(err) => {
+                                        sender
+                                            .send(Err(err))
+                                            .expect("Failed to return TipToCheckpoint error");
+                                        continue;
+                                    }
+                                    Ok(tip) => {
+                                        let cp_or_err = state_layout.scratchpad_to_checkpoint(
+                                            tip,
+                                            height,
+                                            Some(&mut thread_pool),
+                                        );
+                                        match cp_or_err {
+                                            Err(err) => {
+                                                sender.send(Err(err)).expect(
+                                                    "Failed to return TipToCheckpoint error",
+                                                );
+                                                continue;
+                                            }
+                                            Ok(cp) => {
+                                                let cp_ref = CheckpointRef::new(
+                                                    log.clone(),
+                                                    metrics.clone(),
+                                                    state_layout.clone(),
+                                                    height,
+                                                );
+                                                sender.send(Ok((cp_ref.clone(), cp))).expect(
+                                                    "Failed to return TipToCheckpoint result",
+                                                );
+                                                cp_ref
+                                            }
                                         }
                                     }
                                 }
                             };
 
-                            std::mem::drop(_timer);
                             let _timer = request_timer(&metrics, "tip_to_checkpoint_reset_tip_to");
                             tip_handler
                                 .reset_tip_to(&state_layout, height, Some(&mut thread_pool))
@@ -270,7 +271,7 @@ pub fn spawn_tip_thread(
 fn serialize_to_tip(
     log: &ReplicaLogger,
     state: &ReplicatedState,
-    tip: &CheckpointLayout<RwPolicy>,
+    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
 ) -> Result<(), CheckpointError> {
     tip.system_metadata()
@@ -295,7 +296,7 @@ fn serialize_to_tip(
 fn serialize_canister_to_tip(
     log: &ReplicaLogger,
     canister_state: &CanisterState,
-    tip: &CheckpointLayout<RwPolicy>,
+    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
 ) -> Result<(), CheckpointError> {
     let canister_layout = tip.canister(&canister_state.canister_id())?;
     canister_layout
@@ -414,7 +415,7 @@ fn serialize_canister_to_tip(
 
 fn serialize_bitcoin_state_to_tip(
     state: &BitcoinState,
-    layout: &BitcoinStateLayout<RwPolicy>,
+    layout: &BitcoinStateLayout<RwPolicy<TipHandler>>,
 ) -> Result<(), CheckpointError> {
     state
         .utxo_set
@@ -465,7 +466,7 @@ fn serialize_bitcoin_state_to_tip(
 /// definitely unique to the tip at the end of defragmentation. For
 /// now, only the bitcoin PageMap files are being considered.
 pub fn defrag_tip(
-    tip: &CheckpointLayout<RwPolicy>,
+    tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     page_maps: &[PageMapType],
     max_size: u64,
     max_files: usize,
@@ -553,11 +554,10 @@ mod test {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let tip = StateLayout::try_new(log, root, &MetricsRegistry::new())
+            let mut tip_handler = StateLayout::try_new(log, root, &MetricsRegistry::new())
                 .unwrap()
-                .capture_tip_handler()
-                .tip(Height::new(42))
-                .unwrap();
+                .capture_tip_handler();
+            let tip = tip_handler.tip(Height::new(42)).unwrap();
 
             let defrag_size = 1 << 20; // 1MB
 
