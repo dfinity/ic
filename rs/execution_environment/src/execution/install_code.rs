@@ -655,7 +655,7 @@ pub(crate) fn canister_layout(
 ) -> CanisterLayout<ReadOnly> {
     // We use ReadOnly, as CheckpointLayouts with write permissions have side effects
     // of creating directories
-    CheckpointLayout::<ReadOnly>::new(state_path.into(), Height::from(0))
+    CheckpointLayout::<ReadOnly>::new_untracked(state_path.into(), Height::from(0))
         .and_then(|layout| layout.canister(canister_id))
         .expect("failed to obtain canister layout")
 }

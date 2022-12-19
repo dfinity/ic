@@ -21,7 +21,12 @@ impl TestEnvironment {
         let root_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
         let cache = Arc::new(parking_lot::RwLock::new(StateSyncCache::new(log.clone())));
         let metrics = StateManagerMetrics::new(&MetricsRegistry::new());
-        let state_layout = StateLayout::try_new(log.clone(), root_dir.path().to_owned()).unwrap();
+        let state_layout = StateLayout::try_new(
+            log.clone(),
+            root_dir.path().to_owned(),
+            &MetricsRegistry::new(),
+        )
+        .unwrap();
 
         Self {
             log,

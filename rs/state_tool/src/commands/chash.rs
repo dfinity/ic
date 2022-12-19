@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 /// Computes and prints partial state hash used for certification.
 pub fn do_hash(path: PathBuf) -> Result<(), String> {
-    let cp_layout = CompleteCheckpointLayout::new(path.clone(), Height::new(0))
+    let cp_layout = CompleteCheckpointLayout::new_untracked(path.clone(), Height::new(0))
         .map_err(|e| format!("failed to create checkpoint layout: {}", e))?;
 
     let dummy_metrics_registry = ic_metrics::MetricsRegistry::new();

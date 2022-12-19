@@ -285,9 +285,10 @@ pub fn load_canister_state<P: ReadPolicy>(
             );
             durations.insert("wasm_binary", starting_time.elapsed());
 
-            let canister_root = CheckpointLayout::<ReadOnly>::new("NOT_USED".into(), height)?
-                .canister(canister_id)?
-                .raw_path();
+            let canister_root =
+                CheckpointLayout::<ReadOnly>::new_untracked("NOT_USED".into(), height)?
+                    .canister(canister_id)?
+                    .raw_path();
             Some(ExecutionState {
                 canister_root,
                 session_nonce,
@@ -422,6 +423,7 @@ mod tests {
     use crate::{spawn_tip_thread, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS};
     use ic_base_types::NumSeconds;
     use ic_ic00_types::CanisterStatusType;
+    use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::execution_state::WasmBinary, canister_state::execution_state::WasmMetadata,
@@ -497,7 +499,8 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
+            let layout =
+                StateLayout::try_new(log.clone(), root.clone(), &MetricsRegistry::new()).unwrap();
             let tip_handler = layout.capture_tip_handler();
             let (_tip_thread, tip_channel) =
                 spawn_tip_thread(log, tip_handler, layout.clone(), state_manager_metrics());
@@ -555,7 +558,8 @@ mod tests {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
             let checkpoints_dir = root.join("checkpoints");
-            let layout = StateLayout::try_new(log.clone(), root.clone()).unwrap();
+            let layout =
+                StateLayout::try_new(log.clone(), root.clone(), &MetricsRegistry::new()).unwrap();
             let tip_handler = layout.capture_tip_handler();
             let state_manager_metrics = state_manager_metrics();
             let (_tip_thread, tip_channel) =
@@ -599,7 +603,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
             let tip_handler = layout.capture_tip_handler();
             let state_manager_metrics = state_manager_metrics();
             let (_tip_thread, tip_channel) = spawn_tip_thread(
@@ -697,7 +701,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
             let tip_handler = layout.capture_tip_handler();
             let state_manager_metrics = state_manager_metrics();
             let (_tip_thread, tip_channel) = spawn_tip_thread(
@@ -732,7 +736,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log, root).unwrap();
+            let layout = StateLayout::try_new(log, root, &MetricsRegistry::new()).unwrap();
 
             const MISSING_HEIGHT: Height = Height::new(42);
             match layout
@@ -761,7 +765,7 @@ mod tests {
 
             mark_readonly(&root).unwrap();
 
-            let layout = StateLayout::try_new(log, root);
+            let layout = StateLayout::try_new(log, root, &MetricsRegistry::new());
 
             assert!(layout.is_err());
             let err_msg = layout.err().unwrap().to_string();
@@ -778,7 +782,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
             let tip_handler = layout.capture_tip_handler();
             let state_manager_metrics = state_manager_metrics();
             let (_tip_thread, tip_channel) = spawn_tip_thread(
@@ -842,7 +846,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
             let tip_handler = layout.capture_tip_handler();
             let state_manager_metrics = state_manager_metrics();
             let (_tip_thread, tip_channel) = spawn_tip_thread(
@@ -892,7 +896,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
             let tip_handler = layout.capture_tip_handler();
             let state_manager_metrics = state_manager_metrics();
             let (_tip_thread, tip_channel) = spawn_tip_thread(
@@ -942,7 +946,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
             let tip_handler = layout.capture_tip_handler();
             let state_manager_metrics = state_manager_metrics();
             let (_tip_thread, tip_channel) = spawn_tip_thread(
@@ -994,7 +998,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
             let tip_handler = layout.capture_tip_handler();
             let state_manager_metrics = state_manager_metrics();
             let (_tip_thread, tip_channel) = spawn_tip_thread(
@@ -1046,7 +1050,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
             let tip_handler = layout.capture_tip_handler();
             let state_manager_metrics = state_manager_metrics();
             let (_tip_thread, tip_channel) = spawn_tip_thread(
