@@ -235,9 +235,17 @@ pub(crate) async fn bless_replica_version(
     image_type: UpdateImageType,
     logger: &Logger,
     sha256: &String,
+    upgrade_url: Vec<String>,
 ) {
-    bless_replica_version_with_sha(nns_node, target_version, image_type, logger, sha256, vec![])
-        .await;
+    bless_replica_version_with_sha(
+        nns_node,
+        target_version,
+        image_type,
+        logger,
+        sha256,
+        upgrade_url,
+    )
+    .await;
 }
 
 pub(crate) async fn bless_public_replica_version(

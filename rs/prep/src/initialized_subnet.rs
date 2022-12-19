@@ -24,7 +24,7 @@ use crate::{
 
 /// Represents a subnet for which all initial state (node crypto keys, initial
 /// dkg transcript) was generated.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct InitializedSubnet {
     pub subnet_index: u64,
 

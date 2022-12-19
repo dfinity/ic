@@ -15,14 +15,6 @@ fn main() -> Result<()> {
 
 // vec![
 //     pot_with_setup(
-//         "downgrade_app_subnet_with_ecdsa",
-//         orchestrator::downgrade_with_ecdsa::config,
-//         par(vec![sys_t(
-//             "downgrade_app_subnet_with_ecdsa",
-//             orchestrator::downgrade_with_ecdsa::downgrade_app_subnet,
-//         )]),
-//     ),
-//     pot_with_setup(
 //         "upgrade_downgrade_app_subnet",
 //         orchestrator::upgrade_downgrade::config,
 //         par(vec![sys_t(

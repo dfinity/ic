@@ -649,6 +649,8 @@ pub trait HasIcDependencies {
     fn get_malicious_ic_os_img_sha256(&self) -> Result<String>;
     fn get_ic_os_update_img_url(&self) -> Result<Url>;
     fn get_ic_os_update_img_sha256(&self) -> Result<String>;
+    fn get_ic_os_update_img_test_url(&self) -> Result<Url>;
+    fn get_ic_os_update_img_test_sha256(&self) -> Result<String>;
     fn get_malicious_ic_os_update_img_url(&self) -> Result<Url>;
     fn get_malicious_ic_os_update_img_sha256(&self) -> Result<String>;
     fn get_boundary_node_snp_img_url(&self) -> Result<Url>;
@@ -723,6 +725,25 @@ impl<T: HasDependencies> HasIcDependencies for T {
         let dep_rel_path = "ic-os/guestos/dev/update-img.tar.zst.sha256";
         let sha256 = self.read_dependency_to_string(dep_rel_path)?;
         bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
+        Ok(sha256)
+    }
+
+    fn get_ic_os_update_img_test_url(&self) -> Result<Url> {
+        let dep_rel_path =
+            "ic-os/guestos/dev/upload_update-img_update-img-test.tar.zst.proxy-cache-url";
+        let url = self.read_dependency_to_string(dep_rel_path)?;
+        Ok(Url::parse(&url)?)
+    }
+
+    fn get_ic_os_update_img_test_sha256(&self) -> Result<String> {
+        let dep_rel_path = "ic-os/guestos/dev/upload_update-img/update-img-test.tar.zst.SHA256SUM";
+        let sha256 = self
+            .read_dependency_to_string(dep_rel_path)?
+            .split(' ')
+            .next()
+            .unwrap()
+            .to_string();
+        bail_if_sha256_invalid(&sha256, "update-img-test.tar.zst")?;
         Ok(sha256)
     }
 
