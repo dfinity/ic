@@ -4,9 +4,11 @@ mod system_api;
 pub mod system_api_complexity;
 
 use std::{
+    cell::Ref,
     collections::HashMap,
     convert::TryFrom,
-    sync::{Arc, Mutex},
+    mem::size_of,
+    sync::{atomic::Ordering, Arc, Mutex},
 };
 
 use ic_system_api::ModificationTracking;
@@ -19,7 +21,8 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{debug, error, fatal, ReplicaLogger};
 use ic_replicated_state::{
-    canister_state::execution_state, EmbedderCache, Global, NumWasmPages, PageIndex, PageMap,
+    canister_state::{execution_state, WASM_PAGE_SIZE_IN_BYTES},
+    EmbedderCache, Global, NumWasmPages, PageIndex, PageMap,
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
@@ -27,7 +30,7 @@ use ic_types::{
     CanisterId,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use memory_tracker::{DirtyPageTracking, SigsegvMemoryTracker};
+use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::{serialized_module::SerializedModuleBytes, wasm_utils::validation::ensure_determinism};
@@ -100,7 +103,6 @@ fn trap_code_to_hypervisor_error(trap: wasmtime::Trap) -> HypervisorError {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CanisterMemoryType {
     Heap,
-    HeapByteMap,
 }
 
 pub struct WasmtimeEmbedder {
@@ -218,7 +220,7 @@ impl WasmtimeEmbedder {
             self.log.clone(),
             canister_id,
             &store,
-            self.config.feature_flags.rate_limiting_of_debug_prints,
+            self.config.feature_flags,
             self.config.stable_memory_dirty_page_limit,
         );
 
@@ -322,9 +324,14 @@ impl WasmtimeEmbedder {
                 None
             };
 
-        let dirty_page_tracking = match modification_tracking {
-            ModificationTracking::Ignore => DirtyPageTracking::Ignore,
-            ModificationTracking::Track => DirtyPageTracking::Track,
+        let dirty_page_tracking = match (
+            modification_tracking,
+            self.config.feature_flags.write_barrier,
+        ) {
+            (ModificationTracking::Ignore, _) | (_, FlagStatus::Enabled) => {
+                DirtyPageTracking::Ignore
+            }
+            (ModificationTracking::Track, FlagStatus::Disabled) => DirtyPageTracking::Track,
         };
 
         // if `wasmtime::Instance` does not have memory we don't need a memory tracker
@@ -348,7 +355,7 @@ impl WasmtimeEmbedder {
                     }
                     Some(current_memory_size_in_pages) => current_memory_size_in_pages,
                 };
-                let mut memories = [(
+                let memories = [(
                     CanisterMemoryType::Heap,
                     MemorySigSegvInfo {
                         instance_memory,
@@ -360,45 +367,58 @@ impl WasmtimeEmbedder {
                 .into_iter()
                 .collect::<HashMap<_, _>>();
 
-                if self.config.feature_flags.write_barrier == FlagStatus::Enabled {
-                    match instance_bytemap_memory.and_then(|bytemap_instance_memory| {
-                        let start = MemoryStart(bytemap_instance_memory.data_ptr(&store) as usize);
-                        created_memories
-                            .remove(&start)
-                            .map(|s| (bytemap_instance_memory, s))
-                    }) {
-                        None => {
-                            error!(
-                                self.log,
-                                "Unable to find memory bytemap for canister {} when instantiating",
-                                canister_id
-                            );
-                            return Err((
-                                HypervisorError::WasmEngineError(
-                                    WasmEngineError::FailedToInstantiateModule,
-                                ),
-                                store.into_data().system_api,
-                            ));
-                        }
-                        Some((instance_memory, current_memory_size_in_pages)) => {
-                            memories.insert(
-                                CanisterMemoryType::HeapByteMap,
-                                MemorySigSegvInfo {
-                                    instance_memory,
-                                    current_memory_size_in_pages,
-                                    page_map: PageMap::new(),
-                                    dirty_page_tracking: DirtyPageTracking::Ignore,
-                                },
-                            );
-                        }
-                    }
-                }
-
                 sigsegv_memory_tracker(memories, &mut store, self.log.clone())
             }
         };
-        let signal_stack = WasmtimeSignalStack::new();
 
+        if self.config.feature_flags.write_barrier == FlagStatus::Enabled {
+            match instance_bytemap_memory.and_then(|bytemap_instance_memory| {
+                let start = MemoryStart(bytemap_instance_memory.data_ptr(&store) as usize);
+                let mut created_memories = self.created_memories.lock().unwrap();
+                created_memories
+                    .remove(&start)
+                    .map(|s| (bytemap_instance_memory, s))
+            }) {
+                None => {
+                    // If there is a heap memory, but no bytemap for it then we
+                    // should throw an error. But if there is no heap memory
+                    // then there will also be no bytemap.
+                    if instance_heap_memory.is_some() {
+                        error!(
+                            self.log,
+                            "Unable to find memory bytemap for canister {} when instantiating",
+                            canister_id
+                        );
+                        return Err((
+                            HypervisorError::WasmEngineError(
+                                WasmEngineError::FailedToInstantiateModule,
+                            ),
+                            store.into_data().system_api,
+                        ));
+                    }
+                }
+                Some((instance_memory, current_memory_size_in_pages)) => {
+                    // We don't need to track changes to the bytemap so it can
+                    // be immediately read/write permissioned and we don't have
+                    // to register it with the sigsegv tracker.
+                    let addr = instance_memory.data_ptr(&store) as usize;
+                    let size_in_bytes = current_memory_size_in_pages.load(Ordering::SeqCst)
+                        * WASM_PAGE_SIZE_IN_BYTES;
+                    use nix::sys::mman;
+                    // SAFETY: This is the array we created in the host_memory creator, so we know it is a valid memory region that we own.
+                    unsafe {
+                        mman::mprotect(
+                            addr as *mut _,
+                            size_in_bytes,
+                            mman::ProtFlags::PROT_READ | mman::ProtFlags::PROT_WRITE,
+                        )
+                        .unwrap();
+                    }
+                }
+            }
+        }
+
+        let signal_stack = WasmtimeSignalStack::new();
         Ok(WasmtimeInstance {
             instance,
             memory_trackers,
@@ -409,6 +429,8 @@ impl WasmtimeEmbedder {
                 dirty_pages: 0,
             },
             store,
+            write_barrier: self.config.feature_flags.write_barrier,
+            modification_tracking,
         })
     }
 
@@ -504,6 +526,8 @@ pub struct WasmtimeInstance<S: SystemApi> {
     log: ReplicaLogger,
     instance_stats: InstanceStats,
     store: wasmtime::Store<StoreData<S>>,
+    write_barrier: FlagStatus,
+    modification_tracking: ModificationTracking,
 }
 
 impl<S: SystemApi> WasmtimeInstance<S> {
@@ -533,34 +557,56 @@ impl<S: SystemApi> WasmtimeInstance<S> {
             .map_err(wasmtime_error_to_hypervisor_error)
     }
 
-    fn dirty_pages(&self) -> HashMap<CanisterMemoryType, PageAccessResults> {
-        if self.memory_trackers.is_empty() {
+    fn page_accesses(&mut self) -> HypervisorResult<PageAccessResults> {
+        if self
+            .memory_trackers
+            .get(&CanisterMemoryType::Heap)
+            .is_none()
+        {
             debug!(
                 self.log,
                 "Memory tracking disabled. Returning empty list of dirty pages"
             );
-            return HashMap::new();
-        }
-        self.memory_trackers
-            .iter()
-            .map(|(ty, tracker)| {
-                let memory_tracker = tracker.lock().unwrap();
-                let speculatively_dirty_pages = memory_tracker.take_speculatively_dirty_pages();
-                let dirty_pages = memory_tracker.take_dirty_pages();
-                let dirty_pages = dirty_pages
-                    .into_iter()
-                    .chain(speculatively_dirty_pages.into_iter())
-                    .filter_map(|p| memory_tracker.validate_speculatively_dirty_page(p))
-                    .collect::<Vec<PageIndex>>();
-                (
-                    *ty,
-                    PageAccessResults {
-                        dirty_pages,
-                        num_accessed_pages: memory_tracker.num_accessed_pages(),
-                    },
-                )
+            Ok(PageAccessResults {
+                dirty_pages: vec![],
+                num_accessed_pages: 0,
             })
-            .collect()
+        } else {
+            let dirty_pages = match self.modification_tracking {
+                ModificationTracking::Track => match self.write_barrier {
+                    FlagStatus::Enabled => self.dirty_pages_from_bytemap()?,
+                    FlagStatus::Disabled => {
+                        let tracker = self
+                            .memory_trackers
+                            .get(&CanisterMemoryType::Heap)
+                            .unwrap()
+                            .lock()
+                            .unwrap();
+                        let speculatively_dirty_pages = tracker.take_speculatively_dirty_pages();
+                        let dirty_pages = tracker.take_dirty_pages();
+                        dirty_pages
+                            .into_iter()
+                            .chain(speculatively_dirty_pages.into_iter())
+                            .filter_map(|p| tracker.validate_speculatively_dirty_page(p))
+                            .collect::<Vec<PageIndex>>()
+                    }
+                },
+                ModificationTracking::Ignore => {
+                    vec![]
+                }
+            };
+            let tracker = self
+                .memory_trackers
+                .get(&CanisterMemoryType::Heap)
+                .unwrap()
+                .lock()
+                .unwrap();
+            let num_accessed_pages = tracker.num_accessed_pages();
+            Ok(PageAccessResults {
+                dirty_pages,
+                num_accessed_pages,
+            })
+        }
     }
 
     fn memory(&mut self) -> HypervisorResult<Memory> {
@@ -577,6 +623,24 @@ impl<S: SystemApi> WasmtimeInstance<S> {
             None => Err(HypervisorError::ContractViolation(format!(
                 "export '{}' not found",
                 WASM_HEAP_MEMORY_NAME
+            ))),
+        }
+    }
+
+    fn bytemap_memory(&mut self) -> HypervisorResult<Memory> {
+        match self
+            .instance
+            .get_export(&mut self.store, WASM_HEAP_BYTEMAP_MEMORY_NAME)
+        {
+            Some(export) => export.into_memory().ok_or_else(|| {
+                HypervisorError::ContractViolation(format!(
+                    "export '{}' is not a memory",
+                    WASM_HEAP_BYTEMAP_MEMORY_NAME
+                ))
+            }),
+            None => Err(HypervisorError::ContractViolation(format!(
+                "export '{}' not found",
+                WASM_HEAP_BYTEMAP_MEMORY_NAME
             ))),
         }
     }
@@ -619,18 +683,9 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                 .unwrap_or(e)
         });
 
-        let mut accesses = self.dirty_pages();
-        let dirty_pages = if let Some(PageAccessResults {
-            dirty_pages,
-            num_accessed_pages,
-        }) = accesses.remove(&CanisterMemoryType::Heap)
-        {
-            self.instance_stats.accessed_pages += num_accessed_pages;
-            self.instance_stats.dirty_pages += dirty_pages.len();
-            dirty_pages
-        } else {
-            vec![]
-        };
+        let access = self.page_accesses()?;
+        self.instance_stats.accessed_pages += access.num_accessed_pages;
+        self.instance_stats.dirty_pages += access.dirty_pages.len();
 
         let stable_memory_dirty_pages: Vec<_> = self
             .store
@@ -647,12 +702,126 @@ impl<S: SystemApi> WasmtimeInstance<S> {
         match result {
             Ok(_) => Ok(InstanceRunResult {
                 exported_globals: self.get_exported_globals(),
-                dirty_pages,
+                dirty_pages: access.dirty_pages,
                 stable_memory_size,
                 stable_memory_dirty_pages,
             }),
             Err(err) => Err(err),
         }
+    }
+
+    fn dirty_pages_from_bytemap(&mut self) -> HypervisorResult<Vec<PageIndex>> {
+        let mut result = vec![];
+        if let Ok(heap_memory) = self.memory() {
+            let bytemap = self.bytemap_memory()?.data(&self.store);
+            let tracker = self
+                .memory_trackers
+                .get(&CanisterMemoryType::Heap)
+                .ok_or_else(|| {
+                    HypervisorError::ContractViolation("No heap memory tracker".to_string())
+                })?;
+            let tracker = tracker.lock().unwrap();
+            let page_map = tracker.page_map();
+            let accessed_pages = tracker.accessed_pages().borrow();
+            let heap_memory = heap_memory.data(&self.store);
+
+            fn handle_bytemap_entry(
+                previous_page_marked_written: &mut bool,
+                result: &mut Vec<PageIndex>,
+                page_index: usize,
+                heap_memory: &[u8],
+                page_map: &PageMap,
+                accessed_pages: &Ref<PageBitmap>,
+                written: u8,
+            ) -> HypervisorResult<()> {
+                let index = PageIndex::new(page_index as u64);
+                match written {
+                    1 => {
+                        result.push(index);
+                        *previous_page_marked_written = true;
+                        Ok(())
+                    }
+                    0 => {
+                        // We must check that the page was accessed during
+                        // execution before trying to read it because if it
+                        // wasn't accessed then it will still be mapped
+                        // `PROT_NONE` and trying to read it will segfault.
+                        if *previous_page_marked_written && accessed_pages.is_marked(index) {
+                            // An unaligned V128 write to the previous page may
+                            // have written as many as 15 bytes into this page.
+                            // So even if we didn't see a write here we need to
+                            // check that the first 15 bytes haven't been
+                            // modified to be sure it isn't dirty.
+                            let first_bytes = &heap_memory[PAGE_SIZE * page_index
+                                ..PAGE_SIZE * page_index + size_of::<u128>() - 1];
+                            let previous_bytes =
+                                &page_map.get_page(index)[0..size_of::<u128>() - 1];
+                            if first_bytes != previous_bytes {
+                                result.push(index);
+                            }
+                        }
+                        *previous_page_marked_written = false;
+                        Ok(())
+                    }
+                    _ => Err(HypervisorError::ContractViolation(format!(
+                        "Bytemap contains invalid value {}",
+                        written
+                    ))),
+                }
+            }
+
+            // We only need to scan the bytemap up to and including the last
+            // page that is actually used by the existing memory (i.e. the page
+            // of the last byte of heap memory).
+            let bytemap = &bytemap[0..=(heap_memory.len() - 1) / PAGE_SIZE];
+            // SAFETY: It is always safe to transmute a sequence of `u8` to a
+            // `u128`. These will then be converted back to `u8` using
+            // the native ordering.
+            let (prefix, middle, suffix) = unsafe { bytemap.align_to::<u128>() };
+            let mut previous_page_marked_written = false;
+            let mut page_index: usize = 0;
+            for written in prefix {
+                handle_bytemap_entry(
+                    &mut previous_page_marked_written,
+                    &mut result,
+                    page_index,
+                    heap_memory,
+                    page_map,
+                    &accessed_pages,
+                    *written,
+                )?;
+                page_index += 1;
+            }
+            for group in middle {
+                if *group != 0 {
+                    for (group_index, written) in group.to_ne_bytes().iter().enumerate() {
+                        handle_bytemap_entry(
+                            &mut previous_page_marked_written,
+                            &mut result,
+                            page_index + group_index,
+                            heap_memory,
+                            page_map,
+                            &accessed_pages,
+                            *written,
+                        )?;
+                    }
+                }
+                page_index += size_of::<u128>();
+            }
+            for written in suffix {
+                handle_bytemap_entry(
+                    &mut previous_page_marked_written,
+                    &mut result,
+                    page_index,
+                    heap_memory,
+                    page_map,
+                    &accessed_pages,
+                    *written,
+                )?;
+                page_index += 1;
+            }
+        }
+        Ok(result)
     }
 
     /// Sets the instruction counter to the given value.
@@ -685,6 +854,10 @@ impl<S: SystemApi> WasmtimeInstance<S> {
         NumWasmPages::from(self.memory().map_or(0, |mem| mem.size(&self.store)) as usize)
     }
 
+    pub fn bytemap_size(&mut self) -> NumWasmPages {
+        NumWasmPages::from(self.bytemap_memory().map_or(0, |mem| mem.size(&self.store)) as usize)
+    }
+
     /// Returns a list of exported globals.
     pub fn get_exported_globals(&mut self) -> Vec<Global> {
         let globals: Vec<_> = self
@@ -712,6 +885,18 @@ impl<S: SystemApi> WasmtimeInstance<S> {
     /// only valid while the Instance object is kept alive.
     pub unsafe fn heap_addr(&mut self) -> *const u8 {
         self.memory()
+            .map(|mem| mem.data(&self.store).as_ptr())
+            .unwrap_or_else(|_| std::ptr::null())
+    }
+
+    /// Return the heap bytemap address. If the Instance does not contain any memory,
+    /// the pointer is null.
+    ///
+    /// # Safety
+    /// This function returns a pointer to Instance's heap bytemap memory. The pointer is
+    /// only valid while the Instance object is kept alive.
+    pub unsafe fn heap_bytemap_addr(&mut self) -> *const u8 {
+        self.bytemap_memory()
             .map(|mem| mem.data(&self.store).as_ptr())
             .unwrap_or_else(|_| std::ptr::null())
     }

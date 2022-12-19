@@ -1,6 +1,8 @@
-use crate::wasmtime_embedder::{system_api_complexity, StoreData, WASM_HEAP_MEMORY_NAME};
+use crate::wasmtime_embedder::{
+    system_api_complexity, StoreData, WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME,
+};
 
-use ic_config::flag_status::FlagStatus;
+use ic_config::{embedders::FeatureFlags, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, HypervisorError, HypervisorResult, PerformanceCounterType, SystemApi,
 };
@@ -92,6 +94,38 @@ fn store_value<S: SystemApi>(
             caller,
             HypervisorError::InstructionLimitExceeded,
         ));
+    }
+    Ok(())
+}
+
+/// Updates heap bytemap marking which pages have been written to dst and size
+/// need to have valid values (need to pass checks performed by the function
+/// that actually writes to the heap)
+#[inline(never)]
+fn mark_writes_on_bytemap<S: SystemApi>(
+    caller: &mut Caller<'_, StoreData<S>>,
+    dst: usize,
+    size: usize,
+) -> Result<(), anyhow::Error> {
+    if size < 1 {
+        return Ok(());
+    }
+    let bitmap_mem = match caller.get_export(WASM_HEAP_BYTEMAP_MEMORY_NAME) {
+        Some(wasmtime::Extern::Memory(mem)) => mem,
+        _ => {
+            return Err(process_err(
+                caller,
+                HypervisorError::ContractViolation("Failed to access heap bitmap".to_string()),
+            ))
+        }
+    };
+
+    let bitmap = bitmap_mem.data_mut(caller);
+    let mut i = dst / PAGE_SIZE;
+    let end = (dst + size - 1) / PAGE_SIZE + 1;
+    while i < end {
+        bitmap[i] = 1;
+        i += 1;
     }
     Ok(())
 }
@@ -328,7 +362,7 @@ pub(crate) fn syscalls<S: SystemApi>(
     log: ReplicaLogger,
     canister_id: CanisterId,
     store: &Store<StoreData<S>>,
-    rate_limiting_of_debug_prints: FlagStatus,
+    feature_flags: FeatureFlags,
     stable_memory_dirty_page_limit: NumPages,
 ) -> Linker<StoreData<S>> {
     fn with_system_api<S, T>(caller: &mut Caller<'_, StoreData<S>>, f: impl Fn(&mut S) -> T) -> T {
@@ -382,7 +416,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_caller_copy(dst as u32, offset as u32, size as u32, memory)
-                })
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
@@ -434,7 +473,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, mem| {
                     system_api.ic0_msg_arg_data_copy(dst as u32, offset as u32, size as u32, mem)
-                })
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
@@ -477,7 +521,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                         size as u32,
                         memory,
                     )
-                })
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
@@ -595,7 +644,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                         size as u32,
                         memory,
                     )
-                })
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
@@ -635,7 +689,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                         size as u32,
                         memory,
                     )
-                })
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
@@ -670,7 +729,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_controller_copy(dst as u32, offset as u32, size as u32, memory)
-                })
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
@@ -694,7 +758,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                 )?;
                 match (
                     caller.data().system_api.subnet_type(),
-                    rate_limiting_of_debug_prints,
+                    feature_flags.rate_limiting_of_debug_prints,
                 ) {
                     // Debug print is a no-op on non-system subnets with rate limiting.
                     (SubnetType::Application, FlagStatus::Enabled) => Ok(()),
@@ -951,7 +1015,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable_read(dst as u32, offset as u32, size as u32, memory)
-                })
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
@@ -1040,7 +1109,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_stable64_read(dst as u64, offset as u64, size as u64, memory)
-                })
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
@@ -1157,7 +1231,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_canister_cycles_balance128(dst, memory)
-                })
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
@@ -1192,7 +1271,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_available128(dst, memory)
-                })
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
@@ -1227,7 +1311,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_msg_cycles_refunded128(dst, memory)
-                })
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
@@ -1264,7 +1353,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                         dst,
                         memory,
                     )
-                })
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as usize, 16)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
@@ -1359,7 +1453,12 @@ pub(crate) fn syscalls<S: SystemApi>(
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
                     system_api.ic0_data_certificate_copy(dst, offset, size, memory)
-                })
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as usize, size as usize)
+                } else {
+                    Ok(())
+                }
             }
         })
         .unwrap();
