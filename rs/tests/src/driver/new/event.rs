@@ -1,4 +1,5 @@
 use std::{
+    fmt::Display,
     ops::DerefMut,
     sync::{Arc, Mutex},
     time::SystemTime,
@@ -9,7 +10,28 @@ use utils::thread::JoinOnDrop;
 
 use super::process::ProcessEventPayload;
 
-pub type TaskId = String;
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Debug)]
+pub enum TaskId {
+    // Argument x must be unique across all TaskId::Test(x)
+    Test(String),
+    // Argument x in TaskId::Timeout(x) corresponds to x in TaskId::Test(x)
+    Timeout(String),
+}
+
+impl Display for TaskId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TaskId::Test(test_name) => write!(f, "{}", test_name),
+            TaskId::Timeout(task_id) => write!(f, "timeout({})", task_id),
+        }
+    }
+}
+
+impl TaskId {
+    pub fn name(&self) -> String {
+        format!("{self}")
+    }
+}
 
 /// Represents an event in the system.
 #[allow(dead_code)]

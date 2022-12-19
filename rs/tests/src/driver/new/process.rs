@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn can_capture_output_from_bash() {
         let r = tokio::runtime::Runtime::new().unwrap();
-        let task_id = "proc".to_string();
+        let task_id = TaskId::Test("proc".to_string());
         let (event_sender, event_recv) = unbounded();
         let event_sender = Arc::new(SubscriberFactorySender(event_sender));
 

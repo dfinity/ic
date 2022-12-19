@@ -124,7 +124,7 @@ mod tests {
     fn timeout_task_times_out() {
         let rt = create_rt();
         let d = ms(1);
-        let expected_task_id = "test-id".to_string();
+        let expected_task_id = TaskId::Test("test-id".to_string());
         let (evt_send, evt_rcv) = create_subfact();
 
         let t = TimeoutTask::new(rt.handle().clone(), d, evt_send, expected_task_id.clone());
@@ -143,7 +143,7 @@ mod tests {
     fn timeout_task_can_be_stopped() {
         let rt = create_rt();
         let d = ms(2000);
-        let expected_task_id = "test-id".to_string();
+        let expected_task_id = TaskId::Test("test-id".to_string());
         let (evt_send, evt_rcv) = create_subfact();
 
         let t = TimeoutTask::new(rt.handle().clone(), d, evt_send, expected_task_id.clone());
@@ -161,7 +161,7 @@ mod tests {
     fn timeout_task_can_be_failed() {
         let rt = create_rt();
         let d = ms(2000);
-        let expected_task_id = "test-id".to_string();
+        let expected_task_id = TaskId::Test("test-id".to_string());
         let (evt_send, evt_rcv) = create_subfact();
 
         let t = TimeoutTask::new(rt.handle().clone(), d, evt_send, expected_task_id.clone());
@@ -180,7 +180,7 @@ mod tests {
     fn spawning_timeout_task_twice_should_panic() {
         let rt = create_rt();
         let d = ms(2000);
-        let expected_task_id = "test-id".to_string();
+        let expected_task_id = TaskId::Test("test-id".to_string());
         let (evt_send, _evt_rcv) = create_subfact();
 
         let t = TimeoutTask::new(rt.handle().clone(), d, evt_send, expected_task_id);

@@ -7,8 +7,14 @@ use crate::driver::{
     new::{
         action_graph::ActionGraph,
         dsl::SubprocessFn,
-        event::{BroadcastingEventSubscriberFactory, Event, EventBroadcaster, EventPayload},
+        event::{
+            BroadcastingEventSubscriberFactory, Event, EventBroadcaster, EventPayload, TaskId,
+        },
         plan::{EvalOrder, Plan},
+        report::{
+            Outcome, SystemTestGroupError, SystemTestGroupReport, TargetFunctionFailure,
+            TargetFunctionSuccess,
+        },
         task::EmptyTask,
         task_scheduler::{new_task_scheduler, TaskTable},
     },
@@ -83,12 +89,19 @@ pub enum SystemTestsSubcommand {
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
 
+const ROOT_TASK_NAME: &str = "root";
+const SETUP_TASK_NAME: &str = "setup";
+
+fn is_task_visible_to_user(task_id: &TaskId) -> bool {
+    matches!(task_id, TaskId::Test(task_name) if task_name.ne(ROOT_TASK_NAME) && !task_name.starts_with("dummy("))
+}
+
 /// A shortcut to represent the type of an event subscriber
 pub type Subs = Arc<dyn BroadcastingEventSubscriberFactory>;
 
 pub struct ComposeContext {
     group_ctx: GroupContext,
-    empty_task_counter: usize,
+    empty_task_counter: u64,
     subs: Subs,
     logger: Logger,
     timeout_per_test: Duration,
@@ -96,13 +109,13 @@ pub struct ComposeContext {
 
 fn subproc(
     rh: &Handle,
-    task_name: &str,
+    task_id: TaskId,
     target_fn: impl SubprocessFn,
     ctx: &mut ComposeContext,
 ) -> SubprocessTask {
-    debug!(ctx.group_ctx.log(), "subproc(task_name={})", &task_name);
+    debug!(ctx.group_ctx.log(), "subproc(task_name={})", &task_id);
     SubprocessTask::new(
-        task_name.to_string(),
+        task_id,
         rh.clone(),
         target_fn,
         ctx.group_ctx.clone(),
@@ -124,7 +137,7 @@ fn timed(
         rh.clone(),
         timeout,
         ctx.subs.clone(),
-        format!("timeout_of_{}", plan.root_task_id()),
+        TaskId::Timeout(plan.root_task_id().name()),
     );
     Plan::Supervised {
         supervisor: Box::from(timeout_task) as Box<dyn Task>,
@@ -148,7 +161,7 @@ fn compose(
         None => {
             let empty_task = Box::from(EmptyTask::new(
                 ctx.subs.clone(),
-                format!("empty_task_{}", ctx.empty_task_counter),
+                TaskId::Test(format!("dummy({})", ctx.empty_task_counter)),
             ));
             ctx.empty_task_counter += 1;
             empty_task
@@ -181,14 +194,17 @@ fn compose_seq(
 
 fn get_setup_env(gctx: GroupContext) -> TestEnv {
     info!(gctx.log(), "get_setup_env()");
-    let process_ctx = ProcessContext::new(gctx, "setup".to_string()).unwrap();
+    let process_ctx = ProcessContext::new(gctx, String::from(SETUP_TASK_NAME)).unwrap();
     process_ctx.group_context.create_setup_env().unwrap()
 }
 
-fn get_env(gctx: GroupContext, task_id: String) -> TestEnv {
+fn get_env(gctx: GroupContext, task_id: TaskId) -> TestEnv {
     info!(gctx.log(), "get_env(task_id={})", &task_id);
-    let process_ctx = ProcessContext::new(gctx, task_id.clone()).unwrap();
-    process_ctx.group_context.create_test_env(&task_id).unwrap()
+    let process_ctx = ProcessContext::new(gctx, task_id.name()).unwrap();
+    process_ctx
+        .group_context
+        .create_test_env(&task_id.name())
+        .unwrap()
 }
 
 pub enum SystemTestSubGroup {
@@ -198,7 +214,7 @@ pub enum SystemTestSubGroup {
     },
     Singleton {
         task_fn: Box<dyn SysTestFn>,
-        task_name: String,
+        task_id: TaskId,
     },
 }
 
@@ -217,10 +233,10 @@ impl SystemTestSubGroup {
     }
 
     pub fn add_test(self, test: TestFunction) -> Self {
-        let task_name = String::from(test.name());
+        let task_is = TaskId::Test(String::from(test.name()));
         let singleton = Self::Singleton {
             task_fn: test.f(),
-            task_name,
+            task_id: task_is,
         };
         match self {
             Self::Multiple { tasks, .. } if tasks.is_empty() => {
@@ -251,19 +267,19 @@ impl SystemTestSubGroup {
                     .collect(),
                 ctx,
             ),
-            SystemTestSubGroup::Singleton { task_fn, task_name } => {
+            SystemTestSubGroup::Singleton { task_fn, task_id } => {
                 let logger = ctx.logger.clone();
-                let task_name = task_name;
+                let task_id = task_id;
                 let closure = {
-                    let task_name = task_name.clone();
+                    let task_id = task_id.clone();
                     let group_ctx = ctx.group_ctx.clone();
                     move || {
-                        debug!(logger, ">>> task_fn({})", task_name);
-                        let env = get_env(group_ctx, task_name);
+                        debug!(logger, ">>> test_fn({})", &task_id);
+                        let env = get_env(group_ctx, task_id);
                         task_fn(env)
                     }
                 };
-                let task = subproc(rh, &task_name, closure, ctx);
+                let task = subproc(rh, task_id, closure, ctx);
                 timed(
                     rh,
                     Plan::Leaf {
@@ -290,16 +306,13 @@ impl Default for SystemTestGroup {
 }
 
 impl Plan<Box<dyn Task>> {
-    fn root_task_id(&self) -> String {
+    fn root_task_id(&self) -> TaskId {
         match self {
             Plan::Supervised { supervisor, .. } => supervisor.task_id(),
             Plan::Leaf { task } => task.task_id(),
         }
     }
 }
-
-// The ID of the top-level supervisor task in the generated Plan<Task> structure.
-const ROOT_TASK_ID: &str = "root_task";
 
 impl SystemTestGroup {
     pub fn new() -> Self {
@@ -316,10 +329,10 @@ impl SystemTestGroup {
     }
 
     pub fn add_test(mut self, test: TestFunction) -> Self {
-        let task_name = String::from(test.name());
+        let task_id = TaskId::Test(String::from(test.name()));
         self.tests.push(SystemTestSubGroup::Singleton {
             task_fn: test.f(),
-            task_name,
+            task_id,
         });
         self
     }
@@ -364,17 +377,18 @@ impl SystemTestGroup {
         };
 
         // The ID of the root task is needed outside this function for awaiting when the plan execution finishes.
-        let root_task =
-            Box::from(EmptyTask::new(subs.clone(), ROOT_TASK_ID.to_string())) as Box<dyn Task>;
+        let root_task = Box::from(EmptyTask::new(
+            subs.clone(),
+            TaskId::Test(String::from(ROOT_TASK_NAME)),
+        )) as Box<dyn Task>;
 
         let setup_plan = {
             let logger = group_ctx.logger().clone();
-            let task_name = "setup";
             let group_ctx = group_ctx.clone();
             let setup_fn = self.setup.unwrap();
             let setup_task = subproc(
                 rh,
-                task_name,
+                TaskId::Test(String::from(SETUP_TASK_NAME)),
                 move || {
                     debug!(logger, ">>> setup_fn");
                     let env = get_setup_env(group_ctx);
@@ -407,7 +421,7 @@ impl SystemTestGroup {
         Ok(plan)
     }
 
-    pub fn execute_from_args(self) -> Result<()> {
+    pub fn execute(self) -> Result<Outcome> {
         // TODO: check preconditions:
         // 1. there exists at least one test after setup
         // 2. all sub-groups are non-empty
@@ -438,7 +452,7 @@ impl SystemTestGroup {
 
         // Step 6 -- create a task table, consuming the plan
         let mut table = TaskTable::new();
-        let mut duplicate_tasks: Option<String> = None;
+        let mut duplicate_tasks: Option<TaskId> = None;
         plan.flatten().into_iter().for_each(|task| {
             let tid = task.task_id();
             if table.insert(tid.clone(), task).is_some() {
@@ -446,10 +460,15 @@ impl SystemTestGroup {
             }
         });
         if let Some(duplicate_task_id) = duplicate_tasks {
-            bail!(format!(
-                "test function {} specified more than once",
-                duplicate_task_id
-            ))
+            bail!(SystemTestGroupError::PreconditionViolation {
+                condition:
+                    "Test function names must be unique across an entire SystemTestGroup instance"
+                        .to_string(),
+                counterexample: format!(
+                    "test function name {} is specified more than once",
+                    duplicate_task_id
+                )
+            })
         }
         info!(group_ctx.log(), "Generated task table: {:?}", table);
 
@@ -480,23 +499,60 @@ impl SystemTestGroup {
                 let (terminal_event_sender, terminal_event_receiver) =
                     crossbeam_channel::bounded(0);
 
-                #[derive(Clone, Debug)]
-                struct SystemTestGroupReport {
-                    num_failures: usize,
-                }
-
                 broadcaster.subscribe(Box::new({
-                    let group_ctx = group_ctx.clone();
-                    let mut report = SystemTestGroupReport { num_failures: 0 };
+                    let group_ctx = group_ctx;
+                    let mut report = SystemTestGroupReport::default();
                     move |event| {
                         debug!(group_ctx.log(), "Considering event {:?}", event);
-                        if let EventPayload::TaskFailed { .. } = event.what {
-                            report.num_failures += 1;
+                        if let EventPayload::TaskSpawned { ref task_id } = event.what {
+                            // 1. Write down the start time of a freshly-spawned task
+                            // Note: This will be needed to compute the task's duration
+                            report.set_test_start_time(task_id.clone());
                         };
-                        match event.clone().what {
-                            EventPayload::TaskFailed { task_id, .. }
-                            | EventPayload::TaskStopped { task_id, .. }
-                                if task_id == *ROOT_TASK_ID =>
+                        if let EventPayload::TaskFailed {
+                            ref task_id,
+                            ref msg,
+                        } = event.what
+                        {
+                            // 2. Handle failed tasks
+                            if let TaskId::Timeout(timed_task_id) = task_id {
+                                // 2.1. When a timeout task of a timed task fails, the timed task should be marked as "timed out"
+                                // Note: Timeout tasks have no other purpose whatsoever
+                                report.set_test_as_timed_out(TaskId::Test(timed_task_id.clone()));
+                            } else {
+                                // 2.2. When a regular (i.e., not Timeout) tasks fails, Write down its end time.
+                                report.set_test_end_time(task_id.clone());
+                                if report.is_test_timed_out(task_id) {
+                                    // 2.3. Use information from step 2.1 to detect if this task has timed out
+                                    report.add_fail(TargetFunctionFailure::TimedOut {
+                                        task_id: task_id.clone(),
+                                        timeout: report.get_test_duration(task_id),
+                                    });
+                                } else {
+                                    // 2.4. Otherwise, this is a regular failure (i.e., the test function panicked)
+                                    report.add_fail(TargetFunctionFailure::Panicked {
+                                        task_id: task_id.clone(),
+                                        message: msg.clone(),
+                                        runtime: report.get_test_duration(task_id),
+                                    });
+                                }
+                            }
+                        };
+                        if let EventPayload::TaskStopped { ref task_id } = event.what {
+                            if is_task_visible_to_user(task_id) {
+                                // 3. Handle successfully completed tasks
+                                // Note: we omit tasks that the user is not aware of in the report
+                                report.set_test_end_time(task_id.clone());
+                                report.add_succ(TargetFunctionSuccess {
+                                    task_id: task_id.clone(),
+                                    runtime: report.get_test_duration(task_id),
+                                });
+                            }
+                        };
+                        match event.what {
+                            EventPayload::TaskFailed { ref task_id, .. }
+                            | EventPayload::TaskStopped { ref task_id, .. }
+                                if task_id.name().eq(ROOT_TASK_NAME) =>
                             {
                                 debug!(group_ctx.log(), "Detected final event {:?}", event);
                                 terminal_event_sender.send(report.clone()).unwrap();
@@ -514,19 +570,10 @@ impl SystemTestGroup {
 
                 // Step F -- await root task's final event and produce appropriate return code
                 let report = terminal_event_receiver.recv().unwrap();
-                let msg = "Exiting parent process after receiving terminal event from root task";
-                if report.num_failures > 0 {
-                    info!(
-                        group_ctx.log(),
-                        "{} (exit code 1 as there were {} failure(s))", msg, report.num_failures
-                    );
-                    bail!(format!("{} test(s) failed", report.num_failures))
+                if report.is_failure_free() {
+                    Ok(Outcome::FromParentProcess(report))
                 } else {
-                    info!(
-                        group_ctx.log(),
-                        "{} (all tasks succeeded ==> exit code 0)", msg
-                    );
-                    Ok(())
+                    bail!(SystemTestGroupError::SystemTestFailure(report))
                 }
             }
             SystemTestsSubcommand::InteractiveMode => {
@@ -538,9 +585,27 @@ impl SystemTestGroup {
                 log_stream: _,
             } => {
                 info!(group_ctx.log(), "Executing sub-process-specific code ...");
-                let my_task = table.get(&task_name).unwrap();
+                let my_task = table.get(&TaskId::Test(task_name)).unwrap();
                 my_task.execute().unwrap();
+                Ok(Outcome::FromSubProcess)
+            }
+        }
+    }
+
+    pub fn execute_from_args(self) -> Result<()> {
+        let outcome = self.execute();
+
+        let logger = super::logger::new_stdout_logger();
+
+        match outcome {
+            Ok(Outcome::FromSubProcess) => Ok(()),
+            Ok(Outcome::FromParentProcess(report)) => {
+                info!(&logger, "{}", format!("{report}"));
                 Ok(())
+            }
+            Err(failure_mode) => {
+                info!(&logger, "{}", format!("{failure_mode}"));
+                bail!("Tests failed.")
             }
         }
     }

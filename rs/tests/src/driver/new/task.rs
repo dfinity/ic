@@ -29,7 +29,7 @@ pub trait Task: Send + Sync {
 
 impl std::fmt::Debug for dyn Task {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Task< task_id={:?} >", self.task_id())
+        write!(f, "Task< task_id={} >", self.task_id())
     }
 }
 
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn uninterrupted_empty_task_sends_no_events() {
-        let expected_task_id = "test-id".to_string();
+        let expected_task_id = TaskId::Test("test-id".to_string());
         let (evt_send, evt_rcv) = create_subfact();
 
         let t = EmptyTask::new(evt_send, expected_task_id);
@@ -203,7 +203,7 @@ mod tests {
 
     #[test]
     fn spawned_empty_task_can_be_stopped() {
-        let expected_task_id = "test-id".to_string();
+        let expected_task_id = TaskId::Test("test-id".to_string());
         let (evt_send, evt_rcv) = create_subfact();
 
         let t = EmptyTask::new(evt_send, expected_task_id.clone());
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn spawned_empty_task_can_be_failed() {
-        let expected_task_id = "test-id".to_string();
+        let expected_task_id = TaskId::Test("test-id".to_string());
         let (evt_send, evt_rcv) = create_subfact();
 
         let t = EmptyTask::new(evt_send, expected_task_id.clone());

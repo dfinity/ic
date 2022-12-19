@@ -7,6 +7,7 @@ pub mod group;
 pub mod logger;
 pub mod plan;
 pub mod process;
+pub mod report;
 pub mod subprocess_task;
 pub mod task;
 pub mod task_executor;
