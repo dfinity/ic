@@ -46,7 +46,9 @@ pub enum ReadOnly {}
 pub enum WriteOnly {}
 
 /// `RwPolicy` is the access policy used for tip on disk state.
-pub enum RwPolicy {}
+pub struct RwPolicy<'a, Owner> {
+    lifetime_tag: PhantomData<&'a Owner>,
+}
 
 pub trait AccessPolicy {
     /// `check_dir` specifies what to do the first time we enter a
@@ -84,14 +86,14 @@ impl AccessPolicy for WriteOnly {
 
 impl WritePolicy for WriteOnly {}
 
-impl AccessPolicy for RwPolicy {
+impl<'a, T> AccessPolicy for RwPolicy<'a, T> {
     fn check_dir(p: &Path) -> Result<(), LayoutError> {
         WriteOnly::check_dir(p)
     }
 }
 
-impl ReadPolicy for RwPolicy {}
-impl WritePolicy for RwPolicy {}
+impl<'a, T> ReadPolicy for RwPolicy<'a, T> {}
+impl<'a, T> WritePolicy for RwPolicy<'a, T> {}
 
 pub type CompleteCheckpointLayout = CheckpointLayout<ReadOnly>;
 
@@ -303,7 +305,7 @@ impl TipHandler {
     /// full state and is converted to a checkpoint.
     /// This directory is cleaned during restart of a node and reset to
     /// last full checkpoint.
-    pub fn tip(&mut self, height: Height) -> Result<CheckpointLayout<RwPolicy>, LayoutError> {
+    pub fn tip(&mut self, height: Height) -> Result<CheckpointLayout<RwPolicy<Self>>, LayoutError> {
         CheckpointLayout::new_untracked(self.tip_path(), height)
     }
 
@@ -496,9 +498,9 @@ impl StateLayout {
         }
     }
 
-    pub fn scratchpad_to_checkpoint(
+    pub fn scratchpad_to_checkpoint<'a, T>(
         &self,
-        layout: CheckpointLayout<RwPolicy>,
+        layout: CheckpointLayout<RwPolicy<'a, T>>,
         height: Height,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
@@ -2082,7 +2084,7 @@ mod test {
             let scratchpad_dir = tmpdir("scratchpad");
             let cp1 = state_layout
                 .scratchpad_to_checkpoint(
-                    CheckpointLayout::<RwPolicy>::new_untracked(
+                    CheckpointLayout::<RwPolicy<()>>::new_untracked(
                         scratchpad_dir.path().to_path_buf().join("1"),
                         Height::new(1),
                     )
@@ -2093,7 +2095,7 @@ mod test {
                 .unwrap();
             let cp2 = state_layout
                 .scratchpad_to_checkpoint(
-                    CheckpointLayout::<RwPolicy>::new_untracked(
+                    CheckpointLayout::<RwPolicy<()>>::new_untracked(
                         scratchpad_dir.path().to_path_buf().join("2"),
                         Height::new(2),
                     )
@@ -2105,7 +2107,7 @@ mod test {
             // Add one checkpoint so that we never remove the last one and crash
             let _cp3 = state_layout
                 .scratchpad_to_checkpoint(
-                    CheckpointLayout::<RwPolicy>::new_untracked(
+                    CheckpointLayout::<RwPolicy<()>>::new_untracked(
                         scratchpad_dir.path().to_path_buf().join("3"),
                         Height::new(3),
                     )

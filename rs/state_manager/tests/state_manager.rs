@@ -381,7 +381,7 @@ fn missing_stable_memory_file_is_handled() {
         // Since the canister has no execution state, there should be no stable memory
         // file.
         let state_layout = state_manager.state_layout();
-        let mutable_cp_layout = CheckpointLayout::<RwPolicy>::new_untracked(
+        let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
             state_layout
                 .checkpoint(height(1))
                 .unwrap()
@@ -2246,7 +2246,7 @@ fn can_recover_from_corruption_on_state_sync() {
 
             // Corrupt some files in the destination checkpoint.
             let state_layout = dst_state_manager.state_layout();
-            let mutable_cp_layout = CheckpointLayout::<RwPolicy>::new_untracked(
+            let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
                 state_layout
                     .checkpoint(height(1))
                     .unwrap()

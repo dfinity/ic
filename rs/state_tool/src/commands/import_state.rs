@@ -90,7 +90,7 @@ pub fn do_import(state_path: PathBuf, config_path: PathBuf, height: u64) -> Resu
 
     copy_recursively(&state_path, &scratchpad_dir)?;
 
-    let cp_layout = CheckpointLayout::<RwPolicy>::new_untracked(scratchpad_dir, height)
+    let cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(scratchpad_dir, height)
         .map_err(|e| format!("Failed to create scratchpad checkpoint layout: {}", e))?;
 
     state_layout

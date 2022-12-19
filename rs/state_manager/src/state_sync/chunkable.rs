@@ -797,7 +797,7 @@ impl IncompleteState {
         }
 
         let scratchpad_layout =
-            CheckpointLayout::<RwPolicy>::new_untracked(root.to_path_buf(), height)
+            CheckpointLayout::<RwPolicy<()>>::new_untracked(root.to_path_buf(), height)
                 .expect("failed to create checkpoint layout");
 
         match state_layout.scratchpad_to_checkpoint(scratchpad_layout, height, Some(thread_pool)) {
