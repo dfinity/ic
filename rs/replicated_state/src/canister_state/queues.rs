@@ -4,6 +4,7 @@ mod tests;
 
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{CanisterState, InputQueueType, NextInputQueue, StateError};
+use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
 use ic_ic00_types::IC_00;
 use ic_interfaces::messages::CanisterInputMessage;
@@ -586,21 +587,22 @@ impl CanisterQueues {
 
     /// Immediately reject an output request by pushing a `Response` onto the
     /// input queue without ever putting the `Request` on an output queue. This
-    /// can only be used for `IC00` requests and will panic if used on a request
-    /// to any other address.
+    /// can only be used for `IC00` requests and requests to subnet IDs.
     ///
     /// This is expected to be used in cases of `IC00` routing where no
-    /// destination subnet is found that the `Request` could be routed to and
-    /// therefore an immediate (reject) `Response` is added to the relevant
+    /// destination subnet is found that the `Request` could be routed to
+    /// or if the canister directly includes subnet IDs in the request.
+    /// Hence, an immediate (reject) `Response` is added to the relevant
     /// input queue.
-    pub(crate) fn reject_ic00_output_request(
+    pub(crate) fn reject_subnet_output_request(
         &mut self,
         request: Request,
         reject_context: RejectContext,
+        subnet_ids: &[PrincipalId],
     ) -> Result<(), StateError> {
-        assert_eq!(
-            request.receiver, IC_00,
-            "reject_ic00_output_request can only be used to reject management canister requests"
+        assert!(
+            request.receiver == IC_00 || subnet_ids.contains(&request.receiver.get()),
+            "reject_subnet_output_request can only be used to reject management canister requests"
         );
 
         let (input_queue, _output_queue) = self.get_or_insert_queues(&request.receiver);

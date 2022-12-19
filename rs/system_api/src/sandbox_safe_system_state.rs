@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::routing::ResolveDestinationError;
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
@@ -106,6 +107,62 @@ impl SystemStateChanges {
         self.cycles_balance_change.get_removed_cycles()
     }
 
+    fn error<S: ToString>(message: S) -> HypervisorError {
+        HypervisorError::WasmEngineError(WasmEngineError::FailedToApplySystemChanges(
+            message.to_string(),
+        ))
+    }
+
+    fn reject_subnet_message(
+        system_state: &mut SystemState,
+        subnet_ids: &[PrincipalId],
+        msg: Request,
+        err: ResolveDestinationError,
+        logger: &ReplicaLogger,
+    ) -> HypervisorResult<()> {
+        info!(
+            logger,
+            "Error routing IC00 message: sender id {}, method_name {}, resolve error: {:?}.",
+            msg.sender,
+            msg.method_name,
+            err
+        );
+        let reject_context = RejectContext {
+            code: RejectCode::DestinationInvalid,
+            message: format!(
+                "Unable to route management canister request {}: {:?}",
+                msg.method_name, err
+            ),
+        };
+        system_state
+            .reject_subnet_output_request(msg, reject_context, subnet_ids)
+            .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
+        Ok(())
+    }
+
+    fn push_message(
+        system_state: &mut SystemState,
+        time: Time,
+        msg: Request,
+        logger: &ReplicaLogger,
+    ) -> HypervisorResult<()> {
+        let sent_cycles = msg.payment.get();
+        let msg_receiver = msg.receiver;
+        system_state
+            .push_output_request(msg.into(), time)
+            .map_err(|e| Self::error(format!("Failed to push output request: {:?}", e)))?;
+        if sent_cycles > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
+            info!(
+                logger,
+                "Canister {} sent {} cycles to canister {}.",
+                system_state.canister_id,
+                sent_cycles,
+                msg_receiver
+            );
+        }
+        Ok(())
+    }
+
     /// Verify that the changes to the system state are sound and apply them to
     /// the system state if they are.
     pub fn apply_changes(
@@ -116,12 +173,6 @@ impl SystemStateChanges {
         own_subnet_id: SubnetId,
         logger: &ReplicaLogger,
     ) -> HypervisorResult<()> {
-        fn error<S: ToString>(message: S) -> HypervisorError {
-            HypervisorError::WasmEngineError(WasmEngineError::FailedToApplySystemChanges(
-                message.to_string(),
-            ))
-        }
-
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
         self.cycles_balance_change
@@ -139,13 +190,15 @@ impl SystemStateChanges {
             let own_canister_id = system_state.canister_id;
             let call_context_manager = system_state
                 .call_context_manager_mut()
-                .ok_or_else(|| error("Call context manager does not exists"))?;
+                .ok_or_else(|| Self::error("Call context manager does not exists"))?;
             for (context_id, amount_taken) in &self.call_context_balance_taken {
                 let call_context = call_context_manager
                     .call_context_mut(*context_id)
-                    .ok_or_else(|| error("Canister accepted cycles from invalid call context"))?;
+                    .ok_or_else(|| {
+                        Self::error("Canister accepted cycles from invalid call context")
+                    })?;
                 call_context.withdraw_cycles(*amount_taken).map_err(|_| {
-                    error("Canister accepted more cycles than available from call context")
+                    Self::error("Canister accepted more cycles than available from call context")
                 })?;
                 if (*amount_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                     match call_context.call_origin() {
@@ -165,6 +218,9 @@ impl SystemStateChanges {
 
         // Push outgoing messages.
         let mut callback_changes = BTreeMap::new();
+        let nns_subnet_id = network_topology.nns_subnet_id;
+        let subnet_ids: Vec<PrincipalId> =
+            network_topology.subnets.keys().map(|s| s.get()).collect();
         for mut msg in self.requests {
             if msg.receiver == IC_00 {
                 // This is a request to ic:00. Update the receiver to be the appropriate
@@ -178,60 +234,21 @@ impl SystemStateChanges {
                 .map(|id| CanisterId::new(id).unwrap())
                 {
                     Ok(destination_subnet) => {
-                        let sent_cycles = msg.payment.get();
                         msg.receiver = destination_subnet;
                         callback_changes.insert(msg.sender_reply_callback, destination_subnet);
-                        system_state
-                            .push_output_request(msg.into(), time)
-                            .map_err(|e| {
-                                error(format!("Failed to push output request: {:?}", e))
-                            })?;
-                        if sent_cycles > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
-                            info!(
-                                logger,
-                                "Canister {} sent {} cycles to canister {}.",
-                                system_state.canister_id,
-                                sent_cycles,
-                                destination_subnet
-                            );
-                        }
+                        Self::push_message(system_state, time, msg, logger)?;
                     }
                     Err(err) => {
-                        info!(
-                                logger,
-                                "Error routing IC00 message: sender id {}, method_name {}, resolve error: {:?}.",
-                                msg.sender, msg.method_name, err
-                            );
-
-                        let reject_context = RejectContext {
-                            code: RejectCode::DestinationInvalid,
-                            message: format!(
-                                "Unable to route management canister request {}: {:?}",
-                                msg.method_name, err
-                            ),
-                        };
-                        system_state
-                            .reject_ic00_output_request(msg, reject_context)
-                            .map_err(|e| {
-                                error(format!("Failed to push IC00 reject response: {:?}", e))
-                            })?;
+                        Self::reject_subnet_message(system_state, &subnet_ids, msg, err, logger)?;
                     }
                 }
+            } else if own_subnet_id != nns_subnet_id && subnet_ids.contains(&msg.receiver.get()) {
+                // This is a management canister call providing the target subnet ID
+                // directly in the request. This is only allowed for NNS canisters.
+                let err = ResolveDestinationError::AlreadyResolved(msg.receiver.get());
+                Self::reject_subnet_message(system_state, &subnet_ids, msg, err, logger)?;
             } else {
-                let sent_cycles = msg.payment.get();
-                let msg_receiver = msg.receiver;
-                system_state
-                    .push_output_request(msg.into(), time)
-                    .map_err(|e| error(format!("Failed to push output request: {:?}", e)))?;
-                if sent_cycles > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
-                    info!(
-                        logger,
-                        "Canister {} sent {} cycles to canister {}.",
-                        system_state.canister_id,
-                        sent_cycles,
-                        msg_receiver
-                    );
-                }
+                Self::push_message(system_state, time, msg, logger)?;
             }
         }
 
@@ -239,7 +256,7 @@ impl SystemStateChanges {
         for update in self.callback_updates {
             let call_context_manager = system_state
                 .call_context_manager_mut()
-                .ok_or_else(|| error("Call context manager does not exists"))?;
+                .ok_or_else(|| Self::error("Call context manager does not exists"))?;
             match update {
                 CallbackUpdate::Register(expected_id, mut callback) => {
                     if let Some(receiver) = callback_changes.get(&expected_id) {
@@ -247,14 +264,14 @@ impl SystemStateChanges {
                     }
                     let id = call_context_manager.register_callback(callback);
                     if id != expected_id {
-                        return Err(error("Failed to register update callback"));
+                        return Err(Self::error("Failed to register update callback"));
                     }
                 }
                 CallbackUpdate::Unregister(callback_id) => {
                     let _callback = call_context_manager
                         .unregister_callback(callback_id)
                         .ok_or_else(|| {
-                            error("Tried to unregister callback with an id that isn't in use")
+                            Self::error("Tried to unregister callback with an id that isn't in use")
                         });
                 }
             }
@@ -263,7 +280,7 @@ impl SystemStateChanges {
         // Verify new certified data isn't too long and set it.
         if let Some(certified_data) = self.new_certified_data.as_ref() {
             if certified_data.len() > CERTIFIED_DATA_MAX_LENGTH as usize {
-                return Err(error("Certified data is too large"));
+                return Err(Self::error("Certified data is too large"));
             }
             system_state.certified_data = certified_data.clone();
         }
