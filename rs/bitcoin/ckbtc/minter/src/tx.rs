@@ -33,7 +33,7 @@ mod ops {
     pub const CHECKSIG: u8 = 0xac;
 }
 
-pub struct DisplayTxid<'a>(pub &'a [u8; 32]);
+pub struct DisplayTxid<'a>(pub &'a [u8]);
 
 impl fmt::Display for DisplayTxid<'_> {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
