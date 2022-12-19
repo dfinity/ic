@@ -165,6 +165,28 @@ fn random_writes(heap_size: usize, num_writes: usize) -> impl Strategy<Value = V
     prop::collection::vec(write_strategy, 1..num_writes)
 }
 
+fn corner_case_writes(heap_size: usize) -> Vec<Vec<Write>> {
+    assert!(heap_size > 4096 * 3); // These cases assume we have at least three pages.
+    vec![
+        // Write zero to second page so that the contents doesn't actually
+        // change and it is no longer considered dirty.
+        vec![Write {
+            dst: 4096,
+            bytes: vec![0; 10],
+        }],
+        // Write that crosses a page boundary.
+        vec![Write {
+            dst: 4096 * 2 - 3,
+            bytes: vec![5; 3],
+        }],
+        // Write that just fits on the second page.
+        vec![Write {
+            dst: 4096 * 2 - 1,
+            bytes: vec![5; 1],
+        }],
+    ]
+}
+
 fn buf_apply_write(heap: &mut [u8], write: &Write) {
     // match the behavior of write_bytes: copy the i32 `addr` to heap[0;4]
     heap[0..4].copy_from_slice(&write.dst.to_le_bytes());
@@ -306,7 +328,22 @@ mod tests {
                     // page(0) by copying the 4-byte value to addr=0.
                     result.insert(0);
                     // Add the target pages.
-                    result.extend(writes.iter().map(|w| w.dst as u64 / PAGE_SIZE as u64));
+                    for Write { dst, bytes } in writes {
+                        if !bytes.is_empty() {
+                            // A page will not actually be considered dirty
+                            // unless the contents has changed. Memory is
+                            // initially all 0, so this means we should ignore
+                            // all zero bytes.
+                            result.extend(
+                                bytes
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(_, b)| **b != 0)
+                                    .map(|(addr, _)| (dst as u64 + addr as u64) / PAGE_SIZE as u64)
+                                    .collect::<BTreeSet<_>>(),
+                            );
+                        }
+                    }
                     result.iter().cloned().collect()
                 };
 
@@ -626,6 +663,7 @@ mod tests {
         // The seed value will always be the same for a particular version of
         // Proptest and algorithm, but may change across releases.
         let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES);
         // Random, *non-empty* writes
         let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES)
             .new_tree(&mut runner)
@@ -635,6 +673,9 @@ mod tests {
             .filter(|w| !w.bytes.is_empty())
             .cloned()
             .collect();
+        for writes in corner_writes {
+            apply_writes_and_check_heap(writes, ModificationTracking::Track)
+        }
         apply_writes_and_check_heap(writes, ModificationTracking::Track);
     }
 
@@ -643,6 +684,7 @@ mod tests {
         // The seed value will always be the same for a particular version of
         // Proptest and algorithm, but may change across releases.
         let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES);
         // Random, *non-empty* writes
         let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES)
             .new_tree(&mut runner)
@@ -652,6 +694,9 @@ mod tests {
             .filter(|w| !w.bytes.is_empty())
             .cloned()
             .collect();
+        for writes in corner_writes {
+            apply_writes_and_check_heap(writes, ModificationTracking::Track)
+        }
         apply_writes_and_check_heap(writes, ModificationTracking::Ignore);
     }
 }
