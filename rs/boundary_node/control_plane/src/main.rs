@@ -25,8 +25,18 @@ use nix::{
     sys::signal::{kill as send_signal, Signal},
     unistd::Pid,
 };
-use opentelemetry::{baggage::BaggageExt, global, sdk::Resource, trace::FutureExt, KeyValue};
-use opentelemetry_prometheus::PrometheusExporter;
+use opentelemetry::{
+    baggage::BaggageExt,
+    global,
+    sdk::{
+        export::metrics::aggregation,
+        metrics::{controllers, processors, selectors},
+        Resource,
+    },
+    trace::FutureExt,
+    KeyValue,
+};
+use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
 use persist::{Persist, PersistStatus};
 use prometheus::{Encoder as PrometheusEncoder, TextEncoder};
 use registry::{RoutingTable, Subnet};
@@ -42,7 +52,7 @@ mod routes;
 
 use crate::{
     encode::{RoutesEncoder, TrustedCertsEncoder, UpstreamEncoder},
-    metrics::{MetricParams, WithMetrics},
+    metrics::{CheckMetricParams, CheckWithMetrics, MetricParams, WithMetrics},
     persist::{LegacyPersister, Persister, WithDedup, WithEmpty, WithMultiple},
     registry::{
         CreateRegistryClient, CreateRegistryClientImpl, Snapshot, Snapshotter, WithMinimumVersion,
@@ -101,9 +111,18 @@ async fn main() -> Result<(), Error> {
     )
     .expect("failed to set global subscriber");
 
-    let exporter = opentelemetry_prometheus::exporter()
+    let exporter = ExporterBuilder::new(
+        controllers::basic(
+            processors::factory(
+                selectors::simple::histogram([]),
+                aggregation::cumulative_temporality_selector(),
+            )
+            .with_memory(true),
+        )
         .with_resource(Resource::new(vec![KeyValue::new("service", SERVICE_NAME)]))
-        .init();
+        .build(),
+    )
+    .init();
 
     let meter = global::meter(SERVICE_NAME);
 
@@ -151,7 +170,10 @@ async fn main() -> Result<(), Error> {
     let mut snapshot_runner = snapshot_runner;
 
     let checker = Checker::new(http_client);
-    let checker = WithMetrics(checker, MetricParams::new(&meter, SERVICE_NAME, "check"));
+    let checker = CheckWithMetrics(
+        checker,
+        CheckMetricParams::new(&meter, SERVICE_NAME, "check"),
+    );
     let checker = WithRetry(
         checker,
         3,          // max_attempts
