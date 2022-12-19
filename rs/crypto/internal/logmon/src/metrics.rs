@@ -271,7 +271,7 @@ impl KeyCounts {
 
 /// A result for operations returning booleans. Using an enum allows adding errors, and using
 /// macros for deriving the string representation needed for the dashboards.
-#[derive(IntoStaticStr)]
+#[derive(EnumIter, IntoStaticStr)]
 pub enum BooleanResult {
     True,
     False,
@@ -284,7 +284,7 @@ impl Display for BooleanResult {
     }
 }
 
-#[derive(IntoStaticStr)]
+#[derive(EnumIter, IntoStaticStr)]
 pub enum BooleanOperation {
     KeyInRegistryMissingLocally,
     LatestLocalIdkgKeyExistsInRegistry,
@@ -422,6 +422,25 @@ impl Metrics {
                 ),
             );
         }
+        let boolean_results = r.int_counter_vec(
+            "crypto_boolean_results",
+            "Boolean results from crypto operations",
+            &["operation", "result"],
+        );
+        for operation in BooleanOperation::iter() {
+            for result in BooleanResult::iter() {
+                boolean_results
+                    .with_label_values(&[&format!("{}", operation), &format!("{}", result)]);
+            }
+        }
+        let rotation_results = r.int_counter_vec(
+            "crypto_key_rotation_results",
+            "Result from iDKG dealing encryption key rotations",
+            &["result"],
+        );
+        for result in KeyRotationResult::iter() {
+            rotation_results.with_label_values(&[&format!("{}", result)]);
+        }
         Self {
             crypto_lock_acquisition_duration_seconds: r.histogram_vec(
                 "crypto_lock_acquisition_duration_seconds",
@@ -431,16 +450,8 @@ impl Metrics {
             ),
             crypto_duration_seconds: durations,
             crypto_key_counts: key_counts,
-            crypto_key_rotation_results: r.int_counter_vec(
-                "crypto_key_rotation_results",
-                "Result from iDKG dealing encryption key rotations",
-                &["result"],
-            ),
-            crypto_boolean_results: r.int_counter_vec(
-                "crypto_boolean_results",
-                "Boolean results from crypto operations",
-                &["operation", "result"],
-            ),
+            crypto_key_rotation_results: rotation_results,
+            crypto_boolean_results: boolean_results,
             crypto_parameter_byte_sizes: r.histogram_vec(
                 "crypto_parameter_byte_sizes",
                 "Byte sizes of crypto operation parameters",
