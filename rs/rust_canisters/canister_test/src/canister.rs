@@ -267,6 +267,9 @@ pub enum Runtime {
 
 impl<'a> Runtime {
     /// Returns a client-side view of the management canister.
+    /// This is used for `provisional_create_canister_with_cycles`.
+    /// More details on effective canister id can be found in Interface Spec:
+    /// https://ic-interface-spec.netlify.app/#http-effective-canister-id
     pub fn get_management_canister(&'a self) -> Canister<'a> {
         let effective_canister_id = match self {
             Runtime::Remote(r) => r.effective_canister_id,
@@ -280,7 +283,12 @@ impl<'a> Runtime {
         }
     }
 
-    /// Returns a client-side view of the management canister with given effective canister id.
+    /// Returns a client-side view of the management canister
+    /// with given effective canister id.
+    /// This is used for all management canister methods
+    /// but `provisional_create_canister_with_cycles`.
+    /// More details on effective canister id can be found in Interface Spec:
+    /// https://ic-interface-spec.netlify.app/#http-effective-canister-id
     pub fn get_management_canister_with_effective_canister_id(
         &'a self,
         effective_canister_id: PrincipalId,
@@ -447,6 +455,8 @@ where
 #[derive(Clone)]
 pub struct Canister<'a> {
     runtime: &'a Runtime,
+    /// More details on effective canister id can be found in Interface Spec:
+    /// https://ic-interface-spec.netlify.app/#http-effective-canister-id
     effective_canister_id: PrincipalId,
     canister_id: CanisterId,
 
