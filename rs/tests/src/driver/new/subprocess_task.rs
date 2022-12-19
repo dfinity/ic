@@ -64,7 +64,7 @@ impl Task for SubprocessTask {
             .arg("--working-dir") // TODO: rename as --group-dir
             .arg(self.group_ctx.group_dir().as_os_str())
             .arg("spawn-child")
-            .arg(self.task_id.clone())
+            .arg(self.task_id.name())
             .arg("ABC")
             .arg("XYZ");
 
@@ -119,8 +119,8 @@ impl Task for SubprocessTask {
                     // overrides the result from the process.
                     TaskState::StopRequested => Event::task_stopped(task_id),
                     TaskState::FailRequested => Event::task_failed(
-                        task_id,
-                        "Task '{task_id}' failed with exit code: {exit_code:?}.".to_string(),
+                        task_id.clone(),
+                        format!("Task '{task_id}' failed with exit code: {exit_code:?}."),
                     ),
                     TaskState::Finished => {
                         crit!(log, "Task '{task_id}' already finished!");
