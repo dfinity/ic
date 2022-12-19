@@ -951,7 +951,7 @@ fn subnet_canister_request_bad_candid_payload() {
 }
 
 #[test]
-fn create_canister_xnet_to_nns_called_from_non_nns() {
+fn management_canister_xnet_to_nns_called_from_non_nns() {
     let own_subnet = subnet_test_id(1);
     let other_subnet = subnet_test_id(2);
     let other_canister = canister_test_id(1);
@@ -960,22 +960,30 @@ fn create_canister_xnet_to_nns_called_from_non_nns() {
         .with_nns_subnet_id(own_subnet)
         .with_caller(other_subnet, other_canister)
         .build();
+    test.state_mut().metadata.own_subnet_features.http_requests = true;
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
         EmptyBlob.encode(),
         test.canister_creation_fee(),
     );
-    test.execute_all();
-    let response = test.xnet_messages()[0].clone();
-    assert_eq!(
-        get_reject_message(response),
-        format!("Incorrect sender subnet id: {}. Sender should be on the same subnet or on the NNS subnet.", other_subnet)
+    test.inject_call_to_ic00(Method::RawRand, EmptyBlob.encode(), Cycles::from(0_u64));
+    test.inject_call_to_ic00(
+        Method::HttpRequest,
+        EmptyBlob.encode(),
+        test.http_request_fee(NumBytes::from(0), None),
     );
+    test.execute_all();
+    for response in test.xnet_messages().clone() {
+        assert_eq!(
+            get_reject_message(response),
+            format!("Incorrect sender subnet id: {}. Sender should be on the same subnet or on the NNS subnet.", other_subnet)
+        );
+    }
 }
 
 #[test]
-fn create_canister_xnet_called_from_non_nns() {
+fn management_canister_xnet_called_from_non_nns() {
     let own_subnet = subnet_test_id(1);
     let nns_subnet = subnet_test_id(2);
     let other_subnet = subnet_test_id(3);
@@ -985,18 +993,26 @@ fn create_canister_xnet_called_from_non_nns() {
         .with_nns_subnet_id(nns_subnet)
         .with_caller(other_subnet, other_canister)
         .build();
+    test.state_mut().metadata.own_subnet_features.http_requests = true;
 
     test.inject_call_to_ic00(
         Method::CreateCanister,
         EmptyBlob.encode(),
         test.canister_creation_fee(),
     );
-    test.execute_all();
-    let response = test.xnet_messages()[0].clone();
-    assert_eq!(
-        get_reject_message(response),
-        format!("Incorrect sender subnet id: {}. Sender should be on the same subnet or on the NNS subnet.", other_subnet)
+    test.inject_call_to_ic00(Method::RawRand, EmptyBlob.encode(), Cycles::from(0_u64));
+    test.inject_call_to_ic00(
+        Method::HttpRequest,
+        EmptyBlob.encode(),
+        test.http_request_fee(NumBytes::from(0), None),
     );
+    test.execute_all();
+    for response in test.xnet_messages().clone() {
+        assert_eq!(
+            get_reject_message(response),
+            format!("Incorrect sender subnet id: {}. Sender should be on the same subnet or on the NNS subnet.", other_subnet)
+        );
+    }
 }
 
 #[test]
