@@ -74,7 +74,8 @@ test --test_env=RUST_BACKTRACE=full
 
 test:precommit --build_tests_only --test_tag_filters="smoke"
 
-test:systest --test_output=streamed --test_tag_filters= --build_tag_filters= --s3_endpoint=https://s3-upload.zh1-idx2.dfinity.network
+build:systest --build_tag_filters= --s3_endpoint=https://s3-upload.zh1-idx2.dfinity.network
+test:systest --test_output=streamed --test_tag_filters=
 
 # For sandboxed actions, mount an empty, writable directory at this absolute path
 # (if supported by the sandboxing implementation, ignored otherwise).
