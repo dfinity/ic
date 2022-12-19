@@ -52,7 +52,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let result =
             dealing::create_dealing(&self.csp, &self.node_id, &self.registry_client, params);
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Full,
             "create_dealing",
             MetricsResult::from(&result),
@@ -91,7 +91,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             signed_dealing,
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Full,
             "verify_dealing_public",
             MetricsResult::from(&result),
@@ -130,7 +130,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             signed_dealing,
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Full,
             "verify_dealing_private",
             MetricsResult::from(&result),
@@ -168,7 +168,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             initial_dealings,
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Full,
             "verify_initial_dealings",
             MetricsResult::from(&result),
@@ -202,7 +202,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let result =
             transcript::create_transcript(&self.csp, &self.registry_client, params, dealings);
         self.metrics.observe_parameter_size(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             "create_transcript",
             "internal_transcript_raw",
             result
@@ -211,7 +211,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             MetricsResult::from(&result),
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Full,
             "create_transcript",
             MetricsResult::from(&result),
@@ -246,14 +246,14 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let result =
             transcript::verify_transcript(&self.csp, &self.registry_client, params, transcript);
         self.metrics.observe_parameter_size(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             "verify_transcript",
             "internal_transcript_raw",
             transcript.internal_transcript_raw.len(),
             MetricsResult::from(&result),
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Full,
             "verify_transcript",
             MetricsResult::from(&result),
@@ -289,14 +289,14 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             transcript,
         );
         self.metrics.observe_parameter_size(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             "load_transcript",
             "internal_transcript_raw",
             transcript.internal_transcript_raw.len(),
             MetricsResult::from(&result),
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Full,
             "load_transcript",
             MetricsResult::from(&result),
@@ -342,14 +342,14 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             complainer_id,
         );
         self.metrics.observe_parameter_size(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             "verify_complaint",
             "internal_transcript_raw",
             transcript.internal_transcript_raw.len(),
             MetricsResult::from(&result),
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Full,
             "verify_complaint",
             MetricsResult::from(&result),
@@ -391,14 +391,14 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             complaint,
         );
         self.metrics.observe_parameter_size(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             "open_transcript",
             "internal_transcript_raw",
             transcript.internal_transcript_raw.len(),
             MetricsResult::from(&result),
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Full,
             "open_transcript",
             MetricsResult::from(&result),
@@ -436,14 +436,14 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let start_time = self.metrics.now();
         let result = transcript::verify_opening(&self.csp, transcript, opener, opening, complaint);
         self.metrics.observe_parameter_size(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             "verify_opening",
             "internal_transcript_raw",
             transcript.internal_transcript_raw.len(),
             MetricsResult::from(&result),
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Full,
             "verify_opening",
             MetricsResult::from(&result),
@@ -482,14 +482,14 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             openings,
         );
         self.metrics.observe_parameter_size(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             "load_transcript_with_openings",
             "internal_transcript_raw",
             transcript.internal_transcript_raw.len(),
             MetricsResult::from(&result),
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Full,
             "load_transcript_with_openings",
             MetricsResult::from(&result),
@@ -534,14 +534,14 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             active_transcripts,
         );
         self.metrics.observe_parameter_size(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             "retain_active_transcripts",
             "internal_transcript_raw",
             transcripts_len,
             MetricsResult::from(&result),
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Full,
             "retain_active_transcripts",
             MetricsResult::from(&result),

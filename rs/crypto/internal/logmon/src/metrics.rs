@@ -183,7 +183,7 @@ pub enum MetricsDomain {
     ThresholdSignature,
     NiDkgAlgorithm,
     TlsHandshake,
-    IDkgProtocol,
+    IdkgProtocol,
     ThresholdEcdsa,
     IcCanisterSignature,
     PublicSeed,
@@ -287,7 +287,7 @@ impl Display for BooleanResult {
 #[derive(IntoStaticStr)]
 pub enum BooleanOperation {
     KeyInRegistryMissingLocally,
-    LatestLocalIDkgKeyExistsInRegistry,
+    LatestLocalIdkgKeyExistsInRegistry,
 }
 
 impl Display for BooleanOperation {

@@ -58,7 +58,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             transcript_operation,
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Local,
             "idkg_create_dealing",
             MetricsResult::from(&result),
@@ -87,7 +87,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             context_data,
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Local,
             "idkg_verify_dealing_private",
             MetricsResult::from(&result),
@@ -113,7 +113,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             transcript,
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Local,
             "idkg_load_transcript",
             MetricsResult::from(&result),
@@ -141,7 +141,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             transcript,
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Local,
             "idkg_load_transcript_with_openings",
             MetricsResult::from(&result),
@@ -155,7 +155,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let start_time = self.metrics.now();
         let result = self.idkg_gen_dealing_encryption_key_pair_internal();
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Local,
             "idkg_gen_dealing_encryption_key_pair",
             MetricsResult::from(&result),
@@ -181,7 +181,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             opener_key_id,
         );
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Local,
             "idkg_open_dealing",
             MetricsResult::from(&result),
@@ -199,7 +199,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let start_time = self.metrics.now();
         let result = self.idkg_retain_active_keys_internal(active_key_ids, oldest_public_key);
         self.metrics.observe_duration_seconds(
-            MetricsDomain::IDkgProtocol,
+            MetricsDomain::IdkgProtocol,
             MetricsScope::Local,
             "idkg_retain_active_keys",
             MetricsResult::from(&result),

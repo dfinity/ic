@@ -109,7 +109,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
                 .equal_ignoring_timestamp(&latest_local_idkg_dealing_encryption_key)
             {
                 self.metrics.observe_boolean_result(
-                    BooleanOperation::LatestLocalIDkgKeyExistsInRegistry,
+                    BooleanOperation::LatestLocalIdkgKeyExistsInRegistry,
                     BooleanResult::True,
                 );
                 match idkg_dealing_encryption_key.timestamp {
@@ -139,7 +139,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
                     "Local iDKG dealing encryption key needs registration"
                 );
                 self.metrics.observe_boolean_result(
-                    BooleanOperation::LatestLocalIDkgKeyExistsInRegistry,
+                    BooleanOperation::LatestLocalIdkgKeyExistsInRegistry,
                     BooleanResult::False,
                 );
                 return Ok(
@@ -343,7 +343,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                         self.metrics
                             .observe_key_rotation_result(KeyRotationResult::KeyRotated);
                         self.metrics.observe_boolean_result(
-                            BooleanOperation::LatestLocalIDkgKeyExistsInRegistry,
+                            BooleanOperation::LatestLocalIdkgKeyExistsInRegistry,
                             BooleanResult::False,
                         );
                     }
@@ -364,7 +364,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                         KeyRotationResult::LatestLocalRotationTooRecent,
                     );
                     self.metrics.observe_boolean_result(
-                        BooleanOperation::LatestLocalIDkgKeyExistsInRegistry,
+                        BooleanOperation::LatestLocalIdkgKeyExistsInRegistry,
                         BooleanResult::True,
                     );
                 }
