@@ -63,6 +63,7 @@ ic-crypto-node-key-generation = { path = "../../node_key_generation" }
 ic-crypto-test-utils = { path = "../../test_utils" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../crypto/test_utils/reproducible_rng" }
 ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs" }
+ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory_logger"}
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 lazy_static = "1.4.0"
 mockall = "0.7.2"
