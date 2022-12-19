@@ -37,6 +37,7 @@ use ic_types::{
     NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
 use job_types::{JobType, NodeOS};
+use slog::{warn, Logger};
 use thiserror::Error;
 
 pub mod config_generator;
@@ -100,6 +101,7 @@ impl IcServiceDiscoveryImpl {
     /// `ic_scraping_targets_dir` must point to a directory that contains the
     /// local stores of the Internet Computer instances to be scraped.
     pub fn new<P: AsRef<Path>>(
+        log: Logger,
         ic_scraping_targets_dir: P,
         registry_query_timeout: Duration,
         jobs: HashMap<JobType, u16>,
@@ -117,7 +119,7 @@ impl IcServiceDiscoveryImpl {
             registries,
             jobs,
         };
-        self_.load_new_ics()?;
+        self_.load_new_ics(log)?;
         Ok(self_)
     }
 
@@ -150,7 +152,7 @@ impl IcServiceDiscoveryImpl {
     /// * The set of scraped ICs currently strictly grows throughout the
     /// lifetime of a service instance. I.e., removing an IC as a scrape target
     /// requires rebooting the service.
-    pub fn load_new_ics(&self) -> Result<(), IcServiceDiscoveryError> {
+    pub fn load_new_ics(&self, log: Logger) -> Result<(), IcServiceDiscoveryError> {
         let paths = std::fs::read_dir(&self.ic_scraping_targets_dir)?;
         let mut registries_lock_guard = self.registries.write().unwrap();
         for path in paths {
@@ -161,8 +163,23 @@ impl IcServiceDiscoveryImpl {
             }
             let ic_name = path.file_name().to_str().unwrap().to_string();
             if let Entry::Vacant(e) = registries_lock_guard.entry(ic_name) {
-                let ic_registry = LocalRegistry::new(path.path(), self.registry_query_timeout)?;
-                e.insert(ic_registry);
+                // if the path does not contain a correct cache, and
+                // if it cannot fetch it, the SD will not start.
+                // This is a temporary fix which will solve the issue by ignoring
+                // the directories it cannot create a registry from.
+                // The downside is that it will try to do it everytime the
+                // registry is being polled
+                match LocalRegistry::new(path.path(), self.registry_query_timeout) {
+                    Ok(ic_registry) => {
+                        e.insert(ic_registry);
+                    }
+                    Err(e) => warn!(
+                        log,
+                        "Could not load create a registry from {}: {}, skipping.",
+                        path.path().canonicalize().unwrap().to_str().unwrap(),
+                        e
+                    ),
+                };
             }
         }
         Ok(())
@@ -320,6 +337,10 @@ impl IcServiceDiscovery for IcServiceDiscoveryImpl {
         }
 
         for (listed_job, port) in &self.jobs {
+            if mapping.is_some() {
+                break;
+            }
+
             if *listed_job == job {
                 mapping = Some(some_after(set_port(*port)));
                 break;
@@ -478,6 +499,7 @@ pub enum IcServiceDiscoveryError {
 mod tests {
     use std::collections::{HashMap, HashSet};
 
+    use slog::o;
     use tempfile::TempDir;
 
     use super::*;
@@ -494,8 +516,11 @@ mod tests {
         let mut jobs: HashMap<JobType, u16> = HashMap::new();
         jobs.insert(JobType::Replica, 9090);
 
-        let ic_scraper = IcServiceDiscoveryImpl::new(tempdir.path(), QUERY_TIMEOUT, jobs).unwrap();
-        ic_scraper.load_new_ics().unwrap();
+        let log = slog::Logger::root(slog::Discard, o!());
+
+        let ic_scraper =
+            IcServiceDiscoveryImpl::new(log.clone(), tempdir.path(), QUERY_TIMEOUT, jobs).unwrap();
+        ic_scraper.load_new_ics(log.clone()).unwrap();
         let target_groups = ic_scraper.get_target_groups(JobType::Replica).unwrap();
 
         let nns_targets: HashSet<_> = target_groups
