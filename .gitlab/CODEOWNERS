@@ -220,6 +220,9 @@
 /rs/tests/bin/tecdsa_add_nodes_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
 /rs/tests/bin/tecdsa_complaint_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
 /rs/tests/bin/two_third_latency_test.rs   @dfinity-lab/teams/ic-testing-verification
+/rs/tests/bin/downgrade_app_subnet_with_ecdsa_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
+/rs/tests/bin/upgrade_downgrade_app_subnet_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
+/rs/tests/bin/upgrade_downgrade_nns_subnet_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/orchestrator-owners
 /rs/tests/src/basic_health_test.rs      @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/boundary_nodes_integration/     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/boundary_nodes_snp_tests/     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification
