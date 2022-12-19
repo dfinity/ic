@@ -753,7 +753,7 @@ fn dirty_pages_to_dirty_chunks(
     // The field `height` of the checkpoint layout is not used here.
     // The checkpoint layout is only used to get the file path of canister heap.
     let checkpoint_layout: CheckpointLayout<ReadOnly> =
-        CheckpointLayout::new(PathBuf::from(checkpoint_root_path), Height::from(0))?;
+        CheckpointLayout::new_untracked(PathBuf::from(checkpoint_root_path), Height::from(0))?;
 
     let mut dirty_chunks: BTreeMap<PathBuf, BitVec> = Default::default();
     for dirty_page in &manifest_delta.dirty_memory_pages {

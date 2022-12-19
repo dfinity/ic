@@ -495,26 +495,16 @@ impl Drop for CheckpointContext {
         }
 
         let start = Instant::now();
-        if let Err(err) = self.state_layout.try_remove_checkpoint(self.height) {
-            self.metrics
-                .state_manager_error_count
-                .with_label_values(&["remove_checkpoint"])
-                .inc();
-            error!(
-                self.log,
-                "Failed to remove the checkpoint with height {}: {}", self.height, err
-            );
-        } else {
-            let elapsed = start.elapsed();
-            info!(
-                self.log,
-                "Removed checkpoint @{} in {:?}", self.height, elapsed
-            );
-            self.metrics
-                .checkpoint_op_duration
-                .with_label_values(&["remove"])
-                .observe(elapsed.as_secs_f64());
-        }
+        self.state_layout.remove_checkpoint_when_unused(self.height);
+        let elapsed = start.elapsed();
+        info!(
+            self.log,
+            "Removed checkpoint @{} in {:?}", self.height, elapsed
+        );
+        self.metrics
+            .checkpoint_op_duration
+            .with_label_values(&["remove"])
+            .observe(elapsed.as_secs_f64());
     }
 }
 
@@ -1265,7 +1255,7 @@ impl StateManagerImpl {
             config.state_root().display()
         );
         let starting_time = Instant::now();
-        let state_layout = StateLayout::try_new(log.clone(), config.state_root())
+        let state_layout = StateLayout::try_new(log.clone(), config.state_root(), metrics_registry)
             .unwrap_or_else(|err| fatal!(&log, "Failed to init state layout: {:?}", err));
         info!(log, "StateLayout init took {:?}", starting_time.elapsed());
 

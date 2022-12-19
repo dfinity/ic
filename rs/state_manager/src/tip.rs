@@ -530,6 +530,7 @@ fn truncate_path(log: &ReplicaLogger, path: &Path) {
 mod test {
     use super::*;
     use crate::BitcoinPageMap;
+    use ic_metrics::MetricsRegistry;
     use ic_test_utilities::types::ids::canister_test_id;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_tmpdir::tmpdir;
@@ -539,7 +540,7 @@ mod test {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root).unwrap();
+            let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
             let metrics_registry = ic_metrics::MetricsRegistry::new();
             let metrics = StateManagerMetrics::new(&metrics_registry);
             let tip_handler = layout.capture_tip_handler();
@@ -552,7 +553,7 @@ mod test {
         with_test_replica_logger(|log| {
             let tmp = tmpdir("checkpoint");
             let root = tmp.path().to_path_buf();
-            let tip = StateLayout::try_new(log, root)
+            let tip = StateLayout::try_new(log, root, &MetricsRegistry::new())
                 .unwrap()
                 .capture_tip_handler()
                 .tip(Height::new(42))

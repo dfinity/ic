@@ -18,13 +18,13 @@ fn diff_checkpoints(path_a: PathBuf, path_b: PathBuf) -> Result<Changes, Checkpo
     let dummy_metrics_registry = ic_metrics::MetricsRegistry::new();
     let dummy_metrics = CheckpointMetrics::new(&dummy_metrics_registry);
     let state_a = load_checkpoint(
-        &CompleteCheckpointLayout::new(path_a, unused_height)?,
+        &CompleteCheckpointLayout::new_untracked(path_a, unused_height)?,
         own_subnet_type,
         &dummy_metrics,
         None,
     )?;
     let state_b = load_checkpoint(
-        &CompleteCheckpointLayout::new(path_b, unused_height)?,
+        &CompleteCheckpointLayout::new_untracked(path_b, unused_height)?,
         own_subnet_type,
         &dummy_metrics,
         None,

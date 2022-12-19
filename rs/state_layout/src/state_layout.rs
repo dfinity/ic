@@ -4,6 +4,7 @@ use crate::utils::do_copy;
 use bitcoin::{hashes::Hash, Network, OutPoint, Script, TxOut, Txid};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{error, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::{
     bitcoin::v1 as pb_bitcoin,
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -24,6 +25,7 @@ use ic_types::{
 use ic_utils::fs::sync_path;
 use ic_utils::thread::parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
+use prometheus::IntCounterVec;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom, TryInto};
 use std::fs::OpenOptions;
@@ -32,7 +34,7 @@ use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc,
+    Arc, Mutex,
 };
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
@@ -42,8 +44,10 @@ pub enum ReadOnly {}
 /// `WriteOnly` is the access policy used while we are creating a new
 /// checkpoint.
 pub enum WriteOnly {}
+
 /// `RwPolicy` is the access policy used for tip on disk state.
 pub enum RwPolicy {}
+
 pub trait AccessPolicy {
     /// `check_dir` specifies what to do the first time we enter a
     /// directory while reading/writing a checkpoint.
@@ -156,6 +160,30 @@ impl Default for BitcoinStateBits {
     }
 }
 
+#[derive(Clone)]
+struct StateLayoutMetrics {
+    state_layout_error_count: IntCounterVec,
+}
+
+impl StateLayoutMetrics {
+    fn new(metric_registry: &MetricsRegistry) -> StateLayoutMetrics {
+        StateLayoutMetrics {
+            state_layout_error_count: metric_registry.int_counter_vec(
+                "state_layout_error_count",
+                "Total number of errors encountered in the state layout.",
+                &["source"],
+            ),
+        }
+    }
+}
+
+struct CheckpointRefData {
+    // CheckpointLayouts using this ref that are still alive.
+    checkpoint_layout_counter: i32,
+    // The ref is scheduled for removal once checkpoint_layout_counter drops to zero.
+    mark_deleted: bool,
+}
+
 /// `StateLayout` provides convenience functions to construct correct
 /// paths to individual components of the replicated execution
 /// state. It also utilizes filesystem specific checkpoint managers
@@ -255,7 +283,9 @@ impl Default for BitcoinStateBits {
 pub struct StateLayout {
     root: PathBuf,
     log: ReplicaLogger,
+    metrics: StateLayoutMetrics,
     tip_handler_captured: Arc<AtomicBool>,
+    checkpoint_ref_registry: Arc<Mutex<BTreeMap<Height, CheckpointRefData>>>,
 }
 
 pub struct TipHandler {
@@ -274,7 +304,7 @@ impl TipHandler {
     /// This directory is cleaned during restart of a node and reset to
     /// last full checkpoint.
     pub fn tip(&mut self, height: Height) -> Result<CheckpointLayout<RwPolicy>, LayoutError> {
-        CheckpointLayout::new(self.tip_path(), height)
+        CheckpointLayout::new_untracked(self.tip_path(), height)
     }
 
     /// Resets "tip" to a checkpoint identified by height.
@@ -354,11 +384,17 @@ impl TipHandler {
 
 impl StateLayout {
     /// Needs to be pub for criterion performance regression tests.
-    pub fn try_new(log: ReplicaLogger, root: PathBuf) -> Result<Self, LayoutError> {
+    pub fn try_new(
+        log: ReplicaLogger,
+        root: PathBuf,
+        metrics_registry: &MetricsRegistry,
+    ) -> Result<Self, LayoutError> {
         let state_layout = Self {
             root,
             log,
+            metrics: StateLayoutMetrics::new(metrics_registry),
             tip_handler_captured: Arc::new(false.into()),
+            checkpoint_ref_registry: Arc::new(Mutex::new(BTreeMap::new())),
         };
         state_layout.init()?;
         Ok(state_layout)
@@ -466,6 +502,7 @@ impl StateLayout {
         height: Height,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
+        debug_assert_eq!(height, layout.height);
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
         let cp_path = checkpoints_path.join(self.checkpoint_name(height));
@@ -492,7 +529,7 @@ impl StateLayout {
             message: "Could not sync checkpoints".to_string(),
             io_err: err,
         })?;
-        CheckpointLayout::new(cp_path, height)
+        self.checkpoint(height)
     }
 
     pub fn clone_checkpoint(&self, from: Height, to: Height) -> Result<(), LayoutError> {
@@ -515,7 +552,57 @@ impl StateLayout {
         if !path.exists() {
             return Err(LayoutError::NotFound(height));
         }
-        CheckpointLayout::new(path, height)
+        let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
+        match checkpoint_ref_registry.get_mut(&height) {
+            Some(ref mut ref_data) => {
+                ref_data.checkpoint_layout_counter += 1;
+                debug_assert!(!ref_data.mark_deleted);
+            }
+            None => {
+                checkpoint_ref_registry.insert(
+                    height,
+                    CheckpointRefData {
+                        checkpoint_layout_counter: 1,
+                        mark_deleted: false,
+                    },
+                );
+            }
+        }
+        CheckpointLayout::new(path, height, self.clone())
+    }
+
+    fn remove_checkpoint_ref(&self, height: Height) {
+        let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
+        match checkpoint_ref_registry.get_mut(&height) {
+            None => debug_assert!(false, "Double removal at height {}", height),
+            Some(ref mut data) => {
+                debug_assert!(data.checkpoint_layout_counter >= 1);
+                data.checkpoint_layout_counter -= 1;
+                if data.checkpoint_layout_counter != 0 {
+                    return;
+                }
+                if data.mark_deleted {
+                    self.remove_checkpoint_if_not_the_latest(height);
+                }
+            }
+        }
+
+        let _removed = checkpoint_ref_registry.remove(&height);
+        debug_assert!(_removed.is_some());
+    }
+
+    /// Schedule checkpoint for removal when no CheckpointLayout points to it.
+    /// If none then remove immediately.
+    pub fn remove_checkpoint_when_unused(&self, height: Height) {
+        let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
+        match checkpoint_ref_registry.get_mut(&height) {
+            None => {
+                self.remove_checkpoint_if_not_the_latest(height);
+            }
+            Some(ref mut data) => {
+                data.mark_deleted = true;
+            }
+        }
     }
 
     /// Returns a sorted list of `Height`s for which a checkpoint is available.
@@ -607,20 +694,52 @@ impl StateLayout {
     }
 
     /// Removes a checkpoint for a given height if it exists and it is not the latest checkpoint.
-    /// Crashes in debug if removal of the last checkpoint is ever attempted.
+    /// Crashes in debug if removal of the last checkpoint is ever attempted or the checkpoint is
+    /// not found.
     ///
     /// Postcondition:
     ///   height ∉ self.checkpoint_heights()[0:-1]
-    pub fn try_remove_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
-        let mut heights = self.checkpoint_heights()?;
-        if heights.is_empty() {
-            return Err(LayoutError::NotFound(height));
+    fn remove_checkpoint_if_not_the_latest(&self, height: Height) {
+        match self.checkpoint_heights() {
+            Err(err) => {
+                error!(self.log, "Failed to get checkpoint heights: {}", err);
+                self.metrics
+                    .state_layout_error_count
+                    .with_label_values(&["remove_checkpoint_no_heights"])
+                    .inc();
+            }
+            Ok(mut heights) => {
+                if heights.is_empty() {
+                    error!(
+                        self.log,
+                        "Trying to remove non-existing checkpoint {}. The CheckpoinLayout was invalid",
+                        height,
+                    );
+                    self.metrics
+                        .state_layout_error_count
+                        .with_label_values(&["remove_checkpoint_non_existent"])
+                        .inc();
+                    return;
+                }
+                if heights.pop() == Some(height) {
+                    error!(self.log, "Trying to remove the last checkpoint {}", height);
+                    self.metrics
+                        .state_layout_error_count
+                        .with_label_values(&["remove_last_checkpoint"])
+                        .inc();
+                    debug_assert!(false);
+                    return;
+                }
+                if let Err(err) = self.force_remove_checkpoint(height) {
+                    error!(self.log, "Failed to remove checkpoint: {}", err);
+                    debug_assert!(false);
+                    self.metrics
+                        .state_layout_error_count
+                        .with_label_values(&["remove_checkpoint_other"])
+                        .inc();
+                }
+            }
         }
-        if heights.pop() == Some(height) {
-            debug_assert!(false, "Trying to remove the last checkpoint");
-            return Err(LayoutError::LatestCheckpoint(height));
-        }
-        self.force_remove_checkpoint(height)
     }
 
     /// Marks the checkpoint with the specified height as diverged.
@@ -944,15 +1063,42 @@ fn parse_and_sort_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, La
 pub struct CheckpointLayout<Permissions: AccessPolicy> {
     root: PathBuf,
     height: Height,
+    // The StateLayout is used to make sure we never remove the CheckpointLayout when still in use.
+    // Is not None for CheckpointLayout pointing to "real" checkpoints, that is checkpoints in
+    // StateLayout's root/checkpoints/..., that are tracked by StateLayout
+    state_layout: Option<StateLayout>,
     permissions_tag: PhantomData<Permissions>,
 }
 
+impl<Permissions: AccessPolicy> Drop for CheckpointLayout<Permissions> {
+    fn drop(&mut self) {
+        if let Some(state_layout) = &self.state_layout {
+            state_layout.remove_checkpoint_ref(self.height)
+        }
+    }
+}
+
 impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
-    pub fn new(root: PathBuf, height: Height) -> Result<Self, LayoutError> {
+    pub fn new(
+        root: PathBuf,
+        height: Height,
+        state_layout: StateLayout,
+    ) -> Result<Self, LayoutError> {
         Permissions::check_dir(&root)?;
         Ok(Self {
             root,
             height,
+            state_layout: Some(state_layout),
+            permissions_tag: PhantomData,
+        })
+    }
+
+    pub fn new_untracked(root: PathBuf, height: Height) -> Result<Self, LayoutError> {
+        Permissions::check_dir(&root)?;
+        Ok(Self {
+            root,
+            height,
+            state_layout: None,
             permissions_tag: PhantomData,
         })
     }
@@ -1832,7 +1978,9 @@ mod test {
         with_test_replica_logger(|log| {
             let tempdir = tmpdir("state_layout");
             let root_path = tempdir.path().to_path_buf();
-            let state_layout = StateLayout::try_new(log, root_path.clone()).unwrap();
+            let metrics_registry = ic_metrics::MetricsRegistry::new();
+            let state_layout =
+                StateLayout::try_new(log, root_path.clone(), &metrics_registry).unwrap();
             state_layout
                 .create_diverged_state_marker(Height::new(1))
                 .unwrap();
@@ -1922,5 +2070,68 @@ mod test {
         let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
         let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
         assert_eq!(canister_state_bits.task_queue, task_queue);
+    }
+
+    #[test]
+    fn test_removal_when_last_dropped() {
+        with_test_replica_logger(|log| {
+            let tempdir = tmpdir("state_layout");
+            let root_path = tempdir.path().to_path_buf();
+            let metrics_registry = ic_metrics::MetricsRegistry::new();
+            let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
+            let scratchpad_dir = tmpdir("scratchpad");
+            let cp1 = state_layout
+                .scratchpad_to_checkpoint(
+                    CheckpointLayout::<RwPolicy>::new_untracked(
+                        scratchpad_dir.path().to_path_buf().join("1"),
+                        Height::new(1),
+                    )
+                    .unwrap(),
+                    Height::new(1),
+                    None,
+                )
+                .unwrap();
+            let cp2 = state_layout
+                .scratchpad_to_checkpoint(
+                    CheckpointLayout::<RwPolicy>::new_untracked(
+                        scratchpad_dir.path().to_path_buf().join("2"),
+                        Height::new(2),
+                    )
+                    .unwrap(),
+                    Height::new(2),
+                    None,
+                )
+                .unwrap();
+            // Add one checkpoint so that we never remove the last one and crash
+            let _cp3 = state_layout
+                .scratchpad_to_checkpoint(
+                    CheckpointLayout::<RwPolicy>::new_untracked(
+                        scratchpad_dir.path().to_path_buf().join("3"),
+                        Height::new(3),
+                    )
+                    .unwrap(),
+                    Height::new(3),
+                    None,
+                )
+                .unwrap();
+            assert_eq!(
+                vec![Height::new(1), Height::new(2), Height::new(3)],
+                state_layout.checkpoint_heights().unwrap(),
+            );
+
+            std::mem::drop(cp1);
+            state_layout.remove_checkpoint_when_unused(Height::new(1));
+            state_layout.remove_checkpoint_when_unused(Height::new(2));
+            assert_eq!(
+                vec![Height::new(2), Height::new(3)],
+                state_layout.checkpoint_heights().unwrap(),
+            );
+
+            std::mem::drop(cp2);
+            assert_eq!(
+                vec![Height::new(3)],
+                state_layout.checkpoint_heights().unwrap(),
+            );
+        });
     }
 }

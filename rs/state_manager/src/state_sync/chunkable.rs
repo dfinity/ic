@@ -770,7 +770,7 @@ impl IncompleteState {
             "state sync: start to make a checkpoint from the scratchpad"
         );
 
-        let ro_layout = CheckpointLayout::<ReadOnly>::new(root.to_path_buf(), height)
+        let ro_layout = CheckpointLayout::<ReadOnly>::new_untracked(root.to_path_buf(), height)
             .expect("failed to create checkpoint layout");
 
         // Recover the state to make sure it's usable
@@ -796,8 +796,9 @@ impl IncompleteState {
             )
         }
 
-        let scratchpad_layout = CheckpointLayout::<RwPolicy>::new(root.to_path_buf(), height)
-            .expect("failed to create checkpoint layout");
+        let scratchpad_layout =
+            CheckpointLayout::<RwPolicy>::new_untracked(root.to_path_buf(), height)
+                .expect("failed to create checkpoint layout");
 
         match state_layout.scratchpad_to_checkpoint(scratchpad_layout, height, Some(thread_pool)) {
             Ok(_) => {

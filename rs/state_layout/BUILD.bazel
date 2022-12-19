@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
     "//rs/protobuf",
     "//rs/replicated_state",
     "//rs/sys",
@@ -16,6 +17,7 @@ DEPENDENCIES = [
     "@crate_index//:bitcoin",
     "@crate_index//:hex",
     "@crate_index//:libc",
+    "@crate_index//:prometheus",
     "@crate_index//:prost",
     "@crate_index//:scoped_threadpool",
     "@crate_index//:serde",

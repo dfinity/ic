@@ -381,7 +381,7 @@ fn missing_stable_memory_file_is_handled() {
         // Since the canister has no execution state, there should be no stable memory
         // file.
         let state_layout = state_manager.state_layout();
-        let mutable_cp_layout = CheckpointLayout::<RwPolicy>::new(
+        let mutable_cp_layout = CheckpointLayout::<RwPolicy>::new_untracked(
             state_layout
                 .checkpoint(height(1))
                 .unwrap()
@@ -2246,7 +2246,7 @@ fn can_recover_from_corruption_on_state_sync() {
 
             // Corrupt some files in the destination checkpoint.
             let state_layout = dst_state_manager.state_layout();
-            let mutable_cp_layout = CheckpointLayout::<RwPolicy>::new(
+            let mutable_cp_layout = CheckpointLayout::<RwPolicy>::new_untracked(
                 state_layout
                     .checkpoint(height(1))
                     .unwrap()
@@ -3080,9 +3080,15 @@ fn debug_assert_last_checkpoint() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         wait_for_checkpoint(&state_manager, height(1));
 
-        let _ = state_manager
+        state_manager
             .state_layout()
-            .try_remove_checkpoint(height(1));
+            .remove_checkpoint_when_unused(height(1));
+
+        // The removal can happen in the manifest thread computing manifest for height 1.
+        // Make another checkpoint to ensure the manifest is done.
+        let (_, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        wait_for_checkpoint(&state_manager, height(2));
     });
 }
 
