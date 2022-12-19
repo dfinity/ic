@@ -3,15 +3,15 @@
   "canisters": {
     "ledger": {
       "type": "custom",
-      "candid": "ledger.did",
-      "wasm": "../target/wasm32-unknown-unknown/release/ledger-canister-min.wasm",
-      "build": "./build-ledger.sh"
+      "candid": "./icp_ledger/ledger.did",
+      "build": ["bazel build //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method"],
+      "wasm": "../../bazel-bin/rs/rosetta-api/icp_ledger/ledger/ledger-canister-wasm-notify-method.wasm",
     },
     "icrc1_ledger": {
       "type":"custom",
       "candid": "./icrc1/ledger/icrc1.did",
-      "wasm": "/home/leo/.cache/bazel/_bazel_leo/8b8a658025d1e461a7c86dfd4f07d4f6/execroot/ic/bazel-out/k8-opt/bin/rs/rosetta-api/icrc1/ledger/ledger_canister.wasm",
-      "build": ""
+      "build": ["bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister"],
+      "wasm": "../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister.wasm",
     }
   },
   "networks": {
