@@ -600,11 +600,12 @@ impl SystemState {
         self.queues.push_output_request(msg, time)
     }
 
-    /// See documentation for [`CanisterQueues::reject_ic00_output_request`].
-    pub fn reject_ic00_output_request(
+    /// See documentation for [`CanisterQueues::reject_subnet_output_request`].
+    pub fn reject_subnet_output_request(
         &mut self,
         request: Request,
         reject_context: RejectContext,
+        subnet_ids: &[PrincipalId],
     ) -> Result<(), StateError> {
         assert_eq!(
             request.sender, self.canister_id,
@@ -612,7 +613,7 @@ impl SystemState {
             self.canister_id, request.sender
         );
         self.queues
-            .reject_ic00_output_request(request, reject_context)
+            .reject_subnet_output_request(request, reject_context, subnet_ids)
     }
 
     /// Returns the number of output requests that can be pushed onto the queue

@@ -1250,7 +1250,7 @@ fn test_garbage_collect_restores_defaults() {
 }
 
 #[test]
-fn test_reject_ic00_output_request() {
+fn test_reject_subnet_output_request() {
     let this = canister_test_id(1);
 
     let request = RequestBuilder::default()
@@ -1266,7 +1266,7 @@ fn test_reject_ic00_output_request() {
 
     // Reject an output request without having enqueued it first.
     queues
-        .reject_ic00_output_request(request, reject_context.clone())
+        .reject_subnet_output_request(request, reject_context.clone(), &[])
         .unwrap();
 
     // There is now a reject response.

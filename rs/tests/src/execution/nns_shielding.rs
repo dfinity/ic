@@ -252,7 +252,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
                     .unwrap()
                     .canister_id
             });
-        assert_reject(res, RejectCode::CanisterReject);
+        assert_reject(res, RejectCode::CanisterError);
 
         let other_subnet = get_random_system_node_endpoint(&handle, &mut rng)
             .subnet_id()
@@ -270,7 +270,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
                     .unwrap()
                     .canister_id
             });
-        assert_reject(res, RejectCode::CanisterReject);
+        assert_reject(res, RejectCode::CanisterError);
 
         // Check that canisters on app subnets cannot create canisters on other subnets.
         let app_endpoint = get_random_application_node_endpoint(&handle, &mut rng);
@@ -300,7 +300,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
                     .unwrap()
                     .canister_id
             });
-        assert_reject(res, RejectCode::CanisterReject);
+        assert_reject(res, RejectCode::CanisterError);
 
         let other_subnet = get_random_system_node_endpoint(&handle, &mut rng)
             .subnet_id()
@@ -318,7 +318,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
                     .unwrap()
                     .canister_id
             });
-        assert_reject(res, RejectCode::CanisterReject);
+        assert_reject(res, RejectCode::CanisterError);
 
         // Check that canisters on system subnets excluding NNS cannot create canisters
         // on other subnets.
@@ -349,7 +349,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
                     .unwrap()
                     .canister_id
             });
-        assert_reject(res, RejectCode::CanisterReject);
+        assert_reject(res, RejectCode::CanisterError);
 
         let other_subnet = get_random_application_node_endpoint(&handle, &mut rng)
             .subnet_id()
@@ -367,7 +367,7 @@ pub fn non_nns_canister_attempt_to_create_canister_on_another_subnet_fails(env: 
                     .unwrap()
                     .canister_id
             });
-        assert_reject(res, RejectCode::CanisterReject);
+        assert_reject(res, RejectCode::CanisterError);
     });
 }
 

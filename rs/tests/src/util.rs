@@ -942,9 +942,9 @@ pub(crate) fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code
                 reject_code,
                 reject_message,
             } => assert_eq!(
-                reject_code, code as u64,
+                code as u64, reject_code,
                 "Expect code {} did not match {}. Reject message: {}",
-                reject_code, code as u64, reject_message
+                code as u64, reject_code, reject_message
             ),
             others => panic!(
                 "Expected call to fail with a replica error but got {:?} instead",

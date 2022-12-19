@@ -17,6 +17,7 @@ pub(super) enum ResolveDestinationError {
     CandidError(candid::Error),
     MethodNotFound(String),
     SubnetNotFound(CanisterId, Ic00Method),
+    AlreadyResolved(PrincipalId),
     EcdsaKeyError(String),
 }
 
