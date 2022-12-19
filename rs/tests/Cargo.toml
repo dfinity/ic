@@ -275,3 +275,7 @@ path = "bin/downgrade_app_subnet_with_ecdsa_test.rs"
 [[bin]]
 name = "ic-systest-upgrade-downgrade-app-subnet"
 path = "bin/upgrade_downgrade_app_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-upgrade-downgrade-nns-subnet"
+path = "bin/upgrade_downgrade_nns_subnet_test.rs"
