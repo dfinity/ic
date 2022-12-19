@@ -471,6 +471,21 @@ system_test(
     deps = DEPENDENCIES + [":tests"],
 )
 
+system_test(
+    name = "upgrade_downgrade_nns_subnet_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "allow_to_fail",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS +
+        MAINNET_REVISION_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
 filegroup(
     name = "rosetta_workspace",
     srcs = glob(["rosetta_workspace/*"]),
