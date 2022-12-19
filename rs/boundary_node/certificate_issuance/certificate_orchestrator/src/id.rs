@@ -1,4 +1,5 @@
 use certificate_orchestrator_interface::Id;
+use ic_cdk::api::time;
 use sha2::{Digest, Sha256};
 
 use crate::{LocalRef, StableValue};
@@ -9,11 +10,12 @@ pub trait Generate {
 
 pub struct Generator {
     counter: LocalRef<StableValue<u128>>,
+    id_seed: LocalRef<StableValue<u128>>,
 }
 
 impl Generator {
-    pub fn new(counter: LocalRef<StableValue<u128>>) -> Self {
-        Self { counter }
+    pub fn new(counter: LocalRef<StableValue<u128>>, id_seed: LocalRef<StableValue<u128>>) -> Self {
+        Self { counter, id_seed }
     }
 }
 
@@ -26,7 +28,9 @@ impl Generate for Generator {
             idx
         });
 
-        let id = Sha256::digest(idx.to_string());
+        let id_seed = self.id_seed.with(|s| s.borrow().get(&()).unwrap());
+
+        let id = Sha256::digest(format!("{}{}{}", idx, id_seed, time()));
         hex::encode(id)
     }
 }
