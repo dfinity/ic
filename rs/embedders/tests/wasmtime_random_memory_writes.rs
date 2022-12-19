@@ -145,51 +145,213 @@ fn make_module_wat(heap_size: usize) -> String {
     )
 }
 
+fn make_module_wat_for_api_calls(heap_size: usize) -> String {
+    format!(
+        r#"
+    (module
+      (import "ic0" "msg_reply" (func $msg_reply))
+      (import "ic0" "msg_reply_data_append"
+        (func $msg_reply_data_append (param i32) (param i32)))
+      (import "ic0" "msg_arg_data_copy"
+        (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
+      (import "ic0" "msg_arg_data_size"
+        (func $ic0_msg_arg_data_size (result i32)))
+      (import "ic0" "msg_caller_copy"
+        (func $ic0_msg_caller_copy (param i32) (param i32) (param i32)))
+      (import "ic0" "msg_caller_size"
+        (func $ic0_msg_caller_size (result i32)))
+      (import "ic0" "canister_self_copy"
+        (func $ic0_canister_self_copy (param i32) (param i32) (param i32)))
+      (import "ic0" "canister_self_size"
+        (func $ic0_canister_self_size (result i32)))
+      (import "ic0" "controller_copy"
+        (func $ic0_controller_copy (param i32) (param i32) (param i32)))
+      (import "ic0" "controller_size"
+        (func $ic0_controller_size (result i32)))
+
+      (import "ic0" "canister_cycle_balance128"
+        (func $ic0_canister_cycle_balance128 (param i32)))
+
+      (import "ic0" "stable_grow"
+        (func $ic0_stable_grow (param $pages i32) (result i32)))
+      (import "ic0" "stable_read"
+        (func $ic0_stable_read (param $dst i32) (param $offset i32) (param $size i32)))
+      (import "ic0" "stable_write"
+        (func $ic0_stable_write (param $offset i32) (param $src i32) (param $size i32)))
+
+      (func $touch_heap_with_api_calls
+        (call $ic0_msg_caller_copy (i32.const 4096) (i32.const 0) (call $ic0_msg_caller_size))
+        (call $ic0_msg_arg_data_copy (i32.const 12288) (i32.const 0) (call $ic0_msg_arg_data_size))
+        (call $ic0_canister_self_copy (i32.const 20480) (i32.const 0) (call $ic0_canister_self_size))
+        (call $ic0_controller_copy (i32.const 28672) (i32.const 0) (call $ic0_controller_size))
+        (call $ic0_canister_cycle_balance128 (i32.const 36864))
+ 
+        (; Write some data to page 10 using stable_read, by first copying 4
+        bytes from the second page to stable memory, then copying back ;)
+        (drop (call $ic0_stable_grow (i32.const 1)))
+        (call $ic0_stable_write (i32.const 0) (i32.const 4096) (i32.const 4))
+        (call $ic0_stable_read (i32.const 40960) (i32.const 0) (i32.const 4))
+      )
+
+      (memory $memory {HEAP_SIZE})
+      (export "memory" (memory $memory))
+      (export "canister_update touch_heap_with_api_calls" (func $touch_heap_with_api_calls))
+    )"#,
+        HEAP_SIZE = heap_size
+    )
+}
+
+fn make_module_wat_with_write_fun(heap_size: usize, write_fun: &str) -> String {
+    format!(
+        r#"
+    (module
+      (import "ic0" "msg_reply" (func $msg_reply))
+      (import "ic0" "msg_arg_data_copy"
+        (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
+      (import "ic0" "msg_arg_data_size"
+        (func $ic0_msg_arg_data_size (result i32)))
+
+      ;; write to memory
+      {WRITE_FUN}
+
+      (memory $memory {HEAP_SIZE})
+      (export "memory" (memory $memory))
+      (export "canister_update write_bytes" (func $write_bytes))
+    )"#,
+        WRITE_FUN = write_fun,
+        HEAP_SIZE = heap_size
+    )
+}
+
+fn make_backward_store_module_wat(
+    heap_size: usize,
+    store_inst_data_size: usize,
+    store_inst: &str,
+    load_inst: &str,
+) -> String {
+    let write_fun = format!(
+        r#"
+      (func $write_bytes
+        (local $i i32)
+        ;; copy payload to the beginning of the heap
+        (call $ic0_msg_arg_data_copy
+          (i32.const 0) ;; dst
+          (i32.const 0) ;; off
+          (call $ic0_msg_arg_data_size) ;; len
+        )
+        ;; now copy the payload[4..] using I32.store to the heap[addr;size-4]
+        (local.set $i (i32.sub (call $ic0_msg_arg_data_size) (i32.const 4)))
+        (loop $copy_loop
+          (i32.sub (local.get $i) (i32.const {store_inst_data_size}))
+          (local.set $i)
+
+          ({store_inst}
+            (i32.add (i32.load (i32.const 0)) (local.get $i))
+            ({load_inst} (i32.add (local.get $i) (i32.const 4)))
+          )
+
+          (i32.gt_s (local.get $i) (i32.const 0))
+          br_if $copy_loop
+        )
+        (call $msg_reply)
+      )
+      "#,
+        store_inst_data_size = store_inst_data_size,
+        store_inst = store_inst,
+        load_inst = load_inst,
+    );
+    make_module_wat_with_write_fun(heap_size, &write_fun)
+}
+
+/// Note: this module may not actually do the write properly if the payload is
+/// large enough to read the destination address, because we first copy the
+/// payload to address 4 and then move it to the destination in the forward
+/// direction.
+fn make_i32_store_forward_module_wat(heap_size: usize) -> String {
+    let write_fun = r#"
+      (func $write_bytes
+        (local $i i32)
+        ;; copy payload to the beginning of the heap
+        (call $ic0_msg_arg_data_copy
+          (i32.const 0) ;; dst
+          (i32.const 0) ;; off
+          (call $ic0_msg_arg_data_size) ;; len
+        )
+        ;; now copy the payload[4..] using I32.store to the heap[addr;size-4]
+        (local.set $i (i32.const 0))
+        (loop $copy_loop
+          (i32.store
+            (i32.add (i32.load (i32.const 0)) (local.get $i))
+            (i32.load (i32.add (local.get $i) (i32.const 4)))
+          )
+
+          (i32.add (local.get $i) (i32.const 4))
+          (local.set $i)
+
+          (i32.lt_u (local.get $i) (i32.sub (call $ic0_msg_arg_data_size) (i32.const 4)))
+          br_if $copy_loop
+        )
+        (call $msg_reply)
+      )
+      "#;
+    make_module_wat_with_write_fun(heap_size, write_fun)
+}
+
 #[derive(Debug, Clone)]
 pub struct Write {
     dst: u32,
     bytes: Vec<u8>,
 }
 
-fn random_writes(heap_size: usize, num_writes: usize) -> impl Strategy<Value = Vec<Write>> {
+fn random_writes(
+    heap_size: usize,
+    num_writes: usize,
+    quant_size: usize,
+) -> impl Strategy<Value = Vec<Write>> {
     // Start generating writes at address 4096 (or higher) to avoid generating
     // writes to the first OS page. This is because we must first copy the
     // offset from the payload to Wasm memory. We store the 4-byte offset at
     // addr=0, hence dirtying the first OS page.
-    let write_strategy = (4096..heap_size).prop_flat_map(move |dst| {
-        let dst = dst as u32;
+    let write_strategy = (4096..(heap_size as u32)).prop_flat_map(move |dst| {
         // up to 128 bytes
         let remain = (heap_size - dst as usize) % 128;
-        prop::collection::vec(any::<u8>(), 0..=remain).prop_map(move |bytes| Write { dst, bytes })
+        prop::collection::vec(any::<u8>(), 0..=remain).prop_map(move |mut bytes| {
+            bytes.truncate(bytes.len() - bytes.len() % quant_size);
+            Write { dst, bytes }
+        })
     });
     prop::collection::vec(write_strategy, 1..num_writes)
 }
 
-fn corner_case_writes(heap_size: usize) -> Vec<Vec<Write>> {
+fn corner_case_writes(heap_size: usize, quant_size: usize) -> Vec<Vec<Write>> {
     assert!(heap_size > 4096 * 3); // These cases assume we have at least three pages.
+
     vec![
         // Write zero to second page so that the contents doesn't actually
         // change and it is no longer considered dirty.
         vec![Write {
             dst: 4096,
-            bytes: vec![0; 10],
+            bytes: vec![0; quant_size],
         }],
         // Write that crosses a page boundary.
         vec![Write {
-            dst: 4096 * 2 - 3,
-            bytes: vec![5; 3],
+            dst: (4096 * 2 - if quant_size == 1 { 1 } else { quant_size - 1 }) as u32,
+            bytes: vec![5; if quant_size == 1 { 2 } else { quant_size }],
         }],
         // Write that just fits on the second page.
         vec![Write {
-            dst: 4096 * 2 - 1,
-            bytes: vec![5; 1],
+            dst: (4096 * 2 - quant_size) as u32,
+            bytes: vec![5; quant_size],
         }],
     ]
 }
 
-fn buf_apply_write(heap: &mut [u8], write: &Write) {
+fn buf_apply_write(heap: &mut [u8], write: &Write, copies_data_to_first_page: bool) {
     // match the behavior of write_bytes: copy the i32 `addr` to heap[0;4]
     heap[0..4].copy_from_slice(&write.dst.to_le_bytes());
+    if copies_data_to_first_page {
+        heap[4..4 + write.bytes.len()].copy_from_slice(&write.bytes);
+    }
     heap[write.dst as usize..(write.dst as usize + write.bytes.len() as usize)]
         .copy_from_slice(&write.bytes)
 }
@@ -218,15 +380,15 @@ mod tests {
     use proptest::strategy::ValueTree;
 
     fn apply_writes_and_check_heap(
-        writes: Vec<Write>,
+        writes: &[Write],
         modification_tracking: ModificationTracking,
+        wat: &str,
+        copies_data_to_first_page: bool,
     ) {
         with_test_replica_logger(|log| {
-            let wat = make_module_wat(TEST_NUM_PAGES);
-            let wasm = wat2wasm(&wat).unwrap();
+            let wasm = wat2wasm(wat).unwrap();
 
-            let config = Config::default();
-            let embedder = WasmtimeEmbedder::new(config, log);
+            let embedder = WasmtimeEmbedder::new(Config::default(), log);
             let (embedder_cache, result) = compile(&embedder, &wasm);
             result.unwrap();
 
@@ -236,7 +398,7 @@ mod tests {
             let mut page_map = PageMap::new_for_testing();
             let mut dirty_pages: BTreeSet<u64> = BTreeSet::new();
 
-            for write in &writes {
+            for write in writes {
                 let mut payload = write.dst.to_le_bytes().to_vec();
                 payload.extend(write.bytes.iter());
 
@@ -263,7 +425,7 @@ mod tests {
                 instance.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
 
                 // Apply the write to the test buffer.
-                buf_apply_write(&mut test_heap, write);
+                buf_apply_write(&mut test_heap, write, copies_data_to_first_page);
 
                 // Apply the write to the Wasm instance.
                 println!(
@@ -330,18 +492,29 @@ mod tests {
                     // Add the target pages.
                     for Write { dst, bytes } in writes {
                         if !bytes.is_empty() {
-                            // A page will not actually be considered dirty
-                            // unless the contents has changed. Memory is
-                            // initially all 0, so this means we should ignore
-                            // all zero bytes.
-                            result.extend(
-                                bytes
-                                    .iter()
-                                    .enumerate()
-                                    .filter(|(_, b)| **b != 0)
-                                    .map(|(addr, _)| (dst as u64 + addr as u64) / PAGE_SIZE as u64)
-                                    .collect::<BTreeSet<_>>(),
-                            );
+                            if embedder.config().feature_flags.write_barrier == FlagStatus::Disabled
+                            {
+                                // A page will not actually be considered dirty
+                                // unless the contents has changed. Memory is
+                                // initially all 0, so this means we should ignore
+                                // all zero bytes.
+                                result.extend(
+                                    bytes
+                                        .iter()
+                                        .enumerate()
+                                        .filter(|(_, b)| **b != 0)
+                                        .map(|(addr, _)| {
+                                            (*dst as u64 + addr as u64) / PAGE_SIZE as u64
+                                        })
+                                        .collect::<BTreeSet<_>>(),
+                                );
+                            } else {
+                                result.extend(
+                                    *dst as u64 / PAGE_SIZE as u64
+                                        ..=(*dst as u64 + bytes.len() as u64 - 1)
+                                            / PAGE_SIZE as u64,
+                                );
+                            }
                         }
                     }
                     result.iter().cloned().collect()
@@ -359,7 +532,7 @@ mod tests {
 
     fn random_payload() -> Vec<u8> {
         let mut runner = proptest::test_runner::TestRunner::deterministic();
-        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES)
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 1)
             .new_tree(&mut runner)
             .unwrap()
             .current()
@@ -663,9 +836,10 @@ mod tests {
         // The seed value will always be the same for a particular version of
         // Proptest and algorithm, but may change across releases.
         let mut runner = proptest::test_runner::TestRunner::deterministic();
-        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES);
+        let wat = make_module_wat(TEST_NUM_PAGES);
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 1);
         // Random, *non-empty* writes
-        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES)
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 1)
             .new_tree(&mut runner)
             .unwrap()
             .current()
@@ -674,9 +848,270 @@ mod tests {
             .cloned()
             .collect();
         for writes in corner_writes {
-            apply_writes_and_check_heap(writes, ModificationTracking::Track)
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, false)
         }
-        apply_writes_and_check_heap(writes, ModificationTracking::Track);
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, false);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i32store() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 4, "i32.store", "i32.load");
+        let wat2 = make_i32_store_forward_module_wat(TEST_NUM_PAGES);
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 4)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 4);
+        for writes in &corner_writes {
+            apply_writes_and_check_heap(writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+
+        for writes in &corner_writes {
+            apply_writes_and_check_heap(writes, ModificationTracking::Track, &wat2, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat2, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i32store8() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 1, "i32.store8", "i32.load8_u");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 1)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 1);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i32store16() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 2, "i32.store16", "i32.load16_u");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 2)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 2);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i64store() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 8, "i64.store", "i64.load");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 8)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 8);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i64store8() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 1, "i64.store8", "i64.load8_u");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 1)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 1);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i64store16() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 2, "i64.store16", "i64.load16_u");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 2)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 2);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_i64store32() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 4, "i64.store32", "i64.load32_u");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 4)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 4);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_f32store() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 4, "f32.store", "f32.load");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 4)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 4);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn wasmtime_random_memory_writes_f64store() {
+        // The seed value will always be the same for a particular version of
+        // Proptest and algorithm, but may change across releases.
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let wat = make_backward_store_module_wat(TEST_NUM_PAGES, 8, "f64.store", "f64.load");
+        // Random, *non-empty* writes
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 8)
+            .new_tree(&mut runner)
+            .unwrap()
+            .current()
+            .iter()
+            .filter(|w| !w.bytes.is_empty())
+            .cloned()
+            .collect();
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 8);
+        for writes in corner_writes {
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true)
+        }
+        apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, true);
+    }
+
+    #[test]
+    fn touch_heap_with_api_calls() {
+        with_test_replica_logger(|log| {
+            let wat = make_module_wat_for_api_calls(TEST_NUM_PAGES);
+            let wasm = wat2wasm(&wat).unwrap();
+            let mut config = Config::default();
+            config.feature_flags.write_barrier = FlagStatus::Enabled;
+            let embedder = WasmtimeEmbedder::new(config, log);
+            let (embedder_cache, result) = compile(&embedder, &wasm);
+            result.unwrap();
+
+            let mut dirty_pages: BTreeSet<u64> = BTreeSet::new();
+
+            let payload = vec![0, 1, 2, 3, 4, 5, 6, 7];
+
+            let api = test_api_for_update(
+                no_op_logger(),
+                None,
+                payload,
+                SubnetType::Application,
+                MAX_NUM_INSTRUCTIONS,
+            );
+            let instruction_limit = api.slice_instruction_limit();
+            let mut instance = embedder
+                .new_instance(
+                    canister_test_id(1),
+                    &embedder_cache,
+                    &[],
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                    &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                    ModificationTracking::Track,
+                    api,
+                )
+                .map_err(|r| r.0)
+                .expect("Failed to create instance");
+            instance.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
+
+            let result = instance
+                .run(FuncRef::Method(WasmMethod::Update(
+                    "touch_heap_with_api_calls".to_string(),
+                )))
+                .expect("call to touch_heap_with_api_calls failed");
+            dirty_pages.extend(result.dirty_pages.iter().map(|x| x.get()));
+
+            let mut expected_dirty_pages: BTreeSet<u64> = BTreeSet::new();
+            expected_dirty_pages.insert(1); // caller_copy
+            expected_dirty_pages.insert(3); // data_copy
+            expected_dirty_pages.insert(5); // canister_self_copy
+            expected_dirty_pages.insert(7); // controller_copy
+            expected_dirty_pages.insert(9); // canister_cycle_balance128
+            expected_dirty_pages.insert(9); // msg_cycles_available128
+            expected_dirty_pages.insert(10); // stable_read
+
+            assert_eq!(expected_dirty_pages, dirty_pages);
+        });
     }
 
     #[test]
@@ -684,9 +1119,10 @@ mod tests {
         // The seed value will always be the same for a particular version of
         // Proptest and algorithm, but may change across releases.
         let mut runner = proptest::test_runner::TestRunner::deterministic();
-        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES);
+        let wat = make_module_wat(TEST_NUM_PAGES);
+        let corner_writes = corner_case_writes(TEST_HEAP_SIZE_BYTES, 1);
         // Random, *non-empty* writes
-        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES)
+        let writes: Vec<Write> = random_writes(TEST_HEAP_SIZE_BYTES, TEST_NUM_WRITES, 1)
             .new_tree(&mut runner)
             .unwrap()
             .current()
@@ -695,8 +1131,8 @@ mod tests {
             .cloned()
             .collect();
         for writes in corner_writes {
-            apply_writes_and_check_heap(writes, ModificationTracking::Track)
+            apply_writes_and_check_heap(&writes, ModificationTracking::Track, &wat, false)
         }
-        apply_writes_and_check_heap(writes, ModificationTracking::Ignore);
+        apply_writes_and_check_heap(&writes, ModificationTracking::Ignore, &wat, false);
     }
 }

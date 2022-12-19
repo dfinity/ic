@@ -99,7 +99,7 @@ fn test_wasmtime_system_api() {
         no_op_logger(),
         canister_id,
         &store,
-        FlagStatus::Enabled,
+        config.feature_flags,
         config.stable_memory_dirty_page_limit,
     );
     let instance = linker

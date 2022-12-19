@@ -79,7 +79,8 @@ pub enum AccessKind {
     Write,
 }
 
-struct PageBitmap {
+/// Bitmap tracking which pages on the memory were accessed during an execution.
+pub struct PageBitmap {
     pages: BitVec,
     marked_count: usize,
 }
@@ -100,7 +101,8 @@ impl PageBitmap {
         self.marked_count
     }
 
-    fn is_marked(&self, page: PageIndex) -> bool {
+    /// Indicates if the given page was accessed.
+    pub fn is_marked(&self, page: PageIndex) -> bool {
         self.pages.get(page.get() as usize).unwrap_or(false)
     }
 
@@ -349,6 +351,14 @@ impl SigsegvMemoryTracker {
                 speculatively_dirty_pages.push(page_index);
             }
         }
+    }
+
+    pub fn page_map(&self) -> &PageMap {
+        &self.page_map
+    }
+
+    pub fn accessed_pages(&self) -> &RefCell<PageBitmap> {
+        &self.accessed_bitmap
     }
 }
 

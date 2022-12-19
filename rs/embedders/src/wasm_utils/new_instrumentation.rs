@@ -306,6 +306,9 @@ pub(super) fn instrument(
         let func_bodies = &mut module.code_sections;
         for (func_ix, func_type) in func_types.into_iter().enumerate() {
             inject_update_available_memory(&mut func_bodies[func_ix], &func_type);
+            if write_barrier == FlagStatus::Enabled {
+                inject_mem_barrier(&mut func_bodies[func_ix], &func_type);
+            }
         }
     }
 
@@ -571,6 +574,167 @@ fn inject_metering(code: &mut Vec<Operator>, export_data_module: &ExportModuleDa
     }
     elems.extend_from_slice(&orig_elems[last_injection_position..]);
     *orig_elems = elems;
+}
+
+// This function adds mem barrier writes, assuming that arguments
+// of the original store operation are on the stack
+fn write_barrier_instructions<'a>(
+    offset: u64,
+    val_arg_idx: u32,
+    addr_arg_idx: u32,
+) -> Vec<Operator<'a>> {
+    use Operator::*;
+    let page_size_shift = PAGE_SIZE.trailing_zeros() as i32;
+    let tracking_mem_idx = 1;
+    if offset % PAGE_SIZE as u64 == 0 {
+        vec![
+            LocalSet {
+                local_index: val_arg_idx,
+            }, // value
+            LocalTee {
+                local_index: addr_arg_idx,
+            }, // address
+            I32Const {
+                value: page_size_shift,
+            },
+            I32ShrU,
+            I32Const { value: 1 },
+            I32Store8 {
+                memarg: wasmparser::MemArg {
+                    align: 0,
+                    max_align: 0,
+                    offset: offset >> page_size_shift,
+                    memory: tracking_mem_idx,
+                },
+            },
+            // Put original params on the stack
+            LocalGet {
+                local_index: addr_arg_idx,
+            },
+            LocalGet {
+                local_index: val_arg_idx,
+            },
+        ]
+    } else {
+        vec![
+            LocalSet {
+                local_index: val_arg_idx,
+            }, // value
+            LocalTee {
+                local_index: addr_arg_idx,
+            }, // address
+            I32Const {
+                value: offset as i32,
+            },
+            I32Add,
+            I32Const {
+                value: page_size_shift,
+            },
+            I32ShrU,
+            I32Const { value: 1 },
+            I32Store8 {
+                memarg: wasmparser::MemArg {
+                    align: 0,
+                    max_align: 0,
+                    offset: 0,
+                    memory: tracking_mem_idx,
+                },
+            },
+            // Put original params on the stack
+            LocalGet {
+                local_index: addr_arg_idx,
+            },
+            LocalGet {
+                local_index: val_arg_idx,
+            },
+        ]
+    }
+}
+
+fn inject_mem_barrier(func_body: &mut wasm_transform::Body, func_type: &FuncType) {
+    use Operator::*;
+    let mut injection_points: Vec<usize> = Vec::new();
+    {
+        for (idx, instr) in func_body.instructions.iter().enumerate() {
+            match instr {
+                I32Store { .. } | I32Store8 { .. } | I32Store16 { .. } => {
+                    injection_points.push(idx)
+                }
+                I64Store { .. } | I64Store8 { .. } | I64Store16 { .. } | I64Store32 { .. } => {
+                    injection_points.push(idx)
+                }
+                F32Store { .. } => injection_points.push(idx),
+                F64Store { .. } => injection_points.push(idx),
+                _ => (),
+            }
+        }
+    }
+
+    // If we found some injection points, we need to instrument the code.
+    if !injection_points.is_empty() {
+        // We inject some locals to cache the arguments to `memory.store`.
+        // The locals are stored as a vector of (count, ValType), so summing over the first field gives
+        // the total number of locals.
+        let n_locals: u32 = func_body.locals.iter().map(|x| x.0).sum();
+        let arg_i32_addr_idx = func_type.params().len() as u32 + n_locals;
+        let arg_i32_val_idx = arg_i32_addr_idx + 1;
+        func_body.locals.push((2, ValType::I32));
+        let arg_i64_val_idx = arg_i32_val_idx + 1;
+        func_body.locals.push((1, ValType::I64));
+        let arg_f32_val_idx = arg_i64_val_idx + 1;
+        func_body.locals.push((1, ValType::F32));
+        let arg_f64_val_idx = arg_f32_val_idx + 1;
+        func_body.locals.push((1, ValType::F64));
+
+        let orig_elems = &func_body.instructions;
+        let mut elems: Vec<Operator> = Vec::new();
+        let mut last_injection_position = 0;
+        for point in injection_points {
+            let mem_instr = orig_elems[point].clone();
+            elems.extend_from_slice(&orig_elems[last_injection_position..point]);
+
+            match mem_instr {
+                I32Store { memarg } | I32Store8 { memarg } | I32Store16 { memarg } => {
+                    elems.extend_from_slice(&write_barrier_instructions(
+                        memarg.offset,
+                        arg_i32_val_idx,
+                        arg_i32_addr_idx,
+                    ));
+                }
+                I64Store { memarg }
+                | I64Store8 { memarg }
+                | I64Store16 { memarg }
+                | I64Store32 { memarg } => {
+                    elems.extend_from_slice(&write_barrier_instructions(
+                        memarg.offset,
+                        arg_i64_val_idx,
+                        arg_i32_addr_idx,
+                    ));
+                }
+                F32Store { memarg } => {
+                    elems.extend_from_slice(&write_barrier_instructions(
+                        memarg.offset,
+                        arg_f32_val_idx,
+                        arg_i32_addr_idx,
+                    ));
+                }
+                F64Store { memarg } => {
+                    elems.extend_from_slice(&write_barrier_instructions(
+                        memarg.offset,
+                        arg_f64_val_idx,
+                        arg_i32_addr_idx,
+                    ));
+                }
+                _ => {}
+            }
+            // add the original store instruction itself
+            elems.push(mem_instr);
+
+            last_injection_position = point + 1;
+        }
+        elems.extend_from_slice(&orig_elems[last_injection_position..]);
+        func_body.instructions = elems;
+    }
 }
 
 // Scans through a function and adds instrumentation after each `memory.grow`

@@ -37,7 +37,7 @@ const GiB: u64 = KiB * KiB * KiB;
 // is allowed to produce.
 const STABLE_MEMORY_DIRTY_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
     pub rate_limiting_of_debug_prints: FlagStatus,
     /// Use the `wasmparser` and `wasm-encoder` crates for instrumentation and
