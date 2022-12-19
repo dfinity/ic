@@ -201,26 +201,26 @@ impl CspVaultMethod {
             CspVaultMethod::GenTlsKeyPair => (MetricsDomain::TlsHandshake, "gen_tls_key_pair"),
             CspVaultMethod::TlsSign => (MetricsDomain::TlsHandshake, "tls_sign"),
             CspVaultMethod::IdkgCreateDealing => {
-                (MetricsDomain::IDkgProtocol, "idkg_create_dealing")
+                (MetricsDomain::IdkgProtocol, "idkg_create_dealing")
             }
             CspVaultMethod::IdkgVerifyDealingPrivate => {
-                (MetricsDomain::IDkgProtocol, "idkg_verify_dealing_private")
+                (MetricsDomain::IdkgProtocol, "idkg_verify_dealing_private")
             }
             CspVaultMethod::IdkgLoadTranscript => {
-                (MetricsDomain::IDkgProtocol, "idkg_load_transcript")
+                (MetricsDomain::IdkgProtocol, "idkg_load_transcript")
             }
             CspVaultMethod::IdkgLoadTranscriptWithOpenings => (
-                MetricsDomain::IDkgProtocol,
+                MetricsDomain::IdkgProtocol,
                 "idkg_load_transcript_with_openings",
             ),
             CspVaultMethod::IdkgRetainActiveKeys => {
-                (MetricsDomain::IDkgProtocol, "idkg_retain_active_keys")
+                (MetricsDomain::IdkgProtocol, "idkg_retain_active_keys")
             }
             CspVaultMethod::IdkgGenDealingEncryptionKeyPair => (
-                MetricsDomain::IDkgProtocol,
+                MetricsDomain::IdkgProtocol,
                 "idkg_gen_dealing_encryption_key_pair",
             ),
-            CspVaultMethod::IdkgOpenDealing => (MetricsDomain::IDkgProtocol, "idkg_open_dealing"),
+            CspVaultMethod::IdkgOpenDealing => (MetricsDomain::IdkgProtocol, "idkg_open_dealing"),
             CspVaultMethod::EcdsaSignShare => (MetricsDomain::ThresholdEcdsa, "ecdsa_sign_share"),
             CspVaultMethod::NewPublicSeed => (MetricsDomain::PublicSeed, "new_public_seed"),
         }
