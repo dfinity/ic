@@ -185,6 +185,18 @@ name = "ic-systest-ckbtc-batching"
 path = "bin/ckbtc_minter_batching.rs"
 
 [[bin]]
+name = "ic-systest-ckbtc-heartbeat"
+path = "bin/ckbtc_minter_heartbeat.rs"
+
+[[bin]]
+name = "ic-systest-ckbtc-retrieve-btc"
+path = "bin/ckbtc_minter_retrieve_btc.rs"
+
+[[bin]]
+name = "ic-systest-ckbtc-update-balance"
+path = "bin/ckbtc_minter_update_balance.rs"
+
+[[bin]]
 name = "ic-systest-icrc1-agent-test"
 path = "bin/icrc1_agent_test.rs"
 
