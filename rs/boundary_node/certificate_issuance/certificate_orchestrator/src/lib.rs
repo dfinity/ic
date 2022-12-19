@@ -46,6 +46,7 @@ const SET_VALUE_LEN: u32 = 0;
 
 const PRINCIPAL_ID_LEN: u32 = 63 * BYTE;
 const ID_COUNTER_LEN: u32 = size_of::<u128>() as u32;
+const ID_SEED_LEN: u32 = size_of::<u128>() as u32;
 const REGISTRATION_ID_LEN: u32 = 64 * BYTE;
 const REGISTRATION_LEN: u32 = 128;
 const ENCRYPED_PRIVATE_KEY_LEN: u32 = KB; // 1 * KB
@@ -61,9 +62,10 @@ thread_local! {
 const MEMORY_ID_ROOT_PRINCIPALS: u8 = 0;
 const MEMORY_ID_ALLOWED_PRINCIPALS: u8 = 1;
 const MEMORY_ID_ID_COUNTER: u8 = 2;
-const MEMORY_ID_REGISTRATIONS: u8 = 3;
-const MEMORY_ID_NAMES: u8 = 4;
-const MEMORY_ID_ENCRPYTED_CERTIFICATES: u8 = 5;
+const MEMORY_ID_ID_SEED: u8 = 3;
+const MEMORY_ID_REGISTRATIONS: u8 = 4;
+const MEMORY_ID_NAMES: u8 = 5;
+const MEMORY_ID_ENCRPYTED_CERTIFICATES: u8 = 6;
 
 // ACLs
 thread_local! {
@@ -106,8 +108,16 @@ thread_local! {
         )
     );
 
+    static ID_SEED: RefCell<StableValue<u128>> = RefCell::new(
+        StableValue::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ID_SEED))),
+            CONST_KEY_LEN,  // MAX_KEY_SIZE,
+            ID_SEED_LEN, // MAX_VALUE_SIZE
+        )
+    );
+
     static ID_GENERATOR: RefCell<Box<dyn Generate>> = RefCell::new({
-        let g = Generator::new(&ID_COUNTER);
+        let g = Generator::new(&ID_COUNTER, &ID_SEED);
         Box::new(g)
     });
 }
@@ -193,10 +203,17 @@ thread_local! {
 struct InitArg {
     #[serde(rename = "rootPrincipals")]
     root_principals: Vec<Principal>,
+    #[serde(rename = "idSeed")]
+    id_seed: u128,
 }
 
 #[init]
-fn init_fn(InitArg { root_principals }: InitArg) {
+fn init_fn(
+    InitArg {
+        root_principals,
+        id_seed,
+    }: InitArg,
+) {
     ROOT_PRINCIPALS.with(|m| {
         let mut m = m.borrow_mut();
         root_principals.iter().for_each(|p| {
@@ -204,6 +221,11 @@ fn init_fn(InitArg { root_principals }: InitArg) {
                 trap(&format!("failed to insert root principal: {err}"));
             }
         });
+    });
+
+    ID_SEED.with(|s| {
+        let mut s = s.borrow_mut();
+        s.insert((), id_seed).unwrap();
     });
 }
 
