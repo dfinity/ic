@@ -48,8 +48,11 @@ impl LoggerImpl {
         }
     }
 
-    pub fn new_for_test(config: LoggerConfig) -> Self {
-        Self::new_internal(slog_term::TestStdoutWriter, &config, "test".to_string())
+    pub fn new_for_test<W>(writer: W, config: &LoggerConfig) -> Self
+    where
+        W: 'static + io::Write + Send,
+    {
+        Self::new_internal(writer, config, "logger-for-test".to_string())
     }
 
     fn new_internal<W>(i: W, config: &LoggerConfig, thread_name: String) -> Self

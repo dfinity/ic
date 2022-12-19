@@ -5104,6 +5104,7 @@ dependencies = [
  "ic-metrics",
  "ic-protobuf",
  "ic-test-utilities-compare-dirs",
+ "ic-test-utilities-in-memory-logger",
  "ic-types",
  "ic-types-test-utils",
  "ic-utils 0.8.0",
@@ -8714,6 +8715,19 @@ dependencies = [
 [[package]]
 name = "ic-test-utilities-compare-dirs"
 version = "0.8.0"
+
+[[package]]
+name = "ic-test-utilities-in-memory-logger"
+version = "0.8.0"
+dependencies = [
+ "ic-config",
+ "ic-logger",
+ "ic-protobuf",
+ "parking_lot 0.12.1",
+ "serde_json",
+ "slog",
+ "slog-async",
+]
 
 [[package]]
 name = "ic-test-utilities-load-wasm"

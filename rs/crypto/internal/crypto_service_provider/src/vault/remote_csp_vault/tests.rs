@@ -18,7 +18,6 @@ use crate::LocalCspVault;
 use crate::RemoteCspVault;
 use crate::SecretKeyStore;
 use assert_matches::assert_matches;
-use ic_config::logger::Config as LoggerConfig;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::setup_listener;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_for_test;
 use rand::SeedableRng;
@@ -1027,26 +1026,21 @@ mod public_seed {
 
 mod logging {
     use super::*;
-    use crate::vault::remote_csp_vault::tests::LoggerConfig;
     use crate::CryptoMetrics;
-    use ic_config::logger::LogTarget;
-    use ic_logger::new_replica_logger_from_config;
-    use tempfile::NamedTempFile;
+    use ic_logger::ReplicaLogger;
+    use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
+    use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+    use slog::Level;
 
     #[test]
     fn should_log_payload_size_transmitted_over_rpc_socket() {
-        let log_file = NamedTempFile::new().expect("error creating temporary file");
-        let logger_config = LoggerConfig {
-            target: LogTarget::File(log_file.path().to_path_buf()),
-            ..Default::default()
-        };
-        let (logger, guard) = new_replica_logger_from_config(&logger_config);
+        let in_memory_logger = InMemoryReplicaLogger::new();
         let tokio_rt = new_tokio_runtime();
         let socket_path = start_new_remote_csp_vault_server_for_test(tokio_rt.handle());
         let csp_vault = RemoteCspVault::new(
             &socket_path,
             tokio_rt.handle().clone(),
-            logger,
+            ReplicaLogger::from(&in_memory_logger),
             Arc::new(CryptoMetrics::none()),
         )
         .expect("failed instantiating remote CSP vault client");
@@ -1055,20 +1049,18 @@ mod logging {
             .gen_node_signing_key_pair()
             .expect("failed to generate keys");
 
-        drop(guard);
-        let log_file_content =
-            std::fs::read_to_string(log_file.path()).expect("failed to read log file");
-        let log_lines: Vec<_> = log_file_content.lines().collect();
+        let logs = in_memory_logger.drain_logs();
 
-        assert_eq!(log_lines.len(), 3);
-        assert!(log_lines[0].contains("DEBG"));
-        assert!(log_lines[0].contains("Instantiated remote CSP vault client"));
-        assert!(log_lines[1].contains("DEBG"));
-        assert!(log_lines[1]
-            .contains("CSP vault client sent 37 bytes (request to 'gen_node_signing_key_pair')"));
-        assert!(log_lines[2].contains("DEBG"));
-        assert!(log_lines[2].contains(
-            "CSP vault client received 38 bytes (response of 'gen_node_signing_key_pair')"
-        ));
+        LogEntriesAssert::assert_that(logs)
+            .has_len(3)
+            .has_only_one_message_containing(&Level::Debug, "Instantiated remote CSP vault client")
+            .has_only_one_message_containing(
+                &Level::Debug,
+                "CSP vault client sent 37 bytes (request to 'gen_node_signing_key_pair')",
+            )
+            .has_only_one_message_containing(
+                &Level::Debug,
+                "CSP vault client received 38 bytes (response of 'gen_node_signing_key_pair')",
+            );
     }
 }
