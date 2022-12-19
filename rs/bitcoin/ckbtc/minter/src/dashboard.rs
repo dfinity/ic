@@ -1,5 +1,6 @@
 use crate::address;
 use crate::state;
+use crate::tx::DisplayTxid;
 use ic_icrc1::Account;
 
 pub fn build_dashboard() -> Vec<u8> {
@@ -125,7 +126,7 @@ pub fn build_account_to_utxos_table() -> String {
                                 <td>{}</td>
                                 <td>{}</td>
                             </tr>",
-                            hex::encode(&u.outpoint.txid),
+                            DisplayTxid(&u.outpoint.txid),
                             u.outpoint.vout,
                             u.value,
                             u.height
@@ -268,7 +269,7 @@ pub fn build_submitted_requests() -> String {
                                 <td>{}</td>
                                 <td>{}</td>
                             </tr>",
-                            hex::encode(&u.outpoint.txid),
+                            DisplayTxid(&u.outpoint.txid),
                             u.outpoint.vout,
                             u.height,
                             u.value
@@ -330,7 +331,7 @@ pub fn build_submitted_requests() -> String {
                             </table>
                         </td>
                     </tr>",
-                    hex::encode(submitted_request.txid),
+                    DisplayTxid(&submitted_request.txid),
                     used_utxos_formated,
                     requests,
                 )
@@ -373,7 +374,7 @@ pub fn build_available_utxos() -> String {
                         <td>{}</td>
                         <td>{}</td>
                     </tr>",
-                    hex::encode(&utxo.outpoint.txid),
+                    DisplayTxid(&utxo.outpoint.txid),
                     utxo.outpoint.vout,
                     utxo.height,
                     utxo.value
