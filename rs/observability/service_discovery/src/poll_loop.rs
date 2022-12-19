@@ -23,7 +23,7 @@ pub fn make_poll_loop(
         loop {
             let mut err = false;
             info!(log, "Loading new scraping targets (tick: {:?})", tick);
-            if let Err(e) = ic_discovery.load_new_ics() {
+            if let Err(e) = ic_discovery.load_new_ics(log.clone()) {
                 warn!(
                     log,
                     "Failed to load new scraping targets @ interval {:?}: {:?}", tick, e

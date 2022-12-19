@@ -2,17 +2,18 @@
 //! discovery configuration of prometheus.
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt::Debug,
     net::IpAddr,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
 
-use crate::vector_configuration::VectorServiceDiscoveryConfigEnriched;
+use crate::{vector_configuration::VectorServiceDiscoveryConfigEnriched, JobParameters};
 
 use regex::Regex;
 use service_discovery::{config_generator::ConfigGenerator, job_types::JobType, TargetGroup};
+use url::Url;
 
 pub trait TargetGroupFilter: Send + Sync + Debug {
     fn filter(&self, target_groups: TargetGroup) -> bool;
@@ -227,14 +228,29 @@ pub struct ConfigWriter {
     last_targets: Arc<RwLock<BTreeMap<String, BTreeSet<TargetGroup>>>>,
     /// Filters the returned config basaed on different patterns
     filters: TargetGroupFilterList,
+    /// Maps the job type to parameters required for writing the config
+    jobs_parameters: HashMap<JobType, JobParameters>,
+    /// Vector scrape interval
+    scrape_interval: u64,
+    /// URL of the proxy to use when generating the config
+    proxy_url: Option<Url>,
 }
 
 impl ConfigWriter {
-    pub fn new<P: AsRef<Path>>(write_path: P, filters: TargetGroupFilterList) -> Self {
+    pub fn new<P: AsRef<Path>>(
+        write_path: P,
+        filters: TargetGroupFilterList,
+        jobs_parameters: HashMap<JobType, JobParameters>,
+        scrape_interval: u64,
+        proxy_url: Option<Url>,
+    ) -> Self {
         ConfigWriter {
             base_directory: PathBuf::from(write_path.as_ref()),
             last_targets: Default::default(),
             filters,
+            jobs_parameters,
+            scrape_interval,
+            proxy_url,
         }
     }
 
@@ -261,7 +277,13 @@ impl ConfigWriter {
             .filter(|tg| self.filters.filter(tg.clone()))
             .collect();
 
-        let vector_config = VectorServiceDiscoveryConfigEnriched::from(filtered_target_groups);
+        let vector_config = VectorServiceDiscoveryConfigEnriched::from_target_groups_with_job(
+            filtered_target_groups,
+            &job,
+            self.jobs_parameters.get(&job).unwrap(),
+            self.scrape_interval,
+            self.proxy_url.clone(),
+        );
 
         ic_utils::fs::write_atomically(target_path.as_path(), |f| {
             serde_json::to_writer_pretty(f, &vector_config).map_err(|e| {

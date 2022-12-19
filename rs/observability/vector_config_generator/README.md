@@ -1,123 +1,57 @@
-# vector-service-discovery
+# Vector Config Generator
 
 ## Synopsis
 
 Periodically check the registry on a given IC for the current topology
 (subnets, and the nodes assigned to them).
 
-When the topology changes it writes a JSON file in 
-[Vector configuration format](https://vector.dev/docs/reference/configuration/) format.
+When the topology changes it writes a JSON file in  [Vector configuration
+format](https://vector.dev/docs/reference/configuration/) format.
 
-Vector will be configured to read these files to determine which replica processes should
-be scraped.
+Vector will be configured to read these files to determine which replica
+processes should be scraped.
 
-This implements the service discovery for metrics as described in [Vector overview](https://docs.google.com/document/d/1275g6N2ckRVKXJGhclS2wdi0UjA7GCN5DTggnIeAPy8/)
+This implements the service discovery for metrics as described in [Vector
+overview](https://docs.google.com/document/d/1275g6N2ckRVKXJGhclS2wdi0UjA7GCN5DTggnIeAPy8/)
 
 ## Quickstart
 
 ```shell
-cargo run --bin vector-sd -- 
+mkdir /tmp/{targets,gen}
+cargo run -- --targets-dir /tmp/targets --generation-dir /tmp/gen --filter-node-id-regex "^a"
 ```
 
-The topology for Prometheus will be written to `/tmp/topology.json`, which
+The config for Vector will be written to `/tmp/gen`, which
 can be inspected to confirm it matches expectations.
-
-## General configuration
-
-Configuration can be provided on the command line, a configuration file, or a
-mixture of both.
-
-```json
-{
-  "service_discovery_file": "/tmp/topology.json",
-  "service_discovery_file_mode": 416,
-  "ic_name": "topochange",
-  "metrics_addr": "127.0.0.1:8006",
-  "discover_every": "10s",
-  "log": {
-    "to_stderr": true,
-    "to_stderr_pretty": true,
-    "level": "debug",
-    "to_disk": null
-  },
-  "nns": {
-    "urls": ["http://dcs-topochange-11.dfinity.systems:8080/"]
-  }
-}
-```
-
-Each entry in the config file has an associated command line flag of the
-same name (`--ic_name`, `--metrics_addr`, etc). Nested entries are converted
-to flags by flattening the nesting and inserting a `_`, so:
-
-```
-  "nns": {
-    "urls": [
-      "http://dcs-topochange-11.dfinity.systems:8080/"
-    ]
-  }
-```
-
-corresponds to `--nns_urls http://...`.
-
-Specify the path to the config file with the `--config_file` flag.
-
-Any command line flags override their values from the config file.
 
 ## Recommended production configuration
 
 - Specify arguments using flags rather than the configuration file, it's one
   less thing to go wrong.
-
-- Use the following flags, assuming the server is from `systemd`:
-  - `--service_discovery_file`, `ic_name`, `--nns_urls`: Adjust as necessary
-    for the IC NNS that is being queried.
-  - `--discover_every`, set to `10s`, the registry client library doesn't poll
+- Use the following flags
+  - `--targets-dir` (Required) to tell the process where to store the info from
+    the NNS locally
+  - `--generation-dir` (Required) to tell the process where to generate the config
+  - `--poll-interval`, set to `10s`, the registry client library doesn't poll
     faster than that.
-  - `--log_level debug`, log at debug and above
-  - `--log_to_stderr`, send logs to STDERR
-  - `--metrics_addr IP:PORT`, set to the ip:port to serve metrics on
-  - Do not set `--log_to_stderr_pretty` or `--log_to_disk PATH` in production
-
-## Logs
-
-Logs are structured JSON, written to files, and can be sent to disk and/or
-STDERR.
-
-They follow the Elastic Common Schema definition, see
-https://www.elastic.co/guide/en/ecs/current/index.html and the files
-in `elastic_common_schema` for more details.
-
-### Logging options
-
-`log_to_disk` -- directory to write logs to.
-
-`log_level` -- minimum level at which to log (`trace`, `debug`, `info`,
-`warning`, `error`, `critical`).
-
-`log_to_stderr` -- if true, log messages will be sent to STDERR as well
-as to files.
-
-`log_to_stderr_pretty` -- if true, log messages sent to STDERR will be
-pretty-printed.
+  - `--metrics-listen-addr IP:PORT`, set to the ip:port to serve metrics on
 
 ## Metrics
 
 Prometheus metrics are exported.
 
-The export address is controlled by the `--metrics_addr` flag.
+The export address is controlled by the `--metrics-listen-addr` flag.
 
 The metrics are:
-
-- `ic_service_discovery_duration_seconds` (Histogram): Time elapsed
-  from starting to check the registry to finishing writing the topology
-  file. `status` label is either `success` for successful checks, or describes
-  the failure mode.
-- `ic_service_discovery_skipped_total` (Counter): Count of updates skipped
-  (not included in `ic_service_discovery_duration_seconds`) because the
-  registry version had not changed since the previous iteration.
-- `ic_topology_registry_version` (Gauge): Registry version used to determine
-  the topology.
+- `discovery_poll_count` (Counter): Number of times the IC was polled
+- `discovery_registries_update_latency_seconds_bucket` (Histogram): Registry
+  update latency bucket
+- `discovery_registries_update_latency_seconds_sum`  (Counter): Total Registry
+  update latency
+- `discovery_registries_update_latency_seconds_count` (Counter): Number of
+  registry update latency events
+- `metrics_endpoint_tcp_connections_total` (Counter): Numver of connections done
+  to the metrics endpoint
 
 ## Safe shutdown
 

@@ -24,13 +24,61 @@ mod config_writer;
 mod config_writer_loop;
 mod vector_configuration;
 
+#[derive(Clone, Debug)]
+pub struct JobParameters {
+    pub port: u16,
+    pub endpoint: String,
+}
+
+#[derive(Clone)]
+struct Job {
+    _type: JobType,
+    port: u16,
+    endpoint: String,
+}
+
+fn jobs() -> Vec<Job> {
+    vec![
+        Job {
+            _type: JobType::NodeExporter(NodeOS::Guest),
+            port: 9100,
+            endpoint: "/metrics".into(),
+        },
+        Job {
+            _type: JobType::NodeExporter(NodeOS::Host),
+            port: 9100,
+            endpoint: "/metrics".into(),
+        },
+        Job {
+            _type: JobType::Orchestrator,
+            port: 9091,
+            endpoint: "/".into(),
+        },
+        Job {
+            _type: JobType::Replica,
+            port: 9090,
+            endpoint: "/".into(),
+        },
+    ]
+}
+
 fn get_jobs() -> HashMap<JobType, u16> {
-    let mut x: HashMap<JobType, u16> = HashMap::new();
-    x.insert(JobType::NodeExporter(NodeOS::Guest), 9100);
-    x.insert(JobType::NodeExporter(NodeOS::Host), 9100);
-    x.insert(JobType::Orchestrator, 9091);
-    x.insert(JobType::Replica, 9090);
-    x
+    jobs().iter().map(|job| (job._type, job.port)).collect()
+}
+
+fn get_jobs_parameters() -> HashMap<JobType, JobParameters> {
+    jobs()
+        .iter()
+        .map(|job| {
+            (
+                job._type,
+                JobParameters {
+                    port: job.port,
+                    endpoint: job.endpoint.clone(),
+                },
+            )
+        })
+        .collect()
 }
 
 fn main() -> Result<()> {
@@ -54,6 +102,7 @@ fn main() -> Result<()> {
 
     info!(log, "Starting IcServiceDiscovery ...");
     let ic_discovery = Arc::new(IcServiceDiscoveryImpl::new(
+        log.clone(),
         cli_args.targets_dir,
         cli_args.registry_query_timeout,
         jobs.clone(),
@@ -82,9 +131,12 @@ fn main() -> Result<()> {
         ic_discovery,
         stop_signal_rcv,
         jobs.into_iter().map(|(job, _)| job).collect(),
+        get_jobs_parameters(),
         update_signal_rcv,
         cli_args.generation_dir,
         cli_args.filter_node_id_regex,
+        cli_args.scrape_interval,
+        cli_args.proxy_url,
     );
     let config_join_handle = std::thread::spawn(config_writer_loop);
     handles.push(config_join_handle);
@@ -163,6 +215,25 @@ Regex used to filter the node IDs
 "#
     )]
     filter_node_id_regex: Option<Regex>,
+
+    #[clap(
+        long = "scrape-interval",
+        default_value = "30",
+        help = r#"
+Interval for metrics scraping in the generated configuration
+
+"#
+    )]
+    scrape_interval: u64,
+
+    #[clap(
+        long = "proxy-url",
+        help = r#"
+URL of the proxy to use in the generated config
+
+"#
+    )]
+    proxy_url: Option<Url>,
 
     #[clap(
         long = "nns-url",

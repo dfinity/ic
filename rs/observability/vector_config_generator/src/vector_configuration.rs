@@ -2,7 +2,14 @@ use std::collections::{BTreeSet, HashMap};
 
 use serde::Serialize;
 
-use service_discovery::TargetGroup;
+use service_discovery::{job_types::JobType, TargetGroup};
+use url::Url;
+
+use crate::JobParameters;
+
+const IC_NAME: &str = "ic";
+const IC_NODE: &str = "ic_node";
+const IC_SUBNET: &str = "ic_subnet";
 
 // NOTE: Those structures are tightly coupled with the use we want out of them
 // for metrics, meaning adding labels and creating prometheus scraper sources.
@@ -24,30 +31,48 @@ impl VectorServiceDiscoveryConfigEnriched {
         }
     }
 
-    fn add_target_group(&mut self, target_group: TargetGroup) {
+    pub fn from_target_groups_with_job(
+        tgs: BTreeSet<TargetGroup>,
+        job: &JobType,
+        job_parameters: &JobParameters,
+        scrape_interval: u64,
+        proxy_url: Option<Url>,
+    ) -> Self {
+        let mut config = Self::new();
+        for tg in tgs {
+            config.add_target_group(tg, job, job_parameters, scrape_interval, proxy_url.clone())
+        }
+        config
+    }
+
+    fn add_target_group(
+        &mut self,
+        target_group: TargetGroup,
+        job: &JobType,
+        job_parameters: &JobParameters,
+        scrape_interval: u64,
+        proxy_url: Option<Url>,
+    ) {
         let key = target_group
-            .clone()
             .targets
-            .into_iter()
+            .iter()
             .map(|t| t.to_string())
-            .next()
+            .next() // Only take the first one here. Might cause some issues
             .unwrap();
         self.sources.insert(
             key.clone() + "-source",
-            target_group.clone().try_into().unwrap(),
+            VectorSource::from_target_group_with_job(
+                target_group.clone(),
+                job,
+                job_parameters,
+                scrape_interval,
+                proxy_url,
+            ),
         );
-        self.transforms
-            .insert(key + "-transform", target_group.into());
-    }
-}
-
-impl From<BTreeSet<TargetGroup>> for VectorServiceDiscoveryConfigEnriched {
-    fn from(records: BTreeSet<TargetGroup>) -> Self {
-        let mut config = Self::new();
-        for record in records {
-            config.add_target_group(record);
-        }
-        config
+        self.transforms.insert(
+            key + "-transform",
+            VectorTransform::from_target_group_with_job(target_group, job, job_parameters),
+        );
     }
 }
 
@@ -57,31 +82,60 @@ struct VectorSource {
     _type: String,
     endpoints: Vec<String>,
     scrape_interval_secs: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    proxy: Option<VectorSourceProxy>,
     instance_tag: String,
     endpoint_tag: String,
 }
 
-impl TryFrom<TargetGroup> for VectorSource {
-    type Error = url::ParseError;
-
-    fn try_from(target_group: TargetGroup) -> Result<Self, Self::Error> {
-        let endpoints: Vec<String> = target_group
+impl VectorSource {
+    fn from_target_group_with_job(
+        tg: TargetGroup,
+        _job: &JobType,
+        job_parameters: &JobParameters,
+        scrape_interval: u64,
+        proxy_url: Option<Url>,
+    ) -> Self {
+        let endpoints: Vec<String> = tg
             .targets
             .into_iter()
             .map(|g| g.to_string())
-            .map(|g| "http://".to_string() + &g)
+            .map(|g| format!("http://{}{}", g, job_parameters.endpoint))
             .map(|g| url::Url::parse(&g).unwrap())
             .map(|g| g.to_string())
             .collect();
 
-        Ok(Self {
+        // TODO Pass URL through args
+
+        let proxy = proxy_url.map(|url| VectorSourceProxy {
+            enabled: true,
+            http: Some(url),
+            https: None,
+        });
+
+        Self {
             _type: "prometheus_scrape".into(),
             endpoints,
-            scrape_interval_secs: 5,
+            scrape_interval_secs: scrape_interval,
+            proxy,
+            // proxy: Some(VectorSourceProxy {
+            //     enabled: true,
+            //     http: Some(proxy_url),
+            //     https: None,
+            // }),
             instance_tag: "instance".into(),
             endpoint_tag: "endpoint".into(),
-        })
+        }
     }
+}
+
+#[derive(Debug, Serialize)]
+struct VectorSourceProxy {
+    enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    http: Option<url::Url>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    https: Option<url::Url>,
 }
 
 #[derive(Debug, Serialize)]
@@ -92,21 +146,22 @@ struct VectorTransform {
     source: String,
 }
 
-const IC_NAME: &str = "ic";
-const IC_NODE: &str = "ic_node";
-const IC_SUBNET: &str = "ic_subnet";
-
-impl From<TargetGroup> for VectorTransform {
-    fn from(target_group: TargetGroup) -> Self {
+impl VectorTransform {
+    fn from_target_group_with_job(
+        tg: TargetGroup,
+        job: &JobType,
+        _job_parameters: &JobParameters,
+    ) -> Self {
         let mut labels: HashMap<String, String> = HashMap::new();
-        labels.insert(IC_NAME.into(), target_group.ic_name);
-        labels.insert(IC_NODE.into(), target_group.node_id.to_string());
-        if let Some(subnet_id) = target_group.subnet_id {
+        labels.insert(IC_NAME.into(), tg.ic_name);
+        labels.insert(IC_NODE.into(), tg.node_id.to_string());
+        if let Some(subnet_id) = tg.subnet_id {
             labels.insert(IC_SUBNET.into(), subnet_id.to_string());
         }
+        labels.insert("job".into(), job.to_string());
         Self {
             _type: "remap".into(),
-            inputs: target_group
+            inputs: tg
                 .targets
                 .into_iter()
                 .map(|g| g.to_string())
@@ -128,10 +183,11 @@ mod tests {
     use std::{net::SocketAddrV6, str::FromStr};
 
     use ic_types::{NodeId, PrincipalId, SubnetId};
-    use service_discovery::TargetGroup;
+    use service_discovery::{job_types::JobType, TargetGroup};
 
     use std::collections::BTreeSet;
 
+    use crate::get_jobs_parameters;
     use crate::vector_configuration::VectorServiceDiscoveryConfigEnriched;
 
     #[test]
@@ -162,10 +218,17 @@ mod tests {
             operator_id: None,
         };
 
-        let mut tg_map = BTreeSet::new();
-        tg_map.insert(ptg);
+        let mut tg_set = BTreeSet::new();
+        tg_set.insert(ptg);
 
-        let vector_config = VectorServiceDiscoveryConfigEnriched::from(tg_map);
+        let job_params = get_jobs_parameters();
+        let vector_config = VectorServiceDiscoveryConfigEnriched::from_target_groups_with_job(
+            tg_set,
+            &JobType::Orchestrator,
+            job_params.get(&JobType::Orchestrator).unwrap(),
+            30,
+            None,
+        );
         assert!(vector_config.sources.contains_key(&sources_key));
         assert!(vector_config.transforms.contains_key(&transforms_key));
 

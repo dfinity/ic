@@ -1,12 +1,12 @@
 use std::{fmt, str::FromStr};
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum NodeOS {
     Guest,
     Host,
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum JobType {
     Replica,
     NodeExporter(NodeOS),

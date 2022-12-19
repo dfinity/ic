@@ -39,6 +39,7 @@ fn main() -> Result<()> {
 
     info!(log, "Starting IcServiceDiscovery ...");
     let ic_discovery = Arc::new(IcServiceDiscoveryImpl::new(
+        log.clone(),
         cli_args.targets_dir,
         cli_args.registry_query_timeout,
         get_jobs(),
