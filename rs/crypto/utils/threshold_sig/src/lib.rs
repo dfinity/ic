@@ -21,7 +21,6 @@ mod tests;
 /// `Ok(())` if the signature is accepted, or an `Err` otherwise
 /// # Error
 /// Returns an error if the signature could not be verified
-#[allow(dead_code)]
 pub fn verify_combined<T: Signable>(
     msg: &T,
     sig: &CombinedThresholdSigOf<T>,
@@ -30,4 +29,24 @@ pub fn verify_combined<T: Signable>(
     let bls_pk = BlsPublicKeyBytes(pk.into_bytes());
     let bls_sig = bls12_381::types::CombinedSignatureBytes::try_from(&sig.get_ref().0)?;
     bls12_381::api::verify_combined_signature(&msg.as_signed_bytes(), bls_sig, bls_pk)
+}
+
+/// Verify a combined threshold signature with a cache of successful results
+///
+/// # Arguments
+/// * `msg` is the [Signable] object associated with the signature
+/// * `sig` is the combined threshold signature to be verified
+/// * `pk` is the public key
+/// # Returns
+/// `Ok(())` if the signature is accepted, or an `Err` otherwise
+/// # Error
+/// Returns an error if the signature could not be verified
+pub fn verify_combined_with_cache<T: Signable>(
+    msg: &T,
+    sig: &CombinedThresholdSigOf<T>,
+    pk: &ThresholdSigPublicKey,
+) -> CryptoResult<()> {
+    let bls_pk = BlsPublicKeyBytes(pk.into_bytes());
+    let bls_sig = bls12_381::types::CombinedSignatureBytes::try_from(&sig.get_ref().0)?;
+    bls12_381::api::verify_combined_signature_with_cache(&msg.as_signed_bytes(), bls_sig, bls_pk)
 }

@@ -1077,6 +1077,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cached"
+version = "0.41.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec6d20b3d24b6c74e2c5331d2d3d8d1976a9883c7da179aa851afa4c90d62e36"
+dependencies = [
+ "hashbrown 0.12.3 (registry+https://github.com/rust-lang/crates.io-index)",
+ "instant",
+ "once_cell",
+ "thiserror",
+]
+
+[[package]]
 name = "camino"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2270,6 +2282,7 @@ dependencies = [
  "byte-unit",
  "byteorder",
  "bytes",
+ "cached",
  "candid 0.8.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "candid_derive 0.5.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "cargo_metadata",

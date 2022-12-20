@@ -8,6 +8,7 @@ use super::super::types::{
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::NumberOfNodes;
 use proptest::prelude::*;
 use rand::Rng;
@@ -78,6 +79,47 @@ fn test_combined_signature_verifies(
     assert_eq!(
         tsig::verify_combined_signature(message, signature, public_key),
         Ok(())
+    );
+
+    // test the functionality of the cached version:
+
+    let initial_stats = crate::cache::SignatureCache::global().cache_statistics();
+
+    let entry =
+        crate::cache::SignatureCacheEntry::new(public_key.as_bytes(), &signature.0, message);
+
+    assert!(!crate::cache::SignatureCache::global().contains(&entry));
+
+    // test with cached version twice (once for miss case, once for hit case)
+    assert_eq!(
+        tsig::verify_combined_signature_with_cache(message, signature, public_key),
+        Ok(())
+    );
+
+    // check that the entry is now in the cache:
+    assert!(crate::cache::SignatureCache::global().contains(&entry));
+
+    // there is now at least one additional miss in the cache stats:
+    assert!(
+        crate::cache::SignatureCache::global()
+            .cache_statistics()
+            .misses
+            > initial_stats.misses
+    );
+
+    let initial_stats = crate::cache::SignatureCache::global().cache_statistics();
+
+    assert_eq!(
+        tsig::verify_combined_signature_with_cache(message, signature, public_key),
+        Ok(())
+    );
+
+    // there is now at least one additional hit in the cache stats:
+    assert!(
+        crate::cache::SignatureCache::global()
+            .cache_statistics()
+            .hits
+            > initial_stats.hits
     );
 }
 
@@ -166,6 +208,50 @@ fn test_threshold_sig_api_and_core_match(
         tsig::verify_combined_signature(message, tsig_signature, tsig_public_key),
         Ok(())
     );
+
+    // test cached version twice, one for the miss case and the second for the hit case
+    assert_eq!(
+        tsig::verify_combined_signature_with_cache(message, tsig_signature, tsig_public_key),
+        Ok(())
+    );
+    assert_eq!(
+        tsig::verify_combined_signature_with_cache(message, tsig_signature, tsig_public_key),
+        Ok(())
+    );
+}
+
+#[test]
+fn should_invalid_threshold_signatures_not_be_cached() {
+    use crate::cache::*;
+
+    let mut rng = reproducible_rng();
+
+    for _ in 0..10000 {
+        let mut pk = [0u8; 96];
+        let mut sig = [0u8; 48];
+        let mut msg = [0u8; 32];
+
+        rng.fill_bytes(&mut pk);
+        rng.fill_bytes(&mut sig);
+        rng.fill_bytes(&mut msg);
+
+        let entry = SignatureCacheEntry::new(&pk, &sig, &msg);
+
+        // not found:
+        assert!(!SignatureCache::global().contains(&entry));
+
+        let pk = PublicKeyBytes(pk);
+        let sig = CombinedSignatureBytes(sig);
+
+        let initial_stats = SignatureCache::global().cache_statistics();
+
+        assert!(tsig::verify_combined_signature_with_cache(&msg, sig, pk).is_err());
+
+        // the invalid signature is still not included in the cache
+        assert!(!SignatureCache::global().contains(&entry));
+
+        assert!(SignatureCache::global().cache_statistics().misses > initial_stats.misses);
+    }
 }
 
 #[test]

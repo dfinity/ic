@@ -8,4 +8,5 @@ pub mod crypto;
 pub mod ni_dkg;
 pub mod types;
 
+mod cache;
 pub mod test_utils;

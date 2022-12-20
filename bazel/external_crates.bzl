@@ -149,6 +149,10 @@ def external_crates_repository(name, annotations):
             "bytes": crate.spec(
                 version = "^1.0.1",
             ),
+            "cached": crate.spec(
+                version = "^0.41",
+                default_features = False,
+            ),
             "candid": crate.spec(
                 version = "^0.8.1",
             ),
