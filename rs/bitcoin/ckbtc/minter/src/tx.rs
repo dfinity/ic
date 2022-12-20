@@ -53,6 +53,66 @@ impl fmt::Display for DisplayTxid<'_> {
     }
 }
 
+/// Displays an amount in satoshis as decimal fraction of BTC.
+pub struct DisplayAmount(pub u64);
+
+impl fmt::Display for DisplayAmount {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const SATOSHIS_PER_BTC: u64 = 100_000_000;
+        let int = self.0 / SATOSHIS_PER_BTC;
+        let frac = self.0 % SATOSHIS_PER_BTC;
+
+        if frac > 0 {
+            let frac_width: usize = {
+                // Count decimal digits in the fraction part.
+                let mut d = 0;
+                let mut x = frac;
+                while x > 0 {
+                    d += 1;
+                    x /= 10;
+                }
+                d
+            };
+            debug_assert!(frac_width <= 8);
+            let frac_prefix: u64 = {
+                // The fraction part without trailing zeros.
+                let mut f = frac;
+                while f % 10 == 0 {
+                    f /= 10
+                }
+                f
+            };
+
+            write!(fmt, "{}.", int)?;
+            for _ in 0..(8 - frac_width) {
+                write!(fmt, "0")?;
+            }
+            write!(fmt, "{}", frac_prefix)
+        } else {
+            write!(fmt, "{}.0", int)
+        }
+    }
+}
+
+#[test]
+fn test_amount_display() {
+    fn check(amount: u64, expected: &str) {
+        assert_eq!(format!("{}", DisplayAmount(amount)), expected);
+    }
+    check(0, "0.0");
+    check(1, "0.00000001");
+    check(10, "0.0000001");
+    check(100, "0.000001");
+    check(1_000, "0.00001");
+    check(10_000, "0.0001");
+    check(100_000, "0.001");
+    check(1_000_000, "0.01");
+    check(10_000_000, "0.1");
+    check(100_000_000, "1.0");
+    check(1_000_000_000, "10.0");
+    check(1_234_567_890, "12.3456789");
+}
+
 pub trait Buffer {
     type Output;
 

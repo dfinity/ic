@@ -15,12 +15,14 @@ Notes on init args:
 
 * The ledger id comes from the `canister_ids.json` file.
 * Max time in queue is seven minutes, or 420 billion nanoseconds.
-* Min retrieve BTC amount is 50K satoshies. That's enough to cover the fees for the type of transactions we create.
+* Min retrieve BTC amount is 5K satoshies.
+  That's enough to cover the fees for the type of transactions we create.
+  Also, it is hard to obtain more than 10K satoshies on the BTC testnet.
 * ECDSA key name is "key_1".
 
 
 ```shell
-dfx deploy minter --network ic --argument '(record { btc_network = variant { Testnet }; ledger_id = principal "mc6ru-gyaaa-aaaar-qaaaq-cai"; ecdsa_key_name = "key_1"; retrieve_btc_min_amount = 50_000; max_time_in_queue_nanos = 420_000_000_000 })'
+dfx deploy minter --network ic --argument '(record { btc_network = variant { Testnet }; ledger_id = principal "mc6ru-gyaaa-aaaar-qaaaq-cai"; ecdsa_key_name = "key_1"; retrieve_btc_min_amount = 5_000; max_time_in_queue_nanos = 420_000_000_000 })'
 ```
 
 ## Installing the ledger ([`mc6ru-gyaaa-aaaar-qaaaq-cai`](https://dashboard.internetcomputer.org/canister/mc6ru-gyaaa-aaaar-qaaaq-cai))

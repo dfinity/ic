@@ -384,8 +384,10 @@ pub async fn get_bitcoin_balance<'a>(
 }
 
 pub async fn upgrade_canister(canister: &mut Canister<'_>) {
-    let upgrade_result = canister.upgrade_to_self_binary(Vec::new()).await;
-    assert!(upgrade_result.is_ok(), "Error while upgrading canister");
+    canister
+        .upgrade_to_self_binary(Encode!().unwrap())
+        .await
+        .expect("failed to upgrade the canister");
 }
 
 /// Verify the account balance on the ledger.

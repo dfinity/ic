@@ -123,7 +123,7 @@ pub async fn update_balance(
     log!(
         P1,
         "minting {} wrapped BTC for {} new UTXOs",
-        satoshis_to_mint,
+        crate::tx::DisplayAmount(satoshis_to_mint),
         new_utxos.len()
     );
 

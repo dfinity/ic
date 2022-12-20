@@ -73,8 +73,8 @@ async fn heartbeat() {
 }
 
 #[post_upgrade]
-fn post_upgrade() {
-    lifecycle::upgrade::post_upgrade()
+fn post_upgrade(init_args: Option<InitArgs>) {
+    lifecycle::upgrade::post_upgrade(init_args)
 }
 
 #[candid_method(update)]
