@@ -5,12 +5,15 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 source "$SCRIPT_DIR/functions.sh"
 
 help() {
-    echo "
-Usage: $0 <LAST_DEPLOYED_VERSION> <TARGET_VERSION> <CANISTER_NAME> (<OUTPUT_FILE>)
-  LAST_DEPLOYED_VERSION: Git hash of last version deployed to production
-  TARGET_VERSION: Git hash of version to be deployed to production
+    print_green "
+Usage: $0 <CANISTER_NAME> <TARGET_VERSION> (<OUTPUT_FILE>)
   CANISTER_NAME: Canister name to be deployed (from rs/nns/canister_ids.json)
+  TARGET_VERSION: Git hash of version to be deployed to production
   OUTPUT_FILE: File to write contents to (otherwise stdout is used)
+
+  Environment_variables:
+   PREVIOUS_COMMIT: (optional) Git hash of last deployed version for cases when the canister's git version is not
+    available in the metadata, or needs to be overridden.
 
   This script will output text for a proposal to upgrade a given canister.  That text should be modified by hand
   to include any additional information that should be in the proposal.
@@ -18,14 +21,14 @@ Usage: $0 <LAST_DEPLOYED_VERSION> <TARGET_VERSION> <CANISTER_NAME> (<OUTPUT_FILE
     exit 1
 }
 
-if [ $# -lt 3 ]; then
+if [ $# -lt 2 ]; then
     help
 fi
 
-LAST=$1
+CANISTER_NAME=$1
 NEXT=$2
-CANISTER_NAME=$3
-OUTPUT_FILE=${4:-}
+LAST=${PREVIOUS_COMMIT:-$(nns_canister_git_version ic "$CANISTER_NAME")}
+OUTPUT_FILE=${3:-}
 
 IC_ROOT=$(repo_root)
 

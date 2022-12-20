@@ -238,6 +238,14 @@ canister_hash() {
         | sed 's/^0x//'
 }
 
+nns_canister_git_version() {
+    local NETWORK=$1
+    local CANISTER_NAME=$2
+
+    dfx canister --network $NETWORK metadata \
+        $(nns_canister_id $CANISTER_NAME) git_commit_id
+}
+
 ##: canister_has_version_installed
 ## Check if canister has the right version (git commit)
 ##      NETWORK: ic, or URL to an NNS subnet (including port)

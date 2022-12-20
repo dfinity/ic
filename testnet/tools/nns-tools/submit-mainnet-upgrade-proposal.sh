@@ -5,7 +5,7 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 source "$SCRIPT_DIR/functions.sh"
 
 help() {
-    echo "
+    print_green "
 Usage: $0 <PROPOSAL_FILE> <NEURON_ID>
     PROPOSAL_FILE: File with proposal created by ./prepare-mainnet-proposal-text.sh (or formatted in that way)
     NEURON_ID: Your mainnet neuron ID, associated with your HSM
