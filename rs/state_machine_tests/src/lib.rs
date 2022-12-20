@@ -6,7 +6,7 @@ use ic_config::{
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::{
-    combine_signatures, combined_public_key, keygen, sign_message,
+    combine_signatures, combined_public_key, generate_threshold_key, sign_message,
 };
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
@@ -553,8 +553,12 @@ impl StateMachine {
             203, 206, 208, 211, 216, 229, 232, 233, 236, 242, 244, 246, 250,
         ];
 
-        let (public_coefficients, secret_key_bytes) =
-            keygen(Seed::from_bytes(&seed), NumberOfNodes::new(1), &[true; 1]).unwrap();
+        let (public_coefficients, secret_key_bytes) = generate_threshold_key(
+            Seed::from_bytes(&seed),
+            NumberOfNodes::new(1),
+            NumberOfNodes::new(1),
+        )
+        .unwrap();
         let public_key = ThresholdSigPublicKey::from(CspThresholdSigPublicKey::from(
             combined_public_key(&public_coefficients).unwrap(),
         ));
@@ -572,7 +576,7 @@ impl StateMachine {
 
         Self {
             subnet_id,
-            secret_key: secret_key_bytes.get(0).unwrap().clone().unwrap(),
+            secret_key: secret_key_bytes.get(0).unwrap().clone(),
             public_key,
             registry_data_provider,
             registry_client,

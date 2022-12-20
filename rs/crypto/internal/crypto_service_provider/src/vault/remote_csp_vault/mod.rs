@@ -87,8 +87,8 @@ pub trait TarpcCspVault {
     async fn threshold_keygen_for_test(
         algorithm_id: AlgorithmId,
         threshold: NumberOfNodes,
-        signatory_eligibility: Vec<bool>,
-    ) -> Result<(CspPublicCoefficients, Vec<Option<KeyId>>), CspThresholdSignatureKeygenError>;
+        receivers: NumberOfNodes,
+    ) -> Result<(CspPublicCoefficients, Vec<KeyId>), CspThresholdSignatureKeygenError>;
 
     // Corresponds to `NiDkgCspVault.gen_dealing_encryption_key_pair()`.
     async fn gen_dealing_encryption_key_pair(

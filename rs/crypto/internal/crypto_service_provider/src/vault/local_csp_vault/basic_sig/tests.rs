@@ -137,9 +137,13 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
 
     let threshold = NumberOfNodes::from(1);
     let (_pub_coeffs, key_ids) = csp_vault
-        .threshold_keygen_for_test(AlgorithmId::ThresBls12_381, threshold, &[true])
+        .threshold_keygen_for_test(
+            AlgorithmId::ThresBls12_381,
+            threshold,
+            NumberOfNodes::from(1),
+        )
         .expect("failed to generate threshold sig keys");
-    let key_id = key_ids[0].expect("threshold sig key not generated");
+    let key_id = key_ids[0];
 
     let msg_len: usize = rng.gen_range(0..1024);
     let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();

@@ -11,7 +11,7 @@ mod internal_types {
     pub use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes as ThresholdPublicKeyBytes;
 }
 mod clib {
-    pub use crate::api::keygen as threshold_keygen;
+    pub use crate::api::generate_threshold_key;
     pub use crate::types::SecretKeyBytes as ThresholdSecretKeyBytes;
 }
 use super::*;
@@ -99,21 +99,16 @@ fn wrong_pop_should_not_verify() {
 
 /// Generates valid threshold keys and the corresponding public coefficients
 fn generate_threshold_keys(
-    num_receivers: usize,
+    num_receivers: u32,
     threshold: NumberOfNodes,
     seed: Seed,
 ) -> (
     internal_types::PublicCoefficientsBytes,
     Vec<clib::ThresholdSecretKeyBytes>,
 ) {
-    let receiver_eligibility = vec![true; num_receivers];
-    let (public_coefficients, threshold_keys_maybe) =
-        clib::threshold_keygen(seed, threshold, &receiver_eligibility[..])
+    let (public_coefficients, threshold_keys) =
+        clib::generate_threshold_key(seed, threshold, NumberOfNodes::from(num_receivers))
             .expect("Test fail: Threshold keygen failed");
-    let threshold_keys = threshold_keys_maybe
-        .iter()
-        .map(|key_maybe| key_maybe.clone().unwrap())
-        .collect::<Vec<_>>();
     let public_coefficients = internal_types::PublicCoefficientsBytes {
         coefficients: public_coefficients
             .coefficients
@@ -152,7 +147,7 @@ fn encryption_should_work() {
     let threshold = NumberOfNodes::from(2);
 
     let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as usize,
+        NUM_RECEIVERS as u32,
         threshold,
         Seed::from_bytes(&[99u8; 32]),
     );
@@ -191,7 +186,7 @@ fn encrypted_messages_should_decrypt() {
     let threshold = NumberOfNodes::from(2);
 
     let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as usize,
+        NUM_RECEIVERS as u32,
         threshold,
         Seed::from_bytes(&[99u8; 32]),
     );
@@ -255,7 +250,7 @@ fn decryption_should_fail_below_epoch() {
     rng.fill_bytes(&mut associated_data[..]);
 
     let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as usize,
+        NUM_RECEIVERS as u32,
         threshold,
         Seed::from_bytes(&[99u8; 32]),
     );
@@ -341,7 +336,7 @@ fn zk_proofs_should_verify() {
     rng.fill_bytes(&mut associated_data[..]);
     let threshold = NumberOfNodes::from(2);
     let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as usize,
+        NUM_RECEIVERS as u32,
         threshold,
         Seed::from_bytes(&[99u8; 32]),
     );
@@ -394,7 +389,7 @@ fn zk_proofs_should_not_verify_with_wrong_epoch() {
     let threshold = NumberOfNodes::from(2);
 
     let (public_coefficients, threshold_keys) = generate_threshold_keys(
-        NUM_RECEIVERS as usize,
+        NUM_RECEIVERS as u32,
         threshold,
         Seed::from_bytes(&[99u8; 32]),
     );

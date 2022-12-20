@@ -23,21 +23,17 @@ mod util {
 
     /// Shim for tests that use the old API that generated keys for all
     /// participants. The new API generates only select keys.
-    ///
-    /// TODO(DFN-1412): Test scenarios where only some keys are generated
-    pub fn keygen(
+    pub fn generate_threshold_key(
         seed: Seed,
         threshold: NumberOfNodes,
         group_size: NumberOfNodes,
     ) -> CryptoResult<(PublicCoefficientsBytes, Vec<SecretKeyBytes>)> {
-        let selection = &vec![true; group_size.get() as usize];
-        tsig::keygen(seed, threshold, selection).map(|(public_coefficients, selected_keys)| {
-            let all_keys: Vec<SecretKeyBytes> = selected_keys
-                .into_iter()
-                .map(|key_maybe| key_maybe.unwrap())
-                .collect();
-            (public_coefficients, all_keys)
-        })
+        tsig::generate_threshold_key(seed, threshold, group_size).map(
+            |(public_coefficients, selected_keys)| {
+                let all_keys: Vec<SecretKeyBytes> = selected_keys.into_iter().collect();
+                (public_coefficients, all_keys)
+            },
+        )
     }
 }
 
@@ -49,7 +45,7 @@ fn test_individual_signature_verifies(
     message: &[u8],
 ) {
     let (public_coefficients, secret_keys) =
-        util::keygen(seed, threshold, group_size).expect("Failed to deal");
+        util::generate_threshold_key(seed, threshold, group_size).expect("Failed to deal");
     for (index, secret_key) in (0..).zip(secret_keys) {
         let signature = tsig::sign_message(message, &secret_key).expect("Failed to sign");
         let public_key = tsig::individual_public_key(&public_coefficients, index)
@@ -66,7 +62,8 @@ fn test_combined_signature_verifies(
 ) {
     let mut rng = seed.into_rng();
     let (public_coefficients, secret_keys) =
-        util::keygen(Seed::from_rng(&mut rng), threshold, group_size).expect("Failed to deal");
+        util::generate_threshold_key(Seed::from_rng(&mut rng), threshold, group_size)
+            .expect("Failed to deal");
     let signatures: Vec<IndividualSignatureBytes> = secret_keys
         .iter()
         .map(|secret_key| tsig::sign_message(message, secret_key).expect("Failed to sign"))
@@ -133,11 +130,14 @@ fn test_threshold_sig_api_and_core_match(
 ) {
     let mut rng = seed.into_rng();
     let seed_bytes = rng.gen::<[u8; 32]>();
-    let (core_public_coefficients, core_secret_keys) =
-        crypto::tests::util::keygen(Seed::from_bytes(&seed_bytes), threshold, group_size)
-            .expect("Core failed to deal");
+    let (core_public_coefficients, core_secret_keys) = crypto::tests::util::generate_threshold_key(
+        Seed::from_bytes(&seed_bytes),
+        threshold,
+        group_size,
+    )
+    .expect("Core failed to deal");
     let (tsig_public_coefficients, tsig_secret_keys) =
-        util::keygen(Seed::from_bytes(&seed_bytes), threshold, group_size)
+        util::generate_threshold_key(Seed::from_bytes(&seed_bytes), threshold, group_size)
             .expect("Threshold sig failed to deal");
     assert_eq!(
         PublicCoefficientsBytes::from(&core_public_coefficients),

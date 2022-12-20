@@ -66,24 +66,22 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         &self,
         algorithm_id: AlgorithmId,
         threshold: ic_types::NumberOfNodes,
-        signatory_eligibilty: &[bool],
-    ) -> Result<(CspPublicCoefficients, Vec<Option<KeyId>>), CspThresholdSignatureKeygenError> {
+        receivers: ic_types::NumberOfNodes,
+    ) -> Result<(CspPublicCoefficients, Vec<KeyId>), CspThresholdSignatureKeygenError> {
         match algorithm_id {
             AlgorithmId::ThresBls12_381 => {
                 let seed = Seed::from_rng(&mut *self.rng_write_lock());
                 let (public_coefficients, secret_keys) =
-                    bls12381_clib::api::keygen(seed, threshold, signatory_eligibilty)?;
-                let key_ids: Vec<Option<KeyId>> = secret_keys
+                    bls12381_clib::api::generate_threshold_key(seed, threshold, receivers)?;
+                let key_ids: Vec<KeyId> = secret_keys
                     .iter()
-                    .map(|secret_key_maybe| {
-                        secret_key_maybe.clone().map(|secret_key| loop {
-                            let key_id = KeyId::from(self.rng_write_lock().gen::<[u8; 32]>());
-                            let csp_secret_key = CspSecretKey::ThresBls12_381(secret_key.clone());
-                            let result = self.sks_write_lock().insert(key_id, csp_secret_key, None);
-                            if result.is_ok() {
-                                break key_id;
-                            }
-                        })
+                    .map(|secret_key| loop {
+                        let key_id = KeyId::from(self.rng_write_lock().gen::<[u8; 32]>());
+                        let csp_secret_key = CspSecretKey::ThresBls12_381(secret_key.clone());
+                        let result = self.sks_write_lock().insert(key_id, csp_secret_key, None);
+                        if result.is_ok() {
+                            break key_id;
+                        }
                     })
                     .collect();
                 let csp_public_coefficients = CspPublicCoefficients::Bls12_381(public_coefficients);

@@ -194,12 +194,10 @@ impl<
         _: context::Context,
         algorithm_id: AlgorithmId,
         threshold: NumberOfNodes,
-        signatory_eligibility: Vec<bool>,
-    ) -> Result<(CspPublicCoefficients, Vec<Option<KeyId>>), CspThresholdSignatureKeygenError> {
+        receivers: NumberOfNodes,
+    ) -> Result<(CspPublicCoefficients, Vec<KeyId>), CspThresholdSignatureKeygenError> {
         let vault = self.local_csp_vault;
-        let job = move || {
-            vault.threshold_keygen_for_test(algorithm_id, threshold, &signatory_eligibility)
-        };
+        let job = move || vault.threshold_keygen_for_test(algorithm_id, threshold, receivers);
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 

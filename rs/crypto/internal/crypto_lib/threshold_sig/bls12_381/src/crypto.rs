@@ -14,7 +14,6 @@ use ic_types::{
     crypto::{AlgorithmId, CryptoError, CryptoResult},
     NodeIndex, NumberOfNodes,
 };
-use std::convert::TryFrom;
 
 /// Domain separator for Hash-to-G1 to be used for signature generation as
 /// as specified in the Basic ciphersuite in https://tools.ietf.org/html/draft-irtf-cfrg-bls-signature-04#section-4.2.1
@@ -64,30 +63,29 @@ pub(crate) fn x_for_index(index: NodeIndex) -> Scalar {
 ///   It must be treated as a secret.
 /// * `threshold` - the minimum number of individual signatures that can be
 ///   combined into a valid threshold signature.
-/// * `share_indices` - a vector with one entry per receiver.  The entry is true
-///   iff the receiver is eligible to receive a threshold key.
+/// * `receivers` - the number of receivers
 ///
 /// # Errors
 /// * `InvalidArgumentError` if
-///   - The number of share indices is too large to be stored as type
+///   - The number of receivers is too large to be stored as type
 ///     `NumberOfNodes`.
 ///   - The number of eligible receivers is below the threshold; under these
 ///     circumstances the receivers could never generate a valid threshold key.
-pub(crate) fn keygen(
+pub(crate) fn generate_threshold_key(
     seed: Seed,
     threshold: NumberOfNodes,
-    share_indices: &[bool],
-) -> Result<(PublicCoefficients, Vec<Option<SecretKey>>), InvalidArgumentError> {
-    verify_keygen_args(threshold, share_indices)?;
+    receivers: NumberOfNodes,
+) -> Result<(PublicCoefficients, Vec<SecretKey>), InvalidArgumentError> {
+    verify_keygen_args(threshold, receivers)?;
     let mut rng = seed.into_rng();
     let polynomial = Polynomial::random(threshold.get() as usize, &mut rng);
-    Ok(keygen_from_polynomial(polynomial, share_indices))
+    Ok(keygen_from_polynomial(polynomial, receivers))
 }
 
-/// Generates keys for a (t,n)-threshold signature scheme, using an existing
+/// Generates keys for a (t,n)-threshold signature scheme, resharing an existing
 /// secret key.
 ///
-/// This method is identical to `keygen(..)` except that the threshold secret
+/// This method is identical to `generate_threshold_key(..)` except that the threshold secret
 /// key is specified (i.e. the constant term of the randomly-generated
 /// polynomial is set to `secret`).
 ///
@@ -95,9 +93,8 @@ pub(crate) fn keygen(
 /// * `seed` - randomness used to seed the PRNG for generating the polynomial.
 ///   It must be treated as a secret.
 /// * `threshold` - the minimum number of individual signatures that can be
-///   combined into a valid threshold signature.
-/// * `share_indices` - a vector with one entry per receiver.  The entry is true
-///   iff the receiver is eligible to receive a threshold key.
+///   combined into a valid threshold signature. (aka, t)
+/// * `receivers` - the number of receivers (aka, n)
 /// * `secret` - an existing secret key, which is to be shared.
 ///
 /// # Errors
@@ -107,13 +104,13 @@ pub(crate) fn keygen(
 /// * The number of eligible receivers is below the threshold; under these
 ///   circumstances the receivers could never generate a valid threshold key.
 /// * The `threshold` is `0`.
-pub(crate) fn keygen_with_secret(
+pub(crate) fn threshold_share_secret_key(
     seed: Seed,
     threshold: NumberOfNodes,
-    share_indices: &[bool],
+    receivers: NumberOfNodes,
     secret: &SecretKey,
-) -> Result<(PublicCoefficients, Vec<Option<SecretKey>>), InvalidArgumentError> {
-    verify_keygen_args(threshold, share_indices)?;
+) -> Result<(PublicCoefficients, Vec<SecretKey>), InvalidArgumentError> {
+    verify_keygen_args(threshold, receivers)?;
     // If a secret is provided we have one additional constraint:
     if threshold == NumberOfNodes::from(0) {
         return Err(InvalidArgumentError {
@@ -130,45 +127,28 @@ pub(crate) fn keygen_with_secret(
         polynomial.coefficients[0] = secret.clone();
         polynomial
     };
-    Ok(keygen_from_polynomial(polynomial, share_indices))
+    Ok(keygen_from_polynomial(polynomial, receivers))
 }
 
 /// Verifies that the keygen args are satisfiable.
 ///
 /// # Arguments
-/// * `share_indices` - a vector with one entry per receiver.  The entry is true
-///   iff the receiver is eligible to receive a threshold key.
 /// * `threshold` - the minimum number of individual signatures that can be
 ///   combined into a valid threshold signature.
+/// * `receivers` - the total number of shares that are created
 /// # Errors
 /// This returns an error if:
-/// * The number of share indices is too large to be stored as type
-///   NumberOfNodes.
 /// * The number of eligible receivers is below the threshold; under these
 ///   circumstances the receivers could never generate a valid threshold key.
 fn verify_keygen_args(
     threshold: NumberOfNodes,
-    share_indices: &[bool],
+    receivers: NumberOfNodes,
 ) -> Result<(), InvalidArgumentError> {
-    if NodeIndex::try_from(share_indices.len()).is_err() {
-        return Err(InvalidArgumentError {
-            message: format!(
-                "Too many share indices: (share_indices.len()={} !<= {}=max)",
-                share_indices.len(),
-                NodeIndex::max_value()
-            ),
-        });
-    }
-    let number_of_eligible_nodes = NumberOfNodes::from(
-        NodeIndex::try_from(share_indices.iter().filter(|x| **x).count())
-            .expect("Cannot fail because this is less than the total number of nodes"),
-    );
-    if threshold > number_of_eligible_nodes {
+    if threshold > receivers {
         return Err(InvalidArgumentError {
             message: format!(
                 "Threshold too high: (threshold={} !<= {}=num_shares)",
-                threshold.get(),
-                number_of_eligible_nodes,
+                threshold, receivers,
             ),
         });
     }
@@ -178,19 +158,11 @@ fn verify_keygen_args(
 /// Generates keys from a polynomial
 fn keygen_from_polynomial(
     polynomial: Polynomial,
-    share_indices: &[bool],
-) -> (PublicCoefficients, Vec<Option<SecretKey>>) {
+    receivers: NumberOfNodes,
+) -> (PublicCoefficients, Vec<SecretKey>) {
     let public_coefficients = PublicCoefficients::from(&polynomial);
-    let shares: Vec<Option<SecretKey>> = share_indices
-        .iter()
-        .zip(0_u32..)
-        .map(|(needs_share, index)| {
-            if *needs_share {
-                Some(polynomial.evaluate_at(&x_for_index(index)))
-            } else {
-                None
-            }
-        })
+    let shares = (0..receivers.get())
+        .map(|idx| polynomial.evaluate_at(&x_for_index(idx)))
         .collect();
     (public_coefficients, shares)
 }

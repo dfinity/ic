@@ -253,21 +253,14 @@ pub mod util {
             Csp::of(csprng, secret_key_store, public_key_store)
         };
 
-        match csp.threshold_keygen(
-            AlgorithmId::ThresBls12_381,
-            threshold,
-            &vec![true; number_of_signers.get() as usize],
-        ) {
+        match csp.threshold_keygen(AlgorithmId::ThresBls12_381, threshold, number_of_signers) {
             Ok((public_coefficients, key_ids)) => {
                 assert!(
                     number_of_signers >= threshold,
                     "Generated keys even though the threshold is too high"
                 );
 
-                let signers: Vec<_> = key_ids
-                    .iter()
-                    .map(|key_id_maybe| (&csp, key_id_maybe.expect("Missing key")))
-                    .collect();
+                let signers: Vec<_> = key_ids.iter().map(|key_id| (&csp, *key_id)).collect();
 
                 test_threshold_signatures(
                     &public_coefficients,
