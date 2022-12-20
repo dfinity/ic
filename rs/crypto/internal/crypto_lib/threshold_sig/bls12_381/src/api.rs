@@ -233,14 +233,14 @@ pub fn verify_individual_signature(
 /// Verifies that a combined signature is valid.
 ///
 /// # Arguments
-/// * `message` is the bytes that have been signed.  Note: This may be changed
-///   to a `[u8;32]` and renamed to hash pending discussion.  See TODO: DFN-1430
+/// * `message` is the bytes that have been signed.
 /// * `signature` is the combined signature to be verified.
 /// * `public_key` is the combined public key for the threshold signature.
 /// # Panics
 /// This method is not expected to panic.
 /// # Errors
-/// * If `signature` or `public_key` cannot be parsed, this will return an
+/// * If `signature` or `public_key` cannot be parsed, or if the signature
+///   is not valid for this `public_key` and `message`, this will return an
 ///   error.
 pub fn verify_combined_signature(
     message: &[u8],
@@ -250,6 +250,49 @@ pub fn verify_combined_signature(
     let signature = (&signature).try_into()?;
     let pk = PublicKey::try_from(&public_key)?;
     crypto::verify_combined_sig(message, &signature, &pk)
+}
+
+/// Verifies that a combined signature is valid, making use of a cache
+///
+/// The cache is a global shared signature cache defined in `cache.rs`
+/// that caches a fixed number of signatures with an LRU eviction
+/// policy.  Cache hits are significantly (~1000x) faster than
+/// verifying the BLS signature directly. Using this function can be
+/// beneficial in cases where the same BLS signature is repeatedly verified.
+///
+/// # Arguments
+/// * `message` is the bytes that have been signed.
+/// * `signature` is the combined signature to be verified.
+/// * `public_key` is the combined public key for the threshold signature.
+/// # Panics
+/// This method is not expected to panic.
+/// # Errors
+/// * If `signature` or `public_key` cannot be parsed, or if the signature
+///   is not valid for this `public_key` and `message`, this will return an
+///   error.
+pub fn verify_combined_signature_with_cache(
+    message: &[u8],
+    signature: CombinedSignatureBytes,
+    public_key: PublicKeyBytes,
+) -> CryptoResult<()> {
+    let entry = crate::cache::SignatureCacheEntry::new(&public_key.0, &signature.0, message);
+
+    if crate::cache::SignatureCache::global().contains(&entry) {
+        return Ok(());
+    }
+
+    let result = verify_combined_signature(message, signature, public_key);
+
+    if result.is_ok() {
+        crate::cache::SignatureCache::global().insert(&entry);
+    }
+
+    result
+}
+
+/// Return statistics related to the verify_combined_signature_with_cache cache
+pub fn bls_signature_cache_statistics() -> crate::cache::SignatureCacheStatistics {
+    crate::cache::SignatureCache::global().cache_statistics()
 }
 
 /// Converts public key bytes into its DER-encoded form.

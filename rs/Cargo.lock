@@ -1171,6 +1171,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cached"
+version = "0.41.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec6d20b3d24b6c74e2c5331d2d3d8d1976a9883c7da179aa851afa4c90d62e36"
+dependencies = [
+ "hashbrown",
+ "instant",
+ "once_cell",
+ "thiserror",
+]
+
+[[package]]
 name = "call-tree-test"
 version = "0.8.0"
 dependencies = [
@@ -5241,6 +5253,7 @@ version = "0.8.0"
 dependencies = [
  "arrayvec 0.5.2",
  "base64 0.11.0",
+ "cached",
  "criterion",
  "hex",
  "ic-crypto-internal-bls12-381-type",
@@ -5251,6 +5264,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
  "lazy_static",
+ "parking_lot 0.12.1",
  "proptest",
  "proptest-derive",
  "rand 0.8.5",
