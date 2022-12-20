@@ -6,7 +6,7 @@ workspace(
 load("//third_party/lmdb-0.9.70:repository.bzl", "lmdb_repository")
 load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
 load("//third_party/wabt-rs-0.10.0:repository.bzl", "wabt_rs_repository")
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
 http_archive(
@@ -351,4 +351,12 @@ filegroup(name = "artifacts", srcs = glob(["build/*", "test-data/*"]), visibilit
       """,
     sha256 = "f1279374ed0ddc6a4f33ed4f8b2c527ec004d1a9a7e9e814edd5506cb80a09e6",
     urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-8384593e-x86_64-linux.tar.gz"],
+)
+
+# Bitcoin canister
+
+http_file(
+    name = "btc_canister",
+    sha256 = "8ade1e03964a70b3204f26d05bf714150db98f016294dd38f18cd24ceadd2276",
+    url = "https://github.com/dfinity/bitcoin-canister/releases/download/release%2F2022-12-02/ic-btc-canister.wasm.gz",
 )

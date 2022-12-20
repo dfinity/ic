@@ -95,9 +95,14 @@ CANISTERS_MAX_SIZE_IN_BYTES = {
     for (name, target) in CANISTERS.items()
 ]
 
+alias(
+    name = "ic-btc-canister.wasm.gz",
+    actual = "@btc_canister//file",
+)
+
 filegroup(
     name = "canisters",
-    srcs = [name + ".gz" for name in CANISTERS],
+    srcs = [name + ".gz" for name in CANISTERS] + [":ic-btc-canister.wasm.gz"],
     visibility = ["//visibility:public"],
 )
 
