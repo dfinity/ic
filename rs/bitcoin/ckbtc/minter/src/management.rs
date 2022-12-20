@@ -51,6 +51,8 @@ pub enum Reason {
     QueueIsFull,
     /// The canister does not have enough cycles to submit the request.
     OutOfCycles,
+    /// The call failed with an error.
+    CanisterError(String),
     /// The management canister rejected the signature request (not enough
     /// cycles, the ECDSA subnet is overloaded, etc.).
     Rejected(String),
@@ -61,6 +63,7 @@ impl fmt::Display for Reason {
         match self {
             Self::QueueIsFull => write!(fmt, "the canister queue is full"),
             Self::OutOfCycles => write!(fmt, "the canister is out of cycles"),
+            Self::CanisterError(msg) => write!(fmt, "canister error: {}", msg),
             Self::Rejected(msg) => {
                 write!(fmt, "the management canister rejected the call: {}", msg)
             }
@@ -72,7 +75,7 @@ impl Reason {
     fn from_reject(reject_code: RejectionCode, reject_message: String) -> Self {
         match reject_code {
             RejectionCode::SysTransient => Self::QueueIsFull,
-            RejectionCode::CanisterError => Self::OutOfCycles,
+            RejectionCode::CanisterError => Self::CanisterError(reject_message),
             RejectionCode::CanisterReject => Self::Rejected(reject_message),
             _ => Self::QueueIsFull,
         }

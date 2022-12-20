@@ -1,5 +1,7 @@
+use crate::logs::P1;
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
+use ic_canister_log::log;
 use ic_icrc1::{
     endpoints::{TransferArg, TransferError},
     Account,
@@ -95,6 +97,14 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         block_index,
         received_at: ic_cdk::api::time(),
     };
+
+    log!(
+        P1,
+        "accepted a retrieve btc request for {} BTC to address {} (block_index = {})",
+        crate::tx::DisplayAmount(request.amount),
+        args.address,
+        request.block_index
+    );
 
     mutate_state(|s| state::audit::accept_retrieve_btc_request(s, request));
 

@@ -222,7 +222,7 @@ async fn submit_pending_requests() {
             Err(BuildTxError::AmountTooLow) => {
                 log!(P0,
                     "[heartbeat]: dropping requests for total BTC amount {} to addresses {} (too low to cover the fees)",
-                    batch.iter().map(|req| req.amount).sum::<u64>(),
+                    tx::DisplayAmount(batch.iter().map(|req| req.amount).sum::<u64>()),
                     batch.iter().map(|req| req.address.display(s.btc_network)).collect::<Vec<_>>().join(",")
                 );
 
@@ -236,7 +236,7 @@ async fn submit_pending_requests() {
             Err(BuildTxError::ZeroOutput { address, amount }) => {
                 log!(P0,
                     "[heartbeat]: dropping a request for BTC amount {} to {} (too low to cover the fees)",
-                     amount, address.display(s.btc_network)
+                     tx::DisplayAmount(amount), address.display(s.btc_network)
                 );
 
                 let mut requests_to_put_back = vec![];
@@ -433,7 +433,7 @@ async fn finalize_requests() {
             P1,
             "[heartbeat]: finalized transaction {} (retrieved amount = {}) at {} (after {} sec)",
             tx::DisplayTxid(&req.txid),
-            req.requests.iter().map(|r| r.amount).sum::<u64>(),
+            tx::DisplayAmount(req.requests.iter().map(|r| r.amount).sum::<u64>()),
             now,
             (now - req.submitted_at) / 1_000_000_000
         );
