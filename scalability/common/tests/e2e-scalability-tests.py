@@ -105,6 +105,21 @@ def main(argv):
                 + base_arguments
             )
 
+            print("📂 Delegated workload")
+            run(
+                [
+                    "python3",
+                    "experiments/run_delegation_experiment.py",
+                    "--num_procs",
+                    "2",
+                    "--num_tasks",
+                    "2",
+                    "--num_requests",
+                    "5",
+                ]
+                + base_arguments
+            )
+
             # Benchmarks WITH load generation
             # --------------------------------------------------
             # Turns off replicas, so only load based benchmarks from this point onward.
@@ -266,6 +281,7 @@ def main(argv):
                 ]
                 + base_arguments_load_test
             )
+
         finally:
             # We save prometheus' data directory such that a user can later
             # manually launch a local prometheus and grafana server on this data

@@ -56,7 +56,7 @@ def get_delegation(host_url):
     ii_canister_id = "not-available"  # any invalid canister ID should do here.
     if os.path.exists("ii/canister_id"):
         with open("ii/canister_id", "r") as f:
-            ii_canister_id = f.read()
+            ii_canister_id = f.read().strip()
 
     challenge = None
     try:

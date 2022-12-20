@@ -176,16 +176,19 @@ class BaseExperiment:
         print(f"Using workload generator at {self.workload_generator_path}")
 
     def get_machine_to_instrument(self) -> str:
+        return self.get_machines_to_target()[0]
+
+    def get_machines_to_target(self) -> [str]:
         """Return the machine to instrument."""
         if len(FLAGS.targets) > 0:
-            return FLAGS.targets.split(",")[0]
+            return FLAGS.targets.split(",")
 
         topology = self.__get_topology()
         for subnet, info in topology["topology"]["subnets"].items():
             subnet_type = info["records"][0]["value"]["subnet_type"]
             members = info["records"][0]["value"]["membership"]
             if subnet_type == "application":
-                return self.get_node_ip_address(members[0])
+                return [self.get_node_ip_address(m) for m in members]
 
     def get_subnet_to_instrument(self) -> str:
         """Return the subnet to instrument."""
@@ -450,14 +453,16 @@ class BaseExperiment:
             cmd += ["--canister", canister]
         return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    def install_canister(self, target: str, canister=None, check=True) -> str:
+    def install_canister(self, target: str = None, canister=None, check=True) -> str:
         """
-        Install the canister on the given machine.
+        Install the canister on the machine given by IPv6 address.
 
         Note that canisters are currently always installed as best effort.
 
         Returns the canister ID if installation was successful.
         """
+        if target is None:
+            target = self.get_machine_to_instrument()
         print(f"Installing canister .. {canister} on {target}")
         this_canister = canister if canister is not None else "counter"
         this_canister_name = "".join(this_canister.split("#")[0])

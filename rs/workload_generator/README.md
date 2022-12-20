@@ -12,6 +12,8 @@ Generally, see `--help` for a description of available commands.
 
 Originally based on rench (https://github.com/kbacha/rench)
 
+Build in debug mode to get debug output.
+
 # Summary status counts
 - 200: all good (query), great success
 - 202: all good (update), great success
@@ -35,8 +37,17 @@ Originally based on rench (https://github.com/kbacha/rench)
   - The name of the canister method to call should be given using `--canister-method-name=<method name>`.
   - The custom arguments for the canister method can be provided in `--payload=<payload string>` as string.
 
+# Bugs
+
+ - The interactive progress bar sometimes overwrites error messages (concurrently writing stdout with anything that overwrites lines in the terminal is dangerous in general). If you suspect output get lost, use `--periodic-output`
+
 # Limitations
 
  - The workload generator only installs a single canister per invocation.
  - Update calls on a canister are executed sequentially one update at a time.
  - The current implementation starts checking the update request status 2s after submission and stops checking the update request status after 60 s (IC MAX TTL is currently 5min) to limit the number of status queries per request, could/should be turned into a command line argument.
+
+# Run against mainnet using boundary nodes
+
+ - Simply use https://ic0.app as hostname.
+ - Make sure to set `--no-status-check`
