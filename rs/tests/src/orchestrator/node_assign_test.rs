@@ -22,7 +22,7 @@ Success:: nodes can be added/killed to/within the existing subnet.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_message_canisters;
+use super::utils::rw_message::install_nns_and_check_progress;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed};
@@ -57,7 +57,7 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_message_canisters(env.topology_snapshot());
+    install_nns_and_check_progress(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {

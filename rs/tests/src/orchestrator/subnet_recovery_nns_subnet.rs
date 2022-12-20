@@ -17,7 +17,7 @@ Success::
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_message_canisters;
+use super::utils::rw_message::install_nns_and_check_progress;
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
@@ -45,7 +45,7 @@ pub fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_message_canisters(env.topology_snapshot());
+    install_nns_and_check_progress(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {

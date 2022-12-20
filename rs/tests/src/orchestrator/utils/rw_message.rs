@@ -210,11 +210,7 @@ pub(crate) fn cert_state_makes_no_progress_with_retries(
     .expect("System shouldn't make progress!");
 }
 
-pub(crate) fn install_nns_and_message_canisters(topology: TopologySnapshot) {
-    check_or_init_ic(topology, true)
-}
-
-fn check_or_init_ic(topology: TopologySnapshot, install_canisters: bool) {
+pub(crate) fn install_nns_and_check_progress(topology: TopologySnapshot) {
     let logger = topology.test_env().logger();
     // Perfrom IC checks prior to canister installation.
     // 1. Check that all subnet nodes are healthy.
@@ -230,29 +226,25 @@ fn check_or_init_ic(topology: TopologySnapshot, install_canisters: bool) {
             .expect("Timeout while waiting for all unassigned nodes to be healthy");
     });
     info!(logger, "IC is healthy and ready.");
-    if install_canisters {
-        topology
-            .root_subnet()
-            .nodes()
-            .next()
-            .unwrap()
-            .install_nns_canisters()
-            .expect("NNS canisters not installed");
-        info!(logger, "NNS canisters are installed.");
-    }
+    topology
+        .root_subnet()
+        .nodes()
+        .next()
+        .unwrap()
+        .install_nns_canisters()
+        .expect("NNS canisters not installed");
+    info!(logger, "NNS canisters are installed.");
     topology.subnets().for_each(|subnet| {
         if subnet.subnet_id != topology.root_subnet_id() {
             subnet.nodes().for_each(|node| {
                 // make sure the node is participating in a subnet
-                if install_canisters {
-                    cert_state_makes_progress_with_retries(
-                        &node.get_public_url(),
-                        node.effective_canister_id(),
-                        &logger,
-                        secs(600),
-                        secs(10),
-                    );
-                }
+                cert_state_makes_progress_with_retries(
+                    &node.get_public_url(),
+                    node.effective_canister_id(),
+                    &logger,
+                    secs(600),
+                    secs(10),
+                );
             });
         }
     });
