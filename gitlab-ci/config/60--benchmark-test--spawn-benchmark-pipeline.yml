@@ -712,3 +712,29 @@ tecdsa:
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -
+
+# BENCHMARK SUITE delegated identity
+delegated-identity-bench:
+  extends: .benchmark-test
+  artifacts:
+    when: always
+    paths:
+      - scalability/
+  variables:
+    TESTNET: "cdslo"
+  script:
+    - |
+      set -eExou pipefail
+      git fetch
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
+
+      $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
+      cd ./scalability
+
+      $SHELL_WRAPPER pipenv --python 3
+      $SHELL_WRAPPER pipenv install -r requirements.txt
+
+      $SHELL_WRAPPER pipenv run python3 experiments/run_delegation_experiment.py --testnet $TESTNET --num_procs 64 --num_requests 20 --num_tasks 8 --rps 30,40,50,60,70
+
+      find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
+      cd -
