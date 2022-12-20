@@ -34,7 +34,6 @@ fi
 # Multipart upload does not work trough the proxy for some reasons. Just disabling it for now.
 "@@RCLONE@@" \
     --config="@@RCLONE_CONFIG@@" \
-    --progress \
     --stats-one-line \
     --checksum \
     --immutable \
