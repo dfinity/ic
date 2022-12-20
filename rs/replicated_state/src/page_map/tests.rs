@@ -1,7 +1,8 @@
 use super::{
     checkpoint::{Checkpoint, MappingSerialization},
     page_allocator::PageAllocatorSerialization,
-    Buffer, FileDescriptor, PageAllocator, PageDelta, PageIndex, PageMap, PageMapSerialization,
+    Buffer, FileDescriptor, PageAllocator, PageAllocatorRegistry, PageDelta, PageIndex, PageMap,
+    PageMapSerialization,
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES};
@@ -227,18 +228,21 @@ fn can_use_buffer_to_modify_page_map() {
 
 #[test]
 fn serialize_empty_page_map() {
+    let page_allocator_registry = PageAllocatorRegistry::new();
     let original_page_map = PageMap::new_for_testing();
     let serialized_page_map = duplicate_file_descriptors(original_page_map.serialize());
-    let deserialized_page_map = PageMap::deserialize(serialized_page_map).unwrap();
+    let deserialized_page_map =
+        PageMap::deserialize(serialized_page_map, &page_allocator_registry).unwrap();
     assert_equal_page_maps(&original_page_map, &deserialized_page_map);
 }
 
 #[test]
 fn serialize_page_map() {
+    let page_allocator_registry = PageAllocatorRegistry::new();
     let mut replica = PageMap::new_for_testing();
     // The replica process sends the page map to the sandbox process.
     let serialized_page_map = duplicate_file_descriptors(replica.serialize());
-    let mut sandbox = PageMap::deserialize(serialized_page_map).unwrap();
+    let mut sandbox = PageMap::deserialize(serialized_page_map, &page_allocator_registry).unwrap();
     // The sandbox process allocates new pages.
     let page_1 = [1u8; PAGE_SIZE];
     let page_3 = [3u8; PAGE_SIZE];

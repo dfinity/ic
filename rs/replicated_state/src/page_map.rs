@@ -8,8 +8,8 @@ use ic_sys::PageBytes;
 pub use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_utils::{deterministic_operations::deterministic_copy_from_slice, fs::write_all_vectored};
 pub use page_allocator::{
-    allocated_pages_count, PageAllocator, PageAllocatorSerialization, PageDeltaSerialization,
-    PageSerialization,
+    allocated_pages_count, PageAllocator, PageAllocatorRegistry, PageAllocatorSerialization,
+    PageDeltaSerialization, PageSerialization,
 };
 
 // NOTE: We use a persistent map to make snapshotting of a PageMap a cheap
@@ -375,9 +375,16 @@ impl PageMap {
     }
 
     /// Creates a page-map from the given serialization-friendly representation.
-    pub fn deserialize(page_map: PageMapSerialization) -> Result<Self, PersistenceError> {
+    /// The page allocator registry is needed to deduplicate page allocators
+    /// such that each page allocator is deserialized at most once. Otherwise,
+    /// two page allocators may share the same backing file and corrupt each
+    /// other's data.
+    pub fn deserialize(
+        page_map: PageMapSerialization,
+        registry: &PageAllocatorRegistry,
+    ) -> Result<Self, PersistenceError> {
         let checkpoint = Checkpoint::deserialize(page_map.checkpoint)?;
-        let page_allocator = PageAllocator::deserialize(page_map.page_allocator);
+        let page_allocator = PageAllocator::deserialize(page_map.page_allocator, registry);
         let page_delta =
             PageDelta::from(page_allocator.deserialize_page_delta(page_map.page_delta));
         let round_delta =

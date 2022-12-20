@@ -174,13 +174,16 @@ impl PageAllocatorInner {
     }
 
     // If the page allocator with the given id has already been deserialized and
-    // exists in the global `PageAllocatorRegistry`, then the function returns a
+    // exists in the given `PageAllocatorRegistry`, then the function returns a
     // reference to that page allocator.
     // Otherwise, the function creates a new page allocator and registers it in the
-    // global `PageAllocatorRegistry`.
-    pub fn deserialize(serialized_page_allocator: PageAllocatorSerialization) -> Arc<Self> {
+    // given `PageAllocatorRegistry`.
+    pub fn deserialize(
+        serialized_page_allocator: PageAllocatorSerialization,
+        registry: &PageAllocatorRegistry,
+    ) -> Arc<Self> {
         let PageAllocatorSerialization { id, fd } = serialized_page_allocator;
-        PageAllocatorRegistry::lookup_or_insert_with(&id, || {
+        registry.lookup_or_insert_with(&id, || {
             Arc::new(Self::open(id, fd, BackingFileOwner::AnotherAllocator))
         })
     }
