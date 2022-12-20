@@ -35,7 +35,7 @@ use ic_interfaces::execution_environment::{
     ExecutionMode, HypervisorError, HypervisorResult, WasmExecutionOutput,
 };
 use ic_logger::ReplicaLogger;
-use ic_replicated_state::page_map::PageMapSerialization;
+use ic_replicated_state::page_map::{PageAllocatorRegistry, PageMapSerialization};
 use ic_replicated_state::{EmbedderCache, Global, Memory, PageMap};
 use ic_types::CanisterId;
 
@@ -250,6 +250,7 @@ pub struct SandboxManager {
     repr: Mutex<SandboxManagerInt>,
     controller: Arc<dyn ControllerService>,
     embedder: Arc<WasmtimeEmbedder>,
+    page_allocator_registry: Arc<PageAllocatorRegistry>,
     log: ReplicaLogger,
 }
 struct SandboxManagerInt {
@@ -285,6 +286,7 @@ impl SandboxManager {
             controller,
             embedder,
             log,
+            page_allocator_registry: Arc::new(PageAllocatorRegistry::new()),
         }
     }
 
@@ -353,7 +355,7 @@ impl SandboxManager {
     /// Opens a new memory requested by the replica process.
     pub fn open_memory(&self, request: OpenMemoryRequest) {
         let mut guard = self.repr.lock().unwrap();
-        guard.open_memory(request);
+        guard.open_memory(request, &self.page_allocator_registry);
     }
 
     /// Adds a new memory after sandboxed execution.
@@ -524,7 +526,8 @@ impl SandboxManager {
     ) -> HypervisorResult<(MemoryModifications, Vec<Global>)> {
         let embedder = Arc::clone(&self.embedder);
 
-        let mut wasm_page_map = PageMap::deserialize(wasm_page_map).unwrap();
+        let mut wasm_page_map =
+            PageMap::deserialize(wasm_page_map, &self.page_allocator_registry).unwrap();
         let (exported_globals, wasm_memory_delta, wasm_memory_size) =
             ic_embedders::wasm_executor::get_initial_globals_and_memory(
                 data_segments,
@@ -550,8 +553,13 @@ impl SandboxManager {
 }
 
 impl SandboxManagerInt {
-    fn open_memory(&mut self, request: OpenMemoryRequest) {
-        let page_map = PageMap::deserialize(request.memory.page_map).unwrap();
+    fn open_memory(
+        &mut self,
+        request: OpenMemoryRequest,
+        page_allocator_registry: &PageAllocatorRegistry,
+    ) {
+        let page_map =
+            PageMap::deserialize(request.memory.page_map, page_allocator_registry).unwrap();
         let memory = Memory::new(page_map, request.memory.num_wasm_pages);
         self.add_memory(request.memory_id, memory);
     }

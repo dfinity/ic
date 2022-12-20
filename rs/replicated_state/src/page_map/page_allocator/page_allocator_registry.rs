@@ -5,15 +5,52 @@ use std::{
 
 use super::{PageAllocatorId, PageAllocatorInner};
 
-lazy_static::lazy_static! {
-    static ref PAGE_ALLOCATOR_REGISTRY: Mutex<PageAllocatorRegistry> = Mutex::new(PageAllocatorRegistry::new());
+/// It is used to deduplicate page allocators after deserialization in the
+/// sandbox process in order to ensure the 1:1 correspondence between page
+/// allocators in the replica and sandbox processes.
+pub struct PageAllocatorRegistry {
+    core: Mutex<PageAllocatorRegistryCore>,
 }
 
-/// A process-wide registry of page allocators. It is used to deduplicate page
-/// allocators after deserialization in the sandbox process in order to ensure
-/// the 1:1 correspondence between page allocators in the replica and sandbox
-/// processes.
-pub struct PageAllocatorRegistry {
+impl PageAllocatorRegistry {
+    pub fn new() -> Self {
+        Self {
+            core: Mutex::new(PageAllocatorRegistryCore::new()),
+        }
+    }
+
+    pub fn lookup_or_insert_with<F>(&self, id: &PageAllocatorId, f: F) -> Arc<PageAllocatorInner>
+    where
+        F: FnOnce() -> Arc<PageAllocatorInner>,
+    {
+        let mut registry = self.core.lock().unwrap();
+        registry.lookup_or_insert_with(id, f)
+    }
+
+    #[cfg(test)]
+    fn number_of_entries(&self) -> usize {
+        let registry = self.core.lock().unwrap();
+        registry.table.len()
+    }
+
+    #[cfg(test)]
+    fn number_of_nonempty_entries(&self) -> usize {
+        let registry = self.core.lock().unwrap();
+        registry
+            .table
+            .iter()
+            .filter(|(_k, v)| v.strong_count() > 0)
+            .count()
+    }
+}
+
+impl Default for PageAllocatorRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub struct PageAllocatorRegistryCore {
     // This table is empty in the replica process because replica never
     // deserializes page allocators. In the sandbox process, the table will
     // contain only dozen of entries at any time because each canister has
@@ -25,7 +62,7 @@ pub struct PageAllocatorRegistry {
     compaction_threshold: usize,
 }
 
-impl PageAllocatorRegistry {
+impl PageAllocatorRegistryCore {
     fn new() -> Self {
         Self {
             table: HashMap::default(),
@@ -36,12 +73,15 @@ impl PageAllocatorRegistry {
     /// Returns a page allocator with the given id if it exists.
     /// Otherwise, inserts a new page allocator constructed with the given
     /// function.
-    pub fn lookup_or_insert_with<F>(id: &PageAllocatorId, f: F) -> Arc<PageAllocatorInner>
+    pub fn lookup_or_insert_with<F>(
+        &mut self,
+        id: &PageAllocatorId,
+        f: F,
+    ) -> Arc<PageAllocatorInner>
     where
         F: FnOnce() -> Arc<PageAllocatorInner>,
     {
-        let mut registry = PAGE_ALLOCATOR_REGISTRY.lock().unwrap();
-        if let Some(weak) = registry.table.get(id) {
+        if let Some(weak) = self.table.get(id) {
             if let Some(pa) = weak.upgrade() {
                 return pa;
             }
@@ -49,32 +89,14 @@ impl PageAllocatorRegistry {
 
         let pa = f();
 
-        registry.table.insert(*id, Arc::downgrade(&pa));
-        if registry.table.len() >= registry.compaction_threshold {
+        self.table.insert(*id, Arc::downgrade(&pa));
+        if self.table.len() >= self.compaction_threshold {
             // Perform amortized compaction of the table.
-            registry
-                .table
-                .retain(|_key, value| value.strong_count() > 0);
-            registry.compaction_threshold = registry.table.len() * 2;
+            self.table.retain(|_key, value| value.strong_count() > 0);
+            self.compaction_threshold = self.table.len() * 2;
         }
 
         pa
-    }
-
-    #[cfg(test)]
-    fn number_of_entries() -> usize {
-        let registry = PAGE_ALLOCATOR_REGISTRY.lock().unwrap();
-        registry.table.len()
-    }
-
-    #[cfg(test)]
-    fn number_of_nonempty_entries() -> usize {
-        let registry = PAGE_ALLOCATOR_REGISTRY.lock().unwrap();
-        registry
-            .table
-            .iter()
-            .filter(|(_k, v)| v.strong_count() > 0)
-            .count()
     }
 }
 
@@ -87,19 +109,18 @@ mod tests {
 
     #[test]
     fn lookup_or_insert_with() {
+        let registry = PageAllocatorRegistry::new();
         let id1 = PageAllocatorId::default();
         let pa1 = Arc::new(PageAllocatorInner::new_for_testing());
 
         let id2 = PageAllocatorId::default();
         let pa2 = Arc::new(PageAllocatorInner::new_for_testing());
 
-        PageAllocatorRegistry::lookup_or_insert_with(&id1, || Arc::clone(&pa1));
-        PageAllocatorRegistry::lookup_or_insert_with(&id2, || Arc::clone(&pa2));
+        registry.lookup_or_insert_with(&id1, || Arc::clone(&pa1));
+        registry.lookup_or_insert_with(&id2, || Arc::clone(&pa2));
 
         // This lookup returns `pa1`.
-        let pa3 = PageAllocatorRegistry::lookup_or_insert_with(&id1, || {
-            unreachable!("the entry should exists")
-        });
+        let pa3 = registry.lookup_or_insert_with(&id1, || unreachable!("the entry should exists"));
 
         assert_eq!(pa1.serialize().id, pa3.serialize().id);
         assert_eq!(pa1.serialize().fd.fd, pa3.serialize().fd.fd);
@@ -109,7 +130,7 @@ mod tests {
         let pa4 = Arc::new(PageAllocatorInner::new_for_testing());
 
         // Since we dropped `pa2`, this lookup returns `pa4`.
-        let pa5 = PageAllocatorRegistry::lookup_or_insert_with(&id2, || Arc::clone(&pa4));
+        let pa5 = registry.lookup_or_insert_with(&id2, || Arc::clone(&pa4));
 
         assert_eq!(pa4.serialize().id, pa5.serialize().id);
         assert_eq!(pa4.serialize().fd.fd, pa5.serialize().fd.fd);
@@ -119,16 +140,17 @@ mod tests {
         drop(pa4);
         drop(pa5);
 
-        assert_eq!(0, PageAllocatorRegistry::number_of_nonempty_entries())
+        assert_eq!(0, registry.number_of_nonempty_entries())
     }
 
     #[test]
     fn compact() {
+        let registry = PageAllocatorRegistry::new();
         for _ in 0..1000 {
             let id1 = PageAllocatorId::default();
             let pa1 = Arc::new(PageAllocatorInner::new_for_testing());
-            PageAllocatorRegistry::lookup_or_insert_with(&id1, || pa1);
+            registry.lookup_or_insert_with(&id1, || pa1);
         }
-        assert!(PageAllocatorRegistry::number_of_entries() < 10);
+        assert!(registry.number_of_entries() < 10);
     }
 }

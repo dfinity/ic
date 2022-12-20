@@ -13,6 +13,8 @@ pub mod mmap;
 
 use mmap::{PageAllocatorId, PageAllocatorInner, PageInner};
 
+pub use self::page_allocator_registry::PageAllocatorRegistry;
+
 use super::{FileDescriptor, FileOffset};
 
 static ALLOCATED_PAGES: PageCounter = PageCounter::new();
@@ -90,10 +92,16 @@ impl PageAllocator {
         self.0.serialize()
     }
 
-    /// Creates a page allocator from the given serialization-friendly
-    /// representation.
-    pub fn deserialize(page_allocator: PageAllocatorSerialization) -> Self {
-        Self(PageAllocatorInner::deserialize(page_allocator))
+    // If the page allocator with the given id has already been deserialized and
+    // exists in the given `PageAllocatorRegistry`, then the function returns a
+    // reference to that page allocator.
+    // Otherwise, the function creates a new page allocator and registers it in the
+    // given `PageAllocatorRegistry`.
+    pub fn deserialize(
+        page_allocator: PageAllocatorSerialization,
+        registry: &PageAllocatorRegistry,
+    ) -> Self {
+        Self(PageAllocatorInner::deserialize(page_allocator, registry))
     }
 
     /// Returns a serialization-friendly representation of the given page-delta.

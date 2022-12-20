@@ -1,4 +1,6 @@
-use crate::page_map::FileDescriptor;
+use crate::page_map::{
+    page_allocator::page_allocator_registry::PageAllocatorRegistry, FileDescriptor,
+};
 
 use super::{PageAllocator, PageAllocatorSerialization, PageSerialization};
 use ic_sys::{PageIndex, PAGE_SIZE};
@@ -58,6 +60,7 @@ fn test_page_serialization() {
 
 #[test]
 fn test_page_deserialize_twice() {
+    let registry = PageAllocatorRegistry::new();
     let page_allocator: PageAllocator = PageAllocator::new_for_testing();
     let page = (PageIndex::new(1), &[1u8; PAGE_SIZE]);
     page_allocator.allocate(&[page]);
@@ -65,8 +68,8 @@ fn test_page_deserialize_twice() {
     let serialized1 = duplicate_file_descriptors(page_allocator.serialize());
     let serialized2 = duplicate_file_descriptors(page_allocator.serialize());
 
-    let deserialized1 = PageAllocator::deserialize(serialized1);
-    let deserialized2 = PageAllocator::deserialize(serialized2);
+    let deserialized1 = PageAllocator::deserialize(serialized1, &registry);
+    let deserialized2 = PageAllocator::deserialize(serialized2, &registry);
 
     assert_eq!(deserialized1.serialize().id, deserialized2.serialize().id);
     assert_eq!(
