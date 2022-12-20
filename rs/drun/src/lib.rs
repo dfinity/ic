@@ -6,6 +6,7 @@ use ic_config::{subnet_config::SubnetConfigs, Config};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
+use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces::{execution_environment::IngressHistoryReader, messaging::MessageRouting};
 use ic_interfaces_state_manager::StateReader;
 use ic_messaging::MessageRoutingImpl;
@@ -208,6 +209,13 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
             Arc::clone(&state_manager) as Arc<_>,
         )
         .into_parts();
+
+    let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
+        tokio::runtime::Handle::current(),
+        cfg.metrics,
+        metrics_registry.clone(),
+        &log,
+    );
 
     let message_routing = MessageRoutingImpl::new(
         Arc::clone(&state_manager) as _,

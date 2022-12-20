@@ -5748,6 +5748,7 @@ dependencies = [
  "ic-cycles-account-manager",
  "ic-error-types",
  "ic-execution-environment",
+ "ic-http-endpoints-metrics",
  "ic-ic00-types",
  "ic-interfaces",
  "ic-interfaces-state-manager",

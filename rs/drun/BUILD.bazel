@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
+    "//rs/http_endpoints/metrics",
     "//rs/interfaces",
     "//rs/interfaces/state_manager",
     "//rs/messaging",
