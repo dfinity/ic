@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 
@@ -95,9 +96,11 @@ CANISTERS_MAX_SIZE_IN_BYTES = {
     for (name, target) in CANISTERS.items()
 ]
 
-alias(
-    name = "ic-btc-canister.wasm.gz",
-    actual = "@btc_canister//file",
+# `bazel cquery --output=files` that is used by build-ic script does not show external sources of `filegroup` targets.
+copy_file(
+    name = "copy_ic-btc-canister.wasm.gz",
+    src = "@btc_canister//file",
+    out = "ic-btc-canister.wasm.gz",
 )
 
 filegroup(
