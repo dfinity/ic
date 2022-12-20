@@ -41,7 +41,7 @@ use ic_types::crypto::KeyPurpose;
 use ic_types::Height;
 use slog::{info, warn, Logger};
 
-use super::utils::rw_message::install_nns_and_message_canisters;
+use super::utils::rw_message::install_nns_and_check_progress;
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 3;
@@ -58,7 +58,7 @@ pub fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_message_canisters(env.topology_snapshot());
+    install_nns_and_check_progress(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {

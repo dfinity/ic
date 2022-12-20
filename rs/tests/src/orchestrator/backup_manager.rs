@@ -26,7 +26,7 @@ use crate::driver::test_env::HasIcPrepDir;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::{
     orchestrator::utils::{
-        rw_message::install_nns_and_message_canisters,
+        rw_message::install_nns_and_check_progress,
         ssh_access::{
             generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
             wait_until_authentication_is_granted, AuthMean,
@@ -63,7 +63,7 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_message_canisters(env.topology_snapshot());
+    install_nns_and_check_progress(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {

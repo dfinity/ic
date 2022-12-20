@@ -25,7 +25,7 @@ Coverage::
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_message_canisters;
+use super::utils::rw_message::install_nns_and_check_progress;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::nns::{add_nodes_to_subnet, change_subnet_membership, remove_nodes_via_endpoint};
@@ -55,7 +55,7 @@ pub fn config(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_message_canisters(env.topology_snapshot());
+    install_nns_and_check_progress(env.topology_snapshot());
 }
 
 pub fn test(env: TestEnv) {
