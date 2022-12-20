@@ -8,7 +8,7 @@ use crate::api::ni_dkg_errors::{
 };
 use crate::{
     api::individual_public_key,
-    crypto::{keygen, keygen_with_secret},
+    crypto::{generate_threshold_key, threshold_share_secret_key},
 };
 use ic_crypto_internal_seed::Seed;
 use ic_types::{NodeIndex, NumberOfNodes};
@@ -67,25 +67,17 @@ pub fn create_dealing(
     dealer_index: NodeIndex,
     resharing_secret: Option<ThresholdSecretKeyBytes>,
 ) -> Result<Dealing, CspDkgCreateReshareDealingError> {
+    let number_of_receivers =
+        number_of_receivers(receiver_keys).map_err(CspDkgCreateReshareDealingError::SizeError)?;
+
     // Check parameters
     {
-        let number_of_receivers = number_of_receivers(receiver_keys)
-            .map_err(CspDkgCreateReshareDealingError::SizeError)?;
         verify_threshold(threshold, number_of_receivers)
             .map_err(CspDkgCreateReshareDealingError::InvalidThresholdError)?;
         verify_receiver_indices(receiver_keys, number_of_receivers)?;
     }
 
     let (public_coefficients, threshold_secret_key_shares) = {
-        let selected_nodes: Vec<bool> = {
-            let max_node_index = receiver_keys.keys().max();
-            let mut selected =
-                vec![false; max_node_index.map(|index| *index as usize + 1).unwrap_or(0)];
-            for index in receiver_keys.keys() {
-                selected[*index as usize] = true;
-            }
-            selected
-        };
         if let Some(resharing_secret) = resharing_secret {
             let resharing_secret: ThresholdSecretKey =
                 ThresholdSecretKey::try_from(&resharing_secret).map_err(|_| {
@@ -97,15 +89,15 @@ pub fn create_dealing(
                     )
                 })?;
 
-            keygen_with_secret(
+            threshold_share_secret_key(
                 keygen_seed,
                 threshold,
-                &selected_nodes[..],
+                number_of_receivers,
                 &resharing_secret,
             )
             .map_err(CspDkgCreateReshareDealingError::InvalidThresholdError)
         } else {
-            keygen(keygen_seed, threshold, &selected_nodes[..])
+            generate_threshold_key(keygen_seed, threshold, number_of_receivers)
                 .map_err(CspDkgCreateReshareDealingError::InvalidThresholdError)
         }
     }?;
@@ -116,15 +108,11 @@ pub fn create_dealing(
         let key_message_pairs: Vec<_> = (0..)
             .zip(&threshold_secret_key_shares)
             .map(|(index, share)| {
-                let share = (*share)
-                    .clone()
-                    .expect("The keys should be contiguous but we have a missing entry.");
-                (
-                    *receiver_keys
-                        .get(&index)
-                        .expect("There should be a public key for each share"),
-                    share,
-                )
+                let share = share.clone();
+                let key = *receiver_keys
+                    .get(&index)
+                    .expect("There should be a public key for each share");
+                (key, share)
             })
             .collect();
         encrypt_and_prove(

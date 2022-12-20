@@ -48,22 +48,18 @@ pub trait ThresholdSignatureCspClient {
     ///   generation.
     /// * `threshold` is the minimum number of signatures that can be combined
     ///   to make a valid threshold signature.
-    /// * `signatory_eligibility` is a boolean indicating, for each signatory,
-    ///   whether they should receive a key.  The `i`th signatory should receive
-    ///   a key if and only if `signatory_eligibility[i]==true`.
+    /// * `receivers` is the number of receivers who receive a share
     /// # Returns
     /// * `CspPublicCoefficients` can be used by the caller to verify
     ///   signatures.
-    /// * `Vec<Option<KeyId>>` contains key identifiers.  The vector has the
-    ///   same length as the input `signatory_eligibility` and the i'th entry
-    ///   contains a secret key if and only if `signatory_eligibility[i]` is
-    ///   `true`.
+    /// * `Vec<KeyId>` contains key identifiers.  The vector has the
+    ///   same length as `receivers`.
     /// # Panics
     /// * An implementation MAY panic if it is unable to access the secret key
     ///   store to save keys or if it cannot access a suitable random number
     ///   generator.
     /// # Errors
-    /// * If `threshold > signatory_eligibility.len()` then it is impossible for
+    /// * If `threshold > receivers` then it is impossible for
     ///   the signatories to create a valid combined signature, so
     ///   implementations MUST return an error.
     /// * An implementation MAY return an error if it is temporarily unable to
@@ -73,8 +69,8 @@ pub trait ThresholdSignatureCspClient {
         &self,
         algorithm_id: AlgorithmId,
         threshold: NumberOfNodes,
-        signatory_eligibility: &[bool],
-    ) -> CryptoResult<(CspPublicCoefficients, Vec<Option<KeyId>>)>;
+        receivers: NumberOfNodes,
+    ) -> CryptoResult<(CspPublicCoefficients, Vec<KeyId>)>;
 
     /// Signs with a threshold key
     fn threshold_sign(

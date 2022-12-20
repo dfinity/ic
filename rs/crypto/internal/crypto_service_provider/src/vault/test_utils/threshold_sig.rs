@@ -245,7 +245,7 @@ pub fn test_threshold_scheme_with_basic_keygen(
     match csp_vault.threshold_keygen_for_test(
         AlgorithmId::ThresBls12_381,
         threshold,
-        &vec![true; number_of_signers.get() as usize],
+        number_of_signers,
     ) {
         Ok((public_coefficients, key_ids)) => {
             assert!(
@@ -255,7 +255,7 @@ pub fn test_threshold_scheme_with_basic_keygen(
 
             let signers: Vec<_> = key_ids
                 .iter()
-                .map(|key_id_maybe| (csp_vault.clone(), key_id_maybe.expect("Missing key")))
+                .map(|key_id| (csp_vault.clone(), *key_id))
                 .collect();
 
             test_threshold_signatures(

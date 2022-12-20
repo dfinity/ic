@@ -28,11 +28,8 @@
 //! * Potential signatories are stored in a list.  It is important to preserve
 //!   the order of signatories, especially in the case of distributed key
 //!   generation where multiple keys may be dealt for each signatory.
-//! * Given that signatories may become ineligible the standard form for storing
-//!   signatory information is `<Vec<Option<T>>`, where:
-//!   * the index in the vector corresponds to the signatory index
-//!   * the `Option` is set to `None` for ineligible, discredited or otherwise
-//!     non-participating signatories.
+//! * The standard form for storing signatory information is `Vec<T>`,
+//!   where: the index in the vector corresponds to the signatory index
 //! * The external API methods are equivalent to internal methods but use opaque
 //!   data types. The external API parses requests to the internal types, calls
 //!   the corresponding internal methods and serialises the responses.
@@ -66,32 +63,25 @@ pub mod threshold_sign_error;
 /// * `seed` is a random input.  It must be treated as a secret.
 /// * `threshold` is the minimum number of signatures that can be combined to
 ///   make a valid threshold signature.
-/// * `signatory_eligibility` is a boolean indicating, for each signatory,
-///   whether they should receive a key.  The `i`th signatory should receive a
-///   key if and only if `signatory_eligibilty[i]==true`.
+/// * `receivers` is the total number of nodes that will receive a share of
+///   the key.
 /// # Returns
 /// * `PublicCoefficients` can be used by the caller to verify signatures.
-/// * `Vec<Option<SecretKeyBytes>>` contains secret keys.  The vector has the
-///   same length as the input `signatory_eligibility` and the i'th entry
-///   contains a secret key if and only if `signatory_eligibility[i]` is `true`.
+/// * `Vec<SecretKeyBytes>` contains secret keys.  The vector is of length
+///   `receivers`
 /// # Panics
 /// This method is not expected to panic.
 /// # Errors
-/// * If `threshold > signatory_eligibility.len()` then it is impossible for the
-///   signatories to create a valid combined signature, so this is treated as an
-///   error.
-pub fn keygen(
+/// * If `threshold > receivers` then it is impossible for the signatories to
+///   create a valid combined signature, so this is treated as an error.
+pub fn generate_threshold_key(
     seed: Seed,
     threshold: NumberOfNodes,
-    signatory_eligibilty: &[bool],
-) -> CryptoResult<(PublicCoefficientsBytes, Vec<Option<SecretKeyBytes>>)> {
-    crypto::keygen(seed, threshold, signatory_eligibilty)
+    receivers: NumberOfNodes,
+) -> CryptoResult<(PublicCoefficientsBytes, Vec<SecretKeyBytes>)> {
+    crypto::generate_threshold_key(seed, threshold, receivers)
         .map(|(public_coefficients, shares)| {
-            let shares = shares
-                .iter()
-                .cloned()
-                .map(|key_maybe| key_maybe.map(SecretKeyBytes::from))
-                .collect();
+            let shares = shares.iter().cloned().map(SecretKeyBytes::from).collect();
             (PublicCoefficientsBytes::from(&public_coefficients), shares)
         })
         .map_err(CryptoError::from)

@@ -237,13 +237,13 @@ impl ThresholdSignatureCspVault for RemoteCspVault {
         &self,
         algorithm_id: AlgorithmId,
         threshold: NumberOfNodes,
-        signatory_eligibility: &[bool],
-    ) -> Result<(CspPublicCoefficients, Vec<Option<KeyId>>), CspThresholdSignatureKeygenError> {
+        receivers: NumberOfNodes,
+    ) -> Result<(CspPublicCoefficients, Vec<KeyId>), CspThresholdSignatureKeygenError> {
         self.tokio_block_on(self.tarpc_csp_client.threshold_keygen_for_test(
             context_with_timeout(self.rpc_timeout),
             algorithm_id,
             threshold,
-            signatory_eligibility.to_vec(),
+            receivers,
         ))
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspThresholdSignatureKeygenError::InternalError {

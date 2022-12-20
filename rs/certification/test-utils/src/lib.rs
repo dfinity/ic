@@ -3,7 +3,7 @@ use rand::{thread_rng, Rng};
 use serde::Serialize;
 
 use ic_crypto_internal_threshold_sig_bls12381::api::{
-    combine_signatures, combined_public_key, keygen, sign_message,
+    combine_signatures, combined_public_key, generate_threshold_key, sign_message,
 };
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
@@ -106,15 +106,19 @@ impl CertificateBuilder {
         let mut seed: [u8; 32] = [0; 32];
         thread_rng().fill(&mut seed);
 
-        let (public_coefficients, secret_key_bytes) =
-            keygen(Seed::from_bytes(&seed), NumberOfNodes::new(1), &[true; 1]).unwrap();
+        let (public_coefficients, secret_key_bytes) = generate_threshold_key(
+            Seed::from_bytes(&seed),
+            NumberOfNodes::new(1),
+            NumberOfNodes::new(1),
+        )
+        .unwrap();
         let public_key = ThresholdSigPublicKey::from(CspThresholdSigPublicKey::from(
             combined_public_key(&public_coefficients).unwrap(),
         ));
 
         CertificateBuilder {
             public_key,
-            secret_key: secret_key_bytes.get(0).unwrap().clone().unwrap(),
+            secret_key: secret_key_bytes.get(0).unwrap().clone(),
             data,
             delegatee_pub_key: None,
             override_sig: None,
