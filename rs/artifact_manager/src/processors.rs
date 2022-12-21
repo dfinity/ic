@@ -785,6 +785,19 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
         );
         (clients::EcdsaClient::new(ecdsa_pool, ecdsa_gossip), manager)
     }
+
+    fn advert_class(&self, msg: &EcdsaMessage, source: AdvertSource) -> AdvertClass {
+        // 1. Notify all peers for ecdsa messages received directly by us
+        // 2. For relayed ecdsa support messages: don't notify any peers.
+        // 3. For other relayed messages: still notify peers.
+        match source {
+            AdvertSource::Produced => AdvertClass::Critical,
+            AdvertSource::Relayed => match msg {
+                EcdsaMessage::EcdsaDealingSupport(_) => AdvertClass::None,
+                _ => AdvertClass::Critical,
+            },
+        }
+    }
 }
 
 impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<EcdsaArtifact>
@@ -809,14 +822,17 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<Ecds
 
             for change_action in change_set.iter() {
                 match change_action {
-                    EcdsaChangeAction::AddToValidated(msg) => adverts.push(
-                        EcdsaArtifact::message_to_advert_send_request(msg, AdvertClass::Critical),
-                    ),
+                    EcdsaChangeAction::AddToValidated(msg) => {
+                        adverts.push(EcdsaArtifact::message_to_advert_send_request(
+                            msg,
+                            self.advert_class(msg, AdvertSource::Produced),
+                        ))
+                    }
                     EcdsaChangeAction::MoveToValidated(msg_id) => {
                         if let Some(msg) = ecdsa_pool.unvalidated().get(msg_id) {
                             adverts.push(EcdsaArtifact::message_to_advert_send_request(
                                 &msg,
-                                AdvertClass::Critical,
+                                self.advert_class(&msg, AdvertSource::Relayed),
                             ))
                         } else {
                             warn!(
