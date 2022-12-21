@@ -205,7 +205,7 @@ impl fmt::Display for MemoTooLarge {
     Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, Default,
 )]
 #[serde(transparent)]
-pub struct Memo(#[serde(deserialize_with = "deserialize_memo_bytes")] ByteBuf);
+pub struct Memo(#[serde(deserialize_with = "deserialize_memo_bytes")] pub ByteBuf);
 
 fn deserialize_memo_bytes<'de, D>(d: D) -> Result<ByteBuf, D::Error>
 where
