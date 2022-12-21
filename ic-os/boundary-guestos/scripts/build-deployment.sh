@@ -109,7 +109,7 @@ for argument in "${@}"; do
             CERTIFICATE_ISSUER_ENCRYPTION_KEY="${argument#*=}"
             ;;
         *)
-            echo 'Error: Argument is not supported.'
+            echo "Error: Argument \"${argument#}\" is not supported for $0"
             exit 1
             ;;
     esac
