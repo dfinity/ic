@@ -183,6 +183,7 @@ thread_local! {
 }
 
 // Tasks
+
 thread_local! {
     static TASKS: RefCell<PriorityQueue<String, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
 
@@ -320,6 +321,20 @@ fn queue_task(id: Id, timestamp: u64) -> QueueTaskResponse {
 #[update(name = "dispenseTask")]
 fn dispense_task() -> DispenseTaskResponse {
     match DISPENSER.with(|d| d.borrow().dispense()) {
+        Ok(id) => DispenseTaskResponse::Ok(id),
+        Err(err) => DispenseTaskResponse::Err(match err {
+            DispenseError::NoTasksAvailable => DispenseTaskError::NoTasksAvailable,
+            DispenseError::Unauthorized => DispenseTaskError::Unauthorized,
+            DispenseError::UnexpectedError(err) => {
+                DispenseTaskError::UnexpectedError(err.to_string())
+            }
+        }),
+    }
+}
+
+#[query(name = "peekTask")]
+fn peek_task() -> DispenseTaskResponse {
+    match DISPENSER.with(|d| d.borrow().peek()) {
         Ok(id) => DispenseTaskResponse::Ok(id),
         Err(err) => DispenseTaskResponse::Err(match err {
             DispenseError::NoTasksAvailable => DispenseTaskError::NoTasksAvailable,

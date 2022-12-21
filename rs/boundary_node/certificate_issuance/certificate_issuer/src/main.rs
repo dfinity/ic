@@ -398,6 +398,20 @@ async fn main() -> Result<(), Error> {
                 let queuer = queuer.clone();
                 let registration_updater = registration_updater.clone();
 
+                // First check with a query call if there's anything to dispense
+                if let Err(err) = dispenser.peek().await {
+                    match err {
+                        DispenseError::NoTasksAvailable => {
+                            sleep(Duration::from_secs(1));
+                            continue;
+                        }
+                        DispenseError::UnexpectedError(_) => {
+                            sleep(Duration::from_secs(1));
+                            continue;
+                        }
+                    }
+                };
+
                 let (id, task) = match dispenser.dispense().await {
                     Ok((id, task)) => (id, task),
                     Err(DispenseError::NoTasksAvailable) => {

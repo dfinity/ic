@@ -195,6 +195,32 @@ impl<T: Dispense> Dispense for WithMetrics<T> {
 
         out
     }
+
+    async fn peek(&self) -> Result<Id, DispenseError> {
+        let start_time = Instant::now();
+
+        let out = self.0.peek().await;
+
+        let status = if out.is_ok() { "ok" } else { "fail" };
+        let duration = start_time.elapsed().as_secs_f64();
+
+        let labels = &[KeyValue::new("status", status)];
+
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        let cx = Context::current();
+
+        counter.add(&cx, 1, labels);
+        recorder.record(&cx, duration, labels);
+
+        info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
+
+        out
+    }
 }
 
 #[async_trait]

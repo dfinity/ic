@@ -70,6 +70,7 @@ pub enum DispenseError {
 #[async_trait]
 pub trait Dispense: Sync + Send {
     async fn dispense(&self) -> Result<(Id, Task), DispenseError>;
+    async fn peek(&self) -> Result<Id, DispenseError>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -197,6 +198,31 @@ impl Dispense for CanisterDispenser {
                 action: reg.state.into(),
             },
         ))
+    }
+
+    async fn peek(&self) -> Result<Id, DispenseError> {
+        use ifc::{DispenseTaskError as Error, DispenseTaskResponse as Response};
+
+        let args = Encode!().context("failed to encode arg")?;
+
+        let resp = self
+            .0
+            .query(&self.1, "peekTask")
+            .with_arg(args)
+            .call()
+            .await
+            .context("failed to query canister")?;
+
+        let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+
+        match resp {
+            Response::Ok(id) => Ok(id),
+            Response::Err(err) => Err(match err {
+                Error::NoTasksAvailable => DispenseError::NoTasksAvailable,
+                Error::Unauthorized => DispenseError::UnexpectedError(anyhow!("unauthorized")),
+                Error::UnexpectedError(err) => DispenseError::UnexpectedError(anyhow!(err)),
+            }),
+        }
     }
 }
 
