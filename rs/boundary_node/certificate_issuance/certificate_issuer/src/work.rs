@@ -105,7 +105,7 @@ impl Queue for CanisterQueuer {
 
         let waiter = Delay::builder()
             .throttle(Duration::from_millis(500))
-            .timeout(Duration::from_millis(3000))
+            .timeout(Duration::from_millis(10000))
             .build();
 
         let args = Encode!(id, &t).context("failed to encode arg")?;
@@ -141,7 +141,7 @@ impl Dispense for CanisterDispenser {
 
             let waiter = Delay::builder()
                 .throttle(Duration::from_millis(500))
-                .timeout(Duration::from_millis(3000))
+                .timeout(Duration::from_millis(10000))
                 .build();
 
             let args = Encode!().context("failed to encode arg")?;

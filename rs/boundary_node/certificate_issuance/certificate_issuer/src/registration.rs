@@ -156,7 +156,7 @@ impl Create for CanisterCreator {
 
         let waiter = Delay::builder()
             .throttle(Duration::from_millis(500))
-            .timeout(Duration::from_millis(3000))
+            .timeout(Duration::from_millis(10000))
             .build();
 
         let args = Encode!(&name.to_string(), canister).context("failed to encode arg")?;
@@ -192,7 +192,7 @@ impl Update for CanisterUpdater {
 
         let waiter = Delay::builder()
             .throttle(Duration::from_millis(500))
-            .timeout(Duration::from_millis(3000))
+            .timeout(Duration::from_millis(10000))
             .build();
 
         let state: ifc::State = state.to_owned().into();
