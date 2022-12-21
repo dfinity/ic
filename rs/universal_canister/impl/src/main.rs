@@ -152,6 +152,10 @@ fn eval(ops_bytes: OpsBytes) {
             Ops::Self_ => stack.push_blob(api::id()),
             Ops::Reject => api::reject(&stack.pop_blob()),
             Ops::Caller => stack.push_blob(api::caller()),
+            Ops::InstructionCounterIsAtLeast => {
+                let amount = stack.pop_int64();
+                while api::performance_counter(0) < amount {}
+            }
             Ops::RejectMessage => stack.push_blob(api::reject_message()),
             Ops::RejectCode => stack.push_int(api::reject_code()),
             Ops::IntToBlob => {

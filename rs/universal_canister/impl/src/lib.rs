@@ -36,7 +36,7 @@ try_from_u8!(
         Self_ = 6,
         Reject = 7,
         Caller = 8,
-        // = 9,
+        InstructionCounterIsAtLeast = 9,
         RejectMessage = 10,
         RejectCode = 11,
         IntToBlob = 12,

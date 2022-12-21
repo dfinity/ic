@@ -432,6 +432,13 @@ impl PayloadBuilder {
         self
     }
 
+    /// Loops until the instruction counter is at least the specified amount.
+    pub fn instruction_counter_is_at_least(mut self, amount: u64) -> Self {
+        self = self.push_int64(amount);
+        self.0.push(Ops::InstructionCounterIsAtLeast as u8);
+        self
+    }
+
     pub fn build(self) -> Vec<u8> {
         self.0
     }
