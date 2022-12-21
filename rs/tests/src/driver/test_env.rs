@@ -147,11 +147,13 @@ where
         env.write_json_object(Self::attribute_name(), self)
             .unwrap_or_else(|e| panic!("cannot write {} to TestEnv: {}", Self::attribute_name(), e))
     }
-    fn read_attribute(env: &TestEnv) -> Self {
+    fn try_read_attribute(env: &TestEnv) -> Result<Self> {
         env.read_json_object(Self::attribute_name())
-            .unwrap_or_else(|e| {
-                panic!("cannot read {} from TestEnv: {}", Self::attribute_name(), e)
-            })
+    }
+    fn read_attribute(env: &TestEnv) -> Self {
+        Self::try_read_attribute(env).unwrap_or_else(|e| {
+            panic!("cannot read {} from TestEnv: {}", Self::attribute_name(), e)
+        })
     }
 }
 

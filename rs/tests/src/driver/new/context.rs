@@ -44,13 +44,13 @@ impl GroupContext {
         self.group_dir.clone()
     }
 
-    fn dir_exists<P: AsRef<Path>>(path: P) -> bool {
+    fn dir_exists<P: AsRef<Path>>(path: &P) -> bool {
         fs::read_dir(path.as_ref()).is_ok()
     }
 
     fn ensure_dir<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = self.group_dir.parent().unwrap().join(path.as_ref());
-        if Self::dir_exists(path.clone()) {
+        if Self::dir_exists(&path) {
             println!("GroupContext: directory already exists: {:?}", path);
         } else {
             println!("GroupContext: creating directory: {:?}", path);
@@ -61,54 +61,63 @@ impl GroupContext {
 
     /// Returns the path to the setup artifact directory,
     /// ensuring that the directory actually exists.
-    pub fn get_or_create_setup_dir(&self) -> Result<PathBuf> {
+    fn create_setup_dir(&self) -> Result<PathBuf> {
         let root_env_path = self.group_dir.join(constants::ROOT_ENV_DIR);
         let setup_path = self.group_dir.join(constants::GROUP_SETUP_DIR);
 
-        if root_env_path.is_dir() && !setup_path.exists() {
-            // todo: this function should eventually just `fork` the root environment.
-            TestEnv::shell_copy(&root_env_path, &setup_path)?;
-        }
+        info!(
+            self.logger,
+            "Ensuring directory {:?} exists ...", setup_path
+        );
+        self.ensure_dir(setup_path.clone())?;
 
-        self.ensure_dir(setup_path.clone()).map(|_| setup_path)
+        info!(
+            self.logger,
+            "Copying configuration from {:?} to {:?} ...", root_env_path, setup_path
+        );
+        // todo: this function should eventually just `fork` the root environment.
+        TestEnv::shell_copy(&root_env_path, &setup_path)?;
+
+        Ok(setup_path)
+    }
+
+    /// Returns the path to the setup artifact directory, if it exists.
+    fn get_setup_dir(&self) -> Option<PathBuf> {
+        let setup_path = self.group_dir.join(constants::GROUP_SETUP_DIR);
+        if setup_path.is_dir() {
+            Some(setup_path)
+        } else {
+            None
+        }
     }
 
     /// Returns the path to the artifact directory for this [test_name],
     /// ensuring that the directory actually exists.
-    ///
-    /// This function must be called after setup_dir
-    pub fn get_or_create_test_dir(&self, test_name: &str) -> Result<PathBuf> {
-        let setup_path = self.group_dir.join(constants::GROUP_SETUP_DIR);
-        assert!(
-            Self::dir_exists(setup_path.clone()),
-            "test directory must be created after {:?}, which does not exist",
-            setup_path
-        );
-
+    fn create_test_dir(&self, test_name: &str) -> Result<PathBuf> {
         let test_path = self.group_dir.join(constants::TESTS_DIR).join(test_name);
         info!(self.logger, "Ensuring directory {:?} exists ...", test_path);
         self.ensure_dir(test_path.clone()).map(|_| test_path)
     }
 
     pub fn create_setup_env(&self) -> Result<TestEnv> {
-        let setup_dir = self.get_or_create_setup_dir()?;
+        let setup_dir = self.create_setup_dir()?;
         TestEnv::new(setup_dir, self.logger.clone())
     }
 
     pub fn create_test_env(&self, test_name: &str) -> Result<TestEnv> {
-        let target_dir = self.get_or_create_test_dir(test_name)?;
-        let setup_dir = self.get_or_create_setup_dir()?;
-        TestEnv::fork_from(
-            setup_dir.as_path(),
-            target_dir.as_path(),
-            self.logger.clone(),
-        )
-    }
-
-    pub fn create_finalize_env(&self) -> Result<TestEnv> {
-        // TODO: check that setup exists
-        let setup_dir = self.get_or_create_setup_dir()?;
-        TestEnv::new(setup_dir, self.logger.clone())
+        let target_dir = self.create_test_dir(test_name)?;
+        if let Some(setup_dir) = self.get_setup_dir() {
+            TestEnv::fork_from(
+                setup_dir.as_path(),
+                target_dir.as_path(),
+                self.logger.clone(),
+            )
+        } else {
+            bail!(
+                "cannot create TestEnv for {} as setup directory does not exist yet",
+                test_name
+            )
+        }
     }
 
     pub fn logger(&self) -> Logger {
