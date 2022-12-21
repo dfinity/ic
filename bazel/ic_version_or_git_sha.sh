@@ -26,8 +26,7 @@ while read -r k v; do
     esac
 done <"$1"
 
-if [ "${GIT_TREE_STATUS}" != 'Clean' ]; then
-    VERSION="${VERSION}-${BUILD_TIMESTAMP}"
-fi
+# Set the version to "{git sha}-{build timestamp}" unconditionally unles it explicitly set (using --ic_version arg) to avoid conflicts with CI.
+VERSION="${VERSION}-${BUILD_TIMESTAMP}"
 
 echo "${VERSION}" >"$2"
