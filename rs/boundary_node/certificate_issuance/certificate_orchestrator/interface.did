@@ -143,6 +143,7 @@ service: (InitArg) -> {
     // Tasks
     queueTask: (Id, Timestamp) -> (QueueTaskResponse);
     dispenseTask: () -> (DispenseTaskResponse);
+    peekTask: () -> (DispenseTaskResponse) query;
 
     // ACL
     listAllowedPrincipals: () -> (LisAllowedPrincipalsResponse) query;

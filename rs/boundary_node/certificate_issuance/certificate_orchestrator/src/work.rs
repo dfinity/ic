@@ -82,6 +82,7 @@ pub enum DispenseError {
 
 pub trait Dispense {
     fn dispense(&self) -> Result<Id, DispenseError>;
+    fn peek(&self) -> Result<Id, DispenseError>;
 }
 
 pub struct Dispenser {
@@ -117,6 +118,22 @@ impl Dispense for Dispenser {
             Ok(id)
         })
     }
+
+    fn peek(&self) -> Result<Id, DispenseError> {
+        self.tasks.with(|tasks| {
+            // Check for available task
+            match tasks.borrow().peek() {
+                None => Err(DispenseError::NoTasksAvailable),
+                Some((id, Reverse(timestamp))) => {
+                    if time().lt(timestamp) {
+                        Err(DispenseError::NoTasksAvailable)
+                    } else {
+                        Ok(id.clone())
+                    }
+                }
+            }
+        })
+    }
 }
 
 impl<T: Dispense, A: Authorize> Dispense for WithAuthorize<T, A> {
@@ -129,5 +146,16 @@ impl<T: Dispense, A: Authorize> Dispense for WithAuthorize<T, A> {
         };
 
         self.0.dispense()
+    }
+
+    fn peek(&self) -> Result<Id, DispenseError> {
+        if let Err(err) = self.1.authorize(&caller()) {
+            return Err(match err {
+                AuthorizeError::Unauthorized => DispenseError::Unauthorized,
+                AuthorizeError::UnexpectedError(err) => DispenseError::UnexpectedError(err),
+            });
+        };
+
+        self.0.peek()
     }
 }
