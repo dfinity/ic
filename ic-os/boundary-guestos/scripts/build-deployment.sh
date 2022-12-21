@@ -93,7 +93,7 @@ Arguments:
             GEOLITE2_CITY_DB="${argument#*=}"
             ;;
         *)
-            echo 'Error: Argument is not supported.'
+            echo "Error: Argument \"${argument#}\" is not supported for $0"
             exit 1
             ;;
     esac
