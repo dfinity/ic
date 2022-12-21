@@ -277,7 +277,7 @@ pub trait ThresholdEcdsaSigVerifier {
         share: &ThresholdEcdsaSigShare,
     ) -> Result<(), ThresholdEcdsaVerifySigShareError>;
 
-    /// Combine the given signature shares into a convential ECDSA signature.
+    /// Combine the given signature shares into a conventional ECDSA signature.
     ///
     /// The signature is returned as raw bytes.
     fn combine_sig_shares(
