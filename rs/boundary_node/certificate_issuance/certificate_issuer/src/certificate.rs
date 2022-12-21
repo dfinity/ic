@@ -72,7 +72,7 @@ impl Upload for CanisterUploader {
 
         let waiter = Delay::builder()
             .throttle(Duration::from_millis(500))
-            .timeout(Duration::from_millis(3000))
+            .timeout(Duration::from_millis(10000))
             .build();
 
         let pair = EncryptedPair(
