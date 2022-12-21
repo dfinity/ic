@@ -9,6 +9,7 @@ IMPORTANT: ckBTC is still under development.
 We do not recommend people try it out yet.
 
 == Interact with the ckBTC minter
+To interact with the testnet bitcoin minter please move to rs/bitcoin/ckbtc/testnet.
 
 === Bitcoin to ckBTC
 ```
@@ -35,7 +36,7 @@ We do not recommend people try it out yet.
 1. Obtain the deposit address:
 +
 ----
-dfx canister call minter get_btc_address '(record {subaccount=null;})'
+dfx canister --network ic call minter get_btc_address "(record {subaccount=null;})"
 ----
 +
 2. Send bitcoin to the BTC address the minter gave you.
@@ -44,7 +45,7 @@ dfx canister call minter get_btc_address '(record {subaccount=null;})'
 4. Notify the minter about the transfer.
 +
 ----
-dfx canister call minter update_balance '(record {subaccount=null;})'
+dfx canister --network ic call minter update_balance "(record {subaccount=null;})"
 ----
 +
 
@@ -52,7 +53,11 @@ You now have some ckBTC, you can enjoy the Internet Computer speed and low fees!
 
 If you would like to transfer them to your wallet (plug, stoic, ...), copy the principal of your wallet and paste it over PRINCIPAL and change AMOUNT to the desired amount (in satoshis) in the following command:
 ----
-dfx canister call ledger icrc1_transfer '(record {from_subaccount=null; to=record{owner="PRINCIPAL"; subaccount=null;}; amount=AMOUNT; fee=null; memo=null; created_at_time=null;})'
+dfx canister --network ic call ledger icrc1_transfer "(record { to = record { owner = principal "PRINCIPAL" }; amount = AMOUNT; })"
+----
+If you want to override the default transfer arguments (for more information on the supported parameters, see the https://github.com/dfinity/ICRC-1/blob/main/standards/ICRC-1/README.md[ICRC-1 Token Standard]), you can modify the following command: 
+----
+dfx canister --network ic call ledger icrc1_transfer "(record { from_subaccount = null; to = record { owner = principal "PRINCIPAL"; subaccount = null; }; amount = AMOUNT; fee = null; memo = null; created_at_time = null;})"
 ----
 
 === ckBTC to Bitcoin
@@ -81,20 +86,20 @@ dfx canister call ledger icrc1_transfer '(record {from_subaccount=null; to=recor
 1. Obtain the withdrawal address and store it in a variable.
 +
 ----
-withdrawal_address="$(dfx canister call minter get_withdrawal_account)"
+withdrawal_address=$(dfx canister --network ic call minter get_withdrawal_account)
 ----
 +
 2. Clean the output of the previous command to get the desired format:
 +
 ----
-cleaned_withdrawal_address=$(echo $withdrawal_addres | sed -re 's/^\(|, \)$//g')
+cleaned_withdrawal_address="$(printf "%s\n" "$withdrawal_address" | sed -re 's/^\(|,|)$//g')"
 ----
 +
 3. Transfer the ckBTCs you want to unwrap to *cleaned_withdrawal_address* on the ckBTC ledger.
    Replace AMOUNT with the amount that you want to unwrap.
 +
 ----
-dfx canister call ledger icrc1_transfer '(record {from=null; to=$cleaned_withdrawal_address; amount=AMOUNT; fee=null; memo=null; created_at_time=null;})'
+dfx canister --network ic call ledger icrc1_transfer "(record {from=null; to=$cleaned_withdrawal_address; amount=AMOUNT; fee=null; memo=null; created_at_time=null;})"
 ----
 +
 4. Call the `retrieve_btc` endpoint with the desired BTC destination address where you want to receive your Bitcoin.
@@ -102,7 +107,7 @@ dfx canister call ledger icrc1_transfer '(record {from=null; to=$cleaned_withdra
    Replace AMOUNT with the amount that you transferred for unwrapping.
 +
 ----
-dfx canister call minter retrieve_btc '(record {address=BTC_ADDRESS; amount=AMOUNT})'
+dfx canister --network ic call minter retrieve_btc "(record {address=BTC_ADDRESS; amount=AMOUNT})"
 ----
 
 You now have your BTC back on the Bitcoin network (caution: transaction finalization may take a while). 
@@ -111,7 +116,6 @@ You now have your BTC back on the Bitcoin network (caution: transaction finaliza
 ====
 You can query the status of your `retrieve_btc` request using the following command (replace `BLOCK_INDEX` with the block index you get when calling retrieve_btc): 
 ----
-dfx canister call minter retrieve_btc_status '(record { block_index = BLOCK_INDEX; })'
+dfx canister --network ic call minter retrieve_btc_status "(record { block_index = BLOCK_INDEX; })"
 ----
 ====
-
