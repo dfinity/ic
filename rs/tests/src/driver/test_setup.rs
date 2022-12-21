@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 use super::ic::VmResources;
+use crate::driver::new::constants::GROUP_TTL;
 
 #[derive(Deserialize, Serialize, Default)]
 pub struct GroupSetup {
@@ -31,7 +32,9 @@ impl GroupSetup {
             .expect("bad things")
             .as_millis();
         res.farm_group_name = format!("{}--{:?}", fname, time);
-        res.group_timeout = Duration::from_secs(15 * 60);
+        // GROUP_TTL should be enough for the setup task to allocate the group on Farm
+        // Afterwards, the group's TTL should be bumped via a keepalive task
+        res.group_timeout = GROUP_TTL;
         res
     }
 }

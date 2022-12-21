@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 
 use crate::driver::{
+    farm::Farm,
     new::{
         action_graph::ActionGraph,
         dsl::SubprocessFn,
@@ -18,7 +19,9 @@ use crate::driver::{
         task::EmptyTask,
         task_scheduler::{new_task_scheduler, TaskTable},
     },
-    test_env::TestEnv,
+    test_env::{TestEnv, TestEnvAttribute},
+    test_env_api::HasIcDependencies,
+    test_setup::GroupSetup,
 };
 use crate::driver::{
     new::{
@@ -32,6 +35,7 @@ use anyhow::{bail, Result};
 use clap::Parser;
 use tokio::runtime::{Handle, Runtime};
 
+use crate::driver::new::constants::{GROUP_TTL, KEEPALIVE_INTERVAL};
 use crate::driver::new::{subprocess_task::SubprocessTask, task::Task, timeout::TimeoutTask};
 use std::{
     iter::once,
@@ -198,13 +202,10 @@ fn get_setup_env(gctx: GroupContext) -> TestEnv {
     process_ctx.group_context.create_setup_env().unwrap()
 }
 
-fn get_env(gctx: GroupContext, task_id: TaskId) -> TestEnv {
+fn get_env(gctx: GroupContext, task_id: TaskId) -> Result<TestEnv> {
     info!(gctx.log(), "get_env(task_id={})", &task_id);
     let process_ctx = ProcessContext::new(gctx, task_id.name()).unwrap();
-    process_ctx
-        .group_context
-        .create_test_env(&task_id.name())
-        .unwrap()
+    process_ctx.group_context.create_test_env(&task_id.name())
 }
 
 pub enum SystemTestSubGroup {
@@ -275,7 +276,8 @@ impl SystemTestSubGroup {
                     let group_ctx = ctx.group_ctx.clone();
                     move || {
                         debug!(logger, ">>> test_fn({})", &task_id);
-                        let env = get_env(group_ctx, task_id);
+                        // Assumption: this function will be called after setup finishes
+                        let env = get_env(group_ctx, task_id).unwrap();
                         task_fn(env)
                     }
                 };
@@ -377,9 +379,49 @@ impl SystemTestGroup {
         };
 
         // The ID of the root task is needed outside this function for awaiting when the plan execution finishes.
-        let root_task = Box::from(EmptyTask::new(
-            subs.clone(),
-            TaskId::Test(String::from(ROOT_TASK_NAME)),
+        let root_task_id = TaskId::Test(String::from(ROOT_TASK_NAME));
+        let root_task = Box::from(subproc(
+            rh,
+            root_task_id.clone(),
+            {
+                let logger = group_ctx.logger().clone();
+                let group_ctx = group_ctx.clone();
+                move || {
+                    let group_ctx = group_ctx.clone();
+                    debug!(logger, ">>> keepalive");
+                    loop {
+                        let group_ctx = group_ctx.clone();
+                        let root_task_id = root_task_id.clone();
+                        if let Ok((group_setup, env)) = get_env(group_ctx, root_task_id)
+                            .and_then(|env| GroupSetup::try_read_attribute(&env).map(|x| (x, env)))
+                        {
+                            let farm_url = env.get_farm_url().unwrap();
+                            let farm = Farm::new(farm_url.clone(), env.logger());
+                            let group_name = group_setup.farm_group_name;
+                            if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
+                                panic!(
+                                    "{}",
+                                    format!(
+                                        "Failed to keep group {} alive via endpoint {:?}: {:?}",
+                                        group_name, farm_url, e
+                                    )
+                                )
+                            };
+                            info!(
+                                logger,
+                                "Group {} TTL set to +{:?} from now (Farm endpoint: {:?})",
+                                group_name,
+                                GROUP_TTL,
+                                farm_url
+                            );
+                        } else {
+                            info!(logger, "Farm group not created (did you forget to call env.ensure_group_setup_created()?)");
+                        }
+                        std::thread::sleep(KEEPALIVE_INTERVAL);
+                    }
+                }
+            },
+            &mut compose_ctx,
         )) as Box<dyn Task>;
 
         let setup_plan = {
@@ -415,7 +457,7 @@ impl SystemTestGroup {
                         .into_iter()
                         .map(|sub_group| sub_group.into_plan(rh, &mut compose_ctx)),
                 )
-                .collect::<Vec<Plan<Box<dyn Task>>>>(),
+                .collect(),
             &mut compose_ctx,
         );
         Ok(plan)
@@ -522,19 +564,21 @@ impl SystemTestGroup {
                             } else {
                                 // 2.2. When a regular (i.e., not Timeout) tasks fails, Write down its end time.
                                 report.set_test_end_time(task_id.clone());
-                                if report.is_test_timed_out(task_id) {
-                                    // 2.3. Use information from step 2.1 to detect if this task has timed out
-                                    report.add_fail(TargetFunctionFailure::TimedOut {
-                                        task_id: task_id.clone(),
-                                        timeout: report.get_test_duration(task_id),
-                                    });
-                                } else {
-                                    // 2.4. Otherwise, this is a regular failure (i.e., the test function panicked)
-                                    report.add_fail(TargetFunctionFailure::Panicked {
-                                        task_id: task_id.clone(),
-                                        message: msg.clone(),
-                                        runtime: report.get_test_duration(task_id),
-                                    });
+                                if is_task_visible_to_user(task_id) {
+                                    if report.is_test_timed_out(task_id) {
+                                        // 2.3. Use information from step 2.1 to detect if this task has timed out
+                                        report.add_fail(TargetFunctionFailure::TimedOut {
+                                            task_id: task_id.clone(),
+                                            timeout: report.get_test_duration(task_id),
+                                        });
+                                    } else {
+                                        // 2.4. Otherwise, this is a regular failure (i.e., the test function panicked)
+                                        report.add_fail(TargetFunctionFailure::Panicked {
+                                            task_id: task_id.clone(),
+                                            message: msg.clone(),
+                                            runtime: report.get_test_duration(task_id),
+                                        });
+                                    }
                                 }
                             }
                         };

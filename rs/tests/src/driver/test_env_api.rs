@@ -809,10 +809,7 @@ impl HasGroupSetup for TestEnv {
         // This `if` is executed only for Bazel runs.
         if !is_group_setup_existing {
             let log = self.logger();
-            info!(log, "Creating GroupSetup.");
             let group_setup = GroupSetup::from_bazel_env();
-            group_setup.write_attribute(self);
-            info!(log, "SystemTestGroup.prepare_group");
             let farm_base_url = Url::parse(constants::DEFAULT_FARM_BASE_URL).expect("can't fail");
             let farm = Farm::new(farm_base_url, self.logger());
             let group_spec = GroupSpec {
@@ -826,6 +823,11 @@ impl HasGroupSetup for TestEnv {
                 group_spec,
             )
             .unwrap();
+            group_setup.write_attribute(self);
+            info!(
+                log,
+                "Created new Farm group {}", group_setup.farm_group_name
+            );
         }
     }
 }

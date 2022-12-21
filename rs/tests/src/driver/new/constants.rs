@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 /// New directory structure:
 ///
 /// - dependencies/
@@ -33,3 +35,6 @@ pub const ROOT_ENV_DIR: &str = "root_env";
 pub const DEFAULT_FARM_BASE_URL: &str = "https://farm.dfinity.systems";
 
 pub const ASYNC_LOG_CHANNEL_SIZE: usize = 8192;
+
+pub const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(30);
+pub const GROUP_TTL: Duration = Duration::from_secs(90);
