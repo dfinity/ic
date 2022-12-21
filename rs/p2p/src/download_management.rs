@@ -69,7 +69,7 @@ extern crate lru;
 use crate::{
     artifact_download_list::ArtifactDownloadList,
     download_prioritization::{AdvertTracker, AdvertTrackerFinalAction, DownloadAttemptTracker},
-    gossip_protocol::{GossipAdvertAction, GossipAdvertSendRequest, GossipImpl, ReceiveCheckCache},
+    gossip_protocol::{GossipImpl, ReceiveCheckCache},
     gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage},
     peer_context::{
         GossipChunkRequestTracker, GossipChunkRequestTrackerKey, PeerContext, PeerContextMap,
@@ -102,18 +102,6 @@ use std::{
 
 /// `DownloadManagerImpl` implements the `DownloadManager` trait.
 impl GossipImpl {
-    /// The method sends adverts to peers.
-    pub fn send_advert_to_peers(&self, advert_request: GossipAdvertSendRequest) {
-        let (peers, label) = match advert_request.action {
-            GossipAdvertAction::SendToAllPeers => (self.get_current_peer_ids(), "all_peers"),
-        };
-        self.metrics
-            .adverts_by_action
-            .with_label_values(&[label])
-            .inc_by(peers.len() as u64);
-        self.send_advert_to_peer_list(advert_request.advert, peers);
-    }
-
     /// The method downloads chunks for adverts with the highest priority from
     /// the given peer.
     pub fn on_advert(&self, gossip_advert: GossipAdvert, peer_id: NodeId) {
@@ -548,7 +536,7 @@ impl GossipImpl {
             .get_all_validated_by_filter(gossip_re_request)
             .into_iter();
 
-        adverts.for_each(|advert| self.send_advert_to_peer_list(advert, vec![peer_id]));
+        adverts.for_each(|advert| self.send_advert_to_peers(advert, vec![peer_id]));
         Ok(())
     }
 
@@ -626,7 +614,7 @@ impl GossipImpl {
         }
     }
 
-    fn get_current_peer_ids(&self) -> Vec<NodeId> {
+    pub(crate) fn get_current_peer_ids(&self) -> Vec<NodeId> {
         self.current_peers
             .lock()
             .iter()
@@ -858,8 +846,8 @@ impl GossipImpl {
     }
 
     /// The method sends the given advert to the given list of peers.
-    fn send_advert_to_peer_list(&self, gossip_advert: GossipAdvert, peer_ids: Vec<NodeId>) {
-        let message = GossipMessage::Advert(gossip_advert.clone());
+    pub(crate) fn send_advert_to_peers(&self, gossip_advert: GossipAdvert, peer_ids: Vec<NodeId>) {
+        let message = GossipMessage::Advert(gossip_advert);
         let transport_channel = self.transport_channel_mapper.map(&message);
         for peer_id in peer_ids {
             self.transport_send(message.clone(), peer_id, transport_channel)
@@ -868,13 +856,6 @@ impl GossipImpl {
                     // Ignore advert send failures
                     self.metrics.adverts_send_failed.inc();
                 });
-            trace!(
-                self.log,
-                "Node-{:?} sent gossip advert ->{:?} {:?}",
-                self.node_id,
-                peer_id,
-                gossip_advert
-            );
         }
     }
 

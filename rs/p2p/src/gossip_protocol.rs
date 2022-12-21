@@ -278,6 +278,11 @@ impl Gossip for GossipImpl {
     /// dropped.  If the artifact is not available locally, the advert
     /// is added to this peer's advert list.
     fn on_gossip_advert(&self, gossip_advert: GossipAdvert, peer_id: NodeId) {
+        let _timer = self
+            .gossip_metrics
+            .op_duration
+            .with_label_values(&["in_advert"])
+            .start_timer();
         if self
             .artifact_manager
             .has_artifact(&gossip_advert.artifact_id)
@@ -294,6 +299,11 @@ impl Gossip for GossipImpl {
     /// The method handles the given chunk request received from the peer with
     /// the given node ID.
     fn on_chunk_request(&self, gossip_request: GossipChunkRequest, node_id: NodeId) {
+        let _timer = self
+            .gossip_metrics
+            .op_duration
+            .with_label_values(&["in_chunk_request"])
+            .start_timer();
         let start = std::time::Instant::now();
         let artifact_chunk = self.serve_chunk(&gossip_request);
         self.metrics
@@ -312,13 +322,32 @@ impl Gossip for GossipImpl {
     /// The method adds the given chunk to the corresponding artifact
     /// under construction.
     fn on_gossip_chunk(&self, gossip_chunk: GossipChunk, peer_id: NodeId) {
+        let _timer = self
+            .gossip_metrics
+            .op_duration
+            .with_label_values(&["in_chunk"])
+            .start_timer();
         self.on_chunk(gossip_chunk, peer_id);
         let _ = self.download_next(peer_id);
     }
 
     /// The method broadcasts the given advert to other peers.
     fn broadcast_advert(&self, advert_request: GossipAdvertSendRequest) {
-        self.send_advert_to_peers(advert_request);
+        let _timer = self
+            .gossip_metrics
+            .op_duration
+            .with_label_values(&["out_advert"])
+            .start_timer();
+
+        let (peers, label) = match advert_request.action {
+            GossipAdvertAction::SendToAllPeers => (self.get_current_peer_ids(), "all_peers"),
+        };
+        self.metrics
+            .adverts_by_action
+            .with_label_values(&[label])
+            .inc_by(peers.len() as u64);
+
+        self.send_advert_to_peers(advert_request.advert, peers);
     }
 
     /// The method reacts to a retransmission request from another
@@ -331,15 +360,30 @@ impl Gossip for GossipImpl {
         gossip_retransmission_request: Self::GossipRetransmissionRequest,
         peer_id: NodeId,
     ) {
+        let _timer = self
+            .gossip_metrics
+            .op_duration
+            .with_label_values(&["out_retransmission"])
+            .start_timer();
         let _ = self.on_retransmission_request(&gossip_retransmission_request, peer_id);
     }
 
     fn on_peer_up(&self, peer_id: NodeId) {
+        let _timer = self
+            .gossip_metrics
+            .op_duration
+            .with_label_values(&["peer_up"])
+            .start_timer();
         info!(self.log, "Peer is up: {:?}", peer_id);
         self.peer_connection_up(peer_id)
     }
 
     fn on_peer_down(&self, peer_id: NodeId) {
+        let _timer = self
+            .gossip_metrics
+            .op_duration
+            .with_label_values(&["peer_down"])
+            .start_timer();
         info!(self.log, "Peer is down: {:?}", peer_id);
         self.peer_connection_down(peer_id)
     }
@@ -358,6 +402,11 @@ impl Gossip for GossipImpl {
     /// In short, the method is a catch-all for a periodic and
     /// holistic refresh of IC state.
     fn on_gossip_timer(&self) {
+        let _timer = self
+            .gossip_metrics
+            .op_duration
+            .with_label_values(&["timer"])
+            .start_timer();
         self.on_timer();
     }
 }
