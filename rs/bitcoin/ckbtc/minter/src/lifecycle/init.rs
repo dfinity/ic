@@ -24,6 +24,11 @@ pub struct InitArgs {
     /// Maximum time in nanoseconds that a transaction should spend in the queue
     /// before being sent.
     pub max_time_in_queue_nanos: u64,
+
+    /// Specifies the minimum number of confirmations on the Bitcoin network
+    /// required for the minter to accept a transaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_confirmations: Option<u32>,
 }
 
 pub fn init(args: InitArgs) {

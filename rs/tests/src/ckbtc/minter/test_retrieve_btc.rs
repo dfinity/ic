@@ -1,12 +1,12 @@
 use crate::ckbtc::minter::utils::{
     assert_account_balance, assert_burn_transaction, assert_mint_transaction, ensure_wallet,
     generate_blocks, get_btc_address, get_btc_client, update_balance, wait_for_bitcoin_balance,
-    BTC_BLOCK_SIZE, BTC_MIN_CONFIRMATIONS,
+    BTC_BLOCK_SIZE,
 };
 use crate::{
     ckbtc::lib::{
         activate_ecdsa_signature, create_canister, install_ledger, install_minter, subnet_app,
-        subnet_sys, RETRIEVE_BTC_MIN_AMOUNT, TEST_KEY_LOCAL, TRANSFER_FEE,
+        subnet_sys, BTC_MIN_CONFIRMATIONS, RETRIEVE_BTC_MIN_AMOUNT, TEST_KEY_LOCAL, TRANSFER_FEE,
     },
     driver::{
         test_env::TestEnv,
@@ -99,7 +99,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         wait_for_bitcoin_balance(
             &universal_canister,
             &logger,
-            BTC_MIN_CONFIRMATIONS * BTC_BLOCK_SIZE,
+            BTC_MIN_CONFIRMATIONS as u64 * BTC_BLOCK_SIZE,
             &btc_address0,
         )
         .await;

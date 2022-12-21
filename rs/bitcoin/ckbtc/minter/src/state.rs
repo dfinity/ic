@@ -192,6 +192,7 @@ impl CkBtcMinterState {
             retrieve_btc_min_amount,
             ledger_id,
             max_time_in_queue_nanos,
+            min_confirmations,
         }: InitArgs,
     ) {
         self.btc_network = btc_network;
@@ -199,6 +200,9 @@ impl CkBtcMinterState {
         self.retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.ledger_id = ledger_id;
         self.max_time_in_queue_nanos = max_time_in_queue_nanos;
+        if let Some(min_confirmations) = min_confirmations {
+            self.min_confirmations = min_confirmations;
+        }
     }
 
     pub fn check_invariants(&self) -> Result<(), String> {
@@ -552,7 +556,9 @@ impl From<InitArgs> for CkBtcMinterState {
             btc_network: args.btc_network,
             ecdsa_key_name: args.ecdsa_key_name,
             ecdsa_public_key: None,
-            min_confirmations: crate::lifecycle::init::DEFAULT_MIN_CONFIRMATIONS,
+            min_confirmations: args
+                .min_confirmations
+                .unwrap_or(crate::lifecycle::init::DEFAULT_MIN_CONFIRMATIONS),
             max_time_in_queue_nanos: args.max_time_in_queue_nanos,
             update_balance_principals: Default::default(),
             retrieve_btc_principals: Default::default(),

@@ -47,6 +47,8 @@ pub(crate) const TRANSFER_FEE: u64 = 1_000;
 
 pub(crate) const RETRIEVE_BTC_MIN_AMOUNT: u64 = 100;
 
+pub const BTC_MIN_CONFIRMATIONS: u32 = 6;
+
 pub fn config(env: TestEnv) {
     // Use the btc integration setup.
     btc_integration::btc::config(env.clone());
@@ -264,6 +266,7 @@ pub(crate) async fn install_minter(
         retrieve_btc_min_amount: RETRIEVE_BTC_MIN_AMOUNT,
         ledger_id,
         max_time_in_queue_nanos,
+        min_confirmations: Some(BTC_MIN_CONFIRMATIONS),
     };
     install_rust_canister_from_path(
         canister,
