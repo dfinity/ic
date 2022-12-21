@@ -4278,9 +4278,9 @@ dependencies = [
 [[package]]
 name = "ic-btc-validation"
 version = "0.1.0"
+source = "git+https://github.com/dfinity/bitcoin-canister?rev=0e996988693f2d55fc9533c44dc20ae5310a1894#0e996988693f2d55fc9533c44dc20ae5310a1894"
 dependencies = [
  "bitcoin",
- "csv",
 ]
 
 [[package]]
