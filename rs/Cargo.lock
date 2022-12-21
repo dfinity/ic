@@ -4839,6 +4839,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-test-utilities",
+ "ic-test-utilities-in-memory-logger",
  "ic-test-utilities-registry",
  "ic-types",
  "ic-types-test-utils",

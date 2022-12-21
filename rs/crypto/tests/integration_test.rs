@@ -18,18 +18,22 @@ use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_re
 use ic_interfaces::crypto::{KeyManager, PublicKeyRegistrationStatus};
 use ic_interfaces::time_source::TimeSource;
 use ic_logger::replica_logger::no_op_logger;
+use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::FastForwardTimeSource;
+use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
+use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys, KeyPurpose};
 use ic_types::{RegistryVersion, Time};
 use ic_types_test_utils::ids::node_test_id;
 use openssl::asn1::Asn1Time;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
+use slog::Level;
 use std::sync::Arc;
 use std::time::Duration;
 use strum::IntoEnumIterator;
@@ -686,6 +690,49 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_secret_key_is
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
     assert_matches!(result, Err(CryptoError::SecretKeyNotFound { algorithm, ..}) if algorithm == AlgorithmId::MegaSecp256k1);
+}
+
+#[test]
+fn should_log_error_if_idkg_dealing_encryption_secret_key_missing() {
+    let idkg_dealing_enc_pubkey_with_without_secret_part_in_store =
+        well_formed_idkg_dealing_encryption_pk();
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let time = FastForwardTimeSource::new();
+    let in_memory_logger = InMemoryReplicaLogger::new();
+    let replica_logger = ReplicaLogger::from(&in_memory_logger);
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .with_time_source(Arc::clone(&time) as Arc<_>)
+        .with_node_id(node_id())
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
+            subnet_id(),
+            Some(node_id()),
+            Some(TWO_WEEKS),
+        ))
+        .with_logger(replica_logger)
+        .build();
+    add_public_key_to_registry(
+        idkg_dealing_enc_pubkey_with_without_secret_part_in_store,
+        crypto_component.get_node_id(),
+        KeyPurpose::IDkgMEGaEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    let result = crypto_component.check_keys_with_registry(REG_V2);
+
+    assert_matches!(result, Err(CryptoError::SecretKeyNotFound { algorithm, ..}) if algorithm == AlgorithmId::MegaSecp256k1);
+    let logs = in_memory_logger.drain_logs();
+
+    LogEntriesAssert::assert_that(logs)
+        .has_len(1)
+        .has_only_one_message_containing(&Level::Error, "One or more secret keys corresponding to node public keys in the registry are missing locally:");
 }
 
 #[test]
