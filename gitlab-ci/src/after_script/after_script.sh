@@ -15,31 +15,8 @@ ENG_OR_CHANNEL="eng-orchestrator"
 ENG_CONS_CHANNEL="eng-consensus-test-failures"
 INGRESS_MNGR_PROPTEST_NAME="ingress-manager-proptests-nightly"
 NNS_STATE_TEST_NAME="nns-state-deployment-test-nightly"
-CARGO_TEST_JSON="${CI_PROJECT_DIR}/rs/ci_output.json"
-CARGO_TEST_JUNIT_XML="${CI_PROJECT_DIR}/test_report.xml"
-PREFIX="${CI_PROJECT_DIR}/gitlab-ci/src"
 cd "${CI_PROJECT_DIR}" || true
-JUNIT_DATA_DIR=${CI_PROJECT_DIR}/junit_data
-mkdir -p "$JUNIT_DATA_DIR"
 
-if [[ -d "${CI_PROJECT_DIR}/rs/ci_output" ]]; then
-    find "${CI_PROJECT_DIR}/rs/ci_output" -name stdout -exec cat '{}' \; >>"${CARGO_TEST_JSON}"
-fi
-
-if [[ -f "$CARGO_TEST_JSON" ]]; then
-    python3 "$PREFIX/cargo_test_json_parser/cargo_test_json_parser.py" --input "$CARGO_TEST_JSON" --generate-junit-xml --out "$CARGO_TEST_JUNIT_XML" || {
-        cat "$CARGO_TEST_JSON"
-        if [[ "$CI_COMMIT_REF_NAME" == "master" ]] || [[ "$CI_COMMIT_REF_NAME" == "post-merge-tests-passed" ]]; then
-            "$PREFIX/notify_slack/notify_slack.py" "junit generation failed in <$CI_JOB_URL|$CI_JOB_NAME>." --channel "#precious-bots"
-        fi
-    }
-    cp "$CARGO_TEST_JSON" "$JUNIT_DATA_DIR/ci_results_$CI_JOB_NAME.json"
-    mkdir -p "$PREFIX/data_to_upload"
-    python3 "$PREFIX/cargo_test_json_parser/cargo_test_json_parser.py" --input "$CARGO_TEST_JSON" --to-log-metrics --out "$PREFIX/data_to_upload/ci_results.json"
-fi
-if [[ -f "$CARGO_TEST_JUNIT_XML" ]]; then
-    cp "$CARGO_TEST_JUNIT_XML" "$JUNIT_DATA_DIR/test_report_$CI_JOB_NAME.xml"
-fi
 git checkout --detach --force "$CI_COMMIT_SHA"
 
 # send slack messages
