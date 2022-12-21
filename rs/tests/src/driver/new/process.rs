@@ -37,9 +37,9 @@ impl Process {
         // signal.
         cmd.kill_on_drop(true);
 
-        println!("AsyncCommand: {:?}", cmd);
+        // println!("AsyncCommand: {:?}", cmd);
         let mut child = cmd.spawn().expect("Spawning subprocess should succeed");
-        println!("Child: {:?}", child);
+        // println!("Child: {:?}", child);
 
         let stdout = child.stdout.take().unwrap();
         let stdout_jh = task::spawn(Self::listen_on_channel(

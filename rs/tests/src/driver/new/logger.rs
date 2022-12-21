@@ -45,6 +45,9 @@ fn multiplex_logger(l1: Logger, l2: Logger) -> Logger {
 /// creates a slog::Logger that prints to standard out using an asynchronous drain
 pub fn new_stdout_logger() -> Logger {
     let decorator = slog_term::TermDecorator::new().build();
-    let drain = slog_term::FullFormat::new(decorator).build().fuse();
+    let drain = slog_term::FullFormat::new(decorator)
+        .use_file_location()
+        .build()
+        .fuse();
     slog::Logger::root(async_drain(drain), o!())
 }

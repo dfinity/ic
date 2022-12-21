@@ -73,11 +73,11 @@ impl TaskSchedule {
                     .map(|s| {
                         let state = if !should_include(s) {
                             // FIXME: use logger
-                            println!("Skipping task {}", &s[..]);
+                            // println!("Skipping task {}", &s[..]);
                             OldTaskState::Skipped
                         } else {
                             // FIXME: use logger
-                            println!("Scheduled task {}", &s[..]);
+                            // println!("Scheduled task {}", &s[..]);
                             OldTaskState::Scheduled
                         };
                         match s.as_str() {
@@ -92,17 +92,17 @@ impl TaskSchedule {
             })
             .collect::<_>();
 
-        println!("Obtained {:?} phases", schedule.len());
+        // println!("Obtained {:?} phases", schedule.len());
 
         let mut done_set: BTreeSet<OldTask> = Default::default();
 
-        for (i, mut tasks) in schedule.into_iter().enumerate() {
-            println!("Executing phase #{:?}", i);
+        for (_i, mut tasks) in schedule.into_iter().enumerate() {
+            //println!("Executing phase #{:?}", i);
             let mut processed_tasks = TaskExecutor::execute(&self.ctx, &mut tasks);
             done_set.append(&mut processed_tasks);
         }
 
-        println!("Completed {:?} phases", done_set.len());
+        //println!("Completed {:?} phases", done_set.len());
         let has_execution_succeeded = done_set
             .iter()
             .any(|x| matches!(x.state(), OldTaskState::Failed { failure_message: _ }));
@@ -148,19 +148,19 @@ pub fn new_task_scheduler(
                 action_graph.stop(node_handle, &mut action_graph_subs)
             }
             EventPayload::StartSchedule => {
-                println!("Processing event EventPayload::StartSchedule ...");
+                //println!("Processing event EventPayload::StartSchedule ...");
                 std::thread::sleep(std::time::Duration::from_secs(5));
-                println!("(changed) Processing event EventPayload::StartSchedule ...");
+                //println!("(changed) Processing event EventPayload::StartSchedule ...");
                 // Start the state machine. As a result, in the first loop
                 // iteration, only tasks get spawned.
-                println!("A action_graph: {:?}", action_graph);
+                //println!("A action_graph: {:?}", action_graph);
                 action_graph.start(&mut action_graph_subs);
-                println!("B action_graph: {:?}", action_graph);
+                //println!("B action_graph: {:?}", action_graph);
             }
             _ => return,
         };
 
-        println!("C action_graph: {:?}", action_graph);
+        //println!("C action_graph: {:?}", action_graph);
 
         // Spawn, stop, or fail tasks in the order in which the action graph
         // tells us to do so.
@@ -168,7 +168,7 @@ pub fn new_task_scheduler(
             let node_handle = c.handle;
             let tid = node_handle.id();
             let action_type = c.event_type;
-            println!("Processing {:?} {:?} ...", action_type, tid);
+            //println!("Processing {:?} {:?} ...", action_type, tid);
             use super::action_graph::NodeEventType::*;
             match action_type {
                 Start => {

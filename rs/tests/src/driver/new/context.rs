@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::driver::{new::logger, test_env::TestEnv};
+use crate::driver::test_env::TestEnv;
 use anyhow::{bail, Result};
 use slog::Logger;
 use std::{
@@ -9,7 +9,7 @@ use std::{
     time::SystemTime,
 };
 
-use super::constants;
+use super::{constants, event::TaskId, subprocess_ipc::SubprocessSender};
 
 use slog::info;
 
@@ -18,12 +18,22 @@ pub struct GroupContext {
     pub exec_path: PathBuf,
     pub group_dir: PathBuf,
     logger: Logger,
+    pub parent_pid: u32,
 }
 
 impl GroupContext {
-    pub fn new(group_dir: PathBuf) -> Result<Self> {
-        let logger = logger::new_stdout_logger();
-        println!("GroupContext.new");
+    /// Create a group context based on the group directory path and an optional subprocess task
+    /// id.
+    ///
+    /// XXX: The task id technically should be part of the ProcessContext. However, we need it here
+    /// to create the log channel in case we are in a subprocess.
+    pub fn new(group_dir: PathBuf, subproc_info: Option<(TaskId, u32)>) -> Result<Self> {
+        let task_id = subproc_info.as_ref().map(|t| t.0.clone());
+        let parent_pid = subproc_info
+            .map(|t| t.1)
+            .unwrap_or_else(|| std::process::id());
+        let socket_path = Self::log_socket_path_(parent_pid);
+        let logger = Self::create_logger(socket_path, task_id)?;
 
         let exec_path = std::env::current_exe().expect("could not acquire parent process path");
         if !exec_path.is_file() {
@@ -37,6 +47,7 @@ impl GroupContext {
             exec_path,
             group_dir,
             logger,
+            parent_pid,
         })
     }
 
@@ -44,16 +55,25 @@ impl GroupContext {
         self.group_dir.clone()
     }
 
-    fn dir_exists<P: AsRef<Path>>(path: &P) -> bool {
-        fs::read_dir(path.as_ref()).is_ok()
+    pub fn log_socket_path(&self) -> PathBuf {
+        let parent_pid = self.parent_pid;
+        PathBuf::from(format!("./log_sock_{parent_pid}"))
+    }
+
+    pub fn log_socket_path_(parent_pid: u32) -> PathBuf {
+        // group_dir.as_ref().join("log_socket_path")
+        // XXX: Here, we have to resort to relative path names, because of API limitations. See
+        // also:
+        // https://unix.stackexchange.com/questions/367008/why-is-socket-path-length-limited-to-a-hundred-chars
+        PathBuf::from(format!("./log_sock_{parent_pid}"))
     }
 
     fn ensure_dir<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = self.group_dir.parent().unwrap().join(path.as_ref());
-        if Self::dir_exists(&path) {
-            println!("GroupContext: directory already exists: {:?}", path);
+        if path.is_dir() {
+            // println!("GroupContext: directory already exists: {:?}", path);
         } else {
-            println!("GroupContext: creating directory: {:?}", path);
+            // println!("GroupContext: creating directory: {:?}", path);
             fs::create_dir_all(path)?;
         }
         Ok(())
@@ -127,6 +147,18 @@ impl GroupContext {
     pub fn log(&self) -> &Logger {
         &self.logger
     }
+
+    /// Create a logger for this process.
+    fn create_logger(sock_path: PathBuf, subproc_id: Option<TaskId>) -> Result<Logger> {
+        if let Some(task_id) = subproc_id {
+            let sender = SubprocessSender::new(task_id, sock_path)?;
+            let logger = Logger::root(sender, slog::o!());
+            Ok(logger)
+        } else {
+            let logger = super::logger::new_stdout_logger();
+            Ok(logger)
+        }
+    }
 }
 
 pub type Command = String;
@@ -136,26 +168,22 @@ pub struct ProcessContext {
     pub group_context: GroupContext,
     pub constructed_at: SystemTime,
     pub command: Command,
-    logger: Logger,
 }
 
 impl ProcessContext {
     pub fn new(group_context: GroupContext, command: Command) -> Result<Self> {
-        println!("ProcessContext.new");
+        info!(group_context.log(), "ProcessContext.new");
 
         let constructed_at = SystemTime::now();
-
-        let logger = logger::new_stdout_logger();
 
         Ok(Self {
             group_context,
             constructed_at,
             command,
-            logger,
         })
     }
 
     pub fn logger(&self) -> Logger {
-        self.logger.clone()
+        self.group_context.logger()
     }
 }
