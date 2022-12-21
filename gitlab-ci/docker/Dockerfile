@@ -36,6 +36,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
 # Add the `${USER}` user, and the required folders
 ARG USER=ubuntu
 ARG UID=1000
+ARG BAZEL_VERSION=invalid
 RUN useradd -ms /bin/bash -u ${UID} ${USER} && \
     mkdir -p /home/${USER} && \
     chown -R ${UID}.${UID} /home/${USER} && \
@@ -92,7 +93,7 @@ RUN gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 595E85A6B1
 RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit honeycomb-beeline junit-xml paramiko \
     python-gitlab libhoney termcolor pygithub python-dateutil elasticsearch elasticsearch-dsl freezegun \
     jsonschema mypy pylint pytest-shutil pyyaml xmltodict pytest==5.4.3 codeowners jira toml aenum cvss pytest-cov \
-    requests==2.27.1 urllib3==1.26.8 parse packaging
+    requests==2.27.1 urllib3==1.26.8 parse packaging==21.3
 
 ARG didc_release_date=2022-01-06
 RUN curl --fail \
@@ -111,7 +112,7 @@ ENV ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib ROCKSDB_STATIC=1 \
     BZ2_INCLUDE_DIR=/usr/include BZ2_LIB_DIR=/usr/lib/x86_64-linux-gnu BZ2_STATIC=1
 
 # Pre-populate the Bazel installation.
-RUN USE_BAZEL_VERSION=5.3.2 bazel version
+RUN USE_BAZEL_VERSION=${BAZEL_VERSION} bazel version
 
 RUN mkdir --mode=0700 /home/${USER}/.ssh
 COPY ./files/known_hosts /home/${USER}/.ssh/known_hosts

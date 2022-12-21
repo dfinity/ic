@@ -46,6 +46,9 @@ else
     LATEST="$PREFIX-latest"
 fi
 
+BAZEL_VERSION="$(cat $REPO_ROOT/.bazelversion)"
+echo "bazel version: $BAZEL_VERSION"
+
 pushd "$REPO_ROOT/gitlab-ci/docker"
 
 # we can pass '--no-cache' from env
@@ -58,6 +61,7 @@ DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
     -t registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:"$DOCKER_IMG_TAG" \
     --build-arg USER="${USER}" \
     --build-arg UID="${SET_UID}" \
+    --build-arg BAZEL_VERSION="${BAZEL_VERSION}" \
     -f Dockerfile.bazel .
 
 if [ "${ONLY_BAZEL:-false}" == "true" ]; then
@@ -82,6 +86,7 @@ DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
     --build-arg USER="${USER}" \
     --build-arg UID="${SET_UID}" \
     --build-arg SRC_IMG_PATH="dfinity/ic-build-src:$DOCKER_IMG_TAG" \
+    --build-arg BAZEL_VERSION="${BAZEL_VERSION}" \
     -f Dockerfile .
 
 # build the container image with support for nix
@@ -95,6 +100,7 @@ if [ "$BUILD_NIX" == "true" ]; then
         --build-arg UID="${SET_UID}" \
         --build-arg IC_BUILD_IMG_VERSION="${LATEST}" \
         --build-arg SRC_IMG_PATH="dfinity/ic-build-src:$DOCKER_IMG_TAG" \
+        --build-arg BAZEL_VERSION="${BAZEL_VERSION}" \
         -f Dockerfile.withnix .
 fi
 

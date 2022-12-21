@@ -4,6 +4,7 @@ FROM ubuntu@sha256:e722c7335fdd0ce77044ab5942cb1fbd2b5f60d1f5416acfcdb0814b2baf7
 
 ARG USER=ubuntu
 ARG UID=1000
+ARG BAZEL_VERSION=invalid
 
 ENV TZ=UTC
 
@@ -57,7 +58,7 @@ USER ${USER}
 RUN echo "source /etc/bash_completion.d/bazel" >>/home/${USER}/.bashrc
 
 # Pre-populate the Bazel installation.
-RUN USE_BAZEL_VERSION=5.3.2 bazel version
+RUN USE_BAZEL_VERSION=${BAZEL_VERSION} bazel version
 
 RUN mkdir --mode=0700 /home/${USER}/.ssh
 COPY ./files/known_hosts /home/${USER}/.ssh/known_hosts
