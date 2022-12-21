@@ -1493,7 +1493,7 @@ pub fn install_nns_canisters(
 pub(crate) const WASM_MAGIC_BYTES: &[u8] = &[0, 97, 115, 109];
 
 pub fn prepare_group(group_setup: &GroupSetup, logger: Logger) -> Result<()> {
-    println!("SystemTestGroup.prepare_group");
+    info!(logger, "SystemTestGroup.prepare_group");
 
     let farm_base_url = Url::parse(constants::DEFAULT_FARM_BASE_URL).expect("can't fail");
     let farm = Farm::new(farm_base_url, logger);
@@ -1512,7 +1512,7 @@ pub fn prepare_group(group_setup: &GroupSetup, logger: Logger) -> Result<()> {
 }
 
 pub fn finalize_group(group_setup: &GroupSetup, logger: Logger) -> Result<()> {
-    println!("SystemTestGroup.finalize_group");
+    info!(logger, "SystemTestGroup.finalize_group");
 
     let farm_base_url = Url::parse(constants::DEFAULT_FARM_BASE_URL).expect("can't fail");
     let farm = Farm::new(farm_base_url, logger);

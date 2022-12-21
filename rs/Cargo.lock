@@ -14016,6 +14016,7 @@ dependencies = [
  "async-recursion",
  "async-trait",
  "base64 0.11.0",
+ "bincode",
  "bitcoincore-rpc",
  "candid",
  "canister-test",

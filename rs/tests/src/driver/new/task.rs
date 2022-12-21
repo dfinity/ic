@@ -167,16 +167,16 @@ impl OldTask {
     }
 
     pub fn mk_passed(&self) -> Self {
-        println!("Task {:?} succeeded", self.name());
+        // println!("Task {:?} succeeded", self.name());
         self.finalize(OldTaskState::Passed)
     }
 
     pub fn mk_failed(&self, failure_message: String) -> Self {
-        println!(
-            "Task {:?} failed with message: {:?}",
-            self.name(),
-            failure_message
-        );
+        // println!(
+        //    "Task {:?} failed with message: {:?}",
+        //    self.name(),
+        //    failure_message
+        // );
         self.finalize(OldTaskState::Failed { failure_message })
     }
 }

@@ -65,8 +65,7 @@ impl Task for SubprocessTask {
             .arg(self.group_ctx.group_dir().as_os_str())
             .arg("spawn-child")
             .arg(self.task_id.name())
-            .arg("ABC")
-            .arg("XYZ");
+            .arg(self.group_ctx.parent_pid.to_string());
 
         let mut sub = self.sub_fact.create_broadcasting_subscriber();
         (sub)(Event::task_spawned(self.task_id.clone()));

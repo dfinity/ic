@@ -7,28 +7,27 @@ use crate::driver::{
     farm::Farm,
     new::{
         action_graph::ActionGraph,
-        dsl::SubprocessFn,
+        context::{GroupContext, ProcessContext},
+        dsl::{SubprocessFn, TestFunction},
         event::{
             BroadcastingEventSubscriberFactory, Event, EventBroadcaster, EventPayload, TaskId,
         },
         plan::{EvalOrder, Plan},
+        process::ProcessEventPayload,
         report::{
             Outcome, SystemTestGroupError, SystemTestGroupReport, TargetFunctionFailure,
             TargetFunctionSuccess,
         },
+        subprocess_ipc::LogServer,
         task::EmptyTask,
         task_scheduler::{new_task_scheduler, TaskTable},
     },
+};
+use crate::driver::{
+    pot_dsl::{PotSetupFn, SysTestFn},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::HasIcDependencies,
     test_setup::GroupSetup,
-};
-use crate::driver::{
-    new::{
-        context::{GroupContext, ProcessContext},
-        dsl::TestFunction,
-    },
-    pot_dsl::{PotSetupFn, SysTestFn},
 };
 
 use anyhow::{bail, Result};
@@ -43,7 +42,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use slog::{debug, info, Logger};
+use slog::{debug, info, warn, Logger};
 
 #[derive(Parser, Debug)]
 pub struct CliArgs {
@@ -58,6 +57,18 @@ impl CliArgs {
     fn validate(self) -> Result<Self> {
         // nothing to validate at the moment
         Ok(self)
+    }
+
+    /// A convenience method to get the task id of this subprocess, *if* it is in fact a
+    /// subprocess.
+    fn subproc_id(&self) -> Option<(TaskId, u32)> {
+        match &self.action {
+            SystemTestsSubcommand::SpawnChild {
+                task_id,
+                parent_pid,
+            } => Some((task_id.clone(), *parent_pid)),
+            _ => None,
+        }
     }
 }
 
@@ -84,11 +95,7 @@ pub enum SystemTestsSubcommand {
     InteractiveMode,
 
     #[clap(hide = true)]
-    SpawnChild {
-        task_name: String,
-        cord: PathBuf,
-        log_stream: PathBuf,
-    },
+    SpawnChild { task_id: TaskId, parent_pid: u32 },
 }
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
@@ -468,31 +475,26 @@ impl SystemTestGroup {
         // 1. there exists at least one test after setup
         // 2. all sub-groups are non-empty
 
-        // Step 0
         let args = CliArgs::parse().validate()?;
 
-        // Step 1
-        let group_ctx = GroupContext::new(args.group_dir.path)?;
+        let group_ctx = GroupContext::new(args.group_dir.path.clone(), args.subproc_id())?;
         info!(group_ctx.log(), "Created group context: {:?}", group_ctx);
 
-        // Step 2
         let broadcaster = Arc::new(EventBroadcaster::start());
         info!(group_ctx.log(), "Created broadcaster");
 
-        // Step 3 -- create the runtime that lives until this variable is dropped.
+        // create the runtime that lives until this variable is dropped.
         // Note: having only a runtime handle does not guarantee that the runtime is alive.
         let runtime = Runtime::new().unwrap();
 
-        // Step 4
         let subs: Arc<dyn BroadcastingEventSubscriberFactory> = broadcaster.clone(); // a shallow copy - the broadcaster is shared!
         let plan = self.make_plan(runtime.handle(), group_ctx.clone(), subs)?;
         info!(group_ctx.log(), "Generated plan: {:?}", plan);
 
-        // Step 5
         let static_plan = plan.map(&|task| task.task_id());
         info!(group_ctx.log(), "Generated static_plan: {:?}", static_plan);
 
-        // Step 6 -- create a task table, consuming the plan
+        // create a task table, consuming the plan
         let mut table = TaskTable::new();
         let mut duplicate_tasks: Option<TaskId> = None;
         plan.flatten().into_iter().for_each(|task| {
@@ -514,38 +516,47 @@ impl SystemTestGroup {
         }
         info!(group_ctx.log(), "Generated task table: {:?}", table);
 
-        // Step 7 -- handle the sub-command
+        // handle the sub-command
         match args.action {
             SystemTestsSubcommand::Run => {
                 info!(
                     group_ctx.log(),
                     "Executing parent-process-specific code ..."
                 );
-                // Step A
+
+                let log_server = Arc::new(LogServer::new(
+                    group_ctx.log_socket_path(),
+                    broadcaster.create_broadcasting_subscriber(),
+                    group_ctx.logger(),
+                )?);
+
+                let log_server_jh = std::thread::spawn({
+                    let log_server = log_server.clone();
+                    move || log_server.receive_all_events()
+                });
+
                 let action_graph = ActionGraph::from_plan(static_plan);
                 info!(group_ctx.log(), "Generated action_graph");
 
-                // Step B
                 let scheduler = new_task_scheduler(table, action_graph, group_ctx.logger());
                 info!(group_ctx.log(), "Generated task_scheduler");
 
-                // Step C
                 broadcaster.subscribe(Box::new(scheduler));
                 info!(
                     group_ctx.log(),
                     "Scheduler is now subscribed to broadcaster"
                 );
 
-                // Step D -- subscribe to the root task's terminal events
+                // subscribe to the root task's terminal events
                 // Note: synchronization is done via a zero-capacity crossbeam channel
                 let (terminal_event_sender, terminal_event_receiver) =
                     crossbeam_channel::bounded(0);
 
                 broadcaster.subscribe(Box::new({
-                    let group_ctx = group_ctx;
+                    let group_ctx = group_ctx.clone();
                     let mut report = SystemTestGroupReport::default();
                     move |event| {
-                        debug!(group_ctx.log(), "Considering event {:?}", event);
+                        log_event(group_ctx.log(), &event);
                         if let EventPayload::TaskSpawned { ref task_id } = event.what {
                             // 1. Write down the start time of a freshly-spawned task
                             // Note: This will be needed to compute the task's duration
@@ -606,14 +617,29 @@ impl SystemTestGroup {
                     }
                 }));
 
-                // Step E -- bootstrap the test driver
+                // bootstrap the test driver
                 broadcaster.broadcast(Event {
                     when: SystemTime::now(),
                     what: EventPayload::StartSchedule,
                 });
 
-                // Step F -- await root task's final event and produce appropriate return code
+                // await root task's final event and produce appropriate return code
                 let report = terminal_event_receiver.recv().unwrap();
+
+                if let Err(e) = log_server.shutdown() {
+                    warn!(
+                        group_ctx.log(),
+                        "Error when shutting down log server: {e:?}"
+                    );
+                }
+
+                if let Err(e) = log_server_jh.join() {
+                    warn!(
+                        group_ctx.log(),
+                        "Error receiving all events from subprocess: {e:?}"
+                    );
+                }
+
                 if report.is_failure_free() {
                     Ok(Outcome::FromParentProcess(report))
                 } else {
@@ -623,13 +649,9 @@ impl SystemTestGroup {
             SystemTestsSubcommand::InteractiveMode => {
                 todo!()
             }
-            SystemTestsSubcommand::SpawnChild {
-                task_name,
-                cord: _,
-                log_stream: _,
-            } => {
+            SystemTestsSubcommand::SpawnChild { task_id, .. } => {
                 info!(group_ctx.log(), "Executing sub-process-specific code ...");
-                let my_task = table.get(&TaskId::Test(task_name)).unwrap();
+                let my_task = table.get(&task_id).unwrap();
                 my_task.execute().unwrap();
                 Ok(Outcome::FromSubProcess)
             }
@@ -639,18 +661,40 @@ impl SystemTestGroup {
     pub fn execute_from_args(self) -> Result<()> {
         let outcome = self.execute();
 
+        // this logger is only used in the parent process
         let logger = super::logger::new_stdout_logger();
 
         match outcome {
             Ok(Outcome::FromSubProcess) => Ok(()),
             Ok(Outcome::FromParentProcess(report)) => {
-                info!(&logger, "{}", format!("{report}"));
+                info!(&logger, "{report}");
                 Ok(())
             }
             Err(failure_mode) => {
-                info!(&logger, "{}", format!("{failure_mode}"));
+                warn!(logger, "{failure_mode}");
                 bail!("Tests failed.")
             }
         }
+    }
+}
+
+#[inline]
+fn log_event(log: &Logger, e: &Event) {
+    match &e.what {
+        EventPayload::ProcessEvent {
+            task_id,
+            process_event,
+        } => match process_event {
+            ProcessEventPayload::OutputLine { channel_name, line } => {
+                info!(log, "[{task_id}|{channel_name:?}] {line}");
+            }
+            ProcessEventPayload::ChannelClosed { channel_name } => {
+                info!(log, "[{task_id}|{channel_name:?} closed] ");
+            }
+            ProcessEventPayload::Exited(exit_status) => {
+                info!(log, "[{task_id} existed: {exit_status:?}] ");
+            }
+        },
+        e => debug!(log, "Event: {e:?}"),
     }
 }
