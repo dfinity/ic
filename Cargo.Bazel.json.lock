@@ -1,5 +1,5 @@
 {
-  "checksum": "be38652c32f28366076b4edf28fd9e75c5ffafec321b09e584443cf624a4e962",
+  "checksum": "5b5d799be12fdd443268460e3718034aa9f58be9cfd597b55cc8c0ff3ecbce12",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -619,7 +619,7 @@
               "target": "mio"
             },
             {
-              "id": "num_cpus 1.14.0",
+              "id": "num_cpus 1.15.0",
               "target": "num_cpus"
             },
             {
@@ -7426,13 +7426,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap 4.0.29": {
+    "clap 4.0.30": {
       "name": "clap",
-      "version": "4.0.29",
+      "version": "4.0.30",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/4.0.29/download",
-          "sha256": "4d63b9e9c07271b9957ad22c173bae2a4d9a81127680962039296abcd2f8251d"
+          "url": "https://crates.io/api/v1/crates/clap/4.0.30/download",
+          "sha256": "656ad1e55e23d287773f7d8192c300dc715c3eeded93b3da651d11c42cfd74d2"
         }
       },
       "targets": [
@@ -7487,7 +7487,7 @@
               "target": "clap_lex"
             },
             {
-              "id": "is-terminal 0.4.1",
+              "id": "is-terminal 0.4.2",
               "target": "is_terminal"
             },
             {
@@ -7515,7 +7515,7 @@
           ],
           "selects": {}
         },
-        "version": "4.0.29"
+        "version": "4.0.30"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -11103,7 +11103,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "num_cpus 1.14.0",
+              "id": "num_cpus 1.15.0",
               "target": "num_cpus"
             }
           ],
@@ -12203,7 +12203,7 @@
               "target": "clap"
             },
             {
-              "id": "clap 4.0.29",
+              "id": "clap 4.0.30",
               "target": "clap",
               "alias": "clap_4_0_0"
             },
@@ -12408,6 +12408,10 @@
               "target": "ic_agent"
             },
             {
+              "id": "ic-btc-validation 0.1.0",
+              "target": "ic_btc_validation"
+            },
+            {
               "id": "ic-cdk 0.6.8",
               "target": "ic_cdk"
             },
@@ -12598,7 +12602,7 @@
               "target": "num_traits"
             },
             {
-              "id": "num_cpus 1.14.0",
+              "id": "num_cpus 1.15.0",
               "target": "num_cpus"
             },
             {
@@ -19089,6 +19093,51 @@
       },
       "license": "Apache-2.0"
     },
+    "ic-btc-validation 0.1.0": {
+      "name": "ic-btc-validation",
+      "version": "0.1.0",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/bitcoin-canister",
+          "commitish": {
+            "Rev": "0e996988693f2d55fc9533c44dc20ae5310a1894"
+          },
+          "strip_prefix": "validation"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_btc_validation",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_btc_validation",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "bitcoin 0.28.2",
+              "target": "bitcoin"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": null
+    },
     "ic-cdk 0.5.7": {
       "name": "ic-cdk",
       "version": "0.5.7",
@@ -21269,13 +21318,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "is-terminal 0.4.1": {
+    "is-terminal 0.4.2": {
       "name": "is-terminal",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/is-terminal/0.4.1/download",
-          "sha256": "927609f78c2913a6f6ac3c27a4fe87f43e2a35367c0c4b0f8265e8f49a104330"
+          "url": "https://crates.io/api/v1/crates/is-terminal/0.4.2/download",
+          "sha256": "28dfb6c8100ccc63462345b67d1bbc3679177c75ee4bf59bf29c8b1d110b8189"
         }
       },
       "targets": [
@@ -21326,7 +21375,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.4.1"
+        "version": "0.4.2"
       },
       "license": "MIT"
     },
@@ -28102,13 +28151,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "num_cpus 1.14.0": {
+    "num_cpus 1.15.0": {
       "name": "num_cpus",
-      "version": "1.14.0",
+      "version": "1.15.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/num_cpus/1.14.0/download",
-          "sha256": "f6058e64324c71e02bc2b150e4f3bc8286db6c83092132ffa3f6b1eab0f9def5"
+          "url": "https://crates.io/api/v1/crates/num_cpus/1.15.0/download",
+          "sha256": "0fac9e2da13b5eb447a6ce3d392f23a29d8694bff781bf03a16cd9ac8697593b"
         }
       },
       "targets": [
@@ -28135,7 +28184,7 @@
           "selects": {
             "cfg(all(any(target_arch = \"x86_64\", target_arch = \"aarch64\"), target_os = \"hermit\"))": [
               {
-                "id": "hermit-abi 0.1.19",
+                "id": "hermit-abi 0.2.6",
                 "target": "hermit_abi"
               }
             ],
@@ -28148,7 +28197,7 @@
           }
         },
         "edition": "2015",
-        "version": "1.14.0"
+        "version": "1.15.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -35204,7 +35253,7 @@
               "target": "crossbeam_utils"
             },
             {
-              "id": "num_cpus 1.14.0",
+              "id": "num_cpus 1.15.0",
               "target": "num_cpus"
             },
             {
@@ -44090,7 +44139,7 @@
         "deps": {
           "common": [
             {
-              "id": "num_cpus 1.14.0",
+              "id": "num_cpus 1.15.0",
               "target": "num_cpus"
             }
           ],
@@ -44649,7 +44698,7 @@
               "target": "mio"
             },
             {
-              "id": "num_cpus 1.14.0",
+              "id": "num_cpus 1.15.0",
               "target": "num_cpus"
             },
             {
@@ -48096,8 +48145,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -48108,8 +48157,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -52510,7 +52559,7 @@
     "cc 1.0.78",
     "cddl 0.9.1",
     "clap 3.2.23",
-    "clap 4.0.29",
+    "clap 4.0.30",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",

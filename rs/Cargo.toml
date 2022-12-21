@@ -13,7 +13,6 @@ members = [
   "bitcoin/ckbtc/agent",
   "bitcoin/ckbtc/minter",
   "bitcoin/consensus",
-  "bitcoin/validation",
   "bitcoin/test-utils",
   "bitcoin/types/internal",
   "bitcoin/types/public",

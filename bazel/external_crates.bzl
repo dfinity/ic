@@ -378,6 +378,10 @@ def external_crates_repository(name, annotations):
                     "hyper",
                 ],
             ),
+            "ic-btc-validation": crate.spec(
+                git = "https://github.com/dfinity/bitcoin-canister",
+                rev = "0e996988693f2d55fc9533c44dc20ae5310a1894",
+            ),
             "ic-cdk": crate.spec(
                 version = "^0.6.0",
                 default_features = False,
