@@ -9,20 +9,10 @@ do
             # Required by rclone to get credentials from $HOME/.aws/credentials
             export HOME="$v"
             ;;
-        COMMIT_SHA)
-            TREE_VERSION="$v"
-            ;;
-        GIT_TREE_STATUS)
-            GIT_TREE_STATUS="$v"
-            ;;
-        BUILD_TIMESTAMP)
-            BUILD_TIMESTAMP="$v"
-            ;;
     esac
 done < "@@VERSION_FILE@@"
 
-# Set the version to "{git sha}-{build timestamp}" unconditionally unles it explicitly set (using --ic_version arg) to avoid conflicts with CI.
-: ${VERSION:="${TREE_VERSION}-${BUILD_TIMESTAMP}"}
+VERSION="$(cat @@VERSION_TXT@@)"
 
 # rclone reads the $(dirname $f) to get file attribuates.
 # Therefore symlink should be resolved.
