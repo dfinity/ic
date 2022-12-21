@@ -5,13 +5,13 @@
       "type": "custom",
       "candid": "./icp_ledger/ledger.did",
       "build": ["bazel build //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method"],
-      "wasm": "../../bazel-bin/rs/rosetta-api/icp_ledger/ledger/ledger-canister-wasm-notify-method.wasm",
+      "wasm": "../../bazel-bin/rs/rosetta-api/icp_ledger/ledger/ledger-canister-wasm-notify-method.wasm"
     },
     "icrc1_ledger": {
       "type":"custom",
       "candid": "./icrc1/ledger/icrc1.did",
       "build": ["bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister"],
-      "wasm": "../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister.wasm",
+      "wasm": "../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister.wasm"
     }
   },
   "networks": {

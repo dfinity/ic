@@ -10,9 +10,9 @@ use ic_icrc1::{
 };
 use ic_icrc1_ledger::InitArgs;
 use ic_icrc1_ledger_sm_tests::{
-    balance_of, total_supply, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE,
-    INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE,
-    TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL, TX_WINDOW,
+    balance_of, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY,
+    INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
+    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL, TX_WINDOW,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
@@ -209,256 +209,21 @@ fn test_metadata() {
 
 #[test]
 fn test_tx_deduplication() {
-    let env = StateMachine::new();
-    let p1 = PrincipalId::new_user_test_id(1);
-    let p2 = PrincipalId::new_user_test_id(2);
-    let canister_id = install_ledger(&env, vec![(Account::from(p1), 10_000_000)]);
-
-    // No created_at_time => no deduplication
-    let block_id = transfer(&env, canister_id, p1, p2, 10_000).expect("transfer failed");
-    assert!(transfer(&env, canister_id, p1, p2, 10_000).expect("transfer failed") > block_id);
-
-    let now = system_time_to_nanos(env.time());
-
-    let transfer_args = TransferArg {
-        from_subaccount: None,
-        to: p2.into(),
-        fee: None,
-        amount: Nat::from(1_000_000),
-        created_at_time: Some(now),
-        memo: None,
-    };
-
-    let block_idx = send_transfer(&env, canister_id, p1, &transfer_args).expect("transfer failed");
-
-    assert_eq!(
-        send_transfer(&env, canister_id, p1, &transfer_args),
-        Err(TransferError::Duplicate {
-            duplicate_of: Nat::from(block_idx)
-        })
-    );
-
-    env.advance_time(TX_WINDOW + Duration::from_secs(5 * 60));
-    let now = system_time_to_nanos(env.time());
-
-    assert_eq!(
-        send_transfer(&env, canister_id, p1, &transfer_args,),
-        Err(TransferError::TooOld),
-    );
-
-    // Same transaction, but `created_at_time` specified explicitly.
-    // The ledger should not deduplicate this request.
-    let block_idx = send_transfer(
-        &env,
-        canister_id,
-        p1,
-        &TransferArg {
-            from_subaccount: None,
-            to: p2.into(),
-            fee: None,
-            amount: Nat::from(1_000_000),
-            created_at_time: Some(now),
-            memo: None,
-        },
-    )
-    .expect("transfer failed");
-
-    // This time the transaction is a duplicate.
-    assert_eq!(
-        Err(TransferError::Duplicate {
-            duplicate_of: Nat::from(block_idx)
-        }),
-        send_transfer(
-            &env,
-            canister_id,
-            p1,
-            &TransferArg {
-                from_subaccount: None,
-                to: p2.into(),
-                fee: None,
-                amount: Nat::from(1_000_000),
-                created_at_time: Some(now),
-                memo: None,
-            }
-        )
-    );
-
-    // Same transaction, but with "default" `memo`.
-    // The ledger should not deduplicate because we set a new field explicitly.
-    let block_idx = send_transfer(
-        &env,
-        canister_id,
-        p1,
-        &TransferArg {
-            from_subaccount: None,
-            to: p2.into(),
-            fee: None,
-            amount: Nat::from(1_000_000),
-            created_at_time: Some(now),
-            memo: Some(Memo::default()),
-        },
-    )
-    .expect("transfer failed");
-
-    // This time the transaction is a duplicate.
-    assert_eq!(
-        Err(TransferError::Duplicate {
-            duplicate_of: Nat::from(block_idx)
-        }),
-        send_transfer(
-            &env,
-            canister_id,
-            p1,
-            &TransferArg {
-                from_subaccount: None,
-                to: p2.into(),
-                fee: None,
-                amount: Nat::from(1_000_000),
-                created_at_time: Some(now),
-                memo: Some(Memo::default()),
-            }
-        )
-    );
+    ic_icrc1_ledger_sm_tests::test_tx_deduplication(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_mint_burn() {
-    let env = StateMachine::new();
-    let p1 = PrincipalId::new_user_test_id(1);
-    let p2 = PrincipalId::new_user_test_id(2);
-    let canister_id = install_ledger(&env, vec![]);
-
-    assert_eq!(0, total_supply(&env, canister_id));
-    assert_eq!(0, balance_of(&env, canister_id, p1));
-    assert_eq!(0, balance_of(&env, canister_id, MINTER.clone()));
-
-    transfer(&env, canister_id, MINTER.clone(), p1, 10_000_000).expect("mint failed");
-
-    assert_eq!(10_000_000, total_supply(&env, canister_id));
-    assert_eq!(10_000_000, balance_of(&env, canister_id, p1));
-    assert_eq!(0, balance_of(&env, canister_id, MINTER.clone()));
-
-    transfer(&env, canister_id, p1, MINTER.clone(), 1_000_000).expect("burn failed");
-
-    assert_eq!(9_000_000, total_supply(&env, canister_id));
-    assert_eq!(9_000_000, balance_of(&env, canister_id, p1));
-    assert_eq!(0, balance_of(&env, canister_id, MINTER.clone()));
-
-    // You have at least FEE, you can burn at least FEE
-    assert_eq!(
-        Err(TransferError::BadBurn {
-            min_burn_amount: Nat::from(FEE)
-        }),
-        transfer(&env, canister_id, p1, MINTER.clone(), FEE / 2),
-    );
-
-    transfer(&env, canister_id, p1, p2, FEE / 2).expect("transfer failed");
-
-    assert_eq!(FEE / 2, balance_of(&env, canister_id, p2));
-
-    // If you have less than FEE, you can burn only the whole amount.
-    assert_eq!(
-        Err(TransferError::BadBurn {
-            min_burn_amount: Nat::from(FEE / 2)
-        }),
-        transfer(&env, canister_id, p2, MINTER.clone(), FEE / 4),
-    );
-    transfer(&env, canister_id, p2, MINTER.clone(), FEE / 2).expect("burn failed");
-
-    assert_eq!(0, balance_of(&env, canister_id, p2));
-
-    // You cannot burn zero tokens, no matter what your balance is.
-    assert_eq!(
-        Err(TransferError::BadBurn {
-            min_burn_amount: Nat::from(FEE)
-        }),
-        transfer(&env, canister_id, p2, MINTER.clone(), 0),
-    );
+    ic_icrc1_ledger_sm_tests::test_mint_burn(ledger_wasm(), encode_init_args);
 }
-
 #[test]
 fn test_single_transfer() {
-    let env = StateMachine::new();
-    let p1 = PrincipalId::new_user_test_id(1);
-    let p2 = PrincipalId::new_user_test_id(2);
-    let canister_id = install_ledger(
-        &env,
-        vec![
-            (Account::from(p1), 10_000_000),
-            (Account::from(p2), 5_000_000),
-        ],
-    );
-
-    assert_eq!(15_000_000, total_supply(&env, canister_id));
-    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1));
-    assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2));
-
-    transfer(&env, canister_id, p1, p2, 1_000_000).expect("transfer failed");
-
-    assert_eq!(15_000_000 - FEE, total_supply(&env, canister_id));
-    assert_eq!(9_000_000u64 - FEE, balance_of(&env, canister_id, p1));
-    assert_eq!(6_000_000u64, balance_of(&env, canister_id, p2));
+    ic_icrc1_ledger_sm_tests::test_single_transfer(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_account_canonicalization() {
-    let env = StateMachine::new();
-    let p1 = PrincipalId::new_user_test_id(1);
-    let p2 = PrincipalId::new_user_test_id(2);
-    let canister_id = install_ledger(
-        &env,
-        vec![
-            (Account::from(p1), 10_000_000),
-            (Account::from(p2), 5_000_000),
-        ],
-    );
-
-    assert_eq!(
-        10_000_000u64,
-        balance_of(
-            &env,
-            canister_id,
-            Account {
-                owner: p1,
-                subaccount: None
-            }
-        )
-    );
-    assert_eq!(
-        10_000_000u64,
-        balance_of(
-            &env,
-            canister_id,
-            Account {
-                owner: p1,
-                subaccount: Some([0; 32])
-            }
-        )
-    );
-
-    transfer(
-        &env,
-        canister_id,
-        p1,
-        Account {
-            owner: p2,
-            subaccount: Some([0; 32]),
-        },
-        1_000_000,
-    )
-    .expect("transfer failed");
-
-    assert_eq!(
-        6_000_000u64,
-        balance_of(
-            &env,
-            canister_id,
-            Account {
-                owner: p2,
-                subaccount: None
-            }
-        )
-    );
+    ic_icrc1_ledger_sm_tests::test_account_canonicalization(ledger_wasm(), encode_init_args);
 }
 
 #[test]
