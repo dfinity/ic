@@ -47,6 +47,17 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
                 match err {
                     CryptoError::SecretKeyNotFound { .. }
                     | CryptoError::TlsSecretKeyNotFound { .. } => {
+                        // This may be due to a malicious entity registering new key(s) for this node.
+                        // Some more drastic action should be taken here; at the moment, we just log and
+                        // return an error, and increment a metric that will raise an alert.
+                        // NOTE: The FIT runbook for this alert (IC_Crypto_KeysInRegistryNotFoundLocally)
+                        // suggests to look for this specific error message in the logs, so if the
+                        // error message is modified, the runbook entry should be adjusted accordingly.
+                        error!(
+                            self.logger,
+                            "One or more secret keys corresponding to node public keys in the registry are missing locally: {:?}",
+                            err
+                        );
                         self.metrics.observe_boolean_result(
                             BooleanOperation::KeyInRegistryMissingLocally,
                             BooleanResult::True,
@@ -70,10 +81,13 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         if !self.csp.pks_contains(keys_in_registry)? {
             // This may be due to a malicious entity registering new key(s) for this node.
             // Some more drastic action should be taken here; at the moment, we just log and
-            // return an error.
+            // return an error, and increment a metric that will raise an alert.
+            // NOTE: The FIT runbook for this alert (IC_Crypto_KeysInRegistryNotFoundLocally)
+            // suggests to look for this specific error message in the logs, so if the
+            // error message is modified, the runbook entry should be adjusted accordingly.
             error!(
                 self.logger,
-                "One or more node keys from the registry are missing locally"
+                "One or more node public keys from the registry are missing locally"
             );
             self.metrics.observe_boolean_result(
                 BooleanOperation::KeyInRegistryMissingLocally,
