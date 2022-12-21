@@ -4,8 +4,6 @@
 # result in an `exit 255`` and mark the unit as failed, while also providing a
 # nice `disable` helper skip the unit.
 
-source '/opt/ic/bin/helpers.shlib'
-
 function setup_exec_condition() {
     # Suspect xtrace to not pollute the logs
     set +x

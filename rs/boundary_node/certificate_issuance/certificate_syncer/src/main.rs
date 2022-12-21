@@ -61,7 +61,7 @@ struct Cli {
     #[clap(long, default_value = "/var/run/nginx.pid")]
     pid_path: PathBuf,
 
-    #[clap(long, default_value = "http://127.0.0.1:3000/")]
+    #[clap(long, default_value = "http://127.0.0.1:3000/certificates")]
     certificates_exporter_uri: Uri,
 
     #[clap(long, default_value = "certs")]
@@ -70,8 +70,8 @@ struct Cli {
     #[clap(long, default_value = "servers.conf")]
     local_configuration_path: PathBuf,
 
-    #[clap(long)]
-    configuration_template: String,
+    #[clap(long, default_value = "servers.conf.tmpl")]
+    configuration_template_path: PathBuf,
 
     #[arg(long, default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
@@ -134,7 +134,10 @@ async fn main() -> Result<(), Error> {
     let reloader = WithMetrics(reloader, MetricParams::new(&meter, SERVICE_NAME, "reload"));
 
     // Persistence
-    let renderer = Renderer::new(&cli.configuration_template);
+    let configuration_template = std::fs::read_to_string(&cli.configuration_template_path)
+        .context("failed to read configuration template")?;
+
+    let renderer = Renderer::new(&configuration_template);
     let renderer = WithMetrics(renderer, MetricParams::new(&meter, SERVICE_NAME, "render"));
     let renderer = Arc::new(renderer);
 

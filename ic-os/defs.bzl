@@ -554,6 +554,8 @@ def _boundary_node_image_deps(mode, sev = False):
             # additional files to install
             "//publish/binaries:boundary-node-control-plane": "/opt/ic/bin/boundary-node-control-plane:0755",
             "//publish/binaries:boundary-node-prober": "/opt/ic/bin/boundary-node-prober:0755",
+            "//publish/binaries:certificate-issuer": "/opt/ic/bin/certificate-issuer:0755",
+            "//publish/binaries:certificate-syncer": "/opt/ic/bin/certificate-syncer:0755",
             "//publish/binaries:denylist-updater": "/opt/ic/bin/denylist-updater:0755",
             "//publish/binaries:ic-balance-exporter": "/opt/ic/bin/ic-balance-exporter:0755",
             "//publish/binaries:ic-registry-replicator": "/opt/ic/bin/ic-registry-replicator:0755",

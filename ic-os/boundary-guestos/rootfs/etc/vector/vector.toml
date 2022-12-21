@@ -229,3 +229,75 @@ endpoint = "${ELASTICSEARCH_URL}"
 mode = "bulk"
 bulk.index = "boundary-node-control-plane-%Y.%m.%d"
 tls.verify_certificate = false
+
+# certificate-issuer
+
+[sources.certificate_issuer]
+type = "journald"
+include_units = ["certificate-issuer"]
+
+[transforms.certificate_issuer_json]
+type = "remap"
+inputs = ["certificate_issuer"]
+source = """
+preserved_fields = {}; preserved_keys = ["host"]
+
+for_each(preserved_keys) -> |_, k| {
+    v = get!(., [k])
+    if v != null {
+        preserved_fields = set!(preserved_fields, [k], v)
+    }
+}
+
+. = parse_json!(.message)
+
+.@timestamp = to_timestamp!(.timestamp, unit: "milliseconds")
+.@timestamp = to_unix_timestamp(.@timestamp, unit: "milliseconds")
+del(.timestamp)
+
+. = merge(., preserved_fields)
+"""
+
+[sinks.elasticsearch_certificate_issuer]
+type = "elasticsearch"
+inputs = ["certificate_issuer_json"]
+endpoint = "${ELASTICSEARCH_URL}"
+mode = "bulk"
+bulk.index = "boundary-node-certificate-issuer-%Y.%m.%d"
+tls.verify_certificate = false
+
+# certificate-syncer
+
+[sources.certificate_syncer]
+type = "journald"
+include_units = ["certificate-syncer"]
+
+[transforms.certificate_syncer_json]
+type = "remap"
+inputs = ["certificate_syncer"]
+source = """
+preserved_fields = {}; preserved_keys = ["host"]
+
+for_each(preserved_keys) -> |_, k| {
+    v = get!(., [k])
+    if v != null {
+        preserved_fields = set!(preserved_fields, [k], v)
+    }
+}
+
+. = parse_json!(.message)
+
+.@timestamp = to_timestamp!(.timestamp, unit: "milliseconds")
+.@timestamp = to_unix_timestamp(.@timestamp, unit: "milliseconds")
+del(.timestamp)
+
+. = merge(., preserved_fields)
+"""
+
+[sinks.elasticsearch_certificate_syncer]
+type = "elasticsearch"
+inputs = ["certificate_syncer_json"]
+endpoint = "${ELASTICSEARCH_URL}"
+mode = "bulk"
+bulk.index = "boundary-node-certificate-syncer-%Y.%m.%d"
+tls.verify_certificate = false

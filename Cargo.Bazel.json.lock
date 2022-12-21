@@ -1,5 +1,5 @@
 {
-  "checksum": "abc222dea483045e9709c32e78e108f1df1ac232455c8fe05bb2baa45869730e",
+  "checksum": "be38652c32f28366076b4edf28fd9e75c5ffafec321b09e584443cf624a4e962",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12610,7 +12610,7 @@
               "target": "openssh_keys"
             },
             {
-              "id": "openssl 0.10.44",
+              "id": "openssl 0.10.45",
               "target": "openssl"
             },
             {
@@ -23801,7 +23801,7 @@
           "selects": {
             "cfg(unix)": [
               {
-                "id": "openssl-sys 0.9.79",
+                "id": "openssl-sys 0.9.80",
                 "target": "openssl_sys"
               }
             ]
@@ -26591,7 +26591,7 @@
                 "target": "log"
               },
               {
-                "id": "openssl 0.10.44",
+                "id": "openssl 0.10.45",
                 "target": "openssl"
               },
               {
@@ -26599,7 +26599,7 @@
                 "target": "openssl_probe"
               },
               {
-                "id": "openssl-sys 0.9.79",
+                "id": "openssl-sys 0.9.80",
                 "target": "openssl_sys"
               }
             ],
@@ -28695,13 +28695,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "openssl 0.10.44": {
+    "openssl 0.10.45": {
       "name": "openssl",
-      "version": "0.10.44",
+      "version": "0.10.45",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/openssl/0.10.44/download",
-          "sha256": "29d971fd5722fec23977260f6e81aa67d2f22cadbdc2aa049f1022d9a3be1566"
+          "url": "https://crates.io/api/v1/crates/openssl/0.10.45/download",
+          "sha256": "b102428fd03bc5edf97f62620f7298614c45cedf287c271e7ed450bbaf83f2e1"
         }
       },
       "targets": [
@@ -28761,11 +28761,11 @@
               "target": "once_cell"
             },
             {
-              "id": "openssl 0.10.44",
+              "id": "openssl 0.10.45",
               "target": "build_script_build"
             },
             {
-              "id": "openssl-sys 0.9.79",
+              "id": "openssl-sys 0.9.80",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -28782,7 +28782,7 @@
           ],
           "selects": {}
         },
-        "version": "0.10.44"
+        "version": "0.10.45"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -28791,7 +28791,7 @@
         "deps": {
           "common": [
             {
-              "id": "openssl-sys 0.9.79",
+              "id": "openssl-sys 0.9.80",
               "target": "openssl_sys",
               "alias": "ffi"
             }
@@ -28884,13 +28884,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "openssl-sys 0.9.79": {
+    "openssl-sys 0.9.80": {
       "name": "openssl-sys",
-      "version": "0.9.79",
+      "version": "0.9.80",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/openssl-sys/0.9.79/download",
-          "sha256": "5454462c0eced1e97f2ec09036abc8da362e66802f66fd20f86854d9d8cbcbc4"
+          "url": "https://crates.io/api/v1/crates/openssl-sys/0.9.80/download",
+          "sha256": "23bbbf7854cd45b83958ebe919f0e8e516793727652e27fda10a8384cfc790b7"
         }
       },
       "targets": [
@@ -28931,14 +28931,14 @@
               "target": "libc"
             },
             {
-              "id": "openssl-sys 0.9.79",
+              "id": "openssl-sys 0.9.80",
               "target": "build_script_main"
             }
           ],
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.9.79"
+        "version": "0.9.80"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -44913,11 +44913,11 @@
               "target": "futures_util"
             },
             {
-              "id": "openssl 0.10.44",
+              "id": "openssl 0.10.45",
               "target": "openssl"
             },
             {
-              "id": "openssl-sys 0.9.79",
+              "id": "openssl-sys 0.9.80",
               "target": "openssl_sys"
             },
             {
@@ -48108,8 +48108,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -48120,8 +48120,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
