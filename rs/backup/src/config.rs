@@ -16,6 +16,11 @@ pub struct SubnetConfig {
     pub sync_period_secs: u64,
     pub replay_period_secs: u64,
 }
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ColdStorage {
+    pub cold_storage_dir: PathBuf,
+    pub versions_hot: usize,
+}
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
@@ -29,6 +34,7 @@ pub struct Config {
     pub ssh_private_key: PathBuf,
     pub disk_threshold_warn: u32,
     pub slack_token: String,
+    pub cold_storage: Option<ColdStorage>,
     pub subnets: Vec<SubnetConfig>,
 }
 

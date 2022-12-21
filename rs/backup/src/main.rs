@@ -11,7 +11,7 @@ use tokio::task::spawn_blocking;
 // Here is an example config file:
 //
 // {
-//     "version": 1,
+//     "version": 5,
 //     "push_metrics": true,
 //     "backup_instance": "zh1-spm34",
 //     "nns_url": "https://smallXYZ.testnet.dfinity.network",
@@ -27,7 +27,11 @@ use tokio::task::spawn_blocking;
 //     ],
 //     "ssh_private_key": "/home/my_user/.ssh/id_ed25519_backup",
 //     "disk_threshold_warn": 75,
-//     "slack_token": "ABCD1234"
+//     "slack_token": "ABCD1234",
+//     "cold_storage": {
+//         "cold_storage_dir": "/var/cold_storage",
+//         "versions_hot": 2
+//     },
 //     "subnets": [
 //       {
 //         "subnet_id": "ziu2q-il6zl-3654z-zcdg2-nbtx3-u2ba3-7yzey-flpky-aam7n-x53ip-uqe",

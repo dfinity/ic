@@ -38,7 +38,7 @@ use crate::{
     },
     util::{block_on, get_nns_node},
 };
-use ic_backup::config::{Config, SubnetConfig};
+use ic_backup::config::{ColdStorage, Config, SubnetConfig};
 use ic_backup::util::sleep_secs;
 use ic_recovery::file_sync_helper::{download_binary, write_file};
 use ic_registry_subnet_type::SubnetType;
@@ -80,6 +80,10 @@ pub fn test(env: TestEnv) {
     fs::create_dir_all(bin_dir.clone()).expect("failure creating bin directory");
     let config_dir = root_dir.join("config");
     fs::create_dir_all(config_dir.clone()).expect("failure creating config directory");
+    let cold_storage_dir = tempfile::TempDir::new()
+        .expect("failed to create a temporary directory")
+        .path()
+        .to_path_buf();
 
     let nns_node = get_nns_node(&env.topology_snapshot());
     let node_ip: IpAddr = nns_node.get_ip_addr();
@@ -131,6 +135,11 @@ pub fn test(env: TestEnv) {
         replay_period_secs: 30,
     };
 
+    let cold_storage = Some(ColdStorage {
+        cold_storage_dir,
+        versions_hot: 2,
+    });
+
     let config = Config {
         version: 1,
         push_metrics: false,
@@ -142,6 +151,7 @@ pub fn test(env: TestEnv) {
         ssh_private_key: private_key_path,
         disk_threshold_warn: 75,
         slack_token: "NO_TOKEN_IN_TESTING".to_string(),
+        cold_storage,
         subnets: vec![subnet],
     };
     let config_str =

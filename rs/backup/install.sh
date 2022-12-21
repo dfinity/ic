@@ -22,7 +22,7 @@ PUBLIC_KEY_NAME="ic_public_key.pem"
 PUBLIC_KEY_FILE="${TMP_DIR}/${PUBLIC_KEY_NAME}"
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="a39e24eb838687a599578bdda4408089232315b6"
+DEFAULT_BUILD_ID="7ac6026f5d05673e62f88ae66b23d53e71093e5d"
 echo "Enter the BUILD_ID of the proper ic-backup version:"
 echo "(default: ${DEFAULT_BUILD_ID}):"
 read BUILD_ID
@@ -72,7 +72,7 @@ chmod +x ${BACKUP_EXE}
 
 read -r -d '' CONFIG <<-EOM
 {
-    "version": 2,
+    "version": 5,
     "push_metrics": true,
     "backup_instance": "${BACKUP_INSTANCE}",
     "nns_url": "${NNS_URL}",
@@ -89,6 +89,7 @@ read -r -d '' CONFIG <<-EOM
     "ssh_private_key": "${BACKUP_HOME}/.ssh/id_ed25519_backup",
     "disk_threshold_warn": 75,
     "slack_token": "<INSERT SLACK TOKEN>",
+    "cold_storage": null,
     "subnets": []
 }
 EOM
