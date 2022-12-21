@@ -14,7 +14,9 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
     IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
-use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, PreSignatureQuadruple};
+use ic_types::crypto::canister_threshold_sig::{
+    ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigShare,
+};
 use ic_types::crypto::canister_threshold_sig::{
     ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
 };
@@ -600,7 +602,7 @@ pub fn random_dealer_id(params: &IDkgTranscriptParams) -> NodeId {
 }
 
 pub fn random_dealer_id_excluding(transcript: &IDkgTranscript, exclusion: NodeId) -> NodeId {
-    let mut rng = rand::thread_rng();
+    let mut rng = thread_rng();
     let excluded_index = transcript
         .index_for_dealer_id(exclusion)
         .expect("excluded node not a dealer");
@@ -781,6 +783,34 @@ impl CorruptBytes for Vec<u8> {
         let mut bytes = self.clone();
         *bytes.last_mut().expect("cannot be empty") ^= 1;
         bytes
+    }
+}
+
+impl<const N: usize> CorruptBytes for [u8; N] {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self::Type {
+        let mut bytes = *self;
+        bytes[N - 1] ^= 1;
+        bytes
+    }
+}
+
+impl CorruptBytes for ThresholdEcdsaSigShare {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self::Type {
+        ThresholdEcdsaSigShare {
+            sig_share_raw: self.sig_share_raw.clone_with_bit_flipped(),
+        }
+    }
+}
+
+impl CorruptBytes for Randomness {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self::Type {
+        Randomness::from(self.get().clone_with_bit_flipped())
     }
 }
 
@@ -1022,6 +1052,51 @@ impl IntoBuilder for SignedIDkgDealing {
         SignedIDkgDealingBuilder {
             content: self.content,
             signature: self.signature,
+        }
+    }
+}
+
+pub struct ThresholdEcdsaSigInputsBuilder {
+    derivation_path: ExtendedDerivationPath,
+    hashed_message: Vec<u8>,
+    nonce: Randomness,
+    presig_quadruple: PreSignatureQuadruple,
+    key_transcript: IDkgTranscript,
+}
+
+impl ThresholdEcdsaSigInputsBuilder {
+    pub fn build(self) -> ThresholdEcdsaSigInputs {
+        ThresholdEcdsaSigInputs::new(
+            &self.derivation_path,
+            &self.hashed_message,
+            self.nonce,
+            self.presig_quadruple,
+            self.key_transcript,
+        )
+        .expect("invalid threshold ECDSA sig inputs")
+    }
+
+    pub fn corrupt_hashed_message(mut self) -> Self {
+        self.hashed_message = self.hashed_message.clone_with_bit_flipped();
+        self
+    }
+
+    pub fn corrupt_nonce(mut self) -> Self {
+        self.nonce = self.nonce.clone_with_bit_flipped();
+        self
+    }
+}
+
+impl IntoBuilder for ThresholdEcdsaSigInputs {
+    type BuilderType = ThresholdEcdsaSigInputsBuilder;
+
+    fn into_builder(self) -> Self::BuilderType {
+        ThresholdEcdsaSigInputsBuilder {
+            derivation_path: self.derivation_path().clone(),
+            hashed_message: Vec::from(self.hashed_message()),
+            nonce: *self.nonce(),
+            presig_quadruple: self.presig_quadruple().clone(),
+            key_transcript: self.key_transcript().clone(),
         }
     }
 }

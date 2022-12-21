@@ -91,7 +91,7 @@ impl ThresholdEcdsaSigShareInternal {
             presig_transcript,
         )?;
 
-        // Compute the message represenative from the hash, which may require
+        // Compute the message representative from the hash, which may require
         // a reduction if int(hashed_message) >= group_order
         let e = convert_hash_to_integer(hashed_message, curve_type)?;
 
@@ -219,10 +219,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         sig
     }
 
-    pub fn deserialize(
-        algorithm_id: ic_types::crypto::AlgorithmId,
-        bytes: &[u8],
-    ) -> ThresholdEcdsaResult<Self> {
+    pub fn deserialize(algorithm_id: AlgorithmId, bytes: &[u8]) -> ThresholdEcdsaResult<Self> {
         let curve_type = match algorithm_id {
             AlgorithmId::ThresholdEcdsaSecp256k1 => Ok(EccCurveType::K256),
             x => Err(ThresholdEcdsaError::SerializationError(format!(
