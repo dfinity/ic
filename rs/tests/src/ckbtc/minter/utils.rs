@@ -281,7 +281,10 @@ pub async fn wait_for_update_balance(
     debug!(logger, "Calling update balance");
     let start = Instant::now();
     let mut update_result = ckbtc_minter_agent
-        .update_balance(UpdateBalanceArgs { subaccount })
+        .update_balance(UpdateBalanceArgs {
+            owner: None,
+            subaccount,
+        })
         .await
         .expect("Error while calling update_balance");
     while update_result.is_err() {
@@ -289,7 +292,10 @@ pub async fn wait_for_update_balance(
             panic!("update_balance timeout");
         };
         update_result = ckbtc_minter_agent
-            .update_balance(UpdateBalanceArgs { subaccount })
+            .update_balance(UpdateBalanceArgs {
+                owner: None,
+                subaccount,
+            })
             .await
             .expect("Error while calling update_balance");
     }
@@ -302,7 +308,10 @@ pub async fn update_balance(
 ) -> Result<UpdateBalanceResult, UpdateBalanceError> {
     debug!(logger, "Calling update balance");
     ckbtc_minter_agent
-        .update_balance(UpdateBalanceArgs { subaccount })
+        .update_balance(UpdateBalanceArgs {
+            owner: None,
+            subaccount,
+        })
         .await
         .expect("Error while calling update_balance")
 }
@@ -311,7 +320,10 @@ pub async fn update_balance_without_subaccount(
     ckbtc_minter_agent: &CkBtcMinterAgent,
 ) -> Result<UpdateBalanceResult, UpdateBalanceError> {
     ckbtc_minter_agent
-        .update_balance(UpdateBalanceArgs { subaccount: None })
+        .update_balance(UpdateBalanceArgs {
+            owner: None,
+            subaccount: None,
+        })
         .await
         .expect("Error while calling update_balance")
 }
@@ -323,7 +335,7 @@ pub async fn get_btc_address(
     subaccount: Subaccount,
 ) -> Address {
     let address = agent
-        .get_btc_address(Some(subaccount))
+        .get_btc_address(None, Some(subaccount))
         .await
         .expect("Error while calling get_btc_address");
     debug!(logger, "Btc address for subaccount is: {}", address);
@@ -540,6 +552,7 @@ pub async fn assert_no_new_utxo(agent: &CkBtcMinterAgent, subaccount: &Subaccoun
 pub async fn assert_temporarily_unavailable(agent: &CkBtcMinterAgent, subaccount: &Subaccount) {
     let result = agent
         .update_balance(UpdateBalanceArgs {
+            owner: None,
             subaccount: Some(*subaccount),
         })
         .await
@@ -554,6 +567,7 @@ pub async fn assert_update_balance_error(
 ) {
     let result = agent
         .update_balance(UpdateBalanceArgs {
+            owner: None,
             subaccount: Some(*subaccount),
         })
         .await

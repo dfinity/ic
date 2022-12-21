@@ -81,9 +81,10 @@ impl CkBtcMinterAgent {
 
     pub async fn get_btc_address(
         &self,
+        owner: Option<Principal>,
         subaccount: Option<Subaccount>,
     ) -> Result<String, CkBtcMinterAgentError> {
-        self.update("get_btc_address", GetBtcAddressArgs { subaccount })
+        self.update("get_btc_address", GetBtcAddressArgs { owner, subaccount })
             .await
     }
 

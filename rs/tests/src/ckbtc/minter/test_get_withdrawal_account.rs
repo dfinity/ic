@@ -37,7 +37,10 @@ pub fn test_get_withdrawal_account(env: TestEnv) {
         activate_ecdsa_signature(sys_node, app_subnet_id, TEST_KEY_LOCAL, &logger).await;
 
         // Call endpoint.
-        let arg = GetBtcAddressArgs { subaccount: None };
+        let arg = GetBtcAddressArgs {
+            owner: None,
+            subaccount: None,
+        };
         let arg = &Encode!(&arg).expect("Error while encoding argument.");
         let res = agent
             .update(&minter, "get_withdrawal_account")

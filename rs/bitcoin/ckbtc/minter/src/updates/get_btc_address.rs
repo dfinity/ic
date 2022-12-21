@@ -12,6 +12,7 @@ use serde::Serialize;
 
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GetBtcAddressArgs {
+    pub owner: Option<Principal>,
     pub subaccount: Option<Subaccount>,
 }
 
@@ -27,7 +28,7 @@ pub fn account_to_p2wpkh_address_from_state(s: &CkBtcMinterState, account: &Acco
 }
 
 pub async fn get_btc_address(args: GetBtcAddressArgs) -> String {
-    let caller = PrincipalId(ic_cdk::caller());
+    let caller = PrincipalId::from(args.owner.unwrap_or_else(ic_cdk::caller));
 
     init_ecdsa_public_key().await;
 
