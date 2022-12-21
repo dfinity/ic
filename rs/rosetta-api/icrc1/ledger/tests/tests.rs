@@ -3,17 +3,16 @@ use candid::{CandidType, Decode, Encode};
 use ic_base_types::PrincipalId;
 use ic_icrc1::{
     endpoints::{
-        ArchiveInfo, GetTransactionsRequest, GetTransactionsResponse, StandardRecord,
-        Transaction as Tx, TransactionRange, Transfer, TransferArg, TransferError, Value,
+        ArchiveInfo, GetTransactionsRequest, GetTransactionsResponse, Transaction as Tx,
+        TransactionRange, Transfer, TransferArg, TransferError, Value,
     },
     Account, Block, Memo, Operation, Transaction,
 };
 use ic_icrc1_ledger::InitArgs;
 use ic_icrc1_ledger_sm_tests::{
-    balance_of, metadata, setup, supported_standards, total_supply, ARCHIVE_TRIGGER_THRESHOLD,
-    BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY,
-    NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME,
-    TOKEN_SYMBOL, TX_WINDOW,
+    balance_of, total_supply, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE,
+    INT_META_KEY, INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE,
+    TEXT_META_KEY, TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL, TX_WINDOW,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
@@ -21,7 +20,7 @@ use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine};
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
@@ -205,68 +204,7 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> InitArgs {
 
 #[test]
 fn test_metadata() {
-    fn lookup<'a>(metadata: &'a BTreeMap<String, Value>, key: &str) -> &'a Value {
-        metadata
-            .get(key)
-            .unwrap_or_else(|| panic!("no metadata key {} in map {:?}", key, metadata))
-    }
-
-    let (env, canister_id) = setup(ledger_wasm(), encode_init_args, vec![]);
-
-    assert_eq!(
-        TOKEN_SYMBOL,
-        Decode!(
-            &env.query(canister_id, "icrc1_symbol", Encode!().unwrap())
-                .unwrap()
-                .bytes(),
-            String
-        )
-        .unwrap()
-    );
-
-    assert_eq!(
-        8,
-        Decode!(
-            &env.query(canister_id, "icrc1_decimals", Encode!().unwrap())
-                .unwrap()
-                .bytes(),
-            u8
-        )
-        .unwrap()
-    );
-
-    let metadata = metadata(&env, canister_id);
-    assert_eq!(lookup(&metadata, "icrc1:name"), &Value::from(TOKEN_NAME));
-    assert_eq!(
-        lookup(&metadata, "icrc1:symbol"),
-        &Value::from(TOKEN_SYMBOL)
-    );
-    assert_eq!(lookup(&metadata, "icrc1:decimals"), &Value::from(8u64));
-    assert_eq!(
-        lookup(&metadata, NAT_META_KEY),
-        &Value::from(NAT_META_VALUE)
-    );
-    assert_eq!(
-        lookup(&metadata, INT_META_KEY),
-        &Value::from(INT_META_VALUE)
-    );
-    assert_eq!(
-        lookup(&metadata, TEXT_META_KEY),
-        &Value::from(TEXT_META_VALUE)
-    );
-    assert_eq!(
-        lookup(&metadata, BLOB_META_KEY),
-        &Value::from(BLOB_META_VALUE)
-    );
-
-    let standards = supported_standards(&env, canister_id);
-    assert_eq!(
-        standards,
-        vec![StandardRecord {
-            name: "ICRC-1".to_string(),
-            url: "https://github.com/dfinity/ICRC-1".to_string(),
-        }]
-    );
+    ic_icrc1_ledger_sm_tests::test_metadata_icp_ledger(ledger_wasm(), encode_init_args)
 }
 
 #[test]
