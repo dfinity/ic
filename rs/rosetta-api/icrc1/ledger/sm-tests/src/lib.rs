@@ -1,10 +1,11 @@
 use candid::{CandidType, Decode, Encode, Nat};
 use ic_base_types::PrincipalId;
 use ic_icrc1::{
-    endpoints::{StandardRecord, Value},
+    endpoints::{StandardRecord, TransferArg, TransferError, Value},
     Account,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_core::block::BlockIndex;
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use num_traits::ToPrimitive;
 use std::{collections::BTreeMap, time::Duration};
@@ -40,6 +41,51 @@ pub struct InitArgs {
     pub token_symbol: String,
     pub metadata: Vec<(String, Value)>,
     pub archive_options: ArchiveOptions,
+}
+
+fn send_transfer(
+    env: &StateMachine,
+    ledger: CanisterId,
+    from: PrincipalId,
+    arg: &TransferArg,
+) -> Result<BlockIndex, TransferError> {
+    Decode!(
+        &env.execute_ingress_as(
+            from,
+            ledger,
+            "icrc1_transfer",
+            Encode!(arg)
+            .unwrap()
+        )
+        .expect("failed to transfer funds")
+        .bytes(),
+        Result<Nat, TransferError>
+    )
+    .expect("failed to decode transfer response")
+    .map(|n| n.0.to_u64().unwrap())
+}
+
+fn transfer(
+    env: &StateMachine,
+    ledger: CanisterId,
+    from: impl Into<Account>,
+    to: impl Into<Account>,
+    amount: u64,
+) -> Result<BlockIndex, TransferError> {
+    let from = from.into();
+    send_transfer(
+        env,
+        ledger,
+        from.owner,
+        &TransferArg {
+            from_subaccount: from.subaccount,
+            to: to.into(),
+            fee: None,
+            created_at_time: None,
+            amount: Nat::from(amount),
+            memo: None,
+        },
+    )
 }
 
 pub fn total_supply(env: &StateMachine, ledger: CanisterId) -> u64 {
@@ -263,4 +309,30 @@ where
 {
     let (env, canister_id) = setup(ledger_wasm, encode_init_args, vec![]);
     assert_eq!(Some(MINTER), minting_account(&env, canister_id));
+}
+
+pub fn test_single_transfer<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![
+            (Account::from(p1), 10_000_000),
+            (Account::from(p2), 5_000_000),
+        ],
+    );
+
+    assert_eq!(15_000_000, total_supply(&env, canister_id));
+    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1));
+    assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2));
+
+    transfer(&env, canister_id, p1, p2, 1_000_000).expect("transfer failed");
+
+    assert_eq!(15_000_000 - FEE, total_supply(&env, canister_id));
+    assert_eq!(9_000_000u64 - FEE, balance_of(&env, canister_id, p1));
+    assert_eq!(6_000_000u64, balance_of(&env, canister_id, p2));
 }
