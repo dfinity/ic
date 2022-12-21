@@ -7,10 +7,6 @@ load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 def _upload_artifact_impl(ctx):
     """
     Uploads an artifact to s3 and returns download link to it
-
-    ctx.version_file contains the information written by workspace_status_command.
-    Bazel treats this file as never changing  - the rule only rebuilds when other dependencies change.
-    Details are on https://bazel.build/docs/user-manual#workspace-status.
     """
 
     uploader = ctx.actions.declare_file(ctx.label.name + "_uploader")
@@ -28,6 +24,7 @@ def _upload_artifact_impl(ctx):
             "@@RCLONE_CONFIG@@": rclone_config.path,
             "@@REMOTE_SUBDIR@@": ctx.attr.remote_subdir,
             "@@VERSION_FILE@@": ctx.version_file.path,
+            "@@VERSION_TXT@@": ctx.file._version_txt.path,
         },
         is_executable = True,
     )
@@ -60,9 +57,8 @@ def _upload_artifact_impl(ctx):
             arguments = [f.path, url.path, proxy_cache_url.path],
             env = {
                 "RCLONE_S3_ENDPOINT": rclone_endpoint,
-                "VERSION": ctx.attr._ic_version[BuildSettingInfo].value,
             },
-            inputs = [f, ctx.version_file, rclone_config],
+            inputs = [f, ctx.version_file, rclone_config, ctx.file._version_txt],
             outputs = [url, proxy_cache_url],
             tools = [ctx.file._rclone],
         )
@@ -92,7 +88,7 @@ _upload_artifacts = rule(
         "rclone_anon_config": attr.label(allow_single_file = True, default = "//:.rclone-anon.conf"),
         "_rclone": attr.label(allow_single_file = True, default = "@rclone//:rclone"),
         "_artifacts_uploader_template": attr.label(allow_single_file = True, default = ":upload.bash.template"),
-        "_ic_version": attr.label(default = "//bazel:ic_version"),
+        "_version_txt": attr.label(allow_single_file = True, default = "//bazel:version.txt"),
         "_s3_endpoint": attr.label(default = ":s3_endpoint"),
     },
 )
