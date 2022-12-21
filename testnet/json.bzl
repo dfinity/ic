@@ -7,9 +7,10 @@ def jq_dep(name, json_path, source, target, **kwargs):
         name = name,
         srcs = [source],
         outs = [target],
+        tools = ["@jq//:jq"],
         local = True,
         cmd_bash = """
-        jq -r "{json_path}" "$(SRCS)" > "$(OUTS)"
+        $(location @jq//:jq) -r "{json_path}" "$(SRCS)" > "$(OUTS)"
         """.format(json_path = json_path),
         **kwargs
     )

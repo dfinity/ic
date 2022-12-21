@@ -318,6 +318,10 @@ load("//bazel:rclone.bzl", "rclone_repository")
 
 rclone_repository(name = "rclone")
 
+load("//bazel:jq.bzl", "jq_repository")
+
+jq_repository(name = "jq")
+
 http_archive(
     name = "aspect_bazel_lib",
     sha256 = "79381b0975ba7d2d5653239e5bab12cf54d89b10217fe771b8edd95047a2e44b",
