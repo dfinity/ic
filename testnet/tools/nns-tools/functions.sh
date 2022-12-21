@@ -152,6 +152,7 @@ generate_release_notes_template() {
     WASM_GZ=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$NEXT_COMMIT")
     WASM_SHA=$(sha_256 "$WASM_GZ")
     CAPITALIZED_CANISTER_NAME="$(tr '[:lower:]' '[:upper:]' <<<${CANISTER_NAME:0:1})${CANISTER_NAME:1}"
+    LAST_WASM_HASH=$(canister_hash ic $CANISTER_NAME)
 
     IC_REPO=$(repo_root)
 
@@ -182,6 +183,9 @@ git checkout $NEXT_COMMIT
 ./gitlab-ci/tools/docker-build-ic --artifacts="canisters"
 sha256sum ./artifacts/docker-build-ic/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
 \`\`\`
+## Current Version
+- Current Git Hash: $LAST_COMMIT
+- Current Wasm Hash: $LAST_WASM_HASH
 EOF
     )
 
