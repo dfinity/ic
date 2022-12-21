@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use slog::{error, info, Logger};
 use tokio::runtime::Handle;
 
-use crate::config::{Config, SubnetConfig};
+use crate::config::{ColdStorage, Config, SubnetConfig};
 use crate::util::{block_on, sleep_secs};
 use crate::{backup_helper::BackupHelper, notification_client::NotificationClient};
 
@@ -29,6 +29,7 @@ const STATE_FILE_NAME: &str = "backup_manager_state.json5";
 const DEFAULT_SYNC_NODES: usize = 5;
 const DEFAULT_SYNC_PERIOD: u64 = 30;
 const DEFAULT_REPLAY_PERIOD: u64 = 240;
+const DEFAULT_VERSIONS_HOT: usize = 2;
 
 struct SubnetBackup {
     pub nodes_syncing: usize,
@@ -84,6 +85,13 @@ fn fetch_value_or_default<T>(
 impl BackupManager {
     pub fn new(config_file: PathBuf, rt: &Handle, log: Logger) -> Self {
         let config = Config::load_config(config_file).expect("Config file can't be loaded");
+        // verification that all is initialized with the init command
+        if config.subnets.is_empty() {
+            panic!("No subnets are configured for backup")
+        }
+        if config.cold_storage.is_none() {
+            panic!("Cold storage and cleanup are not configured")
+        }
         // Load the manager state
         let state_file = config.root_dir.join(STATE_FILE_NAME);
         let manager_state = load_state_file(&state_file);
@@ -293,9 +301,45 @@ impl BackupManager {
         let _ = stdin.read_line(&mut slack_token);
         config.slack_token = slack_token.trim().to_string();
 
+        let cold_storage_dir = loop {
+            println!("Enter the directory for the cold storage:");
+            let mut cold_storage_str = String::new();
+            let _ = stdin.read_line(&mut cold_storage_str);
+            let cold_storage_path = PathBuf::from(&cold_storage_str.trim());
+            if !cold_storage_path.exists() {
+                println!("Directory doesn't exist!");
+                continue;
+            }
+            break cold_storage_path;
+        };
+        let versions_hot = loop {
+            println!(
+                "How many replica versions to keep in the spool hot storage (default {}):",
+                DEFAULT_VERSIONS_HOT
+            );
+            let mut versions_hot_str = String::new();
+            let _ = stdin.read_line(&mut versions_hot_str);
+            versions_hot_str = versions_hot_str.trim().to_string();
+            if versions_hot_str.is_empty() {
+                break DEFAULT_VERSIONS_HOT;
+            }
+            if let Ok(versions_num) = versions_hot_str.parse::<usize>() {
+                if versions_num > 0 {
+                    break versions_num;
+                }
+            }
+            println!("Error: invalid number was entered!")
+        };
+
+        config.cold_storage = Some(ColdStorage {
+            cold_storage_dir,
+            versions_hot,
+        });
+
         config
             .save_config(config_file)
             .expect("Config file couldn't be saved");
+
         config
     }
 

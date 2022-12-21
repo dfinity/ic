@@ -12,7 +12,7 @@ use rand::seq::SliceRandom;
 use rand::thread_rng;
 use slog::{error, info, warn, Logger};
 use std::ffi::OsStr;
-use std::fs::File;
+use std::fs::{read_dir, remove_dir_all, DirEntry, File};
 use std::io::Write;
 use std::net::IpAddr;
 use std::path::PathBuf;
@@ -322,30 +322,12 @@ impl BackupHelper {
             .collect()
     }
 
-    fn last_checkpoint(&self) -> u64 {
-        if !self.state_dir().exists() {
-            return 0u64;
-        }
-        match std::fs::read_dir(self.state_dir().join("checkpoints")) {
-            Ok(file_list) => file_list
-                .flatten()
-                .map(|filename| {
-                    filename
-                        .path()
-                        .file_name()
-                        .unwrap_or_else(|| OsStr::new("0"))
-                        .to_os_string()
-                        .into_string()
-                        .unwrap_or_else(|_| "0".to_string())
-                })
-                .map(|s| u64::from_str_radix(&s, 16).unwrap_or(0))
-                .fold(0u64, |a, b| -> u64 { a.max(b) }),
-            Err(_) => 0,
-        }
+    fn last_state_checkpoint(&self) -> u64 {
+        last_checkpoint(self.state_dir())
     }
 
     pub fn replay(&self, replica_version: ReplicaVersion) -> ReplicaVersion {
-        let start_height = self.last_checkpoint();
+        let start_height = self.last_state_checkpoint();
         let start_time = Instant::now();
         let mut current_replica_version = replica_version;
 
@@ -375,7 +357,7 @@ impl BackupHelper {
             }
         }
 
-        let finish_height = self.last_checkpoint();
+        let finish_height = self.last_state_checkpoint();
         if finish_height > start_height {
             info!(self.log, "Replay was successful!");
             if self.archive_state(finish_height).is_ok() {
@@ -402,7 +384,7 @@ impl BackupHelper {
         &self,
         replica_version: &ReplicaVersion,
     ) -> Result<ReplayResult, String> {
-        let start_height = self.last_checkpoint();
+        let start_height = self.last_state_checkpoint();
         info!(
             self.log,
             "Replaying from height #{} of subnet {:?} with version {}",
@@ -445,7 +427,7 @@ impl BackupHelper {
                         ReplicaVersion::try_from(upgrade_version).map_err(|e| e.to_string())?,
                     ))
                 } else {
-                    info!(self.log, "Last height: #{}!", self.last_checkpoint());
+                    info!(self.log, "Last height: #{}!", self.last_state_checkpoint());
                     Ok(ReplayResult::Done)
                 }
             }
@@ -537,30 +519,74 @@ impl BackupHelper {
         if let Err(e) = exec_cmd(&mut cmd) {
             error!(self.log, "Error: {}", e);
             self.notification_client
-                .report_failure_slack("Couldn't backup the recovered state!".to_string());
-            Err(e.to_string())
-        } else {
-            info!(self.log, "State archived!");
-            let now: DateTime<Utc> = Utc::now();
-            let now_str = format!("{}\n", now.to_rfc2822());
-            let mut file = File::create(archive_dir.join("archiving_timestamp.txt"))
-                .map_err(|err| format!("Error creating timestamp file: {:?}", err))?;
-            file.write_all(now_str.as_bytes())
-                .map_err(|err| format!("Error writing timestamp: {:?}", err))?;
-
-            match (
-                self.get_disk_stats(DiskStats::Space),
-                self.get_disk_stats(DiskStats::Inodes),
-            ) {
-                (Ok(space), Ok(inodes)) => {
-                    info!(self.log, "Space: {}% Inodes: {}%", space, inodes);
-                    self.notification_client
-                        .push_metrics_disk_stats(space, inodes);
-                    Ok(())
-                }
-                (Err(err), Ok(_)) => Err(err),
-                (_, Err(err)) => Err(err),
-            }
+                .report_failure_slack("Couldn't archive the replayed state!".to_string());
+            return Err(e.to_string());
         }
+        // leave only one archived checkpoint
+        let checkpoints_dir = archive_dir.join("ic_state/checkpoints");
+        if !checkpoints_dir.exists() {
+            return Err("Archiving didn't succeed - missing checkpoints directory".to_string());
+        }
+        let archived_checkpoint = last_checkpoint(archive_dir.join("ic_state"));
+        if archived_checkpoint == 0 {
+            return Err("No proper archived checkpoint".to_string());
+        }
+        // delete the older checkpoints
+        match read_dir(checkpoints_dir) {
+            Ok(dirs) => dirs
+                .flatten()
+                .map(|filename| (height_from_dir_entry(&filename), filename))
+                .filter(|(height, _)| *height != 0 && *height != archived_checkpoint)
+                .for_each(|(_, filename)| {
+                    let _ = remove_dir_all(filename.path());
+                }),
+            Err(err) => return Err(format!("Error reading archive checkpoints: {}", err)),
+        };
+        info!(self.log, "State archived!");
+
+        let now: DateTime<Utc> = Utc::now();
+        let now_str = format!("{}\n", now.to_rfc2822());
+        let mut file = File::create(archive_dir.join("archiving_timestamp.txt"))
+            .map_err(|err| format!("Error creating timestamp file: {:?}", err))?;
+        file.write_all(now_str.as_bytes())
+            .map_err(|err| format!("Error writing timestamp: {:?}", err))?;
+
+        match (
+            self.get_disk_stats(DiskStats::Space),
+            self.get_disk_stats(DiskStats::Inodes),
+        ) {
+            (Ok(space), Ok(inodes)) => {
+                info!(self.log, "Space: {}% Inodes: {}%", space, inodes);
+                self.notification_client
+                    .push_metrics_disk_stats(space, inodes);
+                Ok(())
+            }
+            (Err(err), Ok(_)) => Err(err),
+            (_, Err(err)) => Err(err),
+        }
+    }
+}
+
+fn height_from_dir_entry(filename: &DirEntry) -> u64 {
+    let height = filename
+        .path()
+        .file_name()
+        .unwrap_or_else(|| OsStr::new("0"))
+        .to_os_string()
+        .into_string()
+        .unwrap_or_else(|_| "0".to_string());
+    u64::from_str_radix(&height, 16).unwrap_or(0)
+}
+
+fn last_checkpoint(dir: PathBuf) -> u64 {
+    if !dir.exists() {
+        return 0u64;
+    }
+    match read_dir(dir.join("checkpoints")) {
+        Ok(file_list) => file_list
+            .flatten()
+            .map(|filename| height_from_dir_entry(&filename))
+            .fold(0u64, |a, b| -> u64 { a.max(b) }),
+        Err(_) => 0,
     }
 }
