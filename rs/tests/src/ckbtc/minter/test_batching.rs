@@ -2,12 +2,11 @@ use crate::ckbtc::minter::utils::retrieve_btc;
 use crate::ckbtc::minter::utils::{
     ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
     wait_for_finalization_no_new_blocks, wait_for_mempool_change, wait_for_update_balance,
-    BTC_MIN_CONFIRMATIONS,
 };
 use crate::{
     ckbtc::lib::{
         activate_ecdsa_signature, create_canister, install_ledger, install_minter, subnet_app,
-        subnet_sys, TEST_KEY_LOCAL,
+        subnet_sys, BTC_MIN_CONFIRMATIONS, TEST_KEY_LOCAL,
     },
     driver::{
         test_env::TestEnv,

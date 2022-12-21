@@ -124,6 +124,7 @@ mod tests {
             retrieve_btc_min_amount: 0,
             ledger_id: CanisterId::from_u64(42),
             max_time_in_queue_nanos: 0,
+            min_confirmations: None,
         }
     }
 

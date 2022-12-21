@@ -65,6 +65,7 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
         retrieve_btc_min_amount: 0,
         ledger_id,
         max_time_in_queue_nanos: 0,
+        min_confirmations: Some(1),
     };
     env.install_canister(minter_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()

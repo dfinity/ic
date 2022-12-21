@@ -627,6 +627,7 @@ proptest! {
             retrieve_btc_min_amount: 0,
             ledger_id: CanisterId::from_u64(42),
             max_time_in_queue_nanos: 0,
+            min_confirmations: None,
         });
         for (utxo, acc_idx) in utxos_acc_idx {
             state.add_utxos(accounts[acc_idx].clone(), vec![utxo]);
@@ -646,6 +647,7 @@ proptest! {
             retrieve_btc_min_amount: 5_000u64,
             ledger_id: CanisterId::from_u64(42),
             max_time_in_queue_nanos: 0,
+            min_confirmations: None,
         });
 
         let mut available_amount = 0;
