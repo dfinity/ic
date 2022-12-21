@@ -19,6 +19,8 @@ BINARIES = {
     "replica": "//rs/replica",
     "boundary-node-control-plane": "//rs/boundary_node/control_plane:boundary-node-control-plane",
     "boundary-node-prober": "//rs/boundary_node/prober:boundary-node-prober",
+    "certificate-issuer": "//rs/boundary_node/certificate_issuance/certificate_issuer:certificate-issuer",
+    "certificate-syncer": "//rs/boundary_node/certificate_issuance/certificate_syncer:certificate-syncer",
     "denylist-updater": "//rs/boundary_node/denylist_updater:denylist-updater",
     "e2e-test-driver": "//rs/scenario_tests:e2e-test-driver",
     "ic-admin": "//rs/registry/admin:ic-admin",

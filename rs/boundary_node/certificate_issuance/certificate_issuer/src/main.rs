@@ -24,7 +24,7 @@ use clap::Parser;
 use futures::future::TryFutureExt;
 use hyper_rustls::HttpsConnectorBuilder;
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::BasicIdentity, Agent,
+    agent::http_transport::ReqwestHttpReplicaV2Transport, identity::Secp256k1Identity, Agent,
 };
 use instant_acme::{Account, AccountCredentials};
 use opentelemetry::{
@@ -158,7 +158,7 @@ async fn main() -> Result<(), Error> {
         )?;
 
         let f = File::open(cli.identity_path).context("failed to open identity file")?;
-        let identity = BasicIdentity::from_pem(f).context("failed to create basic identity")?;
+        let identity = Secp256k1Identity::from_pem(f).context("failed to create basic identity")?;
 
         let agent = Agent::builder()
             .with_identity(identity)

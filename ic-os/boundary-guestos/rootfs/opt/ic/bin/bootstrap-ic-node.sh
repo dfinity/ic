@@ -61,6 +61,7 @@ function process_bootstrap() {
     FILES=(
         bn_vars.conf network.conf nns.conf
         nns_public_key.pem denylist.map prober_identity.pem
+        certificate_issuer.conf certificate_issuer_identity.pem certificate_issuer_enc_key.pem
     )
     for FILE in ${FILES[@]}; do
         if [ -e "${TMPDIR}/${FILE}" ]; then

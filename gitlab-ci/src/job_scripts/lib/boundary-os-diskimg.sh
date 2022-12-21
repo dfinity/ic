@@ -22,6 +22,8 @@ pushd artifacts/release
 gunzip \
     boundary-node-control-plane.gz \
     boundary-node-prober.gz \
+    certificate-issuer.gz \
+    certificate-syncer.gz \
     denylist-updater.gz \
     ic-balance-exporter.gz \
     ic-registry-replicator.gz \

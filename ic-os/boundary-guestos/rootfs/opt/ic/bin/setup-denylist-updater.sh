@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -euox pipefail
+source '/opt/ic/bin/helpers.shlib'
 source '/opt/ic/bin/exec_condition.shlib'
 
 readonly BN_CONFIG="${BOOT_DIR}/bn_vars.conf"

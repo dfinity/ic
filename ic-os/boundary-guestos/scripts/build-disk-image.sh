@@ -112,6 +112,8 @@ fi
 declare -a IC_EXECUTABLES=(
     "boundary-node-control-plane"
     "boundary-node-prober"
+    "certificate-issuer"
+    "certificate-syncer"
     "denylist-updater"
     "ic-balance-exporter"
     "ic-registry-replicator"

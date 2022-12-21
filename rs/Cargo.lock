@@ -1365,7 +1365,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "certificate_issuer"
+name = "certificate-issuer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1402,6 +1402,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "certificate-syncer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum 0.6.1",
+ "candid",
+ "clap 4.0.29",
+ "futures",
+ "hyper",
+ "hyper-rustls",
+ "nix 0.26.1",
+ "opentelemetry 0.18.0",
+ "opentelemetry-prometheus 0.11.0",
+ "prometheus 0.13.3",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "certificate_orchestrator"
 version = "0.1.0"
 dependencies = [
@@ -1432,30 +1456,6 @@ dependencies = [
  "serde",
  "serde_bytes",
  "thiserror",
-]
-
-[[package]]
-name = "certificate_syncer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "axum 0.6.1",
- "candid",
- "clap 4.0.29",
- "futures",
- "hyper",
- "hyper-rustls",
- "nix 0.26.1",
- "opentelemetry 0.18.0",
- "opentelemetry-prometheus 0.11.0",
- "prometheus 0.13.3",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

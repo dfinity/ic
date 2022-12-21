@@ -26,11 +26,8 @@ fi
 BASE_DIR="$(dirname "${BASH_SOURCE[0]}")/.."
 GIT_REVISION=$(git rev-parse --verify HEAD)
 
-# Get keyword arguments
-for argument in "${@}"; do
-    case ${argument} in
-        -h | --help)
-            echo 'Usage:
+function exit_usage() {
+    echo 'Usage:
 
 Removable Media Builder for Boundary Node VMs
 
@@ -48,9 +45,19 @@ Arguments:
        --prober-identity=               specify an identity file for the prober
        --geolite2-country-db=           specify path to GeoLite2 Country Database
        --geolite2-city-db=              specify path to GeoLite2 City Database
+       --cert-issuer-creds              specify a credentials file for certificate-issuer
+       --cert-issuer-identity           specify an identity file for certificate-issuer
+       --cert-issuer-enc-key            specify an encryption key for certificate-issuer
   -x,  --debug                          enable verbose console output
 '
-            exit 1
+    exit 1
+}
+
+# Get keyword arguments
+for argument in "${@}"; do
+    case ${argument} in
+        -h | --help)
+            exit_usage
             ;;
         -i=* | --input=*)
             INPUT="${argument#*=}"
@@ -91,6 +98,15 @@ Arguments:
             ;;
         --geolite2-city-db=*)
             GEOLITE2_CITY_DB="${argument#*=}"
+            ;;
+        --cert-issuer-creds=*)
+            CERTIFICATE_ISSUER_CREDENTIALS="${argument#*=}"
+            ;;
+        --cert-issuer-identity=*)
+            CERTIFICATE_ISSUER_IDENTITY="${argument#*=}"
+            ;;
+        --cert-issuer-enc-key=*)
+            CERTIFICATE_ISSUER_ENCRYPTION_KEY="${argument#*=}"
             ;;
         *)
             echo 'Error: Argument is not supported.'
@@ -406,6 +422,66 @@ function copy_geolite2_dbs() {
     done
 }
 
+function generate_certificate_issuer_config() {
+    if [[ -z "${CERTIFICATE_ISSUER_CREDENTIALS}" ]]; then
+        err "WARNING: Missing certificate-issuer credentials."
+        err "WARNING: Skipping certificate-issuer configuration."
+        return
+    fi
+
+    while IFS="=" read -r key value; do
+        case "${key}" in
+            "certificate_orchestrator_uri") readonly CERTIFICATE_ORCHESTRATOR_URI="${value:-}" ;;
+            "certificate_orchestrator_canister_id") readonly CERTIFICATE_ORCHESTRATOR_CANISTER_ID="${value:-}" ;;
+            "certificate_issuer_delegation_domain") readonly CERTIFICATE_ISSUER_DELEGATION_DOMAIN="${value:-}" ;;
+            "certificate_issuer_application_domain") readonly CERTIFICATE_ISSUER_APPLICATION_DOMAIN="${value:-}" ;;
+            "certificate_issuer_acme_id") readonly CERTIFICATE_ISSUER_ACME_ID="${value:-}" ;;
+            "certificate_issuer_acme_key") readonly CERTIFICATE_ISSUER_ACME_KEY="${value:-}" ;;
+            "certificate_issuer_cloudflare_api_key") readonly CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY="${value:-}" ;;
+        esac
+    done <"${CERTIFICATE_ISSUER_CREDENTIALS}"
+
+    if [[ -z \
+        "${CERTIFICATE_ORCHESTRATOR_URI}" || -z \
+        "${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}" || -z \
+        "${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}" || -z \
+        "${CERTIFICATE_ISSUER_APPLICATION_DOMAIN}" || -z \
+        "${CERTIFICATE_ISSUER_IDENTITY}" || -z \
+        "${CERTIFICATE_ISSUER_ENCRYPTION_KEY}" || -z \
+        "${CERTIFICATE_ISSUER_ACME_ID}" || -z \
+        "${CERTIFICATE_ISSUER_ACME_KEY}" || -z \
+        "${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}" ]] \
+            ; then
+        err "ERROR: Missing certificate-issuer configuration."
+        exit_usage
+    fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" == "boundary" ]]; then
+            local hostname=${NODE["hostname"]}
+            local subnet_idx=${NODE["subnet_idx"]}
+            local node_idx=${NODE["node_idx"]}
+
+            NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+
+            mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
+            cp "${CERTIFICATE_ISSUER_IDENTITY}" "${CONFIG_DIR}/${NODE_PREFIX}/certificate_issuer_identity.pem"
+            cp "${CERTIFICATE_ISSUER_ENCRYPTION_KEY}" "${CONFIG_DIR}/${NODE_PREFIX}/certificate_issuer_enc_key.pem"
+
+            cat >"${CONFIG_DIR}/${NODE_PREFIX}/certificate_issuer.conf" <<EOF
+certificate_orchestrator_uri=${CERTIFICATE_ORCHESTRATOR_URI}
+certificate_orchestrator_canister_id=${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}
+certificate_issuer_delegation_domain=${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}
+certificate_issuer_application_domain=${CERTIFICATE_ISSUER_APPLICATION_DOMAIN}
+certificate_issuer_acme_id=${CERTIFICATE_ISSUER_ACME_ID}
+certificate_issuer_acme_key=${CERTIFICATE_ISSUER_ACME_KEY}
+certificate_issuer_cloudflare_api_key=${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}
+EOF
+        fi
+    done
+}
+
 function build_tarball() {
     for n in $NODES; do
         declare -n NODE=$n
@@ -456,6 +532,7 @@ function main() {
     copy_certs
     copy_deny_list
     copy_geolite2_dbs
+    generate_certificate_issuer_config
     build_tarball
     build_removable_media
     remove_temporary_directories

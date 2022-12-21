@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -euox pipefail
+source '/opt/ic/bin/helpers.shlib'
 source '/opt/ic/bin/exec_condition.shlib'
 
 readonly IDENTITY_PEM="${BOOT_DIR}/prober_identity.pem"

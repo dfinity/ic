@@ -59,7 +59,7 @@ impl Import for CertificatesImporter {
     async fn import(&self) -> Result<Vec<Package>, ImportError> {
         let req = Request::builder()
             .method("GET")
-            .uri(format!("{}/certificates", self.exporter_uri))
+            .uri(&self.exporter_uri)
             .body(Body::empty())
             .context("failed to create http request")?;
 
