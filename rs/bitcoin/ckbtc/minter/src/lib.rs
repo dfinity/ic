@@ -160,6 +160,8 @@ async fn submit_pending_requests() {
         subaccount: None,
     };
 
+    updates::get_btc_address::init_ecdsa_public_key().await;
+
     let (main_address, ecdsa_public_key) = match state::read_state(|s| {
         s.ecdsa_public_key.clone().map(|key| {
             (
@@ -310,7 +312,7 @@ async fn submit_pending_requests() {
                         log!(
                             P1,
                             "[heartbeat]: successfully sent transaction {}",
-                            hex::encode(txid)
+                            tx::DisplayTxid(&txid),
                         );
 
                         // Defuse the guard because we sent the transaction
@@ -360,6 +362,8 @@ async fn finalize_requests() {
         return;
     }
 
+    updates::get_btc_address::init_ecdsa_public_key().await;
+
     let now = ic_cdk::api::time();
 
     let (btc_network, min_confirmations, ecdsa_public_key, requests_to_finalize) =
@@ -368,7 +372,7 @@ async fn finalize_requests() {
             let reqs: Vec<_> = s
                 .submitted_transactions
                 .iter()
-                .filter(|req| req.submitted_at + wait_time >= now)
+                .filter(|req| req.submitted_at + wait_time < now)
                 .cloned()
                 .collect();
             (

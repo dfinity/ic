@@ -5,6 +5,12 @@ use ic_btc_types::Network;
 use ic_icrc1::Account;
 use std::io::Write;
 
+fn with_utf8_buffer(f: impl FnOnce(&mut Vec<u8>)) -> String {
+    let mut buf = Vec::new();
+    f(&mut buf);
+    String::from_utf8(buf).unwrap()
+}
+
 pub fn build_dashboard() -> Vec<u8> {
     let html = format!(
         "
@@ -24,8 +30,9 @@ pub fn build_dashboard() -> Vec<u8> {
                     margin-top: 30px;
                     margin-bottom: 5px;
                 }}
+                table table {{ font-size: small; }}
                 .background {{ margin: 0; padding: 0; }}
-                .content {{ width: 1500px; margin: 0 auto; }}
+                .content {{ max-width: 100vw; width: fit-content; margin: 0 auto; }}
                 tbody tr:nth-child(odd) {{ background-color: #eeeeee; }}
             </style>
             </head>
@@ -132,35 +139,41 @@ pub fn build_dashboard() -> Vec<u8> {
 }
 
 pub fn build_account_to_utxos_table() -> String {
-    let mut buf = Vec::new();
-
-    state::read_state(|s| {
-        for (account, set) in s.utxos_state_addresses.iter() {
-            for (i, utxo) in set.iter().enumerate() {
-                write!(&mut buf, "<tr>").unwrap();
-                if i == 0 {
-                    write!(
-                        &mut buf,
-                        "<td rowspan='{}'><code>{}</code></td>",
-                        set.len(),
-                        account
+    with_utf8_buffer(|buf| {
+        state::read_state(|s| {
+            let mut total = 0;
+            for (account, set) in s.utxos_state_addresses.iter() {
+                for (i, utxo) in set.iter().enumerate() {
+                    write!(buf, "<tr>").unwrap();
+                    if i == 0 {
+                        write!(
+                            buf,
+                            "<td rowspan='{}'><code>{}</code></td>",
+                            set.len(),
+                            account
+                        )
+                        .unwrap();
+                    }
+                    writeln!(
+                        buf,
+                        "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+                        txid_link(&utxo.outpoint.txid),
+                        utxo.outpoint.vout,
+                        utxo.height,
+                        DisplayAmount(utxo.value),
                     )
                     .unwrap();
+                    total += utxo.value;
                 }
-                writeln!(
-                    &mut buf,
-                    "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
-                    txid_link(&utxo.outpoint.txid),
-                    utxo.outpoint.vout,
-                    utxo.height,
-                    DisplayAmount(utxo.value),
-                )
-                .unwrap();
             }
-        }
-    });
-
-    String::from_utf8(buf).unwrap()
+            writeln!(
+                buf,
+                "<tr><td colspan='4' style='text-align: right;'><b>Total</b></td><td>{}</td></tr>",
+                DisplayAmount(total)
+            )
+            .unwrap();
+        })
+    })
 }
 
 pub fn build_metadata() -> String {
@@ -209,93 +222,134 @@ pub fn build_metadata() -> String {
 }
 
 pub fn build_pending_request_tx() -> String {
-    let mut buf = Vec::new();
-    state::read_state(|s| {
-        for req in s.pending_retrieve_btc_requests.iter() {
-            writeln!(
-                &mut buf,
-                "<tr><td>{}</td><td><code>{}</code></td><td>{}</td></tr>",
-                req.block_index,
-                req.address.display(s.btc_network),
-                req.amount
-            )
-            .unwrap();
-        }
-    });
-    String::from_utf8(buf).unwrap()
-}
-
-pub fn build_requests_in_flight_tx() -> String {
-    let mut buf = Vec::new();
-    state::read_state(|s| {
-        for (id, s) in s.requests_in_flight.iter() {
-            writeln!(&mut buf, "<tr><td>{}</td><td>{:?}</td></tr>", id, s).unwrap();
-        }
-    });
-    String::from_utf8(buf).unwrap()
-}
-
-pub fn build_submitted_transactions() -> String {
-    let mut buf = Vec::new();
-
-    state::read_state(|s| {
-        for tx in s.submitted_transactions.iter() {
-            for (i, utxo) in tx.used_utxos.iter().enumerate() {
-                write!(&mut buf, "<tr>").unwrap();
-                if i == 0 {
-                    let rowspan = tx.used_utxos.len();
-                    write!(
-                        &mut buf,
-                        "<td rowspan='{}'>{}</td>",
-                        rowspan,
-                        txid_link(&tx.txid)
-                    )
-                    .unwrap();
-                    write!(&mut buf, "<td rowspan='{}'>{:?}</td>", rowspan, tx.requests).unwrap();
-                }
+    with_utf8_buffer(|buf| {
+        state::read_state(|s| {
+            for req in s.pending_retrieve_btc_requests.iter() {
                 writeln!(
-                    &mut buf,
-                    "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
-                    txid_link(&utxo.outpoint.txid),
-                    utxo.outpoint.vout,
-                    utxo.height,
-                    DisplayAmount(utxo.value),
+                    buf,
+                    "<tr><td>{}</td><td><code>{}</code></td><td>{}</td></tr>",
+                    req.block_index,
+                    req.address.display(s.btc_network),
+                    req.amount
                 )
                 .unwrap();
             }
-        }
-    });
-    String::from_utf8(buf).unwrap()
+        })
+    })
+}
+
+pub fn build_requests_in_flight_tx() -> String {
+    with_utf8_buffer(|buf| {
+        state::read_state(|s| {
+            for (id, status) in &s.requests_in_flight {
+                write!(buf, "<tr><td>{}</td>", id).unwrap();
+                match status {
+                    state::InFlightStatus::Signing => {
+                        write!(buf, "<td>Signing...</td>").unwrap();
+                    }
+                    state::InFlightStatus::Sending { txid } => {
+                        write!(
+                            buf,
+                            "<td>Sending TX {}</td>",
+                            txid_link_on(txid, s.btc_network)
+                        )
+                        .unwrap();
+                    }
+                }
+                writeln!(buf, "</tr>").unwrap();
+            }
+        })
+    })
+}
+
+pub fn build_submitted_transactions() -> String {
+    with_utf8_buffer(|buf| {
+        state::read_state(|s| {
+            for tx in s.submitted_transactions.iter() {
+                for (i, utxo) in tx.used_utxos.iter().enumerate() {
+                    write!(buf, "<tr>").unwrap();
+                    if i == 0 {
+                        let rowspan = tx.used_utxos.len();
+                        write!(
+                            buf,
+                            "<td rowspan='{}'>{}</td>",
+                            rowspan,
+                            txid_link(&tx.txid)
+                        )
+                        .unwrap();
+
+                        write!(buf, "<td rowspan='{}'>", rowspan).unwrap();
+                        for req in &tx.requests {
+                            write!(
+                                buf,
+                                "<table>
+                            <tr><th>Block index</th><td>{}</td></tr>
+                            <tr><th>Amount</th><td>{}</td></tr>
+                            <tr><th>Address</th><td><code>{}</code></td></tr>
+                            <tr><th>Received at</th><td>{}</td></tr>
+                            </table>",
+                                req.block_index,
+                                DisplayAmount(req.amount),
+                                req.address.display(s.btc_network),
+                                req.received_at,
+                            )
+                            .unwrap();
+                        }
+                        write!(buf, "</td>").unwrap();
+                    }
+                    writeln!(
+                        buf,
+                        "<td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+                        txid_link(&utxo.outpoint.txid),
+                        utxo.outpoint.vout,
+                        utxo.height,
+                        DisplayAmount(utxo.value),
+                    )
+                    .unwrap();
+                }
+            }
+        })
+    })
 }
 
 pub fn build_finalized_requests() -> String {
-    state::read_state(|s| {
-        s.finalized_requests
-            .iter()
-            .map(|finalized_req| {
-                format!(
+    with_utf8_buffer(|buf| {
+        state::read_state(|s| {
+            for req in &s.finalized_requests {
+                write!(
+                    buf,
                     "<tr>
                         <td>{}</td>
                         <td><code>{}</code></td>
-                        <td>{}</td>
-                        <td>{:?}</td>
-                    </tr>",
-                    finalized_req.request.block_index,
-                    finalized_req.request.address.display(s.btc_network),
-                    DisplayAmount(finalized_req.request.amount),
-                    finalized_req.state
+                        <td>{}</td>",
+                    req.request.block_index,
+                    req.request.address.display(s.btc_network),
+                    DisplayAmount(req.request.amount),
                 )
-            })
-            .collect::<String>()
+                .unwrap();
+                match &req.state {
+                    state::FinalizedStatus::AmountTooLow => {
+                        write!(buf, "<td>Amount is too low to cover fees</td>").unwrap()
+                    }
+                    state::FinalizedStatus::Confirmed { txid } => write!(
+                        buf,
+                        "<td>Confirmed {}</td>",
+                        txid_link_on(txid, s.btc_network)
+                    )
+                    .unwrap(),
+                }
+                writeln!(buf, "</tr>").unwrap();
+            }
+        })
     })
 }
 
 pub fn build_available_utxos() -> String {
-    state::read_state(|s| {
-        s.available_utxos
-            .iter()
-            .map(|utxo| {
-                format!(
+    with_utf8_buffer(|buf| {
+        state::read_state(|s| {
+            for utxo in &s.available_utxos {
+                writeln!(
+                    buf,
                     "<tr>
                         <td>{}</td>
                         <td>{}</td>
@@ -307,29 +361,36 @@ pub fn build_available_utxos() -> String {
                     utxo.height,
                     DisplayAmount(utxo.value),
                 )
-            })
-            .collect::<String>()
+                .unwrap()
+            }
+            writeln!(
+                buf,
+                "<tr><td colspan='3' style='text-align: right;'><b>Total</b></td><td>{}</td></tr>",
+                DisplayAmount(s.available_utxos.iter().map(|u| u.value).sum::<u64>())
+            )
+            .unwrap();
+        })
     })
 }
 
 pub fn build_update_balance_principals() -> String {
-    let mut buf = Vec::new();
-    state::read_state(|s| {
-        for p in &s.update_balance_principals {
-            writeln!(&mut buf, "<li>{}</li>", p).unwrap();
-        }
-    });
-    String::from_utf8(buf).unwrap()
+    with_utf8_buffer(|buf| {
+        state::read_state(|s| {
+            for p in &s.update_balance_principals {
+                writeln!(buf, "<li>{}</li>", p).unwrap();
+            }
+        })
+    })
 }
 
 pub fn build_retrieve_btc_principals() -> String {
-    let mut buf = Vec::new();
-    state::read_state(|s| {
-        for p in &s.retrieve_btc_principals {
-            writeln!(&mut buf, "<li>{}</li>", p).unwrap();
-        }
-    });
-    String::from_utf8(buf).unwrap()
+    with_utf8_buffer(|buf| {
+        state::read_state(|s| {
+            for p in &s.retrieve_btc_principals {
+                writeln!(buf, "<li>{}</li>", p).unwrap();
+            }
+        })
+    })
 }
 
 fn display_logs() -> String {
@@ -351,27 +412,25 @@ fn display_logs() -> String {
     let mut i0 = 0;
     let mut i1 = 0;
 
-    let mut buf = vec![];
-
-    // Merge sorted log entries with different priorities.
-    while i0 < p0.len() && i1 < p1.len() {
-        if p0[i0].timestamp <= p1[i1].timestamp {
-            display_entry(&mut buf, "P0", &p0[i0]);
-            i0 += 1;
-        } else {
-            display_entry(&mut buf, "P1", &p1[i1]);
-            i1 += 1;
+    with_utf8_buffer(|buf| {
+        // Merge sorted log entries with different priorities.
+        while i0 < p0.len() && i1 < p1.len() {
+            if p0[i0].timestamp <= p1[i1].timestamp {
+                display_entry(buf, "P0", &p0[i0]);
+                i0 += 1;
+            } else {
+                display_entry(buf, "P1", &p1[i1]);
+                i1 += 1;
+            }
         }
-    }
 
-    for e in p0[i0..].iter() {
-        display_entry(&mut buf, "P0", e);
-    }
-    for e in p1[i1..].iter() {
-        display_entry(&mut buf, "P1", e);
-    }
-
-    String::from_utf8(buf).unwrap()
+        for e in p0[i0..].iter() {
+            display_entry(buf, "P0", e);
+        }
+        for e in p1[i1..].iter() {
+            display_entry(buf, "P1", e);
+        }
+    })
 }
 
 fn txid_link(txid: &[u8]) -> String {

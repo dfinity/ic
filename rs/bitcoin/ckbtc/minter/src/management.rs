@@ -126,7 +126,7 @@ pub async fn get_utxos(
     address: &Address,
     min_confirmations: u32,
 ) -> Result<Vec<Utxo>, CallError> {
-    const GET_UTXOS_COST_CYCLES: u64 = 100_000_000;
+    const GET_UTXOS_COST_CYCLES: u64 = 5_000_000_000;
 
     // Calls "bitcoin_get_utxos" method with the specified argument on the
     // management canister.
@@ -202,7 +202,7 @@ pub async fn sign_with_ecdsa(
     derivation_path: Vec<Vec<u8>>,
     message_hash: [u8; 32],
 ) -> Result<Vec<u8>, CallError> {
-    const CYCLES_PER_SIGNATURE: u64 = 10_000_000_000;
+    const CYCLES_PER_SIGNATURE: u64 = 25_000_000_000;
 
     let reply: SignWithECDSAReply = call(
         "sign_with_ecdsa",
