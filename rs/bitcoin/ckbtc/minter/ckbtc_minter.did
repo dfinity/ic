@@ -153,18 +153,22 @@ type Event = variant {
 service : (InitArgs) -> {
     // Section "Wrap BTC" {{{
 
-    // Returns the bitcoin address to which the caller should send BTC
+    // Returns the bitcoin address to which the owner should send BTC
     // before converting the amount to ckBTC using the update_balance
     // endpoint.
-    get_btc_address : (record { subaccount : opt blob }) -> (text);
+    //
+    // If the owner is not set, it defaults to the caller's principal.
+    get_btc_address : (record { owner: opt principal; subaccount : opt blob }) -> (text);
 
     // Mints ckBTC for newly deposited UTXOs.
     //
+    // If the owner is not set, it defaults to the caller's principal.
+    //
     // # Preconditions
     //
-    // * The caller deposited some BTC to the address that the
+    // * The owner deposited some BTC to the address that the
     //   [get_btc_address] endpoint returns.
-    update_balance : (record { subaccount : opt blob }) -> (variant { Ok : UpdateBalanceResult; Err : UpdateBalanceError });
+    update_balance : (record { owner: opt principal; subaccount : opt blob }) -> (variant { Ok : UpdateBalanceResult; Err : UpdateBalanceError });
 
     // }}} Section "Wrap BTC"
 

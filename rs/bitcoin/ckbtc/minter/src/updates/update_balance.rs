@@ -1,5 +1,5 @@
 use crate::logs::P1;
-use candid::{CandidType, Deserialize, Nat};
+use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_types::GetUtxosError;
 use ic_canister_log::log;
@@ -21,6 +21,7 @@ use crate::{
 
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct UpdateBalanceArgs {
+    pub owner: Option<Principal>,
     pub subaccount: Option<Subaccount>,
 }
 
@@ -88,7 +89,7 @@ pub async fn update_balance(
     let _guard = balance_update_guard(caller)?;
 
     let caller_account = Account {
-        owner: PrincipalId::from(caller),
+        owner: PrincipalId::from(args.owner.unwrap_or(caller)),
         subaccount: args.subaccount,
     };
 

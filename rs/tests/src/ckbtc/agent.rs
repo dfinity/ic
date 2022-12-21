@@ -78,7 +78,7 @@ pub fn test_ckbtc_minter_agent(env: TestEnv) {
 
 async fn test_get_btc_address(agent: &CkBtcMinterAgent) {
     let res = agent
-        .get_btc_address(None)
+        .get_btc_address(None, None)
         .await
         .expect("Error while decoding response");
     // Checking only proper format of address since ECDSA signature is non-deterministic.
@@ -116,9 +116,10 @@ async fn test_retrieve_btc(agent: &CkBtcMinterAgent) {
 }
 
 async fn test_update_balance(agent: &CkBtcMinterAgent) {
-    let owner = PrincipalId(agent.agent.get_principal().unwrap());
-    let subaccount = compute_subaccount(owner, 0);
+    let owner = agent.agent.get_principal().unwrap();
+    let subaccount = compute_subaccount(PrincipalId(owner), 0);
     let args = UpdateBalanceArgs {
+        owner: None,
         subaccount: Some(subaccount),
     };
     let res = agent

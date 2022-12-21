@@ -35,7 +35,10 @@ pub fn test_get_btc_address(env: TestEnv) {
 
         // Call endpoint.
         info!(logger, "Calling get_btc_address endpoint...");
-        let arg = GetBtcAddressArgs { subaccount: None };
+        let arg = GetBtcAddressArgs {
+            owner: None,
+            subaccount: None,
+        };
         let arg = &Encode!(&arg).expect("Error while encoding arg.");
         let res = agent
             .update(&minter, "get_btc_address")
