@@ -168,7 +168,7 @@ pub fn build_account_to_utxos_table() -> String {
             }
             writeln!(
                 buf,
-                "<tr><td colspan='4' style='text-align: right;'><b>Total</b></td><td>{}</td></tr>",
+                "<tr><td colspan='4' style='text-align: right;'><b>Total available</b></td><td>{}</td></tr>",
                 DisplayAmount(total)
             )
             .unwrap();
@@ -205,6 +205,10 @@ pub fn build_metadata() -> String {
                         <th>Min retrieve BTC amount</th>
                         <td>{}</td>
                     </tr>
+                    <tr>
+                        <th>Total BTC managed</th>
+                        <td>{}</td>
+                    </tr>
                 </tbody>
             </table>",
             s.btc_network,
@@ -217,6 +221,7 @@ pub fn build_metadata() -> String {
             s.min_confirmations,
             s.ledger_id,
             DisplayAmount(s.retrieve_btc_min_amount),
+            DisplayAmount(get_total_btc_managed())
         )
     })
 }
@@ -365,7 +370,7 @@ pub fn build_available_utxos() -> String {
             }
             writeln!(
                 buf,
-                "<tr><td colspan='3' style='text-align: right;'><b>Total</b></td><td>{}</td></tr>",
+                "<tr><td colspan='3' style='text-align: right;'><b>Total available</b></td><td>{}</td></tr>",
                 DisplayAmount(s.available_utxos.iter().map(|u| u.value).sum::<u64>())
             )
             .unwrap();
@@ -380,6 +385,19 @@ pub fn build_update_balance_principals() -> String {
                 writeln!(buf, "<li>{}</li>", p).unwrap();
             }
         })
+    })
+}
+
+fn get_total_btc_managed() -> u64 {
+    state::read_state(|s| {
+        let mut total_btc = 0_u64;
+        for req in s.submitted_transactions.iter() {
+            if let Some(change_output) = &req.change_output {
+                total_btc += change_output.value;
+            }
+        }
+        total_btc += s.available_utxos.iter().map(|u| u.value).sum::<u64>();
+        total_btc
     })
 }
 
