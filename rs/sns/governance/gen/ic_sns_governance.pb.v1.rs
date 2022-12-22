@@ -1852,7 +1852,7 @@ pub mod manage_neuron {
     /// permissions must be a subset of `NervousSystemParameters::neuron_grantable_permissions`.
     /// If the PrincipalId doesn't have existing permissions, a new entry will be added for it
     /// with the provided permissions. If a principalId already has permissions for the neuron,
-    /// the new permissions will be added to the existing permissions.
+    /// the new permissions will be added to the existing set.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -2470,6 +2470,9 @@ pub enum NeuronPermissionType {
     DisburseMaturity = 8,
     /// The principal has permission to stake the neuron's maturity.
     StakeMaturity = 9,
+    /// The principal has permission to grant/revoke permission to vote and submit
+    /// proposals on behalf of the neuron to other principals.
+    ManageVotingPermission = 10,
 }
 impl NeuronPermissionType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -2490,6 +2493,9 @@ impl NeuronPermissionType {
             NeuronPermissionType::MergeMaturity => "NEURON_PERMISSION_TYPE_MERGE_MATURITY",
             NeuronPermissionType::DisburseMaturity => "NEURON_PERMISSION_TYPE_DISBURSE_MATURITY",
             NeuronPermissionType::StakeMaturity => "NEURON_PERMISSION_TYPE_STAKE_MATURITY",
+            NeuronPermissionType::ManageVotingPermission => {
+                "NEURON_PERMISSION_TYPE_MANAGE_VOTING_PERMISSION"
+            }
         }
     }
 }

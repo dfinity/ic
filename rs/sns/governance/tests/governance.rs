@@ -1,7 +1,11 @@
 use crate::fixtures::{neuron_id, GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::E8;
+use ic_nervous_system_common_test_keys::{
+    TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
+};
 use ic_sns_governance::neuron::NeuronState;
+use ic_sns_governance::pb::v1::Neuron;
 use ic_sns_governance::{
     pb::v1::{
         governance_error::ErrorType,
@@ -125,7 +129,7 @@ async fn test_disburse_fails_when_state_is_not_dissolving() {
         &user_principal,
     );
 
-    // Assert tha the neuron state is NotDissolving
+    // Assert that the neuron state is NotDissolving
     let neuron = canister_fixture.get_neuron(&neuron_id);
     let neuron_state = neuron.state(canister_fixture.now());
     assert_eq!(neuron_state, NeuronState::NotDissolving);
@@ -326,4 +330,548 @@ fn test_vesting_neuron_manage_neuron_operations() {
     let expected_response = ManageNeuronResponse::register_vote_response();
     let actual_response = gov.manage_neuron(&neuron_id2, command, &user_principal2);
     assert_eq!(expected_response, actual_response);
+}
+
+#[test]
+fn test_adding_permissions_when_we_have_manage_principals() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let target = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    let permissions_to_add = NeuronPermissionList::all();
+    let (mut governance, neuron) = {
+        let permissions: &[(PrincipalId, NeuronPermissionList)] =
+            &[(caller, vec![NeuronPermissionType::ManagePrincipals].into())];
+        let user_principal = PrincipalId::new_user_test_id(0);
+        let neuron_id = neuron_id(user_principal, 0);
+
+        let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+            .with_neuron_grantable_permissions(NeuronPermissionList::all())
+            .add_neuron_with_permissions(permissions, neuron_id.clone())
+            .create();
+
+        (governance_fixture, neuron_id)
+    };
+
+    // Attempt to add permissions to `target` - should succeed since `caller`
+    // has `ManagePrincipals`.
+    governance
+        .add_neuron_permissions(&neuron, target, permissions_to_add.clone(), caller)
+        .unwrap();
+
+    // Check that `target` now has those permissions.
+    governance.assert_principal_has_permissions_for_neuron(&neuron, target, permissions_to_add);
+}
+
+#[test]
+fn test_removing_permissions_when_we_have_manage_principals() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let target = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    let permissions_to_remove = NeuronPermissionList::all();
+    let (mut governance, neuron) = {
+        let permissions: &[(PrincipalId, NeuronPermissionList)] = &[
+            (caller, vec![NeuronPermissionType::ManagePrincipals].into()),
+            (target, permissions_to_remove.clone()),
+        ];
+        let user_principal = PrincipalId::new_user_test_id(0);
+        let neuron_id = neuron_id(user_principal, 0);
+
+        let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+            .with_neuron_grantable_permissions(NeuronPermissionList::all())
+            .add_neuron_with_permissions(permissions, neuron_id.clone())
+            .create();
+
+        (governance_fixture, neuron_id)
+    };
+
+    // Attempt to remove permissions from `target` - should succeed since `caller`
+    // has `ManagePrincipals`.
+    governance
+        .remove_neuron_permissions(&neuron, target, permissions_to_remove, caller)
+        .unwrap();
+
+    // Check that `target` now has no permissions.
+    governance.assert_principal_has_permissions_for_neuron(
+        &neuron,
+        target,
+        NeuronPermissionList::empty(),
+    );
+}
+
+#[test]
+fn test_manage_voting_permission_allows_adding_permissions_related_to_voting() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let target = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    let permissions_to_add: NeuronPermissionList =
+        Neuron::PERMISSIONS_RELATED_TO_VOTING.to_vec().into();
+    let (mut governance, neuron) = {
+        let permissions: &[(PrincipalId, NeuronPermissionList)] = &[(
+            caller,
+            vec![NeuronPermissionType::ManageVotingPermission].into(),
+        )];
+        let user_principal = PrincipalId::new_user_test_id(0);
+        let neuron_id = neuron_id(user_principal, 0);
+
+        let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+            .with_neuron_grantable_permissions(NeuronPermissionList::all())
+            .add_neuron_with_permissions(permissions, neuron_id.clone())
+            .create();
+
+        (governance_fixture, neuron_id)
+    };
+
+    // Attempt to add voting-related permissions to `target` - should succeed
+    // since `caller` has ManageVotingPermission.
+    governance
+        .add_neuron_permissions(&neuron, target, permissions_to_add.clone(), caller)
+        .unwrap();
+
+    // Check that `target` now has those permissions.
+    governance.assert_principal_has_permissions_for_neuron(&neuron, target, permissions_to_add);
+}
+
+#[test]
+fn test_manage_voting_permission_allows_removing_permissions_related_to_voting() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let target = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    let permissions_to_remove: NeuronPermissionList =
+        Neuron::PERMISSIONS_RELATED_TO_VOTING.to_vec().into();
+
+    let (mut governance, neuron) = {
+        let permissions: &[(PrincipalId, NeuronPermissionList)] = &[
+            (
+                caller,
+                vec![NeuronPermissionType::ManageVotingPermission].into(),
+            ),
+            (target, permissions_to_remove.clone()),
+        ];
+        let user_principal = PrincipalId::new_user_test_id(0);
+        let neuron_id = neuron_id(user_principal, 0);
+
+        let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+            .with_neuron_grantable_permissions(NeuronPermissionList::all())
+            .add_neuron_with_permissions(permissions, neuron_id.clone())
+            .create();
+
+        (governance_fixture, neuron_id)
+    };
+
+    // Attempt to remove voting-related permissions from `target` - should
+    // succeed since `caller` has ManageVotingPermission.
+    governance
+        .remove_neuron_permissions(&neuron, target, permissions_to_remove, caller)
+        .unwrap();
+
+    // Check that `target` no longer has those permissions.
+    governance.assert_principal_has_permissions_for_neuron(
+        &neuron,
+        target,
+        NeuronPermissionList::empty(),
+    );
+}
+
+#[test]
+fn test_manage_voting_permission_doesnt_allow_adding_permissions_unrelated_to_voting() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let target = *TEST_NEURON_2_OWNER_PRINCIPAL;
+
+    // We want to try adding the permissions individually
+    // to make sure they all fail, so we get all the
+    // permissions not related to voting and loop over them.
+    let permissions_not_related_to_voting =
+        Vec::<NeuronPermissionType>::try_from(NeuronPermissionList {
+            permissions: NeuronPermissionType::all(),
+        })
+        .unwrap()
+        .into_iter()
+        .filter(|permission| !Neuron::PERMISSIONS_RELATED_TO_VOTING.contains(permission));
+    for permission_not_related_to_voting in permissions_not_related_to_voting {
+        let (mut governance, neuron) = {
+            let permissions: &[(PrincipalId, NeuronPermissionList)] = &[(
+                caller,
+                vec![NeuronPermissionType::ManageVotingPermission].into(),
+            )];
+            let user_principal = PrincipalId::new_user_test_id(0);
+            let neuron_id = neuron_id(user_principal, 0);
+
+            let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+                .with_neuron_grantable_permissions(NeuronPermissionList::all())
+                .add_neuron_with_permissions(permissions, neuron_id.clone())
+                .create();
+
+            (governance_fixture, neuron_id)
+        };
+
+        // Attempt to add voting-unrelated permission to `target` - should fail
+        // since `caller` doesn't have `ManagePrincipals`.
+        governance
+            .add_neuron_permissions(
+                &neuron,
+                target,
+                vec![permission_not_related_to_voting].into(),
+                caller,
+            )
+            .unwrap_err();
+
+        // Check that `target` didn't get any permissions
+        governance.assert_principal_has_permissions_for_neuron(
+            &neuron,
+            target,
+            NeuronPermissionList::empty(),
+        );
+    }
+}
+
+#[test]
+fn test_manage_voting_permission_doesnt_allow_removing_permissions_unrelated_to_voting() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let target = *TEST_NEURON_2_OWNER_PRINCIPAL;
+
+    // We want to try removing the permissions individually
+    // to make sure they all fail, so we get all the
+    // permissions not related to voting and loop over them.
+    let permissions_not_related_to_voting =
+        Vec::<NeuronPermissionType>::try_from(NeuronPermissionList {
+            permissions: NeuronPermissionType::all(),
+        })
+        .unwrap()
+        .into_iter()
+        .filter(|permission| !Neuron::PERMISSIONS_RELATED_TO_VOTING.contains(permission));
+    for permission_not_related_to_voting in permissions_not_related_to_voting {
+        let (mut governance, neuron) = {
+            let permissions: &[(PrincipalId, NeuronPermissionList)] = &[
+                (
+                    caller,
+                    vec![NeuronPermissionType::ManageVotingPermission].into(),
+                ),
+                (target, vec![permission_not_related_to_voting].into()),
+            ];
+            let user_principal = PrincipalId::new_user_test_id(0);
+            let neuron_id = neuron_id(user_principal, 0);
+
+            let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+                .with_neuron_grantable_permissions(NeuronPermissionList::all())
+                .add_neuron_with_permissions(permissions, neuron_id.clone())
+                .create();
+
+            (governance_fixture, neuron_id)
+        };
+
+        // Attempt to remove our voting-unrelated permission to `target` - should fail
+        // since `caller` doesn't have `ManagePrincipals`.
+        governance
+            .remove_neuron_permissions(
+                &neuron,
+                target,
+                vec![permission_not_related_to_voting].into(),
+                caller,
+            )
+            .unwrap_err();
+
+        // Check that `target` still has the permissions
+        governance.assert_principal_has_permissions_for_neuron(
+            &neuron,
+            target,
+            vec![permission_not_related_to_voting].into(),
+        );
+    }
+}
+
+#[test]
+fn test_manage_voting_permission_allows_adding_voting_permissions_to_self() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let permissions_to_add: NeuronPermissionList =
+        Neuron::PERMISSIONS_RELATED_TO_VOTING.to_vec().into();
+
+    let (mut governance, neuron) = {
+        let permissions: &[(PrincipalId, NeuronPermissionList)] = &[(
+            caller,
+            vec![NeuronPermissionType::ManageVotingPermission].into(),
+        )];
+        let user_principal = PrincipalId::new_user_test_id(0);
+        let neuron_id = neuron_id(user_principal, 0);
+
+        let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+            .with_neuron_grantable_permissions(NeuronPermissionList::all())
+            .add_neuron_with_permissions(permissions, neuron_id.clone())
+            .create();
+
+        (governance_fixture, neuron_id)
+    };
+
+    // Attempt to add voting-related permissions to `caller` - should succeed
+    // since `caller` has ManageVotingPermission.
+    governance
+        .add_neuron_permissions(&neuron, caller, permissions_to_add.clone(), caller)
+        .unwrap();
+
+    // Check that `caller` now has those permissions.
+    governance.assert_principal_has_permissions_for_neuron(&neuron, caller, permissions_to_add);
+}
+
+#[test]
+fn test_manage_voting_permission_allows_removing_voting_permissions_from_self() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let permissions_to_remove = Neuron::PERMISSIONS_RELATED_TO_VOTING.to_vec().into();
+
+    let (mut governance, neuron) = {
+        let permissions: &[(PrincipalId, NeuronPermissionList)] = &[(
+            caller,
+            Neuron::PERMISSIONS_RELATED_TO_VOTING.to_vec().into(),
+        )];
+        let user_principal = PrincipalId::new_user_test_id(0);
+        let neuron_id = neuron_id(user_principal, 0);
+
+        let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+            .with_neuron_grantable_permissions(NeuronPermissionList::all())
+            .add_neuron_with_permissions(permissions, neuron_id.clone())
+            .create();
+
+        (governance_fixture, neuron_id)
+    };
+
+    // Attempt to remove voting-related permissions from `caller` - should
+    // succeed since `caller` has ManageVotingPermission.
+    governance
+        .remove_neuron_permissions(&neuron, caller, permissions_to_remove, caller)
+        .unwrap();
+
+    // Check that `caller` no longer has those permissions.
+    governance.assert_principal_has_permissions_for_neuron(
+        &neuron,
+        caller,
+        NeuronPermissionList::empty(),
+    );
+}
+
+#[test]
+fn test_manage_principals_allows_adding_voting_permissions_to_self() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let permissions_to_add = NeuronPermissionList::all();
+
+    let (mut governance, neuron) = {
+        let permissions: &[(PrincipalId, NeuronPermissionList)] =
+            &[(caller, vec![NeuronPermissionType::ManagePrincipals].into())];
+        let user_principal = PrincipalId::new_user_test_id(0);
+        let neuron_id = neuron_id(user_principal, 0);
+
+        let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+            .with_neuron_grantable_permissions(NeuronPermissionList::all())
+            .add_neuron_with_permissions(permissions, neuron_id.clone())
+            .create();
+
+        (governance_fixture, neuron_id)
+    };
+
+    // Attempt to add voting-related permissions to `caller` - should succeed
+    // since `caller` has ManageVotingPermission.
+    governance
+        .add_neuron_permissions(&neuron, caller, permissions_to_add.clone(), caller)
+        .unwrap();
+
+    // Check that `caller` now has those permissions.
+    governance.assert_principal_has_permissions_for_neuron(&neuron, caller, permissions_to_add);
+}
+
+#[test]
+fn test_manage_principals_allows_removing_voting_permissions_from_self() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let permissions_to_remove = NeuronPermissionList::all();
+
+    let (mut governance, neuron) = {
+        let permissions: &[(PrincipalId, NeuronPermissionList)] =
+            &[(caller, permissions_to_remove.clone())];
+        let user_principal = PrincipalId::new_user_test_id(0);
+        let neuron_id = neuron_id(user_principal, 0);
+
+        let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+            .with_neuron_grantable_permissions(NeuronPermissionList::all())
+            .add_neuron_with_permissions(permissions, neuron_id.clone())
+            .create();
+
+        (governance_fixture, neuron_id)
+    };
+
+    // Attempt to remove voting-related permissions from `caller` - should
+    // succeed since `caller` has ManageVotingPermission.
+    governance
+        .remove_neuron_permissions(&neuron, caller, permissions_to_remove, caller)
+        .unwrap();
+
+    // Check that `caller` no longer has those permissions.
+    governance.assert_principal_has_permissions_for_neuron(
+        &neuron,
+        caller,
+        NeuronPermissionList::empty(),
+    );
+}
+
+#[test]
+fn test_normally_unable_to_add_permissions_to_self() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let permissions_to_add: NeuronPermissionList =
+        Neuron::PERMISSIONS_RELATED_TO_VOTING.to_vec().into();
+
+    let (mut governance, neuron) = {
+        let permissions: &[(PrincipalId, NeuronPermissionList)] =
+            &[(caller, vec![NeuronPermissionType::Vote].into())];
+        let user_principal = PrincipalId::new_user_test_id(0);
+        let neuron_id = neuron_id(user_principal, 0);
+
+        let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+            .with_neuron_grantable_permissions(NeuronPermissionList::all())
+            .add_neuron_with_permissions(permissions, neuron_id.clone())
+            .create();
+
+        (governance_fixture, neuron_id)
+    };
+
+    // Attempt to add voting-related permissions to `caller` - should
+    // fail since `caller` doesn't have ManageVotingPermission or
+    // ManagePrincipals.
+    governance
+        .add_neuron_permissions(&neuron, caller, permissions_to_add, caller)
+        .unwrap_err();
+
+    // Check that `caller` didn't get the permissions
+    governance.assert_principal_has_permissions_for_neuron(
+        &neuron,
+        caller,
+        vec![NeuronPermissionType::Vote].into(),
+    );
+}
+
+#[test]
+fn test_normally_unable_to_remove_permissions_from_self() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let permissions_to_remove: NeuronPermissionList = vec![NeuronPermissionType::Vote].into();
+
+    let (mut governance, neuron) = {
+        let permissions: &[(PrincipalId, NeuronPermissionList)] =
+            &[(caller, vec![NeuronPermissionType::Vote].into())];
+        let user_principal = PrincipalId::new_user_test_id(0);
+        let neuron_id = neuron_id(user_principal, 0);
+
+        let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+            .with_neuron_grantable_permissions(NeuronPermissionList::all())
+            .add_neuron_with_permissions(permissions, neuron_id.clone())
+            .create();
+
+        (governance_fixture, neuron_id)
+    };
+
+    // Attempt to add voting-related permissions to `caller` - should
+    // fail since `caller` doesn't have ManageVotingPermission or
+    // ManagePrincipals.
+    governance
+        .remove_neuron_permissions(&neuron, caller, permissions_to_remove, caller)
+        .unwrap_err();
+
+    // Check that `caller` still has the permission
+    governance.assert_principal_has_permissions_for_neuron(
+        &neuron,
+        caller,
+        vec![NeuronPermissionType::Vote].into(),
+    );
+}
+
+#[test]
+fn test_normally_unable_to_add_permissions_to_others() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let target = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    let permissions_to_add: NeuronPermissionList = vec![NeuronPermissionType::Vote].into();
+
+    let (mut governance, neuron) = {
+        let permissions: &[(PrincipalId, NeuronPermissionList)] =
+            &[(caller, vec![NeuronPermissionType::Vote].into())];
+        let user_principal = PrincipalId::new_user_test_id(0);
+        let neuron_id = neuron_id(user_principal, 0);
+
+        let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+            .with_neuron_grantable_permissions(NeuronPermissionList::all())
+            .add_neuron_with_permissions(permissions, neuron_id.clone())
+            .create();
+
+        (governance_fixture, neuron_id)
+    };
+
+    // Attempt to add voting-related permissions to `target` - should
+    // fail since `caller` doesn't have ManageVotingPermission or
+    // ManagePrincipals.
+    governance
+        .remove_neuron_permissions(&neuron, target, permissions_to_add, caller)
+        .unwrap_err();
+
+    // Check that `target` didn't get the new permissions.
+    governance.assert_principal_has_permissions_for_neuron(
+        &neuron,
+        target,
+        NeuronPermissionList::empty(),
+    );
+}
+
+#[test]
+fn test_normally_unable_to_remove_permissions_to_others() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let target = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    let permissions_to_remove: NeuronPermissionList = vec![NeuronPermissionType::Vote].into();
+
+    let (mut governance, neuron) = {
+        let permissions: &[(PrincipalId, NeuronPermissionList)] = &[
+            (caller, vec![NeuronPermissionType::Vote].into()),
+            (target, vec![NeuronPermissionType::Vote].into()),
+        ];
+        let user_principal = PrincipalId::new_user_test_id(0);
+        let neuron_id = neuron_id(user_principal, 0);
+
+        let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+            .with_neuron_grantable_permissions(NeuronPermissionList::all())
+            .add_neuron_with_permissions(permissions, neuron_id.clone())
+            .create();
+
+        (governance_fixture, neuron_id)
+    };
+
+    // Attempt to remove voting-related permissions from `target` - should
+    // fail since `caller` doesn't have ManageVotingPermission or
+    // ManagePrincipals.
+    governance
+        .remove_neuron_permissions(&neuron, target, permissions_to_remove.clone(), caller)
+        .unwrap_err();
+
+    governance.assert_principal_has_permissions_for_neuron(&neuron, target, permissions_to_remove);
+}
+
+#[test]
+fn test_adding_invalid_permissions_fails() {
+    let caller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+    let target = *TEST_NEURON_2_OWNER_PRINCIPAL;
+    let permissions_to_add: NeuronPermissionList = NeuronPermissionList {
+        permissions: vec![10_000], // 10_000 is not going to be a valid permission
+    };
+
+    let (mut governance, neuron) = {
+        let permissions: &[(PrincipalId, NeuronPermissionList)] =
+            &[(caller, vec![NeuronPermissionType::ManagePrincipals].into())];
+        let user_principal = PrincipalId::new_user_test_id(0);
+        let neuron_id = neuron_id(user_principal, 0);
+
+        let governance_fixture = GovernanceCanisterFixtureBuilder::new()
+            .with_neuron_grantable_permissions(NeuronPermissionList::all())
+            .add_neuron_with_permissions(permissions, neuron_id.clone())
+            .create();
+
+        (governance_fixture, neuron_id)
+    };
+
+    // Attempt to remove voting-related permissions from `target` - should
+    // fail since `caller` doesn't have ManageVotingPermission or
+    // ManagePrincipals.
+    governance
+        .add_neuron_permissions(&neuron, target, permissions_to_add, caller)
+        .unwrap_err();
+
+    governance.assert_principal_has_permissions_for_neuron(
+        &neuron,
+        target,
+        NeuronPermissionList::empty(),
+    );
 }

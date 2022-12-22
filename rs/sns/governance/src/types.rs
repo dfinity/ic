@@ -2,6 +2,7 @@ use crate::{
     governance::{log_prefix, Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
     pb::v1::{
         claim_swap_neurons_request::NeuronParameters,
+        get_neuron_response,
         governance::{self, neuron_in_flight_command, SnsMetadata},
         governance_error::ErrorType,
         manage_neuron, manage_neuron_response,
@@ -9,7 +10,7 @@ use crate::{
         nervous_system_function::FunctionType,
         proposal::Action,
         DefaultFollowees, Empty, ExecuteGenericNervousSystemFunction, GovernanceError,
-        ManageNeuronResponse, NervousSystemFunction, NervousSystemParameters, NeuronId,
+        ManageNeuronResponse, NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId,
     },
     proposal::ValidGenericNervousSystemFunction,
 };
@@ -1522,6 +1523,7 @@ impl NeuronParameters {
             permissions.push(NeuronPermission::new(
                 &hotkey,
                 vec![
+                    NeuronPermissionType::ManageVotingPermission as i32,
                     NeuronPermissionType::SubmitProposal as i32,
                     NeuronPermissionType::Vote as i32,
                 ],
@@ -1556,9 +1558,43 @@ impl TryFrom<NeuronPermissionList> for BTreeSet<NeuronPermissionType> {
             .permissions
             .into_iter()
             .map(|p| {
-                NeuronPermissionType::from_i32(p).ok_or_else(|| format!("Invalid permission {}", p))
+                NeuronPermissionType::from_i32(p)
+                    .ok_or_else(|| format!("Invalid permission: {}", p))
             })
             .collect()
+    }
+}
+
+impl TryFrom<NeuronPermissionList> for Vec<NeuronPermissionType> {
+    type Error = String;
+
+    fn try_from(permissions: NeuronPermissionList) -> Result<Self, Self::Error> {
+        permissions
+            .permissions
+            .into_iter()
+            .map(|p| {
+                NeuronPermissionType::from_i32(p)
+                    .ok_or_else(|| format!("Invalid permission: {}", p))
+            })
+            .collect()
+    }
+}
+
+impl fmt::Display for NeuronPermissionList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let permissions = Vec::<NeuronPermissionType>::try_from(self.clone()).unwrap();
+        write!(f, "{permissions:?}")
+    }
+}
+
+impl get_neuron_response::Result {
+    #[track_caller]
+    pub fn unwrap(self) -> Neuron {
+        match self {
+            get_neuron_response::Result::Error(e) => Err(e),
+            get_neuron_response::Result::Neuron(n) => Ok(n),
+        }
+        .unwrap()
     }
 }
 
