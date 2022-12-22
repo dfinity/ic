@@ -24,7 +24,7 @@ pub fn algorithm_identifier() -> PkixAlgorithmIdentifier {
 /// # Arguments
 /// * `pk_der` is the binary DER encoding of the public key
 /// # Errors
-/// * `AlgorithmNotSupported` if an error occured while invoking OpenSSL
+/// * `AlgorithmNotSupported` if an error occurred while invoking OpenSSL
 /// * `MalformedPublicKey` if the public key could not be parsed
 /// # Returns
 /// The decoded public key
@@ -80,7 +80,7 @@ pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes>
 /// * `x` the x coordinate of the public point
 /// * `y` the y coordinate of the public point
 /// # Errors
-/// * `AlgorithmNotSupported` if an error occured while invoking OpenSSL
+/// * `AlgorithmNotSupported` if an error occurred while invoking OpenSSL
 /// * `MalformedPublicKey` if the public key could not be parsed
 /// # Returns
 /// The DER encoding of the public key

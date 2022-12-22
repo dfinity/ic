@@ -618,6 +618,7 @@ impl NiDkgTestEnvironment {
             .build();
         let dkg_dealing_encryption_pubkey = temp_crypto
             .current_node_public_keys()
+            .expect("Failed to retrieve node public keys")
             .dkg_dealing_encryption_public_key
             .expect("missing dkg_dealing_encryption_pk");
         self.crypto_components.insert(node_id, temp_crypto);

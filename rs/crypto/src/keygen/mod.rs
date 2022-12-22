@@ -20,7 +20,8 @@ use ic_crypto_internal_types::encrypt::forward_secure::{
 use ic_crypto_node_key_generation::{mega_public_key_from_proto, MEGaPublicKeyFromProtoError};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_interfaces::crypto::{
-    IDkgDealingEncryptionKeyRotationError, KeyManager, PublicKeyRegistrationStatus,
+    CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError, KeyManager,
+    PublicKeyRegistrationStatus,
 };
 use ic_logger::{error, info};
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
@@ -38,7 +39,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         &self,
         registry_version: RegistryVersion,
     ) -> CryptoResult<PublicKeyRegistrationStatus> {
-        self.collect_and_store_key_count_metrics(registry_version);
+        self.collect_and_store_key_count_metrics(registry_version)?;
         // Get the public keys from the registry, and ensure that we have the
         // secret keys locally in the SKS.
         let keys_in_registry = match self.check_local_key_material(registry_version) {
@@ -116,7 +117,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         // Check if the latest iDKG key we have locally still needs to be registered in the
         // registry, or if it needs to be rotated.
         if let Some(latest_local_idkg_dealing_encryption_key) = self
-            .current_node_public_keys()
+            .current_node_public_keys()?
             .idkg_dealing_encryption_public_key
         {
             if idkg_dealing_encryption_key
@@ -168,13 +169,20 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
     }
 
-    fn collect_and_store_key_count_metrics(&self, registry_version: RegistryVersion) {
+    fn collect_and_store_key_count_metrics(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
         self.metrics
-            .observe_node_key_counts(self.collect_key_count_metrics(registry_version));
+            .observe_node_key_counts(self.collect_key_count_metrics(registry_version)?);
+        Ok(())
     }
 
-    fn current_node_public_keys(&self) -> CurrentNodePublicKeys {
-        self.csp.current_node_public_keys()
+    fn current_node_public_keys(
+        &self,
+    ) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError> {
+        let result = self.csp.current_node_public_keys()?;
+        Ok(result)
     }
 
     fn rotate_idkg_dealing_encryption_keys(
@@ -190,11 +198,14 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
 
 // Helpers for implementing `KeyManager`-trait.
 impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
-    pub fn collect_key_count_metrics(&self, registry_version: RegistryVersion) -> KeyCounts {
+    pub fn collect_key_count_metrics(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<KeyCounts> {
         let mut pub_keys_in_reg: u8 = 0;
         let mut secret_keys_in_sks: u8 = 0;
         let pub_keys_local = self
-            .current_node_public_keys()
+            .current_node_public_keys()?
             .get_pub_keys_and_cert_count();
         let reg_and_secret_key_results = vec![
             self.ensure_node_signing_key_material_is_set_up(registry_version)
@@ -223,7 +234,11 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                 _ => {}
             }
         }
-        KeyCounts::new(pub_keys_in_reg, pub_keys_local, secret_keys_in_sks)
+        Ok(KeyCounts::new(
+            pub_keys_in_reg,
+            pub_keys_local,
+            secret_keys_in_sks,
+        ))
     }
 
     fn rotate_idkg_dealing_encryption_keys_internal(
@@ -242,7 +257,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             return Err(IDkgDealingEncryptionKeyRotationError::KeyRotationNotEnabled);
         };
 
-        let current_idkg_public_key_proto = self.current_node_public_keys().idkg_dealing_encryption_public_key
+        let current_idkg_public_key_proto = self.current_node_public_keys()?.idkg_dealing_encryption_public_key
             .expect("missing local IDKG public key! \
             This should not happen because it's expected that check_keys_with_registry() was called before \
             to ensure that rotation was needed.");
@@ -394,6 +409,10 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                     self.metrics
                         .observe_key_rotation_result(KeyRotationResult::KeyRotationNotEnabled);
                 }
+                IDkgDealingEncryptionKeyRotationError::TransientInternalError(_) => {
+                    self.metrics
+                        .observe_key_rotation_result(KeyRotationResult::TransientInternalError);
+                }
             },
         }
     }
@@ -429,6 +448,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             KeyPurpose::CommitteeSigning,
             registry_version,
         )?;
+
         ensure_committee_signing_key_material_is_set_up_correctly(pk_proto.clone(), &self.csp)?;
         Ok(pk_proto)
     }
@@ -443,6 +463,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             KeyPurpose::DkgDealingEncryption,
             registry_version,
         )?;
+
         ensure_dkg_dealing_encryption_key_material_is_set_up_correctly(
             pk_proto.clone(),
             &self.csp,

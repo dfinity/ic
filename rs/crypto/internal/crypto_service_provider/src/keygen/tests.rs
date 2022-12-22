@@ -38,6 +38,7 @@ mod gen_node_siging_key_pair_tests {
         );
         assert_eq!(
             csp.current_node_public_keys()
+                .expect("Failed to retrieve node public keys")
                 .node_signing_public_key
                 .expect("missing key"),
             node_signing_pk_to_proto(public_key)
@@ -96,6 +97,7 @@ mod gen_key_pair_with_pop_tests {
 
         assert_eq!(
             csp.current_node_public_keys()
+                .expect("Failed to retrieve node public keys")
                 .committee_signing_public_key
                 .expect("missing key"),
             committee_signing_pk_to_proto((public_key, pop))

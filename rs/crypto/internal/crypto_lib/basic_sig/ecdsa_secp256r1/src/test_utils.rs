@@ -50,7 +50,7 @@ pub fn new_keypair(
 /// * `sk_raw_bytes` is the big-endian encoding of unsigned integer
 /// * `pk` is the public key associated with this secret key
 /// # Errors
-/// * `AlgorithmNotSupported` if an error occured while invoking OpenSSL
+/// * `AlgorithmNotSupported` if an error occurred while invoking OpenSSL
 /// * `MalformedPublicKey` if the public key could not be parsed
 /// * `MalformedSecretKey` if the secret key does not correspond with the public
 ///   key

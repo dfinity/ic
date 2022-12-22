@@ -1,3 +1,7 @@
+mod errors;
+
+pub use errors::*;
+
 use super::super::types::{CspPop, CspPublicKey};
 use crate::key_id::KeyId;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
@@ -11,11 +15,11 @@ pub trait CspKeyGenerator {
     /// # Returns
     /// The public key of the keypair
     /// # Errors
-    /// * `CryptoError::InternalError` if there is an internal
+    /// * [`CryptoError::InternalError`] if there is an internal
     ///   error (e.g., the public key in the public key store is already set).
-    /// * `CryptoError::TransientInternalError` if there is a transient
+    /// * [`CryptoError::TransientInternalError`] if there is a transient
     ///   internal error, e.g., an IO error when writing a key to disk, or an
-    ///   RPC error when calling a remote CSP vault.
+    ///   RPC error when calling the CSP vault.
     /// # Panics
     /// If there already exists a secret key in the store for the secret key ID
     /// derived from the public key. This error most likely indicates a bad
@@ -28,11 +32,11 @@ pub trait CspKeyGenerator {
     /// The public key and the proof of possession (PoP) of the keypair
     ///
     /// # Errors
-    /// * `CryptoError::InternalError` if there is an internal
+    /// * [`CryptoError::InternalError`] if there is an internal
     ///   error (e.g., the public key in the public key store is already set).
-    /// * `CryptoError::TransientInternalError` if there is a transient
+    /// * [`CryptoError::TransientInternalError`] if there is a transient
     ///   internal error, e.g,. an IO error when writing a key to disk, or an
-    ///   RPC error when calling a remote CSP vault.
+    ///   RPC error when calling the CSP vault.
     ///
     /// # Panics
     /// If there already exists a secret key in the store for the secret key ID
@@ -87,11 +91,29 @@ pub trait NodePublicKeyData {
     /// public key store
     ///
     /// # Errors
-    /// * `CryptoError::TransientInternalError` if there is a transient
-    ///   internal error, e.g., an RPC error when calling a remote CSP vault.
-    fn pks_contains(&self, public_keys: CurrentNodePublicKeys) -> Result<bool, CryptoError>;
+    /// * [`NodePublicKeyDataError::TransientInternalError`] if there is a transient internal
+    ///   error when calling the CSP vault.
+    fn pks_contains(
+        &self,
+        public_keys: CurrentNodePublicKeys,
+    ) -> Result<bool, NodePublicKeyDataError>;
+
     /// Returns the node's current public keys.
-    fn current_node_public_keys(&self) -> CurrentNodePublicKeys;
+    ///
+    /// # Errors
+    /// * [`NodePublicKeyDataError::TransientInternalError`] if there is a transient internal
+    ///   error when calling the CSP vault.
+    fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError>;
+
     /// Returns the id of the dkg dealing encryption key.
-    fn dkg_dealing_encryption_key_id(&self) -> KeyId;
+    ///
+    /// # Errors
+    /// * [`DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound`] if the key was not found.
+    /// * [`DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey`] if the public key
+    ///   could not be parsed or was otherwise invalid.
+    /// * [`DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError`] if there is a transient internal
+    ///   error when calling the CSP vault.
+    fn dkg_dealing_encryption_key_id(
+        &self,
+    ) -> Result<KeyId, DkgDealingEncryptionKeyIdRetrievalError>;
 }

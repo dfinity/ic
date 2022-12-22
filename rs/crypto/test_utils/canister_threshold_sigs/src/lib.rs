@@ -468,7 +468,9 @@ impl CanisterThresholdSigTestEnvironment {
                 generate_tls_keys_and_certificate: false,
             })
             .build();
-        let node_keys = temp_crypto.current_node_public_keys();
+        let node_keys = temp_crypto
+            .current_node_public_keys()
+            .expect("Failed to retrieve node public keys");
         self.crypto_components.insert(node_id, temp_crypto);
 
         self.registry_data

@@ -48,7 +48,7 @@ impl HonestDealerDlogLookupTable {
             }
         }
 
-        // Now confirm the results (since collisions may have occured
+        // Now confirm the results (since collisions may have occurred
         // if the dealer was dishonest) and convert to Scalar
 
         let mut results = Vec::with_capacity(targets.len());

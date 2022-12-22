@@ -28,6 +28,7 @@ use crate::api::{
     CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner, CspTlsHandshakeSignerProvider,
     NiDkgCspClient, NodePublicKeyData, ThresholdSignatureCspClient,
 };
+use crate::api::{DkgDealingEncryptionKeyIdRetrievalError, NodePublicKeyDataError};
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
@@ -39,7 +40,7 @@ use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_logger::{info, new_logger, replica_logger::no_op_logger, ReplicaLogger};
-use ic_types::crypto::{CryptoError, CurrentNodePublicKeys};
+use ic_types::crypto::CurrentNodePublicKeys;
 use key_id::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use rand::{CryptoRng, Rng};
@@ -273,28 +274,40 @@ impl Csp {
 }
 
 impl NodePublicKeyData for Csp {
-    fn pks_contains(&self, public_keys: CurrentNodePublicKeys) -> Result<bool, CryptoError> {
+    fn pks_contains(
+        &self,
+        public_keys: CurrentNodePublicKeys,
+    ) -> Result<bool, NodePublicKeyDataError> {
         self.csp_vault.pks_contains(public_keys).map_err(
             |CspPublicKeyStoreError::TransientInternalError(internal_error)| {
-                CryptoError::TransientInternalError { internal_error }
+                NodePublicKeyDataError::TransientInternalError(internal_error)
             },
         )
     }
 
-    fn current_node_public_keys(&self) -> CurrentNodePublicKeys {
-        self.csp_vault
-            .current_node_public_keys()
-            .expect("error retrieving public keys")
+    fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError> {
+        let pks = self.csp_vault.current_node_public_keys()?;
+        Ok(pks)
     }
 
-    fn dkg_dealing_encryption_key_id(&self) -> KeyId {
-        CspFsEncryptionPublicKey::try_from(
-            self.current_node_public_keys()
+    fn dkg_dealing_encryption_key_id(
+        &self,
+    ) -> Result<KeyId, DkgDealingEncryptionKeyIdRetrievalError> {
+        let pk = CspFsEncryptionPublicKey::try_from(
+            self.current_node_public_keys()?
                 .dkg_dealing_encryption_public_key
-                .expect("Missing dkg dealing encryption key id"),
+                .ok_or(DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound)?,
         )
-        .map(|pk| KeyId::from(&pk))
-        .expect("Unsupported public key proto as dkg dealing encryption public key.")
+        .map_err(
+            |e| DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey {
+                key_bytes: e.key_bytes,
+                details: format!(
+                    "Unsupported public key proto as dkg dealing encryption public key: {}",
+                    e.internal_error
+                ),
+            },
+        )?;
+        Ok(KeyId::from(&pk))
     }
 }
 

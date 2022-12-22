@@ -194,6 +194,18 @@ mod retain_active_keys_error_conversions {
                         internal_error: e.internal_error,
                     })
                 }
+                CspDkgUpdateFsEpochError::KeyNotFoundError(e) => {
+                    DkgKeyRemovalError::KeyNotFoundError(e)
+                }
+                CspDkgUpdateFsEpochError::MalformedPublicKeyError(e) => {
+                    use ic_types::crypto::threshold_sig::ni_dkg::errors::MalformedFsEncryptionPublicKeyError;
+
+                    DkgKeyRemovalError::MalformedFsEncryptionPublicKey(
+                        MalformedFsEncryptionPublicKeyError {
+                            internal_error: e.internal_error,
+                        },
+                    )
+                }
             }
         }
     }

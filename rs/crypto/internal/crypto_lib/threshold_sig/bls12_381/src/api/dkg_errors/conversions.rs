@@ -1,5 +1,7 @@
 //! Convert DKG error types to and from other error types.
-use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
+use ic_types::crypto::threshold_sig::ni_dkg::errors::{
+    create_transcript_error::DkgCreateTranscriptError, MalformedFsEncryptionPublicKeyError,
+};
 
 use crate::api::ni_dkg_errors::{
     CspDkgCreateReshareTranscriptError, CspDkgCreateTranscriptError, CspDkgLoadPrivateKeyError,
@@ -60,6 +62,14 @@ impl From<CspDkgLoadPrivateKeyError> for DkgLoadTranscriptError {
                 DkgLoadTranscriptError::TransientInternalError(
                     ic_types::crypto::error::InternalError {
                         internal_error: e.internal_error,
+                    },
+                )
+            }
+            CspDkgLoadPrivateKeyError::MalformedPublicKeyError(error) => {
+                // Forward to the caller because the argument is malformed.
+                DkgLoadTranscriptError::MalformedFsEncryptionPublicKey(
+                    MalformedFsEncryptionPublicKeyError {
+                        internal_error: error.to_string(),
                     },
                 )
             }

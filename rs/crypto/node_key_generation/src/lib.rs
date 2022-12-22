@@ -161,7 +161,11 @@ pub fn get_node_keys_or_generate_if_missing(
                 .expect("Could not read generated keys.")
                 .expect("Newly generated keys are inconsistent.");
 
-            (csp.current_node_public_keys(), node_id)
+            (
+                csp.current_node_public_keys()
+                    .expect("Failed to retrieve node public keys"),
+                node_id,
+            )
         }
         Ok(Some(node_pks)) => {
             let csp = csp_for_config(config, tokio_runtime_handle);
@@ -170,7 +174,11 @@ pub fn get_node_keys_or_generate_if_missing(
                 .as_ref()
                 .expect("Missing node signing public key");
             let node_id = derive_node_id(node_signing_pk);
-            (csp.current_node_public_keys(), node_id)
+            (
+                csp.current_node_public_keys()
+                    .expect("Failed to retrieve node public keys"),
+                node_id,
+            )
         }
         Err(e) => panic!("Node contains inconsistent key material: {}", e),
     }

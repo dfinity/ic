@@ -161,6 +161,8 @@ impl ErrorReproducibility for DkgKeyRemovalError {
             DkgKeyRemovalError::FsKeyNotInSecretKeyStoreError(_) => true,
             // false, as a transient error is not replicated by definition
             DkgKeyRemovalError::TransientInternalError(_) => false,
+            // true, as the encryption public key is fetched from the registry
+            DkgKeyRemovalError::KeyNotFoundError(_) => true,
         }
     }
 }

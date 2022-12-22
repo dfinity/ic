@@ -145,7 +145,9 @@ fn should_provide_public_keys_via_crypto_for_non_replica_process() {
             None,
         );
 
-        let retrieved_node_pks = crypto.current_node_public_keys();
+        let retrieved_node_pks = crypto
+            .current_node_public_keys()
+            .expect("Failed to retrieve node public keys");
 
         assert!(all_node_keys_are_present(&retrieved_node_pks));
         assert_eq!(created_node_pks, retrieved_node_pks);
@@ -249,6 +251,7 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_key_is_missin
     let idkg_dealing_encryption_pk_in_public_key_store = crypto
         .get()
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .idkg_dealing_encryption_public_key;
     assert!(idkg_dealing_encryption_pk_in_public_key_store.is_none());
 
@@ -793,6 +796,7 @@ fn should_fail_check_keys_with_registry_if_no_idkg_key_in_registry() {
     let idkg_dealing_encryption_pk_in_public_key_store = crypto
         .get()
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .idkg_dealing_encryption_public_key;
     assert!(idkg_dealing_encryption_pk_in_public_key_store.is_some());
 
@@ -894,6 +898,7 @@ fn should_fail_check_keys_with_registry_if_registry_node_signing_key_has_no_matc
     let node_signing_pk_without_corresponding_secret_key = {
         let mut nspk = crypto_component
             .current_node_public_keys()
+            .expect("Failed to retrieve node public keys")
             .node_signing_public_key
             .unwrap();
         nspk.key_value[0] ^= 0xff; // flip some bits
@@ -931,6 +936,7 @@ fn should_fail_check_keys_with_registry_if_registry_committee_signing_public_key
     let committee_signing_pk_without_corresponding_secret_key = {
         let mut cspk = crypto_component
             .current_node_public_keys()
+            .expect("Failed to retrieve node public keys")
             .committee_signing_public_key
             .unwrap();
         cspk.key_value[0] ^= 0xff; // flip some bits
@@ -967,6 +973,7 @@ fn should_fail_check_keys_with_registry_if_registry_dkg_dealing_encryption_key_h
     let dkg_dealing_encryption_pk_without_corresponding_secret_key = {
         let mut ddepk = crypto_component
             .current_node_public_keys()
+            .expect("Failed to retrieve node public keys")
             .dkg_dealing_encryption_public_key
             .unwrap();
         ddepk.key_value[0] ^= 0xff; // flip some bits
@@ -1048,8 +1055,10 @@ fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timest
         )
         .with_time_source(Arc::clone(&time) as Arc<_>)
         .build();
+
     let mut idkg_dealing_encryption_pk = crypto_component
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .idkg_dealing_encryption_public_key
         .expect("no idkg dealing encryption key set");
     idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
@@ -1092,6 +1101,7 @@ fn should_return_rotation_needed_from_check_keys_with_registry_if_idkg_dealing_e
         .build();
     let mut idkg_dealing_encryption_pk = crypto_component
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .idkg_dealing_encryption_public_key
         .expect("no idkg dealing encryption key set");
     idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
@@ -1132,6 +1142,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_key_rot
         .build();
     let mut idkg_dealing_encryption_pk = crypto_component
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .idkg_dealing_encryption_public_key
         .expect("no idkg dealing encryption key set");
     idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
@@ -1170,6 +1181,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_node_not_i
         .build();
     let mut idkg_dealing_encryption_pk = crypto_component
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .idkg_dealing_encryption_public_key
         .expect("no idkg dealing encryption key set");
     idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
@@ -1212,6 +1224,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_k
         .build();
     let mut idkg_dealing_encryption_pk = crypto_component
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .idkg_dealing_encryption_public_key
         .expect("no idkg dealing encryption key set");
     idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
@@ -1253,6 +1266,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_c
         .build();
     let mut idkg_dealing_encryption_pk = crypto_component
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .idkg_dealing_encryption_public_key
         .expect("no idkg dealing encryption key set");
     idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
@@ -1297,6 +1311,7 @@ fn should_return_registration_needed_from_check_keys_with_registry_if_local_idkg
 
     let mut idkg_dealing_encryption_pk = crypto_component
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .idkg_dealing_encryption_public_key
         .expect("no idkg dealing encryption key set");
     idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
@@ -1348,6 +1363,7 @@ fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timest
         .build();
     let mut idkg_dealing_encryption_pk = crypto_component
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .idkg_dealing_encryption_public_key
         .expect("no idkg dealing encryption key set");
     idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
@@ -1389,6 +1405,7 @@ fn should_transition_from_all_keys_registered_to_rotation_needed_with_sys_time_s
         .build();
     let mut idkg_dealing_encryption_pk = crypto_component
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .idkg_dealing_encryption_public_key
         .expect("no idkg dealing encryption key set");
     idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
@@ -1429,6 +1446,7 @@ fn well_formed_dkg_dealing_encryption_pk() -> PublicKey {
         new_temp_crypto_component(NodeKeysToGenerate::only_dkg_dealing_encryption_key());
     temp_crypto
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .dkg_dealing_encryption_public_key
         .unwrap()
 }
@@ -1438,6 +1456,7 @@ fn well_formed_idkg_dealing_encryption_pk() -> PublicKey {
         new_temp_crypto_component(NodeKeysToGenerate::only_idkg_dealing_encryption_key());
     temp_crypto
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .idkg_dealing_encryption_public_key
         .unwrap()
 }

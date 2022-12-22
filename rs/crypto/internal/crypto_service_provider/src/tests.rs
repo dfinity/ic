@@ -23,7 +23,9 @@ mod csp_tests {
         fn should_return_empty_when_no_public_keys() {
             let csp = Csp::with_rng(csprng());
 
-            let current_node_public_keys = csp.current_node_public_keys();
+            let current_node_public_keys = csp
+                .current_node_public_keys()
+                .expect("Failed to retrieve node public keys");
 
             assert_eq!(
                 current_node_public_keys,

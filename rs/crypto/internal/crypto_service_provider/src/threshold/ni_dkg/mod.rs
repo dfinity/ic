@@ -54,7 +54,7 @@ impl NiDkgCspClient for Csp {
     ) -> Result<(), ni_dkg_errors::CspDkgUpdateFsEpochError> {
         debug!(self.logger; crypto.method_name => "update_forward_secure_epoch", crypto.dkg_epoch => epoch.get());
 
-        let key_id = self.dkg_dealing_encryption_key_id();
+        let key_id = self.dkg_dealing_encryption_key_id()?;
         self.csp_vault
             .update_forward_secure_epoch(algorithm_id, key_id, epoch)
     }
@@ -195,7 +195,9 @@ impl NiDkgCspClient for Csp {
         receiver_index: NodeIndex,
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError> {
         debug!(self.logger; crypto.method_name => "load_threshold_signing_key", crypto.dkg_epoch => epoch.get());
-        let fs_key_id = self.dkg_dealing_encryption_key_id();
+
+        let fs_key_id = self.dkg_dealing_encryption_key_id()?;
+
         self.csp_vault.load_threshold_signing_key(
             algorithm_id,
             epoch,

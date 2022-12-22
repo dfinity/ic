@@ -16,10 +16,10 @@ use ic_crypto_tls_interfaces::{
 };
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
-    IDkgDealingEncryptionKeyRotationError, IDkgProtocol, KeyManager, LoadTranscriptResult,
-    MultiSigVerifier, MultiSigner, NiDkgAlgorithm, PublicKeyRegistrationStatus,
-    ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
-    ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError, IDkgProtocol, KeyManager,
+    LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm,
+    PublicKeyRegistrationStatus, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_registry::RegistryClient;
@@ -472,6 +472,7 @@ impl TempCryptoComponent {
     pub fn node_tls_public_key_certificate(&self) -> TlsPublicKeyCert {
         let tls_certificate = self
             .current_node_public_keys()
+            .expect("Failed to retrieve node public keys")
             .tls_certificate
             .expect("missing tls_certificate");
         TlsPublicKeyCert::new_from_der(tls_certificate.certificate_der)
@@ -1015,12 +1016,17 @@ impl<C: CryptoServiceProvider> KeyManager for TempCryptoComponentGeneric<C> {
             .check_keys_with_registry(registry_version)
     }
 
-    fn collect_and_store_key_count_metrics(&self, registry_version: RegistryVersion) {
+    fn collect_and_store_key_count_metrics(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()> {
         self.crypto_component
             .collect_and_store_key_count_metrics(registry_version)
     }
 
-    fn current_node_public_keys(&self) -> CurrentNodePublicKeys {
+    fn current_node_public_keys(
+        &self,
+    ) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError> {
         self.crypto_component.current_node_public_keys()
     }
 

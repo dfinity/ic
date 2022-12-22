@@ -1,3 +1,7 @@
+mod errors;
+
+pub use errors::*;
+
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::{CryptoResult, CurrentNodePublicKeys};
 use ic_types::registry::RegistryClientError;
@@ -38,13 +42,23 @@ pub trait KeyManager {
 
     /// Collects key count metrics from the local node and the registry, and stores the information
     /// in the metrics component.
-    fn collect_and_store_key_count_metrics(&self, registry_version: RegistryVersion);
+    ///
+    /// # Errors
+    /// * [`CryptoError::TransientInternalError`] e.g. on RPC error.
+    fn collect_and_store_key_count_metrics(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> CryptoResult<()>;
 
     /// Returns the node's public keys currently stored in the public key store.
     ///
     /// Calling this method multiple times may lead to different results
     /// depending on the state of the public key store.
-    fn current_node_public_keys(&self) -> CurrentNodePublicKeys;
+    ///
+    /// # Errors
+    /// * [`CurrentNodePublicKeysError::TransientInternalError`] in case of a transient internal error.
+    fn current_node_public_keys(&self)
+        -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError>;
 
     /// Rotates the I-DKG dealing encryption keys. This function shall only be called if a prior
     /// call to `check_keys_with_registry()` has indicated that the I-DKG dealing encryption keys
@@ -76,6 +90,7 @@ pub enum IDkgDealingEncryptionKeyRotationError {
     KeyGenerationError(String),
     RegistryError(RegistryClientError),
     KeyRotationNotEnabled,
+    TransientInternalError(String),
 }
 
 impl From<RegistryClientError> for IDkgDealingEncryptionKeyRotationError {

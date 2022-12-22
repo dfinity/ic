@@ -90,7 +90,9 @@ impl TestKeygenCryptoBuilder {
             .with_node_id(node_id)
             .with_keys(self.node_keys_to_generate.clone())
             .build();
-        let node_pubkeys = temp_crypto.current_node_public_keys();
+        let node_pubkeys = temp_crypto
+            .current_node_public_keys()
+            .expect("Failed to retrieve node public keys");
         self.add_node_signing_key_to_registry_if_present(
             registry_version,
             node_id,

@@ -160,8 +160,8 @@ impl NodeRegistration {
         let node_pub_keys =
             tokio::task::spawn_blocking(move || key_handler.current_node_public_keys())
                 .await
-                .unwrap();
-
+                .unwrap()
+                .expect("Failed to retrieve current node public keys");
         AddNodePayload {
             // These four are raw bytes because sadly we can't marshal between pb and candid...
             node_signing_pk: protobuf_to_vec(node_pub_keys.node_signing_public_key.unwrap()),
@@ -321,20 +321,25 @@ impl NodeRegistration {
             Some(url) => url,
             None => return,
         };
-
         let key_handler = self.key_handler.clone();
-        let node_pub_key = if let Some(pk) = tokio::task::spawn_blocking(move || {
+        let node_pub_key_opt = tokio::task::spawn_blocking(move || {
             key_handler
                 .current_node_public_keys()
-                .node_signing_public_key
+                .map(|cnpks| cnpks.node_signing_public_key)
         })
         .await
-        .unwrap()
-        {
-            pk
-        } else {
-            warn!(self.log, "Missing node signing key.");
-            return; // missing signing key, can't continue
+        .unwrap();
+
+        let node_pub_key = match node_pub_key_opt {
+            Ok(Some(pk)) => pk,
+            Ok(None) => {
+                warn!(self.log, "Missing node signing key.");
+                return;
+            }
+            Err(e) => {
+                warn!(self.log, "Failed to retrieve current node public keys: {e}");
+                return;
+            }
         };
 
         let key_handler = self.key_handler.clone();
