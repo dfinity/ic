@@ -13,35 +13,103 @@ use std::{
     sync::Arc,
 };
 
-/// A FIFO queue that enforces an upper bound on the number of slots used and
-/// reserved. Pushing an item into the queue or reserving a slot may fail if the
-/// queue is full. Pushing an item into a reserved slot will always succeed
-/// (unless a reservation has not been made, in which case it will panic).
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct QueueWithReservation<T: std::clone::Clone> {
-    queue: VecDeque<T>,
-    /// Maximum number of messages allowed in the `queue` above.
-    capacity: usize,
-    /// Number of slots in the above `queue` currently reserved.  A slot must
-    /// first be reserved before it can be pushed to which consumes it.
-    num_slots_reserved: usize,
+/// Trait for queue items in `InputQueue` and `OutputQueue`. Such items must
+/// either be a response or a request (including timed out requests).
+/// Since an item is either a request or a response, implementing
+/// `is_response()` is sufficient.
+trait QueueItem<T> {
+    /// Returns true if the queue item is a response.
+    fn is_response(&self) -> bool;
+
+    /// Converts a request into a queue item.
+    fn from_request(request: Arc<Request>) -> T;
+
+    /// Converts a response into a queue item.
+    fn from_response(response: Arc<Response>) -> T;
 }
 
-impl<T: std::clone::Clone> QueueWithReservation<T> {
+impl QueueItem<RequestOrResponse> for RequestOrResponse {
+    fn is_response(&self) -> bool {
+        matches!(*self, RequestOrResponse::Response(_))
+    }
+
+    fn from_request(request: Arc<Request>) -> RequestOrResponse {
+        RequestOrResponse::Request(request)
+    }
+    fn from_response(response: Arc<Response>) -> RequestOrResponse {
+        RequestOrResponse::Response(response)
+    }
+}
+
+impl QueueItem<Option<RequestOrResponse>> for Option<RequestOrResponse> {
+    fn is_response(&self) -> bool {
+        matches!(*self, Some(RequestOrResponse::Response(_)))
+    }
+
+    fn from_request(request: Arc<Request>) -> Option<RequestOrResponse> {
+        Some(RequestOrResponse::Request(request))
+    }
+    fn from_response(response: Arc<Response>) -> Option<RequestOrResponse> {
+        Some(RequestOrResponse::Response(response))
+    }
+}
+
+/// A FIFO queue with equal but separate capacities for requests and responses,
+/// ensuring full-duplex communication up to the capacity; and providing a
+/// backpressure mechanism in either direction, once the limit is reached. This
+/// is the basis for both `InputQueue` and `OutputQueue`.
+///
+/// Requests are handled in a straightforward manner: pushing a request onto the
+/// queue succeeds if there are available request slots, fails if there aren't.
+///
+/// Response slots are used by either actual responses or by reservations for
+/// expected responses. Since an (incoming or outgoing) response always results
+/// from an (outgoing or, respectively, incoming) request, it is required to
+/// first make a reservation for a response; and later push the response into
+/// the reserved slot, consuming the reservation. Attempting to push a response
+/// with no reservations available will produce an error.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct QueueWithReservation<T: QueueItem<T> + std::clone::Clone> {
+    /// A FIFO queue of all requests and responses. Since responses may be enqueued
+    /// at arbitrary points in time, response reservations cannot be explicitly
+    /// represented in `queue`. They only exist as the difference between
+    /// `num_responses + num_requests` and `queue.len()`.
+    queue: VecDeque<T>,
+    /// Maximum number of requests; or responses + reservations; allowed by the
+    /// queue at any one time.
+    capacity: usize,
+    /// Number of slots used by requests.
+    num_request_slots: usize,
+    /// Number of slots used by responses and response reservations.
+    num_response_slots: usize,
+}
+
+impl<T: QueueItem<T> + std::clone::Clone> QueueWithReservation<T> {
     fn new(capacity: usize) -> Self {
         let queue = VecDeque::new();
 
         Self {
             queue,
             capacity,
-            num_slots_reserved: 0,
+            num_request_slots: 0,
+            num_response_slots: 0,
         }
     }
 
-    /// Returns `Ok(())` if there exists at least one available slot,
+    /// Returns the number of slots available in the queue for reservations.
+    fn available_response_slots(&self) -> usize {
+        self.capacity.saturating_sub(self.num_response_slots)
+    }
+
+    /// Returns the number slots available for requests.
+    fn available_request_slots(&self) -> usize {
+        self.capacity.saturating_sub(self.num_request_slots)
+    }
+
+    /// Returns `Ok(())` if there exists at least one available request slot,
     /// `Err(StateError::QueueFull)` otherwise.
-    fn check_has_slot(&self) -> Result<(), StateError> {
-        if self.queue.len() + self.num_slots_reserved >= self.capacity {
+    fn check_has_request_slot(&self) -> Result<(), StateError> {
+        if self.num_request_slots >= self.capacity {
             return Err(StateError::QueueFull {
                 capacity: self.capacity,
             });
@@ -49,45 +117,70 @@ impl<T: std::clone::Clone> QueueWithReservation<T> {
         Ok(())
     }
 
-    /// Returns the number of slots available in the queue. This many items can
-    /// be reserved or pushed before an error is returned.
-    fn available_slots(&self) -> usize {
-        self.capacity
-            .saturating_sub(self.queue.len() + self.num_slots_reserved)
-    }
-
-    /// Reserves a slot if available, else returns `Err(StateError::QueueFull)`.
+    /// Reserves a slot for a response, if available; else returns `Err(StateError::QueueFull)`.
     fn reserve_slot(&mut self) -> Result<(), StateError> {
-        self.check_has_slot()?;
-        self.num_slots_reserved += 1;
-        Ok(())
-    }
-
-    /// Pushes an item into the queue if not full, returns
-    /// `Err(StateError::QueueFull)` along with the provided item otherwise.
-    fn push(&mut self, msg: T) -> Result<(), (StateError, T)> {
-        if let Err(e) = self.check_has_slot() {
-            return Err((e, msg));
+        if self.available_response_slots() == 0 {
+            return Err(StateError::QueueFull {
+                capacity: self.capacity,
+            });
         }
-        self.queue.push_back(msg);
+        self.num_response_slots += 1;
+        debug_assert!(self.check_invariants());
         Ok(())
     }
 
-    /// Pushes an item into a reserved slot, consuming the reservation or
-    /// returns an error if there is no reservation available.
-    fn push_into_reserved_slot(&mut self, msg: T) -> Result<(), (StateError, T)> {
-        if self.num_slots_reserved > 0 {
-            self.num_slots_reserved -= 1;
-            self.queue.push_back(msg);
+    /// Pushes a request into the queue or returns an error if the capacity
+    /// for requests is exhausted.
+    fn push_request(&mut self, request: Arc<Request>) -> Result<(), (StateError, Arc<Request>)> {
+        if self.num_request_slots < self.capacity {
+            self.num_request_slots += 1;
+            self.queue
+                .push_back(<T as QueueItem<T>>::from_request(request));
+            debug_assert!(self.check_invariants());
             Ok(())
         } else {
-            Err((StateError::QueueFull { capacity: 0 }, msg))
+            Err((
+                StateError::QueueFull {
+                    capacity: self.capacity,
+                },
+                request,
+            ))
+        }
+    }
+
+    /// Pushes a response into a reserved slot, consuming the reservation or
+    /// returns an error if there is no reservation available.
+    fn push_response(
+        &mut self,
+        response: Arc<Response>,
+    ) -> Result<(), (StateError, Arc<Response>)> {
+        if self.reserved_slots() > 0 {
+            self.queue
+                .push_back(<T as QueueItem<T>>::from_response(response));
+            debug_assert!(self.check_invariants());
+            Ok(())
+        } else {
+            Err((
+                StateError::QueueFull {
+                    capacity: self.capacity,
+                },
+                response,
+            ))
         }
     }
 
     /// Pops an item from the queue. Returns `None` if the queue is empty.
     fn pop(&mut self) -> Option<T> {
-        self.queue.pop_front()
+        let msg = self.queue.pop_front();
+        if let Some(msg) = &msg {
+            if msg.is_response() {
+                self.num_response_slots = self.num_response_slots.checked_sub(1).unwrap();
+            } else {
+                self.num_request_slots = self.num_request_slots.checked_sub(1).unwrap();
+            }
+        }
+        debug_assert!(self.check_invariants());
+        msg
     }
 
     /// Returns a reference to the next item in the queue; or `None` if
@@ -98,12 +191,14 @@ impl<T: std::clone::Clone> QueueWithReservation<T> {
 
     /// Returns the number of reserved slots in the queue.
     pub(super) fn reserved_slots(&self) -> usize {
-        self.num_slots_reserved
+        (self.num_request_slots + self.num_response_slots)
+            .checked_sub(self.queue.len())
+            .unwrap()
     }
 
     /// Returns `true` if the queue has one or more used slots.
     pub(super) fn has_used_slots(&self) -> bool {
-        !self.queue.is_empty() || self.reserved_slots() > 0
+        !self.queue.is_empty() || self.num_response_slots > 0
     }
 
     /// Calculates the sum of the given stat across all enqueued messages.
@@ -111,6 +206,19 @@ impl<T: std::clone::Clone> QueueWithReservation<T> {
     /// Time complexity: O(num_messages).
     fn calculate_stat_sum(&self, stat: impl Fn(&T) -> usize) -> usize {
         self.queue.iter().map(stat).sum::<usize>()
+    }
+
+    /// Queue invariant check that panics if any invariant does not hold. Intended
+    /// to be called from within a `debug_assert!()` in production code.
+    fn check_invariants(&self) -> bool {
+        assert!(self.num_response_slots <= self.capacity);
+        assert!(self.num_request_slots <= self.capacity);
+
+        let num_responses = self.queue.iter().filter(|msg| msg.is_response()).count();
+        assert!(num_responses <= self.num_response_slots);
+        assert_eq!(self.num_request_slots, self.queue.len() - num_responses);
+
+        true
     }
 }
 
@@ -132,9 +240,23 @@ impl From<&QueueWithReservation<Option<RequestOrResponse>>> for Vec<pb_queues::R
     }
 }
 
-/// Validates that the queue capacity is `DEFAULT_QUEUE_CAPACITY`; and that
-/// the queue (items plus reservations) is not over capacity.
-fn check_size(q: &pb_queues::InputOutputQueue) -> Result<(), ProxyDecodeError> {
+/// Computes `num_request_slots` and `num_response_slots`.
+/// Also performs sanity checks for `capacity` and the above.
+fn get_num_slots(q: &pb_queues::InputOutputQueue) -> Result<(usize, usize), ProxyDecodeError> {
+    let mut num_request_slots: u64 = 0;
+    let mut num_response_slots: u64 = 0;
+    for msg in q.queue.iter() {
+        if let pb_queues::RequestOrResponse {
+            r: Some(pb_queues::request_or_response::R::Response(_)),
+        } = msg
+        {
+            num_response_slots += 1;
+        } else {
+            num_request_slots += 1;
+        }
+    }
+    num_response_slots = num_response_slots.saturating_add(q.num_slots_reserved);
+
     if q.capacity != super::DEFAULT_QUEUE_CAPACITY as u64 {
         return Err(ProxyDecodeError::Other(format!(
             "QueueWithReservation: capacity {}, expecting {}",
@@ -142,49 +264,38 @@ fn check_size(q: &pb_queues::InputOutputQueue) -> Result<(), ProxyDecodeError> {
             super::DEFAULT_QUEUE_CAPACITY
         )));
     }
-
-    let mut num_responses: u64 = 0;
-    let mut num_requests: u64 = 0;
-    for msg in q.queue.iter() {
-        if let pb_queues::RequestOrResponse {
-            r: Some(pb_queues::request_or_response::R::Response(_)),
-        } = msg
-        {
-            num_responses += 1;
-        } else {
-            num_requests += 1;
-        }
-    }
-
-    if num_responses.saturating_add(q.num_slots_reserved) > q.capacity {
+    if num_request_slots > q.capacity {
         return Err(ProxyDecodeError::Other(format!(
-            "QueueWithReservation: response count ({}) > capacity ({})",
-            num_responses, q.capacity,
+            "QueueWithReservation: request slot count ({}) > capacity ({})",
+            num_request_slots, q.capacity,
         )));
     }
-    if num_requests > q.capacity {
+    if num_response_slots > q.capacity {
         return Err(ProxyDecodeError::Other(format!(
-            "QueueWithReservation: request count ({}) > capacity ({})",
-            num_requests, q.capacity,
+            "QueueWithReservation: response slot count ({}) > capacity ({})",
+            num_response_slots, q.capacity,
         )));
     }
 
-    Ok(())
+    Ok((num_request_slots as usize, num_response_slots as usize))
 }
 
 impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<RequestOrResponse> {
     type Error = ProxyDecodeError;
 
     fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
-        check_size(&q)?;
+        let (num_request_slots, num_response_slots) = get_num_slots(&q)?;
+
+        let queue = q
+            .queue
+            .into_iter()
+            .map(|rr| rr.try_into())
+            .collect::<Result<VecDeque<_>, _>>()?;
         Ok(QueueWithReservation {
-            num_slots_reserved: q.num_slots_reserved as usize,
+            queue,
             capacity: super::DEFAULT_QUEUE_CAPACITY,
-            queue: q
-                .queue
-                .into_iter()
-                .map(|rr| rr.try_into())
-                .collect::<Result<VecDeque<_>, _>>()?,
+            num_request_slots,
+            num_response_slots,
         })
     }
 }
@@ -193,18 +304,21 @@ impl TryFrom<pb_queues::InputOutputQueue> for QueueWithReservation<Option<Reques
     type Error = ProxyDecodeError;
 
     fn try_from(q: pb_queues::InputOutputQueue) -> Result<Self, Self::Error> {
-        check_size(&q)?;
+        let (num_request_slots, num_response_slots) = get_num_slots(&q)?;
+
+        let queue = q
+            .queue
+            .into_iter()
+            .map(|rr| match rr.r {
+                None => Ok(None),
+                Some(_) => rr.try_into().map(Some),
+            })
+            .collect::<Result<VecDeque<_>, _>>()?;
         Ok(QueueWithReservation {
-            num_slots_reserved: q.num_slots_reserved as usize,
+            queue,
             capacity: super::DEFAULT_QUEUE_CAPACITY,
-            queue: q
-                .queue
-                .into_iter()
-                .map(|rr| match rr.r {
-                    None => Ok(None),
-                    Some(_) => rr.try_into().map(Some),
-                })
-                .collect::<Result<VecDeque<_>, _>>()?,
+            num_request_slots,
+            num_response_slots,
         })
     }
 }
@@ -223,12 +337,12 @@ impl InputQueue {
         }
     }
 
-    pub(super) fn check_has_slot(&self) -> Result<(), StateError> {
-        self.queue.check_has_slot()
+    pub(super) fn available_response_slots(&self) -> usize {
+        self.queue.available_response_slots()
     }
 
-    pub(super) fn available_slots(&self) -> usize {
-        self.queue.available_slots()
+    pub(super) fn check_has_request_slot(&self) -> Result<(), StateError> {
+        self.queue.check_has_request_slot()
     }
 
     pub(super) fn push(
@@ -236,8 +350,14 @@ impl InputQueue {
         msg: RequestOrResponse,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         match msg {
-            RequestOrResponse::Request(_) => self.queue.push(msg),
-            RequestOrResponse::Response(_) => self.queue.push_into_reserved_slot(msg),
+            RequestOrResponse::Request(request) => self
+                .queue
+                .push_request(request)
+                .map_err(|(err, request)| (err, RequestOrResponse::Request(request))),
+            RequestOrResponse::Response(response) => self
+                .queue
+                .push_response(response)
+                .map_err(|(err, response)| (err, RequestOrResponse::Response(response))),
         }
     }
 
@@ -298,7 +418,7 @@ impl From<&InputQueue> for pb_queues::InputOutputQueue {
             queue: (&q.queue).into(),
             begin: 0,
             capacity: q.queue.capacity as u64,
-            num_slots_reserved: q.queue.num_slots_reserved as u64,
+            num_slots_reserved: q.queue.reserved_slots() as u64,
             deadline_range_ends: Vec::new(),
             timeout_index: 0,
         }
@@ -366,24 +486,20 @@ impl OutputQueue {
         }
     }
 
-    pub(super) fn check_has_slot(&self) -> Result<(), StateError> {
-        self.queue.check_has_slot()
+    pub(super) fn available_request_slots(&self) -> usize {
+        self.queue.available_request_slots()
     }
 
-    pub(super) fn available_slots(&self) -> usize {
-        self.queue.available_slots()
+    pub(super) fn check_has_request_slot(&self) -> Result<(), StateError> {
+        self.queue.check_has_request_slot()
     }
 
     pub(super) fn push_request(
         &mut self,
-        msg: Arc<Request>,
+        request: Arc<Request>,
         deadline: Time,
     ) -> Result<(), (StateError, Arc<Request>)> {
-        if let Err((err, Some(RequestOrResponse::Request(msg)))) =
-            self.queue.push(Some(RequestOrResponse::Request(msg)))
-        {
-            return Err((err, msg));
-        }
+        self.queue.push_request(request)?;
 
         // Update the deadline queue.
         //
@@ -408,11 +524,8 @@ impl OutputQueue {
         Ok(())
     }
 
-    pub(super) fn push_response(&mut self, msg: Arc<Response>) {
-        self.queue
-            .push_into_reserved_slot(Some(RequestOrResponse::Response(msg)))
-            .unwrap();
-
+    pub(super) fn push_response(&mut self, response: Arc<Response>) {
+        self.queue.push_response(response).unwrap();
         self.num_messages += 1;
         debug_assert!(self.check_invariants());
     }
@@ -461,7 +574,7 @@ impl OutputQueue {
     }
 
     /// Queue invariant check that panics if any invariant does not hold. Intended
-    /// to be called form within a `debug_assert!()` in production code.
+    /// to be called from within a `debug_assert!()` in production code.
     ///
     /// This is (and must remain) strictly a wrapper around `test_invariants()`, as
     /// we should be enforcing the exact same invariants after deserialization as
@@ -643,7 +756,7 @@ impl From<&OutputQueue> for pb_queues::InputOutputQueue {
             queue: (&q.queue).into(),
             begin: q.begin as u64,
             capacity: q.queue.capacity as u64,
-            num_slots_reserved: q.queue.num_slots_reserved as u64,
+            num_slots_reserved: q.queue.reserved_slots() as u64,
             deadline_range_ends: q
                 .deadline_range_ends
                 .iter()

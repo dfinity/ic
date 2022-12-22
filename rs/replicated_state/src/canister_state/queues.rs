@@ -336,7 +336,7 @@ impl CanisterQueues {
         let input_queue = match msg {
             RequestOrResponse::Request(_) => {
                 let (input_queue, output_queue) = self.get_or_insert_queues(&sender);
-                if let Err(e) = input_queue.check_has_slot() {
+                if let Err(e) = input_queue.check_has_request_slot() {
                     return Err((e, msg));
                 }
                 // Safe to already (attempt to) reserve an output slot here, as the `push()`
@@ -562,7 +562,7 @@ impl CanisterQueues {
     ) -> Result<(), (StateError, Arc<Request>)> {
         let (input_queue, output_queue) = self.get_or_insert_queues(&msg.receiver);
 
-        if let Err(e) = output_queue.check_has_slot() {
+        if let Err(e) = output_queue.check_has_request_slot() {
             return Err((e, msg));
         }
         if let Err(e) = input_queue.reserve_slot() {
@@ -575,7 +575,7 @@ impl CanisterQueues {
 
         output_queue
             .push_request(msg, time + REQUEST_LIFETIME)
-            .expect("cannot fail due to checks above");
+            .expect("cannot fail due to the checks above");
 
         self.input_queues_stats.reserved_slots += 1;
         self.output_queues_stats += oq_stats_delta;
@@ -634,8 +634,8 @@ impl CanisterQueues {
                 (
                     *canister,
                     input_queue
-                        .available_slots()
-                        .min(output_queue.available_slots()),
+                        .available_response_slots()
+                        .min(output_queue.available_request_slots()),
                 )
             })
             .collect()
