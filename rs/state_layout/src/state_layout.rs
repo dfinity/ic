@@ -554,20 +554,22 @@ impl StateLayout {
         if !path.exists() {
             return Err(LayoutError::NotFound(height));
         }
-        let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
-        match checkpoint_ref_registry.get_mut(&height) {
-            Some(ref mut ref_data) => {
-                ref_data.checkpoint_layout_counter += 1;
-                debug_assert!(!ref_data.mark_deleted);
-            }
-            None => {
-                checkpoint_ref_registry.insert(
-                    height,
-                    CheckpointRefData {
-                        checkpoint_layout_counter: 1,
-                        mark_deleted: false,
-                    },
-                );
+        {
+            let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
+            match checkpoint_ref_registry.get_mut(&height) {
+                Some(ref mut ref_data) => {
+                    ref_data.checkpoint_layout_counter += 1;
+                    debug_assert!(!ref_data.mark_deleted);
+                }
+                None => {
+                    checkpoint_ref_registry.insert(
+                        height,
+                        CheckpointRefData {
+                            checkpoint_layout_counter: 1,
+                            mark_deleted: false,
+                        },
+                    );
+                }
             }
         }
         CheckpointLayout::new(path, height, self.clone())
@@ -576,21 +578,25 @@ impl StateLayout {
     fn remove_checkpoint_ref(&self, height: Height) {
         let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
         match checkpoint_ref_registry.get_mut(&height) {
-            None => debug_assert!(false, "Double removal at height {}", height),
+            None => {
+                debug_assert!(false, "Double removal at height {}", height);
+                return;
+            }
             Some(ref mut data) => {
                 debug_assert!(data.checkpoint_layout_counter >= 1);
                 data.checkpoint_layout_counter -= 1;
                 if data.checkpoint_layout_counter != 0 {
                     return;
                 }
-                if data.mark_deleted {
-                    self.remove_checkpoint_if_not_the_latest(height);
+                let mark_deleted = data.mark_deleted;
+                let _removed = checkpoint_ref_registry.remove(&height);
+                debug_assert!(_removed.is_some());
+                if !mark_deleted {
+                    return;
                 }
             }
         }
-
-        let _removed = checkpoint_ref_registry.remove(&height);
-        debug_assert!(_removed.is_some());
+        self.remove_checkpoint_if_not_the_latest(height, checkpoint_ref_registry);
     }
 
     /// Schedule checkpoint for removal when no CheckpointLayout points to it.
@@ -598,12 +604,8 @@ impl StateLayout {
     pub fn remove_checkpoint_when_unused(&self, height: Height) {
         let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
         match checkpoint_ref_registry.get_mut(&height) {
-            None => {
-                self.remove_checkpoint_if_not_the_latest(height);
-            }
-            Some(ref mut data) => {
-                data.mark_deleted = true;
-            }
+            Some(ref mut data) => data.mark_deleted = true,
+            None => self.remove_checkpoint_if_not_the_latest(height, checkpoint_ref_registry),
         }
     }
 
@@ -675,15 +677,20 @@ impl StateLayout {
     }
 
     /// Removes a checkpoint for a given height if it exists.
+    /// Drops drop_after_rename once the checkpoint is moved to tmp.
     ///
     /// Postcondition:
     ///   height ∉ self.checkpoint_heights()
-    pub fn force_remove_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
+    fn remove_checkpoint<T>(
+        &self,
+        height: Height,
+        drop_after_rename: T,
+    ) -> Result<(), LayoutError> {
         let cp_name = self.checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
         let tmp_path = self.fs_tmp().join(&cp_name);
 
-        self.atomically_remove_via_path(&cp_path, &tmp_path)
+        self.atomically_remove_via_path(&cp_path, &tmp_path, drop_after_rename)
             .map_err(|err| LayoutError::IoError {
                 path: cp_path,
                 message: format!(
@@ -695,13 +702,17 @@ impl StateLayout {
             })
     }
 
+    pub fn force_remove_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
+        self.remove_checkpoint(height, ())
+    }
+
     /// Removes a checkpoint for a given height if it exists and it is not the latest checkpoint.
     /// Crashes in debug if removal of the last checkpoint is ever attempted or the checkpoint is
     /// not found.
     ///
     /// Postcondition:
     ///   height ∉ self.checkpoint_heights()[0:-1]
-    fn remove_checkpoint_if_not_the_latest(&self, height: Height) {
+    fn remove_checkpoint_if_not_the_latest<T>(&self, height: Height, drop_after_rename: T) {
         match self.checkpoint_heights() {
             Err(err) => {
                 error!(self.log, "Failed to get checkpoint heights: {}", err);
@@ -732,7 +743,7 @@ impl StateLayout {
                     debug_assert!(false);
                     return;
                 }
-                if let Err(err) = self.force_remove_checkpoint(height) {
+                if let Err(err) = self.remove_checkpoint(height, drop_after_rename) {
                     error!(self.log, "Failed to remove checkpoint: {}", err);
                     debug_assert!(false);
                     self.metrics
@@ -812,7 +823,7 @@ impl StateLayout {
         let tmp_path = self
             .fs_tmp()
             .join(format!("diverged_checkpoint_{}", &checkpoint_name));
-        self.atomically_remove_via_path(&cp_path, &tmp_path)
+        self.atomically_remove_via_path(&cp_path, &tmp_path, ())
             .map_err(|err| LayoutError::IoError {
                 path: cp_path,
                 message: format!("failed to remove diverged checkpoint {}", height),
@@ -857,7 +868,7 @@ impl StateLayout {
         let backup_name = self.checkpoint_name(height);
         let backup_path = self.backups().join(&backup_name);
         let tmp_path = self.fs_tmp().join(format!("backup_{}", &backup_name));
-        self.atomically_remove_via_path(backup_path.as_path(), tmp_path.as_path())
+        self.atomically_remove_via_path(backup_path.as_path(), tmp_path.as_path(), ())
             .map_err(|err| LayoutError::IoError {
                 path: backup_path,
                 message: format!("failed to remove backup {}", height),
@@ -979,7 +990,13 @@ impl StateLayout {
 
     /// Atomically removes path by first renaming it into tmp_path, and then
     /// deleting tmp_path.
-    fn atomically_remove_via_path(&self, path: &Path, tmp_path: &Path) -> std::io::Result<()> {
+    /// Drops drop_after_rename once the path is renamed to tmp_path.
+    fn atomically_remove_via_path<T>(
+        &self,
+        path: &Path,
+        tmp_path: &Path,
+        drop_after_rename: T,
+    ) -> std::io::Result<()> {
         // We first move the checkpoint directory into a temporary directory to
         // maintain the invariant that <root>/checkpoints/<height> are always
         // internally consistent.
@@ -1004,6 +1021,7 @@ impl StateLayout {
             }
             Err(err) => return Err(err),
         }
+        std::mem::drop(drop_after_rename);
         std::fs::remove_dir_all(tmp_path)
     }
 }
