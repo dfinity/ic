@@ -4,6 +4,12 @@ use std::convert::Into;
 use std::net::IpAddr;
 use std::{collections::BTreeMap, fs::File, io, net::SocketAddr, path::PathBuf, process::Command};
 
+use crate::driver::farm::FarmResult;
+use crate::driver::ic::{InternetComputer, Node};
+use crate::driver::test_env::{HasIcPrepDir, TestEnv};
+use crate::driver::test_env_api::{
+    HasDependencies, HasIcDependencies, HasTopologySnapshot, IcNodeContainer, NodesInfo,
+};
 use ic_base_types::NodeId;
 use ic_prep_lib::{
     internet_computer::{IcConfig, InitializedIc, TopologyConfig},
@@ -19,16 +25,8 @@ use std::thread::{self, JoinHandle};
 use url::Url;
 
 use crate::driver::{
-    config::NODES_INFO,
-    driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
-    farm::Farm,
-    farm::FarmResult,
-    ic::{InternetComputer, Node},
-    node_software_version::NodeSoftwareVersion,
-    port_allocator::AddrType,
-    resource::AllocatedVm,
-    test_env::{HasIcPrepDir, TestEnv},
-    test_env_api::{HasDependencies, HasIcDependencies, NodesInfo},
+    config::NODES_INFO, driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR, farm::Farm,
+    node_software_version::NodeSoftwareVersion, port_allocator::AddrType, resource::AllocatedVm,
 };
 
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
@@ -264,6 +262,17 @@ pub fn create_config_disk_image(
         .arg(node.crypto_path())
         .arg("--journalbeat_tags")
         .arg(format!("system_test {}", group_name));
+
+    // If we have a root subnet, specify the correct NNS url.
+    if let Some(node) = test_env
+        .topology_snapshot_by_name(ic_name)
+        .root_subnet()
+        .nodes()
+        .next()
+    {
+        cmd.arg("--nns_url")
+            .arg(format!("http://[{}]:8080", node.get_ip_addr()));
+    }
 
     if let Some(malicious_behavior) = malicious_behavior {
         info!(

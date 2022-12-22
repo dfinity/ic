@@ -33,6 +33,10 @@ pub struct Config {
     /// up the initial state of the registry's local store.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nns_pub_key_pem: Option<PathBuf>,
+
+    /// When the orchestrator runs the first time, it checks if it is given
+    /// a pem file to register with for testing purposes.
+    pub test_key_pem: Option<PathBuf>,
 }
 
 // We allow for the operator to only specify some of the fields while the others
@@ -64,6 +68,7 @@ impl Default for Config {
             eject_keycard_signal_file: PathBuf::from("/var/lib/dfinity-node/eject-hsm"),
             nns_url: None,
             nns_pub_key_pem: None,
+            test_key_pem: None,
         }
     }
 }

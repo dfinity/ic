@@ -1,5 +1,8 @@
 #![allow(dead_code)]
-use crate::error::{OrchestratorError, OrchestratorResult};
+use crate::{
+    error::{OrchestratorError, OrchestratorResult},
+    signer::{Hsm, Signer, TestSigner},
+};
 use candid::Encode;
 use ic_canister_client::{Agent, Sender};
 use ic_config::{
@@ -21,7 +24,6 @@ use ic_registry_client_helpers::{
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
 use ic_registry_local_store::LocalStore;
-use ic_sys::utility_command::UtilityCommand;
 use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
 use prost::Message;
 use rand::prelude::*;
@@ -44,6 +46,7 @@ pub(crate) struct NodeRegistration {
     node_id: NodeId,
     key_handler: Arc<dyn CryptoComponentForNonReplicaProcess>,
     local_store: Arc<dyn LocalStore>,
+    signer: Box<dyn Signer>,
 }
 
 impl NodeRegistration {
@@ -55,6 +58,17 @@ impl NodeRegistration {
         key_handler: Arc<dyn CryptoComponentForNonReplicaProcess>,
         local_store: Arc<dyn LocalStore>,
     ) -> Self {
+        // If we can open a PEM file under the path specified in the replica config, we use a mock
+        // signer using this key to register the node.
+        let signer: Box<dyn Signer> = match node_config
+            .clone()
+            .registration
+            .test_key_pem
+            .and_then(|path| TestSigner::new(path.as_path()))
+        {
+            Some(test_signer) => Box::new(test_signer),
+            None => Box::new(Hsm),
+        };
         Self {
             log,
             node_config,
@@ -62,6 +76,7 @@ impl NodeRegistration {
             node_id,
             key_handler,
             local_store,
+            signer,
         }
     }
 
@@ -88,71 +103,35 @@ impl NodeRegistration {
 
     // postcondition: we are registered with the NNS
     async fn retry_register_node(&mut self) {
-        UtilityCommand::notify_host("Starting node registration.", 1);
-        UtilityCommand::notify_host("Attaching HSM.", 1);
-        let sign_cmd = |msg: &[u8]| {
-            UtilityCommand::try_to_attach_hsm();
-            let res = UtilityCommand::sign_message(msg.to_vec(), None, None, None)
-                .execute()
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
-            UtilityCommand::try_to_detach_hsm();
-            res
-        };
-
         let add_node_payload = self.assemble_add_node_message().await;
 
-        let read_public_key = UtilityCommand::read_public_key(None, None);
-        let hsm_pub_key = loop {
-            UtilityCommand::try_to_attach_hsm();
-            match read_public_key.execute() {
-                Ok(v) => {
-                    UtilityCommand::try_to_detach_hsm();
-                    break v;
+        while !self.is_node_registered().await {
+            match self.signer.get() {
+                Ok(signer) => {
+                    let nns_url = self
+                        .get_random_nns_url_from_config()
+                        .expect("no NNS urls available");
+                    let agent = Agent::new(nns_url, signer);
+                    if let Err(e) = agent
+                        .execute_update(
+                            &REGISTRY_CANISTER_ID,
+                            &REGISTRY_CANISTER_ID,
+                            "add_node",
+                            Encode!(&add_node_payload)
+                                .expect("Could not encode payload for the registration request"),
+                            generate_nonce(),
+                        )
+                        .await
+                    {
+                        warn!(self.log, "Registration request failed: {:?}", e);
+                    };
                 }
                 Err(e) => {
-                    warn!(self.log, "Failed to read public key from usb HSM: {:?}", e);
+                    warn!(self.log, "Failed to create the message signer: {:?}", e);
                 }
             };
-
-            UtilityCommand::try_to_detach_hsm();
-            if self.is_node_registered().await {
-                return;
-            }
-        };
-        // we have the public key
-
-        UtilityCommand::notify_host("Sending add_node request.", 1);
-        while !self.is_node_registered().await {
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            let sender = Sender::ExternalHsm {
-                pub_key: hsm_pub_key.clone(),
-                sign: Arc::new(sign_cmd),
-            };
-            let nns_url = match self.get_random_nns_url_from_config() {
-                Some(url) => url,
-                None => continue,
-            };
-            let agent = Agent::new(nns_url, sender);
-
-            if let Err(e) = agent
-                .execute_update(
-                    &REGISTRY_CANISTER_ID,
-                    &REGISTRY_CANISTER_ID,
-                    "add_node",
-                    Encode!(&add_node_payload)
-                        .expect("Could not encode payload for add_node-call."),
-                    generate_nonce(),
-                )
-                .await
-            {
-                warn!(self.log, "Error when sending add node request: {:?}", e);
-            };
+            tokio::time::sleep(Duration::from_secs(5)).await;
         }
-
-        UtilityCommand::notify_host(
-            "Join request successful!\nYou may now safely remove the HSM.",
-            20,
-        );
     }
 
     async fn assemble_add_node_message(&self) -> AddNodePayload {
@@ -620,6 +599,7 @@ fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_sys::utility_command::UtilityCommand;
     use ic_test_utilities_logger::with_test_replica_logger;
 
     #[test]

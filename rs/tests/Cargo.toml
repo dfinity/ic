@@ -214,6 +214,10 @@ name = "ic-systest-create-subnet-pre-master-test"
 path = "bin/create_subnet_pre_master_test.rs"
 
 [[bin]]
+name = "ic-systest-node-registration-test"
+path = "bin/node_registration_test.rs"
+
+[[bin]]
 name = "ic-systest-rejoin-test"
 path = "bin/rejoin_test.rs"
 
