@@ -142,11 +142,6 @@ impl Orchestrator {
             registry_local_store.clone(),
         );
 
-        if args.enable_provisional_registration {
-            // will not return until the node is registered
-            registration.register_node().await;
-        }
-
         let slog_logger = logger.inner_logger.root.clone();
         let replica_process = Arc::new(Mutex::new(ReplicaProcess::new(slog_logger.clone())));
         let ic_binary_directory = args
@@ -175,6 +170,11 @@ impl Orchestrator {
             .orchestrator_info
             .with_label_values(&[replica_version.as_ref()])
             .set(1);
+
+        if args.enable_provisional_registration {
+            // will not return until the node is registered
+            registration.register_node().await;
+        }
 
         let upgrade = Some(
             Upgrade::new(
