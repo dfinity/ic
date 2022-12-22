@@ -613,7 +613,7 @@ impl CanisterQueues {
 
         let response = RequestOrResponse::Response(Arc::new(Response {
             originator: request.sender,
-            respondent: IC_00,
+            respondent: request.receiver,
             originator_reply_callback: request.sender_reply_callback,
             refund: request.payment,
             response_payload: Payload::Reject(reject_context),
