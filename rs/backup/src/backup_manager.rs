@@ -89,9 +89,13 @@ impl BackupManager {
         if config.subnets.is_empty() {
             panic!("No subnets are configured for backup")
         }
-        if config.cold_storage.is_none() {
-            panic!("Cold storage and cleanup are not configured")
-        }
+        let ColdStorage {
+            cold_storage_dir,
+            versions_hot,
+        } = match config.cold_storage {
+            Some(cs) => cs,
+            None => panic!("Cold storage and cleanup are not configured"),
+        };
         // Load the manager state
         let state_file = config.root_dir.join(STATE_FILE_NAME);
         let manager_state = load_state_file(&state_file);
@@ -168,6 +172,9 @@ impl BackupManager {
                 notification_client,
                 downloads: downloads.clone(),
                 disk_threshold_warn,
+                cold_storage_dir: cold_storage_dir.clone(),
+                versions_hot,
+                artefacts: Mutex::new(true),
                 log: log.clone(),
             };
             let sync_period = std::time::Duration::from_secs(s.sync_period_secs);
@@ -212,7 +219,7 @@ impl BackupManager {
 
     pub fn init(log: Logger, config_file: PathBuf) {
         let config = BackupManager::init_config(config_file);
-        BackupManager::copy_subnet_states(log, config);
+        BackupManager::init_copy_states(log, config);
     }
 
     fn init_config(config_file: PathBuf) -> Config {
@@ -343,7 +350,7 @@ impl BackupManager {
         config
     }
 
-    fn copy_subnet_states(log: Logger, config: Config) {
+    fn init_copy_states(log: Logger, config: Config) {
         for b in &config.subnets {
             let data_dir = &config.root_dir.join("data").join(b.subnet_id.to_string());
             if !data_dir.exists() {
@@ -398,6 +405,9 @@ impl BackupManager {
 
         let m = self.clone();
         thread::spawn(move || replay_subnets(m));
+
+        let m2 = self.clone();
+        thread::spawn(move || cold_store(m2));
 
         let config_file = self.root_dir.join(STATE_FILE_NAME);
         loop {
@@ -474,6 +484,43 @@ fn replay_subnets(m: Arc<BackupManager>) {
         }
         // Have a small break before the next check for replays
         sleep_secs(30);
+    }
+}
+
+fn cold_store(m: Arc<BackupManager>) {
+    let size = m.subnet_backups.len();
+    // let subnet_id = &b.backup_helper.subnet_id;
+    loop {
+        for i in 0..size {
+            let b = &m.subnet_backups[i];
+            let subnet_id = &b.backup_helper.subnet_id;
+            match b.backup_helper.need_cold_storage_move() {
+                Ok(need) => {
+                    if !need {
+                        continue;
+                    }
+                }
+                Err(e) => {
+                    error!(
+                        m.log,
+                        "Error checking for cold store on subnet {}: {:?}", subnet_id, e
+                    );
+                    continue;
+                }
+            };
+            if let Err(err) = b.backup_helper.do_move_cold_storage() {
+                let msg = format!(
+                    "Error moving to cold storage for subnet {}: {:?}",
+                    subnet_id, err
+                );
+                error!(m.log, "{}", msg);
+                b.backup_helper
+                    .notification_client
+                    .report_failure_slack(msg);
+            }
+        }
+        // make checks for archiving only once per hour or so
+        sleep_secs(3600);
     }
 }
 
