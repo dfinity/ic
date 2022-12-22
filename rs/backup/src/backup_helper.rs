@@ -11,11 +11,12 @@ use chrono::{DateTime, Utc};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 use slog::{error, info, warn, Logger};
+use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs::{read_dir, remove_dir_all, DirEntry, File};
 use std::io::Write;
 use std::net::IpAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -33,6 +34,9 @@ pub struct BackupHelper {
     pub notification_client: NotificationClient,
     pub downloads: Arc<Mutex<bool>>,
     pub disk_threshold_warn: u32,
+    pub cold_storage_dir: PathBuf,
+    pub versions_hot: usize,
+    pub artefacts: Mutex<bool>,
     pub log: Logger,
 }
 
@@ -179,6 +183,7 @@ impl BackupHelper {
     }
 
     fn rsync_node_backup(&self, node_ip: &IpAddr) {
+        let _guard = self.artefacts.lock().expect("artefacts mutex lock failed");
         info!(
             self.log,
             "Sync backup data from the node: {} for subnet_id: {}",
@@ -323,7 +328,7 @@ impl BackupHelper {
     }
 
     fn last_state_checkpoint(&self) -> u64 {
-        last_checkpoint(self.state_dir())
+        last_checkpoint(&self.state_dir())
     }
 
     pub fn replay(&self, replica_version: ReplicaVersion) -> ReplicaVersion {
@@ -527,11 +532,11 @@ impl BackupHelper {
         if !checkpoints_dir.exists() {
             return Err("Archiving didn't succeed - missing checkpoints directory".to_string());
         }
-        let archived_checkpoint = last_checkpoint(archive_dir.join("ic_state"));
+        let archived_checkpoint = last_checkpoint(&archive_dir.join("ic_state"));
         if archived_checkpoint == 0 {
             return Err("No proper archived checkpoint".to_string());
         }
-        // delete the older checkpoints
+        // delete the older checkpoint(s)
         match read_dir(checkpoints_dir) {
             Ok(dirs) => dirs
                 .flatten()
@@ -565,9 +570,65 @@ impl BackupHelper {
             (_, Err(err)) => Err(err),
         }
     }
+
+    fn fetch_spool_dirs(&self) -> Result<Vec<DirEntry>, String> {
+        Ok(match read_dir(self.spool_dir()) {
+            Ok(dirs) => dirs.flatten(),
+            Err(err) => return Err(format!("Error reading spool directory: {}", err)),
+        }
+        .collect())
+    }
+
+    pub fn need_cold_storage_move(&self) -> Result<bool, String> {
+        let _guard = self.artefacts.lock().expect("artefacts mutex lock failed");
+        let spool_dirs = self.fetch_spool_dirs()?;
+        Ok(spool_dirs.len() > self.versions_hot)
+    }
+
+    pub fn do_move_cold_storage(&self) -> Result<(), String> {
+        let guard = self.artefacts.lock().expect("artefacts mutex lock failed");
+        info!(
+            self.log,
+            "Start moving old artifacts and states of subnet {:?} to the cold storage",
+            self.subnet_id
+        );
+        let spool_dirs = self.fetch_spool_dirs()?;
+        let mut dir_heights = BTreeMap::new();
+        spool_dirs.iter().for_each(|replica_version_dir| {
+            let replica_version_path = replica_version_dir.path();
+            let height_bucket = last_dir_height(&replica_version_path, 10);
+            let top_height =
+                last_dir_height(&replica_version_path.join(format!("{}", height_bucket)), 10);
+            dir_heights.insert(top_height, replica_version_path);
+        });
+        let mut max_height: u64 = 0;
+        let to_clean = dir_heights.len() - self.versions_hot;
+        for (height, dir) in dir_heights.iter().take(to_clean) {
+            info!(
+                self.log,
+                "Artefact directory: {:?} needs to be moved to the cold storage", dir
+            );
+            max_height = max_height.max(*height);
+            // TODO: move artefact dirs
+        }
+        drop(guard);
+        // TODO tar/copy/delete moved artefact dirs
+        info!(
+            self.log,
+            "Moving states with height up to: {:?} from the archive to the cold storage",
+            max_height
+        );
+        // TODO: clean up the archive directory now
+        info!(
+            self.log,
+            "Finished moving old artifacts and states of subnet {:?} to the cold storage",
+            self.subnet_id
+        );
+        Ok(())
+    }
 }
 
-fn height_from_dir_entry(filename: &DirEntry) -> u64 {
+fn height_from_dir_entry_radix(filename: &DirEntry, radix: u32) -> u64 {
     let height = filename
         .path()
         .file_name()
@@ -575,18 +636,26 @@ fn height_from_dir_entry(filename: &DirEntry) -> u64 {
         .to_os_string()
         .into_string()
         .unwrap_or_else(|_| "0".to_string());
-    u64::from_str_radix(&height, 16).unwrap_or(0)
+    u64::from_str_radix(&height, radix).unwrap_or(0)
 }
 
-fn last_checkpoint(dir: PathBuf) -> u64 {
+fn height_from_dir_entry(filename: &DirEntry) -> u64 {
+    height_from_dir_entry_radix(filename, 16)
+}
+
+fn last_dir_height(dir: &PathBuf, radix: u32) -> u64 {
     if !dir.exists() {
         return 0u64;
     }
-    match read_dir(dir.join("checkpoints")) {
+    match read_dir(dir) {
         Ok(file_list) => file_list
             .flatten()
-            .map(|filename| height_from_dir_entry(&filename))
+            .map(|filename| height_from_dir_entry_radix(&filename, radix))
             .fold(0u64, |a, b| -> u64 { a.max(b) }),
         Err(_) => 0,
     }
+}
+
+fn last_checkpoint(dir: &Path) -> u64 {
+    last_dir_height(&dir.join("checkpoints"), 16)
 }
