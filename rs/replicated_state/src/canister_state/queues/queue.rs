@@ -98,12 +98,12 @@ impl<T: QueueItem<T> + std::clone::Clone> QueueWithReservation<T> {
 
     /// Returns the number of slots available in the queue for reservations.
     fn available_response_slots(&self) -> usize {
-        self.capacity.saturating_sub(self.num_response_slots)
+        self.capacity.checked_sub(self.num_response_slots).unwrap()
     }
 
     /// Returns the number slots available for requests.
     fn available_request_slots(&self) -> usize {
-        self.capacity.saturating_sub(self.num_request_slots)
+        self.capacity.checked_sub(self.num_request_slots).unwrap()
     }
 
     /// Returns `Ok(())` if there exists at least one available request slot,
@@ -211,8 +211,8 @@ impl<T: QueueItem<T> + std::clone::Clone> QueueWithReservation<T> {
     /// Queue invariant check that panics if any invariant does not hold. Intended
     /// to be called from within a `debug_assert!()` in production code.
     fn check_invariants(&self) -> bool {
-        assert!(self.num_response_slots <= self.capacity);
         assert!(self.num_request_slots <= self.capacity);
+        assert!(self.num_response_slots <= self.capacity);
 
         let num_responses = self.queue.iter().filter(|msg| msg.is_response()).count();
         assert!(num_responses <= self.num_response_slots);
