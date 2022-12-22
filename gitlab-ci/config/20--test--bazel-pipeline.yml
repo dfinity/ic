@@ -152,8 +152,6 @@ bazel-build-macos:
     - .bazel-rules-pipeline-no-merge-train
   tags:
     - macos
-  # TODO(IDX-2602): remove when build on MacOS will be fixed.
-  allow_failure: true
   variables:
     BAZEL_STARTUP_ARGS: "--output_base /var/tmp/bazel-output//${CI_CONCURRENT_ID}"
     BAZEL_COMMAND: "build"
