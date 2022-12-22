@@ -1,23 +1,17 @@
 //! Tests of Multi-Signature operations in the CSP vault.
-use std::sync::Arc;
-
 use mockall::Sequence;
-use rand::SeedableRng;
-use rand_chacha::ChaCha20Rng;
 
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
-use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::secret_key_store::test_utils::{MockSecretKeyStore, TempSecretKeyStore};
-use crate::secret_key_store::SecretKeyStore;
-use crate::vault::api::CspVault;
+use crate::public_key_store::PublicKeySetOnceError;
+use crate::secret_key_store::test_utils::MockSecretKeyStore;
+use crate::vault::api::MultiSignatureCspVault;
 use crate::vault::test_utils;
-use crate::vault::test_utils::local_csp_vault::new_local_csp_vault;
 use crate::LocalCspVault;
 
 #[test]
 fn should_generate_committee_signing_key_pair_and_store_keys() {
     test_utils::multi_sig::should_generate_committee_signing_key_pair_and_store_keys(
-        new_local_csp_vault(),
+        LocalCspVault::builder().build_into_arc(),
     );
 }
 
@@ -34,7 +28,10 @@ fn should_store_committee_signing_secret_key_before_public_key() {
         .times(1)
         .returning(|_key| Ok(()))
         .in_sequence(&mut seq);
-    let vault = vault_with_node_secret_key_store_and_public_key_store(sks, pks);
+    let vault = LocalCspVault::builder()
+        .with_node_secret_key_store(sks)
+        .with_public_key_store(pks)
+        .build_into_arc();
 
     let _ = vault.gen_committee_signing_key_pair();
 }
@@ -45,7 +42,9 @@ fn should_fail_with_internal_error_if_committee_signing_key_already_set() {
     pks_returning_already_set_error
         .expect_set_once_committee_signing_pubkey()
         .returning(|_key| Err(PublicKeySetOnceError::AlreadySet));
-    let vault = vault_with_public_key_store(pks_returning_already_set_error);
+    let vault = LocalCspVault::builder()
+        .with_public_key_store(pks_returning_already_set_error)
+        .build_into_arc();
     test_utils::multi_sig::should_fail_with_internal_error_if_committee_signing_key_already_set(
         vault,
     );
@@ -53,7 +52,7 @@ fn should_fail_with_internal_error_if_committee_signing_key_already_set() {
 
 #[test]
 fn should_fail_with_internal_error_if_committee_signing_key_generated_more_than_once() {
-    let vault = new_local_csp_vault();
+    let vault = LocalCspVault::builder().build_into_arc();
     test_utils::multi_sig::should_fail_with_internal_error_if_committee_signing_key_generated_more_than_once(vault);
 }
 
@@ -64,7 +63,9 @@ fn should_fail_with_transient_internal_error_if_committee_signing_key_persistenc
     pks_returning_io_error
         .expect_set_once_committee_signing_pubkey()
         .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
-    let vault = vault_with_public_key_store(pks_returning_io_error);
+    let vault = LocalCspVault::builder()
+        .with_public_key_store(pks_returning_io_error)
+        .build_into_arc();
     test_utils::multi_sig::should_fail_with_transient_internal_error_if_committee_signing_key_persistence_fails(
         vault,
     );
@@ -72,45 +73,28 @@ fn should_fail_with_transient_internal_error_if_committee_signing_key_persistenc
 
 #[test]
 fn should_generate_verifiable_pop() {
-    test_utils::multi_sig::should_generate_verifiable_pop(new_local_csp_vault());
+    test_utils::multi_sig::should_generate_verifiable_pop(
+        LocalCspVault::builder().build_into_arc(),
+    );
 }
 
 #[test]
 fn should_multi_sign_and_verify_with_generated_key() {
-    test_utils::multi_sig::should_multi_sign_and_verify_with_generated_key(new_local_csp_vault());
+    test_utils::multi_sig::should_multi_sign_and_verify_with_generated_key(
+        LocalCspVault::builder().build_into_arc(),
+    );
 }
 
 #[test]
 fn should_fail_to_multi_sign_with_unsupported_algorithm_id() {
     test_utils::multi_sig::should_not_multi_sign_with_unsupported_algorithm_id(
-        new_local_csp_vault(),
+        LocalCspVault::builder().build_into_arc(),
     );
 }
 
 #[test]
 fn should_fail_to_multi_sign_if_secret_key_in_store_has_wrong_type() {
     test_utils::multi_sig::should_not_multi_sign_if_secret_key_in_store_has_wrong_type(
-        new_local_csp_vault(),
+        LocalCspVault::builder().build_into_arc(),
     );
-}
-
-fn vault_with_public_key_store<P: PublicKeyStore + 'static>(
-    public_key_store: P,
-) -> Arc<dyn CspVault> {
-    let dummy_rng = ChaCha20Rng::seed_from_u64(42);
-    let temp_sks = TempSecretKeyStore::new();
-    let vault = LocalCspVault::new_for_test(dummy_rng, temp_sks, public_key_store);
-    Arc::new(vault)
-}
-
-fn vault_with_node_secret_key_store_and_public_key_store<
-    S: SecretKeyStore + 'static,
-    P: PublicKeyStore + 'static,
->(
-    node_secret_key_store: S,
-    public_key_store: P,
-) -> Arc<dyn CspVault> {
-    let dummy_rng = ChaCha20Rng::seed_from_u64(42);
-    let vault = LocalCspVault::new_for_test(dummy_rng, node_secret_key_store, public_key_store);
-    Arc::new(vault)
 }
