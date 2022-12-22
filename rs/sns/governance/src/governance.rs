@@ -24,7 +24,7 @@ use crate::pb::v1::{
     NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
     NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
     ProposalRewardStatus, RewardEvent, Tally, TransferSnsTreasuryFunds,
-    UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+    UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
 };
 use ic_base_types::PrincipalId;
 use ic_icrc1::{Account, Subaccount};
@@ -697,6 +697,14 @@ impl Governance {
         self.nervous_system_parameters()
             .wait_for_quiet_deadline_increase_seconds
             .expect("NervousSystemParameters must have wait_for_quiet_deadline_increase_seconds")
+    }
+
+    /// Returns the voting rewards parameters from the nervous system parameters.
+    fn voting_rewards_parameters(&self) -> &VotingRewardsParameters {
+        self.nervous_system_parameters()
+            .voting_rewards_parameters
+            .as_ref()
+            .expect("NervousSystemParameters must have voting_rewards_parameters")
     }
 
     /// Computes the NeuronId or returns a GovernanceError if a neuron with this ID already exists.
@@ -2601,12 +2609,7 @@ impl Governance {
         let proposal_id = ProposalId { id: proposal_num };
 
         // Compute whether the proposal is eligible for rewards
-        let is_eligible_for_rewards = self
-            .nervous_system_parameters()
-            .voting_rewards_parameters
-            .as_ref()
-            .expect("NervousSystemParameters::voting_rewards_parameters must be set")
-            .rewards_enabled();
+        let is_eligible_for_rewards = self.voting_rewards_parameters().rewards_enabled();
         // Create the proposal.
         let mut proposal_data = ProposalData {
             action: u64::from(action),
@@ -3811,6 +3814,10 @@ impl Governance {
                 Some(ok) => ok,
             };
 
+        if !voting_rewards_parameters.rewards_enabled() {
+            return false;
+        }
+
         voting_rewards_parameters
             .most_recent_round(self.env.now(), self.proto.genesis_timestamp_seconds)
             > self.latest_reward_event().round
@@ -3826,14 +3833,15 @@ impl Governance {
     fn distribute_rewards(&mut self, supply: Tokens) {
         println!("{}distribute_rewards. Supply: {:?}", log_prefix(), supply);
 
-        // Do nothing if no VotingRewardsParameters.
+        // VotingRewardsParameters should always be set,
+        // but we check and return early just in case.
         let voting_rewards_parameters =
             match &self.nervous_system_parameters().voting_rewards_parameters {
                 Some(voting_rewards_parameters) => voting_rewards_parameters,
                 None => {
                     println!(
                         "{}WARNING: distribute_rewards called even though \
-                         voting_rewards_parameters not set.",
+                     voting_rewards_parameters not set.",
                         log_prefix(),
                     );
                     return;
