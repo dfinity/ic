@@ -58,7 +58,7 @@ step 1 "Download all binary tools." || (
 step 2 "Deploy an IC to the testnet." || (
     LOG_FILE="$TMP_DIR/2_testnet_deployment_log.txt"
     log "Log of the deployment is written to $LOG_FILE ..."
-    $SCRIPT_DIR/icos_deploy.sh --no-boundary-nodes --dkg-interval-length 19 "$TESTNET" --git-revision "$VERSION" --hosts-ini $HOSTS_INI_FILENAME >$LOG_FILE 2>&1
+    $SCRIPT_DIR/icos_deploy.sh --boundary-dev-image --dkg-interval-length 19 "$TESTNET" --git-revision "$VERSION" --hosts-ini $HOSTS_INI_FILENAME >$LOG_FILE 2>&1
 )
 
 # Get all unassigned nodes.

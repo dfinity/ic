@@ -129,7 +129,12 @@ step 5 "Configure SNS-WASMs" || time (
 
 )
 
-step --optional 6 "Upload WASMs to SNS-WASM" || time (
+step 6 "Set up the boundary node" || time (
+    echo "Configuring boundary node to work with recovered NNS"
+    configure_boundary_nodes_for_recovered_nns "$NNS_URL" "$TESTNET"
+)
+
+step --optional 7 "Upload WASMs to SNS-WASM" || time (
     LOG_FILE="$DIR/4_upload_wasms_to_sns_wasm.txt"
     for TYPE in ledger governance archive swap root index; do
         upload_canister_wasm_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" $TYPE "$VERSION"
