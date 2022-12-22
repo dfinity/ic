@@ -1,29 +1,25 @@
 use candid::types::number::Nat;
-use candid::{CandidType, Decode, Encode};
+use candid::{Decode, Encode};
 use ic_base_types::PrincipalId;
 use ic_icrc1::{
-    endpoints::{
-        ArchiveInfo, GetTransactionsRequest, GetTransactionsResponse, Transaction as Tx,
-        TransactionRange, Transfer, TransferArg, TransferError, Value,
-    },
+    endpoints::{TransferArg, TransferError, Value},
     Account, Block, Memo, Operation, Transaction,
 };
 use ic_icrc1_ledger::InitArgs;
 use ic_icrc1_ledger_sm_tests::{
     balance_of, ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY,
     INT_META_VALUE, MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY,
-    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL, TX_WINDOW,
+    TEXT_META_VALUE, TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
-use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine};
+use ic_state_machine_tests::{CanisterId, StateMachine};
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime};
 
 fn ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
@@ -116,89 +112,28 @@ fn transfer(
     )
 }
 
-fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo> {
-    Decode!(
-        &env.query(ledger, "archives", Encode!().unwrap())
-            .expect("failed to query archives")
-            .bytes(),
-        Vec<ArchiveInfo>
-    )
-    .expect("failed to decode archives response")
-}
-
-fn get_archive_transaction(
-    env: &StateMachine,
-    archive: CanisterId,
-    block_index: u64,
-) -> Option<Tx> {
-    Decode!(
-        &env.query(archive, "get_transaction", Encode!(&block_index).unwrap())
-            .expect("failed to get transaction")
-            .bytes(),
-        Option<Tx>
-    )
-    .expect("failed to decode get_transaction response")
-}
-
-fn get_transactions(
-    env: &StateMachine,
-    ledger: CanisterId,
-    start: u64,
-    length: usize,
-) -> GetTransactionsResponse {
-    Decode!(
-        &env.query(
-            ledger,
-            "get_transactions",
-            Encode!(&GetTransactionsRequest {
-                start: Nat::from(start),
-                length: Nat::from(length)
-            })
-            .unwrap()
-        )
-        .expect("failed to query ledger transactions")
-        .bytes(),
-        GetTransactionsResponse
-    )
-    .expect("failed to decode get_transactions response")
-}
-
-fn get_archive_transactions(
-    env: &StateMachine,
-    archive: CanisterId,
-    start: u64,
-    length: usize,
-) -> TransactionRange {
-    Decode!(
-        &env.query(
-            archive,
-            "get_transactions",
-            Encode!(&GetTransactionsRequest {
-                start: Nat::from(start),
-                length: Nat::from(length)
-            })
-            .unwrap()
-        )
-        .expect("failed to query archive transactions")
-        .bytes(),
-        TransactionRange
-    )
-    .expect("failed to decode get_transactions archive response")
-}
-
-fn system_time_to_nanos(t: SystemTime) -> u64 {
-    t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
-}
-
 fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> InitArgs {
     InitArgs {
-        minting_account: args.minting_account,
+        minting_account: MINTER.clone(),
         initial_balances: args.initial_balances,
-        transfer_fee: args.transfer_fee,
-        token_name: args.token_name,
-        token_symbol: args.token_symbol,
-        metadata: args.metadata,
-        archive_options: args.archive_options,
+        transfer_fee: FEE,
+        token_name: TOKEN_NAME.to_string(),
+        token_symbol: TOKEN_SYMBOL.to_string(),
+        metadata: vec![
+            Value::entry(NAT_META_KEY, NAT_META_VALUE),
+            Value::entry(INT_META_KEY, INT_META_VALUE),
+            Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
+            Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
+        ],
+        archive_options: ArchiveOptions {
+            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId::new_user_test_id(100),
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        },
     }
 }
 
@@ -228,246 +163,17 @@ fn test_account_canonicalization() {
 
 #[test]
 fn test_memo_validation() {
-    let env = StateMachine::new();
-    let p1 = PrincipalId::new_user_test_id(1);
-    let p2 = PrincipalId::new_user_test_id(2);
-    let canister_id = install_ledger(&env, vec![(Account::from(p1), 10_000_000)]);
-
-    // [ic_icrc1::endpoints::TransferArg] does not allow invalid memos by construction, we
-    // need another type to check invalid inputs.
-    #[derive(CandidType)]
-    struct TransferArg {
-        to: Account,
-        amount: Nat,
-        memo: Option<Vec<u8>>,
-    }
-    type TxResult = Result<Nat, TransferError>;
-
-    // 8-byte memo should work
-    Decode!(
-        &env.execute_ingress_as(
-            p1,
-            canister_id,
-            "icrc1_transfer",
-            Encode!(&TransferArg {
-                to: p2.into(),
-                amount: Nat::from(10_000),
-                memo: Some(vec![1u8; 8]),
-            })
-            .unwrap()
-        )
-        .expect("failed to call transfer")
-        .bytes(),
-        TxResult
-    )
-    .unwrap()
-    .expect("transfer failed");
-
-    // 32-byte memo should work
-    Decode!(
-        &env.execute_ingress_as(
-            p1,
-            canister_id,
-            "icrc1_transfer",
-            Encode!(&TransferArg {
-                to: p2.into(),
-                amount: Nat::from(10_000),
-                memo: Some(vec![1u8; 32]),
-            })
-            .unwrap()
-        )
-        .expect("failed to call transfer")
-        .bytes(),
-        TxResult
-    )
-    .unwrap()
-    .expect("transfer failed");
-
-    // 33-byte memo should fail
-    match env.execute_ingress_as(
-        p1,
-        canister_id,
-        "icrc1_transfer",
-        Encode!(&TransferArg {
-            to: p2.into(),
-            amount: Nat::from(10_000),
-            memo: Some(vec![1u8; 33]),
-        })
-        .unwrap(),
-    ) {
-        Err(user_error) => assert_eq!(
-            user_error.code(),
-            ErrorCode::CanisterCalledTrap,
-            "unexpected error: {}",
-            user_error
-        ),
-        Ok(result) => panic!(
-            "expected a reject for a 33-byte memo, got result {:?}",
-            result
-        ),
-    }
+    ic_icrc1_ledger_sm_tests::test_account_canonicalization(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_tx_time_bounds() {
-    let env = StateMachine::new();
-    let p1 = PrincipalId::new_user_test_id(1);
-    let p2 = PrincipalId::new_user_test_id(2);
-    let canister_id = install_ledger(&env, vec![(Account::from(p1), 10_000_000)]);
-
-    let now = system_time_to_nanos(env.time());
-    let tx_window = TX_WINDOW.as_nanos() as u64;
-
-    assert_eq!(
-        Err(TransferError::TooOld),
-        send_transfer(
-            &env,
-            canister_id,
-            p1,
-            &TransferArg {
-                from_subaccount: None,
-                to: p2.into(),
-                fee: None,
-                amount: Nat::from(1_000_000),
-                created_at_time: Some(now - tx_window - 1),
-                memo: None,
-            }
-        )
-    );
-
-    assert_eq!(
-        Err(TransferError::CreatedInFuture { ledger_time: now }),
-        send_transfer(
-            &env,
-            canister_id,
-            p1,
-            &TransferArg {
-                from_subaccount: None,
-                to: p2.into(),
-                fee: None,
-                amount: Nat::from(1_000_000),
-                created_at_time: Some(now + Duration::from_secs(5 * 60).as_nanos() as u64),
-                memo: None
-            }
-        )
-    );
-
-    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1));
-    assert_eq!(0u64, balance_of(&env, canister_id, p2));
+    ic_icrc1_ledger_sm_tests::test_tx_time_bounds(ledger_wasm(), encode_init_args);
 }
 
 #[test]
 fn test_archiving() {
-    let env = StateMachine::new();
-    let p1 = PrincipalId::new_user_test_id(1);
-    let p2 = PrincipalId::new_user_test_id(2);
-
-    let canister_id = install_ledger(&env, vec![(Account::from(p1), 10_000_000)]);
-
-    for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
-        transfer(&env, canister_id, p1, p2, 10_000 + i).expect("transfer failed");
-    }
-
-    env.run_until_completion(/*max_ticks=*/ 10);
-
-    let archive_info = list_archives(&env, canister_id);
-    assert_eq!(archive_info.len(), 1);
-    assert_eq!(archive_info[0].block_range_start, 0);
-    assert_eq!(archive_info[0].block_range_end, NUM_BLOCKS_TO_ARCHIVE - 1);
-
-    let archive_canister_id = archive_info[0].canister_id;
-
-    let resp = get_transactions(&env, canister_id, 0, 1_000_000);
-    assert_eq!(resp.first_index, Nat::from(NUM_BLOCKS_TO_ARCHIVE));
-    assert_eq!(
-        resp.transactions.len(),
-        (ARCHIVE_TRIGGER_THRESHOLD - NUM_BLOCKS_TO_ARCHIVE + 1) as usize
-    );
-    assert_eq!(resp.archived_transactions.len(), 1);
-    assert_eq!(resp.archived_transactions[0].start, Nat::from(0));
-    assert_eq!(
-        resp.archived_transactions[0].length,
-        Nat::from(NUM_BLOCKS_TO_ARCHIVE)
-    );
-
-    let archived_transactions =
-        get_archive_transactions(&env, archive_canister_id, 0, NUM_BLOCKS_TO_ARCHIVE as usize)
-            .transactions;
-
-    for i in 1..NUM_BLOCKS_TO_ARCHIVE {
-        let expected_tx = Transfer {
-            from: p1.into(),
-            to: p2.into(),
-            amount: Nat::from(10_000 + i - 1),
-            fee: Some(Nat::from(FEE)),
-            memo: None,
-            created_at_time: None,
-        };
-        assert_eq!(
-            get_archive_transaction(&env, archive_canister_id, i)
-                .unwrap()
-                .transfer
-                .as_ref(),
-            Some(&expected_tx)
-        );
-        assert_eq!(
-            archived_transactions[i as usize].transfer.as_ref(),
-            Some(&expected_tx)
-        );
-    }
-
-    // Check that requesting non-existing blocks does not crash the ledger.
-    let missing_blocks_reply = get_transactions(&env, canister_id, 100, 5);
-    assert_eq!(0, missing_blocks_reply.transactions.len());
-    assert_eq!(0, missing_blocks_reply.archived_transactions.len());
-
-    // Upgrade the archive and check that the data is still available.
-
-    env.upgrade_canister(archive_canister_id, archive_wasm(), vec![])
-        .expect("failed to upgrade the archive canister");
-
-    for i in 1..NUM_BLOCKS_TO_ARCHIVE {
-        assert_eq!(
-            get_archive_transaction(&env, archive_canister_id, i)
-                .unwrap()
-                .transfer,
-            Some(Transfer {
-                from: p1.into(),
-                to: p2.into(),
-                amount: Nat::from(10_000 + i - 1),
-                fee: Some(Nat::from(FEE)),
-                memo: None,
-                created_at_time: None,
-            })
-        );
-    }
-
-    // Check that we can append more blocks after the upgrade.
-    for i in 0..(ARCHIVE_TRIGGER_THRESHOLD - NUM_BLOCKS_TO_ARCHIVE) {
-        transfer(&env, canister_id, p1, p2, 20_000 + i).expect("transfer failed");
-    }
-
-    let archive_info = list_archives(&env, canister_id);
-    assert_eq!(archive_info.len(), 1);
-    assert_eq!(archive_info[0].block_range_start, 0);
-    assert_eq!(
-        archive_info[0].block_range_end,
-        2 * NUM_BLOCKS_TO_ARCHIVE - 1
-    );
-
-    // Check that the archive handles requested ranges correctly.
-    let archived_transactions =
-        get_archive_transactions(&env, archive_canister_id, 0, 1_000_000).transactions;
-    let n = 2 * NUM_BLOCKS_TO_ARCHIVE as usize;
-    assert_eq!(archived_transactions.len(), n);
-
-    for start in 0..n {
-        for end in start..n {
-            let tx = get_archive_transactions(&env, archive_canister_id, start as u64, end - start)
-                .transactions;
-            assert_eq!(archived_transactions[start..end], tx);
-        }
-    }
+    ic_icrc1_ledger_sm_tests::test_archiving(ledger_wasm(), encode_init_args, archive_wasm());
 }
 
 fn arb_amount() -> impl Strategy<Value = u64> {
@@ -537,43 +243,13 @@ fn arb_block() -> impl Strategy<Value = Block> {
 // Generate random blocks and check that their CBOR encoding complies with the CDDL spec.
 #[test]
 fn block_encoding_agrees_with_the_schema() {
-    use std::path::PathBuf;
-
-    let block_cddl_path =
-        PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("block.cddl");
-    let block_cddl =
-        String::from_utf8(std::fs::read(&block_cddl_path).expect("failed to read block.cddl file"))
-            .unwrap();
-
-    let mut runner = TestRunner::default();
-    runner
-        .run(&arb_block(), |block| {
-            let cbor_bytes = block.encode().into_vec();
-            cddl::validate_cbor_from_slice(&block_cddl, &cbor_bytes, None).map_err(|e| {
-                TestCaseError::fail(format!(
-                    "Failed to validate CBOR: {} (inspect it on https://cbor.me), error: {}",
-                    hex::encode(&cbor_bytes),
-                    e
-                ))
-            })
-        })
-        .unwrap();
+    ic_icrc1_ledger_sm_tests::block_encoding_agrees_with_the_schema();
 }
 
 // Check that different blocks produce different hashes.
 #[test]
 fn transaction_hashes_are_unique() {
-    let mut runner = TestRunner::default();
-    runner
-        .run(&(arb_transaction(), arb_transaction()), |(lhs, rhs)| {
-            use ic_ledger_canister_core::ledger::LedgerTransaction;
-
-            prop_assume!(lhs != rhs);
-            prop_assert_ne!(lhs.hash(), rhs.hash());
-
-            Ok(())
-        })
-        .unwrap();
+    ic_icrc1_ledger_sm_tests::transaction_hashes_are_unique();
 }
 
 // Check that different blocks produce different hashes.
