@@ -85,3 +85,19 @@ fn test_tx_time_bounds() {
 fn transaction_hashes_are_unique() {
     ic_icrc1_ledger_sm_tests::transaction_hashes_are_unique();
 }
+
+#[test]
+fn block_hashes_are_unique() {
+    ic_icrc1_ledger_sm_tests::block_hashes_are_unique();
+}
+
+// Generate random blocks and check that the block hash is stable.
+#[test]
+fn block_hashes_are_stable() {
+    ic_icrc1_ledger_sm_tests::block_hashes_are_stable();
+}
+
+#[test]
+fn check_transfer_model() {
+    ic_icrc1_ledger_sm_tests::check_transfer_model(ledger_wasm(), encode_init_args);
+}

@@ -13,9 +13,9 @@ use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine};
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
-use proptest::test_runner::TestRunner;
+use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     time::{Duration, SystemTime},
 };
 pub const FEE: u64 = 10_000;
@@ -51,8 +51,76 @@ pub struct InitArgs {
     pub archive_options: ArchiveOptions,
 }
 
-fn system_time_to_nanos(t: SystemTime) -> u64 {
-    t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
+fn test_transfer_model<T>(
+    accounts: Vec<Account>,
+    mints: Vec<u64>,
+    transfers: Vec<(usize, usize, u64)>,
+    ledger_wasm: Vec<u8>,
+    encode_init_args: fn(InitArgs) -> T,
+) -> TestCaseResult
+where
+    T: CandidType,
+{
+    let initial_balances: Vec<_> = mints
+        .into_iter()
+        .enumerate()
+        .map(|(i, amount)| (accounts[i].clone(), amount))
+        .collect();
+    let mut balances: BalancesModel = initial_balances.iter().cloned().collect();
+
+    let (env, canister_id) = setup(ledger_wasm, encode_init_args, initial_balances);
+
+    for (from_idx, to_idx, amount) in transfers.into_iter() {
+        let from = accounts[from_idx].clone();
+        let to = accounts[to_idx].clone();
+
+        let ((from_balance, to_balance), maybe_error) =
+            model_transfer(&mut balances, from.clone(), to.clone(), amount);
+
+        let result = transfer(&env, canister_id, from.clone(), to.clone(), amount);
+
+        prop_assert_eq!(result.is_err(), maybe_error.is_some());
+
+        if let Err(err) = result {
+            prop_assert_eq!(Some(err), maybe_error);
+        }
+
+        let actual_from_balance = balance_of(&env, canister_id, from);
+        let actual_to_balance = balance_of(&env, canister_id, to);
+
+        prop_assert_eq!(from_balance, actual_from_balance);
+        prop_assert_eq!(to_balance, actual_to_balance);
+    }
+    Ok(())
+}
+
+type BalancesModel = HashMap<Account, u64>;
+
+fn model_transfer(
+    balances: &mut BalancesModel,
+    from: Account,
+    to: Account,
+    amount: u64,
+) -> ((u64, u64), Option<TransferError>) {
+    let from_balance = balances.get(&from).cloned().unwrap_or_default();
+    if from_balance < amount + FEE {
+        let to_balance = balances.get(&to).cloned().unwrap_or_default();
+        return (
+            (from_balance, to_balance),
+            Some(TransferError::InsufficientFunds {
+                balance: Nat::from(from_balance),
+            }),
+        );
+    }
+    balances.insert(from.clone(), from_balance - amount - FEE);
+
+    let to_balance = balances.get(&to).cloned().unwrap_or_default();
+    balances.insert(to.clone(), to_balance + amount);
+
+    let from_balance = balances.get(&from).cloned().unwrap_or_default();
+    let to_balance = balances.get(&to).cloned().unwrap_or_default();
+
+    ((from_balance, to_balance), None)
 }
 
 fn send_transfer(
@@ -75,6 +143,10 @@ fn send_transfer(
     )
     .expect("failed to decode transfer response")
     .map(|n| n.0.to_u64().unwrap())
+}
+
+fn system_time_to_nanos(t: SystemTime) -> u64 {
+    t.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64
 }
 
 fn transfer(
@@ -1073,5 +1145,68 @@ pub fn transaction_hashes_are_unique() {
 
             Ok(())
         })
+        .unwrap();
+}
+
+pub fn block_hashes_are_unique() {
+    let mut runner = TestRunner::default();
+    runner
+        .run(&(arb_block(), arb_block()), |(lhs, rhs)| {
+            prop_assume!(lhs != rhs);
+
+            let lhs_hash = Block::block_hash(&lhs.encode());
+            let rhs_hash = Block::block_hash(&rhs.encode());
+
+            prop_assert_ne!(lhs_hash, rhs_hash);
+            Ok(())
+        })
+        .unwrap();
+}
+
+// Generate random blocks and check that the block hash is stable.
+pub fn block_hashes_are_stable() {
+    let mut runner = TestRunner::default();
+    runner
+        .run(&arb_block(), |block| {
+            let encoded_block = block.encode();
+            let hash1 = Block::block_hash(&encoded_block);
+            let decoded = Block::decode(encoded_block).unwrap();
+            let hash2 = Block::block_hash(&decoded.encode());
+            prop_assert_eq!(hash1, hash2);
+            Ok(())
+        })
+        .unwrap();
+}
+
+pub fn check_transfer_model<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    use proptest::collection::vec as pvec;
+
+    const NUM_ACCOUNTS: usize = 10;
+    const MIN_TRANSACTIONS: usize = 5;
+    const MAX_TRANSACTIONS: usize = 10;
+    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(5));
+    runner
+        .run(
+            &(
+                pvec(arb_account(), NUM_ACCOUNTS),
+                pvec(0..10_000_000u64, NUM_ACCOUNTS),
+                pvec(
+                    (0..NUM_ACCOUNTS, 0..NUM_ACCOUNTS, 0..1_000_000_000u64),
+                    MIN_TRANSACTIONS..MAX_TRANSACTIONS,
+                ),
+            ),
+            |(accounts, mints, transfers)| {
+                test_transfer_model(
+                    accounts,
+                    mints,
+                    transfers,
+                    ledger_wasm.clone(),
+                    encode_init_args,
+                )
+            },
+        )
         .unwrap();
 }
