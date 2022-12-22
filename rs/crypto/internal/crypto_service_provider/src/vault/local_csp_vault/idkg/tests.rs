@@ -1,12 +1,8 @@
-use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::vault::api::IDkgProtocolCspVault;
 use crate::vault::local_csp_vault::test_utils::temp_local_csp_server::TempLocalCspVault;
 use crate::vault::test_utils;
-use crate::CspVault;
 use crate::LocalCspVault;
 use crate::PublicKeyStore;
-use crate::SecretKeyStore;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::AlgorithmId;
@@ -22,7 +18,6 @@ mod idkg_gen_dealing_encryption_key_pair {
     use crate::secret_key_store::test_utils::MockSecretKeyStore;
     use crate::vault::api::PublicKeyStoreCspVault;
     use crate::vault::api::SecretKeyStoreCspVault;
-    use crate::vault::test_utils::local_csp_vault::new_local_csp_vault;
     use crate::KeyId;
     use hex::FromHex;
     use ic_crypto_internal_seed::Seed;
@@ -80,7 +75,7 @@ mod idkg_gen_dealing_encryption_key_pair {
     #[test]
     fn should_generate_and_store_dealing_encryption_key_pair_multiple_times() {
         test_utils::idkg::should_generate_and_store_dealing_encryption_key_pair_multiple_times(
-            new_local_csp_vault(),
+            LocalCspVault::builder().build_into_arc(),
         );
     }
 
@@ -163,7 +158,10 @@ mod idkg_gen_dealing_encryption_key_pair {
             .returning(|_keys| Ok(()))
             .in_sequence(&mut seq);
 
-        let vault = vault_with_node_secret_key_store_and_public_key_store(sks, pks);
+        let vault = LocalCspVault::builder()
+            .with_node_secret_key_store(sks)
+            .with_public_key_store(pks)
+            .build_into_arc();
 
         assert!(vault.idkg_gen_dealing_encryption_key_pair().is_ok());
     }
@@ -181,7 +179,9 @@ mod idkg_gen_dealing_encryption_key_pair {
             .expect_set_idkg_dealing_encryption_pubkeys()
             .return_once(|_keys| Err(io_error));
 
-        let vault = vault_with_public_key_store(pks_returning_io_error);
+        let vault = LocalCspVault::builder()
+            .with_public_key_store(pks_returning_io_error)
+            .build_into_arc();
 
         test_utils::idkg::should_fail_with_transient_internal_error_if_storing_idkg_public_key_fails(
             vault,
@@ -204,7 +204,9 @@ mod idkg_gen_dealing_encryption_key_pair {
             })
             .returning(|_keys| Ok(()));
 
-        let vault = vault_with_public_key_store(pks);
+        let vault = LocalCspVault::builder()
+            .with_public_key_store(pks)
+            .build_into_arc();
 
         assert!(vault.idkg_gen_dealing_encryption_key_pair().is_ok());
     }
@@ -221,7 +223,10 @@ mod idkg_gen_dealing_encryption_key_pair {
                 *key_id == expected_key_id && *scope == Some(IDKG_MEGA_SCOPE)
             })
             .return_const(Ok(()));
-        let vault = vault_with_secret_key_store(sks);
+        let vault = LocalCspVault::builder()
+            .with_rng(ChaCha20Rng::seed_from_u64(42))
+            .with_node_secret_key_store(sks)
+            .build_into_arc();
 
         assert!(vault.idkg_gen_dealing_encryption_key_pair().is_ok());
     }
@@ -426,34 +431,4 @@ fn idkg_node_public_key_with_value(key_value: Vec<u8>) -> PublicKey {
         key_value,
         timestamp: None,
     }
-}
-
-fn vault_with_public_key_store<P: PublicKeyStore + 'static>(
-    public_key_store: P,
-) -> Arc<dyn CspVault> {
-    let dummy_rng = ChaCha20Rng::seed_from_u64(42);
-    let temp_sks = TempSecretKeyStore::new();
-    let vault = LocalCspVault::new_for_test(dummy_rng, temp_sks, public_key_store);
-    Arc::new(vault)
-}
-
-fn vault_with_secret_key_store<S: SecretKeyStore + 'static>(
-    secret_key_store: S,
-) -> Arc<dyn CspVault> {
-    let dummy_rng = ChaCha20Rng::seed_from_u64(42);
-    let temp_pks = TempPublicKeyStore::new();
-    let vault = LocalCspVault::new_for_test(dummy_rng, secret_key_store, temp_pks);
-    Arc::new(vault)
-}
-
-fn vault_with_node_secret_key_store_and_public_key_store<
-    S: SecretKeyStore + 'static,
-    P: PublicKeyStore + 'static,
->(
-    node_secret_key_store: S,
-    public_key_store: P,
-) -> Arc<dyn CspVault> {
-    let dummy_rng = ChaCha20Rng::seed_from_u64(42);
-    let vault = LocalCspVault::new_for_test(dummy_rng, node_secret_key_store, public_key_store);
-    Arc::new(vault)
 }

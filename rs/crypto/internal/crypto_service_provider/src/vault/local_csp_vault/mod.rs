@@ -76,6 +76,8 @@ pub struct LocalCspVault<
 impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore> {
     /// Creates a production-grade local CSP vault.
     ///
+    /// For test purposes, it might be more appropriate to use the provided builder.
+    ///
     /// # Panics
     /// If the key stores (`node_secret_key_store`,`canister_secret_key_store` or `public_key_store`)
     /// do not use distinct files.
@@ -246,4 +248,136 @@ fn ensure_unique_paths(paths: &[&Path]) {
         distinct_paths.len(),
         "Key stores do not use distinct files"
     );
+}
+
+#[cfg(test)]
+pub mod builder {
+    use super::*;
+    use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
+    use crate::secret_key_store::test_utils::TempSecretKeyStore;
+    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+
+    pub struct LocalCspVaultBuilder<R, S, C, P> {
+        csprng: Box<dyn FnOnce() -> R>,
+        node_secret_key_store: Box<dyn FnOnce() -> S>,
+        canister_secret_key_store: Box<dyn FnOnce() -> C>,
+        public_key_store: Box<dyn FnOnce() -> P>,
+    }
+
+    impl Default
+        for LocalCspVaultBuilder<
+            ReproducibleRng,
+            TempSecretKeyStore,
+            TempSecretKeyStore,
+            TempPublicKeyStore,
+        >
+    {
+        fn default() -> Self {
+            LocalCspVaultBuilder {
+                csprng: Box::new(|| ReproducibleRng::new()),
+                node_secret_key_store: Box::new(|| TempSecretKeyStore::new()),
+                canister_secret_key_store: Box::new(|| TempSecretKeyStore::new()),
+                public_key_store: Box::new(|| TempPublicKeyStore::new()),
+            }
+        }
+    }
+
+    impl LocalCspVault<ReproducibleRng, TempSecretKeyStore, TempSecretKeyStore, TempPublicKeyStore> {
+        /// Builder for [`LocalCspVault`] for testing purposes.
+        ///
+        /// The instantiated builder comes with the following sensible defaults:
+        /// * [`ReproducibleRng`] is used as source of randomness to make the test automatically reproducible.
+        /// * [`TempSecretKeyStore`] is used as node secret key store and canister secret key store.
+        ///   This is simply the productive implementation ([`ProtoSecretKeyStore`]) in a temporary directory.
+        /// * [`TempPublicKeyStore`] is used for the public key store.
+        ///   This is simply the productive implementation ([`ProtoPublicKeyStore`]) in a temporary directory.
+        /// * Logger and metrics are (currently) disabled.
+        pub fn builder() -> LocalCspVaultBuilder<
+            ReproducibleRng,
+            TempSecretKeyStore,
+            TempSecretKeyStore,
+            TempPublicKeyStore,
+        > {
+            LocalCspVaultBuilder::default()
+        }
+    }
+
+    impl<R, S, C, P> LocalCspVaultBuilder<R, S, C, P>
+    where
+        R: Rng + CryptoRng,
+        S: SecretKeyStore,
+        C: SecretKeyStore,
+        P: PublicKeyStore,
+    {
+        pub fn with_rng<VaultRng: Rng + CryptoRng + 'static>(
+            self,
+            csprng: VaultRng,
+        ) -> LocalCspVaultBuilder<VaultRng, S, C, P> {
+            LocalCspVaultBuilder {
+                csprng: Box::new(|| csprng),
+                node_secret_key_store: self.node_secret_key_store,
+                canister_secret_key_store: self.canister_secret_key_store,
+                public_key_store: self.public_key_store,
+            }
+        }
+
+        pub fn with_node_secret_key_store<VaultSks: SecretKeyStore + 'static>(
+            self,
+            node_secret_key_store: VaultSks,
+        ) -> LocalCspVaultBuilder<R, VaultSks, C, P> {
+            LocalCspVaultBuilder {
+                csprng: self.csprng,
+                node_secret_key_store: Box::new(|| node_secret_key_store),
+                canister_secret_key_store: self.canister_secret_key_store,
+                public_key_store: self.public_key_store,
+            }
+        }
+
+        pub fn with_canister_secret_key_store<VaultCks: SecretKeyStore + 'static>(
+            self,
+            canister_secret_key_store: VaultCks,
+        ) -> LocalCspVaultBuilder<R, S, VaultCks, P> {
+            LocalCspVaultBuilder {
+                csprng: self.csprng,
+                node_secret_key_store: self.node_secret_key_store,
+                canister_secret_key_store: Box::new(|| canister_secret_key_store),
+                public_key_store: self.public_key_store,
+            }
+        }
+
+        pub fn with_public_key_store<VaultPks: PublicKeyStore + 'static>(
+            self,
+            public_key_store: VaultPks,
+        ) -> LocalCspVaultBuilder<R, S, C, VaultPks> {
+            LocalCspVaultBuilder {
+                csprng: self.csprng,
+                node_secret_key_store: self.node_secret_key_store,
+                canister_secret_key_store: self.canister_secret_key_store,
+                public_key_store: Box::new(|| public_key_store),
+            }
+        }
+
+        pub fn build(self) -> LocalCspVault<R, S, C, P> {
+            LocalCspVault::new_internal(
+                (self.csprng)(),
+                (self.node_secret_key_store)(),
+                (self.canister_secret_key_store)(),
+                (self.public_key_store)(),
+                Arc::new(CryptoMetrics::none()),
+                no_op_logger(),
+            )
+        }
+    }
+
+    impl<R, S, C, P> LocalCspVaultBuilder<R, S, C, P>
+    where
+        R: Rng + CryptoRng + Send + Sync + 'static,
+        S: SecretKeyStore + 'static,
+        C: SecretKeyStore + 'static,
+        P: PublicKeyStore + 'static,
+    {
+        pub fn build_into_arc(self) -> Arc<LocalCspVault<R, S, C, P>> {
+            Arc::new(self.build())
+        }
+    }
 }

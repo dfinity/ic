@@ -2,27 +2,24 @@
 use crate::imported_test_utils::ed25519::csp_testvec;
 use crate::key_id::KeyId;
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
-use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
+use crate::public_key_store::PublicKeySetOnceError;
 use crate::secret_key_store::test_utils::{MockSecretKeyStore, TempSecretKeyStore};
 use crate::secret_key_store::SecretKeyStore;
-use crate::vault::api::{BasicSignatureCspVault, CspBasicSignatureError, CspVault};
+use crate::vault::api::{BasicSignatureCspVault, CspBasicSignatureError};
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::test_utils;
-use crate::vault::test_utils::local_csp_vault::new_local_csp_vault;
 use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_SHA_ABC;
 use ic_types::crypto::AlgorithmId;
 use ic_types::NumberOfNodes;
 use mockall::Sequence;
 use rand::{thread_rng, Rng, SeedableRng};
-use rand_chacha::{ChaCha20Rng, ChaChaRng};
+use rand_chacha::ChaChaRng;
 use std::io;
-use std::sync::Arc;
 
 #[test]
 fn should_generate_node_signing_key_pair_and_store_keys() {
     test_utils::basic_sig::should_generate_node_signing_key_pair_and_store_keys(
-        new_local_csp_vault(),
+        LocalCspVault::builder().build_into_arc(),
     );
 }
 
@@ -39,7 +36,10 @@ fn should_store_node_signing_secret_key_before_public_key() {
         .times(1)
         .returning(|_key| Ok(()))
         .in_sequence(&mut seq);
-    let vault = vault_with_node_secret_key_store_and_public_key_store(sks, pks);
+    let vault = LocalCspVault::builder()
+        .with_node_secret_key_store(sks)
+        .with_public_key_store(pks)
+        .build_into_arc();
 
     assert!(vault.gen_node_signing_key_pair().is_ok());
 }
@@ -50,13 +50,15 @@ fn should_fail_with_internal_error_if_node_signing_key_already_set() {
     pks_returning_already_set_error
         .expect_set_once_node_signing_pubkey()
         .returning(|_key| Err(PublicKeySetOnceError::AlreadySet));
-    let vault = vault_with_public_key_store(pks_returning_already_set_error);
+    let vault = LocalCspVault::builder()
+        .with_public_key_store(pks_returning_already_set_error)
+        .build_into_arc();
     test_utils::basic_sig::should_fail_with_internal_error_if_node_signing_key_already_set(vault);
 }
 
 #[test]
 fn should_fail_with_internal_error_if_node_signing_key_generated_more_than_once() {
-    let vault = new_local_csp_vault();
+    let vault = LocalCspVault::builder().build_into_arc();
     test_utils::basic_sig::should_fail_with_internal_error_if_node_signing_key_generated_more_than_once(vault);
 }
 
@@ -67,7 +69,9 @@ fn should_fail_with_transient_internal_error_if_node_signing_key_persistence_fai
     pks_returning_io_error
         .expect_set_once_node_signing_pubkey()
         .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
-    let vault = vault_with_public_key_store(pks_returning_io_error);
+    let vault = LocalCspVault::builder()
+        .with_public_key_store(pks_returning_io_error)
+        .build_into_arc();
     test_utils::basic_sig::should_fail_with_transient_internal_error_if_node_signing_key_persistence_fails(
         vault,
     );
@@ -92,7 +96,10 @@ fn should_correctly_sign_compared_to_testvec() {
             .expect("failed to insert key into SKS");
 
         let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
-        LocalCspVault::new_for_test(csprng, key_store, TempPublicKeyStore::new())
+        LocalCspVault::builder()
+            .with_rng(csprng)
+            .with_node_secret_key_store(key_store)
+            .build()
     };
 
     assert_eq!(
@@ -106,34 +113,29 @@ fn should_correctly_sign_compared_to_testvec() {
 #[test]
 fn should_sign_verifiably_with_generated_node_signing_key() {
     test_utils::basic_sig::should_sign_verifiably_with_generated_node_signing_key(
-        new_local_csp_vault(),
+        LocalCspVault::builder().build_into_arc(),
     );
 }
 
 #[test]
 fn should_fail_to_sign_with_unsupported_algorithm_id() {
     test_utils::basic_sig::should_not_basic_sign_with_unsupported_algorithm_id(
-        new_local_csp_vault(),
+        LocalCspVault::builder().build_into_arc(),
     );
 }
 
 #[test]
 fn should_fail_to_sign_with_non_existent_key() {
-    test_utils::basic_sig::should_not_basic_sign_with_non_existent_key(new_local_csp_vault());
+    test_utils::basic_sig::should_not_basic_sign_with_non_existent_key(
+        LocalCspVault::builder().build_into_arc(),
+    );
 }
 
 #[test]
 fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
     use crate::vault::api::ThresholdSignatureCspVault;
 
-    let mut rng = thread_rng();
-
-    let csp_vault = {
-        let secret_key_store = TempSecretKeyStore::new();
-        let public_key_store = TempPublicKeyStore::new();
-        let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
-        LocalCspVault::new_for_test(csprng, secret_key_store, public_key_store)
-    };
+    let csp_vault = LocalCspVault::builder().build();
 
     let threshold = NumberOfNodes::from(1);
     let (_pub_coeffs, key_ids) = csp_vault
@@ -145,6 +147,7 @@ fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
         .expect("failed to generate threshold sig keys");
     let key_id = key_ids[0];
 
+    let mut rng = thread_rng();
     let msg_len: usize = rng.gen_range(0..1024);
     let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
 
@@ -165,27 +168,8 @@ mod basic_sig_large_message {
 
     #[test]
     fn should_sign_a_large_hundred_megabytes_message() {
-        test_utils::basic_sig::should_sign_a_large_hundred_megabytes_message(new_local_csp_vault());
+        test_utils::basic_sig::should_sign_a_large_hundred_megabytes_message(
+            LocalCspVault::builder().build_into_arc(),
+        );
     }
-}
-
-fn vault_with_public_key_store<P: PublicKeyStore + 'static>(
-    public_key_store: P,
-) -> Arc<dyn CspVault> {
-    let dummy_rng = ChaCha20Rng::seed_from_u64(42);
-    let temp_sks = TempSecretKeyStore::new();
-    let vault = LocalCspVault::new_for_test(dummy_rng, temp_sks, public_key_store);
-    Arc::new(vault)
-}
-
-fn vault_with_node_secret_key_store_and_public_key_store<
-    S: SecretKeyStore + 'static,
-    P: PublicKeyStore + 'static,
->(
-    node_secret_key_store: S,
-    public_key_store: P,
-) -> Arc<dyn CspVault> {
-    let dummy_rng = ChaCha20Rng::seed_from_u64(42);
-    let vault = LocalCspVault::new_for_test(dummy_rng, node_secret_key_store, public_key_store);
-    Arc::new(vault)
 }

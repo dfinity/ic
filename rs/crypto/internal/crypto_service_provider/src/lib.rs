@@ -252,27 +252,6 @@ impl Csp {
     }
 }
 
-impl Csp {
-    /// Creates a crypto service provider for testing.
-    ///
-    /// Note: This MUST NOT be used in production as the secrecy of the random
-    /// number generator, hence the keys, is not guaranteed.
-    pub fn new_with_rng<R: Rng + CryptoRng + Send + Sync + 'static>(
-        csprng: R,
-        config: &CryptoConfig,
-    ) -> Self {
-        Csp {
-            csp_vault: Arc::new(LocalCspVault::new_for_test(
-                csprng,
-                ProtoSecretKeyStore::open(&config.crypto_root, SKS_DATA_FILENAME, None),
-                ProtoPublicKeyStore::open(&config.crypto_root, PUBLIC_KEY_STORE_DATA_FILENAME),
-            )),
-            logger: no_op_logger(),
-            metrics: Arc::new(CryptoMetrics::none()),
-        }
-    }
-}
-
 impl NodePublicKeyData for Csp {
     fn pks_contains(
         &self,

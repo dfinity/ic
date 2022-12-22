@@ -44,7 +44,6 @@ use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
 use ic_types::messages::MessageId;
 use ic_types::{NodeId, RegistryVersion};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use rand::{CryptoRng, Rng};
 use std::fmt;
 use std::sync::Arc;
 
@@ -131,27 +130,6 @@ impl LockableThresholdSigDataStore {
     /// Returns a read lock to the store.
     pub fn read(&self) -> RwLockReadGuard<'_, ThresholdSigDataStoreImpl> {
         self.threshold_sig_data_store.read()
-    }
-}
-
-impl CryptoComponentFatClient<Csp> {
-    /// Creates a crypto component using the given `csprng` and fake `node_id`.
-    /// Note that `R: 'static` is required so that `CspTlsHandshakeSignerProvider`
-    /// can be implemented for [Csp]. See the documentation of the respective `impl`
-    /// block for more details on the meaning of `R: 'static`.
-    pub fn new_with_rng_and_fake_node_id<R: Rng + CryptoRng + Send + Sync + 'static>(
-        csprng: R,
-        config: &CryptoConfig,
-        logger: ReplicaLogger,
-        registry_client: Arc<dyn RegistryClient>,
-        node_id: NodeId,
-    ) -> Self {
-        Self::new_with_csp_and_fake_node_id(
-            Csp::new_with_rng(csprng, config),
-            logger,
-            registry_client,
-            node_id,
-        )
     }
 }
 
