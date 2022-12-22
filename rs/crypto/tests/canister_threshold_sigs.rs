@@ -1088,7 +1088,7 @@ mod retain_active_transcripts {
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
         let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
         let retainer = crypto_for(random_receiver_id(&params), &env.crypto_components);
-        let public_keys_before_retaining = retainer.current_node_public_keys();
+        let public_keys_before_retaining = retainer.current_node_public_keys().unwrap();
         assert!(public_keys_before_retaining
             .idkg_dealing_encryption_public_key
             .is_some());
@@ -1100,7 +1100,7 @@ mod retain_active_transcripts {
             .is_ok());
         assert_eq!(
             public_keys_before_retaining,
-            retainer.current_node_public_keys()
+            retainer.current_node_public_keys().unwrap()
         );
     }
 

@@ -47,6 +47,7 @@ mod gen_dealing_encryption_key_pair_tests {
 
         assert_eq!(
             csp.current_node_public_keys()
+                .expect("Failed to retrieve node public keys")
                 .dkg_dealing_encryption_public_key
                 .expect("missing key"),
             dkg_dealing_encryption_pk_to_proto(public_key, pop)

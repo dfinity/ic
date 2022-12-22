@@ -2,7 +2,6 @@ use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::key_id::KeyId;
 use crate::types::CspPublicCoefficients;
 use crate::types::{CspPop, CspPublicKey, CspSignature};
-use crate::vault::CryptoError;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
@@ -21,7 +20,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
-use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
+use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -106,6 +105,18 @@ pub enum CspSecretKeyStoreContainsError {
 pub enum CspPublicKeyStoreError {
     // TODO: CRP-1719 add more error variants if necessary
     TransientInternalError(String),
+}
+
+impl From<CspPublicKeyStoreError> for CryptoError {
+    fn from(e: CspPublicKeyStoreError) -> CryptoError {
+        match e {
+            CspPublicKeyStoreError::TransientInternalError(details) => {
+                CryptoError::TransientInternalError {
+                    internal_error: format!("Error retrieving public keys: {:?}", details),
+                }
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

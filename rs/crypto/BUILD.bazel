@@ -101,7 +101,7 @@ ALIASES = {}
 
 rust_library(
     name = "crypto",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_crypto",
     proc_macro_deps = MACRO_DEPENDENCIES,

@@ -528,6 +528,7 @@ pub trait NiDkgCspClient {
     ///   (`MalformedSecretKeyError`)
     /// * the transcript is malformed. (`MalformedTranscriptError`)
     /// * it is unable to compute the secret key. (`InvalidTranscriptError`)
+    /// * the public key is malformed. (`MalformedPublicKeyError`)
     fn load_threshold_signing_key(
         &self,
         algorithm_id: AlgorithmId,

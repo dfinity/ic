@@ -71,6 +71,10 @@ pub enum CspDkgUpdateFsEpochError {
     UnsupportedAlgorithmId(AlgorithmId),
     FsKeyNotInSecretKeyStoreError(KeyNotFoundError),
     TransientInternalError(InternalError),
+    /// Precondition error: The encryption key was not found.
+    KeyNotFoundError(KeyNotFoundError),
+    /// The public key could not be parsed.
+    MalformedPublicKeyError(MalformedDataError),
 }
 
 /// Encrypting or zero-knowledge proving during DKG failed.
@@ -478,6 +482,8 @@ pub enum CspDkgLoadPrivateKeyError {
     },
     // A transient internal error, e.g. an RPC error.
     TransientInternalError(InternalError),
+    /// The public key could not be parsed.
+    MalformedPublicKeyError(MalformedDataError),
 }
 
 impl CspDkgVerifyReshareDealingError {

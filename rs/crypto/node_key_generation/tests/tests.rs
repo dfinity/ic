@@ -24,7 +24,12 @@ fn should_generate_all_keys_for_new_node() {
         ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
 
         let crypto = local_crypto_component(&config);
-        assert_eq!(node_pks, crypto.current_node_public_keys());
+        assert_eq!(
+            node_pks,
+            crypto
+                .current_node_public_keys()
+                .expect("Failed to retrieve node public keys")
+        );
     })
 }
 
@@ -41,7 +46,12 @@ fn should_generate_all_keys_for_new_node_with_remote_csp_vault() {
 
     let crypto = remote_crypto_component(&config, tokio_rt.handle().clone());
 
-    assert_eq!(node_pks, crypto.current_node_public_keys());
+    assert_eq!(
+        node_pks,
+        crypto
+            .current_node_public_keys()
+            .expect("Failed to retrieve node public keys")
+    );
 }
 
 #[test]

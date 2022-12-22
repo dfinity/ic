@@ -12,13 +12,16 @@ use ic_types_test_utils::ids::node_test_id;
 
 mod node_public_key_data {
     use super::*;
+    use ic_crypto_internal_csp::api::DkgDealingEncryptionKeyIdRetrievalError;
 
     #[test]
-    #[should_panic(expected = "Missing dkg dealing encryption key id")]
-    fn should_panic_when_no_dkg_encryption_key() {
+    fn should_return_key_not_found_error_when_no_dkg_encryption_key() {
         CryptoConfig::run_with_temp_config(|config| {
             let csp = csp_for_config(&config, None);
-            let _ = csp.dkg_dealing_encryption_key_id();
+            assert_eq!(
+                csp.dkg_dealing_encryption_key_id(),
+                Err(DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound)
+            );
         })
     }
 
@@ -34,7 +37,9 @@ mod node_public_key_data {
             .expect("invalid dkg encryption key");
             let csp = csp_for_config(&config, None);
 
-            let key_id = csp.dkg_dealing_encryption_key_id();
+            let key_id = csp
+                .dkg_dealing_encryption_key_id()
+                .expect("Failed to retrieve DKG dealing encryption key id");
 
             assert_eq!(key_id, KeyId::from(&generated_dkg_dealing_enc_pk))
         })
@@ -47,7 +52,9 @@ mod node_public_key_data {
                 get_node_keys_or_generate_if_missing(&config, None);
             let csp = csp_for_config(&config, None);
 
-            let csp_pks = csp.current_node_public_keys();
+            let csp_pks = csp
+                .current_node_public_keys()
+                .expect("Failed to retrieve node public keys");
 
             assert_eq!(generated_node_pks, csp_pks);
         })
@@ -59,7 +66,11 @@ fn should_have_the_csp_public_keys_that_were_previously_generated() {
     CryptoConfig::run_with_temp_config(|config| {
         let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
         let csp = csp_for_config(&config, None);
-        assert_eq!(node_pks, csp.current_node_public_keys());
+        assert_eq!(
+            node_pks,
+            csp.current_node_public_keys()
+                .expect("Failed to retrieve node public keys")
+        );
     })
 }
 
@@ -68,7 +79,8 @@ fn should_generate_all_keys_for_a_node_without_public_keys() {
     CryptoConfig::run_with_temp_config(|config| {
         let csp = csp_for_config(&config, None);
         assert_eq!(
-            csp.current_node_public_keys(),
+            csp.current_node_public_keys()
+                .expect("Failed to retrieve node public keys"),
             CurrentNodePublicKeys {
                 node_signing_public_key: None,
                 committee_signing_public_key: None,
@@ -82,7 +94,11 @@ fn should_generate_all_keys_for_a_node_without_public_keys() {
 
         ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
         let csp = csp_for_config(&config, None);
-        assert_eq!(node_pks, csp.current_node_public_keys());
+        assert_eq!(
+            node_pks,
+            csp.current_node_public_keys()
+                .expect("Failed to retrieve node public keys")
+        );
     })
 }
 
@@ -395,7 +411,9 @@ fn crypto_with_node_keys_generation(
         .with_node_id(node_id)
         .with_keys(selector)
         .build();
-    let current_node_public_keys = temp_crypto.current_node_public_keys();
+    let current_node_public_keys = temp_crypto
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys");
     let node_public_keys = NodePublicKeys::from(current_node_public_keys);
     (temp_crypto, node_public_keys)
 }

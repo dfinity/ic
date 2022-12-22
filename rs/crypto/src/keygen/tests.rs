@@ -25,7 +25,9 @@ fn should_collect_correctly_key_count_metrics_for_all_keys() {
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
         .build();
-    let key_counts = crypto_component.collect_key_count_metrics(REG_V1);
+    let key_counts = crypto_component
+        .collect_key_count_metrics(REG_V1)
+        .expect("Failed to collect key count metrics");
     assert_eq!(5, key_counts.get_pk_registry());
     assert_eq!(5, key_counts.get_pk_local());
     assert_eq!(5, key_counts.get_sk_local());
@@ -36,7 +38,9 @@ fn should_collect_correctly_key_count_metrics_for_only_node_signing_key() {
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::only_node_signing_key())
         .build();
-    let key_counts = crypto_component.collect_key_count_metrics(REG_V1);
+    let key_counts = crypto_component
+        .collect_key_count_metrics(REG_V1)
+        .expect("Failed to collect key count metrics");
     assert_eq!(1, key_counts.get_pk_registry());
     assert_eq!(1, key_counts.get_pk_local());
     assert_eq!(1, key_counts.get_sk_local());
@@ -57,6 +61,7 @@ fn should_count_correctly_inconsistent_numbers_of_node_signing_keys() {
     let node_signing_pk_without_corresponding_secret_key = {
         let mut nspk = crypto_component
             .current_node_public_keys()
+            .expect("Failed to retrieve node public keys")
             .node_signing_public_key
             .unwrap();
         nspk.key_value[0] ^= 0xff; // flip some bits
@@ -72,7 +77,9 @@ fn should_count_correctly_inconsistent_numbers_of_node_signing_keys() {
     );
     registry_client.reload();
 
-    let key_counts = crypto_component.collect_key_count_metrics(REG_V2);
+    let key_counts = crypto_component
+        .collect_key_count_metrics(REG_V2)
+        .expect("Failed to collect key count metrics");
     assert_eq!(5, key_counts.get_pk_registry());
     assert_eq!(5, key_counts.get_pk_local());
     assert_eq!(4, key_counts.get_sk_local());
@@ -110,7 +117,9 @@ fn should_count_correctly_inconsistent_numbers_of_tls_certificates() {
     );
     registry_client.reload();
 
-    let key_counts = crypto_component.collect_key_count_metrics(REG_V2);
+    let key_counts = crypto_component
+        .collect_key_count_metrics(REG_V2)
+        .expect("Failed to collect key count metrics");
     assert_eq!(5, key_counts.get_pk_registry());
     assert_eq!(5, key_counts.get_pk_local());
     assert_eq!(4, key_counts.get_sk_local());
@@ -377,6 +386,63 @@ mod rotate_idkg_dealing_encryption_keys {
         );
     }
 
+    #[test]
+    fn should_have_rotate_idkg_dealing_encryption_keys_returning_transient_error_if_csp_fails_to_get_current_node_public_keys(
+    ) {
+        use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
+        use ic_crypto_internal_csp::api::NodePublicKeyDataError;
+        use ic_interfaces::crypto::KeyManager;
+        use ic_logger::replica_logger::no_op_logger;
+        use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+        use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+
+        let mut csp = MockAllCryptoServiceProvider::new();
+        const DETAILS_STR: &str = "test";
+        csp.expect_current_node_public_keys().return_const(Err(
+            NodePublicKeyDataError::TransientInternalError(DETAILS_STR.to_string()),
+        ));
+
+        let ecdsa_subnet_config =
+            EcdsaSubnetConfig::new(subnet_id(), Some(node_id()), Some(TWO_WEEKS));
+
+        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+
+        let registry_client =
+            Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+
+        registry_data
+            .add(
+                make_subnet_record_key(ecdsa_subnet_config.subnet_id).as_str(),
+                REGISTRY_VERSION_1,
+                Some(ecdsa_subnet_config.subnet_record),
+            )
+            .expect("Failed to add subnet record key");
+
+        let subnet_list_record = SubnetListRecord {
+            subnets: vec![ecdsa_subnet_config.subnet_id.get().into_vec()],
+        };
+
+        registry_data
+            .add(
+                make_subnet_list_record_key().as_str(),
+                REGISTRY_VERSION_1,
+                Some(subnet_list_record),
+            )
+            .expect("Failed to add subnet list record key");
+
+        let crypto_component = CryptoComponentFatClient::new_with_csp_and_fake_node_id(
+            csp,
+            no_op_logger(),
+            registry_client.clone(),
+            node_id(),
+        );
+        registry_client.reload();
+
+        let result = crypto_component.rotate_idkg_dealing_encryption_keys(REGISTRY_VERSION_1);
+
+        assert_matches!(result, Err(IDkgDealingEncryptionKeyRotationError::TransientInternalError(details)) if details == DETAILS_STR);
+    }
+
     struct Setup {
         registry_data: Arc<ProtoRegistryDataProvider>,
         registry_client: Arc<FakeRegistryClient>,
@@ -465,6 +531,7 @@ mod rotate_idkg_dealing_encryption_keys {
         fn current_local_idkg_dealing_encryption_public_key(&self) -> PublicKey {
             self.crypto
                 .current_node_public_keys()
+                .expect("Failed to retrieve node public keys")
                 .idkg_dealing_encryption_public_key
                 .unwrap()
         }

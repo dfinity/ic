@@ -24,6 +24,7 @@ pub fn temp_crypto_component_with_tls_keys(
         .build();
     let tls_certificate = temp_crypto
         .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
         .tls_certificate
         .expect("missing tls_certificate");
     let tls_pubkey = TlsPublicKeyCert::new_from_der(tls_certificate.certificate_der)

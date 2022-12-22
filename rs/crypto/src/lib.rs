@@ -252,7 +252,9 @@ impl CryptoComponentFatClient<Csp> {
             Some(new_logger!(&logger)),
             Arc::clone(&metrics),
         );
-        let node_pks = csp.current_node_public_keys();
+        let node_pks = csp
+            .current_node_public_keys()
+            .expect("Failed to retrieve node public keys");
         let node_signing_pk = node_pks
             .node_signing_public_key
             .as_ref()
@@ -268,7 +270,11 @@ impl CryptoComponentFatClient<Csp> {
             metrics,
             time_source: Arc::new(CurrentSystemTimeSource::new(logger)),
         };
-        crypto_component.collect_and_store_key_count_metrics(latest_registry_version);
+        crypto_component
+            .collect_and_store_key_count_metrics(latest_registry_version)
+            .expect(
+                "Failed to CryptoComponentFatClient::collect_and_store_key_count_metrics(...).",
+            );
         crypto_component
     }
 

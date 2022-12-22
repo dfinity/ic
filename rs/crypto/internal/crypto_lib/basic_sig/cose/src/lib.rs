@@ -46,7 +46,7 @@ const COSE_PARAM_RSA_N: serde_cbor::Value = serde_cbor::Value::Integer(-1);
 const COSE_PARAM_RSA_E: serde_cbor::Value = serde_cbor::Value::Integer(-2);
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-/// An error that occured while parsing the COSE key
+/// An error that occurred while parsing the COSE key
 enum CosePublicKeyParseError {
     /// The key is malformed (not valid CBOR with COSE formatting)
     MalformedPublicKey(AlgorithmId),

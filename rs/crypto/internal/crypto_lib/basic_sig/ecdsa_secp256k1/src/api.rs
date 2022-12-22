@@ -66,7 +66,7 @@ pub fn new_keypair(
 /// * `sk_raw_bytes` is the big-endian encoding of unsigned integer
 /// * `pk` is the public key associated with this secret key
 /// # Errors
-/// * `AlgorithmNotSupported` if an error occured while invoking OpenSSL
+/// * `AlgorithmNotSupported` if an error occurred while invoking OpenSSL
 /// * `MalformedPublicKey` if the public key could not be parsed
 /// * `MalformedSecretKey` if the secret key does not coorespond with the public
 ///   key
@@ -111,7 +111,7 @@ pub fn secret_key_from_components(
 /// # Arguments
 /// * `pk_der` is the binary DER encoding of the public key
 /// # Errors
-/// * `AlgorithmNotSupported` if an error occured while invoking OpenSSL
+/// * `AlgorithmNotSupported` if an error occurred while invoking OpenSSL
 /// * `MalformedPublicKey` if the public key could not be parsed
 /// # Returns
 /// The decoded public key
@@ -166,7 +166,7 @@ pub fn public_key_from_der(pk_der: &[u8]) -> CryptoResult<types::PublicKeyBytes>
 /// # Arguments
 /// * `pk` is the public key
 /// # Errors
-/// * `AlgorithmNotSupported` if an error occured while invoking OpenSSL
+/// * `AlgorithmNotSupported` if an error occurred while invoking OpenSSL
 /// * `MalformedPublicKey` if the public key seems to be invalid
 /// # Returns
 /// The encoded public key
