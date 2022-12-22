@@ -85,6 +85,10 @@ type InitArgs = record {
     /// Maximum time of nanoseconds that a transaction should spend in the queue
     /// before being sent.
     max_time_in_queue_nanos: nat64;
+
+    /// The minimum number of confirmations required for the minter to
+    /// accept a Bitcoin transaction.
+    min_confirmations: opt nat32;
 };
 
 type RetrieveBtcStatus = variant {
