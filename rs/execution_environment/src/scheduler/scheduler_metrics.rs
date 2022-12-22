@@ -79,6 +79,8 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_invariants: IntCounter,
     pub(super) scheduler_compute_allocation_invariant_broken: IntCounter,
     pub(super) scheduler_cores_invariant_broken: IntCounter,
+    pub(super) scheduler_accumulated_priority_invariant: IntGauge,
+    pub(super) scheduler_accumulated_priority_deviation: Gauge,
     pub(super) subnet_memory_usage_invariant: IntCounter,
     pub(super) total_canister_balance: Gauge,
     pub(super) canister_paused_execution: Histogram,
@@ -530,6 +532,14 @@ impl SchedulerMetrics {
             canister_invariants: metrics_registry.error_counter(CANISTER_INVARIANT_BROKEN),
             scheduler_compute_allocation_invariant_broken: metrics_registry.error_counter(SCHEDULER_COMPUTE_ALLOCATION_INVARIANT_BROKEN),
             scheduler_cores_invariant_broken: metrics_registry.error_counter(SCHEDULER_CORES_INVARIANT_BROKEN),
+            scheduler_accumulated_priority_invariant: metrics_registry.int_gauge(
+                "scheduler_accumulated_priority_invariant",
+                "The sum of all accumulated priorities on the subnet."
+            ),
+            scheduler_accumulated_priority_deviation: metrics_registry.gauge(
+                "scheduler_accumulated_priority_deviation",
+                "The standard deviation of accumulated priorities on the subnet."
+            ),
             subnet_memory_usage_invariant: metrics_registry.error_counter(SUBNET_MEMORY_USAGE_INVARIANT_BROKEN),
             total_canister_balance: metrics_registry.gauge(
                 "scheduler_canister_balance_cycles_total",

@@ -30,8 +30,8 @@ use ic_types::{
     crypto::canister_threshold_sig::MasterEcdsaPublicKey,
     ingress::{IngressState, IngressStatus},
     messages::{Ingress, MessageId},
-    CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode, MemoryAllocation,
-    NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
+    AccumulatedPriority, CanisterId, ComputeAllocation, Cycles, ExecutionRound, LongExecutionMode,
+    MemoryAllocation, NumBytes, NumInstructions, NumSlices, Randomness, SubnetId, Time,
 };
 use ic_types::{nominal_cycles::NominalCycles, NumMessages};
 use num_rational::Ratio;
@@ -179,6 +179,8 @@ impl SchedulerImpl {
         let is_reset_round = (current_round.get() % accumulated_priority_reset_interval.get()) == 0;
 
         // Compute the priority of the canisters for this round.
+        let mut accumulated_priority_invariant = AccumulatedPriority::default();
+        let mut accumulated_priority_deviation = 0;
         for (&canister_id, canister) in canister_states.iter_mut() {
             if is_reset_round {
                 canister.scheduler_state.accumulated_priority = Default::default();
@@ -192,15 +194,19 @@ impl SchedulerImpl {
             }
 
             let compute_allocation = canister.scheduler_state.compute_allocation;
+            let accumulated_priority = canister.scheduler_state.accumulated_priority;
             round_states.push(CanisterRoundState {
                 canister_id,
-                accumulated_priority: canister.scheduler_state.accumulated_priority,
+                accumulated_priority,
                 compute_allocation,
                 long_execution_mode: canister.scheduler_state.long_execution_mode,
                 has_aborted_or_paused_execution,
             });
 
             total_compute_allocation_percent += compute_allocation.as_percent() as i64;
+            accumulated_priority_invariant += accumulated_priority;
+            accumulated_priority_deviation +=
+                accumulated_priority.get() * accumulated_priority.get();
         }
         // Assert there is at least `1%` of free capacity to distribute across canisters.
         // It's guaranteed by `validate_compute_allocation()`
@@ -213,6 +219,13 @@ impl SchedulerImpl {
             total_compute_allocation_percent,
             compute_capacity_percent
         );
+        // Observe accumulated priority metrics
+        self.metrics
+            .scheduler_accumulated_priority_invariant
+            .set(accumulated_priority_invariant.get());
+        self.metrics
+            .scheduler_accumulated_priority_deviation
+            .set((accumulated_priority_deviation as f64 / number_of_canisters as f64).sqrt());
 
         // Free capacity per canister in multiplied percent.
         // Note, to avoid division by zero when there are no canisters
