@@ -73,7 +73,7 @@ use prometheus::IntCounter;
 
 const CANISTER_CREATION_FEE: Cycles = Cycles::new(100_000_000_000);
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
-const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
+const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 const DEFAULT_PROVISIONAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
 const MAX_CONTROLLERS: usize = 10;
@@ -907,7 +907,7 @@ fn install_code_preserves_messages() {
             &mut state,
             &mut round_limits,
         );
-        assert!(res.1.is_ok());
+        assert_matches!(res.1, Ok(_));
         state.put_canister_state(res.2.unwrap());
 
         // Check the ingress messages are still in the queue.
