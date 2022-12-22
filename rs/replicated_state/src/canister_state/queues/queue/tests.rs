@@ -55,35 +55,50 @@ fn input_queue_pushed_messages_get_popped() {
     assert_eq!(None, input_queue.pop());
 }
 
-// Pushing a message succeeds if there is space.
+/// Pushing a request succeeds if there is space.
+/// Reserving a slot, then pushing a response succeeds if there is space.
 #[test]
 fn input_queue_push_succeeds() {
-    let capacity: usize = 4;
+    let capacity: usize = 1;
     let mut input_queue = InputQueue::new(capacity);
+
+    // Push request.
+    assert_eq!(input_queue.queue.available_request_slots(), 1);
     input_queue
         .push(RequestBuilder::default().build().into())
         .unwrap();
+    assert_eq!(input_queue.queue.available_request_slots(), 0);
+    assert!(input_queue.check_has_request_slot().is_err());
 
-    assert_eq!(1, input_queue.num_messages());
+    // Push response.
+    assert_eq!(input_queue.queue.available_response_slots(), 1);
+    input_queue.reserve_slot().unwrap();
+    assert_eq!(input_queue.queue.available_response_slots(), 0);
+    input_queue
+        .push(ResponseBuilder::default().build().into())
+        .unwrap();
+    assert_eq!(input_queue.queue.available_response_slots(), 0);
+
+    assert_eq!(2, input_queue.num_messages());
 }
 
 /// Test that overfilling an input queue with messages and reservations
 /// results in failed pushes and reservations; also verifies that
-/// pushes and reservations below capacity succeeds.
+/// pushes and reservations below capacity succeed.
 #[test]
 fn input_queue_push_to_full_queue_fails() {
     // First fill up the queue.
-    let capacity: usize = 4;
+    let capacity: usize = 2;
     let mut input_queue = InputQueue::new(capacity);
-    for _ in 0..capacity / 2 {
+    for _ in 0..capacity {
         input_queue
             .push(RequestBuilder::default().build().into())
             .unwrap();
     }
-    for _index in capacity / 2..capacity {
+    for _index in 0..capacity {
         input_queue.reserve_slot().unwrap();
     }
-    assert_eq!(input_queue.num_messages(), capacity / 2);
+    assert_eq!(input_queue.num_messages(), capacity);
 
     // Now push an extraneous message in.
     assert_eq!(
@@ -100,25 +115,11 @@ fn input_queue_push_to_full_queue_fails() {
 }
 
 #[test]
-fn input_push_without_reservation_fails() {
+fn input_queue_push_response_without_reservation_fails() {
     let mut queue = InputQueue::new(10);
     queue
         .push(ResponseBuilder::default().build().into())
         .unwrap_err();
-}
-
-#[test]
-fn input_queue_available_slots_is_correct() {
-    let capacity = 2;
-    let mut input_queue = InputQueue::new(capacity);
-    assert_eq!(input_queue.available_slots(), 2);
-    input_queue
-        .push(RequestBuilder::default().build().into())
-        .unwrap();
-    assert_eq!(input_queue.available_slots(), 1);
-    input_queue.reserve_slot().unwrap();
-    assert_eq!(input_queue.available_slots(), 0);
-    assert!(input_queue.check_has_slot().is_err())
 }
 
 #[test]
@@ -166,23 +167,54 @@ fn output_queue_with_reservation_is_not_empty() {
     assert!(queue.has_used_slots());
 }
 
+// Pushing a request succeeds if there is space.
+#[test]
+fn output_queue_push_request_succeeds() {
+    let capacity: usize = 1;
+    let mut output_queue = OutputQueue::new(capacity);
+
+    assert_eq!(output_queue.queue.available_request_slots(), 1);
+    output_queue
+        .push_request(RequestBuilder::default().build().into(), mock_time())
+        .unwrap();
+    assert_eq!(output_queue.queue.available_request_slots(), 0);
+    assert!(output_queue.check_has_request_slot().is_err());
+
+    assert_eq!(1, output_queue.num_messages());
+}
+
+// Reserving a slot, then pushing a response succeeds if there is space.
+#[test]
+fn output_queue_push_response_succeeds() {
+    let capacity: usize = 1;
+    let mut output_queue = OutputQueue::new(capacity);
+
+    assert_eq!(output_queue.queue.available_response_slots(), 1);
+    output_queue.reserve_slot().unwrap();
+    assert_eq!(output_queue.queue.available_response_slots(), 0);
+    output_queue.push_response(ResponseBuilder::default().build().into());
+    assert_eq!(output_queue.queue.available_response_slots(), 0);
+
+    assert_eq!(1, output_queue.num_messages());
+}
+
 /// Test that overfilling an output queue with messages and reservations
 /// results in failed pushes and reservations; also verifies that
 /// pushes and reservations below capacity succeeds.
 #[test]
 fn output_queue_push_to_full_queue_fails() {
     // First fill up the queue.
-    let capacity: usize = 4;
+    let capacity: usize = 2;
     let mut output_queue = OutputQueue::new(capacity);
-    for _index in 0..capacity / 2 {
+    for _index in 0..capacity {
         output_queue
             .push_request(RequestBuilder::default().build().into(), mock_time())
             .unwrap();
     }
-    for _index in capacity / 2..capacity {
+    for _index in 0..capacity {
         output_queue.reserve_slot().unwrap();
     }
-    assert_eq!(output_queue.num_messages(), capacity / 2);
+    assert_eq!(output_queue.num_messages(), capacity);
 
     // Now push an extraneous message in
     assert_eq!(
@@ -203,20 +235,6 @@ fn output_queue_push_to_full_queue_fails() {
 fn output_push_without_reserved_slot_fails() {
     let mut queue = OutputQueue::new(10);
     queue.push_response(ResponseBuilder::default().build().into());
-}
-
-#[test]
-fn output_queue_available_slots_is_correct() {
-    let capacity = 2;
-    let mut output_queue = OutputQueue::new(capacity);
-    assert_eq!(output_queue.available_slots(), 2);
-    output_queue
-        .push_request(RequestBuilder::default().build().into(), mock_time())
-        .unwrap();
-    assert_eq!(output_queue.available_slots(), 1);
-    output_queue.reserve_slot().unwrap();
-    assert_eq!(output_queue.available_slots(), 0);
-    assert!(output_queue.check_has_slot().is_err())
 }
 
 /// An explicit example of deadlines in OutputQueue, where we manually fill
@@ -451,6 +469,30 @@ proptest! {
     }
 }
 
+/// Check whether a timed out request produces back pressure.
+#[test]
+fn output_queue_check_back_pressure_with_timed_out_requests() {
+    let mut q = OutputQueue::new(1);
+
+    q.reserve_slot().unwrap();
+    q.push_response(Arc::new(ResponseBuilder::default().build()));
+
+    q.push_request(
+        Arc::new(RequestBuilder::default().build()),
+        Time::from_nanos_since_unix_epoch(1),
+    )
+    .unwrap();
+    q.time_out_requests(Time::from_nanos_since_unix_epoch(u64::MAX))
+        .count();
+
+    assert!(q
+        .push_request(
+            Arc::new(RequestBuilder::default().build()),
+            Time::from_nanos_since_unix_epoch(1),
+        )
+        .is_err());
+}
+
 proptest! {
     /// Check whether the conversion to and from the protobuf version
     /// works for arbitrary output queues.
@@ -559,14 +601,16 @@ fn output_queue_decode_with_none_head_fails() {
 // `queue.len() > capacity`.
 fn output_queue_roundtrip_from_vec_deque(
     queue: VecDeque<Option<RequestOrResponse>>,
-    num_slots_reserved: usize,
+    num_request_slots: usize,
+    num_response_slots: usize,
     num_messages: usize,
 ) -> Result<OutputQueue, ProxyDecodeError> {
     let q = OutputQueue {
         queue: QueueWithReservation::<Option<RequestOrResponse>> {
             queue,
             capacity: super::super::DEFAULT_QUEUE_CAPACITY,
-            num_slots_reserved,
+            num_response_slots,
+            num_request_slots,
         },
         begin: 0,
         deadline_range_ends: VecDeque::new(),
@@ -598,12 +642,16 @@ fn output_queue_decode_check_num_requests_and_responses() {
             ResponseBuilder::default().build().into(),
         )));
     }
-    let num_slots_reserved = capacity - half_capacity;
+    let num_request_slots = capacity;
+    let num_response_slots = capacity;
     let num_messages = 2 * half_capacity;
-    assert!(
-        output_queue_roundtrip_from_vec_deque(queue.clone(), num_slots_reserved, num_messages)
-            .is_ok()
-    );
+    assert!(output_queue_roundtrip_from_vec_deque(
+        queue.clone(),
+        num_request_slots,
+        num_response_slots,
+        num_messages
+    )
+    .is_ok());
 
     // Check we get an error with one more request.
     queue.push_back(Some(RequestOrResponse::Request(
@@ -611,36 +659,42 @@ fn output_queue_decode_check_num_requests_and_responses() {
     )));
     assert!(output_queue_roundtrip_from_vec_deque(
         queue.clone(),
-        num_slots_reserved,
+        num_request_slots + 1,
+        num_response_slots,
         num_messages + 1,
     )
     .is_err());
+    queue.pop_back();
 
     // Check we get an error with one more `None`.
-    queue.pop_back();
     queue.push_back(None);
-    assert!(
-        output_queue_roundtrip_from_vec_deque(queue.clone(), num_slots_reserved, num_messages)
-            .is_err()
-    );
+    assert!(output_queue_roundtrip_from_vec_deque(
+        queue.clone(),
+        num_request_slots + 1,
+        num_response_slots,
+        num_messages
+    )
+    .is_err());
+    queue.pop_back();
 
     // Check we get an error with one more response.
-    queue.pop_back();
     queue.push_back(Some(RequestOrResponse::Response(
         ResponseBuilder::default().build().into(),
     )));
     assert!(output_queue_roundtrip_from_vec_deque(
         queue.clone(),
-        num_slots_reserved,
+        num_request_slots,
+        num_response_slots + 1,
         num_messages + 1,
     )
     .is_err());
+    queue.pop_back();
 
     // Check we get an error with one more reservation.
-    queue.pop_back();
     assert!(output_queue_roundtrip_from_vec_deque(
         queue.clone(),
-        num_slots_reserved + 1,
+        num_request_slots,
+        num_response_slots + 1,
         num_messages,
     )
     .is_err());

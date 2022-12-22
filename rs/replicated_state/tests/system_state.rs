@@ -311,8 +311,8 @@ fn induct_messages_to_self_full_queue() {
         .build()
         .into();
 
-    // Push`DEFAULT_QUEUE_CAPACITY - 1` requests.
-    for _ in 0..DEFAULT_QUEUE_CAPACITY - 1 {
+    // Push`DEFAULT_QUEUE_CAPACITY` requests.
+    for _ in 0..DEFAULT_QUEUE_CAPACITY {
         system_state
             .queues_mut()
             .push_output_request(request.clone(), mock_time())
@@ -325,16 +325,13 @@ fn induct_messages_to_self_full_queue() {
         SubnetType::Application,
     );
 
-    // Expect exactly one request to have been inducted before the queue filled up.
-    assert_eq!(
-        Some(CanisterInputMessage::Request(request)),
-        system_state.pop_input()
-    );
+    // Expect all requests to have been inducted.
+    for _ in 0..DEFAULT_QUEUE_CAPACITY {
+        assert_eq!(
+            Some(CanisterInputMessage::Request(request.clone())),
+            system_state.pop_input()
+        );
+    }
     assert_eq!(None, system_state.pop_input());
-
-    // All other requests should still be in the output queue.
-    assert_eq!(
-        DEFAULT_QUEUE_CAPACITY - 2,
-        system_state.queues().output_message_count()
-    );
+    assert_eq!(0, system_state.queues().output_message_count());
 }
