@@ -491,6 +491,15 @@ where
         &Value::from(TOKEN_SYMBOL)
     );
     assert_eq!(lookup(&metadata, "icrc1:decimals"), &Value::from(8u64));
+
+    let standards = supported_standards(&env, canister_id);
+    assert_eq!(
+        standards,
+        vec![StandardRecord {
+            name: "ICRC-1".to_string(),
+            url: "https://github.com/dfinity/ICRC-1".to_string(),
+        }]
+    );
 }
 pub fn test_metadata<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
 where

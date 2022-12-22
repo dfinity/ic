@@ -7,7 +7,7 @@ use dfn_core::{
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{
-    endpoints::{TransferArg, Value},
+    endpoints::{StandardRecord, TransferArg, Value},
     Account,
 };
 use ic_ledger_canister_core::{
@@ -523,6 +523,14 @@ fn icrc1_balance_of(acc: Account) -> Nat {
     )
 }
 
+#[candid_method(query, rename = "icrc1_supported_standards")]
+fn icrc1_supported_standards() -> Vec<StandardRecord> {
+    vec![StandardRecord {
+        name: "ICRC-1".to_string(),
+        url: "https://github.com/dfinity/ICRC-1".to_string(),
+    }]
+}
+
 #[candid_method(query, rename = "icrc1_minting_account")]
 fn icrc1_minting_account() -> Option<Account> {
     LEDGER.read().unwrap().icrc1_minting_account.clone()
@@ -970,6 +978,11 @@ fn get_blocks_() {
         let start_offset = blockchain.num_archived_blocks();
         icp_ledger::get_blocks(&blockchain.blocks, start_offset, start, length)
     });
+}
+
+#[export_name = "canister_query icrc1_supported_standards"]
+fn icrc1_supported_standards_candid() {
+    over(candid_one, |()| icrc1_supported_standards())
 }
 
 #[candid_method(query, rename = "query_blocks")]
