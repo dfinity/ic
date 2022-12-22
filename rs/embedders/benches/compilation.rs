@@ -87,8 +87,7 @@ fn wasm_compilation(c: &mut Criterion) {
 
     let binaries = generate_binaries();
     let mut group = c.benchmark_group("compilation");
-    let mut config = EmbeddersConfig::default();
-    config.feature_flags.new_wasm_transform_lib = ic_config::flag_status::FlagStatus::Disabled;
+    let config = EmbeddersConfig::default();
     for (name, comp_cost, wasm) in binaries {
         let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
 
@@ -154,8 +153,7 @@ fn wasm_validation_instrumentation(c: &mut Criterion) {
 
     let binaries = generate_binaries();
     let mut group = c.benchmark_group("validation-instrumentation");
-    let mut config = EmbeddersConfig::default();
-    config.feature_flags.new_wasm_transform_lib = ic_config::flag_status::FlagStatus::Disabled;
+    let config = EmbeddersConfig::default();
     for (name, comp_cost, wasm) in binaries {
         let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
 

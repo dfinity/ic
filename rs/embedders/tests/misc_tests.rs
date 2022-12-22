@@ -2,26 +2,26 @@ mod wasmtime_simple;
 
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
-    wasm_utils::{decoding::decode_wasm, validate_and_instrument_for_testing},
+    wasm_utils::{
+        decoding::decode_wasm, validate_and_instrument_for_testing, wasm_transform::Module,
+    },
     WasmtimeEmbedder,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::BinaryEncodedWasm;
-use parity_wasm::elements::Module;
 use std::sync::Arc;
+use wasmparser::ExternalKind;
 
 fn assert_memory_and_table_exports(module: &Module) {
-    let export_section = module.export_section().unwrap();
+    let export_section = &module.exports;
     let mut memory_exported = false;
     let mut table_exported = false;
-    for e in export_section.entries() {
-        if let parity_wasm::elements::Internal::Table(_) = e.internal() {
-            assert_eq!(e.field(), "table");
+    for e in export_section {
+        if ExternalKind::Table == e.kind {
+            assert_eq!(e.name, "table");
             table_exported = true;
-        } else if let parity_wasm::elements::Internal::Memory(_) = e.internal() {
-            if e.field() == "memory" {
-                memory_exported = true;
-            }
+        } else if ExternalKind::Memory == e.kind && e.name == "memory" {
+            memory_exported = true;
         }
     }
     assert!(memory_exported && table_exported);
@@ -54,8 +54,7 @@ fn test_instrument_module_rename_memory_table() {
     .unwrap()
     .1;
 
-    let module =
-        parity_wasm::elements::deserialize_buffer::<Module>(output.binary.as_slice()).unwrap();
+    let module = Module::parse(output.binary.as_slice(), false).unwrap();
     assert_memory_and_table_exports(&module);
     // check that instrumented module instantiates correctly
     wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);
@@ -87,8 +86,7 @@ fn test_instrument_module_export_memory_table() {
     .unwrap()
     .1;
 
-    let module =
-        parity_wasm::elements::deserialize_buffer::<Module>(output.binary.as_slice()).unwrap();
+    let module = Module::parse(output.binary.as_slice(), false).unwrap();
     assert_memory_and_table_exports(&module);
     // check that instrumented module instantiates correctly
     wasmtime_simple::wasmtime_instantiate_and_call_run(&output.binary);

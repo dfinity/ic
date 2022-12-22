@@ -592,14 +592,6 @@ def external_crates_repository(name, annotations):
             "pairing": crate.spec(
                 version = "^0.22",
             ),
-            "parity-wasm": crate.spec(
-                version = "^0.42.2",
-                features = [
-                    "bulk",
-                    "multi_value",
-                    "std",
-                ],
-            ),
             "parking_lot": crate.spec(
                 version = "^0.12.1",
             ),

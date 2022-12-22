@@ -1,5 +1,5 @@
 {
-  "checksum": "5b5d799be12fdd443268460e3718034aa9f58be9cfd597b55cc8c0ff3ecbce12",
+  "checksum": "882cfd437ec12759fddf4b40140148dabcef694c7aa22cbb73c6a4ce748c44f7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12644,10 +12644,6 @@
               "target": "pairing"
             },
             {
-              "id": "parity-wasm 0.42.2",
-              "target": "parity_wasm"
-            },
-            {
               "id": "parking_lot 0.12.1",
               "target": "parking_lot"
             },
@@ -19302,7 +19298,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_tokenstream 0.1.5",
+              "id": "serde_tokenstream 0.1.6",
               "target": "serde_tokenstream"
             },
             {
@@ -29722,45 +29718,6 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "parity-wasm 0.42.2": {
-      "name": "parity-wasm",
-      "version": "0.42.2",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/parity-wasm/0.42.2/download",
-          "sha256": "be5e13c266502aadf83426d87d81a0f5d1ef45b8027f5a471c360abfe4bfae92"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "parity_wasm",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "parity_wasm",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "bulk",
-          "default",
-          "multi_value",
-          "std"
-        ],
-        "edition": "2018",
-        "version": "0.42.2"
-      },
-      "license": "MIT/Apache-2.0"
-    },
     "parking_lot 0.11.2": {
       "name": "parking_lot",
       "version": "0.11.2",
@@ -39401,13 +39358,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "serde_tokenstream 0.1.5": {
+    "serde_tokenstream 0.1.6": {
       "name": "serde_tokenstream",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/serde_tokenstream/0.1.5/download",
-          "sha256": "2794f0ba0179a8ca422c30d9975d86faf8306be0164bfc3b0b1ca4f060ac639d"
+          "url": "https://crates.io/api/v1/crates/serde_tokenstream/0.1.6/download",
+          "sha256": "274f512d6748a01e67cbcde5b4307ab2c9d52a98a2b870a980ef0793a351deff"
         }
       },
       "targets": [
@@ -39447,7 +39404,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.5"
+        "version": "0.1.6"
       },
       "license": "Apache-2.0"
     },
@@ -48157,8 +48114,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -48169,8 +48126,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

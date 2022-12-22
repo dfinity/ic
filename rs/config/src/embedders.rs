@@ -40,9 +40,6 @@ const STABLE_MEMORY_DIRTY_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
     pub rate_limiting_of_debug_prints: FlagStatus,
-    /// Use the `wasmparser` and `wasm-encoder` crates for instrumentation and
-    /// validation instead of `parity-wasm`.
-    pub new_wasm_transform_lib: FlagStatus,
     /// Track dirty pages with a write barrier instead of the signal handler.
     pub write_barrier: FlagStatus,
 }
@@ -51,7 +48,6 @@ impl Default for FeatureFlags {
     fn default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            new_wasm_transform_lib: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
         }
     }

@@ -17,7 +17,6 @@ fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wabt::Error> {
     features.enable_multi_value();
     wabt::wat2wasm_with_features(wat, features).map(BinaryEncodedWasm::new)
 }
-use ic_config::flag_status::FlagStatus;
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
@@ -28,30 +27,12 @@ fn validate_wasm_binary(
     wasm: &BinaryEncodedWasm,
     config: &EmbeddersConfig,
 ) -> Result<WasmValidationDetails, WasmValidationError> {
-    let mut old_validation_config = config.clone();
-    let mut new_validation_config = config.clone();
-    old_validation_config.feature_flags.new_wasm_transform_lib = FlagStatus::Disabled;
-    new_validation_config.feature_flags.new_wasm_transform_lib = FlagStatus::Enabled;
-
-    let embedder = WasmtimeEmbedder::new(old_validation_config, no_op_logger());
-    let res_old = match validate_and_instrument_for_testing(&embedder, wasm) {
+    let embedder = WasmtimeEmbedder::new(config.clone(), no_op_logger());
+    match validate_and_instrument_for_testing(&embedder, wasm) {
         Ok((validation_details, _)) => Ok(validation_details),
         Err(HypervisorError::InvalidWasm(err)) => Err(err),
         Err(other_error) => panic!("unexpected error {}", other_error),
-    };
-
-    let embedder = WasmtimeEmbedder::new(new_validation_config, no_op_logger());
-    let res_new = match validate_and_instrument_for_testing(&embedder, wasm) {
-        Ok((validation_details, _)) => Ok(validation_details),
-        Err(HypervisorError::InvalidWasm(err)) => Err(err),
-        Err(other_error) => panic!("unexpected error {}", other_error),
-    };
-
-    assert_eq!(
-        res_new, res_old,
-        "Old and new validation produced different results"
-    );
-    res_new
+    }
 }
 
 #[test]
