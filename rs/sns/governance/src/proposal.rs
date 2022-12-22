@@ -746,11 +746,11 @@ impl ProposalData {
             return ProposalRewardStatus::AcceptVotes;
         }
 
-        if !self.is_eligible_for_rewards {
-            return ProposalRewardStatus::Settled;
+        if self.is_eligible_for_rewards {
+            ProposalRewardStatus::ReadyToSettle
+        } else {
+            ProposalRewardStatus::Settled
         }
-
-        ProposalRewardStatus::ReadyToSettle
     }
 
     /// Returns the proposal's current voting period deadline in seconds from the Unix epoch.
