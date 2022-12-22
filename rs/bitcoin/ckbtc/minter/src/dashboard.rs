@@ -99,6 +99,17 @@ pub fn build_dashboard() -> Vec<u8> {
                     </thead>
                     <tbody>{}</tbody>
                 </table>
+                <h3>Unconfirmed change</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Txid</th>
+                            <th>Vout</th>
+                            <th>Value (BTC)</th>
+                        </tr>
+                    </thead>
+                    <tbody>{}</tbody>
+                </table>
                 <h3>Account to utxo</h3>
                 <table>
                     <thead>
@@ -130,6 +141,7 @@ pub fn build_dashboard() -> Vec<u8> {
         build_submitted_transactions(),
         build_finalized_requests(),
         build_available_utxos(),
+        build_unconfirmed_change(),
         build_account_to_utxos_table(),
         build_update_balance_principals(),
         build_retrieve_btc_principals(),
@@ -367,6 +379,33 @@ pub fn build_available_utxos() -> String {
                 buf,
                 "<tr><td colspan='3' style='text-align: right;'><b>Total</b></td><td>{}</td></tr>",
                 DisplayAmount(s.available_utxos.iter().map(|u| u.value).sum::<u64>())
+            )
+            .unwrap();
+        })
+    })
+}
+
+pub fn build_unconfirmed_change() -> String {
+    with_utf8_buffer(|buf| {
+        state::read_state(|s| {
+            let mut total = 0;
+            for tx in &s.submitted_transactions {
+                if let Some(change) = tx.change_output.as_ref() {
+                    writeln!(
+                        buf,
+                        "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+                        txid_link_on(&tx.txid, s.btc_network),
+                        change.vout,
+                        DisplayAmount(change.value)
+                    )
+                    .unwrap();
+                    total += change.value;
+                }
+            }
+            writeln!(
+                buf,
+                "<tr><td colspan='2' style='text-align: right;'><b>Total</b></td><td>{}</td></tr>",
+                DisplayAmount(total)
             )
             .unwrap();
         })
