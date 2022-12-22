@@ -6219,12 +6219,15 @@ name = "ic-icrc1-ledger-sm-tests"
 version = "0.8.0"
 dependencies = [
  "candid",
+ "cddl",
+ "hex",
  "ic-base-types",
  "ic-icrc1",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-state-machine-tests",
  "num-traits",
+ "proptest",
 ]
 
 [[package]]

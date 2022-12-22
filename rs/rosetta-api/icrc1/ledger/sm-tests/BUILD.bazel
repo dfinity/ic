@@ -6,6 +6,9 @@ rust_library(
     name = "sm-tests",
     srcs = ["src/lib.rs"],
     crate_name = "ic_icrc1_ledger_sm_tests",
+    data = [
+        "//rs/rosetta-api/icrc1/ledger:block.cddl",
+    ],
     proc_macro_deps = [
         "@crate_index//:async-trait",
     ],
@@ -17,6 +20,9 @@ rust_library(
         "//rs/state_machine_tests",
         "//rs/types/base_types",
         "@crate_index//:candid",
+        "@crate_index//:cddl",
+        "@crate_index//:hex",
         "@crate_index//:num-traits",
+        "@crate_index//:proptest",
     ],
 )
