@@ -24,6 +24,7 @@ use ic_registry_client_helpers::{
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
 use ic_registry_local_store::LocalStore;
+use ic_sys::utility_command::UtilityCommand;
 use ic_types::{crypto::KeyPurpose, messages::MessageId, NodeId, RegistryVersion, SubnetId};
 use prost::Message;
 use rand::prelude::*;
@@ -132,6 +133,15 @@ impl NodeRegistration {
             };
             tokio::time::sleep(Duration::from_secs(5)).await;
         }
+
+        UtilityCommand::notify_host(
+            format!(
+                "Join request successful!\nNode id: {}\nYou may now safely remove the HSM.",
+                self.node_id
+            )
+            .as_str(),
+            20,
+        );
     }
 
     async fn assemble_add_node_message(&self) -> AddNodePayload {

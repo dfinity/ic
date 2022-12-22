@@ -30,10 +30,6 @@ impl Signer for Hsm {
                 .execute()
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>);
             UtilityCommand::try_to_detach_hsm();
-            UtilityCommand::notify_host(
-                "Join request successful!\nYou may now safely remove the HSM.",
-                20,
-            );
             res
         }
         Ok(Sender::ExternalHsm {
