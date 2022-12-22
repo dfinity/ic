@@ -436,9 +436,8 @@ fn cycles_correct_if_cleanup_fails() {
 #[test]
 fn dts_works_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        // TODO: RUN-454: This fails after changing the UC
-        .with_slice_instruction_limit(1_000)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -461,10 +460,9 @@ fn dts_works_in_response_callback() {
                 .on_reject(wasm().reject_code().reject_message().reject())
                 .on_reply(
                     wasm()
-                        .set_global_data(&[0; 100])
+                        .instruction_counter_is_at_least(1_000_000)
                         .message_payload()
-                        .reply_data_append()
-                        .reply()
+                        .append_and_reply()
                         .build(),
                 ),
             (0, 1000),
@@ -519,8 +517,8 @@ fn dts_works_in_response_callback() {
 #[test]
 fn dts_works_in_cleanup_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -529,7 +527,7 @@ fn dts_works_in_cleanup_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(1000)
+        .accept_cycles(1_000)
         .message_payload()
         .append_and_reply()
         .build();
@@ -542,7 +540,7 @@ fn dts_works_in_cleanup_callback() {
                 .other_side(b)
                 .on_reply(wasm().trap())
                 .on_reject(wasm().reject_code().reject_message().reject())
-                .on_cleanup(wasm().stable_grow(1).stable64_fill(0, 0, 1000)),
+                .on_cleanup(wasm().instruction_counter_is_at_least(1_000_000)),
             (0, 1000),
         )
         .build();
@@ -596,8 +594,8 @@ fn dts_works_in_cleanup_callback() {
 fn dts_out_of_subnet_memory_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_total_memory(100 * 1024 * 1024)
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(2_000)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -611,7 +609,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
         .append_and_reply()
         .build();
 
-    // on reply grow by roughly 80 mb
+    // On reply grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
             b_id.get(),
@@ -623,6 +621,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
                     wasm()
                         .stable_grow(1280)
                         .stable64_fill(0, 0, 1000)
+                        .instruction_counter_is_at_least(1_000_000)
                         .message_payload()
                         .append_and_reply(),
                 ),
@@ -699,8 +698,8 @@ fn dts_out_of_subnet_memory_in_response_callback() {
 fn dts_out_of_subnet_memory_in_cleanup_callback() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_total_memory(100 * 1024 * 1024)
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -709,12 +708,12 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(1000)
+        .accept_cycles(1_000)
         .message_payload()
         .append_and_reply()
         .build();
 
-    // on cleanup grow by roughly 80 mb
+    // On cleanup grows memory by roughly 80MB.
     let a = wasm()
         .call_with_cycles(
             b_id.get(),
@@ -723,7 +722,12 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
                 .other_side(b)
                 .on_reply(wasm().trap())
                 .on_reject(wasm().reject_code().reject_message().reject())
-                .on_cleanup(wasm().stable_grow(1280).stable64_fill(0, 0, 1000)),
+                .on_cleanup(
+                    wasm()
+                        .stable_grow(1280)
+                        .stable64_fill(0, 0, 1000)
+                        .instruction_counter_is_at_least(1_000_000),
+                ),
             (0, 1000),
         )
         .build();
@@ -796,9 +800,8 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
 #[test]
 fn dts_abort_works_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        // TODO: RUN-454: This fails after changing the UC
-        .with_slice_instruction_limit(1_000)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -807,7 +810,7 @@ fn dts_abort_works_in_response_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(1000)
+        .accept_cycles(1_000)
         .message_payload()
         .append_and_reply()
         .build();
@@ -821,10 +824,9 @@ fn dts_abort_works_in_response_callback() {
                 .on_reject(wasm().reject_code().reject_message().reject())
                 .on_reply(
                     wasm()
-                        .set_global_data(&[0; 100])
+                        .instruction_counter_is_at_least(1_000_000)
                         .message_payload()
-                        .reply_data_append()
-                        .reply()
+                        .append_and_reply()
                         .build(),
                 ),
             (0, 1000),
@@ -894,8 +896,8 @@ fn dts_abort_works_in_response_callback() {
 #[test]
 fn dts_abort_works_in_cleanup_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -904,7 +906,7 @@ fn dts_abort_works_in_cleanup_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(1000)
+        .accept_cycles(1_000)
         .message_payload()
         .append_and_reply()
         .build();
@@ -917,7 +919,7 @@ fn dts_abort_works_in_cleanup_callback() {
                 .other_side(b)
                 .on_reply(wasm().trap())
                 .on_reject(wasm().reject_code().reject_message().reject())
-                .on_cleanup(wasm().stable_grow(1).stable64_fill(0, 0, 1000)),
+                .on_cleanup(wasm().instruction_counter_is_at_least(1_000_000)),
             (0, 1000),
         )
         .build();
@@ -987,7 +989,7 @@ fn successful_response_scenario(test: &mut ExecutionTest) -> (CanisterId, Messag
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
     let b = wasm()
-        .accept_cycles(1000)
+        .accept_cycles(1_000)
         .message_payload()
         .append_and_reply()
         .build();
@@ -1001,8 +1003,7 @@ fn successful_response_scenario(test: &mut ExecutionTest) -> (CanisterId, Messag
                 .on_reject(wasm().reject_code().reject_message().reject())
                 .on_reply(
                     wasm()
-                        .stable_grow(1)
-                        .stable64_fill(0, 0, 1)
+                        .instruction_counter_is_at_least(1_000_000)
                         .message_payload()
                         .append_and_reply(),
                 ),
@@ -1045,8 +1046,7 @@ fn response_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
                 .other_side(b)
                 .on_reply(
                     wasm()
-                        .stable_grow(1)
-                        .stable64_fill(0, 0, 1)
+                        .instruction_counter_is_at_least(1_000_000)
                         .reply_data_append()
                         .trap(),
                 )
@@ -1104,12 +1104,11 @@ fn cleanup_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
                 .other_side(b)
                 .on_reply(
                     wasm()
-                        .stable_grow(1)
-                        .stable64_fill(0, 0, 1)
+                        .instruction_counter_is_at_least(1_000_000)
                         .reply_data_append()
                         .trap(),
                 )
-                .on_cleanup(wasm().stable_grow(1).stable64_fill(0, 0, 1).trap()),
+                .on_cleanup(wasm().instruction_counter_is_at_least(1_000_000).trap()),
             (0, transferred_cycles),
         )
         .build();
@@ -1137,8 +1136,8 @@ fn dts_and_nondts_cycles_match_after_response() {
     let (a_id, amsg_id) = successful_response_scenario(&mut test_a);
 
     let mut test_b = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -1184,8 +1183,8 @@ fn dts_and_nondts_cycles_match_if_response_fails() {
     let (a_id, amsg_id) = response_fail_scenario(&mut test_a);
 
     let mut test_b = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -1211,8 +1210,8 @@ fn dts_and_nondts_cycles_match_if_cleanup_fails() {
     let (a_id, amsg_id) = cleanup_fail_scenario(&mut test_a);
 
     let mut test_b = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -1245,10 +1244,10 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     // 6. The response callback succeeds because there are enough cycles
     //    in the canister balance to cover both the call and cycles debit.
 
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -1270,8 +1269,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
             "update",
             call_args().other_side(b.clone()).on_reply(
                 wasm()
-                    .stable64_grow(1)
-                    .stable64_fill(0, 0, 10_000)
+                    .instruction_counter_is_at_least(1_000_000)
                     .call_with_cycles(
                         b_id.get(),
                         "update",
@@ -1363,10 +1361,10 @@ fn dts_response_concurrent_cycles_change_fails() {
     // 5. The response callback resumes and calls B transferring 1000 cycles.
     // 6. The response callback fails because there are not enough cycles
     //    in the canister balance to cover both the call and cycles debit.
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -1388,8 +1386,7 @@ fn dts_response_concurrent_cycles_change_fails() {
             "update",
             call_args().other_side(b.clone()).on_reply(
                 wasm()
-                    .stable64_grow(1)
-                    .stable64_fill(0, 0, 10_000)
+                    .instruction_counter_is_at_least(1_000_000)
                     .call_with_cycles(
                         b_id.get(),
                         "update",
@@ -1500,10 +1497,10 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
     // 8. While canister A is paused, we emulate more postponed charges.
     // 9. The cleanup callback resumes and succeeds because it cannot change the
     //    cycles balance of the canister.
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -1511,7 +1508,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
     let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
 
-    let transferred_cycles = Cycles::new(1000);
+    let transferred_cycles = Cycles::new(1_000);
 
     let b = wasm()
         .accept_cycles128(transferred_cycles.into_parts())
@@ -1527,8 +1524,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
                 .other_side(b.clone())
                 .on_reply(
                     wasm()
-                        .stable64_grow(1)
-                        .stable64_fill(0, 0, 10_000)
+                        .instruction_counter_is_at_least(1_000_000)
                         .call_with_cycles(
                             b_id.get(),
                             "update",
@@ -1536,7 +1532,12 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
                             transferred_cycles.into_parts(),
                         ),
                 )
-                .on_cleanup(wasm().stable64_grow(2).stable64_fill(0, 0, 10_000)),
+                .on_cleanup(
+                    wasm()
+                        .stable64_grow(2)
+                        .stable64_fill(0, 0, 10_000)
+                        .instruction_counter_is_at_least(1_000_000),
+                ),
         )
         .build();
 

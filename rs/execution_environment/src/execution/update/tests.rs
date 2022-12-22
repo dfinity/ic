@@ -55,10 +55,10 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     // 3. The update method resumes and calls canister B with 1000 cycles.
     // 4. The update method succeeds because there are enough cycles
     //    in the canister balance to cover both the call and cycles debit.
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -75,8 +75,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
         .build();
 
     let a = wasm()
-        .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
+        .instruction_counter_is_at_least(1_000_000)
         .call_with_cycles(
             b_id.get(),
             "update",
@@ -159,10 +158,10 @@ fn dts_update_concurrent_cycles_change_fails() {
     // 3. The update method resumes and calls canister B with 1000 cycles.
     // 4. The update method fails because there are not enough cycles
     //    in the canister balance to cover both the call and cycles debit.
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -179,8 +178,7 @@ fn dts_update_concurrent_cycles_change_fails() {
         .build();
 
     let a = wasm()
-        .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
+        .instruction_counter_is_at_least(1_000_000)
         .call_with_cycles(
             b_id.get(),
             "update",
@@ -432,10 +430,10 @@ fn dts_update_does_not_expire_while_executing() {
     // 1. Canister A starts running the update method.
     // 2. While canister A is paused, we fast forward the time by 1h.
     // 3. The update resumes and should not fail due to ingress expiration.
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -443,9 +441,7 @@ fn dts_update_does_not_expire_while_executing() {
     let a_id = test.universal_canister().unwrap();
 
     let a = wasm()
-        .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
+        .instruction_counter_is_at_least(1_000_000)
         .push_bytes(&[42])
         .append_and_reply()
         .build();
@@ -504,10 +500,10 @@ fn dts_abort_of_call_works() {
     // 2. The called update method of canister B runs with DTS.
     // 3. The called update method is aborted.
     // 4. The called update method resumes and succeeds.
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_initial_canister_cycles(initial_cycles)
         .with_manual_execution()
@@ -519,9 +515,7 @@ fn dts_abort_of_call_works() {
     let transferred_cycles = Cycles::new(1000);
 
     let b = wasm()
-        .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
+        .instruction_counter_is_at_least(1_000_000)
         .accept_cycles128(transferred_cycles.into_parts())
         .push_bytes(&[42])
         .append_and_reply()
@@ -589,11 +583,11 @@ fn dts_cycles_debit_is_applied_on_aborts() {
     //    of 1000 cycles (i.e. add 1000 to `cycles_debit`).
     // 3. The update method is aborted and we expected the cycles debit to be
     //    applied.
-    let instruction_limit = 1_000_000;
+    let instruction_limit = 100_000_000;
     let initial_canister_cycles = 1_000_000_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
-        .with_slice_instruction_limit(10_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_initial_canister_cycles(initial_canister_cycles)
         .with_manual_execution()
@@ -602,9 +596,7 @@ fn dts_cycles_debit_is_applied_on_aborts() {
     let a_id = test.universal_canister().unwrap();
 
     let a = wasm()
-        .stable64_grow(1)
-        .stable64_fill(0, 0, 10_000)
-        .stable64_fill(0, 0, 10_000)
+        .instruction_counter_is_at_least(1_000_000)
         .push_bytes(&[42])
         .append_and_reply()
         .build();

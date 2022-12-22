@@ -124,6 +124,7 @@ fn dts_env(
         },
         HypervisorConfig {
             deterministic_time_slicing: FlagStatus::Enabled,
+            cost_to_compile_wasm_instruction: 0.into(),
             ..Default::default()
         },
     ))
@@ -961,8 +962,8 @@ fn dts_long_running_install_and_update() {
     }
 
     let env = dts_env(
-        NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(100_000_000),
+        NumInstructions::from(1_000_000),
     );
 
     let user_id = PrincipalId::new_anonymous();
@@ -1042,8 +1043,7 @@ fn dts_long_running_install_and_update() {
 
     for i in 0..30 {
         let work = wasm()
-            .stable64_grow(1)
-            .stable64_fill(0, 0, 10_000)
+            .instruction_counter_is_at_least(1_000_000)
             .message_payload()
             .append_and_reply()
             .build();
@@ -1097,8 +1097,8 @@ fn dts_long_running_calls() {
     }
 
     let env = dts_env(
-        NumInstructions::from(1_000_000_000),
-        NumInstructions::from(10_000),
+        NumInstructions::from(100_000_000),
+        NumInstructions::from(1_000_000),
     );
 
     let user_id = PrincipalId::new_anonymous();
@@ -1133,8 +1133,7 @@ fn dts_long_running_calls() {
 
     for i in 0..30 {
         let work = wasm()
-            .stable64_grow(1)
-            .stable64_fill(0, 0, 10_000)
+            .instruction_counter_is_at_least(1_000_000)
             .message_payload()
             .append_and_reply()
             .build();

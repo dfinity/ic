@@ -4262,13 +4262,14 @@ fn cannot_stop_canister_with_open_call_context() {
 #[test]
 fn can_use_more_instructions_during_install_code() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(10_000)
+        .with_instruction_limit(1_000_000)
+        .with_cost_to_compile_wasm_instruction(0)
         .with_install_code_instruction_limit(
             1_000_000 + wasm_compilation_cost(UNIVERSAL_CANISTER_WASM).get(),
         )
         .build();
     let canister_id = test.universal_canister().unwrap();
-    let work = wasm().stable_grow(1).stable_fill(0, 42, 65_536).build();
+    let work = wasm().instruction_counter_is_at_least(1_000_000).build();
 
     // The update call should hit the instruction limit and fail.
     let err = test
@@ -4295,27 +4296,27 @@ fn can_use_more_instructions_during_install_code() {
 #[test]
 fn dts_pause_resume_works_in_update_call() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test.universal_canister().unwrap();
     let work = wasm()
+        .instruction_counter_is_at_least(1_000_000)
         .push_bytes(&[1, 2, 3, 4, 5])
         .append_and_reply()
         .build();
 
-    // The workload above finishes in 6 slices.
-    // TODO: RUN-454: This fails after changing the UC
+    // The workload above finishes in 2 slices.
     let (ingress_id, _) = test.ingress_raw(canister_id, "update", work);
-    for _ in 0..5 {
-        test.execute_slice(canister_id);
-        assert_eq!(
-            test.canister_state(canister_id).next_execution(),
-            NextExecution::ContinueLong
-        );
-    }
+    // Execute the first slice.
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong
+    );
+    // Execute the second slice.
     test.execute_slice(canister_id);
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
@@ -4329,42 +4330,42 @@ fn dts_pause_resume_works_in_update_call() {
 #[test]
 fn dts_abort_works_in_update_call() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test.universal_canister().unwrap();
     let work = wasm()
+        .instruction_counter_is_at_least(1_000_000)
         .push_bytes(&[1, 2, 3, 4, 5])
         .append_and_reply()
         .build();
 
-    // The workload above finishes in 6 slices.
-    // TODO: RUN-454: This fails after changing the UC
+    // The workload above finishes in 2 slices.
     let (ingress_id, _) = test.ingress_raw(canister_id, "update", work);
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     let original_execution_cost = test.canister_execution_cost(canister_id);
-    for _ in 0..5 {
-        test.execute_slice(canister_id);
-        assert_eq!(
-            test.canister_state(canister_id).next_execution(),
-            NextExecution::ContinueLong
-        );
-        assert_eq!(
-            test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance()
-                - test
-                    .cycles_account_manager()
-                    .execution_cost(NumInstructions::from(1_000_000), test.subnet_size()),
-        );
-        assert_eq!(
-            test.canister_state(canister_id)
-                .system_state
-                .call_context_manager(),
-            original_system_state.call_context_manager()
-        );
-    }
+
+    // Execute the first slice.
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong
+    );
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        original_system_state.balance()
+            - test
+                .cycles_account_manager()
+                .execution_cost(NumInstructions::from(100_000_000), test.subnet_size()),
+    );
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .call_context_manager(),
+        original_system_state.call_context_manager()
+    );
 
     // Abort before executing the last slice.
     test.abort_all_paused_executions();
@@ -4377,28 +4378,27 @@ fn dts_abort_works_in_update_call() {
         Some(1)
     );
 
-    // Now execute from scratch.
-    // TODO: RUN-454: This fails after changing the UC
-    for _ in 0..5 {
-        test.execute_slice(canister_id);
-        assert_eq!(
-            test.canister_state(canister_id).next_execution(),
-            NextExecution::ContinueLong
-        );
-        assert_eq!(
-            test.canister_state(canister_id).system_state.balance(),
-            original_system_state.balance()
-                - test
-                    .cycles_account_manager()
-                    .execution_cost(NumInstructions::from(1_000_000), test.subnet_size()),
-        );
-        assert_eq!(
-            test.canister_state(canister_id)
-                .system_state
-                .call_context_manager(),
-            original_system_state.call_context_manager()
-        );
-    }
+    // Now execute from scratch the first slice.
+    test.execute_slice(canister_id);
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::ContinueLong
+    );
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        original_system_state.balance()
+            - test
+                .cycles_account_manager()
+                .execution_cost(NumInstructions::from(100_000_000), test.subnet_size()),
+    );
+    assert_eq!(
+        test.canister_state(canister_id)
+            .system_state
+            .call_context_manager(),
+        original_system_state.call_context_manager()
+    );
+
+    // Execute the second slice.
     test.execute_slice(canister_id);
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
@@ -4417,18 +4417,18 @@ fn dts_abort_works_in_update_call() {
 #[test]
 fn dts_concurrent_subnet_available_change() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
     let canister_id = test.universal_canister().unwrap();
     let work = wasm()
-        .push_bytes(&[1, 2, 3, 4, 5])
-        .append_and_reply()
+        .instruction_counter_is_at_least(1_000_000)
+        .reply()
         .build();
 
-    // The workload above finishes in 6 slices.
+    // The workload above finishes in 2 slices.
     let (ingress_id, _) = test.ingress_raw(canister_id, "update", work);
     test.execute_slice(canister_id);
     assert_eq!(
@@ -4451,8 +4451,8 @@ fn dts_concurrent_subnet_available_change() {
 #[test]
 fn system_state_apply_change_fails() {
     let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(1_000_000)
-        .with_slice_instruction_limit(1_000)
+        .with_instruction_limit(100_000_000)
+        .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
@@ -4461,20 +4461,19 @@ fn system_state_apply_change_fails() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(1000)
-        .message_payload()
-        .append_and_reply()
+        // The DTS must kick in.
+        .instruction_counter_is_at_least(1_000_000)
+        // The second slice should fail due to no memory
         .stable64_grow(1)
         .build();
 
     let a = wasm()
-        .call_with_cycles(
+        .call_simple(
             b_id.get(),
             "update",
             call_args()
                 .other_side(b)
                 .on_reject(wasm().reject_code().reject_message().reject()),
-            (0, 1000),
         )
         .build();
 
@@ -4486,6 +4485,7 @@ fn system_state_apply_change_fails() {
     );
     test.induct_messages();
     test.execute_slice(b_id);
+    // No memory available after the first slice.
     test.set_subnet_available_memory(SubnetAvailableMemory::new(0, 0));
     while test.canister_state(b_id).next_execution() == NextExecution::ContinueLong {
         test.execute_slice(b_id);
