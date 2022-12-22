@@ -51,6 +51,12 @@ pub enum RemovePermissionsStatus {
 }
 
 impl Neuron {
+    pub const PERMISSIONS_RELATED_TO_VOTING: &'static [NeuronPermissionType] = &[
+        NeuronPermissionType::Vote,
+        NeuronPermissionType::SubmitProposal,
+        NeuronPermissionType::ManageVotingPermission,
+    ];
+
     // Utility methods on neurons.
 
     /// Returns the neuron's state.
@@ -114,30 +120,40 @@ impl Neuron {
         false
     }
 
-    /// Returns true if the principalId has at least all (i.e. has a superset)
-    /// the permissions to act on this neuron (i.e., self).
-    pub(crate) fn is_authorized_with_permissions(
+    /// Returns Ok if the caller has ManagePrincipals, or if the caller has
+    /// ManageVotingPermission and the permissions to change relate to voting.
+    pub(crate) fn check_principal_authorized_to_change_permissions(
         &self,
-        principal_id: &PrincipalId,
-        permissions: &NeuronPermissionList,
-    ) -> bool {
-        let found_neuron_permission = self
-            .permissions
+        caller: &PrincipalId,
+        permissions_to_change: NeuronPermissionList,
+    ) -> Result<(), GovernanceError> {
+        // If the permissions to change are exclusively voting related,
+        // ManagePrincipals or ManageVotingPermission is sufficient.
+        // Otherwise, only ManagePrincipals is sufficient.
+        let sufficient_permissions = if permissions_to_change.is_exclusively_voting_related() {
+            vec![
+                NeuronPermissionType::ManagePrincipals,
+                NeuronPermissionType::ManageVotingPermission,
+            ]
+        } else {
+            vec![NeuronPermissionType::ManagePrincipals]
+        };
+
+        // The caller is authorized if they have any of the sufficient permissions
+        let caller_authorized = sufficient_permissions
             .iter()
-            .find(|neuron_permission| neuron_permission.principal == Some(*principal_id));
+            .any(|sufficient_permission| self.is_authorized(caller, *sufficient_permission));
 
-        if let Some(neuron_permission) = found_neuron_permission {
-            // Check that the found permissions contains each of the requested permissions
-            for permission in &permissions.permissions {
-                if !neuron_permission.permission_type.contains(permission) {
-                    return false;
-                }
-            }
-
-            return true;
+        if caller_authorized {
+            Ok(())
+        } else {
+            let caller_permissions = self.permissions_for_principal(caller);
+            Err(GovernanceError::new_with_message(ErrorType::NotAuthorized,
+            format!(
+                "Caller '{caller:?}' is not authorized to modify permissions {permissions_to_change} for neuron '{}' as it does not have any of {sufficient_permissions:?}. (Caller's permissions are {caller_permissions})",
+                self.id.as_ref().expect("Neuron must have a NeuronId"),
+            )))
         }
-
-        false
     }
 
     /// Returns the voting power of the neuron.
@@ -671,6 +687,19 @@ impl Neuron {
                 self.created_timestamp_seconds + vesting_period_seconds >= now
             })
             .unwrap_or_default()
+    }
+
+    // Returns the permissions that a given principal has for this neuron.
+    pub fn permissions_for_principal(&self, principal: &PrincipalId) -> NeuronPermissionList {
+        NeuronPermissionList {
+            permissions: self
+                .permissions
+                .iter()
+                .filter(|permission| permission.principal == Some(*principal))
+                .flat_map(|permissions| &permissions.permission_type)
+                .cloned()
+                .collect(),
+        }
     }
 }
 

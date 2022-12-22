@@ -3,7 +3,7 @@ use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::NervousSystemError;
+use ic_nervous_system_common::{NervousSystemError, E8};
 use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
     ledger::ICRC1Ledger,
@@ -11,20 +11,22 @@ use ic_sns_governance::{
         get_neuron_response,
         governance::{Mode, SnsMetadata},
         manage_neuron,
-        manage_neuron::MergeMaturity,
+        manage_neuron::{AddNeuronPermissions, MergeMaturity, RemoveNeuronPermissions},
         manage_neuron_response,
-        manage_neuron_response::MergeMaturityResponse,
+        manage_neuron_response::{
+            AddNeuronPermissionsResponse, MergeMaturityResponse, RemoveNeuronPermissionsResponse,
+        },
         neuron::{DissolveState, Followees},
         GetNeuron, Governance as GovernanceProto, GovernanceError, ManageNeuron,
         ManageNeuronResponse, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-        NeuronPermissionList,
+        NeuronPermissionList, NeuronPermissionType,
     },
     types::{Environment, HeapGrowthPotential},
 };
 use maplit::btreemap;
 use rand::{rngs::StdRng, RngCore, SeedableRng};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     sync::{Arc, Mutex},
 };
@@ -597,6 +599,96 @@ impl GovernanceCanisterFixture {
             .unwrap()
     }
 
+    pub fn add_neuron_permissions(
+        &mut self,
+        target_neuron: &NeuronId,
+        target_principal: PrincipalId,
+        permissions_to_add: NeuronPermissionList,
+        caller: PrincipalId,
+    ) -> Result<AddNeuronPermissionsResponse, GovernanceError> {
+        let response = self.manage_neuron(
+            target_neuron,
+            manage_neuron::Command::AddNeuronPermissions(AddNeuronPermissions {
+                principal_id: Some(target_principal),
+                permissions_to_add: Some(permissions_to_add),
+            }),
+            &caller,
+        );
+        match response.command {
+            Some(manage_neuron_response::Command::AddNeuronPermission(a)) => Ok(a),
+            Some(manage_neuron_response::Command::Error(e)) => Err(e),
+            e => panic!("Unexpected response: {e:#?}"),
+        }
+    }
+
+    pub fn remove_neuron_permissions(
+        &mut self,
+        target_neuron: &NeuronId,
+        target_principal: PrincipalId,
+        permissions_to_add: NeuronPermissionList,
+        caller: PrincipalId,
+    ) -> Result<RemoveNeuronPermissionsResponse, GovernanceError> {
+        let response = self.manage_neuron(
+            target_neuron,
+            manage_neuron::Command::RemoveNeuronPermissions(RemoveNeuronPermissions {
+                principal_id: Some(target_principal),
+                permissions_to_remove: Some(permissions_to_add),
+            }),
+            &caller,
+        );
+
+        match response.command {
+            Some(manage_neuron_response::Command::RemoveNeuronPermission(r)) => Ok(r),
+            Some(manage_neuron_response::Command::Error(e)) => Err(e),
+            e => panic!("Unexpected response: {e:#?}"),
+        }
+    }
+
+    pub fn get_neuron_permissions(&mut self, target_neuron: NeuronId) -> Vec<NeuronPermission> {
+        self.governance
+            .get_neuron(GetNeuron {
+                neuron_id: Some(target_neuron),
+            })
+            .result
+            .unwrap()
+            .unwrap()
+            .permissions
+    }
+
+    #[track_caller]
+    pub fn assert_principal_has_permissions_for_neuron(
+        &mut self,
+        target_neuron: &NeuronId,
+        target_principal: PrincipalId,
+        expected_permissions: NeuronPermissionList,
+    ) {
+        let actual_permissions = self.get_neuron_permissions(target_neuron.clone());
+        // Convert expected_permissions and actual_permissions to BTreeSets
+        // so that we can compare them without worrying about order.
+        let expected_permissions: BTreeSet<NeuronPermissionType> = NeuronPermissionList {
+            permissions: expected_permissions
+                .permissions
+                .into_iter()
+                .collect::<Vec<_>>(),
+        }
+        .try_into()
+        .unwrap();
+        let actual_permissions: BTreeSet<NeuronPermissionType> = NeuronPermissionList {
+            permissions: actual_permissions
+                .into_iter()
+                .filter(|p| p.principal.unwrap() == target_principal)
+                .flat_map(|p| p.permission_type.into_iter())
+                .collect::<Vec<_>>(),
+        }
+        .try_into()
+        .unwrap();
+
+        assert_eq!(
+            expected_permissions, actual_permissions,
+            "Expected {expected_permissions:?}, found {actual_permissions:?}"
+        );
+    }
+
     pub fn now(&self) -> u64 {
         self.environment_fixture.now()
     }
@@ -846,6 +938,24 @@ impl GovernanceCanisterFixtureBuilder {
         parameters.neuron_grantable_permissions = Some(neuron_permission_list);
         self.governance.parameters = Some(parameters);
         self
+    }
+
+    pub fn add_neuron_with_permissions(
+        self,
+        permissions: &[(PrincipalId, NeuronPermissionList)],
+        neuron_id: NeuronId,
+    ) -> Self {
+        // Starting with a neuron with no permissions assigned, call
+        // `neuron.add_neuron_permission` for each permission in `permissions`.
+        let neuron = permissions.iter().cloned().fold(
+            NeuronBuilder::new_without_owner(neuron_id, E8),
+            |neuron, (principal_id, permissions)| {
+                neuron.add_neuron_permission(permissions.for_principal(principal_id))
+            },
+        );
+
+        // Set up the canister fixture with our neuron.
+        self.add_neuron(neuron)
     }
 }
 

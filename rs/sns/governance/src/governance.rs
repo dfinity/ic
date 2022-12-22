@@ -128,6 +128,38 @@ impl NeuronPermissionType {
     }
 }
 
+impl NeuronPermissionList {
+    /// Returns a NeuronPermissionList with all permissions.
+    pub fn all() -> Self {
+        NeuronPermissionList {
+            permissions: NeuronPermissionType::all(),
+        }
+    }
+
+    /// Returns a NeuronPermissionList with all permissions.
+    pub fn empty() -> Self {
+        NeuronPermissionList {
+            permissions: vec![],
+        }
+    }
+
+    // Returns a NeuronPermission with `self`'s permissions assigned to the given principal.
+    pub fn for_principal(self, principal: PrincipalId) -> NeuronPermission {
+        NeuronPermission::new(&principal, self.permissions)
+    }
+
+    // Returns true if no element in the permission list is not voting-related
+    pub fn is_exclusively_voting_related(&self) -> bool {
+        let permissions_related_to_voting = Neuron::PERMISSIONS_RELATED_TO_VOTING
+            .iter()
+            .map(|p| *p as i32)
+            .collect::<Vec<_>>();
+        self.permissions
+            .iter()
+            .all(|p| permissions_related_to_voting.contains(p))
+    }
+}
+
 impl NeuronPermission {
     /// Grants all permissions to the given principal.
     pub fn all(principal: &PrincipalId) -> NeuronPermission {
@@ -3317,12 +3349,13 @@ impl Governance {
     ///
     /// If the PrincipalId doesn't have existing permissions, a new entry will be added for it
     /// with the provided permissions. If a principalId already has permissions for this neuron,
-    /// the new permissions will be added to the existing permissions.
+    /// the new permissions will be added to the existing set.
     ///
     /// Preconditions:
     /// - the caller has the permission to change a neuron's access control
-    ///   (permission `ManagePrincipals`), or already has the permissions that
-    ///   are being added.
+    ///   (permission `ManagePrincipals`), or the caller has the permission to
+    ///   manage voting-related permissions (permission `ManageVotingPermissions`)
+    ///   and the permissions being added are voting-related.
     /// - the permissions provided in the request are a subset of neuron_grantable_permissions
     ///   as defined in the nervous system parameters. To see what the current parameters are
     ///   for an SNS see `get_nervous_system_parameters`.
@@ -3355,12 +3388,8 @@ impl Governance {
             ));
         }
 
-        // Check if the caller has the same permissions that the request is requesting to add.
-        // If so, allow the caller to add the permissions to the principal_id, which the security
-        // policy allows. If not, check if the caller can manage other principals
-        if !neuron.is_authorized_with_permissions(caller, permissions_to_add) {
-            neuron.check_authorized(caller, NeuronPermissionType::ManagePrincipals)?;
-        }
+        neuron
+            .check_principal_authorized_to_change_permissions(caller, permissions_to_add.clone())?;
 
         self.nervous_system_parameters()
             .check_permissions_are_grantable(permissions_to_add)?;
@@ -3418,8 +3447,9 @@ impl Governance {
     ///
     /// Preconditions:
     /// - the caller has the permission to change a neuron's access control
-    ///   (permission `ManagePrincipals`), or already has the permissions that
-    ///   are being removed.
+    ///   (permission `ManagePrincipals`), or the caller has the permission to
+    ///   manage voting-related permissions (permission `ManageVotingPermissions`)
+    ///   and the permissions being removed are voting-related.
     /// - the PrincipalId exists within the neuron's permissions
     /// - the PrincipalId's NeuronPermission contains the permission_types that are to be removed
     fn remove_neuron_permissions(
@@ -3448,13 +3478,6 @@ impl Governance {
             ));
         }
 
-        // Check if the caller has the same permissions that the request is requesting to remove.
-        // If so, allow the caller to remove the permissions of the principal_id, which the security
-        // policy allows. If not, check if the caller can manage other principals
-        if !neuron.is_authorized_with_permissions(caller, permissions_to_remove) {
-            neuron.check_authorized(caller, NeuronPermissionType::ManagePrincipals)?;
-        }
-
         let principal_id = remove_neuron_permissions
             .principal_id
             .ok_or_else(|| {
@@ -3463,6 +3486,11 @@ impl Governance {
                     "RemoveNeuronPermissions command must provide a PrincipalId to remove permissions from",
                 )
             })?;
+
+        neuron.check_principal_authorized_to_change_permissions(
+            caller,
+            permissions_to_remove.clone(),
+        )?;
 
         // Re-borrow the neuron mutably to update now that the preconditions have been met
         let principal_id_was_removed = self

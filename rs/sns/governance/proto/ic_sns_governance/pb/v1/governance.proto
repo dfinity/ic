@@ -45,6 +45,10 @@ enum NeuronPermissionType {
 
   // The principal has permission to stake the neuron's maturity.
   NEURON_PERMISSION_TYPE_STAKE_MATURITY = 9;
+
+  // The principal has permission to grant/revoke permission to vote and submit 
+  // proposals on behalf of the neuron to other principals.
+  NEURON_PERMISSION_TYPE_MANAGE_VOTING_PERMISSION = 10;
 }
 
 // A principal with a particular set of permissions over a neuron.
@@ -1384,7 +1388,7 @@ message ManageNeuron {
   // permissions must be a subset of `NervousSystemParameters::neuron_grantable_permissions`.
   // If the PrincipalId doesn't have existing permissions, a new entry will be added for it
   // with the provided permissions. If a principalId already has permissions for the neuron,
-  // the new permissions will be added to the existing permissions.
+  // the new permissions will be added to the existing set.
   message AddNeuronPermissions {
     // The PrincipalId that the permissions will be granted to.
     ic_base_types.pb.v1.PrincipalId principal_id = 1;
