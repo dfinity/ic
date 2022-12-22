@@ -21,7 +21,6 @@ libc = "0.2.91"
 libflate = "1.1.2"
 memory_tracker = { path = "../memory_tracker" }
 nix = "0.23.0"
-parity-wasm = { version = "0.42.2", features = [ "std", "multi_value", "bulk" ] }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11"

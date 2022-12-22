@@ -3,7 +3,7 @@ use std::{
     time::Instant,
 };
 
-use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
+use ic_config::embedders::Config as EmbeddersConfig;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
     canister_state::{execution_state::WasmMetadata, WASM_PAGE_SIZE_IN_BYTES},
@@ -17,13 +17,11 @@ use wasmtime::Module;
 
 use crate::{serialized_module::SerializedModule, CompilationResult, WasmtimeEmbedder};
 
+use self::{instrumentation::instrument, validation::validate_wasm_binary};
+
 pub mod decoding;
-pub mod errors;
 pub mod instrumentation;
-pub mod new_instrumentation;
-pub mod new_validation;
 pub mod validation;
-mod wasm_module_builder;
 pub mod wasm_transform;
 
 #[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -177,23 +175,12 @@ fn validate_and_instrument(
     wasm: &BinaryEncodedWasm,
     config: &EmbeddersConfig,
 ) -> HypervisorResult<(WasmValidationDetails, InstrumentationOutput)> {
-    let (wasm_validation_details, instrumentation_output) =
-        if config.feature_flags.new_wasm_transform_lib == FlagStatus::Enabled {
-            let (validation, module) = new_validation::validate_wasm_binary(wasm, config)?;
-            (
-                validation,
-                new_instrumentation::instrument(
-                    module,
-                    config.cost_to_compile_wasm_instruction,
-                    config.feature_flags.write_barrier,
-                )?,
-            )
-        } else {
-            (
-                validation::validate_wasm_binary(wasm, config)?,
-                instrumentation::instrument(wasm, config.cost_to_compile_wasm_instruction)?,
-            )
-        };
+    let (wasm_validation_details, module) = validate_wasm_binary(wasm, config)?;
+    let instrumentation_output = instrument(
+        module,
+        config.cost_to_compile_wasm_instruction,
+        config.feature_flags.write_barrier,
+    )?;
     Ok((wasm_validation_details, instrumentation_output))
 }
 
