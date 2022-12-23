@@ -6,7 +6,7 @@ import "registry/subnet/v1/subnet.proto";
 import "types/v1/types.proto";
 import "state/queues/v1/queues.proto";
 
-message EcdsaSummaryPayload {
+message EcdsaPayload {
   repeated CompletedSignature signature_agreements = 1;
   repeated OngoingSignature ongoing_signatures = 2;
   repeated AvailableQuadruple available_quadruples = 3;
@@ -15,7 +15,7 @@ message EcdsaSummaryPayload {
   repeated registry.subnet.v1.IDkgTranscript idkg_transcripts = 6;
   repeated OngoingXnetReshare ongoing_xnet_reshares = 7;
   repeated XnetReshareAgreement xnet_reshare_agreements = 8;
-  UnmaskedTranscript current_key_transcript = 9;
+  UnmaskedTranscriptWithAttributes current_key_transcript = 9;
   uint64 next_unused_quadruple_id = 10;
   KeyTranscriptCreation next_key_in_creation = 11;
   registry.crypto.v1.EcdsaKeyId key_id = 12;
@@ -68,10 +68,21 @@ message UnmaskedTranscript {
   TranscriptRef transcript_ref = 1;
 }
 
+message UnmaskedTranscriptWithAttributes {
+  TranscriptRef transcript_ref = 1;
+  IDkgTranscriptAttributes attributes = 2;
+}
+
 message IDkgTranscriptOperationRef {
   int32 op_type = 1;
   MaskedTranscript masked = 2;
   UnmaskedTranscript unmasked = 3;
+}
+
+message IDkgTranscriptAttributes {
+  repeated types.v1.NodeId receivers = 1;
+  int32 algorithm_id = 2;
+  uint64 registry_version = 3;
 }
 
 message IDkgTranscriptParamsRef {

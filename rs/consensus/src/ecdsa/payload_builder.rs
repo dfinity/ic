@@ -1706,9 +1706,11 @@ mod tests {
         generate_key_transcript, run_idkg_and_create_and_verify_transcript,
         CanisterThresholdSigTestEnvironment,
     };
+    use ic_interfaces_registry::RegistryValue;
     use ic_logger::replica_logger::no_op_logger;
     use ic_protobuf::types::v1 as pb;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
+    use ic_test_utilities::consensus::fake::{Fake, FakeContentSigner};
     use ic_test_utilities::{
         crypto::{dummy_initial_idkg_dealing_for_tests, mock_dealings},
         mock_time,
@@ -1721,10 +1723,13 @@ mod tests {
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_types::batch::BatchPayload;
     use ic_types::consensus::dkg::{Dealings, Summary};
-    use ic_types::consensus::{BlockPayload, DataPayload, HashedBlock, Payload, SummaryPayload};
+    use ic_types::consensus::{
+        BlockPayload, BlockProposal, DataPayload, HashedBlock, Payload, Rank, SummaryPayload,
+    };
     use ic_types::crypto::canister_threshold_sig::{
         idkg::IDkgTranscriptId, ThresholdEcdsaCombinedSignature,
     };
+    use ic_types::crypto::{CryptoHash, CryptoHashOf};
     use ic_types::{messages::CallbackId, Height, RegistryVersion};
     use std::collections::BTreeSet;
     use std::convert::TryInto;
@@ -3547,7 +3552,9 @@ mod tests {
                     reshare_refs,
                 ],
             );
-            add_block(summary_block, summary_height.get(), &mut pool);
+            let b = add_block(summary_block, summary_height.get(), &mut pool);
+            assert_proposal_conversion(b);
+
             let sig_1 = inputs_1.sig_inputs_ref;
             let quad_1 = inputs_2.sig_inputs_ref.presig_quadruple_ref;
 
@@ -3570,11 +3577,14 @@ mod tests {
                     reshare_refs,
                 ],
             );
-            add_block(
+
+            let b = add_block(
                 payload_block_1,
                 payload_height_1.get() - summary_height.get(),
                 &mut pool,
             );
+            assert_proposal_conversion(b);
+
             let sig_2 = inputs_1.sig_inputs_ref;
             let quad_2 = inputs_2.sig_inputs_ref.presig_quadruple_ref;
 
@@ -3669,6 +3679,8 @@ mod tests {
                 parent_block_height.get() - payload_height_1.get(),
                 &mut pool,
             );
+            assert_proposal_conversion(parent_block.clone());
+
             let pool_reader = PoolReader::new(&pool);
 
             // Add a summary block after the payload block and update the refs
@@ -3731,9 +3743,26 @@ mod tests {
             assert!(reported > 0);
             assert!(unreported > 0);
 
+            let pl = BlockPayload::Summary(SummaryPayload {
+                dkg: Summary::fake(),
+                ecdsa: Some(summary.clone()),
+            });
+            let b = Block::new(
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+                Payload::new(ic_types::crypto::crypto_hash, pl),
+                Height::from(123),
+                Rank(456),
+                ValidationContext {
+                    registry_version: RegistryVersion::from(99),
+                    certified_height: Height::from(42),
+                    time: mock_time(),
+                },
+            );
+            assert_proposal_conversion(b);
+
             // Convert to proto format and back
             let new_summary_height = Height::new(parent_block_height.get() + 1234);
-            let mut summary_proto: pb::EcdsaSummaryPayload = (&summary).into();
+            let mut summary_proto: pb::EcdsaPayload = (&summary).into();
             let summary_from_proto = (&summary_proto, new_summary_height).try_into().unwrap();
             summary.update_refs(new_summary_height); // expected
             assert_eq!(summary, summary_from_proto);
@@ -3758,6 +3787,16 @@ mod tests {
                 .get(&[4; 32])
                 .is_some());
         })
+    }
+
+    fn assert_proposal_conversion(b: Block) {
+        let artifact = BlockProposal::fake(b, node_test_id(333));
+        let mut buf = Vec::new();
+        pb::BlockProposal::from(&artifact).encode(&mut buf).unwrap();
+        assert_eq!(
+            artifact,
+            BlockProposal::try_from(pb::BlockProposal::decode(buf.as_slice()).unwrap()).unwrap()
+        );
     }
 
     #[test]

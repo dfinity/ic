@@ -235,7 +235,7 @@ pub struct InitialDkgAttemptCount {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct EcdsaSummaryPayload {
+pub struct EcdsaPayload {
     #[prost(message, repeated, tag = "1")]
     pub signature_agreements: ::prost::alloc::vec::Vec<CompletedSignature>,
     #[prost(message, repeated, tag = "2")]
@@ -255,7 +255,7 @@ pub struct EcdsaSummaryPayload {
     #[prost(message, repeated, tag = "8")]
     pub xnet_reshare_agreements: ::prost::alloc::vec::Vec<XnetReshareAgreement>,
     #[prost(message, optional, tag = "9")]
-    pub current_key_transcript: ::core::option::Option<UnmaskedTranscript>,
+    pub current_key_transcript: ::core::option::Option<UnmaskedTranscriptWithAttributes>,
     #[prost(uint64, tag = "10")]
     pub next_unused_quadruple_id: u64,
     #[prost(message, optional, tag = "11")]
@@ -345,6 +345,15 @@ pub struct UnmaskedTranscript {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct UnmaskedTranscriptWithAttributes {
+    #[prost(message, optional, tag = "1")]
+    pub transcript_ref: ::core::option::Option<TranscriptRef>,
+    #[prost(message, optional, tag = "2")]
+    pub attributes: ::core::option::Option<IDkgTranscriptAttributes>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct IDkgTranscriptOperationRef {
     #[prost(int32, tag = "1")]
     pub op_type: i32,
@@ -352,6 +361,17 @@ pub struct IDkgTranscriptOperationRef {
     pub masked: ::core::option::Option<MaskedTranscript>,
     #[prost(message, optional, tag = "3")]
     pub unmasked: ::core::option::Option<UnmaskedTranscript>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct IDkgTranscriptAttributes {
+    #[prost(message, repeated, tag = "1")]
+    pub receivers: ::prost::alloc::vec::Vec<NodeId>,
+    #[prost(int32, tag = "2")]
+    pub algorithm_id: i32,
+    #[prost(uint64, tag = "3")]
+    pub registry_version: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -586,9 +606,8 @@ pub struct Block {
     pub xnet_payload: ::core::option::Option<XNetPayload>,
     #[prost(message, optional, tag = "12")]
     pub self_validating_payload: ::core::option::Option<SelfValidatingPayload>,
-    /// Only present in summary blocks
     #[prost(message, optional, tag = "13")]
-    pub ecdsa_summary: ::core::option::Option<EcdsaSummaryPayload>,
+    pub ecdsa_payload: ::core::option::Option<EcdsaPayload>,
     #[prost(message, optional, tag = "14")]
     pub canister_http_payload: ::core::option::Option<CanisterHttpPayload>,
     #[prost(bytes = "vec", tag = "11")]

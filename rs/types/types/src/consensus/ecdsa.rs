@@ -262,6 +262,34 @@ impl EcdsaPayload {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct UnmaskedTranscriptWithAttributes(IDkgTranscriptAttributes, UnmaskedTranscript);
 
+impl From<&UnmaskedTranscriptWithAttributes> for pb::UnmaskedTranscriptWithAttributes {
+    fn from(transcript_with_attrs: &UnmaskedTranscriptWithAttributes) -> Self {
+        pb::UnmaskedTranscriptWithAttributes {
+            transcript_ref: Some(transcript_with_attrs.1.as_ref().into()),
+            attributes: Some((&transcript_with_attrs.0).into()),
+        }
+    }
+}
+
+impl TryFrom<&pb::UnmaskedTranscriptWithAttributes> for UnmaskedTranscriptWithAttributes {
+    type Error = String;
+    fn try_from(
+        transcript_with_attrs: &pb::UnmaskedTranscriptWithAttributes,
+    ) -> Result<Self, Self::Error> {
+        let attributes = transcript_with_attrs
+            .attributes
+            .as_ref()
+            .ok_or("pb::UnmaskedTranscriptWithAttributes missing attributes")?;
+        let unmasked = pb::UnmaskedTranscript {
+            transcript_ref: transcript_with_attrs.transcript_ref.clone(),
+        };
+        Ok(UnmaskedTranscriptWithAttributes::new(
+            attributes.try_into()?,
+            (&unmasked).try_into()?,
+        ))
+    }
+}
+
 impl UnmaskedTranscriptWithAttributes {
     pub fn new(attr: IDkgTranscriptAttributes, transcript: UnmaskedTranscript) -> Self {
         Self(attr, transcript)
@@ -1077,11 +1105,11 @@ pub type Summary = Option<EcdsaPayload>;
 
 pub type Payload = Option<EcdsaPayload>;
 
-impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
-    fn from(summary: &EcdsaPayload) -> Self {
+impl From<&EcdsaPayload> for pb::EcdsaPayload {
+    fn from(payload: &EcdsaPayload) -> Self {
         // signature_agreements
         let mut signature_agreements = Vec::new();
-        for (pseudo_random_id, completed) in &summary.signature_agreements {
+        for (pseudo_random_id, completed) in &payload.signature_agreements {
             let unreported = match completed {
                 CompletedSignature::Unreported(response) => Some(response.into()),
                 CompletedSignature::ReportedToExecution => None,
@@ -1095,7 +1123,7 @@ impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
 
         // ongoing_signatures
         let mut ongoing_signatures = Vec::new();
-        for (request_id, ongoing) in &summary.ongoing_signatures {
+        for (request_id, ongoing) in &payload.ongoing_signatures {
             ongoing_signatures.push(pb::OngoingSignature {
                 request_id: Some((*request_id).into()),
                 sig_inputs: Some(ongoing.into()),
@@ -1104,7 +1132,7 @@ impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
 
         // available_quadruples
         let mut available_quadruples = Vec::new();
-        for (quadruple_id, quadruple) in &summary.available_quadruples {
+        for (quadruple_id, quadruple) in &payload.available_quadruples {
             available_quadruples.push(pb::AvailableQuadruple {
                 quadruple_id: quadruple_id.0,
                 quadruple: Some(quadruple.into()),
@@ -1113,7 +1141,7 @@ impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
 
         // quadruples_in_creation
         let mut quadruples_in_creation = Vec::new();
-        for (quadruple_id, quadruple) in &summary.quadruples_in_creation {
+        for (quadruple_id, quadruple) in &payload.quadruples_in_creation {
             quadruples_in_creation.push(pb::QuadrupleInProgress {
                 quadruple_id: quadruple_id.0,
                 quadruple: Some(quadruple.into()),
@@ -1121,19 +1149,19 @@ impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
         }
 
         let next_unused_transcript_id: Option<subnet_pb::IDkgTranscriptId> =
-            Some((&summary.uid_generator.next_unused_transcript_id).into());
+            Some((&payload.uid_generator.next_unused_transcript_id).into());
 
-        let next_unused_quadruple_id = summary.uid_generator.next_unused_quadruple_id.0;
+        let next_unused_quadruple_id = payload.uid_generator.next_unused_quadruple_id.0;
 
         // idkg_transcripts
         let mut idkg_transcripts = Vec::new();
-        for transcript in summary.idkg_transcripts.values() {
+        for transcript in payload.idkg_transcripts.values() {
             idkg_transcripts.push(transcript.into());
         }
 
         // ongoing_xnet_reshares
         let mut ongoing_xnet_reshares = Vec::new();
-        for (request, transcript) in &summary.ongoing_xnet_reshares {
+        for (request, transcript) in &payload.ongoing_xnet_reshares {
             ongoing_xnet_reshares.push(pb::OngoingXnetReshare {
                 request: Some(request.into()),
                 transcript: Some(transcript.into()),
@@ -1142,7 +1170,7 @@ impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
 
         // xnet_reshare_agreements
         let mut xnet_reshare_agreements = Vec::new();
-        for (request, completed) in &summary.xnet_reshare_agreements {
+        for (request, completed) in &payload.xnet_reshare_agreements {
             let initial_dealings = match completed {
                 CompletedReshareRequest::Unreported(initial_dealings) => {
                     Some(initial_dealings.into())
@@ -1156,13 +1184,13 @@ impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
             });
         }
 
-        let current_key_transcript = summary
+        let current_key_transcript = payload
             .key_transcript
             .current
             .as_ref()
-            .map(|transcript| (&transcript.1).into());
-        let next_key_in_creation = Some((&summary.key_transcript.next_in_creation).into());
-        let key_id = Some((&summary.key_transcript.key_id).into());
+            .map(|transcript| transcript.into());
+        let next_key_in_creation = Some((&payload.key_transcript.next_in_creation).into());
+        let key_id = Some((&payload.key_transcript.key_id).into());
 
         Self {
             signature_agreements,
@@ -1181,26 +1209,33 @@ impl From<&EcdsaPayload> for pb::EcdsaSummaryPayload {
     }
 }
 
-impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
+impl TryFrom<(&pb::EcdsaPayload, Height)> for EcdsaPayload {
     type Error = String;
-    fn try_from(
-        (summary, height): (&pb::EcdsaSummaryPayload, Height),
-    ) -> Result<Self, Self::Error> {
+    fn try_from((payload, height): (&pb::EcdsaPayload, Height)) -> Result<Self, Self::Error> {
+        let mut ret = EcdsaPayload::try_from(payload)?;
+        ret.update_refs(height);
+        Ok(ret)
+    }
+}
+
+impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
+    type Error = String;
+    fn try_from(payload: &pb::EcdsaPayload) -> Result<Self, Self::Error> {
         // Key Id must exist
-        let key_id = summary
+        let key_id = payload
             .key_id
             .clone()
-            .expect("pb::EcdsaSummaryPayload:: Missing key id");
+            .expect("pb::EcdsaPayload:: Missing key id");
         let key_id = EcdsaKeyId::try_from(key_id).map_err(|err| format!("{:?}", err))?;
         // signature_agreements
         let mut signature_agreements = BTreeMap::new();
-        for completed_signature in &summary.signature_agreements {
+        for completed_signature in &payload.signature_agreements {
             // NOTE: We still look at the request_id for compatibility reasons,
             // which should be removed from protobuf after upgrading deployment.
             let request_id = completed_signature
                 .request_id
                 .as_ref()
-                .ok_or("pb::EcdsaSummaryPayload:: Missing completed_signature request Id")
+                .ok_or("pb::EcdsaPayload:: Missing completed_signature request Id")
                 .and_then(RequestId::try_from);
             let pseudo_random_id = request_id.map(|x| x.pseudo_random_id).or_else(|_| {
                 if completed_signature.pseudo_random_id.len() != 32 {
@@ -1222,54 +1257,54 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
 
         // ongoing_signatures
         let mut ongoing_signatures = BTreeMap::new();
-        for ongoing_signature in &summary.ongoing_signatures {
+        for ongoing_signature in &payload.ongoing_signatures {
             let request_id = ongoing_signature
                 .request_id
                 .as_ref()
-                .ok_or("pb::EcdsaSummaryPayload:: Missing ongoing_signature request Id")
+                .ok_or("pb::EcdsaPayload:: Missing ongoing_signature request Id")
                 .and_then(RequestId::try_from)?;
             let proto = ongoing_signature
                 .sig_inputs
                 .as_ref()
-                .ok_or("pb::EcdsaSummaryPayload:: Missing sig inputs")?;
+                .ok_or("pb::EcdsaPayload:: Missing sig inputs")?;
             let sig_inputs: ThresholdEcdsaSigInputsRef = proto.try_into()?;
             ongoing_signatures.insert(request_id, sig_inputs);
         }
 
         // available_quadruples
         let mut available_quadruples = BTreeMap::new();
-        for available_quadruple in &summary.available_quadruples {
+        for available_quadruple in &payload.available_quadruples {
             let quadruple_id = QuadrupleId(available_quadruple.quadruple_id);
             let proto = available_quadruple
                 .quadruple
                 .as_ref()
-                .ok_or("pb::EcdsaSummaryPayload:: Missing available_quadruple")?;
+                .ok_or("pb::EcdsaPayload:: Missing available_quadruple")?;
             let quadruple: PreSignatureQuadrupleRef = proto.try_into()?;
             available_quadruples.insert(quadruple_id, quadruple);
         }
 
         // quadruples_in_creation
         let mut quadruples_in_creation = BTreeMap::new();
-        for quadruple_in_creation in &summary.quadruples_in_creation {
+        for quadruple_in_creation in &payload.quadruples_in_creation {
             let quadruple_id = QuadrupleId(quadruple_in_creation.quadruple_id);
             let proto = quadruple_in_creation
                 .quadruple
                 .as_ref()
-                .ok_or("pb::EcdsaSummaryPayload:: Missing quadruple_in_creation Id")?;
+                .ok_or("pb::EcdsaPayload:: Missing quadruple_in_creation Id")?;
             let quadruple: QuadrupleInCreation = proto.try_into()?;
             quadruples_in_creation.insert(quadruple_id, quadruple);
         }
 
-        let next_unused_transcript_id: IDkgTranscriptId = (&summary.next_unused_transcript_id)
+        let next_unused_transcript_id: IDkgTranscriptId = (&payload.next_unused_transcript_id)
             .try_into()
             .map_err(|err| {
                 format!(
-                    "pb::EcdsaSummaryPayload:: Failed to convert next_unused_transcript_id: {:?}",
+                    "pb::EcdsaPayload:: Failed to convert next_unused_transcript_id: {:?}",
                     err
                 )
             })?;
 
-        let next_unused_quadruple_id: QuadrupleId = QuadrupleId(summary.next_unused_quadruple_id);
+        let next_unused_quadruple_id: QuadrupleId = QuadrupleId(payload.next_unused_quadruple_id);
 
         let uid_generator = EcdsaUIDGenerator {
             next_unused_transcript_id,
@@ -1278,12 +1313,9 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
 
         // idkg_transcripts
         let mut idkg_transcripts = BTreeMap::new();
-        for proto in &summary.idkg_transcripts {
+        for proto in &payload.idkg_transcripts {
             let transcript: IDkgTranscript = proto.try_into().map_err(|err| {
-                format!(
-                    "pb::EcdsaSummaryPayload:: Failed to convert transcript: {:?}",
-                    err
-                )
+                format!("pb::EcdsaPayload:: Failed to convert transcript: {:?}", err)
             })?;
             let transcript_id = transcript.transcript_id;
             idkg_transcripts.insert(transcript_id, transcript);
@@ -1291,35 +1323,35 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
 
         // ongoing_xnet_reshares
         let mut ongoing_xnet_reshares = BTreeMap::new();
-        for reshare in &summary.ongoing_xnet_reshares {
+        for reshare in &payload.ongoing_xnet_reshares {
             let proto = reshare
                 .request
                 .as_ref()
-                .ok_or("pb::EcdsaSummaryPayload:: Missing reshare request")?;
+                .ok_or("pb::EcdsaPayload:: Missing reshare request")?;
             let request: EcdsaReshareRequest = proto.try_into()?;
 
             let proto = reshare
                 .transcript
                 .as_ref()
-                .ok_or("pb::EcdsaSummaryPayload:: Missing reshare transcript")?;
+                .ok_or("pb::EcdsaPayload:: Missing reshare transcript")?;
             let transcript: ReshareOfUnmaskedParams = proto.try_into()?;
             ongoing_xnet_reshares.insert(request, transcript);
         }
 
         // xnet_reshare_agreements
         let mut xnet_reshare_agreements = BTreeMap::new();
-        for agreement in &summary.xnet_reshare_agreements {
+        for agreement in &payload.xnet_reshare_agreements {
             let proto = agreement
                 .request
                 .as_ref()
-                .ok_or("pb::EcdsaSummaryPayload:: Missing agreement reshare request")?;
+                .ok_or("pb::EcdsaPayload:: Missing agreement reshare request")?;
             let request: EcdsaReshareRequest = proto.try_into()?;
 
             let completed = match &agreement.initial_dealings {
                 Some(response) => {
                     let unreported = response.clone().try_into().map_err(|err| {
                         format!(
-                            "pb::EcdsaSummaryPayload:: failed to convert initial dealing: {:?}",
+                            "pb::EcdsaPayload:: failed to convert initial dealing: {:?}",
                             err
                         )
                     })?;
@@ -1332,29 +1364,37 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
 
         // Key transcript state
         let current_key_transcript: Option<UnmaskedTranscriptWithAttributes> =
-            if let Some(proto) = &summary.current_key_transcript {
-                let unmasked = UnmaskedTranscript::try_from(proto)?;
-                let transcript_id = unmasked.as_ref().transcript_id;
-                let transcript = idkg_transcripts.get(&transcript_id).ok_or_else(|| {
-                    format!(
-                        "Key transcript {:?} does not exist in summary",
-                        transcript_id
-                    )
-                })?;
-                Some(UnmaskedTranscriptWithAttributes(
-                    transcript.to_attributes(),
-                    unmasked,
-                ))
+            if let Some(proto) = &payload.current_key_transcript {
+                let unmasked = match UnmaskedTranscriptWithAttributes::try_from(proto) {
+                    Ok(unmasked) => unmasked,
+                    Err(_) => {
+                        // For compatibility reason, we will try look up in idkg_transcripts.
+                        // This part can be removed once compatibility is no longer an issue.
+                        // The error here should be propagated instead.
+                        let unmasked = UnmaskedTranscript::try_from(&pb::UnmaskedTranscript {
+                            transcript_ref: proto.transcript_ref.clone(),
+                        })?;
+                        let transcript_id = unmasked.as_ref().transcript_id;
+                        let transcript = idkg_transcripts.get(&transcript_id).ok_or_else(|| {
+                            format!(
+                                "Key transcript {:?} does not exist in summary",
+                                transcript_id
+                            )
+                        })?;
+                        UnmaskedTranscriptWithAttributes(transcript.to_attributes(), unmasked)
+                    }
+                };
+                Some(unmasked)
             } else {
                 None
             };
-        let proto = summary
+        let proto = payload
             .next_key_in_creation
             .as_ref()
-            .ok_or("pb::EcdsaSummaryPayload:: Missing next_key_in_creation")?;
+            .ok_or("pb::EcdsaPayload:: Missing next_key_in_creation")?;
         let next_key_in_creation: KeyTranscriptCreation = proto.try_into()?;
 
-        let mut ret = Self {
+        Ok(Self {
             signature_agreements,
             ongoing_signatures,
             available_quadruples,
@@ -1368,9 +1408,7 @@ impl TryFrom<(&pb::EcdsaSummaryPayload, Height)> for EcdsaPayload {
                 next_in_creation: next_key_in_creation,
                 key_id,
             },
-        };
-        ret.update_refs(height);
-        Ok(ret)
+        })
     }
 }
 
