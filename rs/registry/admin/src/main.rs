@@ -4540,6 +4540,12 @@ async fn propose_external_proposal_from_command<
     };
 }
 
+#[derive(Serialize)]
+struct FirewallCommandResult {
+    entries: Vec<FirewallRule>,
+    hash: String,
+}
+
 async fn test_add_firewall_rules(
     cmd: ProposeToAddFirewallRulesCmd,
     registry_canister: &RegistryCanister,
@@ -4576,9 +4582,15 @@ async fn test_add_firewall_rules(
 
     add_firewall_rules_compute_entries(&mut entries, &payload);
 
-    println!("{:?}", serde_json::to_string(&entries));
+    let result = FirewallCommandResult {
+        entries: entries.clone(),
+        hash: compute_firewall_ruleset_hash(&entries),
+    };
 
-    println!("\nSHA-256: {:?}", compute_firewall_ruleset_hash(&entries));
+    println!(
+        "{:?}",
+        serde_json::to_string(&result).expect("Failed to serialize rules")
+    );
 }
 
 async fn test_remove_firewall_rules(
@@ -4605,9 +4617,15 @@ async fn test_remove_firewall_rules(
 
     remove_firewall_rules_compute_entries(&mut entries, &payload);
 
-    println!("{:?}", serde_json::to_string(&entries));
+    let result = FirewallCommandResult {
+        entries: entries.clone(),
+        hash: compute_firewall_ruleset_hash(&entries),
+    };
 
-    println!("\nSHA-256: {:?}", compute_firewall_ruleset_hash(&entries));
+    println!(
+        "{:?}",
+        serde_json::to_string(&result).expect("Failed to serialize rules")
+    );
 }
 
 async fn test_update_firewall_rules(
@@ -4646,14 +4664,23 @@ async fn test_update_firewall_rules(
 
     update_firewall_rules_compute_entries(&mut entries, &payload);
 
-    println!("{:?}", serde_json::to_string(&entries));
+    let result = FirewallCommandResult {
+        entries: entries.clone(),
+        hash: compute_firewall_ruleset_hash(&entries),
+    };
 
-    println!("\nSHA-256: {:?}", compute_firewall_ruleset_hash(&entries));
+    println!(
+        "{:?}",
+        serde_json::to_string(&result).expect("Failed to serialize rules")
+    );
 }
 
 async fn get_firewall_rules(cmd: GetFirewallRulesCmd, registry_canister: &RegistryCanister) {
     let rules = get_firewall_rules_from_registry(registry_canister, &cmd.scope).await;
-    println!("{:?}", serde_json::to_string(&rules));
+    println!(
+        "{:?}",
+        serde_json::to_string(&rules).expect("Failed to serialize rules")
+    );
 }
 
 async fn get_firewall_rules_for_node(
@@ -4702,7 +4729,10 @@ async fn get_firewall_rules_for_node(
         &mut get_firewall_rules_from_registry(registry_canister, &FirewallRulesScope::Global).await,
     );
 
-    println!("{:?}", serde_json::to_string(&rules));
+    println!(
+        "{:?}",
+        serde_json::to_string(&rules).expect("Failed to serialize rules")
+    );
 }
 
 fn get_firewall_ruleset_hash(cmd: GetFirewallRulesetHashCmd) {
