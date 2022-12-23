@@ -12,6 +12,7 @@ use ic_types::{
     p2p::GossipAdvert,
 };
 use std::convert::{TryFrom, TryInto};
+use strum_macros::IntoStaticStr;
 
 /// A request for an artifact sent to the peer.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -41,7 +42,7 @@ pub(crate) struct GossipChunk {
 /// This is the message exchanged on the wire with other peers.  This
 /// enum is private to the gossip layer because lower layers like
 /// *Transport* do not need to interpret the content.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, IntoStaticStr)]
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum GossipMessage {
     /// The advert variant.

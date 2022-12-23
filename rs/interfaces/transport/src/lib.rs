@@ -3,6 +3,7 @@ use ic_base_types::{NodeId, RegistryVersion};
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{convert::Infallible, fmt::Debug, net::SocketAddr};
+use strum_macros::IntoStaticStr;
 use tower::util::BoxCloneService;
 
 /// Transport component API
@@ -101,7 +102,7 @@ pub struct TransportMessage {
 }
 
 /// Error codes returned by transport manager functions.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, IntoStaticStr)]
 pub enum TransportError {
     /// E.g. the the peer connection already is initiated,
     /// the event handler is already set, etc.

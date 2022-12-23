@@ -39,6 +39,9 @@ impl GossipMetrics {
 /// The download management metrics.
 #[derive(Debug)]
 pub struct DownloadManagementMetrics {
+    // Total number of calls to Transport::send.
+    pub transport_send_messages: IntCounterVec,
+
     /// The times required to execute the given operation in milliseconds.
     pub op_duration: HistogramVec,
     // Artifact fields.
@@ -54,14 +57,6 @@ pub struct DownloadManagementMetrics {
     pub artifact_download_time: Histogram,
 
     // Chunking fields.
-    /// The number of requested chunks.
-    pub chunks_requested: IntCounter,
-    /// The number of failures to send chunk requests.
-    pub chunk_request_send_failed: IntCounter,
-    /// The number of sent chunks.
-    pub chunks_sent: IntCounter,
-    /// The number of failures to send chunks.
-    pub chunk_send_failed: IntCounter,
     /// The number of received chunks.
     pub chunks_received: IntCounter,
     /// The number of timed-out chunks.
@@ -87,18 +82,12 @@ pub struct DownloadManagementMetrics {
     pub adverts_sent: IntCounter,
     /// The number of sent adverts(by advert action).
     pub adverts_by_action: IntCounterVec,
-    /// The number of failures to send adverts.
-    pub adverts_send_failed: IntCounter,
     /// The number of received adverts.
     pub adverts_received: IntCounter,
     /// The number of dropped adverts.
     pub adverts_dropped: IntCounter,
 
     // Retransmission fields.
-    /// The number of sent retransmission requests.
-    pub retransmission_requests_sent: IntCounter,
-    /// The number of failures to send retransmission requests.
-    pub retransmission_request_send_failed: IntCounter,
     /// The retransmission request times.
     pub retransmission_request_time: Histogram,
 
@@ -134,6 +123,11 @@ impl DownloadManagementMetrics {
     /// The constructor returns a `DownloadManagementMetrics` instance.
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
+            transport_send_messages: metrics_registry.int_counter_vec(
+                "p2p_gossip_transport_send_messages_total",
+                "Total number of calls to Transport::send grouped by message and status.",
+                &["message", "status"],
+            ),
             op_duration: metrics_registry.histogram_vec(
                 "p2p_peermgmt_op_duration",
                 "The time it took to execute the given op, in milliseconds",
@@ -159,15 +153,6 @@ impl DownloadManagementMetrics {
                 "Number of times the integrity check failed for artifacts",
             ),
 
-            // Chunking fields.
-            chunks_requested: metrics_registry.int_counter(
-                "gossip_chunks_requested",
-                "Number of chunks that were requested",
-            ),
-            chunk_request_send_failed: metrics_registry.int_counter(
-                "chunk_request_send_failed",
-                "Number of chunk request send failures",
-            ),
             chunks_received: metrics_registry
                 .int_counter("gossip_chunks_received", "Number of chunks received"),
             chunk_delivery_time: metrics_registry.histogram_vec(
@@ -180,10 +165,6 @@ impl DownloadManagementMetrics {
                 ],
                 &["artifact_type"],
             ),
-            chunks_sent: metrics_registry
-                .int_counter("gossip_chunks_sent", "Number of chunks sent"),
-            chunk_send_failed: metrics_registry
-                .int_counter("chunkd_send_failed", "Number of chunk send failures"),
             chunks_timed_out: metrics_registry
                 .int_counter("gossip_chunks_timedout", "Timed-out chunks"),
             connection_up_events: metrics_registry.int_counter(
@@ -229,8 +210,6 @@ impl DownloadManagementMetrics {
                 "Total number of artifact advertisements sent, by action type",
                 &["type"],
             ),
-            adverts_send_failed: metrics_registry
-                .int_counter("adverts_send_failed", "Number of advert send failures"),
             adverts_received: metrics_registry.int_counter(
                 "gossip_adverts_received",
                 "Number of adverts received from all peers",
@@ -241,14 +220,6 @@ impl DownloadManagementMetrics {
             ),
 
             // Retransmission fields.
-            retransmission_requests_sent: metrics_registry.int_counter(
-                "retransmission_requests_sent",
-                "Number of retransmission requests successfully sent",
-            ),
-            retransmission_request_send_failed: metrics_registry.int_counter(
-                "retransmission_request_send_failed",
-                "Critical error a lagging replica isn't able to send a retransmission request",
-            ),
             retransmission_request_time: metrics_registry.histogram(
                 "retransmission_request_time",
                 "The time it took to send retransmission request, in milliseconds",

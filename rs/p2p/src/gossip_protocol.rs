@@ -308,11 +308,7 @@ impl Gossip for GossipImpl {
         };
 
         let message = GossipMessage::Chunk(gossip_chunk);
-        self.transport_send(message, node_id)
-            .map(|_| self.metrics.chunks_sent.inc())
-            .unwrap_or_else(|_| {
-                self.metrics.chunk_send_failed.inc();
-            });
+        self.transport_send(message, node_id);
     }
 
     /// The method adds the given chunk to the corresponding artifact
@@ -343,7 +339,10 @@ impl Gossip for GossipImpl {
             .with_label_values(&[label])
             .inc_by(peers.len() as u64);
 
-        self.send_advert_to_peers(advert_request.advert, peers);
+        let message = GossipMessage::Advert(advert_request.advert);
+        for peer_id in peers {
+            self.transport_send(message.clone(), peer_id);
+        }
     }
 
     /// The method reacts to a retransmission request from another

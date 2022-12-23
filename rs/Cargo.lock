@@ -6410,6 +6410,8 @@ dependencies = [
  "phantom_newtype",
  "serde",
  "serde_bytes",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
  "tower",
 ]
 
