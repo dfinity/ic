@@ -42,7 +42,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use slog::{debug, info, warn, Logger};
+use slog::{debug, info, trace, warn, Logger};
 
 #[derive(Parser, Debug)]
 pub struct CliArgs {
@@ -99,12 +99,14 @@ pub enum SystemTestsSubcommand {
 }
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
+const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
 
 const ROOT_TASK_NAME: &str = "root";
+const KEEPALIVE_TASK_NAME: &str = "keepalive";
 const SETUP_TASK_NAME: &str = "setup";
 
 fn is_task_visible_to_user(task_id: &TaskId) -> bool {
-    matches!(task_id, TaskId::Test(task_name) if task_name.ne(ROOT_TASK_NAME) && !task_name.starts_with("dummy("))
+    matches!(task_id, TaskId::Test(task_name) if task_name.ne(ROOT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && !task_name.starts_with("dummy("))
 }
 
 /// A shortcut to represent the type of an event subscriber
@@ -124,7 +126,7 @@ fn subproc(
     target_fn: impl SubprocessFn,
     ctx: &mut ComposeContext,
 ) -> SubprocessTask {
-    debug!(ctx.group_ctx.log(), "subproc(task_name={})", &task_id);
+    trace!(ctx.group_ctx.log(), "subproc(task_name={})", &task_id);
     SubprocessTask::new(
         task_id,
         rh.clone(),
@@ -140,9 +142,11 @@ fn timed(
     timeout: Duration,
     ctx: &mut ComposeContext,
 ) -> Plan<Box<dyn Task>> {
-    debug!(
+    trace!(
         ctx.logger,
-        "timed(plan={:?}, timeout={:?})", &plan, &timeout
+        "timed(plan={:?}, timeout={:?})",
+        &plan,
+        &timeout
     );
     let timeout_task = TimeoutTask::new(
         rh.clone(),
@@ -163,9 +167,12 @@ fn compose(
     children: Vec<Plan<Box<dyn Task>>>,
     ctx: &mut ComposeContext,
 ) -> Plan<Box<dyn Task>> {
-    debug!(
+    trace!(
         ctx.logger,
-        "compose(root={:?}, ordering={:?}, children={:?})", &root_task, &ordering, &children
+        "compose(root={:?}, ordering={:?}, children={:?})",
+        &root_task,
+        &ordering,
+        &children
     );
     let root_task = match root_task {
         Some(task) => task,
@@ -204,13 +211,13 @@ fn compose_seq(
 }
 
 fn get_setup_env(gctx: GroupContext) -> TestEnv {
-    info!(gctx.log(), "get_setup_env()");
+    trace!(gctx.log(), "get_setup_env()");
     let process_ctx = ProcessContext::new(gctx, String::from(SETUP_TASK_NAME)).unwrap();
     process_ctx.group_context.create_setup_env().unwrap()
 }
 
 fn get_env(gctx: GroupContext, task_id: TaskId) -> Result<TestEnv> {
-    info!(gctx.log(), "get_env(task_id={})", &task_id);
+    trace!(gctx.log(), "get_env(task_id={})", &task_id);
     let process_ctx = ProcessContext::new(gctx, task_id.name()).unwrap();
     process_ctx.group_context.create_test_env(&task_id.name())
 }
@@ -306,6 +313,7 @@ pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
     tests: Vec<SystemTestSubGroup>,
     timeout_per_test: Option<Duration>,
+    overall_timeout: Option<Duration>,
 }
 
 impl Default for SystemTestGroup {
@@ -329,7 +337,13 @@ impl SystemTestGroup {
             setup: Default::default(),
             tests: Default::default(),
             timeout_per_test: None,
+            overall_timeout: None,
         }
+    }
+
+    pub fn with_overall_timeout(mut self, overall_timeout: Duration) -> Self {
+        self.overall_timeout = Some(overall_timeout);
+        self
     }
 
     pub fn with_setup<F: PotSetupFn>(mut self, setup: F) -> Self {
@@ -375,7 +389,7 @@ impl SystemTestGroup {
         group_ctx: GroupContext,
         subs: Subs,
     ) -> Result<Plan<Box<dyn Task>>> {
-        info!(group_ctx.log(), "SystemTestGroup.make_plan");
+        debug!(group_ctx.log(), "SystemTestGroup.make_plan");
 
         let mut compose_ctx = ComposeContext {
             group_ctx: group_ctx.clone(),
@@ -386,10 +400,10 @@ impl SystemTestGroup {
         };
 
         // The ID of the root task is needed outside this function for awaiting when the plan execution finishes.
-        let root_task_id = TaskId::Test(String::from(ROOT_TASK_NAME));
-        let root_task = Box::from(subproc(
+        let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
+        let keepalive_task = Box::from(subproc(
             rh,
-            root_task_id.clone(),
+            keepalive_task_id.clone(),
             {
                 let logger = group_ctx.logger().clone();
                 let group_ctx = group_ctx.clone();
@@ -398,9 +412,10 @@ impl SystemTestGroup {
                     debug!(logger, ">>> keepalive");
                     loop {
                         let group_ctx = group_ctx.clone();
-                        let root_task_id = root_task_id.clone();
-                        if let Ok((group_setup, env)) = get_env(group_ctx, root_task_id)
-                            .and_then(|env| GroupSetup::try_read_attribute(&env).map(|x| (x, env)))
+                        if let Ok((group_setup, env)) =
+                            get_env(group_ctx, keepalive_task_id.clone()).and_then(|env| {
+                                GroupSetup::try_read_attribute(&env).map(|x| (x, env))
+                            })
                         {
                             let farm_url = env.get_farm_url().unwrap();
                             let farm = Farm::new(farm_url.clone(), env.logger());
@@ -456,32 +471,60 @@ impl SystemTestGroup {
         };
 
         let plan = compose(
-            Some(root_task),
+            Some(keepalive_task),
             EvalOrder::Sequential,
-            std::iter::once(setup_plan)
-                .chain(
-                    self.tests
-                        .into_iter()
-                        .map(|sub_group| sub_group.into_plan(rh, &mut compose_ctx)),
-                )
-                .collect(),
+            vec![compose(
+                None,
+                EvalOrder::Sequential,
+                std::iter::once(setup_plan)
+                    .chain(
+                        self.tests
+                            .into_iter()
+                            .map(|sub_group| sub_group.into_plan(rh, &mut compose_ctx)),
+                    )
+                    .collect(),
+                &mut compose_ctx,
+            )],
             &mut compose_ctx,
         );
-        Ok(plan)
+        Ok(compose(
+            Some(Box::new(EmptyTask::new(
+                subs.clone(),
+                TaskId::Test(ROOT_TASK_NAME.to_string()),
+            ))),
+            EvalOrder::Sequential,
+            vec![timed(
+                rh,
+                plan,
+                self.overall_timeout.unwrap_or(DEFAULT_OVERALL_TIMEOUT),
+                &mut compose_ctx,
+            )],
+            &mut compose_ctx,
+        ))
     }
 
     pub fn execute(self) -> Result<Outcome> {
         // TODO: check preconditions:
-        // 1. there exists at least one test after setup
-        // 2. all sub-groups are non-empty
+        // 0. None of the test functions (modulo the setup function) have the literal name "setup"
+        // 1. There exists at least one test after setup
+        // 2. All sub-groups are non-empty
+        // 3. The computed plan is sane (e.g., there are no timeout(timeout(x)) for some x)
 
+        // Preconditions that are already being checked:
+        // 1. CLI arguments are sane
+        // 2. Test / setup functions are not specified more than once in the group
         let args = CliArgs::parse().validate()?;
+        let is_parent_process = matches!(args.action, SystemTestsSubcommand::Run);
 
         let group_ctx = GroupContext::new(args.group_dir.path.clone(), args.subproc_id())?;
-        info!(group_ctx.log(), "Created group context: {:?}", group_ctx);
+        if is_parent_process {
+            debug!(group_ctx.log(), "Created group context: {:?}", group_ctx);
+        }
 
         let broadcaster = Arc::new(EventBroadcaster::start());
-        info!(group_ctx.log(), "Created broadcaster");
+        if is_parent_process {
+            debug!(group_ctx.log(), "Created broadcaster");
+        }
 
         // create the runtime that lives until this variable is dropped.
         // Note: having only a runtime handle does not guarantee that the runtime is alive.
@@ -489,10 +532,14 @@ impl SystemTestGroup {
 
         let subs: Arc<dyn BroadcastingEventSubscriberFactory> = broadcaster.clone(); // a shallow copy - the broadcaster is shared!
         let plan = self.make_plan(runtime.handle(), group_ctx.clone(), subs)?;
-        info!(group_ctx.log(), "Generated plan: {:?}", plan);
+        if is_parent_process {
+            info!(group_ctx.log(), "Generated plan: {:?}", plan);
+        }
 
         let static_plan = plan.map(&|task| task.task_id());
-        info!(group_ctx.log(), "Generated static_plan: {:?}", static_plan);
+        if is_parent_process {
+            debug!(group_ctx.log(), "Generated static_plan: {:?}", &static_plan);
+        }
 
         // create a task table, consuming the plan
         let mut table = TaskTable::new();
@@ -514,7 +561,9 @@ impl SystemTestGroup {
                 )
             })
         }
-        info!(group_ctx.log(), "Generated task table: {:?}", table);
+        if is_parent_process {
+            debug!(group_ctx.log(), "Generated task table: {:?}", table);
+        }
 
         // handle the sub-command
         match args.action {
@@ -555,11 +604,16 @@ impl SystemTestGroup {
                 broadcaster.subscribe(Box::new({
                     let group_ctx = group_ctx.clone();
                     let mut report = SystemTestGroupReport::default();
+                    let mut is_root_completed = false;
                     move |event| {
                         log_event(group_ctx.log(), &event);
                         if let EventPayload::TaskSpawned { ref task_id } = event.what {
                             // 1. Write down the start time of a freshly-spawned task
                             // Note: This will be needed to compute the task's duration
+                            debug!(
+                                group_ctx.log(),
+                                "Reporting on newly spawned task {}", task_id
+                            );
                             report.set_test_start_time(task_id.clone());
                         };
                         if let EventPayload::TaskFailed {
@@ -567,53 +621,79 @@ impl SystemTestGroup {
                             ref msg,
                         } = event.what
                         {
+                            report.set_test_end_time(task_id.clone());
                             // 2. Handle failed tasks
-                            if let TaskId::Timeout(timed_task_id) = task_id {
+                            if let TaskId::Timeout(timed_task_name) = task_id {
                                 // 2.1. When a timeout task of a timed task fails, the timed task should be marked as "timed out"
                                 // Note: Timeout tasks have no other purpose whatsoever
-                                report.set_test_as_timed_out(TaskId::Test(timed_task_id.clone()));
+                                // report.set_test_as_timed_out(TaskId::Test(timed_task_id.clone()));
+                                let timed_task_id = TaskId::Test(timed_task_name.clone());
+                                report.set_test_as_timed_out(timed_task_id);
+                                // Set the group timeout flag
+                                report.set_group_timed_out();
                             } else {
                                 // 2.2. When a regular (i.e., not Timeout) tasks fails, Write down its end time.
-                                report.set_test_end_time(task_id.clone());
                                 if is_task_visible_to_user(task_id) {
-                                    if report.is_test_timed_out(task_id) {
+                                    if report.is_test_timed_out(task_id) || report.is_group_timed_out() {
                                         // 2.3. Use information from step 2.1 to detect if this task has timed out
+                                        debug!(
+                                            group_ctx.log(),
+                                            "Reporting on timed out task {}", task_id
+                                        );
                                         report.add_fail(TargetFunctionFailure::TimedOut {
                                             task_id: task_id.clone(),
                                             timeout: report.get_test_duration(task_id),
                                         });
                                     } else {
                                         // 2.4. Otherwise, this is a regular failure (i.e., the test function panicked)
+                                        debug!(
+                                            group_ctx.log(),
+                                            "Reporting on failed task {}", task_id
+                                        );
                                         report.add_fail(TargetFunctionFailure::Panicked {
                                             task_id: task_id.clone(),
                                             message: msg.clone(),
                                             runtime: report.get_test_duration(task_id),
                                         });
                                     }
+                                } else {
+                                    debug!(
+                                        group_ctx.log(),
+                                        "Skip reporting about completed auxiliary task {}", task_id
+                                    );
                                 }
                             }
-                        };
-                        if let EventPayload::TaskStopped { ref task_id } = event.what {
+                        } else if let EventPayload::TaskStopped { ref task_id } = event.what {
+                            report.set_test_end_time(task_id.clone());
                             if is_task_visible_to_user(task_id) {
                                 // 3. Handle successfully completed tasks
                                 // Note: we omit tasks that the user is not aware of in the report
-                                report.set_test_end_time(task_id.clone());
+                                debug!(
+                                    group_ctx.log(),
+                                    "Reporting on successfully completed task {}", task_id
+                                );
                                 report.add_succ(TargetFunctionSuccess {
                                     task_id: task_id.clone(),
                                     runtime: report.get_test_duration(task_id),
                                 });
                             }
-                        };
+                        }
+                        // else { non-terminal event }
                         match event.what {
                             EventPayload::TaskFailed { ref task_id, .. }
                             | EventPayload::TaskStopped { ref task_id, .. }
                                 if task_id.name().eq(ROOT_TASK_NAME) =>
                             {
-                                debug!(group_ctx.log(), "Detected final event {:?}", event);
-                                terminal_event_sender.send(report.clone()).unwrap();
+                                debug!(group_ctx.log(), "Detected root completion {:?} (awaiting all running tasks to complete)", event);
+                                is_root_completed = true;
                             }
                             _ => (),
                         };
+                        if is_root_completed && report.all_tasks_finished() {
+                            // No more running tasks ==> send the report
+                            debug!(group_ctx.log(), "All events completed. Sending the report ...");
+                            terminal_event_sender.send(report.clone()).unwrap();
+                        }
                     }
                 }));
 
@@ -667,7 +747,7 @@ impl SystemTestGroup {
         match outcome {
             Ok(Outcome::FromSubProcess) => Ok(()),
             Ok(Outcome::FromParentProcess(report)) => {
-                info!(&logger, "{report}");
+                info!(&logger, "\n{report}");
                 Ok(())
             }
             Err(failure_mode) => {

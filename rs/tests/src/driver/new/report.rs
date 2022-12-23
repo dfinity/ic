@@ -90,7 +90,11 @@ pub struct SystemTestGroupReport {
     start_times: BTreeMap<TaskId, Instant>,
     end_times: BTreeMap<TaskId, Instant>,
 
+    running_tasks: BTreeSet<TaskId>,
+
     detected_timeouts: BTreeSet<TaskId>,
+
+    is_group_timed_out: bool,
 }
 
 impl SystemTestGroupReport {
@@ -107,10 +111,20 @@ impl SystemTestGroupReport {
     }
 
     pub fn set_test_start_time(&mut self, test_id: TaskId) {
+        assert!(
+            self.running_tasks.insert(test_id.clone()),
+            "cannot set start time for {} more than once",
+            &test_id
+        );
         self.start_times.entry(test_id).or_insert_with(Instant::now);
     }
 
     pub fn set_test_end_time(&mut self, test_id: TaskId) {
+        assert!(
+            self.running_tasks.remove(&test_id),
+            "cannot set end time for {} which did not start",
+            &test_id
+        );
         self.end_times.entry(test_id).or_insert_with(Instant::now);
     }
 
@@ -138,6 +152,18 @@ impl SystemTestGroupReport {
 
     pub fn is_test_timed_out(&self, test_id: &TaskId) -> bool {
         self.detected_timeouts.contains(test_id)
+    }
+
+    pub fn all_tasks_finished(&self) -> bool {
+        self.running_tasks.is_empty()
+    }
+
+    pub fn set_group_timed_out(&mut self) {
+        self.is_group_timed_out = true;
+    }
+
+    pub fn is_group_timed_out(&self) -> bool {
+        self.is_group_timed_out
     }
 }
 

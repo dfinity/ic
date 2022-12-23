@@ -88,3 +88,9 @@ fn test_that_runs_2_parallel_tasks_then_one_failing_task_then_2_parallel_tasks()
     );
     assert!(result.is_err())
 }
+
+#[test]
+fn test_overall_group_timeout() {
+    let result = execute_test_driver_with_scenario("test_overall_group_timeout");
+    assert!(result.is_err())
+}

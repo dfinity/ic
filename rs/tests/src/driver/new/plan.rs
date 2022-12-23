@@ -24,6 +24,23 @@ pub enum Plan<T> {
     },
 }
 
+impl<T: Clone> Clone for Plan<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Supervised {
+                supervisor,
+                ordering,
+                children,
+            } => Self::Supervised {
+                supervisor: supervisor.clone(),
+                ordering: ordering.clone(),
+                children: children.clone(),
+            },
+            Self::Leaf { task } => Self::Leaf { task: task.clone() },
+        }
+    }
+}
+
 impl<T: std::fmt::Debug> std::fmt::Debug for Plan<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -72,6 +89,23 @@ impl<T> Plan<T> {
                     .collect::<Vec<Plan<S>>>(),
             },
             Plan::Leaf { task } => Plan::Leaf { task: f(task) },
+        }
+    }
+
+    pub fn find_by_supervisor<F>(&self, f: &F) -> Option<&Plan<T>>
+    where
+        F: Fn(&T) -> bool,
+    {
+        match self {
+            Plan::Supervised { supervisor, .. } if f(supervisor) => Some(self),
+            Plan::Supervised {
+                supervisor: _,
+                ordering: _,
+                children,
+            } => children
+                .iter()
+                .find(|ch| ch.find_by_supervisor(f).is_some()),
+            _ => None,
         }
     }
 
