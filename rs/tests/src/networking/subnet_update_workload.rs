@@ -25,7 +25,7 @@ use crate::{
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
         ic::{InternetComputer, Subnet},
-        prometheus_vm::HasPrometheus,
+        prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
@@ -82,7 +82,9 @@ fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32),
 fn config(env: TestEnv, nodes_nns_subnet: usize, nodes_app_subnet: usize, use_boundary_node: bool) {
     let logger = env.logger();
 
-    env.start_prometheus_vm();
+    PrometheusVm::default()
+        .start(&env)
+        .expect("failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(nodes_nns_subnet))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(nodes_app_subnet))

@@ -12,7 +12,8 @@ use serde_json::json;
 use slog::info;
 
 use super::{
-    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmResources},
+    farm::HostFeature,
+    ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
     test_env_api::{
@@ -54,32 +55,69 @@ const GRAFANA_PORT: u16 = 3000;
 pub const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 pub const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 
-/// The Prometheus trait allows starting a Prometheus VM,
-/// periodically configuring its scraping targets based on the latest IC topology
-/// and finally downloading its data directory.
-pub trait HasPrometheus {
-    /// Deploy, configure and start a prometheus VM.
-    fn start_prometheus_vm(&self);
-
-    /// Retrieves a topology snapshot,
-    /// converts it into p8s scraping target JSON files
-    /// and scps them to the prometheus VM.
-    fn sync_prometheus_config_with_topology(&self);
-
-    /// Downloads prometheus' data directory to the test artifacts
-    /// such that we can run a local p8s on that later.
-    ///
-    /// Return early if no prometheus_vm has been setup.
-    /// This allows this function to be used in a finalizer where no prometheus server has been setup.
-    fn download_prometheus_data_dir_if_exists(&self);
+pub struct PrometheusVm {
+    universal_vm: UniversalVm,
+    scrape_interval: Duration,
 }
 
-impl HasPrometheus for TestEnv {
-    fn start_prometheus_vm(&self) {
+impl Default for PrometheusVm {
+    fn default() -> Self {
+        PrometheusVm::new(PROMETHEUS_VM_NAME.to_string())
+    }
+}
+
+impl PrometheusVm {
+    pub fn new(name: String) -> Self {
+        PrometheusVm {
+            universal_vm: UniversalVm::new(name)
+                .with_primary_image(DiskImage {
+                    image_type: ImageType::RawImage,
+                    url: Url::parse(&get_default_prometheus_vm_img_url())
+                        .expect("should not fail!"),
+                    sha256: String::from(DEFAULT_PROMETHEUS_VM_IMG_SHA256),
+                })
+                .with_vm_resources(VmResources {
+                    vcpus: Some(NrOfVCPUs::new(2)),
+                    memory_kibibytes: Some(AmountOfMemoryKiB::new(12582912)), // 12GiB
+                    boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(100)),
+                })
+                .disable_ipv4(),
+            scrape_interval: Duration::from_secs(60),
+        }
+    }
+
+    pub fn with_scrape_interval(mut self, scrape_interval: Duration) -> Self {
+        self.scrape_interval = scrape_interval;
+        self
+    }
+
+    pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
+        self.universal_vm = self.universal_vm.with_vm_resources(vm_resources);
+        self
+    }
+
+    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
+        self.universal_vm = self.universal_vm.with_vm_allocation(vm_allocation);
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.universal_vm = self
+            .universal_vm
+            .with_required_host_features(required_host_features);
+        self
+    }
+
+    pub fn enable_ipv4(mut self) -> Self {
+        self.universal_vm.has_ipv4 = true;
+        self
+    }
+
+    pub fn start(&self, env: &TestEnv) -> Result<()> {
         // Create a config directory containing the prometheus.yml configuration file.
         let vm_name = String::from(PROMETHEUS_VM_NAME);
-        let log = self.logger();
-        let config_dir = self
+        let log = env.logger();
+        let config_dir = env
             .single_activate_script_config_dir(
                 &vm_name,
                 &format!(
@@ -93,16 +131,15 @@ chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
                 ),
             )
             .unwrap();
-        write_prometheus_config_dir(config_dir.clone()).unwrap();
+        write_prometheus_config_dir(config_dir.clone(), self.scrape_interval).unwrap();
 
-        // Deploy a universal prometheus VM and start it.
-        new_prometheus_vm(vm_name.clone())
+        self.universal_vm
+            .clone()
             .with_config_dir(config_dir)
-            .start(self)
-            .unwrap_or_else(|e| panic!("failed to setup {vm_name} because: {e:?}"));
+            .start(env)?;
 
         // Log the Prometheus URL so users can browse to it while the test is running.
-        let deployed_prometheus_vm = self.get_deployed_universal_vm(&vm_name).unwrap();
+        let deployed_prometheus_vm = env.get_deployed_universal_vm(&vm_name).unwrap();
         let prometheus_vm = deployed_prometheus_vm.get_vm().unwrap();
         info!(
             log,
@@ -112,11 +149,31 @@ chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
             log,
             "Grafana at http://[{:?}]:{GRAFANA_PORT}", prometheus_vm.ipv6
         );
+        Ok(())
     }
+}
 
+/// The Prometheus trait allows starting a Prometheus VM,
+/// configuring its scraping targets based on the latest IC topology
+/// and finally downloading its data directory.
+pub trait HasPrometheus {
+    /// Retrieves a topology snapshot, converts it into p8s scraping target
+    /// JSON files and scps them to the prometheus VM.
+    fn sync_prometheus_config_with_topology(&self);
+
+    /// Downloads prometheus' data directory to the test artifacts
+    /// such that we can run a local p8s on that later.
+    ///
+    /// Return early if no prometheus_vm has been setup.
+    /// This allows this function to be used in a finalizer where no prometheus
+    /// server has been setup.
+    fn download_prometheus_data_dir_if_exists(&self);
+}
+
+impl HasPrometheus for TestEnv {
     fn sync_prometheus_config_with_topology(&self) {
+        let vm_name = PROMETHEUS_VM_NAME.to_string();
         // Write the scraping target JSON files to the local prometheus config directory.
-        let vm_name = String::from(PROMETHEUS_VM_NAME);
         let topology_snapshot = self.topology_snapshot();
         let prometheus_config_dir = self.get_universal_vm_config_dir(&vm_name);
         let group_setup = GroupSetup::read_attribute(self);
@@ -209,29 +266,13 @@ sudo tar -cf "{tarball_full_path:?}" \
     }
 }
 
-/// Create a new specialized universal VM configured to run a prometheus server.
-fn new_prometheus_vm(name: String) -> UniversalVm {
-    UniversalVm::new(name)
-        .with_primary_image(DiskImage {
-            image_type: ImageType::RawImage,
-            url: Url::parse(&get_default_prometheus_vm_img_url()).expect("should not fail!"),
-            sha256: String::from(DEFAULT_PROMETHEUS_VM_IMG_SHA256),
-        })
-        .with_vm_resources(VmResources {
-            vcpus: Some(NrOfVCPUs::new(2)),
-            memory_kibibytes: Some(AmountOfMemoryKiB::new(12582912)), // 12GiB
-            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(100)),
-        })
-        .disable_ipv4()
-}
-
 #[derive(Serialize)]
 struct PrometheusStaticConfig {
     targets: Vec<String>,
     labels: HashMap<String, String>,
 }
 
-fn write_prometheus_config_dir(config_dir: PathBuf) -> Result<()> {
+fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -> Result<()> {
     let prometheus_config_dir = config_dir.join(PROMETHEUS_CONFIG_DIR_NAME);
     fs::create_dir_all(prometheus_config_dir.clone())?;
 
@@ -241,8 +282,9 @@ fn write_prometheus_config_dir(config_dir: PathBuf) -> Result<()> {
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join("orchestrator.json");
     let node_exporter_scraping_targets_path =
         Path::new(PROMETHEUS_SCRAPING_TARGETS_DIR).join("node_exporter.json");
+    let scrape_interval_str: String = format!("{}s", scrape_interval.as_secs());
     let prometheus_config = json!({
-        "global": {"scrape_interval": "60s"},
+        "global": {"scrape_interval": scrape_interval_str},
         "scrape_configs": [
             {"job_name": "replica", "file_sd_configs": [{"files": [replica_scraping_targets_path]}]},
             {"job_name": "orchestrator", "file_sd_configs": [{"files": [orchestrator_scraping_targets_path]}]},

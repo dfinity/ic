@@ -34,7 +34,7 @@ end::catalog[] */
 use std::time::Duration;
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::prometheus_vm::HasPrometheus;
+use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::*;
 use crate::util::*; // to use the universal canister
@@ -44,7 +44,9 @@ use slog::info;
 
 pub fn config_single_host(env: TestEnv) {
     env.ensure_group_setup_created();
-    env.start_prometheus_vm();
+    PrometheusVm::default()
+        .start(&env)
+        .expect("failed to start prometheus VM");
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(4))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(4))
