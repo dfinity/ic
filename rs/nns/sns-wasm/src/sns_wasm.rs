@@ -620,7 +620,7 @@ where
         init_payloads: SnsCanisterInitPayloads,
     ) -> Result<(), String> {
         let results = zip(
-            vec!["Root", "Governance", "Ledger", "Swap"],
+            vec!["Root", "Governance", "Ledger", "Index", "Swap"],
             futures::future::join_all(vec![
                 canister_api.install_wasm(
                     CanisterId::new(canisters.root.unwrap()).unwrap(),
@@ -1884,6 +1884,16 @@ mod test {
             .errors_on_install_wasms
             .lock()
             .unwrap()
+            .push(None);
+        canister_api
+            .errors_on_install_wasms
+            .lock()
+            .unwrap()
+            .push(None);
+        canister_api
+            .errors_on_install_wasms
+            .lock()
+            .unwrap()
             .push(Some("Test Failure".to_string()));
 
         let root_id = canister_test_id(1);
@@ -1905,7 +1915,7 @@ mod test {
                 subnet_id: None,
                 canisters: None,
                 error: Some(SnsWasmError {
-                    message: "Error installing Ledger WASM: Test Failure".to_string(),
+                    message: "Error installing Swap WASM: Test Failure".to_string(),
                 }),
             },
         )
