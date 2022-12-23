@@ -80,7 +80,7 @@ use ic_interfaces::{
     artifact_manager::OnArtifactError::ArtifactPoolError,
     artifact_pool::ArtifactPoolError::ArtifactReplicaVersionError,
 };
-use ic_interfaces_transport::{TransportError, TransportPayload};
+use ic_interfaces_transport::TransportPayload;
 use ic_logger::{error, info, trace, warn};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::node::v1::NodeRecord};
 use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
@@ -160,7 +160,10 @@ impl GossipImpl {
         self.metrics
             .download_next_time
             .set(start_time.elapsed().as_micros() as i64);
-        self.send_chunk_requests(gossip_requests, peer_id);
+        for request in gossip_requests {
+            let message = GossipMessage::ChunkRequest(request);
+            self.transport_send(message, peer_id);
+        }
         Ok(())
     }
 
@@ -514,7 +517,10 @@ impl GossipImpl {
             .get_all_validated_by_filter(gossip_re_request)
             .into_iter();
 
-        adverts.for_each(|advert| self.send_advert_to_peers(advert, vec![peer_id]));
+        adverts.for_each(|gossip_advert| {
+            let message = GossipMessage::Advert(gossip_advert);
+            self.transport_send(message, peer_id);
+        });
         Ok(())
     }
 
@@ -524,17 +530,7 @@ impl GossipImpl {
         let filter = self.artifact_manager.get_filter();
         let message = GossipMessage::RetransmissionRequest(filter);
         let start_time = Instant::now();
-        self.transport_send(message, peer_id)
-            .map(|_| self.metrics.retransmission_requests_sent.inc())
-            .unwrap_or_else(|e| {
-                trace!(
-                    self.log,
-                    "Send retransmission request failed: peer {:?} {:?} ",
-                    peer_id,
-                    e
-                );
-                self.metrics.retransmission_request_send_failed.inc();
-            });
+        self.transport_send(message, peer_id);
         self.metrics
             .retransmission_request_time
             .observe(start_time.elapsed().as_millis() as f64)
@@ -797,54 +793,27 @@ impl GossipImpl {
     }
 
     /// The method sends the given message over transport to the given peer.
-    pub(crate) fn transport_send(
-        &self,
-        message: GossipMessage,
-        peer_id: NodeId,
-    ) -> Result<(), TransportError> {
+    // TODO(NET-1299): transport send error should be propagaed and handled by P2P
+    pub(crate) fn transport_send(&self, message: GossipMessage, peer_id: NodeId) {
         let _timer = self
             .metrics
             .op_duration
             .with_label_values(&["transport_send"])
             .start_timer();
         let channel_id = self.transport_channel_mapper.map(&message);
+        let message_label: &'static str = (&message).into();
         let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());
-        self.transport
-            .send(&peer_id, channel_id, message)
-            .map_err(|e| {
-                trace!(
-                    self.log,
-                    "Failed to send gossip message to peer {:?}: {:?}",
-                    peer_id,
-                    e
-                );
-                e
-            })
-    }
-
-    /// The method sends the given advert to the given list of peers.
-    pub(crate) fn send_advert_to_peers(&self, gossip_advert: GossipAdvert, peer_ids: Vec<NodeId>) {
-        let message = GossipMessage::Advert(gossip_advert);
-        for peer_id in peer_ids {
-            self.transport_send(message.clone(), peer_id)
-                .map(|_| self.metrics.adverts_sent.inc())
-                .unwrap_or_else(|_e| {
-                    // Ignore advert send failures
-                    self.metrics.adverts_send_failed.inc();
-                });
-        }
-    }
-
-    /// The method sends the given chunk requests to the given peer.
-    fn send_chunk_requests(&self, requests: Vec<GossipChunkRequest>, peer_id: NodeId) {
-        for request in requests {
-            let message = GossipMessage::ChunkRequest(request);
-            self.transport_send(message, peer_id)
-                .map(|_| self.metrics.chunks_requested.inc())
-                .unwrap_or_else(|_e| {
-                    // Ingore chunk send failures. Points to a misbehaving peer
-                    self.metrics.chunk_request_send_failed.inc();
-                });
+        match self.transport.send(&peer_id, channel_id, message) {
+            Ok(()) => self
+                .metrics
+                .transport_send_messages
+                .with_label_values(&[message_label, "success"])
+                .inc(),
+            Err(err) => self
+                .metrics
+                .transport_send_messages
+                .with_label_values(&[message_label, err.into()])
+                .inc(),
         }
     }
 
