@@ -32,6 +32,23 @@ const NODE_ID_4: NodeId = NODE_4;
 
 const TRANSPORT_CHANNEL_ID: u32 = 1234;
 
+fn basic_transport_message() -> TransportPayload {
+    TransportPayload(vec![0xb; 1_000_000])
+}
+
+fn basic_transport_message_v2() -> TransportPayload {
+    TransportPayload(vec![0xb; 1_000_001])
+}
+
+fn blocking_transport_message() -> TransportPayload {
+    TransportPayload(vec![0xb; 1_000_002])
+}
+
+fn large_transport_message() -> TransportPayload {
+    // Currently largest use case (StateSync) may send up to 100MB
+    TransportPayload(vec![0xb; 100_000_000])
+}
+
 #[test]
 fn test_basic_conn_legacy() {
     test_basic_conn_impl(false);
@@ -95,7 +112,7 @@ Verifies that transport suffers "head of line problem" when peer is slow to cons
 - Finally, we unblock B's event handler, and confirm all in-flight messages are delivered.
 */
 #[test]
-fn head_of_line_test() {
+fn head_of_line_test_legacy() {
     let registry_version = REG_V1;
     with_test_replica_logger(|logger| {
         // Setup registry and crypto component
@@ -127,9 +144,11 @@ fn head_of_line_test() {
         // Unblock event handler and confirm in-flight messages are received.
         notify.notify_one();
 
-        let normal_msg = TransportPayload(vec![0xb; 1000000]);
         for _ in 1..=messages_sent {
-            assert_eq!(peer_b_receiver.blocking_recv(), Some(normal_msg.clone()));
+            assert_eq!(
+                peer_b_receiver.blocking_recv(),
+                Some(basic_transport_message())
+            );
         }
     });
 }
@@ -138,12 +157,16 @@ fn head_of_line_test() {
 Establish connection with 2 peers, A and B.  Send message from A->B and B->A and confirm both are received
 */
 #[test]
-fn test_basic_message_send() {
+fn test_basic_message_send_legacy() {
     test_send_big_message_succeeds(false);
+}
+
+#[test]
+fn test_basic_message_send_h2() {
     test_send_big_message_succeeds(true);
 }
 
-// StateSync may send chunks that are 30MB big so we want to make sure a message of this size can be sent and received
+// StateSync may send chunks that are 100 MB big so we want to make sure a message of this size can be sent and received
 // in both directions
 fn test_send_big_message_succeeds(use_h2: bool) {
     let registry_version = REG_V1;
@@ -168,20 +191,23 @@ fn test_send_big_message_succeeds(use_h2: bool) {
             use_h2,
         );
 
-        // Testing message size of 30MB - this is currently largest we'd expect
-        let msg_1 = TransportPayload(vec![0xa; 100000000]);
-        let msg_2 = TransportPayload(vec![0xb; 100000000]);
         let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
 
         // A sends message to B
-        let res = peer_a.send(&NODE_ID_2, channel_id, msg_1.clone());
+        let res = peer_a.send(&NODE_ID_2, channel_id, large_transport_message());
         assert_eq!(res, Ok(()));
-        assert_eq!(peer_b_receiver.blocking_recv(), Some(msg_1));
+        assert_eq!(
+            peer_b_receiver.blocking_recv(),
+            Some(large_transport_message())
+        );
 
         // B sends message to A
-        let res2 = peer_b.send(&NODE_ID_1, channel_id, msg_2.clone());
+        let res2 = peer_b.send(&NODE_ID_1, channel_id, large_transport_message());
         assert_eq!(res2, Ok(()));
-        assert_eq!(peer_a_receiver.blocking_recv(), Some(msg_2));
+        assert_eq!(
+            peer_a_receiver.blocking_recv(),
+            Some(large_transport_message())
+        );
     });
 }
 
@@ -190,8 +216,12 @@ Establish connection with 2 peers, A and B.  Confirm that connection stays alive
 no messages are being sent. (In current implementation, this is ensured by heartbeats)
 */
 #[test]
-fn test_idle_connection_active() {
+fn test_idle_connection_active_legacy() {
     test_idle_connection_active_impl(false);
+}
+
+#[test]
+fn test_idle_connection_active_h2() {
     test_idle_connection_active_impl(true);
 }
 
@@ -237,10 +267,15 @@ Call clear send queue
 A sends another message, confirm queue can accept more messages
 */
 #[test]
-fn test_clear_send_queue() {
+fn test_clear_send_queue_legacy() {
     test_clear_send_queue_impl(false);
+}
+
+#[test]
+fn test_clear_send_queue_h2() {
     test_clear_send_queue_impl(true);
 }
+
 fn test_clear_send_queue_impl(use_h2: bool) {
     let registry_version = REG_V1;
     with_test_replica_logger(|logger| {
@@ -274,10 +309,9 @@ fn test_clear_send_queue_impl(use_h2: bool) {
 
         // Confirm that queue is completely clear by sending messages = queue size
         let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
-        let normal_msg = TransportPayload(vec![0xb; 1000000]);
 
         for _ in 0..queue_size {
-            let res3 = peer_a.send(&NODE_ID_2, channel_id, normal_msg.clone());
+            let res3 = peer_a.send(&NODE_ID_2, channel_id, basic_transport_message_v2());
             assert_eq!(res3, Ok(()));
         }
     });
@@ -291,8 +325,12 @@ Call clear send queue
 A sends another message, confirm queue can accept more messages
 */
 #[test]
-fn test_drain_send_queue() {
+fn test_drain_send_queue_legacy() {
     test_drain_send_queue_impl(false);
+}
+
+#[test]
+fn test_drain_send_queue_h2() {
     test_drain_send_queue_impl(true);
 }
 
@@ -328,22 +366,25 @@ fn test_drain_send_queue_impl(use_h2: bool) {
         // Unblock event handler to drain queue and confirm in-flight messages are received.
         notify.notify_one();
 
-        let normal_msg = TransportPayload(vec![0xb; 1000000]);
-
         for _ in 1..=messages_sent {
-            assert_eq!(peer_b_receiver.blocking_recv(), Some(normal_msg.clone()));
+            assert_eq!(
+                peer_b_receiver.blocking_recv(),
+                Some(basic_transport_message())
+            );
         }
         // Confirm that queue is clear by sending messages = queue size
         let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
-        let normal_msg_v2 = TransportPayload(vec![0xb; 1000001]);
 
         for _ in 0..queue_size {
-            let res3 = peer_a.send(&NODE_ID_2, channel_id, normal_msg_v2.clone());
+            let res3 = peer_a.send(&NODE_ID_2, channel_id, basic_transport_message_v2());
             assert_eq!(res3, Ok(()));
             std::thread::sleep(Duration::from_millis(10));
         }
         for _ in 0..queue_size {
-            assert_eq!(peer_b_receiver.blocking_recv(), Some(normal_msg_v2.clone()));
+            assert_eq!(
+                peer_b_receiver.blocking_recv(),
+                Some(basic_transport_message_v2())
+            );
         }
     });
 }
@@ -354,8 +395,12 @@ Creates peer A and connect it to 3 other peers (B-D)
 Send a high volume of messages from all nodes to A
 */
 #[test]
-fn test_multiple_connections_to_single_peer() {
+fn test_multiple_connections_to_single_peer_legacy() {
     test_multiple_connections_to_single_peer_impl(false);
+}
+
+#[test]
+fn test_multiple_connections_to_single_peer_h2() {
     test_multiple_connections_to_single_peer_impl(true);
 }
 
@@ -375,14 +420,13 @@ fn test_multiple_connections_to_single_peer_impl(use_h2: bool) {
         connect_nodes_to_central_node(&nodes[0], &remainder);
 
         let mut successful_sends = 0;
-        let normal_msg = TransportPayload(vec![0xb; 1000000]);
         let sends_per_peer = 500;
         for node_data in remainder {
             let node_b = node_data.0;
             let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
             for _ in 1..=sends_per_peer {
                 if node_b
-                    .send(&NODE_ID_1, channel_id, normal_msg.clone())
+                    .send(&NODE_ID_1, channel_id, basic_transport_message())
                     .is_ok()
                 {
                     successful_sends += 1;
@@ -392,7 +436,7 @@ fn test_multiple_connections_to_single_peer_impl(use_h2: bool) {
         }
 
         for _ in 1..=successful_sends {
-            assert_eq!(nodes[0].3.blocking_recv(), Some(normal_msg.clone()));
+            assert_eq!(nodes[0].3.blocking_recv(), Some(basic_transport_message()));
         }
     });
 }
@@ -486,7 +530,6 @@ fn setup_blocking_event_handler(
     sender: Sender<TransportPayload>,
     listener: Arc<Notify>,
 ) -> TransportEventHandler {
-    let blocking_msg = TransportPayload(vec![0xa; 1000000]);
     let (event_handler, mut handle) = create_mock_event_handler();
 
     rt.spawn(async move {
@@ -499,7 +542,7 @@ fn setup_blocking_event_handler(
                         .await
                         .expect("Channel busy");
                     // This will block the read task
-                    if msg.payload == blocking_msg {
+                    if msg.payload == blocking_transport_message() {
                         listener.notified().await;
                     }
                 }
@@ -602,27 +645,30 @@ fn trigger_and_test_send_queue_full(
     );
     let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
 
-    let blocking_msg = TransportPayload(vec![0xa; 1000000]);
-    let normal_msg = TransportPayload(vec![0xb; 1000000]);
-
     // A sends message to B
-    let res = peer_a.send(&NODE_ID_2, channel_id, blocking_msg.clone());
+    let res = peer_a.send(&NODE_ID_2, channel_id, blocking_transport_message());
     assert_eq!(res, Ok(()));
-    assert_eq!(peer_b_receiver.blocking_recv(), Some(blocking_msg));
+    assert_eq!(
+        peer_b_receiver.blocking_recv(),
+        Some(blocking_transport_message())
+    );
     // Send messages from A->B until TCP Queue is full
-    let _temp = normal_msg.clone();
+    let _basic_msg = basic_transport_message();
     let mut messages_sent = 0;
     loop {
-        if let Err(TransportError::SendQueueFull(ref _temp)) =
-            peer_a.send(&NODE_ID_2, channel_id, normal_msg.clone())
+        if let Err(TransportError::SendQueueFull(_basic_msg)) =
+            peer_a.send(&NODE_ID_2, channel_id, basic_transport_message())
         {
             break;
         }
         messages_sent += 1;
         std::thread::sleep(Duration::from_millis(10));
     }
-    let res2 = peer_a.send(&NODE_ID_2, channel_id, normal_msg.clone());
-    assert_eq!(res2, Err(TransportError::SendQueueFull(normal_msg)));
+    let res2 = peer_a.send(&NODE_ID_2, channel_id, basic_transport_message());
+    assert_eq!(
+        res2,
+        Err(TransportError::SendQueueFull(basic_transport_message()))
+    );
 
     (peer_a, _peer_b, messages_sent)
 }
