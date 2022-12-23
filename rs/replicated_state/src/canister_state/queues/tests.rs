@@ -18,17 +18,110 @@ use ic_types::{messages::CallbackId, time::current_time_and_expiry_time};
 use proptest::prelude::*;
 use std::convert::TryInto;
 
+/// Wrapper for `CanisterQueues` for tests using only one pair of
+/// `(InputQueue, OutputQueue)` and arbitrary requests/responses.
+struct CanisterQueuesFixture {
+    pub queues: CanisterQueues,
+    pub this: CanisterId,
+    pub other: CanisterId,
+}
+
+impl CanisterQueuesFixture {
+    fn new() -> CanisterQueuesFixture {
+        CanisterQueuesFixture {
+            queues: CanisterQueues::default(),
+            this: canister_test_id(13),
+            other: canister_test_id(11),
+        }
+    }
+
+    fn push_input_request(&mut self) -> Result<(), (StateError, RequestOrResponse)> {
+        self.queues.push_input(
+            RequestBuilder::default()
+                .sender(self.other)
+                .receiver(self.this)
+                .build()
+                .into(),
+            InputQueueType::LocalSubnet,
+        )
+    }
+
+    fn push_input_response(&mut self) -> Result<(), (StateError, RequestOrResponse)> {
+        self.queues.push_input(
+            ResponseBuilder::default()
+                .originator(self.this)
+                .respondent(self.other)
+                .build()
+                .into(),
+            InputQueueType::LocalSubnet,
+        )
+    }
+
+    fn pop_input(&mut self) -> Option<CanisterInputMessage> {
+        self.queues.pop_input()
+    }
+
+    fn push_output_request(&mut self) -> Result<(), (StateError, Arc<Request>)> {
+        self.queues.push_output_request(
+            Arc::new(
+                RequestBuilder::default()
+                    .sender(self.this)
+                    .receiver(self.other)
+                    .build(),
+            ),
+            mock_time(),
+        )
+    }
+
+    fn push_output_response(&mut self) {
+        self.queues.push_output_response(Arc::new(
+            ResponseBuilder::default()
+                .originator(self.other)
+                .respondent(self.this)
+                .build(),
+        ));
+    }
+
+    fn pop_output(&mut self) -> Option<(QueueId, RequestOrResponse)> {
+        let mut iter = self.queues.output_into_iter(self.other);
+        iter.pop()
+    }
+
+    /// Times out all requests in the output queue.
+    fn time_out_all_output_requests(&mut self) -> u64 {
+        let local_canisters = maplit::btreemap! {
+            self.this => {
+                let scheduler_state = SchedulerState::default();
+                let system_state = SystemState::new_running(
+                    CanisterId::from_u64(42),
+                    user_test_id(24).get(),
+                    Cycles::new(1 << 36),
+                    NumSeconds::from(100_000),
+                );
+                CanisterState::new(system_state, None, scheduler_state)
+            }
+        };
+        self.queues.time_out_requests(
+            Time::from_nanos_since_unix_epoch(u64::MAX),
+            &self.this,
+            &local_canisters,
+        )
+    }
+
+    fn available_output_request_slots(&self) -> usize {
+        *self
+            .queues
+            .available_output_request_slots()
+            .get(&self.other)
+            .unwrap()
+    }
+}
+
 /// Can push one request to the output queues.
 #[test]
 fn can_push_output_request() {
-    let this = canister_test_id(13);
-    let mut queues = CanisterQueues::default();
-    queues
-        .push_output_request(
-            RequestBuilder::default().sender(this).build().into(),
-            mock_time(),
-        )
-        .unwrap();
+    let mut queues = CanisterQueuesFixture::new();
+    queues.push_output_request().unwrap();
 }
 
 /// Cannot push response to output queues without pushing an input request
@@ -36,120 +129,166 @@ fn can_push_output_request() {
 #[test]
 #[should_panic(expected = "pushing response into inexistent output queue")]
 fn cannot_push_output_response_without_input_request() {
-    let this = canister_test_id(13);
-    let mut queues = CanisterQueues::default();
-    queues.push_output_response(ResponseBuilder::default().respondent(this).build().into());
+    let mut queues = CanisterQueuesFixture::new();
+    queues.push_output_response();
 }
 
 #[test]
 fn enqueuing_unexpected_response_does_not_panic() {
-    let other = canister_test_id(14);
-    let this = canister_test_id(13);
-    let mut queues = CanisterQueues::default();
+    let mut queues = CanisterQueuesFixture::new();
     // Enqueue a request to create a queue for `other`.
-    queues
-        .push_input(
-            RequestBuilder::default()
-                .sender(other)
-                .receiver(this)
-                .build()
-                .into(),
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap();
+    queues.push_input_request().unwrap();
     // Now `other` sends an unexpected `Response`.  We should return an error not
     // panic.
-    queues
-        .push_input(
-            ResponseBuilder::default()
-                .respondent(other)
-                .originator(this)
-                .build()
-                .into(),
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap_err();
+    queues.push_input_response().unwrap_err();
 }
 
 /// Can push response to output queues after pushing input request.
 #[test]
 fn can_push_output_response_after_input_request() {
-    let this = canister_test_id(13);
-    let other = canister_test_id(14);
-    let mut queues = CanisterQueues::default();
-    queues
-        .push_input(
-            RequestBuilder::default()
-                .sender(other)
-                .receiver(this)
-                .build()
-                .into(),
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap();
-    queues.push_output_response(
-        ResponseBuilder::default()
-            .respondent(this)
-            .originator(other)
-            .build()
-            .into(),
-    );
+    let mut queues = CanisterQueuesFixture::new();
+    queues.push_input_request().unwrap();
+    queues.push_output_response();
 }
 
 /// Can push one request to the induction pool.
 #[test]
 fn can_push_input_request() {
-    let this = canister_test_id(13);
-    let mut queues = CanisterQueues::default();
-    queues
-        .push_input(
-            RequestBuilder::default().receiver(this).build().into(),
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap();
+    let mut queues = CanisterQueuesFixture::new();
+    queues.push_input_request().unwrap();
 }
 
 /// Cannot push response to the induction pool without pushing output
 /// request first.
 #[test]
 fn cannot_push_input_response_without_output_request() {
-    let this = canister_test_id(13);
-    let mut queues = CanisterQueues::default();
-    queues
-        .push_input(
-            ResponseBuilder::default().originator(this).build().into(),
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap_err();
+    let mut queues = CanisterQueuesFixture::new();
+    queues.push_input_response().unwrap_err();
 }
 
 /// Can push response to input queues after pushing request to output
 /// queues.
 #[test]
 fn can_push_input_response_after_output_request() {
-    let this = canister_test_id(13);
-    let other = canister_test_id(14);
-    let mut queues = CanisterQueues::default();
-    queues
-        .push_output_request(
-            RequestBuilder::default()
-                .sender(this)
-                .receiver(other)
-                .build()
-                .into(),
-            mock_time(),
-        )
-        .unwrap();
-    queues
-        .push_input(
-            ResponseBuilder::default()
-                .respondent(other)
-                .originator(this)
-                .build()
-                .into(),
-            InputQueueType::RemoteSubnet,
-        )
-        .unwrap();
+    let mut queues = CanisterQueuesFixture::new();
+    queues.push_output_request().unwrap();
+    queues.push_input_response().unwrap();
+}
+
+/// Check `available_output_request_slots` doesn't count input requests and
+/// output reservations and responses.
+#[test]
+fn test_available_output_request_slots_dont_counts() {
+    let mut queues = CanisterQueuesFixture::new();
+    queues.push_input_request().unwrap();
+    assert_eq!(
+        DEFAULT_QUEUE_CAPACITY,
+        queues.available_output_request_slots()
+    );
+    queues.pop_input().unwrap();
+
+    queues.push_output_response();
+    assert_eq!(
+        DEFAULT_QUEUE_CAPACITY,
+        queues.available_output_request_slots()
+    );
+}
+
+/// Check `available_output_request_slots` counts output requests and input
+/// reservations and responses.
+#[test]
+fn test_available_output_request_slots_counts() {
+    let mut queues = CanisterQueuesFixture::new();
+
+    // Check output request counts.
+    queues.push_output_request().unwrap();
+    assert_eq!(
+        DEFAULT_QUEUE_CAPACITY - 1,
+        queues.available_output_request_slots()
+    );
+
+    // Check input reservation counts.
+    queues.pop_output().unwrap();
+    assert_eq!(
+        DEFAULT_QUEUE_CAPACITY - 1,
+        queues.available_output_request_slots()
+    );
+
+    // Check input response counts.
+    queues.push_input_response().unwrap();
+    assert_eq!(
+        DEFAULT_QUEUE_CAPACITY - 1,
+        queues.available_output_request_slots()
+    );
+}
+
+/// Check `available_output_request_slots` counts timed out output requests.
+#[test]
+fn test_available_output_request_slots_counts_timed_out_output_requests() {
+    let mut queues = CanisterQueuesFixture::new();
+
+    // Need output response to pin timed out request behind.
+    queues.push_input_request().unwrap();
+    queues.pop_input().unwrap();
+    queues.push_output_response();
+
+    // All output request slots are still available.
+    assert_eq!(
+        DEFAULT_QUEUE_CAPACITY,
+        queues.available_output_request_slots()
+    );
+
+    // Push output request, then time it out.
+    queues.push_output_request().unwrap();
+    queues.time_out_all_output_requests();
+
+    // Pop the reject response, to isolate the timed out request.
+    queues.pop_input().unwrap();
+
+    // Check timed out request counts.
+    assert_eq!(
+        DEFAULT_QUEUE_CAPACITY - 1,
+        queues.available_output_request_slots()
+    );
+}
+
+#[test]
+fn test_back_pressure_with_timed_out_requests() {
+    let mut queues = CanisterQueuesFixture::new();
+
+    // Need output response to pin timed out request behind.
+    queues.push_input_request().unwrap();
+    queues.pop_input();
+    queues.push_output_response();
+
+    // Push `DEFAULT_QUEUE_CAPACITY` output requests.
+    for _ in 0..DEFAULT_QUEUE_CAPACITY {
+        queues.push_output_request().unwrap();
+    }
+
+    // Time out all requests, then check no new request can be pushed.
+    queues.time_out_all_output_requests();
+    assert!(queues.push_output_request().is_err());
+}
+
+/// Enqueues 3 requests for the same canister and consumes them.
+#[test]
+fn test_message_picking_round_robin_on_one_queue() {
+    let mut queues = CanisterQueuesFixture::new();
+    assert!(queues.pop_input().is_none());
+    for _ in 0..3 {
+        queues.push_input_request().expect("could not push");
+    }
+
+    for _ in 0..3 {
+        match queues.pop_input().expect("could not pop a message") {
+            CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, queues.other),
+            msg => panic!("unexpected message popped: {:?}", msg),
+        }
+    }
+
+    assert!(!queues.queues.has_input());
+    assert!(queues.pop_input().is_none());
 }
 
 /// Enqueues 10 ingress messages and pops them.
@@ -184,39 +323,6 @@ fn test_message_picking_ingress_only() {
     }
     assert_eq!(10, expected_byte);
 
-    assert!(queues.pop_input().is_none());
-}
-
-/// Enqueues 3 requests for the same canister and consumes them.
-#[test]
-fn test_message_picking_round_robin_on_one_queue() {
-    let this = canister_test_id(13);
-    let other = canister_test_id(14);
-
-    let mut queues = CanisterQueues::default();
-    assert!(queues.pop_input().is_none());
-
-    for _ in 0..3 {
-        queues
-            .push_input(
-                RequestBuilder::default()
-                    .sender(other)
-                    .receiver(this)
-                    .build()
-                    .into(),
-                InputQueueType::RemoteSubnet,
-            )
-            .expect("could not push");
-    }
-
-    for _ in 0..3 {
-        match queues.pop_input().expect("could not pop a message") {
-            CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, other),
-            msg => panic!("unexpected message popped: {:?}", msg),
-        }
-    }
-
-    assert!(!queues.has_input());
     assert!(queues.pop_input().is_none());
 }
 
@@ -1284,201 +1390,6 @@ fn test_reject_subnet_output_request() {
     // And after popping it, there are no messages or reservations left.
     queues.garbage_collect();
     assert!(queues.canister_queues.is_empty());
-}
-
-/// Wrapper for `CanisterQueues` for tests using only one pair of
-/// `(InputQueue, OutputQueue)` and arbitrary requests/responses.
-struct CanisterQueuesFixture {
-    queues: CanisterQueues,
-    this: CanisterId,
-    other: CanisterId,
-}
-
-impl CanisterQueuesFixture {
-    fn new() -> CanisterQueuesFixture {
-        CanisterQueuesFixture {
-            queues: CanisterQueues::default(),
-            this: canister_test_id(13),
-            other: canister_test_id(11),
-        }
-    }
-
-    fn push_input_request(&mut self) -> Result<(), (StateError, RequestOrResponse)> {
-        self.queues.push_input(
-            RequestBuilder::default()
-                .sender(self.other)
-                .receiver(self.this)
-                .build()
-                .into(),
-            InputQueueType::LocalSubnet,
-        )
-    }
-
-    fn push_input_response(&mut self) -> Result<(), (StateError, RequestOrResponse)> {
-        self.queues.push_input(
-            ResponseBuilder::default()
-                .originator(self.this)
-                .respondent(self.other)
-                .build()
-                .into(),
-            InputQueueType::LocalSubnet,
-        )
-    }
-
-    fn pop_input(&mut self) -> Option<CanisterInputMessage> {
-        self.queues.pop_input()
-    }
-
-    fn push_output_request(&mut self) -> Result<(), (StateError, Arc<Request>)> {
-        self.queues.push_output_request(
-            Arc::new(
-                RequestBuilder::default()
-                    .sender(self.this)
-                    .receiver(self.other)
-                    .build(),
-            ),
-            mock_time(),
-        )
-    }
-
-    fn push_output_response(&mut self) {
-        self.queues.push_output_response(Arc::new(
-            ResponseBuilder::default()
-                .originator(self.other)
-                .respondent(self.this)
-                .build(),
-        ));
-    }
-
-    fn pop_output(&mut self) -> Option<(QueueId, RequestOrResponse)> {
-        let mut iter = self.queues.output_into_iter(self.other);
-        iter.pop()
-    }
-
-    /// Times out all requests in the output queue.
-    fn time_out_all_output_requests(&mut self) -> u64 {
-        let local_canisters = maplit::btreemap! {
-            self.this => {
-                let scheduler_state = SchedulerState::default();
-                let system_state = SystemState::new_running(
-                    CanisterId::from_u64(42),
-                    user_test_id(24).get(),
-                    Cycles::new(1 << 36),
-                    NumSeconds::from(100_000),
-                );
-                CanisterState::new(system_state, None, scheduler_state)
-            }
-        };
-        self.queues.time_out_requests(
-            Time::from_nanos_since_unix_epoch(u64::MAX),
-            &self.this,
-            &local_canisters,
-        )
-    }
-
-    fn available_output_request_slots(&self) -> usize {
-        *self
-            .queues
-            .available_output_request_slots()
-            .get(&self.other)
-            .unwrap()
-    }
-}
-
-/// Check `available_output_request_slots` doesn't count input requests and
-/// output reservations and responses.
-#[test]
-fn test_available_output_request_slots_dont_counts() {
-    let mut queues = CanisterQueuesFixture::new();
-    queues.push_input_request().unwrap();
-    assert_eq!(
-        DEFAULT_QUEUE_CAPACITY,
-        queues.available_output_request_slots()
-    );
-    queues.pop_input().unwrap();
-
-    queues.push_output_response();
-    assert_eq!(
-        DEFAULT_QUEUE_CAPACITY,
-        queues.available_output_request_slots()
-    );
-}
-
-/// Check `available_output_request_slots` counts output requests and input
-/// reservations and responses.
-#[test]
-fn test_available_output_request_slots_counts() {
-    let mut queues = CanisterQueuesFixture::new();
-
-    // Check output request counts.
-    queues.push_output_request().unwrap();
-    assert_eq!(
-        DEFAULT_QUEUE_CAPACITY - 1,
-        queues.available_output_request_slots()
-    );
-
-    // Check input reservation counts.
-    queues.pop_output().unwrap();
-    assert_eq!(
-        DEFAULT_QUEUE_CAPACITY - 1,
-        queues.available_output_request_slots()
-    );
-
-    // Check input response counts.
-    queues.push_input_response().unwrap();
-    assert_eq!(
-        DEFAULT_QUEUE_CAPACITY - 1,
-        queues.available_output_request_slots()
-    );
-}
-
-/// Check `available_output_request_slots` counts timed out output requests.
-#[test]
-fn test_available_output_request_slots_counts_timed_out_output_requests() {
-    let mut queues = CanisterQueuesFixture::new();
-
-    // Need output response to pin timed out request behind.
-    queues.push_input_request().unwrap();
-    queues.pop_input().unwrap();
-    queues.push_output_response();
-
-    // All output request slots are still available.
-    assert_eq!(
-        DEFAULT_QUEUE_CAPACITY,
-        queues.available_output_request_slots()
-    );
-
-    // Push output request, then time it out.
-    queues.push_output_request().unwrap();
-    queues.time_out_all_output_requests();
-
-    // Pop the reject response, to isolate the timed out request.
-    queues.pop_input().unwrap();
-
-    // Check timed out request counts.
-    assert_eq!(
-        DEFAULT_QUEUE_CAPACITY - 1,
-        queues.available_output_request_slots()
-    );
-}
-
-#[test]
-fn test_back_pressure_with_timed_out_requests() {
-    let mut queues = CanisterQueuesFixture::new();
-
-    // Need output response to pin timed out request behind.
-    queues.push_input_request().unwrap();
-    queues.pop_input();
-    queues.push_output_response();
-
-    // Push `DEFAULT_QUEUE_CAPACITY` output requests.
-    for _ in 0..DEFAULT_QUEUE_CAPACITY {
-        queues.push_output_request().unwrap();
-    }
-
-    // Time out all requests, then check no new request can be pushed.
-    queues.time_out_all_output_requests();
-    assert!(queues.push_output_request().is_err());
 }
 
 #[test]
