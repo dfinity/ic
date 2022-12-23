@@ -113,4 +113,5 @@ upload_artifacts(
     inputs = [":binaries"],
     remote_subdir = "release",
     target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//testnet/tools:__pkg__"],
 )

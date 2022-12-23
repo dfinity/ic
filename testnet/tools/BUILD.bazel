@@ -1,0 +1,34 @@
+genrule(
+    name = "icos_deploy",
+    srcs = [
+        "//bazel:version.txt",
+        "//ic-os/guestos/dev:hash_and_upload_disk-img",
+        "//ic-os/guestos/dev:hash_and_upload_update-img",
+        "//ic-os/guestos/prod:hash_and_upload_update-img",
+        "//ic-os/boundary-guestos/envs/prod:hash_and_upload_disk-img",
+        "//publish/binaries:legacy_upload",
+        "//publish/canisters:upload",
+    ],
+    outs = ["icos_deploy_script"],
+    cmd = """
+    VERSION="$$(cat $(location //bazel:version.txt))"
+
+    cat <<EOF > $@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PREFIX='exec'
+if [ \\$$# -gt 0 ]; then
+	if [ "\\$$1" == "-n" ]; then
+		PREFIX='echo'
+		shift
+	fi
+fi
+
+cd "\\$$BUILD_WORKSPACE_DIRECTORY"
+
+\\$$PREFIX ./testnet/tools/icos_deploy.sh --git-revision "$$VERSION"  \\$$@
+EOF
+    """,
+    executable = True,
+)
