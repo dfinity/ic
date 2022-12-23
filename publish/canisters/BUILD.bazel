@@ -113,4 +113,5 @@ upload_artifacts(
     name = "upload",
     inputs = [":canisters"],
     remote_subdir = "canisters",
+    visibility = ["//visibility:public"],
 )
