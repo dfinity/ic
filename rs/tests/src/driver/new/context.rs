@@ -29,9 +29,7 @@ impl GroupContext {
     /// to create the log channel in case we are in a subprocess.
     pub fn new(group_dir: PathBuf, subproc_info: Option<(TaskId, u32)>) -> Result<Self> {
         let task_id = subproc_info.as_ref().map(|t| t.0.clone());
-        let parent_pid = subproc_info
-            .map(|t| t.1)
-            .unwrap_or_else(|| std::process::id());
+        let parent_pid = subproc_info.map(|t| t.1).unwrap_or_else(std::process::id);
         let socket_path = Self::log_socket_path_(parent_pid);
         let logger = Self::create_logger(socket_path, task_id)?;
 
