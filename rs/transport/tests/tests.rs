@@ -335,12 +335,15 @@ fn test_drain_send_queue_impl(use_h2: bool) {
         }
         // Confirm that queue is clear by sending messages = queue size
         let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
-        let normal_msg = TransportPayload(vec![0xb; 1000000]);
+        let normal_msg_v2 = TransportPayload(vec![0xb; 1000001]);
 
         for _ in 0..queue_size {
-            let res3 = peer_a.send(&NODE_ID_2, channel_id, normal_msg.clone());
+            let res3 = peer_a.send(&NODE_ID_2, channel_id, normal_msg_v2.clone());
             assert_eq!(res3, Ok(()));
             std::thread::sleep(Duration::from_millis(10));
+        }
+        for _ in 0..queue_size {
+            assert_eq!(peer_b_receiver.blocking_recv(), Some(normal_msg_v2.clone()));
         }
     });
 }
@@ -502,7 +505,7 @@ fn setup_blocking_event_handler(
                 }
                 TransportEvent::PeerUp(_) => {}
                 TransportEvent::PeerDown(_) => {}
-            };
+            }
             rsp.send_response(());
         }
     });
