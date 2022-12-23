@@ -3,8 +3,8 @@ use crate::utils::do_copy;
 
 use bitcoin::{hashes::Hash, Network, OutPoint, Script, TxOut, Txid};
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_logger::{error, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
+use ic_logger::{error, info, ReplicaLogger};
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     bitcoin::v1 as pb_bitcoin,
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -25,7 +25,7 @@ use ic_types::{
 use ic_utils::fs::sync_path;
 use ic_utils::thread::parallel_map;
 use ic_wasm_types::{CanisterModule, WasmHash};
-use prometheus::IntCounterVec;
+use prometheus::{Histogram, IntCounterVec};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom, TryInto};
 use std::fs::OpenOptions;
@@ -36,6 +36,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
 };
+use std::time::Instant;
 
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
@@ -165,6 +166,7 @@ impl Default for BitcoinStateBits {
 #[derive(Clone)]
 struct StateLayoutMetrics {
     state_layout_error_count: IntCounterVec,
+    state_layout_remove_checkpoint_duration: Histogram,
 }
 
 impl StateLayoutMetrics {
@@ -174,6 +176,11 @@ impl StateLayoutMetrics {
                 "state_layout_error_count",
                 "Total number of errors encountered in the state layout.",
                 &["source"],
+            ),
+            state_layout_remove_checkpoint_duration: metric_registry.histogram(
+                "state_layout_remove_checkpoint_duration",
+                "Time elapsed in removing checkpoint.",
+                decimal_buckets(-3, 1),
             ),
         }
     }
@@ -313,27 +320,23 @@ impl TipHandler {
     pub fn reset_tip_to(
         &mut self,
         state_layout: &StateLayout,
-        height: Height,
+        cp: &CheckpointLayout<ReadOnly>,
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> Result<(), LayoutError> {
-        let cp_name = state_layout.checkpoint_name(height);
         let tip = self.tip_path();
         if tip.exists() {
             std::fs::remove_dir_all(&tip).map_err(|err| LayoutError::IoError {
                 path: tip.to_path_buf(),
-                message: format!("Cannot remove tip for checkpoint {}", height),
+                message: format!("Cannot remove tip for checkpoint {}", cp.height),
                 io_err: err,
             })?;
         }
 
-        let cp_path = state_layout.checkpoints().join(&cp_name);
-        if !cp_path.exists() {
-            return Ok(());
-        }
+        debug_assert!(cp.root.exists());
 
         match copy_recursively(
             &state_layout.log,
-            cp_path.as_path(),
+            cp.root.as_path(),
             &tip,
             FilePermissions::ReadWrite,
             FSync::No,
@@ -353,7 +356,7 @@ impl TipHandler {
                     path: tip,
                     message: format!(
                         "Failed to convert reset tip to checkpoint to {} (err kind: {:?})",
-                        cp_name,
+                        cp.root.display(),
                         e.kind()
                     ),
                     io_err: e,
@@ -575,6 +578,17 @@ impl StateLayout {
         CheckpointLayout::new(path, height, self.clone())
     }
 
+    fn increment_checkpoint_ref_counter(&self, height: Height) {
+        let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
+        checkpoint_ref_registry
+            .entry(height)
+            .or_insert(CheckpointRefData {
+                checkpoint_layout_counter: 0,
+                mark_deleted: false,
+            })
+            .checkpoint_layout_counter += 1;
+    }
+
     fn remove_checkpoint_ref(&self, height: Height) {
         let mut checkpoint_ref_registry = self.checkpoint_ref_registry.lock().unwrap();
         match checkpoint_ref_registry.get_mut(&height) {
@@ -686,6 +700,7 @@ impl StateLayout {
         height: Height,
         drop_after_rename: T,
     ) -> Result<(), LayoutError> {
+        let start = Instant::now();
         let cp_name = self.checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
         let tmp_path = self.fs_tmp().join(&cp_name);
@@ -699,7 +714,13 @@ impl StateLayout {
                     err.kind()
                 ),
                 io_err: err,
-            })
+            })?;
+        let elapsed = start.elapsed();
+        info!(self.log, "Removed checkpoint @{} in {:?}", height, elapsed);
+        self.metrics
+            .state_layout_remove_checkpoint_duration
+            .observe(elapsed.as_secs_f64());
+        Ok(())
     }
 
     pub fn force_remove_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
@@ -1095,6 +1116,34 @@ impl<Permissions: AccessPolicy> Drop for CheckpointLayout<Permissions> {
         if let Some(state_layout) = &self.state_layout {
             state_layout.remove_checkpoint_ref(self.height)
         }
+    }
+}
+
+impl Clone for CheckpointLayout<ReadOnly> {
+    fn clone(&self) -> Self {
+        let result = Self {
+            root: self.root.clone(),
+            height: self.height,
+            state_layout: self.state_layout.clone(),
+            permissions_tag: self.permissions_tag,
+        };
+        // Increment after result is constructed in case one of the field clone()'s
+        // panics
+        if let Some(ref state_layout) = self.state_layout {
+            state_layout.increment_checkpoint_ref_counter(self.height);
+        }
+        result
+    }
+}
+
+impl<Permissions: AccessPolicy> std::fmt::Debug for CheckpointLayout<Permissions> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "checkpoint layout #{}, path: #{}",
+            self.height,
+            self.root.display()
+        )
     }
 }
 
@@ -2152,6 +2201,32 @@ mod test {
                 vec![Height::new(3)],
                 state_layout.checkpoint_heights().unwrap(),
             );
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    #[cfg(debug_assertions)]
+    fn test_last_removal_panics_in_debug() {
+        with_test_replica_logger(|log| {
+            let tempdir = tmpdir("state_layout");
+            let root_path = tempdir.path().to_path_buf();
+            let metrics_registry = ic_metrics::MetricsRegistry::new();
+            let state_layout = StateLayout::try_new(log, root_path, &metrics_registry).unwrap();
+            let scratchpad_dir = tmpdir("scratchpad");
+            let cp1 = state_layout
+                .scratchpad_to_checkpoint(
+                    CheckpointLayout::<RwPolicy<()>>::new_untracked(
+                        scratchpad_dir.path().to_path_buf().join("1"),
+                        Height::new(1),
+                    )
+                    .unwrap(),
+                    Height::new(1),
+                    None,
+                )
+                .unwrap();
+            state_layout.remove_checkpoint_when_unused(Height::new(1));
+            std::mem::drop(cp1);
         });
     }
 }

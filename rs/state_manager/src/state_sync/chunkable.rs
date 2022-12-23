@@ -1,6 +1,6 @@
 use crate::{
     manifest::{build_file_group_chunks, filter_out_zero_chunks, DiffScript},
-    CheckpointRef, StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
+    StateManagerMetrics, StateSyncMetrics, StateSyncRefs,
     CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS, LABEL_COPY_CHUNKS, LABEL_COPY_FILES, LABEL_FETCH,
     LABEL_PREALLOCATE, LABEL_STATE_SYNC_MAKE_CHECKPOINT,
 };
@@ -69,7 +69,7 @@ pub struct IncompleteState {
     height: Height,
     root_hash: CryptoHashOfState,
     state: DownloadState,
-    manifest_with_checkpoint_ref: Option<(Manifest, CheckpointRef)>,
+    manifest_with_checkpoint_layout: Option<(Manifest, CheckpointLayout<ReadOnly>)>,
     metrics: StateManagerMetrics,
     started_at: Instant,
     fetch_started_at: Option<Instant>,
@@ -149,7 +149,7 @@ impl IncompleteState {
         height: Height,
         root_hash: CryptoHashOfState,
         state_layout: StateLayout,
-        manifest_with_checkpoint_ref: Option<(Manifest, CheckpointRef)>,
+        manifest_with_checkpoint_layout: Option<(Manifest, CheckpointLayout<ReadOnly>)>,
         metrics: StateManagerMetrics,
         own_subnet_type: SubnetType,
         thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
@@ -172,7 +172,7 @@ impl IncompleteState {
             height,
             root_hash,
             state: DownloadState::Blank,
-            manifest_with_checkpoint_ref,
+            manifest_with_checkpoint_layout,
             metrics,
             started_at: Instant::now(),
             fetch_started_at: None,
@@ -901,89 +901,65 @@ impl IncompleteState {
             validate_data: bool,
         }
 
-        // Get a DiffData from the cache or checkpoint_ref, or neither
-        let diff_data: Option<DiffData> =
-            match (cache.as_ref(), self.manifest_with_checkpoint_ref.as_ref()) {
-                (Some(cache_entry), Some((checkpoint_manifest, checkpoint_ref))) => {
-                    let cache_height = cache_entry.height;
-                    let checkpoint_height = checkpoint_ref.0.height;
-                    if cache_height > checkpoint_height {
-                        // The cache will have missing chunks. However, it likely started from a
-                        // DiffScript with the same checkpoint we have now, so there should be more
-                        // relevant chunks in the cache than in the checkpoint.
-                        // This is just a heuristic however, as the cached chunks might have been
-                        // initialized with a DiffScript from an older checkpoint.
-                        Some(DiffData {
-                            manifest_old: &cache_entry.manifest,
-                            missing_chunks: cache_entry.missing_chunks.clone(),
-                            // The data at root_old will live at least as long as the
-                            // StateSyncCacheEntry, so cloning the path is safe
-                            root_old: cache_entry.path().to_path_buf(),
-                            height_old: cache_entry.height,
-                            validate_data: false,
-                        })
-                    } else {
-                        // This should be a special case that can only happen if the source of the
-                        // checkpoint is outside of state sync, as otherwise we would have cleared
-                        // the cache upon successfully syncing a state.
-                        let checkpoint_old = checkpoint_ref
-                            .0
-                            .state_layout
-                            .checkpoint(checkpoint_height)
-                            .unwrap_or_else(|err| {
-                                fatal!(
-                                    &self.log,
-                                    "Failed to get checkpoint path for height {}: {}",
-                                    checkpoint_height,
-                                    err
-                                );
-                            });
-                        Some(DiffData {
-                            manifest_old: checkpoint_manifest,
-                            missing_chunks: Default::default(),
-                            root_old: checkpoint_old.raw_path().to_path_buf(),
-                            height_old: checkpoint_height,
-                            validate_data: true,
-                        })
-                    }
-                }
-                (Some(cache_entry), None) => Some(DiffData {
-                    manifest_old: &cache_entry.manifest,
-                    missing_chunks: cache_entry.missing_chunks.clone(),
-                    root_old: cache_entry.path().to_path_buf(),
-                    height_old: cache_entry.height,
-                    validate_data: false,
-                }),
-                (None, Some((checkpoint_manifest, checkpoint_ref))) => {
-                    let checkpoint_height = checkpoint_ref.0.height;
-                    let checkpoint_old = checkpoint_ref
-                        .0
-                        .state_layout
-                        .checkpoint(checkpoint_height)
-                        .unwrap_or_else(|err| {
-                            fatal!(
-                                &self.log,
-                                "Failed to get checkpoint path for height {}: {}",
-                                checkpoint_height,
-                                err
-                            );
-                        });
+        // Get a DiffData from the cache or checkpoint_layout, or neither
+        let diff_data: Option<DiffData> = match (
+            cache.as_ref(),
+            self.manifest_with_checkpoint_layout.as_ref(),
+        ) {
+            (Some(cache_entry), Some((checkpoint_manifest, checkpoint_layout))) => {
+                let cache_height = cache_entry.height;
+                let checkpoint_height = checkpoint_layout.height();
+                if cache_height > checkpoint_height {
+                    // The cache will have missing chunks. However, it likely started from a
+                    // DiffScript with the same checkpoint we have now, so there should be more
+                    // relevant chunks in the cache than in the checkpoint.
+                    // This is just a heuristic however, as the cached chunks might have been
+                    // initialized with a DiffScript from an older checkpoint.
+                    Some(DiffData {
+                        manifest_old: &cache_entry.manifest,
+                        missing_chunks: cache_entry.missing_chunks.clone(),
+                        // The data at root_old will live at least as long as the
+                        // StateSyncCacheEntry, so cloning the path is safe
+                        root_old: cache_entry.path().to_path_buf(),
+                        height_old: cache_entry.height,
+                        validate_data: false,
+                    })
+                } else {
+                    // This should be a special case that can only happen if the source of the
+                    // checkpoint is outside of state sync, as otherwise we would have cleared
+                    // the cache upon successfully syncing a state.
                     Some(DiffData {
                         manifest_old: checkpoint_manifest,
                         missing_chunks: Default::default(),
-                        // The data in root_old will live at least as long as self.checkpoint_ref,
-                        // so cloning here is safe
-                        root_old: checkpoint_old.raw_path().to_path_buf(),
+                        root_old: checkpoint_layout.raw_path().to_path_buf(),
                         height_old: checkpoint_height,
-                        validate_data: !self
-                            .state_sync_refs
-                            .cache
-                            .read()
-                            .state_is_fetched(checkpoint_height),
+                        validate_data: true,
                     })
                 }
-                (None, None) => None,
-            };
+            }
+            (Some(cache_entry), None) => Some(DiffData {
+                manifest_old: &cache_entry.manifest,
+                missing_chunks: cache_entry.missing_chunks.clone(),
+                root_old: cache_entry.path().to_path_buf(),
+                height_old: cache_entry.height,
+                validate_data: false,
+            }),
+            (None, Some((checkpoint_manifest, checkpoint_old))) => {
+                let checkpoint_height = checkpoint_old.height();
+                Some(DiffData {
+                    manifest_old: checkpoint_manifest,
+                    missing_chunks: Default::default(),
+                    root_old: checkpoint_old.raw_path().to_path_buf(),
+                    height_old: checkpoint_height,
+                    validate_data: !self
+                        .state_sync_refs
+                        .cache
+                        .read()
+                        .state_is_fetched(checkpoint_height),
+                })
+            }
+            (None, None) => None,
+        };
 
         if let Some(DiffData {
             manifest_old,

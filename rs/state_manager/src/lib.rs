@@ -37,7 +37,7 @@ use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory, page_map::PersistenceError, PageIndex, PageMap,
     ReplicatedState,
 };
-use ic_state_layout::{error::LayoutError, AccessPolicy, CheckpointLayout, StateLayout};
+use ic_state_layout::{error::LayoutError, AccessPolicy, CheckpointLayout, ReadOnly, StateLayout};
 use ic_types::{
     artifact::StateSyncArtifactId,
     chunkable::Chunkable,
@@ -52,11 +52,10 @@ use ic_utils::thread::JoinOnDrop;
 use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use prost::Message;
 use std::convert::{From, TryFrom};
-use std::fmt;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    atomic::{AtomicU64, Ordering},
     Arc,
 };
 use std::time::{Duration, Instant, SystemTime};
@@ -413,9 +412,9 @@ type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
 
 #[derive(Debug, Default, Clone)]
 struct StateMetadata {
-    // We don't persist the checkpoint reference because we re-create it every
+    // We don't persist the checkpoint layout because we re-create it every
     // time we discover a checkpoint on disk.
-    checkpoint_ref: Option<CheckpointRef>,
+    checkpoint_layout: Option<CheckpointLayout<ReadOnly>>,
     // Manifest and root hash are computed asynchronously, so they are set to
     // None before the values are computed.
     root_hash: Option<CryptoHashOfState>,
@@ -444,7 +443,7 @@ impl TryFrom<pb::StateMetadata> for StateMetadata {
                     crate::manifest::manifest_hash(&manifest).to_vec(),
                 ));
                 Ok(Self {
-                    checkpoint_ref: None,
+                    checkpoint_layout: None,
                     manifest: Some(manifest),
                     root_hash: Some(root_hash),
                     state_sync_file_group: None,
@@ -474,89 +473,10 @@ pub struct Snapshot {
     pub state: Arc<ReplicatedState>,
 }
 
-/// This struct contains all the data required to read/delete a checkpoint from
-/// disk.
-///
-/// It also holds a `marked_deleted` flag that controls whether the
-/// corresponding checkpoint needs to be deleted when the context goes out of
-/// scope.
-struct CheckpointContext {
-    log: ReplicaLogger,
-    metrics: StateManagerMetrics,
-    state_layout: StateLayout,
-    height: Height,
-    marked_deleted: AtomicBool,
-}
-
-impl Drop for CheckpointContext {
-    fn drop(&mut self) {
-        if !self.marked_deleted.load(Ordering::Relaxed) {
-            return;
-        }
-
-        let start = Instant::now();
-        self.state_layout.remove_checkpoint_when_unused(self.height);
-        let elapsed = start.elapsed();
-        info!(
-            self.log,
-            "Removed checkpoint @{} in {:?}", self.height, elapsed
-        );
-        self.metrics
-            .checkpoint_op_duration
-            .with_label_values(&["remove"])
-            .observe(elapsed.as_secs_f64());
-    }
-}
-
-/// CheckpointRef is a value indicating that a checkpoint is being used.
-///
-/// When the last reference goes away, the checkpoint will be deleted if it was
-/// marked as deleted.
-///
-/// We need this mechanism to be able to hash checkpoint data in background: if
-/// `remove_states_below(H)` is called while we hash the checkpoint @H, eagerly
-/// removing the checkpoint might cause a crash in the hasher that won't be able
-/// to find deleted files anymore.
-///
-/// NOTE: We must ensure that we never construct two distinct references
-/// (i.e. one is not a clone of another) to the same checkpoint.
-#[derive(Clone)]
-pub struct CheckpointRef(Arc<CheckpointContext>);
-
-impl CheckpointRef {
-    /// Construct a new checkpoint reference.
-    fn new(
-        log: ReplicaLogger,
-        metrics: StateManagerMetrics,
-        state_layout: StateLayout,
-        height: Height,
-    ) -> Self {
-        Self(Arc::new(CheckpointContext {
-            log,
-            metrics,
-            state_layout,
-            height,
-            marked_deleted: AtomicBool::new(false),
-        }))
-    }
-
-    /// Request removal of this checkpoint when the last reference to this
-    /// checkpoint goes out of scope.
-    fn mark_deleted(&self) {
-        self.0.marked_deleted.store(true, Ordering::Relaxed);
-    }
-}
-
-impl fmt::Debug for CheckpointRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "checkpoint reference #{}", self.0.height)
-    }
-}
-
 enum ComputeManifestRequest {
     /// Compute manifest and store the result as a side effect.
     Compute {
-        checkpoint_ref: CheckpointRef,
+        checkpoint_layout: CheckpointLayout<ReadOnly>,
         manifest_delta: Option<manifest::ManifestDelta>,
     },
     /// When the request gets through the queue, notify by sending () into the provided channel.
@@ -710,9 +630,9 @@ fn initialize_tip(
     log: &ReplicaLogger,
     tip_channel: &Sender<TipRequest>,
     snapshot: &Snapshot,
-    checkpoint_ref: &CheckpointRef,
+    checkpoint_layout: CheckpointLayout<ReadOnly>,
 ) -> ReplicatedState {
-    debug_assert_eq!(snapshot.height, checkpoint_ref.0.height);
+    debug_assert_eq!(snapshot.height, checkpoint_layout.height());
 
     // Since we initialize tip from checkpoint states, we expect a clean sandbox slate
     #[cfg(debug_assertions)]
@@ -740,9 +660,7 @@ fn initialize_tip(
     info!(log, "Recovering checkpoint @{} as tip", snapshot.height);
 
     tip_channel
-        .send(TipRequest::ResetTipTo {
-            checkpoint_ref: checkpoint_ref.clone(),
-        })
+        .send(TipRequest::ResetTipTo { checkpoint_layout })
         .unwrap();
 
     // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
@@ -886,7 +804,7 @@ struct PopulatedMetadata {
     certifications_metadata: CertificationsMetadata,
     states_metadata: StatesMetadata,
     compute_manifest_requests: Vec<ComputeManifestRequest>,
-    snapshots: Vec<(Snapshot, CheckpointRef)>,
+    snapshots: Vec<(Snapshot, CheckpointLayout<ReadOnly>)>,
 }
 
 /// An enum describing all possible PageMaps in ReplicatedState
@@ -1389,12 +1307,12 @@ impl StateManagerImpl {
         };
 
         let tip_height_and_state = match snapshots.last() {
-            Some((snapshot, checkpoint_ref)) => {
+            Some((snapshot, checkpoint_layout)) => {
                 // Set latest state height in metadata to be last checkpoint height
                 latest_state_height.store(snapshot.height.get(), Ordering::Relaxed);
                 let starting_time = Instant::now();
 
-                let tip = initialize_tip(&log, &tip_channel, snapshot, checkpoint_ref);
+                let tip = initialize_tip(&log, &tip_channel, snapshot, checkpoint_layout.clone());
 
                 info!(log, "Initialize tip took {:?}", starting_time.elapsed());
                 (snapshot.height, tip)
@@ -1538,19 +1456,6 @@ impl StateManagerImpl {
         ))
     }
 
-    /// Constructs a new ref-counted checkpoint token.
-    ///
-    /// NOTE: this function should not be called twice with the same value of
-    /// `h`.
-    fn new_checkpoint_ref(&self, h: Height) -> CheckpointRef {
-        CheckpointRef::new(
-            self.log.clone(),
-            self.metrics.clone(),
-            self.state_layout.clone(),
-            h,
-        )
-    }
-
     /// Reads states metadata file, returning an empty one if any errors occurs.
     ///
     /// It's OK to miss some (or all) metadata entries as it will be re-computed
@@ -1641,30 +1546,19 @@ impl StateManagerImpl {
                 sender.send(()).expect("failed to sync hasher")
             }
             ComputeManifestRequest::Compute {
-                checkpoint_ref,
+                checkpoint_layout,
                 manifest_delta,
             } => {
-                // As long as CheckpointRef object is in scope, it should be safe to
-                // access the checkpoint data as it's guaranteed to not be removed.
-                let height = checkpoint_ref.0.height;
-                let checkpoint_layout = checkpoint_ref
-                    .0
-                    .state_layout
-                    .checkpoint(height)
-                    .unwrap_or_else(|err| {
-                        fatal!(
-                            log,
-                            "Failed to get checkpoint path for height {}: {}",
-                            height,
-                            err
-                        )
-                    });
-
                 let system_metadata = checkpoint_layout
                     .system_metadata()
                     .deserialize()
                     .unwrap_or_else(|err| {
-                        fatal!(log, "Failed to decode system metadata @{}: {}", height, err)
+                        fatal!(
+                            log,
+                            "Failed to decode system metadata @{}: {}",
+                            checkpoint_layout.height(),
+                            err
+                        )
                     });
 
                 let start = Instant::now();
@@ -1681,7 +1575,7 @@ impl StateManagerImpl {
                     fatal!(
                         log,
                         "Failed to compute manifest for checkpoint @{} after {:?}: {}",
-                        height,
+                        checkpoint_layout.height(),
                         start.elapsed(),
                         err
                     )
@@ -1695,7 +1589,9 @@ impl StateManagerImpl {
 
                 info!(
                     log,
-                    "Computed manifest of state @{} in {:?}", height, elapsed
+                    "Computed manifest of state @{} in {:?}",
+                    checkpoint_layout.height(),
+                    elapsed
                 );
 
                 let state_size_bytes: i64 = manifest
@@ -1707,7 +1603,7 @@ impl StateManagerImpl {
                 metrics.state_size.set(state_size_bytes);
                 metrics
                     .last_computed_manifest_height
-                    .set(height.get() as i64);
+                    .set(checkpoint_layout.height().get() as i64);
 
                 #[cfg(not(feature = "malicious_code"))]
                 let root_hash = CryptoHashOfState::from(CryptoHash(
@@ -1716,12 +1612,17 @@ impl StateManagerImpl {
 
                 // This is where we maliciously alter the root_hash!
                 #[cfg(feature = "malicious_code")]
-                let root_hash =
-                    maliciously_return_wrong_hash(&manifest, log, malicious_flags, height);
+                let root_hash = maliciously_return_wrong_hash(
+                    &manifest,
+                    log,
+                    malicious_flags,
+                    checkpoint_layout.height(),
+                );
 
                 let mut states = states.write();
 
-                if let Some(metadata) = states.states_metadata.get_mut(&height) {
+                if let Some(metadata) = states.states_metadata.get_mut(&checkpoint_layout.height())
+                {
                     metadata.root_hash = Some(root_hash);
                     metadata.manifest = Some(manifest);
                 }
@@ -1774,8 +1675,8 @@ impl StateManagerImpl {
     }
 
     /// Returns the manifest of the latest checkpoint on disk with its
-    /// checkpoint ref.
-    fn latest_manifest(&self) -> Option<(Manifest, CheckpointRef)> {
+    /// checkpoint layout.
+    fn latest_manifest(&self) -> Option<(Manifest, CheckpointLayout<ReadOnly>)> {
         self.checkpoint_heights()
             .iter()
             .rev()
@@ -1783,8 +1684,8 @@ impl StateManagerImpl {
                 let states = self.states.read();
                 let metadata = states.states_metadata.get(checkpointed_height)?;
                 let manifest = metadata.manifest.clone()?;
-                let checkpoint_ref = metadata.checkpoint_ref.clone()?;
-                Some((manifest, checkpoint_ref))
+                let checkpoint_layout = metadata.checkpoint_layout.clone()?;
+                Some((manifest, checkpoint_layout))
             })
     }
 
@@ -1826,7 +1727,7 @@ impl StateManagerImpl {
 
         let mut certifications_metadata = CertificationsMetadata::default();
         let mut states_metadata = StatesMetadata::default();
-        let mut snapshots: Vec<(Snapshot, CheckpointRef)> = Default::default();
+        let mut snapshots: Vec<(Snapshot, CheckpointLayout<ReadOnly>)> = Default::default();
 
         for (height, state) in states {
             certifications_metadata.insert(
@@ -1834,8 +1735,7 @@ impl StateManagerImpl {
                 Self::compute_certification_metadata(metrics, log, &state),
             );
 
-            let checkpoint_ref =
-                CheckpointRef::new(log.clone(), metrics.clone(), layout.clone(), height);
+            let checkpoint_layout = layout.checkpoint(height).unwrap();
 
             let metadata = metadatas.remove(&height);
 
@@ -1850,7 +1750,7 @@ impl StateManagerImpl {
                 states_metadata.insert(
                     height,
                     StateMetadata {
-                        checkpoint_ref: Some(checkpoint_ref.clone()),
+                        checkpoint_layout: Some(checkpoint_layout.clone()),
                         manifest,
                         root_hash,
                         state_sync_file_group: None,
@@ -1858,14 +1758,14 @@ impl StateManagerImpl {
                 );
             } else {
                 compute_manifest_requests.push(ComputeManifestRequest::Compute {
-                    checkpoint_ref: checkpoint_ref.clone(),
+                    checkpoint_layout: checkpoint_layout.clone(),
                     manifest_delta: None,
                 });
 
                 states_metadata.insert(
                     height,
                     StateMetadata {
-                        checkpoint_ref: Some(checkpoint_ref.clone()),
+                        checkpoint_layout: Some(checkpoint_layout.clone()),
                         manifest: None,
                         root_hash: None,
                         state_sync_file_group: None,
@@ -1878,7 +1778,7 @@ impl StateManagerImpl {
                     height,
                     state: Arc::new(state),
                 },
-                checkpoint_ref,
+                checkpoint_layout,
             ));
         }
 
@@ -2047,7 +1947,7 @@ impl StateManagerImpl {
             height,
             StateMetadata {
                 manifest: Some(manifest),
-                checkpoint_ref: Some(self.new_checkpoint_ref(height)),
+                checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
                 root_hash: Some(root_hash),
                 state_sync_file_group: None,
             },
@@ -2160,8 +2060,9 @@ impl StateManagerImpl {
             if heights_to_keep.contains(height) {
                 continue;
             }
-            if let Some(ref checkpoint_ref) = metadata.checkpoint_ref {
-                checkpoint_ref.mark_deleted();
+            if let Some(ref checkpoint_layout) = metadata.checkpoint_layout {
+                self.state_layout
+                    .remove_checkpoint_when_unused(checkpoint_layout.height());
             }
         }
 
@@ -2373,7 +2274,7 @@ impl StateManager for StateManagerImpl {
         // can take a lot of time (many seconds), and we do not want to block
         // state readers (like HTTP handler) for too long.
         //
-        // We are keeping a CheckpointRef for the checkpoint that is becoming
+        // We are keeping a CheckpointLayout for the checkpoint that is becoming
         // the tip, in order to ensure that it does not get deleted.
         //
         // Note that we still will not call initialize_tip()
@@ -2386,11 +2287,11 @@ impl StateManager for StateManagerImpl {
         // In general, there should always be one thread that calls
         // take_tip() and commit_and_certify() — the state machine thread.
 
-        let checkpoint_ref = states
+        let checkpoint_layout = states
             .states_metadata
             .get(&target_snapshot.height)
             .unwrap()
-            .checkpoint_ref
+            .checkpoint_layout
             .as_ref()
             .unwrap()
             .clone();
@@ -2400,7 +2301,7 @@ impl StateManager for StateManagerImpl {
             &self.log,
             &self.tip_channel,
             &target_snapshot,
-            &checkpoint_ref,
+            checkpoint_layout,
         );
 
         new_tip.metadata.prev_state_hash = target_hash;
@@ -2776,7 +2677,7 @@ impl StateManager for StateManagerImpl {
         }
 
         let mut previous_checkpoint_info: Option<PreviousCheckpointInfo> = None;
-        let (cp_ref, checkpointed_state) = match scope {
+        let (cp_layout, checkpointed_state) = match scope {
             CertificationScope::Full => {
                 let start = Instant::now();
                 {
@@ -2830,7 +2731,7 @@ impl StateManager for StateManagerImpl {
                 };
 
                 let elapsed = start.elapsed();
-                let (cp_ref, checkpointed_state) = match result {
+                let (cp_layout, checkpointed_state) = match result {
                     Ok(checkpointed_state) => {
                         info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
                         self.metrics
@@ -2870,7 +2771,10 @@ impl StateManager for StateManagerImpl {
                                     err
                                 )
                             });
-                        (self.new_checkpoint_ref(height), checkpointed_state)
+                        (
+                            self.state_layout.checkpoint(height).unwrap(),
+                            checkpointed_state,
+                        )
                     }
                     Err(err) => fatal!(
                         self.log,
@@ -2880,7 +2784,7 @@ impl StateManager for StateManagerImpl {
                     ),
                 };
                 switch_to_checkpoint(&mut state, &checkpointed_state);
-                (Some(cp_ref), checkpointed_state)
+                (Some(cp_layout), checkpointed_state)
             }
             CertificationScope::Metadata => (None, state.clone()),
         };
@@ -2954,7 +2858,7 @@ impl StateManager for StateManagerImpl {
                     states.states_metadata.insert(
                         height,
                         StateMetadata {
-                            checkpoint_ref: cp_ref.clone(),
+                            checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
                             manifest: None,
                             root_hash: None,
                             state_sync_file_group: None,
@@ -2967,7 +2871,7 @@ impl StateManager for StateManagerImpl {
 
                     self.compute_manifest_request_sender
                         .send(ComputeManifestRequest::Compute {
-                            checkpoint_ref: cp_ref.unwrap(),
+                            checkpoint_layout: cp_layout.unwrap(),
                             manifest_delta: if is_nns { None } else { manifest_delta },
                         })
                         .expect("failed to send ComputeManifestRequest message");
