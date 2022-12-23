@@ -62,7 +62,9 @@ pub trait PublicKeyStore: Send + Sync {
     ) -> Result<(), PublicKeySetOnceError>;
 
     /// Gets the node signing public key.
-    fn node_signing_pubkey(&self) -> Option<&PublicKeyProto>;
+    ///
+    /// Note: any timestamp in [`PublicKeyProto`] will be stripped off.
+    fn node_signing_pubkey(&self) -> Option<PublicKeyProto>;
 
     /// Sets the committee signing public key.
     ///
@@ -73,7 +75,9 @@ pub trait PublicKeyStore: Send + Sync {
     ) -> Result<(), PublicKeySetOnceError>;
 
     /// Gets the committee signing public key.
-    fn committee_signing_pubkey(&self) -> Option<&PublicKeyProto>;
+    ///
+    /// Note: any timestamp in [`PublicKeyProto`] will be stripped off.
+    fn committee_signing_pubkey(&self) -> Option<PublicKeyProto>;
 
     /// Sets the NI-DKG dealing encryption public key.
     ///
@@ -84,7 +88,9 @@ pub trait PublicKeyStore: Send + Sync {
     ) -> Result<(), PublicKeySetOnceError>;
 
     /// Gets the NI-DKG dealing encryption public key.
-    fn ni_dkg_dealing_encryption_pubkey(&self) -> Option<&PublicKeyProto>;
+    ///
+    /// Note: any timestamp in [`PublicKeyProto`] will be stripped off.
+    fn ni_dkg_dealing_encryption_pubkey(&self) -> Option<PublicKeyProto>;
 
     /// Sets the TLS certificate.
     ///
@@ -106,5 +112,6 @@ pub trait PublicKeyStore: Send + Sync {
     /// Gets the iDKG dealing encryption public keys.
     ///
     /// The ordering of the keys is guaranteed to be same as when the keys were set.
-    fn idkg_dealing_encryption_pubkeys(&self) -> &Vec<PublicKeyProto>;
+    /// Note: any timestamp in [`PublicKeyProto`] will be stripped off.
+    fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKeyProto>;
 }

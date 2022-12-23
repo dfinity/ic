@@ -46,7 +46,7 @@ impl PublicKeyStore for TempPublicKeyStore {
         self.store.set_once_node_signing_pubkey(key)
     }
 
-    fn node_signing_pubkey(&self) -> Option<&PublicKey> {
+    fn node_signing_pubkey(&self) -> Option<PublicKey> {
         self.store.node_signing_pubkey()
     }
 
@@ -57,7 +57,7 @@ impl PublicKeyStore for TempPublicKeyStore {
         self.store.set_once_committee_signing_pubkey(key)
     }
 
-    fn committee_signing_pubkey(&self) -> Option<&PublicKey> {
+    fn committee_signing_pubkey(&self) -> Option<PublicKey> {
         self.store.committee_signing_pubkey()
     }
 
@@ -68,7 +68,7 @@ impl PublicKeyStore for TempPublicKeyStore {
         self.store.set_once_ni_dkg_dealing_encryption_pubkey(key)
     }
 
-    fn ni_dkg_dealing_encryption_pubkey(&self) -> Option<&PublicKey> {
+    fn ni_dkg_dealing_encryption_pubkey(&self) -> Option<PublicKey> {
         self.store.ni_dkg_dealing_encryption_pubkey()
     }
 
@@ -87,7 +87,7 @@ impl PublicKeyStore for TempPublicKeyStore {
         self.store.set_idkg_dealing_encryption_pubkeys(keys)
     }
 
-    fn idkg_dealing_encryption_pubkeys(&self) -> &Vec<PublicKey> {
+    fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKey> {
         self.store.idkg_dealing_encryption_pubkeys()
     }
 }

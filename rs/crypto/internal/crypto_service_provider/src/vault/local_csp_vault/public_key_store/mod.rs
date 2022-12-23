@@ -20,12 +20,11 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: 
         public_keys: CurrentNodePublicKeys,
     ) -> Result<bool, CspPublicKeyStoreError> {
         let guard = self.public_key_store_read_lock();
-        let node_signing_public_key = guard.node_signing_pubkey().cloned();
-        let committee_signing_public_key = guard.committee_signing_pubkey().cloned();
+        let node_signing_public_key = guard.node_signing_pubkey();
+        let committee_signing_public_key = guard.committee_signing_pubkey();
         let tls_certificate = guard.tls_certificate().cloned();
-        let dkg_dealing_encryption_public_key = guard.ni_dkg_dealing_encryption_pubkey().cloned();
-        let idkg_dealing_encryption_public_keys =
-            guard.idkg_dealing_encryption_pubkeys().to_owned();
+        let dkg_dealing_encryption_public_key = guard.ni_dkg_dealing_encryption_pubkey();
+        let idkg_dealing_encryption_public_keys = guard.idkg_dealing_encryption_pubkeys();
         drop(guard);
         let keys_match = self.compare_local_and_remote_public_keys(
             node_signing_public_key.as_ref(),
@@ -80,10 +79,10 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: 
 
     fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
         let guard = self.public_key_store_read_lock();
-        let node_signing_public_key = guard.node_signing_pubkey().cloned();
-        let committee_signing_public_key = guard.committee_signing_pubkey().cloned();
+        let node_signing_public_key = guard.node_signing_pubkey();
+        let committee_signing_public_key = guard.committee_signing_pubkey();
         let tls_certificate = guard.tls_certificate().cloned();
-        let dkg_dealing_encryption_public_key = guard.ni_dkg_dealing_encryption_pubkey().cloned();
+        let dkg_dealing_encryption_public_key = guard.ni_dkg_dealing_encryption_pubkey();
         let last_idkg_dealing_encryption_public_key =
             guard.idkg_dealing_encryption_pubkeys().last().cloned();
 

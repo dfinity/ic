@@ -98,7 +98,7 @@ mod idkg_gen_dealing_encryption_key_pair {
                 .public_key_store
                 .read()
                 .idkg_dealing_encryption_pubkeys(),
-            &generated_keys
+            generated_keys
         );
     }
 
