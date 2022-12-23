@@ -97,14 +97,10 @@ try_from_u8!(
         MsgMethodName = 67,
         ParsePrincipal = 68,
         SetTransform = 69,
-        /* TODO(VER-1997): enable this code
         GetHttpReplyWithBody = 70,
         GetHttpTransformContext = 71,
-        */
         StableFill64 = 72,
         CanisterVersion = 73,
-        /* TODO(VER-1997): enable this code
         TrapIfNeq = 74,
-        */
     }
 );

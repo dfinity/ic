@@ -511,7 +511,7 @@ fn dts_scheduling_of_install_code() {
     }
 
     let env = dts_install_code_env(
-        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
     );
 
@@ -667,7 +667,7 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
     }
 
     let env = dts_install_code_env(
-        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(5_000_000_000),
         NumInstructions::from(10_000),
     );
 

@@ -1,13 +1,9 @@
-/* TODO(VER-1997): enable this code
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
-*/
-use candid::Principal;
 use std::convert::TryInto;
 use universal_canister::Ops;
 
 mod api;
 
-/* TODO(VER-1997): enable this code
 // Canister http_request types
 
 #[derive(CandidType, Deserialize)]
@@ -29,15 +25,14 @@ pub struct TransformArg {
     pub context: Vec<u8>,
 }
 
-fn http_reply_with_body(body: &Vec<u8>) -> Vec<u8> {
+fn http_reply_with_body(body: &[u8]) -> Vec<u8> {
     Encode!(&HttpResponse {
-        status: 200 as u128,
+        status: 200_u128,
         headers: vec![],
-        body: body.clone(),
+        body: body.to_vec(),
     })
     .unwrap()
 }
-*/
 
 // A simple dynamically typed stack
 
@@ -321,7 +316,6 @@ fn eval(ops_bytes: OpsBytes) {
                 stack.push_blob(Principal::from_slice(&arg).to_string().as_bytes().to_vec())
             }
             Ops::SetTransform => set_transform(stack.pop_blob()),
-            /* TODO(VER-1997): enable this code
             Ops::GetHttpReplyWithBody => {
                 let body = stack.pop_blob();
                 stack.push_blob(http_reply_with_body(&body));
@@ -330,7 +324,6 @@ fn eval(ops_bytes: OpsBytes) {
                 let arg = Decode!(stack.pop_blob().as_ref(), TransformArg).unwrap();
                 stack.push_blob(arg.context);
             }
-            */
             Ops::StableFill64 => {
                 let length = stack.pop_int64();
                 let byte = stack.pop_int64();
@@ -342,16 +335,15 @@ fn eval(ops_bytes: OpsBytes) {
             }
             Ops::CanisterVersion => {
                 stack.push_int64(api::canister_version());
-            } /* TODO(VER-1997): enable this code
-              Ops::TrapIfNeq => {
-                  let c = stack.pop_blob();
-                  let b = stack.pop_blob();
-                  let a = stack.pop_blob();
-                  if a != b {
-                      api::trap_with_blob(&c)
-                  }
-              }
-              */
+            }
+            Ops::TrapIfNeq => {
+                let c = stack.pop_blob();
+                let b = stack.pop_blob();
+                let a = stack.pop_blob();
+                if a != b {
+                    api::trap_with_blob(&c)
+                }
+            }
         }
     }
 }
