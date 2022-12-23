@@ -435,7 +435,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             .insert(key_id, csp_secret_key, Some(IDKG_MEGA_SCOPE))
             .map_err(CspCreateMEGaKeyError::from)
             .and_then(|()| {
-                let mut public_keys = pks_write_lock.idkg_dealing_encryption_pubkeys().clone();
+                let mut public_keys = pks_write_lock.idkg_dealing_encryption_pubkeys();
                 public_keys.push(public_key_proto);
                 pks_write_lock
                     .set_idkg_dealing_encryption_pubkeys(public_keys)
@@ -693,7 +693,7 @@ fn idkg_most_recent_public_keys_up_to_inclusive<P: PublicKeyStore>(
     let mut keep = false;
 
     for public_key_proto in pks_write_lock.idkg_dealing_encryption_pubkeys() {
-        if !keep && public_key_proto == oldest_public_key_proto {
+        if !keep && &public_key_proto == oldest_public_key_proto {
             keep = true;
         }
         if keep {

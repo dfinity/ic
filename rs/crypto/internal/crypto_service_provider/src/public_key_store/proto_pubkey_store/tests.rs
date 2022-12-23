@@ -42,21 +42,18 @@ fn should_contain_correct_keys_after_opening_existing_pubkey_store() {
 
     let store = ProtoPublicKeyStore::open(crypto_root.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
 
-    assert_eq!(
-        store.node_signing_pubkey(),
-        generated_keys.node_signing_pk.as_ref()
-    );
+    assert_eq!(store.node_signing_pubkey(), generated_keys.node_signing_pk);
     assert_eq!(
         store.committee_signing_pubkey(),
-        generated_keys.committee_signing_pk.as_ref()
+        generated_keys.committee_signing_pk
     );
     assert_eq!(
         store.ni_dkg_dealing_encryption_pubkey(),
-        generated_keys.dkg_dealing_encryption_pk.as_ref()
+        generated_keys.dkg_dealing_encryption_pk
     );
     assert_eq!(
         store.idkg_dealing_encryption_pubkeys(),
-        &generated_keys.idkg_dealing_encryption_pks
+        generated_keys.idkg_dealing_encryption_pks
     );
     assert_eq!(
         store.tls_certificate(),
@@ -75,10 +72,7 @@ fn should_set_pubkeys_if_not_set() {
         store.set_once_node_signing_pubkey(generated_keys.node_signing_pk.clone().unwrap()),
         Ok(())
     );
-    assert_eq!(
-        store.node_signing_pubkey(),
-        generated_keys.node_signing_pk.as_ref()
-    );
+    assert_eq!(store.node_signing_pubkey(), generated_keys.node_signing_pk);
 
     assert!(store.committee_signing_pubkey().is_none());
     assert_matches!(
@@ -89,7 +83,7 @@ fn should_set_pubkeys_if_not_set() {
     );
     assert_eq!(
         store.committee_signing_pubkey(),
-        generated_keys.committee_signing_pk.as_ref()
+        generated_keys.committee_signing_pk
     );
 
     assert!(store.ni_dkg_dealing_encryption_pubkey().is_none());
@@ -101,7 +95,7 @@ fn should_set_pubkeys_if_not_set() {
     );
     assert_eq!(
         store.ni_dkg_dealing_encryption_pubkey(),
-        generated_keys.dkg_dealing_encryption_pk.as_ref()
+        generated_keys.dkg_dealing_encryption_pk
     );
 
     assert!(store.tls_certificate().is_none());
@@ -123,7 +117,7 @@ fn should_set_pubkeys_if_not_set() {
     );
     assert_eq!(
         store.idkg_dealing_encryption_pubkeys(),
-        &generated_keys.idkg_dealing_encryption_pks
+        generated_keys.idkg_dealing_encryption_pks
     );
 }
 
@@ -171,7 +165,7 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
     assert_eq!(
         ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
             .node_signing_pubkey(),
-        generated_keys.node_signing_pk.as_ref()
+        generated_keys.node_signing_pk
     );
 
     assert!(store
@@ -180,7 +174,7 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
     assert_eq!(
         ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
             .committee_signing_pubkey(),
-        generated_keys.committee_signing_pk.as_ref()
+        generated_keys.committee_signing_pk
     );
 
     assert!(store
@@ -191,7 +185,7 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
     assert_eq!(
         ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
             .ni_dkg_dealing_encryption_pubkey(),
-        generated_keys.dkg_dealing_encryption_pk.as_ref()
+        generated_keys.dkg_dealing_encryption_pk
     );
 
     assert!(store
@@ -209,7 +203,7 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
     assert_eq!(
         ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
             .idkg_dealing_encryption_pubkeys(),
-        &generated_keys.idkg_dealing_encryption_pks
+        generated_keys.idkg_dealing_encryption_pks
     );
 }
 
@@ -218,19 +212,19 @@ fn should_preserve_order_of_rotating_pubkeys() {
     let temp_dir = temp_dir();
     let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
     let pubkeys = vec![
-        public_key_with(42),
-        public_key_with(43),
-        public_key_with(44),
+        public_key_with_key_value(42),
+        public_key_with_key_value(43),
+        public_key_with_key_value(44),
     ];
 
     assert!(store
         .set_idkg_dealing_encryption_pubkeys(pubkeys.clone())
         .is_ok());
-    assert_eq!(store.idkg_dealing_encryption_pubkeys(), &pubkeys);
+    assert_eq!(store.idkg_dealing_encryption_pubkeys(), pubkeys);
     assert_eq!(
         ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
             .idkg_dealing_encryption_pubkeys(),
-        &pubkeys
+        pubkeys
     );
 }
 
@@ -266,7 +260,8 @@ fn should_fail_to_write_without_write_permissions() {
     fs::set_permissions(temp_dir.path(), fs::Permissions::from_mode(0o400))
         .expect("failed to set read-only permissions");
 
-    let result = pubkey_store.set_idkg_dealing_encryption_pubkeys(vec![public_key_with(123)]);
+    let result =
+        pubkey_store.set_idkg_dealing_encryption_pubkeys(vec![public_key_with_key_value(123)]);
 
     assert_matches!(result, Err(io_error) if io_error.kind() == std::io::ErrorKind::PermissionDenied);
 
@@ -286,7 +281,7 @@ fn should_deserialize_existing_public_key_store() {
 
     assert_eq!(
         store.node_signing_pubkey(),
-        Some(&PublicKey {
+        Some(PublicKey {
             version: 0,
             algorithm: AlgorithmId::Ed25519 as i32,
             key_value: hex_decode(
@@ -298,7 +293,7 @@ fn should_deserialize_existing_public_key_store() {
     );
     assert_eq!(
         store.committee_signing_pubkey(),
-        Some(&PublicKey {
+        Some(PublicKey {
             version: 0,
             algorithm: AlgorithmId::MultiBls12_381 as i32,
             key_value: hex_decode(
@@ -315,7 +310,7 @@ fn should_deserialize_existing_public_key_store() {
     );
     assert_eq!(
         store.ni_dkg_dealing_encryption_pubkey(),
-        Some(&PublicKey {
+        Some(PublicKey {
             version: 0,
             algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
             key_value: hex_decode(
@@ -335,7 +330,7 @@ fn should_deserialize_existing_public_key_store() {
     );
     assert_eq!(
         store.idkg_dealing_encryption_pubkeys(),
-        &vec![
+        vec![
             (PublicKey {
                 version: 0,
                 algorithm: AlgorithmId::MegaSecp256k1 as i32,
@@ -367,6 +362,80 @@ fn should_deserialize_existing_public_key_store() {
     );
 }
 
+mod timestamps {
+    use super::*;
+
+    #[test]
+    fn should_strip_timestamp_when_returning_node_signing_pubkey() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        store
+            .set_once_node_signing_pubkey(public_key_with_timestamp())
+            .expect("cannot set public key");
+
+        let retrieved_public_key = store.node_signing_pubkey().expect("missing public key");
+
+        assert!(retrieved_public_key.timestamp.is_none())
+    }
+
+    #[test]
+    fn should_strip_timestamp_when_returning_committee_signing_pubkey() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        store
+            .set_once_committee_signing_pubkey(public_key_with_timestamp())
+            .expect("cannot set public key");
+
+        let retrieved_public_key = store
+            .committee_signing_pubkey()
+            .expect("missing public key");
+
+        assert!(retrieved_public_key.timestamp.is_none())
+    }
+
+    #[test]
+    fn should_strip_timestamp_when_returning_ni_dkg_dealing_encryption_pubkey() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        store
+            .set_once_ni_dkg_dealing_encryption_pubkey(public_key_with_timestamp())
+            .expect("cannot set public key");
+
+        let retrieved_public_key = store
+            .ni_dkg_dealing_encryption_pubkey()
+            .expect("missing public key");
+
+        assert!(retrieved_public_key.timestamp.is_none())
+    }
+
+    #[test]
+    fn should_strip_timestamp_when_returning_idkg_dealing_encryption_pubkeys() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        store
+            .set_idkg_dealing_encryption_pubkeys(vec![
+                public_key_with_timestamp(),
+                public_key_with_key_value(42),
+                public_key_with_timestamp(),
+            ])
+            .expect("cannot set public key");
+
+        for public_key in store.idkg_dealing_encryption_pubkeys() {
+            assert!(public_key.timestamp.is_none())
+        }
+    }
+
+    fn public_key_with_timestamp() -> PublicKey {
+        PublicKey {
+            version: 1,
+            algorithm: AlgorithmId::Ed25519 as i32,
+            key_value: [42; 10].to_vec(),
+            proof_data: None,
+            timestamp: Some(1_620_328_630_000),
+        }
+    }
+}
+
 fn hex_decode<T: AsRef<[u8]>>(data: T) -> Vec<u8> {
     hex::decode(data).expect("failed to decode hex")
 }
@@ -386,11 +455,11 @@ fn copy_file_to_dir(source_file: &Path, target_dir: &Path) {
     fs::copy(source_file, target_file).expect("could not copy source file");
 }
 
-fn public_key_with(data: u8) -> PublicKey {
+fn public_key_with_key_value(key_value: u8) -> PublicKey {
     PublicKey {
         version: 1,
         algorithm: AlgorithmId::Ed25519 as i32,
-        key_value: [data; 10].to_vec(),
+        key_value: [key_value; 10].to_vec(),
         proof_data: None,
         timestamp: None,
     }

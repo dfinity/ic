@@ -15,21 +15,21 @@ mock! {
             key: PublicKey,
         ) -> Result<(), PublicKeySetOnceError>;
 
-        fn node_signing_pubkey<'a>(&'a self) -> Option<&'a PublicKey>;
+        fn node_signing_pubkey(&self) -> Option<PublicKey>;
 
         fn set_once_committee_signing_pubkey(
             &mut self,
             key: PublicKey,
         ) -> Result<(), PublicKeySetOnceError>;
 
-        fn committee_signing_pubkey<'a>(&'a self) -> Option<&'a PublicKey>;
+        fn committee_signing_pubkey(&self) -> Option<PublicKey>;
 
         fn set_once_ni_dkg_dealing_encryption_pubkey(
             &mut self,
             key: PublicKey,
         ) -> Result<(), PublicKeySetOnceError>;
 
-        fn ni_dkg_dealing_encryption_pubkey<'a>(&'a self) -> Option<&'a PublicKey>;
+        fn ni_dkg_dealing_encryption_pubkey(&self) -> Option<PublicKey>;
 
         fn set_once_tls_certificate(
             &mut self,
@@ -43,6 +43,6 @@ mock! {
             keys: Vec<PublicKey>,
         ) -> Result<(), std::io::Error>;
 
-        fn idkg_dealing_encryption_pubkeys(&self) -> &Vec<PublicKey>;
+        fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKey>;
         }
 }

@@ -71,8 +71,11 @@ impl PublicKeyStore for ProtoPublicKeyStore {
             .map_err(|io_error| PublicKeySetOnceError::Io(io_error))
     }
 
-    fn node_signing_pubkey(&self) -> Option<&PublicKeyProto> {
-        self.keys.node_signing_pk.as_ref()
+    fn node_signing_pubkey(&self) -> Option<PublicKeyProto> {
+        self.keys
+            .node_signing_pk
+            .as_ref()
+            .map(|pk| remove_timestamp(pk.clone()))
     }
 
     fn set_once_committee_signing_pubkey(
@@ -87,8 +90,11 @@ impl PublicKeyStore for ProtoPublicKeyStore {
             .map_err(|io_error| PublicKeySetOnceError::Io(io_error))
     }
 
-    fn committee_signing_pubkey(&self) -> Option<&PublicKeyProto> {
-        self.keys.committee_signing_pk.as_ref()
+    fn committee_signing_pubkey(&self) -> Option<PublicKeyProto> {
+        self.keys
+            .committee_signing_pk
+            .as_ref()
+            .map(|pk| remove_timestamp(pk.clone()))
     }
 
     fn set_once_ni_dkg_dealing_encryption_pubkey(
@@ -103,8 +109,11 @@ impl PublicKeyStore for ProtoPublicKeyStore {
             .map_err(|io_error| PublicKeySetOnceError::Io(io_error))
     }
 
-    fn ni_dkg_dealing_encryption_pubkey(&self) -> Option<&PublicKeyProto> {
-        self.keys.dkg_dealing_encryption_pk.as_ref()
+    fn ni_dkg_dealing_encryption_pubkey(&self) -> Option<PublicKeyProto> {
+        self.keys
+            .dkg_dealing_encryption_pk
+            .as_ref()
+            .map(|pk| remove_timestamp(pk.clone()))
     }
 
     fn set_once_tls_certificate(
@@ -131,7 +140,18 @@ impl PublicKeyStore for ProtoPublicKeyStore {
         self.write_node_public_keys_proto_to_disk()
     }
 
-    fn idkg_dealing_encryption_pubkeys(&self) -> &Vec<PublicKeyProto> {
-        &self.keys.idkg_dealing_encryption_pks
+    fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKeyProto> {
+        self.keys
+            .idkg_dealing_encryption_pks
+            .iter()
+            .map(|pk| remove_timestamp(pk.clone()))
+            .collect()
+    }
+}
+
+fn remove_timestamp(public_key: PublicKeyProto) -> PublicKeyProto {
+    PublicKeyProto {
+        timestamp: None,
+        ..public_key
     }
 }
