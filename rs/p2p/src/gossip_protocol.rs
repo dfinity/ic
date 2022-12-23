@@ -54,11 +54,11 @@
 use crate::{
     artifact_download_list::ArtifactDownloadListImpl,
     download_prioritization::{DownloadPrioritizer, DownloadPrioritizerImpl},
-    gossip_types::{GossipChunk, GossipChunkRequest},
+    gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage},
     metrics::{DownloadManagementMetrics, DownloadPrioritizerMetrics, GossipMetrics},
     peer_context::PeerContextMap,
     utils::TransportChannelIdMapper,
-    P2PError, P2PErrorCode, P2PResult,
+    P2PError, P2PErrorCode,
 };
 use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
@@ -68,10 +68,7 @@ use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::{
-    artifact::ArtifactFilter, chunkable::ArtifactChunk, crypto::CryptoHash, p2p::GossipAdvert,
-    NodeId, SubnetId,
-};
+use ic_types::{artifact::ArtifactFilter, crypto::CryptoHash, p2p::GossipAdvert, NodeId, SubnetId};
 use lru::LruCache;
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
@@ -240,26 +237,6 @@ impl GossipImpl {
         gossip.refresh_registry();
         gossip
     }
-
-    /// The method returns the artifact chunk matching the given chunk request
-    /// (if available).
-    fn serve_chunk(&self, gossip_request: &GossipChunkRequest) -> P2PResult<ArtifactChunk> {
-        self.artifact_manager
-            .get_validated_by_identifier(&gossip_request.artifact_id)
-            .ok_or_else(|| {
-                self.gossip_metrics.chunk_req_not_found.inc();
-                P2PError {
-                    p2p_error_code: P2PErrorCode::NotFound,
-                }
-            })?
-            .get_chunk(gossip_request.chunk_id)
-            .ok_or_else(|| {
-                self.gossip_metrics.chunk_req_not_found.inc();
-                P2PError {
-                    p2p_error_code: P2PErrorCode::NotFound,
-                }
-            })
-    }
 }
 
 /// Canonical Implementation for the *Gossip* trait.
@@ -304,19 +281,38 @@ impl Gossip for GossipImpl {
             .op_duration
             .with_label_values(&["in_chunk_request"])
             .start_timer();
-        let start = std::time::Instant::now();
-        let artifact_chunk = self.serve_chunk(&gossip_request);
-        self.metrics
-            .op_duration
-            .with_label_values(&["serve_chunk"])
-            .observe(start.elapsed().as_millis() as f64);
+
+        let artifact_chunk = match self
+            .artifact_manager
+            .get_validated_by_identifier(&gossip_request.artifact_id)
+        {
+            Some(artifact) => artifact.get_chunk(gossip_request.chunk_id).ok_or_else(|| {
+                self.gossip_metrics.chunk_req_not_found.inc();
+                P2PError {
+                    p2p_error_code: P2PErrorCode::NotFound,
+                }
+            }),
+            None => {
+                self.gossip_metrics.chunk_req_not_found.inc();
+                Err(P2PError {
+                    p2p_error_code: P2PErrorCode::NotFound,
+                })
+            }
+        };
+
         let gossip_chunk = GossipChunk {
             artifact_id: gossip_request.artifact_id.clone(),
             integrity_hash: gossip_request.integrity_hash.clone(),
             chunk_id: gossip_request.chunk_id,
             artifact_chunk,
         };
-        self.send_chunk_to_peer(gossip_chunk, node_id);
+
+        let message = GossipMessage::Chunk(gossip_chunk);
+        self.transport_send(message, node_id)
+            .map(|_| self.metrics.chunks_sent.inc())
+            .unwrap_or_else(|_| {
+                self.metrics.chunk_send_failed.inc();
+            });
     }
 
     /// The method adds the given chunk to the corresponding artifact

@@ -80,7 +80,7 @@ use ic_interfaces::{
     artifact_manager::OnArtifactError::ArtifactPoolError,
     artifact_pool::ArtifactPoolError::ArtifactReplicaVersionError,
 };
-use ic_interfaces_transport::{TransportChannelId, TransportError, TransportPayload};
+use ic_interfaces_transport::{TransportError, TransportPayload};
 use ic_logger::{error, info, trace, warn};
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy, registry::node::v1::NodeRecord};
 use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
@@ -162,28 +162,6 @@ impl GossipImpl {
             .set(start_time.elapsed().as_micros() as i64);
         self.send_chunk_requests(gossip_requests, peer_id);
         Ok(())
-    }
-
-    /// The method sends a chunk to the peer with the given node ID.
-    pub fn send_chunk_to_peer(&self, gossip_chunk: GossipChunk, peer_id: NodeId) {
-        trace!(
-            self.log,
-            "Node-{:?} sent chunk data  ->{:?} {:?}",
-            self.node_id,
-            peer_id,
-            gossip_chunk
-        );
-        let message = GossipMessage::Chunk(gossip_chunk);
-        let transport_channel = self.transport_channel_mapper.map(&message);
-        self.transport_send(message, peer_id, transport_channel)
-            .map(|_| self.metrics.chunks_sent.inc())
-            .unwrap_or_else(|e| {
-                // Transport and gossip implement fixed-sized queues for flow control.
-                // Logging is performed at a lower level to avoid being spammed by misbehaving
-                // nodes. Errors are ignored as protocol violations.
-                trace!(self.log, "Send chunk failed: peer {:?} {:?} ", peer_id, e);
-                self.metrics.chunk_send_failed.inc();
-            });
     }
 
     /// The method reacts to a chunk received from the peer with the given node
@@ -545,9 +523,8 @@ impl GossipImpl {
     pub fn send_retransmission_request(&self, peer_id: NodeId) {
         let filter = self.artifact_manager.get_filter();
         let message = GossipMessage::RetransmissionRequest(filter);
-        let transport_channel = self.transport_channel_mapper.map(&message);
         let start_time = Instant::now();
-        self.transport_send(message, peer_id, transport_channel)
+        self.transport_send(message, peer_id)
             .map(|_| self.metrics.retransmission_requests_sent.inc())
             .unwrap_or_else(|e| {
                 trace!(
@@ -820,17 +797,17 @@ impl GossipImpl {
     }
 
     /// The method sends the given message over transport to the given peer.
-    fn transport_send(
+    pub(crate) fn transport_send(
         &self,
         message: GossipMessage,
         peer_id: NodeId,
-        channel_id: TransportChannelId,
     ) -> Result<(), TransportError> {
         let _timer = self
             .metrics
             .op_duration
             .with_label_values(&["transport_send"])
             .start_timer();
+        let channel_id = self.transport_channel_mapper.map(&message);
         let message = TransportPayload(pb::GossipMessage::proxy_encode(message).unwrap());
         self.transport
             .send(&peer_id, channel_id, message)
@@ -848,9 +825,8 @@ impl GossipImpl {
     /// The method sends the given advert to the given list of peers.
     pub(crate) fn send_advert_to_peers(&self, gossip_advert: GossipAdvert, peer_ids: Vec<NodeId>) {
         let message = GossipMessage::Advert(gossip_advert);
-        let transport_channel = self.transport_channel_mapper.map(&message);
         for peer_id in peer_ids {
-            self.transport_send(message.clone(), peer_id, transport_channel)
+            self.transport_send(message.clone(), peer_id)
                 .map(|_| self.metrics.adverts_sent.inc())
                 .unwrap_or_else(|_e| {
                     // Ignore advert send failures
@@ -863,16 +839,7 @@ impl GossipImpl {
     fn send_chunk_requests(&self, requests: Vec<GossipChunkRequest>, peer_id: NodeId) {
         for request in requests {
             let message = GossipMessage::ChunkRequest(request);
-            let transport_channel = self.transport_channel_mapper.map(&message);
-            // Debugging
-            trace!(
-                self.log,
-                "Node-{:?} sending chunk request ->{:?} {:?}",
-                self.node_id,
-                peer_id,
-                message
-            );
-            self.transport_send(message, peer_id, transport_channel)
+            self.transport_send(message, peer_id)
                 .map(|_| self.metrics.chunks_requested.inc())
                 .unwrap_or_else(|_e| {
                     // Ingore chunk send failures. Points to a misbehaving peer
@@ -1209,6 +1176,7 @@ pub mod tests {
     use ic_interfaces::artifact_manager::{ArtifactManager, OnArtifactError};
     use ic_interfaces::consensus_pool::ConsensusPoolCache;
     use ic_interfaces_registry::RegistryClient;
+    use ic_interfaces_transport::TransportChannelId;
     use ic_logger::{LoggerImpl, ReplicaLogger};
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::node::v1::{
