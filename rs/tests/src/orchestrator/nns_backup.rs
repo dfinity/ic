@@ -23,6 +23,8 @@ end::catalog[] */
 use super::utils::rw_message::install_nns_and_check_progress;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
+use crate::orchestrator::utils::subnet_recovery::{enable_ecdsa_on_nns, run_ecdsa_signature_test};
+use crate::util::MessageCanister;
 use crate::{
     orchestrator::utils::{
         backup::Backup,
@@ -78,6 +80,21 @@ pub fn test(env: TestEnv) {
 
     let backup_mean = AuthMean::PrivateKey(backup_private_key.clone());
     wait_until_authentication_is_granted(&node_ip, "backup", &backup_mean);
+
+    let agent = nns_node.with_default_agent(|agent| async move { agent });
+    let nns_canister = block_on(MessageCanister::new(
+        &agent,
+        nns_node.effective_canister_id(),
+    ));
+    let k = enable_ecdsa_on_nns(
+        &nns_node,
+        &nns_canister,
+        env.topology_snapshot().root_subnet_id(),
+        None,
+        true,
+        &log,
+    );
+    run_ecdsa_signature_test(&nns_canister, &log, k);
 
     let backup = Backup::new(node_ip, backup_private_key, subnet_id, env.logger());
 

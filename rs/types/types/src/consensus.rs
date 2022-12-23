@@ -1193,7 +1193,7 @@ impl From<&Block> for pb::Block {
             ingress_payload,
             self_validating_payload,
             canister_http_payload,
-            ecdsa_summary,
+            ecdsa_payload,
         ) = if payload.is_summary() {
             (
                 pb::DkgPayload::from(&payload.as_summary().dkg),
@@ -1215,7 +1215,7 @@ impl From<&Block> for pb::Block {
                 Some(pb::IngressPayload::from(&batch.ingress)),
                 Some(pb::SelfValidatingPayload::from(&batch.self_validating)),
                 Some(pb::CanisterHttpPayload::from(&batch.canister_http)),
-                None,
+                payload.as_data().ecdsa.as_ref().map(|ecdsa| ecdsa.into()),
             )
         };
         Self {
@@ -1231,7 +1231,7 @@ impl From<&Block> for pb::Block {
             ingress_payload,
             self_validating_payload,
             canister_http_payload,
-            ecdsa_summary,
+            ecdsa_payload,
             payload_hash: block.payload.get_hash().clone().get().0,
         }
     }
@@ -1273,13 +1273,18 @@ impl TryFrom<pb::Block> for Block {
                     batch.is_empty(),
                     "Error: Summary block has non-empty batch payload."
                 );
-                // Convert the ECDSA summary and adjust the refs to point to
-                // the new summary height
-                let height = Height::from(block.height);
+                // Convert the ECDSA summary. Note that the summary may contain
+                // transcript references, and here we are NOT checking if these
+                // references are valid. Such checks, if required, should be done
+                // after converting from protobuf to rust internal type.
+                //
+                // If after conversion, the summary block is intend to get a different
+                // height value (e.g. when a new CUP is created), then a call to
+                // ecdsa.update_refs(height) should be manually called.
                 let ecdsa = block
-                    .ecdsa_summary
+                    .ecdsa_payload
                     .as_ref()
-                    .map(|ecdsa| (ecdsa, height).try_into())
+                    .map(|ecdsa| ecdsa.try_into())
                     .transpose()?;
                 BlockPayload::Summary(SummaryPayload {
                     dkg: summary,
@@ -1287,11 +1292,12 @@ impl TryFrom<pb::Block> for Block {
                 })
             }
             dkg::Payload::Dealings(dealings) => {
-                assert!(
-                    block.ecdsa_summary.is_none(),
-                    "Error: Payload block has ECDSA summary."
-                );
-                (batch, dealings, None).into()
+                let ecdsa = block
+                    .ecdsa_payload
+                    .as_ref()
+                    .map(|ecdsa| ecdsa.try_into())
+                    .transpose()?;
+                (batch, dealings, ecdsa).into()
             }
         };
         Ok(Block {

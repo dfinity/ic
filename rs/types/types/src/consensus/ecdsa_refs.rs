@@ -287,6 +287,42 @@ pub struct IDkgTranscriptAttributes {
     registry_version: RegistryVersion,
 }
 
+impl From<&IDkgTranscriptAttributes> for pb::IDkgTranscriptAttributes {
+    fn from(attributes: &IDkgTranscriptAttributes) -> Self {
+        pb::IDkgTranscriptAttributes {
+            receivers: attributes
+                .receivers
+                .iter()
+                .cloned()
+                .map(crate::node_id_into_protobuf)
+                .collect(),
+            algorithm_id: attributes.algorithm_id as i32,
+            registry_version: attributes.registry_version.get(),
+        }
+    }
+}
+
+impl TryFrom<&pb::IDkgTranscriptAttributes> for IDkgTranscriptAttributes {
+    type Error = String;
+    fn try_from(attributes: &pb::IDkgTranscriptAttributes) -> Result<Self, Self::Error> {
+        let mut receivers = BTreeSet::new();
+        for pb_node_id in &attributes.receivers {
+            let node_id = crate::node_id_try_from_protobuf(pb_node_id.clone()).map_err(|err| {
+                format!(
+                    "pb::IDkgTranscriptParamsRef:: Failed to convert receiver: {:?}",
+                    err
+                )
+            })?;
+            receivers.insert(node_id);
+        }
+        Ok(IDkgTranscriptAttributes::new(
+            receivers,
+            AlgorithmId::from(attributes.algorithm_id),
+            RegistryVersion::new(attributes.registry_version),
+        ))
+    }
+}
+
 impl IDkgTranscriptAttributes {
     pub fn new(
         receivers: BTreeSet<NodeId>,

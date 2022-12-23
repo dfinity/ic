@@ -38,8 +38,7 @@ message Block {
 	IngressPayload ingress_payload = 9;
 	XNetPayload xnet_payload = 10;
 	SelfValidatingPayload self_validating_payload = 12;
-	// Only present in summary blocks
-	EcdsaSummaryPayload ecdsa_summary = 13;
+	EcdsaPayload ecdsa_payload = 13;
 	CanisterHttpPayload canister_http_payload = 14;
 	bytes payload_hash = 11;
 }

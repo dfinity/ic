@@ -16,10 +16,19 @@ use super::utils::rw_message::install_nns_and_check_progress;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{can_read_msg, store_message};
+use crate::orchestrator::utils::subnet_recovery::{
+    enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test,
+};
 use crate::orchestrator::utils::upgrade::*;
-use crate::util::block_on;
+use crate::tecdsa::tecdsa_signature_test::{
+    add_ecdsa_key_with_timeout_and_rotation_period, make_key, KEY_ID1,
+};
+use crate::util::{block_on, runtime_from_url, MessageCanister};
+use canister_test::Canister;
+use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, SubnetId};
+use k256::ecdsa::VerifyingKey;
 use slog::{info, Logger};
 use std::env;
 
@@ -81,6 +90,31 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
         .next()
         .unwrap();
 
+    let agent = nns_node.with_default_agent(|agent| async move { agent });
+    let nns_canister = block_on(MessageCanister::new(
+        &agent,
+        nns_node.effective_canister_id(),
+    ));
+
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance = Canister::new(&nns_runtime, GOVERNANCE_CANISTER_ID);
+    let subnet_id = env
+        .topology_snapshot()
+        .subnets()
+        .find(|s| s.subnet_type() == subnet_type)
+        .unwrap()
+        .subnet_id;
+    info!(logger, "Enabling ECDSA signatures on {subnet_id}.");
+    block_on(add_ecdsa_key_with_timeout_and_rotation_period(
+        &governance,
+        subnet_id,
+        make_key(KEY_ID1),
+        None,
+        None,
+    ));
+    let key = enable_ecdsa_signing_on_subnet(&nns_node, &nns_canister, subnet_id, &logger);
+    run_ecdsa_signature_test(&nns_canister, &logger, key);
+
     let original_branch_version = get_assigned_replica_version(&nns_node).unwrap();
     // We have to upgrade to `<VERSION>-test` because the original version is stored without the
     // download URL in the registry.
@@ -127,6 +161,8 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
         &mainnet_version,
         &branch_version,
         subnet_type,
+        &nns_canister,
+        key,
     );
 }
 
@@ -137,6 +173,8 @@ fn downgrade_upgrade_roundtrip(
     target_version: &str,
     branch_version: &str,
     subnet_type: SubnetType,
+    nns_canister: &MessageCanister,
+    key: VerifyingKey,
 ) {
     let logger = env.logger();
     let (subnet_id, subnet_node, faulty_node) = if subnet_type == SubnetType::System {
@@ -199,6 +237,7 @@ fn downgrade_upgrade_roundtrip(
         msg_2
     ));
     info!(logger, "Could store and read message '{}'", msg_2);
+    run_ecdsa_signature_test(nns_canister, &logger, key);
 
     stop_node(&logger, &faulty_node);
     upgrade_to(nns_node, subnet_id, &subnet_node, branch_version, &logger);
@@ -218,6 +257,7 @@ fn downgrade_upgrade_roundtrip(
     }
 
     info!(logger, "Could read all previously stored messages!");
+    run_ecdsa_signature_test(nns_canister, &logger, key);
 }
 
 fn upgrade_to(
