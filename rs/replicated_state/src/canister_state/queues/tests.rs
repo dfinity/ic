@@ -148,6 +148,7 @@ fn enqueuing_unexpected_response_does_not_panic() {
 fn can_push_output_response_after_input_request() {
     let mut queues = CanisterQueuesFixture::new();
     queues.push_input_request().unwrap();
+    queues.pop_input().unwrap();
     queues.push_output_response();
 }
 
@@ -172,6 +173,7 @@ fn cannot_push_input_response_without_output_request() {
 fn can_push_input_response_after_output_request() {
     let mut queues = CanisterQueuesFixture::new();
     queues.push_output_request().unwrap();
+    queues.pop_output().unwrap();
     queues.push_input_response().unwrap();
 }
 
@@ -351,6 +353,8 @@ fn test_message_picking_round_robin() {
             .expect("could not push");
     }
 
+    // Push a request to other_2 to the output queue to get a reserved slot
+    // for a response, then pop the request.
     queues
         .push_output_request(
             RequestBuilder::default()
@@ -361,8 +365,10 @@ fn test_message_picking_round_robin() {
             mock_time(),
         )
         .unwrap();
-    // This succeeds because we pushed a request to other_2 to the output_queue
-    // above which reserved a slot for the expected response here.
+    let mut output_iter = queues.output_into_iter(other_2);
+    output_iter.pop().unwrap();
+
+    // Push a response to other_2.
     queues
         .push_input(
             ResponseBuilder::default()
