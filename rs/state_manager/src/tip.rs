@@ -1,6 +1,4 @@
-use crate::{
-    CheckpointError, CheckpointRef, PageMapType, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
-};
+use crate::{CheckpointError, PageMapType, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS};
 use crossbeam_channel::{unbounded, Sender};
 use ic_logger::{fatal, ReplicaLogger};
 #[allow(unused)]
@@ -33,7 +31,7 @@ pub enum TipRequest {
     /// Return the created checkpoint or error into the sender.
     TipToCheckpoint {
         height: Height,
-        sender: Sender<Result<(CheckpointRef, CheckpointLayout<ReadOnly>), LayoutError>>,
+        sender: Sender<Result<CheckpointLayout<ReadOnly>, LayoutError>>,
     },
     /// Filter canisters in tip. Remove ones not present in the set.
     FilterTipCanisters {
@@ -53,7 +51,7 @@ pub enum TipRequest {
     },
     /// Reset tip folder to the checkpoint with given height.
     ResetTipTo {
-        checkpoint_ref: CheckpointRef,
+        checkpoint_layout: CheckpointLayout<ReadOnly>,
     },
     /// Serialize the data from ReplicatedState to the tip folder.
     SerializeToTip {
@@ -121,7 +119,7 @@ pub fn spawn_tip_thread(
                                 });
                         }
                         TipRequest::TipToCheckpoint { height, sender } => {
-                            let _cp_ref = {
+                            let cp = {
                                 let _timer =
                                     request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
                                 let tip = tip_handler.tip(height);
@@ -146,16 +144,10 @@ pub fn spawn_tip_thread(
                                                 continue;
                                             }
                                             Ok(cp) => {
-                                                let cp_ref = CheckpointRef::new(
-                                                    log.clone(),
-                                                    metrics.clone(),
-                                                    state_layout.clone(),
-                                                    height,
-                                                );
-                                                sender.send(Ok((cp_ref.clone(), cp))).expect(
+                                                sender.send(Ok(cp.clone())).expect(
                                                     "Failed to return TipToCheckpoint result",
                                                 );
-                                                cp_ref
+                                                cp
                                             }
                                         }
                                     }
@@ -164,7 +156,7 @@ pub fn spawn_tip_thread(
 
                             let _timer = request_timer(&metrics, "tip_to_checkpoint_reset_tip_to");
                             tip_handler
-                                .reset_tip_to(&state_layout, height, Some(&mut thread_pool))
+                                .reset_tip_to(&state_layout, &cp, Some(&mut thread_pool))
                                 .unwrap_or_else(|err| {
                                     fatal!(
                                         log,
@@ -220,19 +212,19 @@ pub fn spawn_tip_thread(
                                 fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
                             });
                         }
-                        TipRequest::ResetTipTo { checkpoint_ref } => {
+                        TipRequest::ResetTipTo { checkpoint_layout } => {
                             let _timer = request_timer(&metrics, "reset_tip_to");
                             tip_handler
                                 .reset_tip_to(
                                     &state_layout,
-                                    checkpoint_ref.0.height,
+                                    &checkpoint_layout,
                                     Some(&mut thread_pool),
                                 )
                                 .unwrap_or_else(|err| {
                                     fatal!(
                                         log,
                                         "Failed to reset tip to height @{}: {}",
-                                        checkpoint_ref.0.height,
+                                        checkpoint_layout.height(),
                                         err
                                     );
                                 });

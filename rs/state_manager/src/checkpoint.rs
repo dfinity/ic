@@ -1,5 +1,5 @@
 use crate::{
-    CheckpointError, CheckpointMetrics, CheckpointRef, PageMapType, PersistenceError, TipRequest,
+    CheckpointError, CheckpointMetrics, PageMapType, PersistenceError, TipRequest,
     NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
@@ -40,7 +40,7 @@ pub fn make_checkpoint(
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
     thread_pool: &mut scoped_threadpool::Pool,
-) -> Result<(CheckpointRef, ReplicatedState), CheckpointError> {
+) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState), CheckpointError> {
     {
         let _timer = metrics
             .make_checkpoint_step_duration
@@ -61,7 +61,7 @@ pub fn make_checkpoint(
         })
         .unwrap();
 
-    let (cp_ref, cp) = {
+    let cp = {
         let _timer = metrics
             .make_checkpoint_step_duration
             .with_label_values(&["tip_to_checkpoint"])
@@ -101,7 +101,7 @@ pub fn make_checkpoint(
         )?
     };
 
-    Ok((cp_ref, state))
+    Ok((cp, state))
 }
 /// Calls [load_checkpoint] with a newly created thread pool.
 /// See [load_checkpoint] for further details.
