@@ -32,6 +32,7 @@ const MIN_NANOS: u64 = 60 * SEC_NANOS;
 /// The minimum number of pending request in the queue before we try to make
 /// a batch transaction.
 pub const MIN_PENDING_REQUESTS: usize = 20;
+pub const MAX_REQUESTS_PER_BATCH: usize = 100;
 
 // Source: ckBTC design doc (go/ckbtc-design).
 const P2WPKH_DUST_THRESHOLD: Satoshi = 294;
@@ -188,7 +189,7 @@ async fn submit_pending_requests() {
     fetch_main_utxos(&main_account, &main_address).await;
 
     let maybe_sign_request = state::mutate_state(|s| {
-        let batch = s.build_batch();
+        let batch = s.build_batch(MAX_REQUESTS_PER_BATCH);
 
         if batch.is_empty() {
             return None;
