@@ -18,7 +18,7 @@ where
         wasm_module,
         arg,
         compute_allocation: None,
-        memory_allocation: Some(candid::Nat::from(8 * 1024 * 1024 * 1024u64)),
+        memory_allocation: None,
         query_allocation: None,
     };
 
