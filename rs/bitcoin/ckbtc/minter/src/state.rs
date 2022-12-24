@@ -324,12 +324,12 @@ impl CkBtcMinterState {
     }
 
     /// Forms a batch of retrieve_btc requests that the minter can fulfill.
-    pub fn build_batch(&mut self) -> Vec<RetrieveBtcRequest> {
+    pub fn build_batch(&mut self, max_size: usize) -> Vec<RetrieveBtcRequest> {
         let available_utxos_value = self.available_utxos.iter().map(|u| u.value).sum::<u64>();
         let mut batch = vec![];
         let mut tx_amount = 0;
         for req in std::mem::take(&mut self.pending_retrieve_btc_requests) {
-            if available_utxos_value < req.amount + tx_amount {
+            if available_utxos_value < req.amount + tx_amount || batch.len() >= max_size {
                 // Put this request back to the queue until we have enough liquid UTXOs.
                 self.pending_retrieve_btc_requests.push(req);
             } else {

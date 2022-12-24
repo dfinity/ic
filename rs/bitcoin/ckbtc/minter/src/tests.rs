@@ -640,6 +640,7 @@ proptest! {
         utxos_acc_idx in pvec((arb_utxo(5_000u64..1_000_000_000), 0..5usize), 10..20),
         accounts in pvec(arb_account(), 5),
         requests in arb_retrieve_btc_requests(5_000u64..1_000_000_000, 1..25),
+        limit in 1..25usize,
     ) {
         let mut state = CkBtcMinterState::from(InitArgs {
             btc_network: Network::Regtest,
@@ -661,13 +662,14 @@ proptest! {
             prop_assert_eq!(state.retrieve_btc_status(block_index), RetrieveBtcStatus::Pending);
         }
 
-        let batch = state.build_batch();
+        let batch = state.build_batch(limit);
 
         for req in batch.iter() {
             prop_assert_eq!(state.retrieve_btc_status(req.block_index), RetrieveBtcStatus::Unknown);
         }
 
         prop_assert!(batch.iter().map(|req| req.amount).sum::<u64>() <= available_amount);
+        prop_assert!(batch.len() <= limit);
 
         state.check_invariants().expect("invariant check failed");
     }
