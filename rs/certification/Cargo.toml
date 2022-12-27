@@ -14,6 +14,7 @@ serde_cbor = "0.11.1"
 tree-deserializer = { path = "../tree_deserializer" }
 
 [dev-dependencies]
+assert_matches = "1.5.0"
 ic-base-types = {path = "../types/base_types"}
 ic-certification-test-utils = { path = "test-utils"}
 ic-crypto-internal-types = { path = "../crypto/internal/crypto_lib/types" }
