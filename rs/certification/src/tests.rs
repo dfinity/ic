@@ -1,8 +1,9 @@
 use std::str::FromStr;
 
+use assert_matches::assert_matches;
 use rand::{thread_rng, Rng};
 
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_certification_test_utils::{
     encoded_time, serialize_to_cbor, CertificateBuilder, CertificateData::CanisterData,
     CertificateData::CustomTree, CertificateData::SubnetData,
@@ -14,9 +15,47 @@ use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::Time;
 
 use crate::{
-    validate_subnet_delegation_certificate, verify_certified_data, CanisterId,
-    CertificateValidationError,
+    validate_subnet_delegation_certificate, validate_subnet_delegation_certificate_with_cache,
+    verify_certified_data, verify_certified_data_with_cache, CertificateValidationError,
 };
+
+fn verify_certified_data_with_and_without_cache(
+    certificate: &[u8],
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+    certified_data: &[u8],
+) -> Result<Time, CertificateValidationError> {
+    let verification_result_without_cache =
+        verify_certified_data(certificate, canister_id, root_pk, certified_data);
+
+    let verification_result_with_cache =
+        verify_certified_data_with_cache(certificate, canister_id, root_pk, certified_data);
+
+    assert_eq!(
+        verification_result_without_cache,
+        verification_result_with_cache
+    );
+
+    verification_result_without_cache
+}
+
+fn validate_subnet_delegation_certificate_with_and_without_cache(
+    certificate: &[u8],
+    subnet_id: &SubnetId,
+    root_pk: &ThresholdSigPublicKey,
+) -> Result<(), CertificateValidationError> {
+    let verification_result_without_cache =
+        validate_subnet_delegation_certificate(certificate, subnet_id, root_pk);
+    let verification_result_with_cache =
+        validate_subnet_delegation_certificate_with_cache(certificate, subnet_id, root_pk);
+
+    assert_eq!(
+        verification_result_without_cache,
+        verification_result_with_cache
+    );
+
+    verification_result_without_cache
+}
 
 #[test]
 fn should_validate_subnet_delegation_test_vector() {
@@ -28,7 +67,7 @@ fn should_validate_subnet_delegation_test_vector() {
         151, 175, 200, 212, 236, 231, 248, 36, 83, 84, 142, 170,
     ];
 
-    let verification_result = verify_certified_data(
+    let verification_result = verify_certified_data_with_and_without_cache(
         &certificate,
         &CanisterId::from_str("5v3p4-iyaaa-aaaaa-qaaaa-cai").unwrap(),
         &parse_threshold_sig_key_from_der(&root_pubkey).unwrap(),
@@ -47,8 +86,13 @@ fn should_validate_certificate_without_delegation() {
     })
     .build();
 
-    let verification_result =
-        verify_certified_data(&cbor, &canister_id(1), &pk, certified_data.as_bytes());
+    let verification_result = verify_certified_data_with_and_without_cache(
+        &cbor,
+        &canister_id(1),
+        &pk,
+        certified_data.as_bytes(),
+    );
+
     verification_result.expect("expect valid signature");
 }
 
@@ -64,10 +108,14 @@ fn should_return_correct_time() {
     .with_time(time.as_nanos_since_unix_epoch())
     .build();
 
-    let verification_result =
-        verify_certified_data(&cbor, &canister_id(1), &pk, certified_data.as_bytes());
+    let verification_result = verify_certified_data_with_and_without_cache(
+        &cbor,
+        &canister_id(1),
+        &pk,
+        certified_data.as_bytes(),
+    );
 
-    assert_eq!(verification_result.expect("expect valid signature"), time);
+    verification_result.expect("expect valid signature");
 }
 
 #[test]
@@ -83,8 +131,13 @@ fn should_validate_certificate_with_delegation() {
     }))
     .build();
 
-    let verification_result =
-        verify_certified_data(&cbor, &canister_id(1), &pk, certified_data.as_bytes());
+    let verification_result = verify_certified_data_with_and_without_cache(
+        &cbor,
+        &canister_id(1),
+        &pk,
+        certified_data.as_bytes(),
+    );
+
     verification_result.expect("expect valid signature");
 }
 
@@ -102,8 +155,13 @@ fn should_validate_certificate_with_delegation_lowest_canister_id() {
     }))
     .build();
 
-    let verification_result =
-        verify_certified_data(&cbor, &low_canister_id, &pk, certified_data.as_bytes());
+    let verification_result = verify_certified_data_with_and_without_cache(
+        &cbor,
+        &low_canister_id,
+        &pk,
+        certified_data.as_bytes(),
+    );
+
     verification_result.expect("expect valid signature");
 }
 
@@ -120,9 +178,13 @@ fn should_validate_certificate_with_delegation_highest_canister_id() {
         canister_id_ranges: vec![(canister_id(0), high_canister_id)],
     }))
     .build();
+    let verification_result = verify_certified_data_with_and_without_cache(
+        &cbor,
+        &high_canister_id,
+        &pk,
+        certified_data.as_bytes(),
+    );
 
-    let verification_result =
-        verify_certified_data(&cbor, &high_canister_id, &pk, certified_data.as_bytes());
     verification_result.expect("expect valid signature");
 }
 
@@ -139,9 +201,13 @@ fn should_validate_certificate_with_single_id_canister_id_range() {
         canister_id_ranges: vec![(canister_id, canister_id)],
     }))
     .build();
+    let verification_result = verify_certified_data_with_and_without_cache(
+        &cbor,
+        &canister_id,
+        &pk,
+        certified_data.as_bytes(),
+    );
 
-    let verification_result =
-        verify_certified_data(&cbor, &canister_id, &pk, certified_data.as_bytes());
     verification_result.expect("expect valid signature");
 }
 
@@ -162,8 +228,9 @@ fn should_validate_certificate_with_delegation_with_multiple_canister_id_ranges(
         ],
     }))
     .build();
+    let verification_result =
+        verify_certified_data_with_and_without_cache(&cbor, &cid, &pk, certified_data.as_bytes());
 
-    let verification_result = verify_certified_data(&cbor, &cid, &pk, certified_data.as_bytes());
     verification_result.expect("expect valid signature");
 }
 
@@ -179,16 +246,17 @@ fn should_fail_certificate_verification_with_empty_canister_id_range() {
     }))
     .build();
 
-    let verification_result = verify_certified_data(
+    let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
         &canister_id(1),
         &pk,
         random_certified_data().as_bytes(),
     );
-    assert!(matches!(
+
+    assert_matches!(
         verification_result,
         Err(CertificateValidationError::CanisterIdOutOfRange)
-    ));
+    );
 }
 
 #[test]
@@ -200,16 +268,16 @@ fn should_fail_certificate_with_invalid_signature() {
     .with_invalid_sig()
     .build();
 
-    let verification_result = verify_certified_data(
+    let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
         &canister_id(1),
         &pk,
         random_certified_data().as_bytes(),
     );
-    assert!(matches!(
+    assert_matches!(
         verification_result,
         Err(CertificateValidationError::InvalidSignature(_))
-    ));
+    );
 }
 
 #[test]
@@ -225,16 +293,16 @@ fn should_fail_certificate_validation_with_wrong_public_key() {
 
     assert_ne!(pk, wrong_pk);
 
-    let verification_result = verify_certified_data(
+    let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
         &canister_id(1),
         &wrong_pk,
         random_certified_data().as_bytes(),
     );
-    assert!(matches!(
+    assert_matches!(
         verification_result,
         Err(CertificateValidationError::InvalidSignature(_))
-    ));
+    );
 }
 
 #[test]
@@ -252,17 +320,17 @@ fn should_fail_certificate_verification_with_invalid_delegation_signature() {
     )
     .build();
 
-    let verification_result = verify_certified_data(
+    let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
         &canister_id(1),
         &pk,
         random_certified_data().as_bytes(),
     );
 
-    assert!(matches!(
+    assert_matches!(
         verification_result,
         Err(CertificateValidationError::InvalidSignature(_))
-    ));
+    );
 }
 
 #[test]
@@ -281,17 +349,17 @@ fn should_fail_certificate_verification_with_mismatched_delegation_subnet_id() {
     }))
     .build();
 
-    let verification_result = verify_certified_data(
+    let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
         &canister_id(1),
         &pk,
         random_certified_data().as_bytes(),
     );
 
-    assert!(matches!(
+    assert_matches!(
         verification_result,
         Err(CertificateValidationError::MalformedHashTree(_))
-    ));
+    );
 }
 
 #[test]
@@ -312,17 +380,17 @@ fn should_fail_certificate_verification_with_too_many_delegations() {
     )
     .build();
 
-    let verification_result = verify_certified_data(
+    let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
         &canister_id(1),
         &pk,
         random_certified_data().as_bytes(),
     );
 
-    assert!(matches!(
+    assert_matches!(
         verification_result,
         Err(CertificateValidationError::MultipleSubnetDelegationsNotAllowed)
-    ));
+    );
 }
 
 #[test]
@@ -337,17 +405,17 @@ fn should_fail_certificate_verification_with_canister_id_out_of_range() {
     }))
     .build();
 
-    let verification_result = verify_certified_data(
+    let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
         &canister_id(1),
         &pk,
         random_certified_data().as_bytes(),
     );
 
-    assert!(matches!(
+    assert_matches!(
         verification_result,
         Err(CertificateValidationError::CanisterIdOutOfRange)
-    ));
+    );
 }
 
 #[test]
@@ -365,17 +433,17 @@ fn should_fail_certificate_verification_with_canister_id_out_of_range_multiple_r
     }))
     .build();
 
-    let verification_result = verify_certified_data(
+    let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
         &canister_id(1),
         &pk,
         random_certified_data().as_bytes(),
     );
 
-    assert!(matches!(
+    assert_matches!(
         verification_result,
         Err(CertificateValidationError::CanisterIdOutOfRange)
-    ));
+    );
 }
 
 #[test]
@@ -390,17 +458,17 @@ fn should_fail_on_certified_data_mismatch() {
     })
     .build();
 
-    let verification_result = verify_certified_data(
+    let verification_result = verify_certified_data_with_and_without_cache(
         &cbor,
         &canister_id(1),
         &pk,
         expected_certified_data.as_bytes(),
     );
 
-    assert!(matches!(
+    assert_matches!(
         verification_result,
         Err(CertificateValidationError::CertifiedDataMismatch { .. })
-    ));
+    );
 }
 
 #[test]
@@ -410,17 +478,17 @@ fn should_fail_on_invalid_cbor() {
     let mut garbled_data: [u8; 128] = [0; 128];
     thread_rng().fill(&mut garbled_data);
 
-    let verification_result = verify_certified_data(
+    let verification_result = verify_certified_data_with_and_without_cache(
         &garbled_data,
         &canister_id(1),
         &pk,
         Digest([1; 32]).as_bytes(),
     );
 
-    assert!(matches!(
+    assert_matches!(
         verification_result,
         Err(CertificateValidationError::DeserError { .. })
-    ));
+    );
 }
 
 #[test]
@@ -431,13 +499,17 @@ fn should_fail_on_unexpected_tree() {
     ])))
     .build();
 
-    let verification_result =
-        verify_certified_data(&cbor, &canister_id(1), &pk, Digest([1; 32]).as_bytes());
+    let verification_result = verify_certified_data_with_and_without_cache(
+        &cbor,
+        &canister_id(1),
+        &pk,
+        Digest([1; 32]).as_bytes(),
+    );
 
-    assert!(matches!(
+    assert_matches!(
         verification_result,
         Err(CertificateValidationError::DeserError { .. })
-    ));
+    );
 }
 
 #[test]
@@ -456,8 +528,12 @@ fn should_validate_delegation_cert() {
     let delegation = cert.delegation.expect("missing delegation");
 
     assert!(
-        validate_subnet_delegation_certificate(&delegation.certificate, &subnet_id, &root_pk)
-            .is_ok()
+        validate_subnet_delegation_certificate_with_and_without_cache(
+            &delegation.certificate,
+            &subnet_id,
+            &root_pk
+        )
+        .is_ok()
     );
 }
 
@@ -482,10 +558,14 @@ fn should_fail_to_validate_delegation_cert_if_it_contains_further_delegations() 
     .build();
     let delegation = cert.delegation.expect("missing delegation");
 
-    assert!(matches!(
-        validate_subnet_delegation_certificate(&delegation.certificate, &subnet_id, &root_pk),
+    assert_matches!(
+        validate_subnet_delegation_certificate_with_and_without_cache(
+            &delegation.certificate,
+            &subnet_id,
+            &root_pk
+        ),
         Err(CertificateValidationError::MultipleSubnetDelegationsNotAllowed)
-    ));
+    );
 }
 
 #[test]
@@ -506,10 +586,14 @@ fn should_fail_to_validate_delegation_cert_with_invalid_signature() {
     .build();
     let delegation = cert.delegation.expect("missing delegation");
 
-    assert!(matches!(
-        validate_subnet_delegation_certificate(&delegation.certificate, &subnet_id, &root_pk),
+    assert_matches!(
+        validate_subnet_delegation_certificate_with_and_without_cache(
+            &delegation.certificate,
+            &subnet_id,
+            &root_pk
+        ),
         Err(CertificateValidationError::InvalidSignature(_))
-    ));
+    );
 }
 
 #[test]
@@ -517,10 +601,10 @@ fn should_fail_to_validate_delegation_cert_if_cert_tree_is_malformed() {
     let dummy_root_pk =
         CertificateBuilder::new(CustomTree(LabeledTree::Leaf(b"".to_vec()))).get_root_public_key();
 
-    assert!(matches!(
-        validate_subnet_delegation_certificate(&[42, 128], &subnet_id(42), &dummy_root_pk),
+    assert_matches!(
+        validate_subnet_delegation_certificate_with_and_without_cache(&[42, 128], &subnet_id(42), &dummy_root_pk),
         Err(CertificateValidationError::DeserError(e)) if e.contains("failed to decode certificate")
-    ));
+    );
 }
 
 #[test]
@@ -528,29 +612,29 @@ fn should_fail_to_validate_delegation_cert_if_time_missing() {
     let subnet_id = subnet_id(42);
 
     let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
-    .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
-        flatmap![
-            Label::from("subnet") => LabeledTree::SubTree(flatmap![
-                Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                    Label::from("canister_ranges") => LabeledTree::Leaf(b"dummy_canister_ranges".to_vec()),
-                    Label::from("public_key") => LabeledTree::Leaf(b"dummy_public_key".to_vec()),
-                ])
-            ]),
-            // time is missing here
-        ],
-    ))))
-    .with_delegation_subnet_id(subnet_id)
-    .build();
+                    canister_id: canister_id(1),
+                    certified_data: random_certified_data(),
+                })
+                .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
+                    flatmap![
+                        Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                            Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                                Label::from("canister_ranges") => LabeledTree::Leaf(b"dummy_canister_ranges".to_vec()),
+                                Label::from("public_key") => LabeledTree::Leaf(b"dummy_public_key".to_vec()),
+                            ])
+                        ]),
+                        // time is missing here
+                    ],
+                ))))
+                .with_delegation_subnet_id(subnet_id)
+                .build();
     let delegation = cert.delegation.expect("missing delegation");
 
-    assert!(matches!(
-        validate_subnet_delegation_certificate(&delegation.certificate, &subnet_id, &root_pk),
+    assert_matches!(
+        validate_subnet_delegation_certificate_with_and_without_cache(&delegation.certificate, &subnet_id, &root_pk),
         Err(CertificateValidationError::DeserError(e))
         if e.contains("failed to unpack replica state from a labeled tree")
-    ));
+    );
 }
 
 #[test]
@@ -558,29 +642,29 @@ fn should_fail_to_validate_delegation_cert_if_time_malformed() {
     let subnet_id = subnet_id(42);
 
     let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
-    .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
-        flatmap![
-        Label::from("subnet") => LabeledTree::SubTree(flatmap![
-            Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                Label::from("canister_ranges") => LabeledTree::Leaf(b"dummy_canister_ranges".to_vec()),
-                Label::from("public_key") => LabeledTree::Leaf(b"dummy_public_key".to_vec()),
-            ])
-        ]),
-        Label::from("time") => LabeledTree::Leaf(b"malformed_time".to_vec())
-    ],
-    ))))
-    .with_delegation_subnet_id(subnet_id)
-    .build();
+                    canister_id: canister_id(1),
+                    certified_data: random_certified_data(),
+                })
+                .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
+                    flatmap![
+                    Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                        Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                            Label::from("canister_ranges") => LabeledTree::Leaf(b"dummy_canister_ranges".to_vec()),
+                            Label::from("public_key") => LabeledTree::Leaf(b"dummy_public_key".to_vec()),
+                        ])
+                    ]),
+                    Label::from("time") => LabeledTree::Leaf(b"malformed_time".to_vec())
+                ],
+                ))))
+                .with_delegation_subnet_id(subnet_id)
+                .build();
     let delegation = cert.delegation.expect("missing delegation");
 
-    assert!(matches!(
-        validate_subnet_delegation_certificate(&delegation.certificate, &subnet_id, &root_pk),
+    assert_matches!(
+        validate_subnet_delegation_certificate_with_and_without_cache(&delegation.certificate, &subnet_id, &root_pk),
         Err(CertificateValidationError::DeserError(e))
         if e.contains("failed to unpack replica state from a labeled tree")
-    ));
+    );
 }
 
 #[test]
@@ -588,29 +672,29 @@ fn should_fail_to_validate_delegation_cert_if_subnet_public_key_missing() {
     let subnet_id = subnet_id(42);
 
     let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
-    .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
-        flatmap![
-            Label::from("subnet") => LabeledTree::SubTree(flatmap![
-                Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                    Label::from("canister_ranges") => LabeledTree::Leaf(b"dummy_canister_ranges".to_vec()),
-                    // public key is missing here
-                ])
-            ]),
-            Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
-        ],
-    ))))
-    .with_delegation_subnet_id(subnet_id)
-    .build();
+                    canister_id: canister_id(1),
+                    certified_data: random_certified_data(),
+                })
+                .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
+                    flatmap![
+                        Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                            Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                                Label::from("canister_ranges") => LabeledTree::Leaf(b"dummy_canister_ranges".to_vec()),
+                                // public key is missing here
+                            ])
+                        ]),
+                        Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
+                    ],
+                ))))
+                .with_delegation_subnet_id(subnet_id)
+                .build();
     let delegation = cert.delegation.expect("missing delegation");
 
-    assert!(matches!(
-        validate_subnet_delegation_certificate(&delegation.certificate, &subnet_id, &root_pk),
+    assert_matches!(
+        validate_subnet_delegation_certificate_with_and_without_cache(&delegation.certificate, &subnet_id, &root_pk),
         Err(CertificateValidationError::DeserError(e))
         if e.contains("failed to unpack replica state from a labeled tree")
-    ));
+    );
 }
 
 #[test]
@@ -636,11 +720,11 @@ fn should_fail_to_validate_delegation_cert_if_subnet_canister_ranges_missing() {
     .build();
     let delegation = cert.delegation.expect("missing delegation");
 
-    assert!(matches!(
-        validate_subnet_delegation_certificate(&delegation.certificate, &subnet_id, &root_pk),
+    assert_matches!(
+        validate_subnet_delegation_certificate_with_and_without_cache(&delegation.certificate, &subnet_id, &root_pk),
         Err(CertificateValidationError::DeserError(e))
         if e.contains("failed to unpack replica state from a labeled tree")
-    ));
+    );
 }
 
 #[test]
@@ -649,29 +733,29 @@ fn should_fail_to_validate_delegation_cert_if_subnet_public_key_malformed() {
     let canister_ranges: Vec<(CanisterId, CanisterId)> = vec![(canister_id(0), canister_id(10))];
 
     let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
-    .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
-        flatmap![
-            Label::from("subnet") => LabeledTree::SubTree(flatmap![
-                Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                    Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&canister_ranges)),
-                    Label::from("public_key") => LabeledTree::Leaf(b"dummy_public_key".to_vec()),
-                ])
-            ]),
-            Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
-        ],
-    ))))
-    .with_delegation_subnet_id(subnet_id)
-    .build();
+                    canister_id: canister_id(1),
+                    certified_data: random_certified_data(),
+                })
+                .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
+                    flatmap![
+                        Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                            Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                                Label::from("canister_ranges") => LabeledTree::Leaf(serialize_to_cbor(&canister_ranges)),
+                                Label::from("public_key") => LabeledTree::Leaf(b"dummy_public_key".to_vec()),
+                            ])
+                        ]),
+                        Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
+                    ],
+                ))))
+                .with_delegation_subnet_id(subnet_id)
+                .build();
     let delegation = cert.delegation.expect("missing delegation");
 
-    assert!(matches!(
-        validate_subnet_delegation_certificate(&delegation.certificate, &subnet_id, &root_pk),
+    assert_matches!(
+        validate_subnet_delegation_certificate_with_and_without_cache(&delegation.certificate, &subnet_id, &root_pk),
         Err(CertificateValidationError::DeserError(e))
         if e.contains("failed to deserialize public key")
-    ));
+    );
 }
 
 #[test]
@@ -679,28 +763,28 @@ fn should_fail_to_validate_delegation_cert_if_subnet_canister_ranges_malformed()
     let subnet_id = subnet_id(42);
 
     let (cert, root_pk, _cbor) = CertificateBuilder::new(CanisterData {
-        canister_id: canister_id(1),
-        certified_data: random_certified_data(),
-    })
-    .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
-        flatmap![
-            Label::from("subnet") => LabeledTree::SubTree(flatmap![
-                Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
-                    Label::from("canister_ranges") => LabeledTree::Leaf(b"dummy_canister_ranges".to_vec()),
-                    Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&threshold_sig_pubkey().into_bytes()).unwrap()),
-                ])
-            ]),
-            Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
-        ],
-    ))))
-    .with_delegation_subnet_id(subnet_id)
-    .build();
+                    canister_id: canister_id(1),
+                    certified_data: random_certified_data(),
+                })
+                .with_delegation(CertificateBuilder::new(CustomTree(LabeledTree::SubTree(
+                    flatmap![
+                        Label::from("subnet") => LabeledTree::SubTree(flatmap![
+                            Label::from(subnet_id.get_ref().to_vec()) => LabeledTree::SubTree(flatmap![
+                                Label::from("canister_ranges") => LabeledTree::Leaf(b"dummy_canister_ranges".to_vec()),
+                                Label::from("public_key") => LabeledTree::Leaf(public_key_to_der(&threshold_sig_pubkey().into_bytes()).unwrap()),
+                            ])
+                        ]),
+                        Label::from("time") => LabeledTree::Leaf(encoded_time(1234567))
+                    ],
+                ))))
+                .with_delegation_subnet_id(subnet_id)
+                .build();
     let delegation = cert.delegation.expect("missing delegation");
-    assert!(matches!(
-        validate_subnet_delegation_certificate(&delegation.certificate, &subnet_id, &root_pk),
+    assert_matches!(
+        validate_subnet_delegation_certificate_with_and_without_cache(&delegation.certificate, &subnet_id, &root_pk),
         Err(CertificateValidationError::DeserError(e))
         if e.contains("failed to unpack canister range")
-    ));
+    );
 }
 
 fn random_certified_data() -> Digest {

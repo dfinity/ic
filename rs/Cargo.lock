@@ -4587,6 +4587,7 @@ dependencies = [
 name = "ic-certification"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "hex",
  "ic-base-types",
  "ic-certification-test-utils",

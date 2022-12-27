@@ -3,7 +3,7 @@ use std::convert::TryFrom;
 use std::fmt;
 
 use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
-use ic_crypto_utils_threshold_sig::verify_combined;
+use ic_crypto_utils_threshold_sig::{verify_combined, verify_combined_with_cache};
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_types::{
     consensus::certification::CertificationContent,
@@ -22,7 +22,7 @@ mod tests;
 
 /// Describes an error that occurred during parsing and validation of the result
 /// of a `RegistryCanister::get_certified_changes_since()` method call.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum CertificateValidationError {
     /// Failed to deserialize some part of the certificate.
     DeserError(String),
@@ -105,6 +105,30 @@ pub fn verify_certified_data(
     root_pk: &ThresholdSigPublicKey,
     certified_data: &[u8],
 ) -> Result<Time, CertificateValidationError> {
+    verify_certified_data_internal(certificate, canister_id, root_pk, certified_data, false)
+}
+
+/// Does the same as [`verify_certified_data`] but keeps some verified signatures in cache
+/// for efficiency.
+pub fn verify_certified_data_with_cache(
+    certificate: &[u8],
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+    certified_data: &[u8],
+) -> Result<Time, CertificateValidationError> {
+    verify_certified_data_internal(certificate, canister_id, root_pk, certified_data, true)
+}
+
+/// Verifies a certificate and its certified data with optional signature cache.
+/// Internal implementation used by `pub` functions.
+/// More details are given in [`verify_certified_data`].
+fn verify_certified_data_internal(
+    certificate: &[u8],
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+    certified_data: &[u8],
+    use_signature_cache: bool,
+) -> Result<Time, CertificateValidationError> {
     #[derive(Deserialize, Debug)]
     struct CanisterView {
         certified_data: Blob,
@@ -116,7 +140,8 @@ pub fn verify_certified_data(
         canister: BTreeMap<CanisterId, CanisterView>,
     }
 
-    let verified_certificate = verify_certificate(certificate, canister_id, root_pk)?;
+    let verified_certificate =
+        verify_certificate_internal(certificate, canister_id, root_pk, use_signature_cache)?;
 
     let replica_labeled_tree = parse_tree(verified_certificate.tree)?;
     let replica_state = ReplicaState::deserialize(LabeledTreeDeserializer::new(
@@ -176,6 +201,28 @@ pub fn verify_certificate(
     canister_id: &CanisterId,
     root_pk: &ThresholdSigPublicKey,
 ) -> Result<Certificate, CertificateValidationError> {
+    verify_certificate_internal(certificate, canister_id, root_pk, false)
+}
+
+/// Does the same as [`verify_certificate`] but keeps some verified signatures in cache
+/// for efficiency.
+pub fn verify_certificate_with_cache(
+    certificate: &[u8],
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+) -> Result<Certificate, CertificateValidationError> {
+    verify_certificate_internal(certificate, canister_id, root_pk, true)
+}
+
+/// Verifies a certificate with optional signature cache.
+/// Internal implementation used by `pub` functions.
+/// More details are given in [`verify_certificate`].
+fn verify_certificate_internal(
+    certificate: &[u8],
+    canister_id: &CanisterId,
+    root_pk: &ThresholdSigPublicKey,
+    use_signature_cache: bool,
+) -> Result<Certificate, CertificateValidationError> {
     let certificate: Certificate = parse_certificate(certificate)?;
     let key = if let Some(delegation) = &certificate.delegation {
         let subnet_id = PrincipalId::try_from(&*delegation.subnet_id)
@@ -191,12 +238,13 @@ pub fn verify_certificate(
             &subnet_id,
             root_pk,
             Some(canister_id),
+            use_signature_cache,
         )?
     } else {
         *root_pk
     };
 
-    verify_certificate_signature(&certificate, &key)?;
+    verify_certificate_signature(&certificate, &key, use_signature_cache)?;
     Ok(certificate)
 }
 
@@ -208,6 +256,7 @@ fn verify_delegation_certificate(
     subnet_id: &SubnetId,
     root_pk: &ThresholdSigPublicKey,
     canister_id: Option<&CanisterId>,
+    use_signature_cache: bool,
 ) -> Result<ThresholdSigPublicKey, CertificateValidationError> {
     #[derive(Deserialize, Debug)]
     struct SubnetView {
@@ -230,7 +279,7 @@ fn verify_delegation_certificate(
         return Err(CertificateValidationError::MultipleSubnetDelegationsNotAllowed);
     };
 
-    verify_certificate_signature(&certificate, root_pk)?;
+    verify_certificate_signature(&certificate, root_pk, use_signature_cache)?;
 
     let replica_labeled_tree = parse_tree(certificate.tree)?;
     let subnet_state =
@@ -282,7 +331,18 @@ pub fn validate_subnet_delegation_certificate(
     subnet_id: &SubnetId,
     root_pk: &ThresholdSigPublicKey,
 ) -> Result<(), CertificateValidationError> {
-    verify_delegation_certificate(certificate, subnet_id, root_pk, None).map(|_public_key| ())
+    verify_delegation_certificate(certificate, subnet_id, root_pk, None, false)
+        .map(|_public_key| ())
+}
+
+/// Does the same as [`validate_subnet_delegation_certificate`] but keeps some
+/// verified signatures in cache for efficiency.
+pub fn validate_subnet_delegation_certificate_with_cache(
+    certificate: &[u8],
+    subnet_id: &SubnetId,
+    root_pk: &ThresholdSigPublicKey,
+) -> Result<(), CertificateValidationError> {
+    verify_delegation_certificate(certificate, subnet_id, root_pk, None, true).map(|_public_key| ())
 }
 
 fn parse_certificate(certificate: &[u8]) -> Result<Certificate, CertificateValidationError> {
@@ -303,11 +363,17 @@ fn parse_tree(tree: MixedHashTree) -> Result<LabeledTree<Vec<u8>>, CertificateVa
 fn verify_certificate_signature(
     certificate: &Certificate,
     key: &ThresholdSigPublicKey,
+    use_signature_cache: bool,
 ) -> Result<(), CertificateValidationError> {
     let digest = CryptoHashOfPartialState::from(CryptoHash(certificate.tree.digest().to_vec()));
     let content = CertificationContent::new(digest.clone());
     let sig = CombinedThresholdSigOf::new(CombinedThresholdSig(certificate.signature.to_vec()));
-    verify_combined(&content, &sig, key).map_err(|err| {
+    let threshold_sig_verification_fn = if use_signature_cache {
+        verify_combined_with_cache
+    } else {
+        verify_combined
+    };
+    threshold_sig_verification_fn(&content, &sig, key).map_err(|err| {
         CertificateValidationError::InvalidSignature(format!(
             "certificate_tree_hash={:?}, sig={:?}, pk={:?}, error={:?}",
             digest, certificate.signature, key, err

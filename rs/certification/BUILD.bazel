@@ -2,30 +2,35 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
+DEPENDENCIES = [
+    "//rs/crypto/tree_hash",
+    "//rs/crypto/utils/threshold_sig",
+    "//rs/crypto/utils/threshold_sig_der",
+    "//rs/tree_deserializer",
+    "//rs/types/types",
+    "@crate_index//:hex",
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/certification/test-utils",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/types/base_types",
+    "@crate_index//:assert_matches",
+    "@crate_index//:rand_0_8_4",
+]
+
 rust_library(
     name = "certification",
     srcs = glob(["src/**"]),
     crate_name = "ic_certification",
     version = "0.8.0",
-    deps = [
-        "//rs/crypto/tree_hash",
-        "//rs/crypto/utils/threshold_sig",
-        "//rs/crypto/utils/threshold_sig_der",
-        "//rs/tree_deserializer",
-        "//rs/types/types",
-        "@crate_index//:hex",
-        "@crate_index//:serde",
-        "@crate_index//:serde_cbor",
-    ],
+    deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "certification_test",
     crate = ":certification",
-    deps = [
-        "//rs/certification/test-utils",
-        "//rs/crypto/internal/crypto_lib/types",
-        "//rs/types/base_types",
-        "@crate_index//:rand_0_8_4",
-    ],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
