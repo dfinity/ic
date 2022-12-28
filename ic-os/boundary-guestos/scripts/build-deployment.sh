@@ -158,6 +158,7 @@ VALUES=$(echo ${CONFIG} \
 | .aux_nodes[] += { "type": "aux" } | .boundary_nodes[] += {"type": "boundary"} | .nodes[] += { "type": "replica" }
 | [.aux_nodes[], .boundary_nodes[], .nodes[]][] | [
     .ipv6_address,
+    .ipv6_gateway,
     .ipv4_gateway,
     .ipv4_address,
     .prober,
@@ -167,9 +168,10 @@ VALUES=$(echo ${CONFIG} \
     .node_idx,
     .type
 ] | join("\u0001")')
-while IFS=$'\1' read -r ipv6_address ipv4_gateway ipv4_address prober hostname subnet_type subnet_idx node_idx type; do
+while IFS=$'\1' read -r ipv6_address ipv6_gateway ipv4_gateway ipv4_address prober hostname subnet_type subnet_idx node_idx type; do
     eval "declare -A __RAW_NODE_$NODES=(
         ['ipv6_address']=$ipv6_address
+        ['ipv6_gateway']=$ipv6_gateway
 	    ['ipv4_gateway']=$ipv4_gateway
         ['ipv4_address']=$ipv4_address
         ['prober']=$prober
@@ -286,6 +288,8 @@ function generate_network_config() {
             local hostname=${NODE["hostname"]}
             local subnet_idx=${NODE["subnet_idx"]}
             local node_idx=${NODE["node_idx"]}
+            local ipv6_address=${NODE["ipv6_address"]}
+            local ipv6_gateway=${NODE["ipv6_gateway"]}
             local ipv4_address=${NODE["ipv4_address"]}
             local ipv4_gateway=${NODE["ipv4_gateway"]}
 
@@ -297,17 +301,19 @@ function generate_network_config() {
             echo "name_servers=${NAME_SERVERS}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
             echo "name_servers_fallback=${NAME_SERVERS_FALLBACK}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
 
-            # Set ipv4 address
-            if [ -z ${ipv4_address:-} ]; then
-                echo "ipv4_address is unset"
-            else
-                echo "ipv4_address=${ipv4_address}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
+            # ipv6
+            if [ -z ${ipv6_address:-} ]; then echo "ipv6_address is unset"; else
+                echo "ipv6_address=${ipv6_address}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
+            fi
+            if [ -z ${ipv6_gateway:-} ]; then echo "ipv6_gateway is unset"; else
+                echo "ipv6_gateway=${ipv6_gateway}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
             fi
 
-            # Set ipv4 gateway
-            if [ -z ${ipv4_gateway:-} ]; then
-                echo "ipv4_gateway is unset"
-            else
+            # ipv4
+            if [ -z ${ipv4_address:-} ]; then echo "ipv4_address is unset"; else
+                echo "ipv4_address=${ipv4_address}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
+            fi
+            if [ -z ${ipv4_gateway:-} ]; then echo "ipv4_gateway is unset"; else
                 echo "ipv4_gateway=${ipv4_gateway}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
             fi
 
