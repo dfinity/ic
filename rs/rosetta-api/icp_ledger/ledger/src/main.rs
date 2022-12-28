@@ -23,12 +23,12 @@ use ic_ledger_core::{
     tokens::{Tokens, DECIMAL_PLACES},
 };
 use icp_ledger::{
-    account_identifier::account_identifier_from_account, protobuf, tokens_into_proto,
-    AccountBalanceArgs, AccountIdentifier, ArchiveInfo, ArchivedBlocksRange, Archives,
-    BinaryAccountBalanceArgs, Block, BlockArg, BlockRes, CandidBlock, Decimals, GetBlocksArgs,
-    IterBlocksArgs, LedgerCanisterInitPayload, Memo, Name, Operation, PaymentError, QueryArchiveFn,
-    QueryBlocksResponse, SendArgs, Subaccount, Symbol, TipOfChainRes, TotalSupplyArgs, Transaction,
-    TransferArgs, TransferError, TransferFee, TransferFeeArgs, MAX_BLOCKS_PER_REQUEST,
+    protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdentifier, ArchiveInfo,
+    ArchivedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
+    CandidBlock, Decimals, GetBlocksArgs, IterBlocksArgs, LedgerCanisterInitPayload, Memo, Name,
+    Operation, PaymentError, QueryArchiveFn, QueryBlocksResponse, SendArgs, Subaccount, Symbol,
+    TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
+    TransferFeeArgs, MAX_BLOCKS_PER_REQUEST,
 };
 use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES};
 use num_traits::cast::ToPrimitive;
@@ -225,7 +225,7 @@ async fn icrc1_send(
         return Err(ic_icrc1::endpoints::TransferError::TemporarilyUnavailable);
     }
 
-    let from = account_identifier_from_account(from_account);
+    let from = AccountIdentifier::from(from_account);
     let minting_acc = LEDGER
         .read()
         .unwrap()
@@ -762,7 +762,7 @@ async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError>
 
 #[candid_method(update, rename = "icrc1_transfer")]
 async fn icrc1_transfer(ag: TransferArg) -> Result<Nat, ic_icrc1::endpoints::TransferError> {
-    let to = account_identifier_from_account(ag.to);
+    let to = AccountIdentifier::from(ag.to);
     let from_account = Account {
         owner: PrincipalId::from(ic_cdk::api::caller()),
         subaccount: ag.from_subaccount,
@@ -776,7 +776,7 @@ async fn icrc1_transfer(ag: TransferArg) -> Result<Nat, ic_icrc1::endpoints::Tra
                     .read()
                     .unwrap()
                     .balances
-                    .account_balance(&account_identifier_from_account(from_account))
+                    .account_balance(&AccountIdentifier::from(from_account))
                     .get_e8s(),
             );
             assert!(balance < ag.amount);

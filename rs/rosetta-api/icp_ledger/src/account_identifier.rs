@@ -2,7 +2,6 @@ use candid::CandidType;
 use dfn_core::CanisterId;
 use ic_base_types::{CanisterIdError, PrincipalId, PrincipalIdError};
 use ic_crypto_sha::Sha224;
-use ic_icrc1::Account;
 use serde::{de, de::Error, Deserialize, Serialize};
 use std::{
     convert::{TryFrom, TryInto},
@@ -28,10 +27,6 @@ impl AsRef<[u8]> for AccountIdentifier {
     fn as_ref(&self) -> &[u8] {
         &self.hash
     }
-}
-
-pub fn account_identifier_from_account(acc: Account) -> AccountIdentifier {
-    AccountIdentifier::new(acc.owner, acc.subaccount.map(Subaccount))
 }
 
 impl TryFrom<&proto::AccountIdentifier> for AccountIdentifier {

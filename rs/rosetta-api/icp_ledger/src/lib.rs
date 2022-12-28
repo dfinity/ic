@@ -117,9 +117,10 @@ where
 pub struct Transaction {
     pub operation: Operation,
     pub memo: Memo,
-    pub icrc1_memo: Option<ByteBuf>,
     /// The time this transaction was created.
     pub created_at_time: Option<TimeStamp>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icrc1_memo: Option<ByteBuf>,
 }
 
 impl LedgerTransaction for Transaction {
