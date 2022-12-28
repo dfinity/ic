@@ -25,6 +25,20 @@ message GossipChunkRequest {
   bytes integrity_hash = 3;
 }
 
+message GossipChunk {
+  GossipChunkRequest request = 6;
+  oneof response {
+    ArtifactChunk chunk = 3;
+    P2PError error = 4;
+  }
+  reserved 1, 2, 5;
+}
+
+enum P2PError {
+  P2P_ERROR_UNSPECIFIED = 0;
+  P2P_ERROR_NOT_FOUND = 1;
+};
+
 message ArtifactFilter {
   ConsensusMessageFilter consensus_filter = 1;
   IngressMessageFilter ingress_filter = 2;
@@ -48,16 +62,6 @@ message StateSyncFilter {
   uint64 height = 1;
 }
 
-message GossipChunk {
-  bytes artifact_id = 1;
-  uint32 chunk_id = 2;
-  oneof response {
-    ArtifactChunk chunk = 3;
-    P2PError error = 4;
-  }
-  bytes integrity_hash = 5;
-}
-
 message ArtifactChunk {
   repeated bytes witnesses = 1;
   oneof data {
@@ -65,8 +69,3 @@ message ArtifactChunk {
     bytes chunk = 3;
   }
 }
-
-enum P2PError {
-  P2P_ERROR_UNSPECIFIED = 0;
-  P2P_ERROR_NOT_FOUND = 1;
-};

@@ -275,7 +275,7 @@ impl Gossip for GossipImpl {
 
     /// The method handles the given chunk request received from the peer with
     /// the given node ID.
-    fn on_chunk_request(&self, gossip_request: GossipChunkRequest, node_id: NodeId) {
+    fn on_chunk_request(&self, chunk_request: GossipChunkRequest, node_id: NodeId) {
         let _timer = self
             .gossip_metrics
             .op_duration
@@ -284,16 +284,16 @@ impl Gossip for GossipImpl {
 
         let artifact_chunk = match self
             .artifact_manager
-            .get_validated_by_identifier(&gossip_request.artifact_id)
+            .get_validated_by_identifier(&chunk_request.artifact_id)
         {
-            Some(artifact) => artifact.get_chunk(gossip_request.chunk_id).ok_or_else(|| {
-                self.gossip_metrics.chunk_req_not_found.inc();
+            Some(artifact) => artifact.get_chunk(chunk_request.chunk_id).ok_or_else(|| {
+                self.gossip_metrics.requested_chunks_not_found.inc();
                 P2PError {
                     p2p_error_code: P2PErrorCode::NotFound,
                 }
             }),
             None => {
-                self.gossip_metrics.chunk_req_not_found.inc();
+                self.gossip_metrics.requested_chunks_not_found.inc();
                 Err(P2PError {
                     p2p_error_code: P2PErrorCode::NotFound,
                 })
@@ -301,12 +301,9 @@ impl Gossip for GossipImpl {
         };
 
         let gossip_chunk = GossipChunk {
-            artifact_id: gossip_request.artifact_id.clone(),
-            integrity_hash: gossip_request.integrity_hash.clone(),
-            chunk_id: gossip_request.chunk_id,
+            request: chunk_request,
             artifact_chunk,
         };
-
         let message = GossipMessage::Chunk(gossip_chunk);
         self.transport_send(message, node_id);
     }

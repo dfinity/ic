@@ -29,12 +29,8 @@ pub(crate) struct GossipChunkRequest {
 /// It contains the actual chunk data in an artifact chunk.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct GossipChunk {
-    /// The artifact ID.
-    pub(crate) artifact_id: ArtifactId,
-    /// The integrity hash.
-    pub(crate) integrity_hash: CryptoHash,
-    /// The chunk ID.
-    pub(crate) chunk_id: ChunkId,
+    /// The request which resulted in the 'artifact_chunk'.
+    pub(crate) request: GossipChunkRequest,
     /// The artifact chunk, encapsulated in a `P2PResult`.
     pub(crate) artifact_chunk: P2PResult<ArtifactChunk>,
 }
@@ -139,18 +135,18 @@ impl TryFrom<pb::GossipChunkRequest> for GossipChunkRequest {
 impl From<GossipChunk> for pb::GossipChunk {
     /// The function converts the given chunk into the Protobuf equivalent.
     fn from(gossip_chunk: GossipChunk) -> Self {
-        let response = match gossip_chunk.artifact_chunk {
+        let GossipChunk {
+            request,
+            artifact_chunk,
+        } = gossip_chunk;
+        let response = match artifact_chunk {
             Ok(artifact_chunk) => Some(Response::Chunk(artifact_chunk.into())),
             // Add additional cases as required.
             Err(_) => Some(Response::Error(pb::P2pError::NotFound as i32)),
         };
         Self {
-            artifact_id: serialize(&gossip_chunk.artifact_id)
-                .expect("Local value serialization should succeed"),
-            chunk_id: gossip_chunk.chunk_id.get(),
+            request: Some(pb::GossipChunkRequest::from(request)),
             response,
-            integrity_hash: serialize(&gossip_chunk.integrity_hash)
-                .expect("Local value serialization should succeed"),
         }
     }
 }
@@ -161,10 +157,13 @@ impl TryFrom<pb::GossipChunk> for GossipChunk {
     /// The function attempts to convert a Protobuf chunk into a GossipChunk.
     fn try_from(gossip_chunk: pb::GossipChunk) -> Result<Self, Self::Error> {
         let response = try_from_option_field(gossip_chunk.response, "GossipChunk.response")?;
-        let chunk_id = ChunkId::from(gossip_chunk.chunk_id);
+        let request = gossip_chunk.request.ok_or(ProxyDecodeError::MissingField(
+            "The 'request' field is missing",
+        ))?;
+        let chunk_id = ChunkId::from(request.chunk_id);
+        let request = GossipChunkRequest::try_from(request)?;
         Ok(Self {
-            artifact_id: deserialize(&gossip_chunk.artifact_id)?,
-            chunk_id,
+            request,
             artifact_chunk: match response {
                 Response::Chunk(c) => {
                     let artifact_chunk: ArtifactChunk = c.try_into()?;
@@ -178,7 +177,6 @@ impl TryFrom<pb::GossipChunk> for GossipChunk {
                     p2p_error_code: P2PErrorCode::NotFound,
                 }),
             },
-            integrity_hash: deserialize(&gossip_chunk.integrity_hash)?,
         })
     }
 }

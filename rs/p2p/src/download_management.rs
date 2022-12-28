@@ -71,9 +71,7 @@ use crate::{
     download_prioritization::{AdvertTracker, AdvertTrackerFinalAction, DownloadAttemptTracker},
     gossip_protocol::{GossipImpl, ReceiveCheckCache},
     gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage},
-    peer_context::{
-        GossipChunkRequestTracker, GossipChunkRequestTrackerKey, PeerContext, PeerContextMap,
-    },
+    peer_context::{GossipChunkRequestTracker, PeerContext, PeerContextMap},
     P2PError, P2PErrorCode, P2PResult,
 };
 use ic_interfaces::{
@@ -181,16 +179,9 @@ impl GossipImpl {
         // Remove the chunk request tracker.
         let mut current_peers = self.current_peers.lock();
         if let Some(peer_context) = current_peers.get_mut(&peer_id) {
-            if let Some(tracker) = peer_context
-                .requested
-                .remove(&GossipChunkRequestTrackerKey {
-                    artifact_id: gossip_chunk.artifact_id.clone(),
-                    integrity_hash: gossip_chunk.integrity_hash.clone(),
-                    chunk_id: gossip_chunk.chunk_id,
-                })
-            {
+            if let Some(tracker) = peer_context.requested.remove(&gossip_chunk.request) {
                 let artifact_tag: &'static str =
-                    ArtifactTag::from(&gossip_chunk.artifact_id).into();
+                    ArtifactTag::from(&gossip_chunk.request.artifact_id).into();
                 self.metrics
                     .chunk_delivery_time
                     .with_label_values(&[artifact_tag])
@@ -199,8 +190,8 @@ impl GossipImpl {
                 trace!(
                     self.log,
                     "unsolicited or timed out artifact {:?} chunk {:?} from peer {:?}",
-                    gossip_chunk.artifact_id,
-                    gossip_chunk.chunk_id,
+                    gossip_chunk.request.artifact_id,
+                    gossip_chunk.request.chunk_id,
                     peer_id.get()
                 );
                 self.metrics.chunks_unsolicited_or_timed_out.inc();
@@ -225,8 +216,8 @@ impl GossipImpl {
             trace!(
                 self.log,
                 "Chunk download failed for artifact{:?} chunk {:?} from peer {:?}",
-                gossip_chunk.artifact_id,
-                gossip_chunk.chunk_id,
+                gossip_chunk.request.artifact_id,
+                gossip_chunk.request.chunk_id,
                 peer_id
             );
             if let P2PErrorCode::NotFound = error.p2p_error_code {
@@ -235,8 +226,8 @@ impl GossipImpl {
                 // being requested again from this peer.
                 self.delete_advert_from_peer(
                     peer_id,
-                    &gossip_chunk.artifact_id,
-                    &gossip_chunk.integrity_hash,
+                    &gossip_chunk.request.artifact_id,
+                    &gossip_chunk.request.integrity_hash,
                     self.artifacts_under_construction.write().deref_mut(),
                 )
             }
@@ -251,18 +242,18 @@ impl GossipImpl {
 
         // Find the tracker to feed the chunk.
         let artifact_tracker =
-            artifacts_under_construction.get_tracker(&gossip_chunk.integrity_hash);
+            artifacts_under_construction.get_tracker(&gossip_chunk.request.integrity_hash);
         if artifact_tracker.is_none() {
             trace!(
                 self.log,
                 "Chunk received although artifact is complete or dropped from under construction list (e.g., due to priority function change) {:?} chunk {:?} from peer {:?}",
-                gossip_chunk.artifact_id,
-                gossip_chunk.chunk_id,
+                gossip_chunk.request.artifact_id,
+                gossip_chunk.request.chunk_id,
                 peer_id.get()
             );
             let _ = self.prioritizer.delete_advert_from_peer(
-                &gossip_chunk.artifact_id,
-                &gossip_chunk.integrity_hash,
+                &gossip_chunk.request.artifact_id,
+                &gossip_chunk.request.integrity_hash,
                 peer_id,
                 AdvertTrackerFinalAction::Abort,
             );
@@ -283,8 +274,8 @@ impl GossipImpl {
                 trace!(
                     self.log,
                     "Chunk verification failed for artifact{:?} chunk {:?} from peer {:?}",
-                    gossip_chunk.artifact_id,
-                    gossip_chunk.chunk_id,
+                    gossip_chunk.request.artifact_id,
+                    gossip_chunk.request.chunk_id,
                     peer_id
                 );
                 self.metrics.chunks_verification_failed.inc();
@@ -308,8 +299,8 @@ impl GossipImpl {
 
         // Check whether the artifact matches the advertised integrity hash.
         let advert = match self.prioritizer.get_advert_from_peer(
-            &gossip_chunk.artifact_id,
-            &gossip_chunk.integrity_hash,
+            &gossip_chunk.request.artifact_id,
+            &gossip_chunk.request.integrity_hash,
             &peer_id,
         ) {
             Ok(Some(advert)) => advert,
@@ -317,8 +308,8 @@ impl GossipImpl {
                 trace!(
                 self.log,
                 "The advert for {:?} chunk {:?} from peer {:?} was not found, seems the peer never sent it.",
-                gossip_chunk.artifact_id,
-                gossip_chunk.chunk_id,
+                gossip_chunk.request.artifact_id,
+                gossip_chunk.request.chunk_id,
                 peer_id.get()
             );
                 return;
@@ -344,7 +335,7 @@ impl GossipImpl {
             warn!(
                 self.log,
                 "The integrity hash for {:?} from peer {:?} does not match. Expected {:?}, got {:?}.",
-                gossip_chunk.artifact_id,
+                gossip_chunk.request.artifact_id,
                 peer_id.get(),
                 expected_ih,
                 advert.integrity_hash;
@@ -354,8 +345,8 @@ impl GossipImpl {
             // The advert is deleted from this particular peer. Gossip may fetch the
             // artifact again from another peer.
             let _ = self.prioritizer.delete_advert_from_peer(
-                &gossip_chunk.artifact_id,
-                &gossip_chunk.integrity_hash,
+                &gossip_chunk.request.artifact_id,
+                &gossip_chunk.request.integrity_hash,
                 peer_id,
                 AdvertTrackerFinalAction::Abort,
             );
@@ -378,11 +369,11 @@ impl GossipImpl {
         // The artifact is complete and the integrity hash is okay.
         // Clean up the adverts for all peers:
         let _ = self.prioritizer.delete_advert(
-            &gossip_chunk.artifact_id,
-            &gossip_chunk.integrity_hash,
+            &gossip_chunk.request.artifact_id,
+            &gossip_chunk.request.integrity_hash,
             AdvertTrackerFinalAction::Success,
         );
-        artifacts_under_construction.remove_tracker(&gossip_chunk.integrity_hash);
+        artifacts_under_construction.remove_tracker(&gossip_chunk.request.integrity_hash);
 
         // Drop the locks before calling client callbacks.
         std::mem::drop(artifacts_under_construction);
@@ -394,7 +385,7 @@ impl GossipImpl {
             "Node-{:?} received artifact from Node-{:?} ->{:?}",
             self.node_id,
             peer_id,
-            gossip_chunk.artifact_id
+            gossip_chunk.request.artifact_id
         );
         match self
             .artifact_manager
@@ -419,7 +410,6 @@ impl GossipImpl {
     /// The method reacts to a disconnect event event for the peer with the
     /// given node ID.
     pub fn peer_connection_down(&self, peer_id: NodeId) {
-        self.metrics.connection_down_events.inc();
         let now = SystemTime::now();
         let mut current_peers = self.current_peers.lock();
         if let Some(peer_context) = current_peers.get_mut(&peer_id) {
@@ -436,9 +426,6 @@ impl GossipImpl {
     /// The method reacts to a connect event event for the peer with the given
     /// node ID.
     pub fn peer_connection_up(&self, peer_id: NodeId) {
-        self.metrics.connection_up_events.inc();
-        let _now = SystemTime::now();
-
         let last_disconnect = self
             .current_peers
             .lock()
@@ -856,7 +843,7 @@ impl GossipImpl {
         chunk_id: ChunkId,
     ) -> Option<&'a GossipChunkRequestTracker> {
         let peer_context = peers.get(peer_id)?;
-        peer_context.requested.get(&GossipChunkRequestTrackerKey {
+        peer_context.requested.get(&GossipChunkRequest {
             artifact_id: artifact_id.clone(),
             integrity_hash: integrity_hash.clone(),
             chunk_id,
@@ -982,16 +969,11 @@ impl GossipImpl {
             .set(requests.len() as i64);
 
         let peer_context = current_peers.get_mut(&peer_id).unwrap();
-        peer_context.requested.extend(requests.iter().map(|req| {
-            (
-                GossipChunkRequestTrackerKey {
-                    artifact_id: req.artifact_id.clone(),
-                    integrity_hash: req.integrity_hash.clone(),
-                    chunk_id: req.chunk_id,
-                },
-                GossipChunkRequestTracker { requested_instant },
-            )
-        }));
+        peer_context.requested.extend(
+            requests
+                .iter()
+                .map(|req| (req.clone(), GossipChunkRequestTracker { requested_instant })),
+        );
 
         assert!(peer_context.requested.len() <= max_streams_per_peer);
         Ok(requests)
@@ -1791,10 +1773,13 @@ pub mod tests {
             artifact_chunk_data: ArtifactChunkData::UnitChunkData(payload),
         };
 
-        GossipChunk {
+        let request = GossipChunkRequest {
             artifact_id,
             integrity_hash,
             chunk_id,
+        };
+        GossipChunk {
+            request,
             artifact_chunk: Ok(artifact_chunk),
         }
     }
