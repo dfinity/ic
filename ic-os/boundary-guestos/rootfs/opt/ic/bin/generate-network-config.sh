@@ -39,8 +39,16 @@ function read_variables() {
         esac
     done <"${NETWORK_CONFIG}"
 
+    # Ensure IPv6 only on enp1s0
+    sysctl -w net.ipv6.conf.enp1s0.disable_ipv6=0
+    sysctl -w net.ipv6.conf.enp2s0.disable_ipv6=1
+
     # Check the config
     if [[ -n "${ipv6_address:-}" ]]; then
+        sysctl -w net.ipv6.conf.default.accept_ra=0
+        sysctl -w net.ipv6.conf.all.accept_ra=0
+        sysctl -w net.ipv6.conf.enp1s0.accept_ra=0
+        sysctl -w net.ipv6.conf.enp1s0.accept_ra=2
         if [[ -n "${ipv6_gateway:-}" ]]; then
             HAS_IPV6=true
         else
@@ -49,6 +57,12 @@ function read_variables() {
     elif [[ -n "${ipv6_gateway:-}" ]]; then
         err "ipv6 override failed, ipv6_gateway was '${ipv6_gateway}' but ipv6_address not found in ${NETWORK_CONFIG}"
     fi
+
+    # We have an ipv6_address/ipv6_gateway, disable SLAAC using Route Advertisement
+    sysctl -w net.ipv6.conf.default.accept_ra=0
+    sysctl -w net.ipv6.conf.all.accept_ra=0
+    sysctl -w net.ipv6.conf.enp1s0.accept_ra=0
+    sysctl -w net.ipv6.conf.enp2s0.accept_ra=0
 
     if [[ -n "${ipv4_address:-}" ]]; then
         if [[ -n "${ipv4_gateway:-}" ]]; then
