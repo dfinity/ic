@@ -138,7 +138,7 @@ use super::config::NODES_INFO;
 use super::driver_setup::{DEFAULT_FARM_BASE_URL, SSH_AUTHORIZED_PRIV_KEYS_DIR};
 use super::test_setup::GroupSetup;
 use crate::driver::farm::{Farm, GroupSpec};
-use crate::driver::new::constants;
+use crate::driver::new::constants::{self, kibana_link};
 use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
 use crate::util::{create_agent, delay};
 use anyhow::{anyhow, bail, Result};
@@ -826,7 +826,9 @@ impl HasGroupSetup for TestEnv {
             group_setup.write_attribute(self);
             info!(
                 log,
-                "Created new Farm group {}", group_setup.farm_group_name
+                "Created new Farm group {}\nReplica logs will appear in Kibana: {}",
+                group_setup.farm_group_name,
+                kibana_link(&group_setup.farm_group_name)
             );
         }
     }

@@ -4,6 +4,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::driver::test_setup::GroupSetup;
+
 use super::event::TaskId;
 
 pub trait TargetFunctionOutcome {
@@ -82,6 +84,11 @@ fn fmt_fails(fails: &[TargetFunctionFailure], f: &mut Formatter<'_>, min_width: 
         })
 }
 
+#[derive(Clone, Debug)]
+pub struct FarmGroupReport {
+    pub group_setup: GroupSetup,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct SystemTestGroupReport {
     successes: Vec<TargetFunctionSuccess>,
@@ -95,6 +102,8 @@ pub struct SystemTestGroupReport {
     detected_timeouts: BTreeSet<TaskId>,
 
     is_group_timed_out: bool,
+
+    pub farm_group_report: Option<FarmGroupReport>,
 }
 
 impl SystemTestGroupReport {

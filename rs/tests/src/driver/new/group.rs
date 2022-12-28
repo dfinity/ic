@@ -15,8 +15,8 @@ use crate::driver::{
         plan::{EvalOrder, Plan},
         process::ProcessEventPayload,
         report::{
-            Outcome, SystemTestGroupError, SystemTestGroupReport, TargetFunctionFailure,
-            TargetFunctionSuccess,
+            FarmGroupReport, Outcome, SystemTestGroupError, SystemTestGroupReport,
+            TargetFunctionFailure, TargetFunctionSuccess,
         },
         subprocess_ipc::LogServer,
         task::EmptyTask,
@@ -34,7 +34,7 @@ use anyhow::{bail, Result};
 use clap::Parser;
 use tokio::runtime::{Handle, Runtime};
 
-use crate::driver::new::constants::{GROUP_TTL, KEEPALIVE_INTERVAL};
+use crate::driver::new::constants::{kibana_link, GROUP_TTL, KEEPALIVE_INTERVAL};
 use crate::driver::new::{subprocess_task::SubprocessTask, task::Task, timeout::TimeoutTask};
 use std::{
     iter::once,
@@ -216,7 +216,7 @@ fn get_setup_env(gctx: GroupContext) -> TestEnv {
     process_ctx.group_context.create_setup_env().unwrap()
 }
 
-fn get_env(gctx: GroupContext, task_id: TaskId) -> Result<TestEnv> {
+fn create_env(gctx: GroupContext, task_id: TaskId) -> Result<TestEnv> {
     trace!(gctx.log(), "get_env(task_id={})", &task_id);
     let process_ctx = ProcessContext::new(gctx, task_id.name()).unwrap();
     process_ctx.group_context.create_test_env(&task_id.name())
@@ -291,7 +291,7 @@ impl SystemTestSubGroup {
                     move || {
                         debug!(logger, ">>> test_fn({})", &task_id);
                         // Assumption: this function will be called after setup finishes
-                        let env = get_env(group_ctx, task_id).unwrap();
+                        let env = create_env(group_ctx, task_id).unwrap();
                         task_fn(env)
                     }
                 };
@@ -413,7 +413,7 @@ impl SystemTestGroup {
                     loop {
                         let group_ctx = group_ctx.clone();
                         if let Ok((group_setup, env)) =
-                            get_env(group_ctx, keepalive_task_id.clone()).and_then(|env| {
+                            create_env(group_ctx, keepalive_task_id.clone()).and_then(|env| {
                                 GroupSetup::try_read_attribute(&env).map(|x| (x, env))
                             })
                         {
@@ -704,7 +704,7 @@ impl SystemTestGroup {
                 });
 
                 // await root task's final event and produce appropriate return code
-                let report = terminal_event_receiver.recv().unwrap();
+                let mut report = terminal_event_receiver.recv().unwrap();
 
                 if let Err(e) = log_server.shutdown() {
                     warn!(
@@ -721,6 +721,20 @@ impl SystemTestGroup {
                 }
 
                 if report.is_failure_free() {
+                    let setup_env = group_ctx.get_setup_env()?;
+                    debug!(
+                        group_ctx.log(),
+                        "Obtained setup_env from disk: {:?}", setup_env
+                    );
+                    match GroupSetup::try_read_attribute(&setup_env) {
+                        Ok(group_setup) => {
+                            debug!(group_ctx.log(), "Group setup: {:?}", group_setup);
+                            report.farm_group_report = Some(FarmGroupReport { group_setup });
+                        }
+                        Err(error) => {
+                            debug!(group_ctx.log(), "Could not read group setup: {:?}", error);
+                        }
+                    };
                     Ok(Outcome::FromParentProcess(report))
                 } else {
                     bail!(SystemTestGroupError::SystemTestFailure(report))
@@ -747,7 +761,15 @@ impl SystemTestGroup {
         match outcome {
             Ok(Outcome::FromSubProcess) => Ok(()),
             Ok(Outcome::FromParentProcess(report)) => {
-                info!(&logger, "\n{report}");
+                if let Some(ref farm_group_report) = report.farm_group_report {
+                    info!(
+                        &logger,
+                        "\n{report}\nSee replica logs in Kibana: {}",
+                        kibana_link(&farm_group_report.group_setup.farm_group_name)
+                    );
+                } else {
+                    info!(&logger, "\n{report}");
+                }
                 Ok(())
             }
             Err(failure_mode) => {

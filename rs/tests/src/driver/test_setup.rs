@@ -5,7 +5,7 @@ use std::time::Duration;
 use super::ic::VmResources;
 use crate::driver::new::constants::GROUP_TTL;
 
-#[derive(Deserialize, Serialize, Default)]
+#[derive(Clone, Deserialize, Serialize, Default, Debug)]
 pub struct GroupSetup {
     pub farm_group_name: String,
     /// For now, the group timeout strictly translates to the corresponding group

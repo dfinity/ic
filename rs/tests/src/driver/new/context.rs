@@ -11,7 +11,7 @@ use std::{
 
 use super::{constants, event::TaskId, subprocess_ipc::SubprocessSender};
 
-use slog::info;
+use slog::debug;
 
 #[derive(Debug, Clone)]
 pub struct GroupContext {
@@ -66,6 +66,21 @@ impl GroupContext {
         PathBuf::from(format!("./log_sock_{parent_pid}"))
     }
 
+    pub fn get_root_env(&self) -> Result<TestEnv> {
+        let root_env_path = self.group_dir.join(constants::ROOT_ENV_DIR);
+        TestEnv::new(root_env_path, self.logger.clone())
+    }
+
+    pub fn get_setup_env(&self) -> Result<TestEnv> {
+        let setup_path = self.group_dir.join(constants::GROUP_SETUP_DIR);
+        TestEnv::new(setup_path, self.logger.clone())
+    }
+
+    pub fn get_test_env(&self, test_name: &str) -> Result<TestEnv> {
+        let test_path = self.group_dir.join(constants::TESTS_DIR).join(test_name);
+        TestEnv::new(test_path, self.logger.clone())
+    }
+
     fn ensure_dir<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = self.group_dir.parent().unwrap().join(path.as_ref());
         if path.is_dir() {
@@ -78,18 +93,19 @@ impl GroupContext {
     }
 
     /// Returns the path to the setup artifact directory,
-    /// ensuring that the directory actually exists.
+    /// ensuring that the directory actually exists and
+    /// contains a copy of the configuration files from root_env
     fn create_setup_dir(&self) -> Result<PathBuf> {
         let root_env_path = self.group_dir.join(constants::ROOT_ENV_DIR);
         let setup_path = self.group_dir.join(constants::GROUP_SETUP_DIR);
 
-        info!(
+        debug!(
             self.logger,
             "Ensuring directory {:?} exists ...", setup_path
         );
         self.ensure_dir(setup_path.clone())?;
 
-        info!(
+        debug!(
             self.logger,
             "Copying configuration from {:?} to {:?} ...", root_env_path, setup_path
         );
@@ -113,7 +129,7 @@ impl GroupContext {
     /// ensuring that the directory actually exists.
     fn create_test_dir(&self, test_name: &str) -> Result<PathBuf> {
         let test_path = self.group_dir.join(constants::TESTS_DIR).join(test_name);
-        info!(self.logger, "Ensuring directory {:?} exists ...", test_path);
+        debug!(self.logger, "Ensuring directory {:?} exists ...", test_path);
         self.ensure_dir(test_path.clone()).map(|_| test_path)
     }
 
@@ -170,7 +186,7 @@ pub struct ProcessContext {
 
 impl ProcessContext {
     pub fn new(group_context: GroupContext, command: Command) -> Result<Self> {
-        info!(group_context.log(), "ProcessContext.new");
+        debug!(group_context.log(), "ProcessContext.new");
 
         let constructed_at = SystemTime::now();
 
