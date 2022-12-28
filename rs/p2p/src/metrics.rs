@@ -7,7 +7,7 @@ pub struct GossipMetrics {
     /// The time required to execute the given operation in milliseconds.
     pub op_duration: HistogramVec,
     /// The number of chunk requests not found.
-    pub chunk_req_not_found: IntCounter,
+    pub requested_chunks_not_found: IntCounter,
     /// The number of dropped artifacts.
     pub artifacts_dropped: IntCounter,
 }
@@ -26,8 +26,10 @@ impl GossipMetrics {
                 ],
                 &["op"],
             ),
-            chunk_req_not_found: metrics_registry
-                .int_counter("chunk_req_not_found", "Number of chunk requests not found"),
+            requested_chunks_not_found: metrics_registry.int_counter(
+                "p2p_gossip_requested_chunks_not_found_total",
+                "Number of requested chunk not found",
+            ),
             artifacts_dropped: metrics_registry.int_counter(
                 "p2p_gossip_artifacts_dropped",
                 "Number of artifacts dropped by Gossip",
@@ -97,12 +99,6 @@ pub struct DownloadManagementMetrics {
     // node removal
     pub nodes_removed: IntCounter,
 
-    // Connection fields.
-    /// The number of a connection events.
-    pub connection_up_events: IntCounter,
-    /// The number of a disconnections events.
-    pub connection_down_events: IntCounter,
-
     // Download next stats.
     /// The time spent in the `download_next()` function.
     pub download_next_time: IntGauge,
@@ -167,14 +163,6 @@ impl DownloadManagementMetrics {
             ),
             chunks_timed_out: metrics_registry
                 .int_counter("gossip_chunks_timedout", "Timed-out chunks"),
-            connection_up_events: metrics_registry.int_counter(
-                "gossip_connection_up_event",
-                "Number of connection up events received",
-            ),
-            connection_down_events: metrics_registry.int_counter(
-                "gossip_connection_down_event",
-                "Number of connection down events received",
-            ),
             chunks_download_failed: metrics_registry.int_counter(
                 "gossip_chunks_download_failed",
                 "Number for failed chunk downloads (for various reasons)",

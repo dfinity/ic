@@ -48,6 +48,27 @@ pub struct GossipChunkRequest {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GossipChunk {
+    #[prost(message, optional, tag = "6")]
+    pub request: ::core::option::Option<GossipChunkRequest>,
+    #[prost(oneof = "gossip_chunk::Response", tags = "3, 4")]
+    pub response: ::core::option::Option<gossip_chunk::Response>,
+}
+/// Nested message and enum types in `GossipChunk`.
+pub mod gossip_chunk {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Response {
+        #[prost(message, tag = "3")]
+        Chunk(super::ArtifactChunk),
+        #[prost(enumeration = "super::P2pError", tag = "4")]
+        Error(i32),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ArtifactFilter {
     #[prost(message, optional, tag = "1")]
     pub consensus_filter: ::core::option::Option<ConsensusMessageFilter>,
@@ -85,31 +106,6 @@ pub struct CertificationMessageFilter {
 pub struct StateSyncFilter {
     #[prost(uint64, tag = "1")]
     pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct GossipChunk {
-    #[prost(bytes = "vec", tag = "1")]
-    pub artifact_id: ::prost::alloc::vec::Vec<u8>,
-    #[prost(uint32, tag = "2")]
-    pub chunk_id: u32,
-    #[prost(bytes = "vec", tag = "5")]
-    pub integrity_hash: ::prost::alloc::vec::Vec<u8>,
-    #[prost(oneof = "gossip_chunk::Response", tags = "3, 4")]
-    pub response: ::core::option::Option<gossip_chunk::Response>,
-}
-/// Nested message and enum types in `GossipChunk`.
-pub mod gossip_chunk {
-    #[derive(serde::Serialize, serde::Deserialize)]
-    #[allow(clippy::derive_partial_eq_without_eq)]
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Response {
-        #[prost(message, tag = "3")]
-        Chunk(super::ArtifactChunk),
-        #[prost(enumeration = "super::P2pError", tag = "4")]
-        Error(i32),
-    }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
