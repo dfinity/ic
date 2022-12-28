@@ -766,7 +766,7 @@ fn test_throttle_two_tx_per_second_after_soft_limit_nok() {
 /// operation (see NNS1-765).
 #[test]
 fn test_transaction_hash_consistency() {
-    let transaction = Transaction::new(
+    let mut transaction = Transaction::new(
         PrincipalId::new_user_test_id(0).into(),
         PrincipalId::new_user_test_id(1).into(),
         Tokens::new(1, 0).unwrap(),
@@ -777,7 +777,18 @@ fn test_transaction_hash_consistency() {
     let transaction_hash = transaction.hash();
     let hash_string = transaction_hash.to_string();
     assert_eq!(
-        hash_string, "07ecc748dfb8d81c259a368c4492f136aa56c6c4caa1a0b2c95b21439230bf57",
+        hash_string, "f39130181586ea3d166185104114d7697d1e18af4f65209a53627f39b2fa0996",
         "Transaction hash must be stable."
     );
+    transaction.icrc1_memo = Some(ic_icrc1::Memo::default().0);
+    let transaction_hash = transaction.hash();
+    let hash_string = transaction_hash.to_string();
+    assert_ne!(
+        hash_string, "f39130181586ea3d166185104114d7697d1e18af4f65209a53627f39b2fa0996",
+        "ICRC1 Memo field is set, which should change the transaction hash."
+    );
+    assert_eq!(
+        hash_string, "646bf98eac33a37c4f018f13eeef7cf1826156ab69523ecbb51c25345340bbdb",
+        "Transaction hash must be stable."
+    )
 }
