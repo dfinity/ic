@@ -8,8 +8,7 @@ use crate::{
     data_plane::create_connected_state,
     metrics::{IntGaugeResource, STATUS_ERROR, STATUS_SUCCESS},
     types::{
-        Connecting, ConnectionRole, ConnectionState, PeerState, QueueSize, ServerPortState,
-        TransportImpl,
+        Connecting, ConnectionRole, ConnectionState, PeerState, ServerPortState, TransportImpl,
     },
     utils::get_peer_label,
 };
@@ -84,7 +83,7 @@ impl TransportImpl {
                 channel_id,
                 peer_label,
                 ConnectionState::Listening,
-                QueueSize::from(self.config.send_queue_size),
+                self.config.send_queue_size,
                 self.send_queue_metrics.clone(),
                 self.control_plane_metrics.clone(),
             );
@@ -103,7 +102,7 @@ impl TransportImpl {
             channel_id,
             peer_label,
             ConnectionState::Connecting(connecting_state),
-            QueueSize::from(self.config.send_queue_size),
+            self.config.send_queue_size,
             self.send_queue_metrics.clone(),
             self.control_plane_metrics.clone(),
         );
