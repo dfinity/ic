@@ -130,7 +130,7 @@ async fn main() -> std::io::Result<()> {
         // Not connecting to the mainnet, so default to the exchanges url
         let url = Url::parse(
             &opt.ic_url
-                .unwrap_or_else(|| "https://exchanges.dfinity.network".to_string())[..],
+                .unwrap_or_else(|| "https://exchanges.testnet.dfinity.network".to_string())[..],
         )
         .unwrap();
         (root_key, canister_id, governance_canister_id, url)
