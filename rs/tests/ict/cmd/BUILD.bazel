@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "cmd",
+    srcs = [
+        "root.go",
+        "testCmd.go",
+    ],
+    importpath = "github.com/dfinity/ic/rs/tests/ict/cmd",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@com_github_fatih_color//:color",
+        "@com_github_spf13_cobra//:cobra",
+    ],
+)
+
+go_test(
+    name = "cmd_test",
+    srcs = ["cmd_test.go"],
+    deps = [
+        ":cmd",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

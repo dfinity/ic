@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -eEou pipefail
+
+GREEN="\x1b[32m"
+RED="\x1b[31m"
+BOLD="\x1b[1m"
+NC="\x1b[0m"
+
+BAZEL_ICT_TARGET="//rs/tests/ict:ict"
+ICT_BIN=$(bazel cquery --config=local --output=files ${BAZEL_ICT_TARGET} 2>/dev/null)
+
+# Firstly, we build the ict CLI binary.
+# As ict CLI is a wrapper around Bazel CLI, this `build`` step is done prior (and separately) to the bin invocation.
+# I.e. the following build+invoke won't work: `bazel run //rs/tests/ict:ict test target`.
+echo -e "${BOLD}${GREEN}Compiling ict ...${NC}"
+set +e
+# Run command without stdout&stderr, just print a custom message in case of error without failing immediately. That's why "set +e" is needed.
+bazel build $BAZEL_ICT_TARGET --config=local >/dev/null 2>&1
+CODE=$?
+set -e
+if [ "${CODE}" != "0" ]; then
+    echo -e "${BOLD}${RED}ict compilation failed with code=${CODE}${NC}"
+    echo "Try running the build manually: bazel build ${BAZEL_ICT_TARGET}"
+    exit 1
+fi
+# Secondly, we invoke the binary with arguments.
+$ICT_BIN "$@"
