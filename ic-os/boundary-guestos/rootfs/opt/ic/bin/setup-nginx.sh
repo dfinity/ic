@@ -4,6 +4,7 @@ set -euox pipefail
 source '/opt/ic/bin/helpers.shlib'
 
 readonly RUN_DIR='/run/ic-node/etc/nginx'
+readonly EMPTY_NJS_EXPORTS='let v = {}; export default v; // PLACEHOLDER'
 
 SYSTEM_DOMAINS=()
 APPLICATION_DOMAINS=()
@@ -190,7 +191,23 @@ function setup_ic_router() {
     fi
 
     if [[ ! -f "${IC_ROUTER_TABLE}" ]]; then
-        echo 'let subnet_table = {}; export default subnet_table; // PLACEHOLDER' >"${IC_ROUTER_TABLE}"
+        echo "${EMPTY_NJS_EXPORTS}" >"${IC_ROUTER_TABLE}"
+    fi
+}
+
+function setup_custom_domains() {
+    local -r SERVER_BLOCKS='/var/opt/nginx/domains.conf'
+    mkdir -p "$(dirname ${SERVER_BLOCKS})"
+
+    if [[ ! -f "${SERVER_BLOCKS}" ]]; then
+        touch "${SERVER_BLOCKS}"
+    fi
+
+    local -r DOMAIN_MAPPINGS="/var/opt/nginx/domain_canister_mappings.js"
+    mkdir -p "$(dirname ${DOMAIN_MAPPINGS})"
+
+    if [[ ! -f "${DOMAIN_MAPPINGS}" ]]; then
+        echo "${EMPTY_NJS_EXPORTS}" >"${DOMAIN_MAPPINGS}"
     fi
 }
 
@@ -250,6 +267,7 @@ function main() {
     setup_domains
     setup_geolite2_dbs
     setup_ic_router
+    setup_custom_domains
     setup_canister_id_alises
     setup_cgi
     setup_certification

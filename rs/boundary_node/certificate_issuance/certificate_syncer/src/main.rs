@@ -73,6 +73,9 @@ struct Cli {
     #[clap(long, default_value = "servers.conf.tmpl")]
     configuration_template_path: PathBuf,
 
+    #[clap(long, default_value = "mappings.js")]
+    domain_mappings_path: PathBuf,
+
     #[arg(long, default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
 }
@@ -145,6 +148,7 @@ async fn main() -> Result<(), Error> {
         renderer,
         cli.local_certificates_path,
         cli.local_configuration_path,
+        cli.domain_mappings_path,
     );
     let persister = WithReload(persister, reloader);
     let persister = WithDedup(persister, Arc::new(RwLock::new(None)));

@@ -2,6 +2,7 @@ import qs from "querystring";
 
 import SUBNET_TABLE from "/var/opt/nginx/ic/ic_routes.js";
 import CANISTER_ID_ALIASES from "/var/opt/nginx/canister_aliases/canister_id_aliases.js";
+import DOMAIN_CANISTER_MAPPINGS from "/var/opt/nginx/domain_canister_mappings.js";
 
 const CANISTER_ID_LENGTH = 27;
 
@@ -11,49 +12,49 @@ function leftpad(s, len, pad) {
   );
 }
 
-function decode_canister_id(canister_id) {
+function decodeCanisterId(canister_id) {
   canister_id = canister_id.replace(/-/g, "");
-  var RFC4628 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  var hex = "";
-  var bits = "";
-  for (var i = 0; i < canister_id.length; i++) {
-    var val = RFC4628.indexOf(canister_id.charAt(i).toUpperCase());
+  const RFC4628 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let hex = "";
+  let bits = "";
+  for (let i = 0; i < canister_id.length; i++) {
+    let val = RFC4628.indexOf(canister_id.charAt(i).toUpperCase());
     bits += leftpad(val.toString(2), 5, "0");
   }
-  for (i = 32; i + 4 <= bits.length; i += 4) {
-    var chunk = bits.substr(i, 4);
+  for (let i = 32; i + 4 <= bits.length; i += 4) {
+    let chunk = bits.substr(i, 4);
     hex += parseInt(chunk, 2).toString(16);
   }
   return hex;
 }
 
 // Find the first row before the given canister_id.
-function find_subnet(canister_id, table) {
-  var start = 0;
-  var end = table.canister_range_starts.length - 1;
+function findSubnet(canisterId, table) {
+  let start = 0;
+  let end = table.canister_range_starts.length - 1;
   while (start <= end) {
-    var mid = Math.floor((start + end) / 2);
-    var mid_value = table.canister_range_starts[mid];
-    if (mid_value >= canister_id) {
+    let mid = Math.floor((start + end) / 2);
+    let mid_value = table.canister_range_starts[mid];
+
+    if (mid_value >= canisterId) {
       end = mid - 1;
     } else {
       start = mid + 1;
     }
   }
-  if (start > 0 && canister_id < table.canister_range_starts[start]) {
-    return start - 1;
-  } else {
-    return Math.min(start, table.canister_range_starts.length - 1);
-  }
+
+  return start > 0 && canisterId < table.canister_range_starts[start]
+    ? start - 1
+    : Math.min(start, table.canister_range_starts.length - 1);
 }
 
-function resolve_canister_id_from_uri(uri) {
-  var re = /^\/api\/v2\/canister\/([0-9a-z\-]+)\//;
-  var m = re.exec(uri);
+function resolveCanisterIdFromUri(uri) {
+  const re = /^\/api\/v2\/canister\/([0-9a-z\-]+)\//;
+  const m = re.exec(uri);
   if (!m) {
     return "";
   }
-  var canister_id = m[1];
+  const canister_id = m[1];
   if (canister_id.length != CANISTER_ID_LENGTH) {
     // not a canister id
     return "";
@@ -62,12 +63,12 @@ function resolve_canister_id_from_uri(uri) {
 }
 
 function extractCanisterIdFromHost(host) {
-  let re = /^([0-9a-zA-Z\-]+)\./;
-  let m = re.exec(host);
+  const re = /^([0-9a-zA-Z\-]+)\./;
+  const m = re.exec(host);
   if (!m) {
     return "";
   }
-  let canisterId = m[1];
+  const canisterId = m[1];
 
   // Check if ID is an alias
   if (!!CANISTER_ID_ALIASES[canisterId]) {
@@ -81,22 +82,9 @@ function extractCanisterIdFromHost(host) {
   return canisterId;
 }
 
-function resolve_ci_from_host(host) {
-  var pieces = host.split(".");
-  if (pieces.length < 3) {
-    return "";
-  }
-  var ic = pieces[pieces.length - 3];
-  if (ic.length >= 27) {
-    // This is a canister_id.
-    return "";
-  }
-  return ic;
-}
-
-function get_hostname_from_uri(uri) {
-  var re = /^https?\:\/\/([^:\/?#]*)/;
-  var m = re.exec(uri);
+function getHostnameFromUri(uri) {
+  const re = /^https?\:\/\/([^:\/?#]*)/;
+  const m = re.exec(uri);
   if (!m) {
     return "";
   }
@@ -104,27 +92,27 @@ function get_hostname_from_uri(uri) {
 }
 
 function extractCanisterIdFromReferer(r) {
-  var refererHeader = r.headersIn.referer;
+  const refererHeader = r.headersIn.referer;
   if (!refererHeader) {
     return "";
   }
 
-  var refererHost = get_hostname_from_uri(refererHeader);
+  const refererHost = getHostnameFromUri(refererHeader);
   if (!refererHost) {
     return "";
   }
 
-  canisterId = extractCanisterIdFromHost(refererHost);
+  const canisterId = extractCanisterIdFromHost(refererHost);
   if (!!canisterId) {
     return canisterId;
   }
 
-  var idx = refererHeader.indexOf("?");
+  const idx = refererHeader.indexOf("?");
   if (i != -1) {
     return "";
   }
 
-  var queryParams = qs.parse(refererHeader.substr(idx + 1));
+  const queryParams = qs.parse(refererHeader.substr(idx + 1));
   return queryParams["canisterId"];
 }
 
@@ -132,21 +120,31 @@ function hostCanisterId(r) {
   return extractCanisterIdFromHost(r.headersIn.host);
 }
 
+function domainToCanisterId(d) {
+  return DOMAIN_CANISTER_MAPPINGS[d] || "";
+}
+
 function inferCanisterId(r) {
+  // Domain
+  let canisterId = domainToCanisterId(r.headersIn.host);
+  if (!!canisterId) {
+    return canisterId;
+  }
+
   // URI
-  var canisterId = resolve_canister_id_from_uri(r.uri);
+  canisterId = resolveCanisterIdFromUri(r.uri);
   if (!!canisterId) {
     return canisterId;
   }
 
   // Host
-  var canisterId = extractCanisterIdFromHost(r.headersIn.host);
+  canisterId = extractCanisterIdFromHost(r.headersIn.host);
   if (!!canisterId) {
     return canisterId;
   }
 
   // Query param
-  var canisterId = r.args["canisterId"];
+  canisterId = r.args["canisterId"];
   if (!!canisterId) {
     return canisterId;
   }
@@ -169,77 +167,75 @@ function normalizeSubnetType(typ) {
 }
 
 function route(r) {
-  var canister_id = inferCanisterId(r);
-  if (!canister_id) {
+  // Canister ID
+  let canisterId = inferCanisterId(r);
+  if (!canisterId) {
     return "";
   }
 
-  // TODO: Lookup custom domain via ci
-  // if (!canister_id && ci) {
-  //   var custom_route = lookup_custom_route(ci);
-  //   if (custom_route) {
-  //     canister_id = custom_route.canister_id;
-  //     ic = custom_route.ic;
-  //   }
-  // }
   if (!("canister_subnets" in SUBNET_TABLE)) {
     return "";
   }
 
-  canister_id = decode_canister_id(canister_id);
-  var subnet_index = find_subnet(canister_id, SUBNET_TABLE);
+  canisterId = decodeCanisterId(canisterId);
+
+  // Determine subnet
+  const subnetIdx = findSubnet(canisterId, SUBNET_TABLE);
   if (
-    canister_id < SUBNET_TABLE.canister_range_starts[subnet_index] ||
-    canister_id > SUBNET_TABLE.canister_range_ends[subnet_index]
+    canisterId < SUBNET_TABLE.canister_range_starts[subnetIdx] ||
+    canisterId > SUBNET_TABLE.canister_range_ends[subnetIdx]
   ) {
     return "";
   }
 
-  var subnet_id = SUBNET_TABLE.canister_subnets[subnet_index];
+  const subnetId = SUBNET_TABLE.canister_subnets[subnetIdx];
 
-  var subnet_types = SUBNET_TABLE["subnet_types"] || {};
-  var subnet_type = normalizeSubnetType(subnet_types[subnet_id]);
-
-  var nodes = SUBNET_TABLE.subnet_nodes[subnet_id];
-  if (nodes.length < 1) {
+  const subnetNodeIds = SUBNET_TABLE.subnet_node_ids[subnetId] || [];
+  const nodeCount = subnetNodeIds.length;
+  if (nodeCount == 0) {
     return "";
   }
 
-  var node_index = Math.floor(Math.random() * Math.floor(nodes.length));
-  var node_ids = SUBNET_TABLE.subnet_node_ids[subnet_id];
-  var node_id = node_ids[node_index];
-  r.headersOut["x-ic-subnet-id"] = subnet_id;
-  r.headersOut["x-ic-node-id"] = node_id;
-  if (canister_id) {
-    r.headersOut["x-ic-canister-id"] = canister_id;
+  const subnetTypes = SUBNET_TABLE["subnet_types"] || {};
+  const subnetType = normalizeSubnetType(subnetTypes[subnetId]);
+
+  // Choose random node
+  const nodeIdx = Math.floor(Math.random() * nodeCount);
+  const nodeId = subnetNodeIds[nodeIdx];
+
+  // Response Headers
+  r.headersOut["X-Ic-Subnet-Id"] = subnetId;
+  r.headersOut["X-Ic-Node-Id"] = nodeId;
+  if (!!canisterId) {
+    r.headersOut["X-Ic-Canister-Id"] = canisterId;
   }
 
-  return `${node_id},${subnet_id},${subnet_type}`;
+  return `${nodeId},${subnetId},${subnetType}`;
 }
 
 function randomRoute() {
-  var canisterSubnets = SUBNET_TABLE.canister_subnets || [];
-  var subnetCount = canisterSubnets.length;
+  const canisterSubnets = SUBNET_TABLE.canister_subnets || [];
+  const subnetCount = canisterSubnets.length;
   if (subnetCount == 0) {
     return "";
   }
 
   // Choose random subnet
-  var subnetIdx = Math.floor(Math.random() * subnetCount);
-  var subnetId = canisterSubnets[subnetIdx];
+  const subnetIdx = Math.floor(Math.random() * subnetCount);
+  const subnetId = canisterSubnets[subnetIdx];
 
-  var subnetNodeIds = SUBNET_TABLE.subnet_node_ids[subnetId] || [];
-  var nodeCount = subnetNodeIds.length;
+  const subnetNodeIds = SUBNET_TABLE.subnet_node_ids[subnetId] || [];
+  const nodeCount = subnetNodeIds.length;
   if (nodeCount == 0) {
     return "";
   }
 
-  var subnetTypes = SUBNET_TABLE["subnet_types"] || {};
-  var subnetType = normalizeSubnetType(subnetTypes[subnetId]);
+  const subnetTypes = SUBNET_TABLE["subnet_types"] || {};
+  const subnetType = normalizeSubnetType(subnetTypes[subnetId]);
 
   // Choose random node
-  var nodeIdx = Math.floor(Math.random() * nodeCount);
-  var nodeId = subnetNodeIds[nodeIdx];
+  const nodeIdx = Math.floor(Math.random() * nodeCount);
+  const nodeId = subnetNodeIds[nodeIdx];
 
   return `${subnetId},${subnetType},${nodeId}`;
 }
