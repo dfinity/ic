@@ -27,9 +27,8 @@ impl ArtifactKind for ConsensusArtifact {
     /// The function converts a `ConsensusMessage` into an advert for a
     /// `ConsensusArtifact`.
     fn message_to_advert(msg: &ConsensusMessage) -> Advert<ConsensusArtifact> {
-        let binary_data = bincode::serialize(msg).unwrap();
+        let size = bincode::serialized_size(&msg).unwrap() as usize;
         let attribute = ConsensusMessageAttribute::from(msg);
-        let size = binary_data.len();
         Advert {
             id: msg.get_id(),
             attribute,
@@ -102,7 +101,7 @@ impl ArtifactKind for CertificationArtifact {
         Advert {
             id,
             attribute,
-            size: bincode::serialize(msg).unwrap().len(),
+            size: bincode::serialized_size(&msg).unwrap() as usize,
             integrity_hash: ic_types::crypto::crypto_hash(msg).get(),
         }
     }
@@ -123,7 +122,7 @@ impl ArtifactKind for DkgArtifact {
     /// The function converts a `DkgMessage` into an advert for a
     /// `DkgArtifact`.
     fn message_to_advert(msg: &DkgMessage) -> Advert<DkgArtifact> {
-        let size = bincode::serialize(msg).unwrap().len();
+        let size = bincode::serialized_size(&msg).unwrap() as usize;
         let attribute = DkgMessageAttribute {
             interval_start_height: msg.content.dkg_id.start_block_height,
         };
@@ -152,8 +151,7 @@ impl ArtifactKind for EcdsaArtifact {
     /// The function converts a `EcdsaMessage` into an advert for a
     /// `EcdsaArtifact`.
     fn message_to_advert(msg: &EcdsaMessage) -> Advert<EcdsaArtifact> {
-        // TODO: use serialize_len() in all the clients
-        let size = bincode::serialize(msg).unwrap().len();
+        let size = bincode::serialized_size(&msg).unwrap() as usize;
         Advert {
             id: ecdsa_msg_id(msg),
             attribute: EcdsaMessageAttribute::from(msg),
@@ -178,8 +176,7 @@ impl ArtifactKind for CanisterHttpArtifact {
     /// This function converts a `CanisterHttpResponseShare` into an advert for a
     /// `CanisterHttpArtifact`.
     fn message_to_advert(msg: &CanisterHttpResponseShare) -> Advert<CanisterHttpArtifact> {
-        // TODO: use serialize_len() in all the clients
-        let size = bincode::serialize(msg).unwrap().len();
+        let size = bincode::serialized_size(&msg).unwrap() as usize;
         let hash = ic_types::crypto::crypto_hash(msg);
         Advert {
             id: hash.clone(),
