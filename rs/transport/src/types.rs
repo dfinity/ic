@@ -12,8 +12,6 @@ use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_crypto_tls_interfaces::TlsStream;
 use ic_interfaces_transport::{TransportChannelId, TransportEventHandler, TransportPayload};
 use ic_logger::{warn, ReplicaLogger};
-use phantom_newtype::AmountOf;
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::{self, Debug, Formatter};
 use std::net::IpAddr;
@@ -28,12 +26,6 @@ use tokio::{
     task::JoinHandle,
     time::Duration,
 };
-
-/// A tag for the queue size
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct QueueSizeTag;
-/// Type definition for a queue's size
-pub type QueueSize = AmountOf<QueueSizeTag, usize>;
 
 /// The size (in bytes) of the transport header
 pub const TRANSPORT_HEADER_SIZE: usize = 8;
@@ -278,8 +270,6 @@ impl Drop for ServerPortState {
 /// Per-peer state, specific to a transport client
 pub(crate) struct PeerState {
     log: ReplicaLogger,
-    /// Transport channel label, used for metrics
-    pub channel_id_label: String,
     /// Peer label, used for metrics
     pub peer_label: String,
     /// Connection state
@@ -296,7 +286,7 @@ impl PeerState {
         channel_id: TransportChannelId,
         peer_label: String,
         connection_state: ConnectionState,
-        queue_size: QueueSize,
+        queue_size: usize,
         send_queue_metrics: SendQueueMetrics,
         control_plane_metrics: ControlPlaneMetrics,
     ) -> Self {
@@ -308,7 +298,6 @@ impl PeerState {
         ));
         let ret = Self {
             log,
-            channel_id_label: channel_id.to_string(),
             peer_label,
             connection_state,
             send_queue,
@@ -328,7 +317,7 @@ impl PeerState {
     fn report_connection_state(&self) {
         self.control_plane_metrics
             .flow_state
-            .with_label_values(&[&self.peer_label, &self.channel_id_label])
+            .with_label_values(&[&self.peer_label])
             .set(self.connection_state.idx());
     }
 
@@ -345,7 +334,7 @@ impl Drop for PeerState {
         if self
             .control_plane_metrics
             .flow_state
-            .remove_label_values(&[&self.peer_label, &self.channel_id_label])
+            .remove_label_values(&[&self.peer_label])
             .is_err()
         {
             warn!(
@@ -375,6 +364,12 @@ pub(crate) struct Connecting {
     pub connecting_task: JoinHandle<()>,
 }
 
+impl Drop for Connecting {
+    fn drop(&mut self) {
+        self.connecting_task.abort();
+    }
+}
+
 /// Info about a flow in ConnectionState::Connected
 pub(crate) struct Connected {
     /// Peer node
@@ -391,6 +386,16 @@ pub(crate) struct Connected {
 
     /// Our role
     pub role: ConnectionRole,
+}
+
+impl Drop for Connected {
+    fn drop(&mut self) {
+        self.read_task.abort();
+        self.write_task.abort();
+        if let Some(h2_conn) = self.h2_conn.take() {
+            h2_conn.abort();
+        }
+    }
 }
 
 impl ConnectionState {
@@ -471,22 +476,6 @@ impl Debug for ConnectionState {
                     state.peer_addr, state.role
                 )
             }
-        }
-    }
-}
-
-impl Drop for ConnectionState {
-    fn drop(&mut self) {
-        match self {
-            Self::Connecting(state) => state.connecting_task.abort(),
-            Self::Connected(state) => {
-                state.read_task.abort();
-                state.write_task.abort();
-                if let Some(h2_conn) = state.h2_conn.take() {
-                    h2_conn.abort();
-                }
-            }
-            _ => (),
         }
     }
 }

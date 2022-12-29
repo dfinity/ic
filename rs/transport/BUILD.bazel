@@ -13,7 +13,6 @@ DEPENDENCIES = [
     "//rs/interfaces/transport",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
-    "//rs/phantom_newtype",
     "//rs/types/base_types",
     "@crate_index//:bytes",
     "@crate_index//:futures",

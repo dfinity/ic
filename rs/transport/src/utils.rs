@@ -1,7 +1,7 @@
 //! Helper functionality for transport.
 
 use crate::metrics::SendQueueMetrics;
-use crate::types::{QueueSize, SendQueue, SendQueueReader};
+use crate::types::{SendQueue, SendQueueReader};
 use async_trait::async_trait;
 use ic_base_types::NodeId;
 use ic_interfaces_transport::{TransportChannelId, TransportPayload};
@@ -89,7 +89,7 @@ pub(crate) struct SendQueueImpl {
     channel_id: String,
 
     /// Size of queue
-    queue_size: QueueSize,
+    queue_size: usize,
 
     // Both the send and receive ends should be updated together.
     send_end: SendEnd,
@@ -105,10 +105,10 @@ impl SendQueueImpl {
     pub(crate) fn new(
         peer_label: String,
         channel_id: TransportChannelId,
-        queue_size: QueueSize,
+        queue_size: usize,
         metrics: SendQueueMetrics,
     ) -> Self {
-        let (send_end, receive_end) = channel(queue_size.get());
+        let (send_end, receive_end) = channel(queue_size);
         let receieve_end_wrapper = ReceiveEndContainer::new(receive_end);
         Self {
             peer_label,
@@ -124,7 +124,7 @@ impl SendQueueImpl {
 #[async_trait]
 impl SendQueue for SendQueueImpl {
     fn get_reader(&mut self) -> Box<dyn SendQueueReader + Send + Sync> {
-        let (send_end, receive_end) = channel(self.queue_size.get());
+        let (send_end, receive_end) = channel(self.queue_size);
         if self.receive_end.try_update(receive_end).is_ok() {
             // Receive end was updated, so update send end as well.
             self.send_end = send_end;
@@ -170,7 +170,7 @@ impl SendQueue for SendQueueImpl {
     }
 
     fn clear(&mut self) {
-        let (send_end, receive_end) = channel(self.queue_size.get());
+        let (send_end, receive_end) = channel(self.queue_size);
         self.send_end = send_end;
         self.receive_end.update(receive_end);
         self.metrics

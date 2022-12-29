@@ -49,7 +49,7 @@ impl ControlPlaneMetrics {
             flow_state: metrics_registry.int_gauge_vec(
                 "transport_flow_state",
                 "Current state of the flow",
-                &["flow_peer_id", "flow_tag"],
+                &["flow_peer_id"],
             ),
             tcp_accepts: metrics_registry.int_counter_vec(
                 "transport_tcp_accepts_total",
