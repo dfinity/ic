@@ -43,7 +43,7 @@ fi
 wdir="/ic/$(git rev-parse --show-prefix)"
 if [[ -z "${@:-}" ]]; then
     set -x
-    docker run --rm "${DOCKER_RUN_ARGS[@]}" -w "$wdir" "$IMAGE" bash
+    docker run --rm "${DOCKER_RUN_ARGS[@]}" -w "$wdir" "$IMAGE" bash -c 'export PATH="/ic/bin:$PATH"; bash'
 else
     set -x
 

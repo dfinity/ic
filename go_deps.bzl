@@ -10,6 +10,13 @@ def go_dependencies():
         version = "v0.2.0",
     )
     go_repository(
+        name = "com_github_cpuguy83_go_md2man_v2",
+        importpath = "github.com/cpuguy83/go-md2man/v2",
+        sum = "h1:p1EgwI/C7NhT0JmVkwCD2ZBK8j4aeHQX2pMHHBfMQ6w=",
+        version = "v2.0.2",
+    )
+
+    go_repository(
         name = "com_github_data_dog_go_sqlmock",
         importpath = "github.com/DATA-DOG/go-sqlmock",
         sum = "h1:Shsta01QNfFxHCfpW6YH2STWB0MudeXXEWMr20OEh60=",
@@ -227,6 +234,13 @@ def go_dependencies():
         version = "v1.17.1",
     )
     go_repository(
+        name = "com_github_inconshreveable_mousetrap",
+        importpath = "github.com/inconshreveable/mousetrap",
+        sum = "h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=",
+        version = "v1.1.0",
+    )
+
+    go_repository(
         name = "com_github_jackc_chunkreader_v2",
         importpath = "github.com/jackc/chunkreader/v2",
         sum = "h1:i+RDz65UE+mmpjTfyz0MoVTnzeYxroil2G82ki7MGG8=",
@@ -395,6 +409,13 @@ def go_dependencies():
         version = "v1.9.0",
     )
     go_repository(
+        name = "com_github_russross_blackfriday_v2",
+        importpath = "github.com/russross/blackfriday/v2",
+        sum = "h1:JIOH55/0cWyOuilr9/qlrm0BSXldqnqwMsf35Ld67mk=",
+        version = "v2.1.0",
+    )
+
+    go_repository(
         name = "com_github_sergi_go_diff",
         importpath = "github.com/sergi/go-diff",
         sum = "h1:XU+rvMAioB0UC3q1MFrIQy4Vo5/4VsRDQQXHsEya6xQ=",
@@ -413,16 +434,29 @@ def go_dependencies():
         version = "v0.0.0-20170531221838-bd320f5d308e",
     )
     go_repository(
+        name = "com_github_spf13_cobra",
+        importpath = "github.com/spf13/cobra",
+        sum = "h1:o94oiPyS4KD1mPy2fmcYYHHfCxLqYjJOhGsCHFZtEzA=",
+        version = "v1.6.1",
+    )
+    go_repository(
+        name = "com_github_spf13_pflag",
+        importpath = "github.com/spf13/pflag",
+        sum = "h1:iy+VFUOCP1a+8yFto/drg2CJ5u0yRoB7fZw3DKv/JXA=",
+        version = "v1.0.5",
+    )
+
+    go_repository(
         name = "com_github_stretchr_objx",
         importpath = "github.com/stretchr/objx",
-        sum = "h1:M2gUjqZET1qApGOWNSnZ49BAIMX4F/1plDv3+l31EJ4=",
-        version = "v0.4.0",
+        sum = "h1:1zr/of2m5FGMsad5YfcqgdqdWrIhu+EBEJRhR1U7z/c=",
+        version = "v0.5.0",
     )
     go_repository(
         name = "com_github_stretchr_testify",
         importpath = "github.com/stretchr/testify",
-        sum = "h1:pSgiaMZlXftHpm5L7V1+rVB+AZJydKsMxsQBIJw4PKk=",
-        version = "v1.8.0",
+        sum = "h1:w7B6lhMri9wdJUVmEZPGGhZzrYTPvgJArz7wNPgYKsk=",
+        version = "v1.8.1",
     )
     go_repository(
         name = "com_github_ugorji_go_codec",
