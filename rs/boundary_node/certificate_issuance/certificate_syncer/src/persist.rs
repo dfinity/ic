@@ -1,4 +1,6 @@
 use std::{
+    collections::HashMap,
+    io::{BufWriter, Write},
     path::PathBuf,
     sync::{Arc, RwLock},
     time::Instant,
@@ -40,6 +42,7 @@ pub struct Persister {
     // Configuration
     certificates_path: PathBuf,
     configuration_path: PathBuf,
+    domain_mappings_path: PathBuf,
 }
 
 impl Persister {
@@ -47,11 +50,13 @@ impl Persister {
         renderer: Arc<dyn Render>,
         certificates_path: PathBuf,
         configuration_path: PathBuf,
+        domain_mappings_path: PathBuf,
     ) -> Self {
         Self {
             renderer,
             certificates_path,
             configuration_path,
+            domain_mappings_path,
         }
     }
 }
@@ -59,30 +64,50 @@ impl Persister {
 #[async_trait]
 impl Persist for Persister {
     async fn persist(&self, pkgs: &[Package]) -> Result<PersistStatus, PersistError> {
+        // Certificates
+        std::fs::create_dir_all(&self.certificates_path)
+            .context("failed to create certificates directory")?;
+
+        pkgs.iter().try_for_each(|pkg| {
+            // Private Key
+            let ssl_certificate_key_path = format!(
+                "{}/{}-key.pem",
+                self.certificates_path.to_string_lossy(),
+                pkg.name.to_owned()
+            );
+
+            std::fs::write(&ssl_certificate_key_path, &pkg.pair.0)
+                .context("failed to write private key")?;
+
+            // Certificate
+            let ssl_certificate_path = format!(
+                "{}/{}.pem",
+                self.certificates_path.to_string_lossy(),
+                pkg.name.to_owned()
+            );
+
+            std::fs::write(&ssl_certificate_path, &pkg.pair.1)
+                .context("failed to write certificate")?;
+
+            Ok::<_, Error>(())
+        })?;
+
+        // Server blocks
         let cfgs = pkgs
             .iter()
             .map(|pkg| {
-                // Certificates
-                std::fs::create_dir_all(&self.certificates_path)
-                    .context("failed to create certificates directory")?;
-
                 let ssl_certificate_key_path = format!(
                     "{}/{}-key.pem",
                     self.certificates_path.to_string_lossy(),
                     pkg.name.to_owned()
                 );
+
                 let ssl_certificate_path = format!(
                     "{}/{}.pem",
                     self.certificates_path.to_string_lossy(),
                     pkg.name.to_owned()
                 );
 
-                std::fs::write(&ssl_certificate_key_path, &pkg.pair.0)
-                    .context("failed to write private key")?;
-                std::fs::write(&ssl_certificate_path, &pkg.pair.1)
-                    .context("failed to write certificate")?;
-
-                // Server
                 self.renderer
                     .render(&Context {
                         name: &pkg.name,
@@ -95,6 +120,30 @@ impl Persist for Persister {
 
         std::fs::write(&self.configuration_path, cfgs.join("\n"))
             .context("failed to write configuration")?;
+
+        // Domain mappings
+        let mut domains: HashMap<String, String> = HashMap::new();
+
+        pkgs.iter().for_each(|pkg| {
+            domains.insert(pkg.name.to_owned(), pkg.canister.to_string());
+        });
+
+        let cntnt = (|| {
+            let mut inner: Vec<u8> = Vec::new();
+            let mut buf = BufWriter::new(&mut inner);
+
+            buf.write_all("let domain_mappings = ".as_bytes())?;
+            serde_json::to_writer(&mut buf, &domains)?;
+            buf.write_all("; export default domain_mappings;".as_bytes())?;
+
+            buf.flush()?;
+            drop(buf);
+
+            Ok::<_, Error>(inner)
+        })()?;
+
+        std::fs::write(&self.domain_mappings_path, &cntnt)
+            .context("failed to write domain mappings")?;
 
         Ok(PersistStatus::Completed)
     }
