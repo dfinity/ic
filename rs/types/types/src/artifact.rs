@@ -169,7 +169,6 @@ impl From<&Artifact> for ArtifactTag {
 #[derive(AsMut, AsRef, Default, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ArtifactFilter {
     pub consensus_filter: ConsensusMessageFilter,
-    pub ingress_filter: IngressMessageFilter,
     pub certification_filter: CertificationMessageFilter,
     pub state_sync_filter: StateSyncFilter,
     pub no_filter: (),
@@ -421,16 +420,6 @@ impl IngressMessageAttribute {
     }
 }
 
-/// Ingress messages are filtered by their expiry time.
-///
-/// - 'None' means any message that has not expired.
-///
-/// - 'Some(expiry)' means messages whose expiry time is less than or equal to
-///   'expiry', and not expired.
-///
-/// The notion of "not expired" is with respect to the local time source.
-pub type IngressMessageFilter = Option<Time>;
-
 // -----------------------------------------------------------------------------
 // Certification artifacts
 
@@ -602,12 +591,6 @@ impl From<ArtifactFilter> for pb::ArtifactFilter {
     fn from(filter: ArtifactFilter) -> Self {
         Self {
             consensus_filter: Some(filter.consensus_filter.into()),
-            ingress_filter: Some(pb::IngressMessageFilter {
-                time: filter
-                    .ingress_filter
-                    .unwrap_or_else(|| Time::from_nanos_since_unix_epoch(0))
-                    .as_nanos_since_unix_epoch(),
-            }),
             certification_message_filter: Some(filter.certification_filter.into()),
             state_sync_filter: Some(filter.state_sync_filter.into()),
         }
@@ -622,14 +605,6 @@ impl TryFrom<pb::ArtifactFilter> for ArtifactFilter {
                 filter.consensus_filter,
                 "ArtifactFilter.consensus_filter",
             )?,
-            ingress_filter: Some(Time::from_nanos_since_unix_epoch(
-                filter
-                    .ingress_filter
-                    .ok_or(ProxyDecodeError::MissingField(
-                        "ArtifactFilter.ingress_filter",
-                    ))?
-                    .time,
-            )),
             certification_filter: try_from_option_field(
                 filter.certification_message_filter,
                 "ArtifactFilter.certification_message_filter",

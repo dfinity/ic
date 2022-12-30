@@ -41,17 +41,13 @@ enum P2PError {
 
 message ArtifactFilter {
   ConsensusMessageFilter consensus_filter = 1;
-  IngressMessageFilter ingress_filter = 2;
   CertificationMessageFilter certification_message_filter = 3;
   StateSyncFilter state_sync_filter = 4;
+  reserved 2;
 };
 
 message ConsensusMessageFilter {
   uint64 height = 1;
-}
-
-message IngressMessageFilter {
-  uint64 time = 1;
 }
 
 message CertificationMessageFilter {
