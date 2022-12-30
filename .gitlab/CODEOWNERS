@@ -5,7 +5,7 @@
 # [Misc]
 /.dependencies/           @dfinity-lab/teams/prodsec
 /.devcontainer/           @dfinity-lab/teams/idx
-/buf.yaml	              @dfinity-lab/teams/message-routing-owners
+/buf.yaml                 @dfinity-lab/teams/message-routing-owners
 /dshell/                  @dfinity-lab/teams/idx
 /hs/                      @dfinity-lab/teams/ic-testing-verification
 /licenses/                @dfinity-lab/teams/idx
@@ -20,12 +20,17 @@
 .bazelrc                  @dfinity-lab/teams/idx
 .bazelversion             @dfinity-lab/teams/idx
 
+# [Golang]
+go.mod                    @dfinity-lab/teams/idx
+go.sum                    @dfinity-lab/teams/idx
+go_deps.bzl               @dfinity-lab/teams/idx
+
 # [Publishing-Artifacts]
 /publish/ @dfinity-lab/teams/idx
 
 # [Documentation]
 /docs/                                                     @dfinity-lab/teams/docs-owners
-/docs/spec/replica/protocol/consensus_layer/	           @dfinity-lab/teams/consensus-owners
+/docs/spec/replica/protocol/consensus_layer/               @dfinity-lab/teams/consensus-owners
 /docs/internal/testing/testing-plan.adoc                   @dfinity-lab/teams/ic-testing-verification
 
 # [IC-OS]
