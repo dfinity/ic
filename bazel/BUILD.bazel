@@ -22,7 +22,7 @@ string_flag(
 
 string_flag(
     name = "ic_version_rc_only",
-    build_setting_default = "redacted",
+    build_setting_default = "0000000000000000000000000000000000000000",
     visibility = ["//visibility:public"],
 )
 
