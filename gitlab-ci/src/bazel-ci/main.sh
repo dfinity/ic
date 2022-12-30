@@ -11,7 +11,7 @@ AWS_CREDS="${HOME}/.aws/credentials"
 mkdir -p "$(dirname "${AWS_CREDS}")"
 ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"
 
-ic_version_rc_only="redacted"
+ic_version_rc_only="0000000000000000000000000000000000000000"
 if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
     ic_version_rc_only="${CI_COMMIT_SHA}"
 fi
