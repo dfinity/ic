@@ -804,52 +804,6 @@ impl GossipImpl {
         }
     }
 
-    /// The method checks if a download from a peer can be initiated.
-    ///
-    /// A peer may not be ready for downloads for various reasons:
-    ///
-    /// a) The peer's download request capacity has been reached.</br>
-    /// b) The peer is not a current peer (e.g., it is an unknown peer or a peer
-    /// that was removed)</br>
-    /// c) The peer was disconnected (TODO -  P2P512)
-    fn is_peer_ready_for_download<'a>(
-        &self,
-        peer_id: NodeId,
-        peer_dictionary: &'a PeerContextMap,
-    ) -> Result<&'a PeerContext, P2PError> {
-        match peer_dictionary.get(&peer_id) {
-            // Check that the peer is present and
-            // there is available capacity to stream chunks from this peer.
-            Some(peer_context)
-                if peer_context.requested.len()
-                    < self.gossip_config.max_artifact_streams_per_peer as usize =>
-            {
-                Ok(peer_context)
-            }
-            _ => Err(P2PError {
-                p2p_error_code: P2PErrorCode::Busy,
-            }),
-        }
-    }
-
-    /// The method returns the request tracker for ongoing chunk requests from a
-    /// peer.
-    fn get_peer_chunk_tracker<'a>(
-        &self,
-        peer_id: &NodeId,
-        peers: &'a PeerContextMap,
-        artifact_id: &ArtifactId,
-        integrity_hash: &CryptoHash,
-        chunk_id: ChunkId,
-    ) -> Option<&'a GossipChunkRequestTracker> {
-        let peer_context = peers.get(peer_id)?;
-        peer_context.requested.get(&GossipChunkRequest {
-            artifact_id: artifact_id.clone(),
-            integrity_hash: integrity_hash.clone(),
-            chunk_id,
-        })
-    }
-
     /// The method returns a chunk request if a chunk can be downloaded from the
     /// given peer.
     ///
@@ -869,20 +823,17 @@ impl GossipImpl {
             None?
         }
 
+        let chunk_request = GossipChunkRequest {
+            artifact_id: advert_tracker.advert.artifact_id.clone(),
+            integrity_hash: advert_tracker.advert.integrity_hash.clone(),
+            chunk_id,
+        };
         // Skip if some other peer is downloading the chunk and maximum
         // duplicity has been reached.
         let duplicity = advert_tracker
             .peers
             .iter()
-            .filter_map(|advertiser| {
-                self.get_peer_chunk_tracker(
-                    advertiser,
-                    peers,
-                    &advert_tracker.advert.artifact_id,
-                    &advert_tracker.advert.integrity_hash,
-                    chunk_id,
-                )
-            })
+            .filter_map(|advertiser| peers.get(advertiser)?.requested.get(&chunk_request))
             .count();
 
         if duplicity >= self.gossip_config.max_duplicity as usize {
@@ -891,11 +842,7 @@ impl GossipImpl {
 
         // Since the peer has not attempted a chunk download in this round and will not
         // violate duplicity constraints, a gossip chunk request is returned.
-        Some(GossipChunkRequest {
-            artifact_id: advert_tracker.advert.artifact_id.clone(),
-            integrity_hash: advert_tracker.advert.integrity_hash.clone(),
-            chunk_id,
-        })
+        Some(chunk_request)
     }
 
     /// The method returns the next set of downloads that can be initiated
@@ -906,7 +853,27 @@ impl GossipImpl {
     ) -> Result<Vec<GossipChunkRequest>, impl Error> {
         // Get the peer context.
         let mut current_peers = self.current_peers.lock();
-        let peer_context = self.is_peer_ready_for_download(peer_id, &current_peers)?;
+        //  Checks if a download from a peer can be initiated.
+        // A peer may not be ready for downloads for various reasons:
+        //
+        // a) The peer's download request capacity has been reached.
+        // b) The peer is not a current peer (e.g., it is an unknown peer or a peer
+        // that was removed)
+        // c) The peer was disconnected (TODO -  P2P512)
+        let peer_context = match current_peers.get(&peer_id) {
+            // Check that the peer is present and
+            // there is available capacity to stream chunks from this peer.
+            Some(peer_context)
+                if peer_context.requested.len()
+                    < self.gossip_config.max_artifact_streams_per_peer as usize =>
+            {
+                Ok(peer_context)
+            }
+            _ => Err(P2PError {
+                p2p_error_code: P2PErrorCode::Busy,
+            }),
+        }?;
+
         let requested_instant = Instant::now(); // function granularity for instant is good enough
         let max_streams_per_peer = self.gossip_config.max_artifact_streams_per_peer as usize;
 
