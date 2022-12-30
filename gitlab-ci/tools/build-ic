@@ -100,7 +100,7 @@ fi
 if [ "$BUILD_CANISTERS" == "true" ]; then
     echo "Building Canisters"
     mkdir -p "${CANISTERS_DIR}"
-    ic_version_rc_only="redacted"
+    ic_version_rc_only="0000000000000000000000000000000000000000"
     if [ "$CI_COMMIT_REF_PROTECTED" = "true" ]; then
         ic_version_rc_only="${VERSION}"
     fi
