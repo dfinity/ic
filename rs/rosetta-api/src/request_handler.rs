@@ -558,6 +558,7 @@ impl RosettaRequestHandler {
             dissolve_delay_seconds: res.dissolve_delay_seconds,
             voting_power: res.voting_power,
             created_timestamp_seconds: res.created_timestamp_seconds,
+            stake_e8s: res.stake_e8s,
         })
     }
 }

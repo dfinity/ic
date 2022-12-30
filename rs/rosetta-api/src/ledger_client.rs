@@ -8,6 +8,7 @@ mod handle_send;
 mod handle_set_dissolve_timestamp;
 mod handle_spawn;
 mod handle_stake;
+mod handle_stake_maturity;
 mod handle_start_dissolve;
 mod handle_stop_dissolve;
 mod neuron_response;
@@ -46,7 +47,8 @@ use crate::ledger_client::{
     handle_neuron_info::handle_neuron_info, handle_remove_hotkey::handle_remove_hotkey,
     handle_send::handle_send, handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
     handle_spawn::handle_spawn, handle_stake::handle_stake,
-    handle_start_dissolve::handle_start_dissolve, handle_stop_dissolve::handle_stop_dissolve,
+    handle_stake_maturity::handle_stake_maturity, handle_start_dissolve::handle_start_dissolve,
+    handle_stop_dissolve::handle_stop_dissolve,
 };
 use crate::models::{EnvelopePair, Object, SignedTransaction};
 use crate::request::request_result::RequestResult;
@@ -667,6 +669,7 @@ impl LedgerClient {
             RequestType::Disburse { .. } => handle_disburse(bytes),
             RequestType::Follow { .. } => handle_follow(bytes),
             RequestType::MergeMaturity { .. } => handle_merge_maturity(bytes),
+            RequestType::StakeMaturity { .. } => handle_stake_maturity(bytes),
             RequestType::NeuronInfo { .. } => handle_neuron_info(bytes),
             RequestType::RemoveHotKey { .. } => handle_remove_hotkey(bytes),
             RequestType::Send => handle_send(bytes),

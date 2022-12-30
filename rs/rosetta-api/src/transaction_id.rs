@@ -73,6 +73,7 @@ impl TransactionIdentifier {
             | RequestType::RemoveHotKey { .. }
             | RequestType::Spawn { .. }
             | RequestType::MergeMaturity { .. }
+            | RequestType::StakeMaturity { .. }
             | RequestType::NeuronInfo { .. }
             | RequestType::Follow { .. } => {
                 // Unfortunately, staking operations don't really have a transaction ID

@@ -8,7 +8,7 @@ use crate::request::Request;
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
     AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, RemoveHotKey, SetDissolveTimestamp,
-    Spawn, Stake, StartDissolve, StopDissolve,
+    Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
 use icp_ledger::Operation;
 use std::collections::HashSet;
@@ -64,6 +64,7 @@ fn required_public_key(request: Request) -> Result<icp_ledger::AccountIdentifier
         | Request::RemoveHotKey(RemoveHotKey { account, .. })
         | Request::Spawn(Spawn { account, .. })
         | Request::MergeMaturity(MergeMaturity { account, .. })
+        | Request::StakeMaturity(StakeMaturity { account, .. })
         | Request::NeuronInfo(NeuronInfo { account, .. })
         | Request::Follow(Follow { account, .. }) => Ok(account),
     }

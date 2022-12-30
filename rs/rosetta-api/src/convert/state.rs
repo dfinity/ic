@@ -3,7 +3,7 @@ use crate::models::seconds::Seconds;
 use crate::request::Request;
 use crate::request_types::{
     AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, PublicKeyOrPrincipal, RemoveHotKey,
-    SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve,
+    SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
 use ic_types::PrincipalId;
 use icp_ledger::{Operation, Tokens, DEFAULT_TRANSFER_FEE};
@@ -283,6 +283,28 @@ impl State {
             account,
             neuron_index,
             percentage_to_merge: percentage_to_merge.unwrap_or(100),
+        }));
+        Ok(())
+    }
+
+    pub fn stake_maturity(
+        &mut self,
+        account: icp_ledger::AccountIdentifier,
+        neuron_index: u64,
+        percentage_to_stake: Option<u32>,
+    ) -> Result<(), ApiError> {
+        if let Some(pct) = percentage_to_stake {
+            if !(1..=100).contains(&pct) {
+                let msg = format!("Invalid percentage to stake: {}", pct);
+                let err = ApiError::InvalidTransaction(false, msg.into());
+                return Err(err);
+            }
+        }
+        self.flush()?;
+        self.actions.push(Request::StakeMaturity(StakeMaturity {
+            account,
+            neuron_index,
+            percentage_to_stake,
         }));
         Ok(())
     }

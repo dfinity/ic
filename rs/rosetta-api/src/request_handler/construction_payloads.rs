@@ -25,7 +25,7 @@ use crate::request::Request;
 use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
     AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, PublicKeyOrPrincipal, RemoveHotKey,
-    RequestType, SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve,
+    RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
 use crate::{convert, models};
 
@@ -174,6 +174,13 @@ impl RosettaRequestHandler {
                     &ingress_expiries,
                 )?,
                 Request::MergeMaturity(req) => handle_merge_maturity(
+                    req,
+                    &mut payloads,
+                    &mut updates,
+                    &pks_map,
+                    &ingress_expiries,
+                )?,
+                Request::StakeMaturity(req) => handle_stake_maturity(
                     req,
                     &mut payloads,
                     &mut updates,
@@ -631,6 +638,33 @@ fn handle_merge_maturity(
     });
     add_neuron_management_payload(
         RequestType::MergeMaturity { neuron_index },
+        account,
+        None,
+        neuron_index,
+        command,
+        payloads,
+        updates,
+        pks_map,
+        ingress_expiries,
+    )?;
+    Ok(())
+}
+
+fn handle_stake_maturity(
+    req: StakeMaturity,
+    payloads: &mut Vec<SigningPayload>,
+    updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
+    ingress_expiries: &[u64],
+) -> Result<(), ApiError> {
+    let account = req.account;
+    let neuron_index = req.neuron_index;
+    let percentage_to_stake = req.percentage_to_stake;
+    let command = Command::StakeMaturity(manage_neuron::StakeMaturity {
+        percentage_to_stake,
+    });
+    add_neuron_management_payload(
+        RequestType::StakeMaturity { neuron_index },
         account,
         None,
         neuron_index,

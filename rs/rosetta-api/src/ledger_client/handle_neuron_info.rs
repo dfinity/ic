@@ -27,6 +27,7 @@ pub fn handle_neuron_info(
                 neuron_fees_e8s: neuron.neuron_fees_e8s,
                 followees: neuron_followees(&neuron),
                 hotkeys: neuron.hot_keys,
+                staked_maturity_e8s: neuron.staked_maturity_e8s_equivalent,
             });
             return Ok(Ok(Some(output)));
         }

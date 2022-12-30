@@ -48,6 +48,8 @@ pub enum Request {
     Spawn(Spawn),
     #[serde(rename = "MERGE_MATURITY")]
     MergeMaturity(MergeMaturity),
+    #[serde(rename = "STAKE_MATURITY")]
+    StakeMaturity(StakeMaturity),
     #[serde(rename = "NEURON_INFO")]
     NeuronInfo(NeuronInfo),
     #[serde(rename = "FOLLOW")]
@@ -102,6 +104,11 @@ impl Request {
                     neuron_index: *neuron_index,
                 })
             }
+            Request::StakeMaturity(StakeMaturity { neuron_index, .. }) => {
+                Ok(RequestType::StakeMaturity {
+                    neuron_index: *neuron_index,
+                })
+            }
             Request::NeuronInfo(NeuronInfo {
                 neuron_index,
                 controller,
@@ -142,6 +149,7 @@ impl Request {
                 Request::RemoveHotKey(o) => builder.remove_hotkey(o),
                 Request::Spawn(o) => builder.spawn(o),
                 Request::MergeMaturity(o) => builder.merge_maturity(o),
+                Request::StakeMaturity(o) => builder.stake_maturity(o),
                 Request::NeuronInfo(o) => builder.neuron_info(o),
                 Request::Follow(o) => builder.follow(o),
             };
@@ -165,6 +173,7 @@ impl Request {
                 | Request::RemoveHotKey(_)
                 | Request::Spawn(_)
                 | Request::MergeMaturity(_)
+                | Request::StakeMaturity(_)
                 | Request::NeuronInfo(_) // not neuron management but we need it signed.
                 | Request::Follow(_)
         )
@@ -352,6 +361,20 @@ impl TryFrom<&models::Request> for Request {
                     }))
                 } else {
                     Err(ApiError::invalid_request("Invalid merge maturity request."))
+                }
+            }
+            RequestType::StakeMaturity { neuron_index } => {
+                if let Some(Command::StakeMaturity(manage_neuron::StakeMaturity {
+                    percentage_to_stake,
+                })) = manage_neuron()?
+                {
+                    Ok(Request::StakeMaturity(StakeMaturity {
+                        account,
+                        percentage_to_stake,
+                        neuron_index: *neuron_index,
+                    }))
+                } else {
+                    Err(ApiError::invalid_request("Invalid stake maturity request."))
                 }
             }
             RequestType::NeuronInfo {

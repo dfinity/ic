@@ -10,7 +10,7 @@ use ic_rosetta_api::models::{
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
 use ic_rosetta_api::request_types::{
     AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, RemoveHotKey, SetDissolveTimestamp,
-    Spawn, Stake, StartDissolve, StopDissolve,
+    Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
 use ic_rosetta_api::transaction_id::TransactionIdentifier;
 use ic_rosetta_api::{convert, errors, errors::ApiError, DEFAULT_TOKEN_SYMBOL};
@@ -109,6 +109,7 @@ pub async fn prepare_multiple_txn(
             | Request::Disburse(Disburse { account, .. })
             | Request::Spawn(Spawn { account, .. })
             | Request::MergeMaturity(MergeMaturity { account, .. })
+            | Request::StakeMaturity(StakeMaturity { account, .. })
             | Request::NeuronInfo(NeuronInfo { account, .. })
             | Request::Follow(Follow { account, .. }) => {
                 all_sender_account_ids.push(to_model_account_identifier(&account));
@@ -445,7 +446,6 @@ async fn do_multiple_txn_submit(
     if !accept_suggested_fee {
         verify_operations(requests, parse_res);
     }
-
     let hash_res = ros
         .construction_hash(signed.signed_transaction.clone())
         .await
