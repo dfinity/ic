@@ -14,7 +14,6 @@ impl RosettaRequestHandler {
     ) -> Result<ConstructionHashResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
         let envelopes = msg.signed_transaction()?;
-
         let transaction_identifier = if let Some((request_type, envelope_pairs)) =
             envelopes.iter().rev().find(|(rt, _)| rt.is_transfer())
         {

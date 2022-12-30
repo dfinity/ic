@@ -2125,4 +2125,8 @@ pub struct NeuronInfoResponse {
     /// submitted after its creation date.
     #[serde(rename = "created_timestamp_seconds")]
     pub created_timestamp_seconds: u64,
+
+    /// Current stake of the neuron, in e8s.
+    #[serde(rename = "stake_e8s")]
+    pub stake_e8s: u64,
 }

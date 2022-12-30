@@ -48,8 +48,8 @@ use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{
     AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo as NeuronInfoRequest,
-    PublicKeyOrPrincipal, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake, StartDissolve, Status,
-    StopDissolve,
+    PublicKeyOrPrincipal, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake, StakeMaturity,
+    StartDissolve, Status, StopDissolve,
 };
 use ic_rosetta_test_utils::{
     assert_canister_error, assert_ic_error, do_multiple_txn, do_multiple_txn_external, do_txn,
@@ -279,6 +279,16 @@ pub fn test_everything(env: TestEnv) {
 
     neuron_tests.add(
         &mut ledger_balances,
+        "Test stake all neuron maturity",
+        rand::random(),
+        |neuron| {
+            neuron.dissolve_state = None;
+            neuron.maturity_e8s_equivalent = 420_000_000;
+        },
+    );
+
+    neuron_tests.add(
+        &mut ledger_balances,
         "Test merge partial neuron maturity",
         rand::random(),
         |neuron| {
@@ -289,7 +299,27 @@ pub fn test_everything(env: TestEnv) {
 
     neuron_tests.add(
         &mut ledger_balances,
+        "Test stake partial neuron maturity",
+        rand::random(),
+        |neuron| {
+            neuron.dissolve_state = None;
+            neuron.maturity_e8s_equivalent = 420_000_000;
+        },
+    );
+
+    neuron_tests.add(
+        &mut ledger_balances,
         "Test merge neuron maturity invalid",
+        rand::random(),
+        |neuron| {
+            neuron.dissolve_state = None;
+            neuron.maturity_e8s_equivalent = 420_000_000;
+        },
+    );
+
+    neuron_tests.add(
+        &mut ledger_balances,
+        "Test stake neuron maturity invalid",
         rand::random(),
         |neuron| {
             neuron.dissolve_state = None;
@@ -1011,6 +1041,13 @@ pub fn test_everything(env: TestEnv) {
         test_merge_maturity_partial(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
         let neuron_info = neuron_tests.get_neuron_for_test("Test merge neuron maturity invalid");
         test_merge_maturity_invalid(&rosetta_api_serv, neuron_info).await;
+
+        let neuron_info = neuron_tests.get_neuron_for_test("Test stake all neuron maturity");
+        test_stake_maturity_all(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
+        let neuron_info = neuron_tests.get_neuron_for_test("Test stake partial neuron maturity");
+        test_stake_maturity_partial(&rosetta_api_serv, &ledger_for_governance, neuron_info).await;
+        let neuron_info = neuron_tests.get_neuron_for_test("Test stake neuron maturity invalid");
+        test_stake_maturity_invalid(&rosetta_api_serv, neuron_info).await;
 
         // Neuron info.
         let neuron_info = neuron_tests.get_neuron_for_test("Test get neuron info");
@@ -2824,12 +2861,28 @@ async fn test_merge_maturity_all(
     test_merge_maturity(ros, ledger, neuron_info, None).await;
 }
 
+async fn test_stake_maturity_all(
+    ros: &RosettaApiHandle,
+    ledger: &Canister<'_>,
+    neuron_info: NeuronInfo,
+) {
+    test_stake_maturity(ros, ledger, neuron_info, None).await;
+}
+
 async fn test_merge_maturity_partial(
     ros: &RosettaApiHandle,
     ledger: &Canister<'_>,
     neuron_info: NeuronInfo,
 ) {
     test_merge_maturity(ros, ledger, neuron_info, Some(14)).await;
+}
+
+async fn test_stake_maturity_partial(
+    ros: &RosettaApiHandle,
+    ledger: &Canister<'_>,
+    neuron_info: NeuronInfo,
+) {
+    test_stake_maturity(ros, ledger, neuron_info, Some(14)).await;
 }
 
 async fn test_merge_maturity(
@@ -2932,6 +2985,108 @@ async fn test_merge_maturity_invalid(ros: &RosettaApiHandle, neuron_info: Neuron
         res.is_err(),
         "Error expected while trying to merge neuron maturity with an invalid percentage"
     );
+}
+
+async fn test_stake_maturity_invalid(ros: &RosettaApiHandle, neuron_info: NeuronInfo) {
+    let acc = neuron_info.account_id;
+    let neuron_index = neuron_info.neuron_subaccount_identifier;
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+
+    let res = do_multiple_txn(
+        ros,
+        &[RequestInfo {
+            request: Request::StakeMaturity(StakeMaturity {
+                account: acc,
+                percentage_to_stake: Some(104),
+                neuron_index,
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        true,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await;
+
+    assert!(
+        res.is_err(),
+        "Error expected while trying to merge neuron maturity with an invalid percentage"
+    );
+}
+
+async fn test_stake_maturity(
+    ros: &RosettaApiHandle,
+    ledger: &Canister<'_>,
+    neuron_info: NeuronInfo,
+    percent: Option<u32>,
+) {
+    let (_, tip_idx) = get_tip(ledger).await;
+
+    let acc = neuron_info.account_id;
+    let neuron_index = neuron_info.neuron_subaccount_identifier;
+    let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
+
+    let neuron_acc = neuron_info.neuron_account;
+    let balance_before = get_balance(ledger, neuron_acc).await;
+    assert_ne!(
+        balance_before.get_e8s(),
+        0,
+        "Neuron balance shouldn't be 0."
+    );
+
+    let res = do_multiple_txn(
+        ros,
+        &[RequestInfo {
+            request: Request::StakeMaturity(StakeMaturity {
+                account: acc,
+                percentage_to_stake: Some(percent.unwrap_or(100)),
+                neuron_index,
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        true,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(tx_id, results, _)| {
+        assert!(!tx_id.is_transfer());
+        assert!(matches!(
+            results.operations.first().unwrap(),
+            RequestResult {
+                _type: Request::StakeMaturity(_),
+                status: Status::Completed,
+                ..
+            }
+        ));
+        results
+    })
+    .expect("failed to stake neuron maturity");
+
+    // Check stake maturity results.
+    // We expect no transaction to happen, as staking *does not* mint new tokens.
+    let expected_idx = tip_idx;
+    if let Some(h) = res.last_block_index() {
+        assert_eq!(h, expected_idx);
+    }
+    // Wait for Rosetta sync.
+    ros.wait_for_tip_sync(expected_idx).await.unwrap();
+    let balance_after = get_balance(ledger, neuron_acc).await;
+
+    assert_eq!(
+        balance_before.get_e8s(),
+        balance_after.get_e8s(),
+        "Neuron balance should have not increased after redirecting merge_maturity to stake_maturity."
+    );
+
+    // We should get the same results with Rosetta call (step not required though).
+    check_balance(
+        ros,
+        ledger,
+        &neuron_acc,
+        Tokens::from_e8s(balance_before.get_e8s()),
+    )
+    .await;
 }
 
 async fn test_neuron_info(ros: &RosettaApiHandle, _ledger: &Canister<'_>, neuron_info: NeuronInfo) {

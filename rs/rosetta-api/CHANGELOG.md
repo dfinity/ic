@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Unreleased
 ### Fixes
 - Validate the tip of the chain when blocks are downloaded.
+### Added
+- Rosetta supports the stake_maturity functionality
+### Changed
+- The boundary node of the default exchanges testnet that Rosetta connects now now only supports IPv6 instead of IPv4
 
 ## [1.7.2] - 2022-10-18
 ### Fixed

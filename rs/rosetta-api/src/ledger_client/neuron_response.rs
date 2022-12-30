@@ -13,6 +13,7 @@ pub struct NeuronResponse {
     pub(crate) neuron_fees_e8s: u64,
     pub(crate) followees: HashMap<i32, Vec<u64>>,
     pub(crate) hotkeys: Vec<PrincipalId>,
+    pub(crate) staked_maturity_e8s: Option<u64>,
 }
 
 impl From<NeuronResponse> for Object {

@@ -4,7 +4,7 @@ use crate::models::{ConstructionParseRequest, ConstructionParseResponse, ParsedT
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
     AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, PublicKeyOrPrincipal, RemoveHotKey,
-    RequestType, SetDissolveTimestamp, Spawn, Stake, StartDissolve, StopDissolve,
+    RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
 
 use ic_nns_governance::pb::v1::{
@@ -79,6 +79,9 @@ impl RosettaRequestHandler {
                 }
                 RequestType::MergeMaturity { neuron_index } => {
                     merge_maturity(&mut requests, arg, from, neuron_index)?
+                }
+                RequestType::StakeMaturity { neuron_index } => {
+                    stake_maturity(&mut requests, arg, from, neuron_index)?
                 }
                 RequestType::NeuronInfo {
                     neuron_index,
@@ -378,6 +381,33 @@ fn merge_maturity(
         requests.push(Request::MergeMaturity(MergeMaturity {
             account: from,
             percentage_to_merge,
+            neuron_index,
+        }));
+    } else {
+        return Err(ApiError::internal_error(
+            "Incompatible manage_neuron command".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Handle STAKE_MATURITY.
+fn stake_maturity(
+    requests: &mut Vec<Request>,
+    arg: Blob,
+    from: AccountIdentifier,
+    neuron_index: u64,
+) -> Result<(), ApiError> {
+    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
+    })?;
+    if let Some(Command::StakeMaturity(manage_neuron::StakeMaturity {
+        percentage_to_stake,
+    })) = manage.command
+    {
+        requests.push(Request::StakeMaturity(StakeMaturity {
+            account: from,
+            percentage_to_stake,
             neuron_index,
         }));
     } else {
