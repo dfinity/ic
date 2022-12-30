@@ -432,21 +432,6 @@ impl<Pool: IngressPool + IngressGossipPool + Send + Sync> ArtifactClient<Ingress
             .get_validated_by_identifier(msg_id)
     }
 
-    /// The method returns the ingress message filter.
-    fn get_filter(&self) -> IngressMessageFilter {
-        Default::default()
-    }
-
-    /// The method returns all adverts for validated ingress messages.
-    fn get_all_validated_by_filter(
-        &self,
-        _filter: &IngressMessageFilter,
-    ) -> Vec<Advert<IngressArtifact>> {
-        // TODO: Send adverts of ingress messages which are generated on this node (not
-        // relayed from other node). P2P-381
-        Vec::new()
-    }
-
     /// The method returns the priority function.
     fn get_priority_function(
         &self,

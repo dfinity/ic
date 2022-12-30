@@ -72,8 +72,6 @@ pub mod gossip_chunk {
 pub struct ArtifactFilter {
     #[prost(message, optional, tag = "1")]
     pub consensus_filter: ::core::option::Option<ConsensusMessageFilter>,
-    #[prost(message, optional, tag = "2")]
-    pub ingress_filter: ::core::option::Option<IngressMessageFilter>,
     #[prost(message, optional, tag = "3")]
     pub certification_message_filter: ::core::option::Option<CertificationMessageFilter>,
     #[prost(message, optional, tag = "4")]
@@ -85,13 +83,6 @@ pub struct ArtifactFilter {
 pub struct ConsensusMessageFilter {
     #[prost(uint64, tag = "1")]
     pub height: u64,
-}
-#[derive(serde::Serialize, serde::Deserialize)]
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct IngressMessageFilter {
-    #[prost(uint64, tag = "1")]
-    pub time: u64,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

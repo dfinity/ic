@@ -49,7 +49,7 @@ impl ArtifactKind for IngressArtifact {
     type Id = IngressMessageId;
     type Message = SignedIngress;
     type Attribute = IngressMessageAttribute;
-    type Filter = IngressMessageFilter;
+    type Filter = ();
 
     /// The function converts a `SignedIngress` into an advert for an
     /// `IngressArtifact`.
