@@ -8,6 +8,7 @@ require (
 	github.com/facebookgo/limitgroup v0.0.0-20150612190941-6abd8d71ec01 // indirect
 	github.com/facebookgo/muster v0.0.0-20150708232844-fd3d7953fd52 // indirect
 	github.com/fatih/color v1.13.0 // indirect
+	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/honeycombio/beeline-go v1.11.1 // indirect
 	github.com/honeycombio/libhoney-go v1.17.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
