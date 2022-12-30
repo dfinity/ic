@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Rosetta supports the stake_maturity functionality
 ### Changed
 - The boundary node of the default exchanges testnet that Rosetta connects now now only supports IPv6 instead of IPv4
+- Changed the log destination of the blocks synchronizer. It now logs in the same file as the rosetta-api.
 
 ## [1.7.2] - 2022-10-18
 ### Fixed
