@@ -64,9 +64,10 @@ async fn query_success() {
             .unwrap_or_else(|e| panic!("Error responding: {}", e));
     };
 
-    let result = with_test_replica_logger(|log| {
-        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_slice)
-    });
+    let result = with_test_replica_logger(|log| async {
+        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_slice).await
+    })
+    .await;
 
     assert_eq!(expected, result.unwrap());
     assert_eq!(
@@ -87,9 +88,10 @@ async fn query_garbage_response() {
             .unwrap_or_else(|e| panic!("Error responding: {}", e));
     };
 
-    let result = with_test_replica_logger(|log| {
-        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_garbage)
-    });
+    let result = with_test_replica_logger(|log| async {
+        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_garbage).await
+    })
+    .await;
 
     match result {
         Err(XNetClientError::ProxyDecodeError(ProxyDecodeError::DecodeError(_))) => (),
@@ -121,9 +123,10 @@ async fn query_invalid_proto() {
             .unwrap_or_else(|e| panic!("Error responding: {}", e));
     };
 
-    let result = with_test_replica_logger(|log| {
-        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_invalid_proto)
-    });
+    let result = with_test_replica_logger(|log| async {
+        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_invalid_proto).await
+    })
+    .await;
 
     match result {
         Err(XNetClientError::ProxyDecodeError(ProxyDecodeError::MissingField(_))) => (),
@@ -150,9 +153,10 @@ async fn query_no_content() {
             .unwrap_or_else(|e| panic!("Error responding: {}", e));
     };
 
-    let result = with_test_replica_logger(|log| {
-        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_garbage)
-    });
+    let result = with_test_replica_logger(|log| async {
+        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_garbage).await
+    })
+    .await;
 
     match result {
         Err(XNetClientError::NoContent) => (),
@@ -176,9 +180,10 @@ async fn query_error_response() {
             .unwrap_or_else(|e| panic!("Error responding: {}", e));
     };
 
-    let result = with_test_replica_logger(|log| {
-        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_error)
-    });
+    let result = with_test_replica_logger(|log| async {
+        do_xnet_client_query(make_xnet_client(&metrics, log), respond_with_error).await
+    })
+    .await;
 
     match result {
         Err(XNetClientError::ErrorResponse(reqwest::StatusCode::INTERNAL_SERVER_ERROR, _)) => (),
@@ -217,8 +222,10 @@ async fn query_request_timeout() {
         Err(e) => panic!("server.recv() returned error: {}", e),
     });
 
-    let result =
-        with_test_replica_logger(|log| do_async_query(make_xnet_client(metrics, log), url));
+    let result = with_test_replica_logger(|log| async {
+        do_async_query(make_xnet_client(metrics, log), url).await
+    })
+    .await;
 
     // Only let the server proceed after we've timed out.
     barrier.wait();
@@ -270,8 +277,10 @@ async fn query_request_failed() {
     // URL to query a server that would be running on the allocated port.
     let url = format!("http://{}", sa).parse::<Uri>().unwrap();
 
-    let result =
-        with_test_replica_logger(|log| do_async_query(make_xnet_client(metrics, log), url));
+    let result = with_test_replica_logger(|log| async {
+        do_async_query(make_xnet_client(metrics, log), url).await
+    })
+    .await;
 
     match result {
         Err(XNetClientError::RequestFailed(_)) => (),
@@ -288,7 +297,7 @@ async fn query_request_failed() {
 
 /// Returns the result of invoking `xnet_client.query()` against an HTTP server
 /// in a spawned thread that processes a single request using `handle_request`.
-fn do_xnet_client_query<H: Fn(Request) + Send + 'static>(
+async fn do_xnet_client_query<H: Fn(Request) + Send + 'static>(
     xnet_client: XNetClientImpl,
     handle_request: H,
 ) -> Result<CertifiedStreamSlice, XNetClientError> {
@@ -310,7 +319,7 @@ fn do_xnet_client_query<H: Fn(Request) + Send + 'static>(
     });
     barrier.wait();
 
-    let result = do_async_query(xnet_client, uri);
+    let result = do_async_query(xnet_client, uri).await;
 
     // Join the server thread, ensure it didn't panic.
     join_handle
@@ -322,7 +331,7 @@ fn do_xnet_client_query<H: Fn(Request) + Send + 'static>(
 
 /// Helper for synchronously calling `query()` on the given `XNetClientImpl`,
 /// with the given URL.
-fn do_async_query(
+async fn do_async_query(
     xnet_client: XNetClientImpl,
     url: Uri,
 ) -> Result<CertifiedStreamSlice, XNetClientError> {
@@ -331,10 +340,7 @@ fn do_async_query(
         url,
         proximity: PeerLocation::Local,
     };
-    tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current()
-            .block_on(async move { xnet_client.query(&endpoint).await })
-    })
+    xnet_client.query(&endpoint).await
 }
 
 /// Creates an HTTP server listening on a free port, returning it and a URL to
