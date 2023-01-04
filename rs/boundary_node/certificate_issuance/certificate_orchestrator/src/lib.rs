@@ -9,7 +9,7 @@ use certificate_orchestrator_interface::{
     QueueTaskResponse, Registration, State, UpdateRegistrationError, UpdateRegistrationResponse,
     UploadCertificateError, UploadCertificateResponse, NAME_MAX_LEN,
 };
-use ic_cdk::{caller, export::Principal, trap};
+use ic_cdk::{caller, export::Principal, post_upgrade, pre_upgrade, trap};
 use ic_cdk_macros::{init, query, update};
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
@@ -30,6 +30,7 @@ use crate::{
 mod acl;
 mod certificate;
 mod id;
+mod persistence;
 mod registration;
 mod work;
 
@@ -66,6 +67,7 @@ const MEMORY_ID_ID_SEED: u8 = 3;
 const MEMORY_ID_REGISTRATIONS: u8 = 4;
 const MEMORY_ID_NAMES: u8 = 5;
 const MEMORY_ID_ENCRPYTED_CERTIFICATES: u8 = 6;
+const MEMORY_ID_TASKS: u8 = 7;
 
 // ACLs
 thread_local! {
@@ -112,7 +114,7 @@ thread_local! {
         StableValue::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ID_SEED))),
             CONST_KEY_LEN,  // MAX_KEY_SIZE,
-            ID_SEED_LEN, // MAX_VALUE_SIZE
+            ID_SEED_LEN,    // MAX_VALUE_SIZE
         )
     );
 
@@ -227,6 +229,33 @@ fn init_fn(
     ID_SEED.with(|s| {
         let mut s = s.borrow_mut();
         s.insert((), id_seed).unwrap();
+    });
+}
+
+#[pre_upgrade]
+fn pre_upgrade_fn() {
+    MEMORY_MANAGER.with(|m| {
+        let m = m.borrow();
+
+        TASKS.with(|tasks| {
+            if let Err(err) = persistence::store(m.get(MemoryId::new(MEMORY_ID_TASKS)), tasks) {
+                trap(&format!("failed to persist tasks: {err}"));
+            }
+        });
+    });
+}
+
+#[post_upgrade]
+fn post_upgrade_fn() {
+    MEMORY_MANAGER.with(|m| {
+        let m = m.borrow();
+
+        TASKS.with(|tasks| {
+            match persistence::load(m.get(MemoryId::new(MEMORY_ID_TASKS))) {
+                Ok(v) => *tasks.borrow_mut() = v,
+                Err(err) => trap(&format!("failed to load tasks: {err}")),
+            };
+        });
     });
 }
 
