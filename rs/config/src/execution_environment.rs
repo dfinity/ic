@@ -8,7 +8,7 @@ use ic_types::{
     Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
 };
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
+use std::{str::FromStr, time::Duration};
 
 const GB: u64 = 1024 * 1024 * 1024;
 
@@ -155,6 +155,18 @@ pub struct Config {
 
     /// Indicates whether composite queries are available or not.
     pub composite_queries: FlagStatus,
+
+    /// Sandbox process eviction does not activate if the number of sandbox
+    /// processes is below this threshold.
+    pub min_sandbox_count: usize,
+
+    /// Sandbox process eviction ensures that the number of sandbox processes is
+    /// always below this threshold.
+    pub max_sandbox_count: usize,
+
+    /// A sandbox process may be evicted after it has been idle for this
+    /// duration and sandbox process eviction is activated.
+    pub max_sandbox_idle_time: Duration,
 }
 
 impl Default for Config {
@@ -211,6 +223,9 @@ impl Default for Config {
                 mainnet_canister_id: Some(bitcoin_mainnet_canister_id),
             },
             composite_queries: FlagStatus::Disabled,
+            min_sandbox_count: embedders::DEFAULT_MIN_SANDBOX_COUNT,
+            max_sandbox_count: embedders::DEFAULT_MAX_SANDBOX_COUNT,
+            max_sandbox_idle_time: embedders::DEFAULT_MAX_SANDBOX_IDLE_TIME,
         }
     }
 }

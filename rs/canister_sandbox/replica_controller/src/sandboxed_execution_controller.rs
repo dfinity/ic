@@ -37,7 +37,7 @@ use std::process::ExitStatus;
 use std::sync::Weak;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::active_execution_state_registry::{ActiveExecutionStateRegistry, CompletionResult};
 use crate::controller_service_impl::ControllerServiceImpl;
@@ -45,9 +45,13 @@ use crate::launch_as_process::{create_sandbox_process, spawn_launcher_process};
 use crate::process_exe_and_args::{create_launcher_argv, create_sandbox_argv};
 #[cfg(target_os = "linux")]
 use crate::process_os_metrics;
+use crate::sandbox_process_eviction::{self, EvictionCandidate};
 
-const SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION: Duration = Duration::from_secs(60);
 const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
+
+// The percentage of sandbox processes to evict in one go in order to amortize
+// for the eviction cost.
+const SANDBOX_PROCESS_EVICTION_PERCENT: usize = 20;
 
 const SANDBOXED_EXECUTION_INVALID_MEMORY_SIZE: &str = "sandboxed_execution_invalid_memory_size";
 
@@ -392,12 +396,12 @@ impl std::fmt::Debug for OpenedWasm {
 
 /// Manages the lifetime of a remote sandbox memory and provides its id.
 pub struct OpenedMemory {
-    sandbox_process: Arc<SandboxProcess>,
+    sandbox_process: Weak<SandboxProcess>,
     memory_id: MemoryId,
 }
 
 impl OpenedMemory {
-    fn new(sandbox_process: Arc<SandboxProcess>, memory_id: MemoryId) -> Self {
+    fn new(sandbox_process: Weak<SandboxProcess>, memory_id: MemoryId) -> Self {
         Self {
             sandbox_process,
             memory_id,
@@ -406,22 +410,28 @@ impl OpenedMemory {
 }
 
 impl SandboxMemoryOwner for OpenedMemory {
-    fn get_id(&self) -> usize {
+    fn get_sandbox_memory_id(&self) -> usize {
         self.memory_id.as_usize()
+    }
+
+    fn get_sandbox_process_id(&self) -> Option<usize> {
+        self.sandbox_process.upgrade().map(|sp| sp.pid as usize)
     }
 }
 
 impl Drop for OpenedMemory {
     fn drop(&mut self) {
-        self.sandbox_process
-            .history
-            .record(format!("CloseMemory(memory_id={})", self.memory_id));
-        self.sandbox_process
-            .sandbox_service
-            .close_memory(protocol::sbxsvc::CloseMemoryRequest {
-                memory_id: self.memory_id,
-            })
-            .on_completion(|_| {});
+        if let Some(sandbox_process) = self.sandbox_process.upgrade() {
+            sandbox_process
+                .history
+                .record(format!("CloseMemory(memory_id={})", self.memory_id));
+            sandbox_process
+                .sandbox_service
+                .close_memory(protocol::sbxsvc::CloseMemoryRequest {
+                    memory_id: self.memory_id,
+                })
+                .on_completion(|_| {});
+        }
     }
 }
 
@@ -435,24 +445,30 @@ impl std::fmt::Debug for OpenedMemory {
 
 enum Backend {
     Active {
+        // The strong reference to `SandboxProcess` ensures that the sandbox
+        // process will stay alive even if it is not used.
         sandbox_process: Arc<SandboxProcess>,
-        last_used: std::time::Instant,
+        stats: SandboxProcessStats,
     },
     Evicted {
+        // The weak reference is used to promote the sandbox process back to
+        // `active` if a new message execution starts.
         sandbox_process: Weak<SandboxProcess>,
-        last_used: std::time::Instant,
+        stats: SandboxProcessStats,
     },
+    // A dummy, not observable state that is used as a placeholder in
+    // `std::mem::replace()`.
     Empty,
+}
+
+#[derive(Clone)]
+struct SandboxProcessStats {
+    last_used: std::time::Instant,
 }
 
 enum SandboxProcessStatus {
     Active,
     Evicted,
-}
-
-struct SandboxProcessStats {
-    time_since_last_usage: std::time::Duration,
-    status: SandboxProcessStatus,
 }
 
 // Represent a paused sandbox execution.
@@ -534,7 +550,33 @@ impl PausedWasmExecution for PausedSandboxExecution {
 /// Manages sandboxed processes, forwards requests to the appropriate
 /// process.
 pub struct SandboxedExecutionController {
+    /// A registry of known sandbox processes. Each sandbox process can be in
+    /// one of two states:
+    ///
+    /// - `active`: the entry in the registry keeps a strong reference to the
+    /// sandbox process, so that it is guaranteed to stay alive.
+    ///
+    /// - `evicted`: the entry in the registry keeps a weak reference to the
+    /// sandbox process, so that the sandbox process is terminated as soon as
+    /// the last strong reference to it is dropped. In other words, the sandbox
+    /// process is terminated as soon as all pending executions finish and no
+    /// new execution starts.
+    ///
+    /// The sandbox process can move from `evicted` back to `active` if a new
+    /// message execution starts.
+    ///
+    /// Invariants:
+    ///
+    /// - If a sandbox process has a strong reference from somewhere else in the
+    /// replica process, then the registry has an entry for that sandbox process.
+    /// The entry may be either the `active` or `evicted` state.
+    ///
+    /// - An entry is removed from the registry only if it is in the `evicted`
+    /// state and the strong reference count reaches zero.
     backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
+    min_sandbox_count: usize,
+    max_sandbox_count: usize,
+    max_sandbox_idle_time: Duration,
     logger: ReplicaLogger,
     /// Executable and arguments to be passed to `canister_sandbox` which are
     /// the same for all canisters.
@@ -612,12 +654,12 @@ impl WasmExecutor for SandboxedExecutionController {
         // Now set up resources on the sandbox to drive the execution.
         let wasm_memory_handle = open_remote_memory(&sandbox_process, &execution_state.wasm_memory);
         let canister_id = sandbox_safe_system_state.canister_id();
-        let wasm_memory_id = MemoryId::from(wasm_memory_handle.get_id());
+        let wasm_memory_id = MemoryId::from(wasm_memory_handle.get_sandbox_memory_id());
         let next_wasm_memory_id = MemoryId::new();
 
         let stable_memory_handle =
             open_remote_memory(&sandbox_process, &execution_state.stable_memory);
-        let stable_memory_id = MemoryId::from(stable_memory_handle.get_id());
+        let stable_memory_id = MemoryId::from(stable_memory_handle.get_sandbox_memory_id());
         let next_stable_memory_id = MemoryId::new();
 
         sandbox_process.history.record(
@@ -881,6 +923,9 @@ impl SandboxedExecutionController {
         embedder_config: &EmbeddersConfig,
     ) -> std::io::Result<Self> {
         let launcher_exec_argv = create_launcher_argv().expect("No sandbox_launcher binary found");
+        let min_sandbox_count = embedder_config.min_sandbox_count;
+        let max_sandbox_count = embedder_config.max_sandbox_count;
+        let max_sandbox_idle_time = embedder_config.max_sandbox_idle_time;
         let sandbox_exec_argv =
             create_sandbox_argv(embedder_config).expect("No canister_sandbox binary found");
         let backends = Arc::new(Mutex::new(HashMap::new()));
@@ -895,6 +940,9 @@ impl SandboxedExecutionController {
                 logger_copy,
                 backends_copy,
                 metrics_copy,
+                min_sandbox_count,
+                max_sandbox_count,
+                max_sandbox_idle_time,
             );
         });
 
@@ -920,6 +968,9 @@ impl SandboxedExecutionController {
 
         Ok(Self {
             backends,
+            min_sandbox_count,
+            max_sandbox_count,
+            max_sandbox_idle_time,
             logger,
             sandbox_exec_argv,
             metrics,
@@ -935,18 +986,22 @@ impl SandboxedExecutionController {
         #[allow(unused_variables)] logger: ReplicaLogger,
         backends: Arc<Mutex<HashMap<CanisterId, Backend>>>,
         metrics: Arc<SandboxedExecutionMetrics>,
+        min_sandbox_count: usize,
+        max_sandbox_count: usize,
+        max_sandbox_idle_time: Duration,
     ) {
         loop {
-            let sandbox_processes = scavenge_sandbox_processes(&backends);
+            let sandbox_processes = get_sandbox_process_stats(&backends);
 
             #[cfg(target_os = "linux")]
             {
                 let mut total_anon_rss: u64 = 0;
                 let mut total_memfd_rss: u64 = 0;
+                let now = std::time::Instant::now();
 
                 // For all processes requested, get their memory usage and report
                 // it keyed by pid. Ignore processes failures to get
-                for (sandbox_process, stats) in &sandbox_processes {
+                for (sandbox_process, stats, status) in &sandbox_processes {
                     let pid = sandbox_process.pid;
                     let mut process_rss = 0;
                     if let Ok(kib) = process_os_metrics::get_anon_rss(pid) {
@@ -970,16 +1025,19 @@ impl SandboxedExecutionController {
                     metrics
                         .sandboxed_execution_subprocess_rss
                         .observe(process_rss as f64);
-                    match stats.status {
+                    let time_since_last_usage = now
+                        .checked_duration_since(stats.last_used)
+                        .unwrap_or_else(|| std::time::Duration::from_secs(0));
+                    match status {
                         SandboxProcessStatus::Active => {
                             metrics
                                 .sandboxed_execution_subprocess_active_last_used
-                                .observe(stats.time_since_last_usage.as_secs_f64());
+                                .observe(time_since_last_usage.as_secs_f64());
                         }
                         SandboxProcessStatus::Evicted => {
                             metrics
                                 .sandboxed_execution_subprocess_evicted_last_used
-                                .observe(stats.time_since_last_usage.as_secs_f64());
+                                .observe(time_since_last_usage.as_secs_f64());
                         }
                     }
                 }
@@ -998,29 +1056,43 @@ impl SandboxedExecutionController {
             // on macos anyway.
             #[cfg(not(target_os = "linux"))]
             {
+                let now = std::time::Instant::now();
                 // For all processes requested, get their memory usage and report
                 // it keyed by pid. Ignore processes failures to get
-                for (_sandbox_process, stats) in &sandbox_processes {
-                    match stats.status {
+                for (_sandbox_process, stats, status) in &sandbox_processes {
+                    let time_since_last_usage = now
+                        .checked_duration_since(stats.last_used)
+                        .unwrap_or_else(|| std::time::Duration::from_secs(0));
+                    match status {
                         SandboxProcessStatus::Active => {
                             metrics
                                 .sandboxed_execution_subprocess_active_last_used
-                                .observe(stats.time_since_last_usage.as_secs_f64());
+                                .observe(time_since_last_usage.as_secs_f64());
                         }
                         SandboxProcessStatus::Evicted => {
                             metrics
                                 .sandboxed_execution_subprocess_evicted_last_used
-                                .observe(stats.time_since_last_usage.as_secs_f64());
+                                .observe(time_since_last_usage.as_secs_f64());
                         }
                     }
                 }
             }
 
-            // Scavenge and collect metrics sufficiently infrequently that it
-            // does not use excessive compute resources. It might be sensible to
-            // scale this based on the time measured to perform the collection
-            // and e.g.  ensure that we are 99% idle instead of using a static
-            // duration here.
+            {
+                let mut guard = backends.lock().unwrap();
+                evict_sandbox_processes(
+                    &mut guard,
+                    min_sandbox_count,
+                    max_sandbox_count,
+                    max_sandbox_idle_time,
+                );
+            }
+
+            // Collect metrics sufficiently infrequently that it does not use
+            // excessive compute resources. It might be sensible to scale this
+            // based on the time measured to perform the collection and e.g.
+            // ensure that we are 99% idle instead of using a static duration
+            // here.
             std::thread::sleep(SANDBOX_PROCESS_UPDATE_INTERVAL);
         }
     }
@@ -1030,26 +1102,28 @@ impl SandboxedExecutionController {
 
         if let Some(backend) = (*guard).get_mut(&canister_id) {
             let old = std::mem::replace(backend, Backend::Empty);
-            let sandbox_process = match old {
+            let sandbox_process_and_stats = match old {
                 Backend::Active {
-                    sandbox_process, ..
-                } => Some(sandbox_process),
+                    sandbox_process,
+                    stats,
+                } => Some((sandbox_process, stats)),
                 Backend::Evicted {
-                    sandbox_process, ..
-                } => sandbox_process.upgrade(),
+                    sandbox_process,
+                    stats,
+                } => sandbox_process.upgrade().map(|p| (p, stats)),
                 Backend::Empty => None,
             };
-            if let Some(sandbox_process) = sandbox_process {
+            if let Some((sandbox_process, _stats)) = sandbox_process_and_stats {
                 let now = std::time::Instant::now();
-                if SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION.as_secs() > 0 {
+                if self.max_sandbox_count > 0 {
                     *backend = Backend::Active {
                         sandbox_process: Arc::clone(&sandbox_process),
-                        last_used: now,
+                        stats: SandboxProcessStats { last_used: now },
                     };
                 } else {
                     *backend = Backend::Evicted {
                         sandbox_process: Arc::downgrade(&sandbox_process),
-                        last_used: now,
+                        stats: SandboxProcessStats { last_used: now },
                     };
                 }
                 return sandbox_process;
@@ -1057,6 +1131,17 @@ impl SandboxedExecutionController {
         }
 
         let _timer = self.metrics.sandboxed_execution_spawn_process.start_timer();
+        if guard.len() > self.max_sandbox_count {
+            let to_evict = self.max_sandbox_count * SANDBOX_PROCESS_EVICTION_PERCENT / 100;
+            let max_active_sandboxes = self.max_sandbox_count.saturating_sub(to_evict);
+            evict_sandbox_processes(
+                &mut guard,
+                self.min_sandbox_count,
+                max_active_sandboxes,
+                self.max_sandbox_idle_time,
+            );
+        }
+
         // No sandbox process found for this canister. Start a new one and register it.
         let reg = Arc::new(ActiveExecutionStateRegistry::new());
         let controller_service = ControllerServiceImpl::new(Arc::clone(&reg), self.logger.clone());
@@ -1079,7 +1164,7 @@ impl SandboxedExecutionController {
         let now = std::time::Instant::now();
         let backend = Backend::Active {
             sandbox_process: Arc::clone(&sandbox_process),
-            last_used: now,
+            stats: SandboxProcessStats { last_used: now },
         };
         (*guard).insert(canister_id, backend);
 
@@ -1339,113 +1424,146 @@ fn open_remote_memory(
     memory: &Memory,
 ) -> SandboxMemoryHandle {
     let mut guard = memory.sandbox_memory.lock().unwrap();
-    match &*guard {
-        SandboxMemory::Synced(id) => id.clone(),
-        SandboxMemory::Unsynced => {
-            let serialized_page_map = memory.page_map.serialize();
-            // Only clean memory without any dirty pages can be unsynced.
-            // That is because all dirty pages are created by the sandbox and
-            // they are automatically synced using `wrap_remote_memory`.
-            assert!(serialized_page_map.page_delta.is_empty());
-            assert!(serialized_page_map.round_delta.is_empty());
-            let serialized_memory = MemorySerialization {
-                page_map: serialized_page_map,
-                num_wasm_pages: memory.size,
-            };
-            let memory_id = MemoryId::new();
-            sandbox_process
-                .history
-                .record(format!("OpenMemory(memory_id={})", memory_id));
-            sandbox_process
-                .sandbox_service
-                .open_memory(protocol::sbxsvc::OpenMemoryRequest {
-                    memory_id,
-                    memory: serialized_memory,
-                })
-                .on_completion(|_| {});
-            let handle = wrap_remote_memory(sandbox_process, memory_id);
-            *guard = SandboxMemory::Synced(handle.clone());
-            handle
+    if let SandboxMemory::Synced(id) = &*guard {
+        if let Some(pid) = id.get_sandbox_process_id() {
+            // There is a at most one sandbox process per canister at any time.
+            assert_eq!(pid, sandbox_process.pid as usize);
+            return id.clone();
         }
     }
+
+    // Here we have two cases:
+    // 1) either the memory was never synchronized with any sandbox process,
+    // 2) or the memory was synchronized was some sandbox process that got evicted
+    //    and terminated in the meantime.
+    // In both cases, we need to synchronize the memory with the given sandbox
+    // process.
+
+    let serialized_page_map = memory.page_map.serialize();
+    let serialized_memory = MemorySerialization {
+        page_map: serialized_page_map,
+        num_wasm_pages: memory.size,
+    };
+    let memory_id = MemoryId::new();
+    sandbox_process
+        .history
+        .record(format!("OpenMemory(memory_id={})", memory_id));
+    sandbox_process
+        .sandbox_service
+        .open_memory(protocol::sbxsvc::OpenMemoryRequest {
+            memory_id,
+            memory: serialized_memory,
+        })
+        .on_completion(|_| {});
+    let handle = wrap_remote_memory(sandbox_process, memory_id);
+    *guard = SandboxMemory::Synced(handle.clone());
+    handle
 }
 
 fn wrap_remote_memory(
     sandbox_process: &Arc<SandboxProcess>,
     memory_id: MemoryId,
 ) -> SandboxMemoryHandle {
-    let opened_memory = OpenedMemory::new(Arc::clone(sandbox_process), memory_id);
+    let opened_memory = OpenedMemory::new(Arc::downgrade(sandbox_process), memory_id);
     SandboxMemoryHandle::new(Arc::new(opened_memory))
 }
 
-// Evicts inactive process and returns all processes that are still alive.
-fn scavenge_sandbox_processes(
+// Evicts some sandbox process backends according to the heuristics of the
+// `sandbox_process_eviction::evict()` function. See the comments of that
+// function for the explanation of the threshold parameters.
+fn evict_sandbox_processes(
+    backends: &mut HashMap<CanisterId, Backend>,
+    min_active_sandboxes: usize,
+    max_active_sandboxes: usize,
+    max_sandbox_idle_time: Duration,
+) {
+    // Remove the already terminated processes.
+    backends.retain(|_id, backend| match backend {
+        Backend::Active { .. } => true,
+        Backend::Evicted {
+            sandbox_process, ..
+        } => {
+            // Once `strong_count` reaches zero, then `upgrade()` will always
+            // return `None`. This means that such entries never be used again,
+            // so it is safe to remove them from the hash map.
+            sandbox_process.strong_count() > 0
+        }
+        Backend::Empty => false,
+    });
+
+    let candidates: Vec<_> = backends
+        .iter()
+        .filter_map(|(id, backend)| match backend {
+            Backend::Active { stats, .. } => Some(EvictionCandidate {
+                id: *id,
+                last_used: stats.last_used,
+            }),
+            Backend::Evicted { .. } | Backend::Empty => None,
+        })
+        .collect();
+
+    let evicted = sandbox_process_eviction::evict(
+        candidates,
+        min_active_sandboxes,
+        max_active_sandboxes,
+        Instant::now() - max_sandbox_idle_time,
+    );
+
+    // Actually evict all the selected eviction candidates.
+    for EvictionCandidate { id, .. } in evicted.iter() {
+        if let Some(backend) = backends.get_mut(id) {
+            let old = std::mem::replace(backend, Backend::Empty);
+            let new = match old {
+                Backend::Active {
+                    sandbox_process,
+                    stats,
+                } => Backend::Evicted {
+                    sandbox_process: Arc::downgrade(&sandbox_process),
+                    stats,
+                },
+                Backend::Evicted { .. } | Backend::Empty => old,
+            };
+            *backend = new;
+        }
+    }
+}
+
+// Returns all processes that are still alive.
+fn get_sandbox_process_stats(
     backends: &Arc<Mutex<HashMap<CanisterId, Backend>>>,
-) -> Vec<(Arc<SandboxProcess>, SandboxProcessStats)> {
-    let mut guard = backends.lock().unwrap();
-    let now = std::time::Instant::now();
+) -> Vec<(
+    Arc<SandboxProcess>,
+    SandboxProcessStats,
+    SandboxProcessStatus,
+)> {
+    let guard = backends.lock().unwrap();
     let mut result = vec![];
-    for backend in guard.values_mut() {
-        let old = std::mem::replace(backend, Backend::Empty);
-        let new = match old {
+    for backend in guard.values() {
+        match backend {
             Backend::Active {
                 sandbox_process,
-                last_used,
+                stats,
             } => {
-                let inactive_time = now
-                    .checked_duration_since(last_used)
-                    .unwrap_or_else(|| std::time::Duration::from_secs(0));
-                if inactive_time > SANDBOX_PROCESS_INACTIVE_TIME_BEFORE_EVICTION {
-                    result.push((
-                        Arc::clone(&sandbox_process),
-                        SandboxProcessStats {
-                            time_since_last_usage: inactive_time,
-                            status: SandboxProcessStatus::Evicted,
-                        },
-                    ));
-                    Backend::Evicted {
-                        sandbox_process: Arc::downgrade(&sandbox_process),
-                        last_used,
-                    }
-                } else {
-                    result.push((
-                        Arc::clone(&sandbox_process),
-                        SandboxProcessStats {
-                            time_since_last_usage: inactive_time,
-                            status: SandboxProcessStatus::Active,
-                        },
-                    ));
-                    Backend::Active {
-                        sandbox_process,
-                        last_used,
-                    }
-                }
+                result.push((
+                    Arc::clone(sandbox_process),
+                    stats.clone(),
+                    SandboxProcessStatus::Active,
+                ));
             }
             Backend::Evicted {
                 sandbox_process,
-                last_used,
-            } => match sandbox_process.upgrade() {
-                Some(strong_reference) => {
-                    let inactive_time = now
-                        .checked_duration_since(last_used)
-                        .unwrap_or_else(|| std::time::Duration::from_secs(0));
+                stats,
+            } => {
+                if let Some(strong_reference) = sandbox_process.upgrade() {
                     result.push((
                         strong_reference,
-                        SandboxProcessStats {
-                            time_since_last_usage: inactive_time,
-                            status: SandboxProcessStatus::Evicted,
-                        },
+                        stats.clone(),
+                        SandboxProcessStatus::Evicted,
                     ));
-                    Backend::Evicted {
-                        sandbox_process,
-                        last_used,
-                    }
                 }
-                None => Backend::Empty,
-            },
-            Backend::Empty => Backend::Empty,
+            }
+            Backend::Empty => {}
         };
-        *backend = new;
     }
     result
 }

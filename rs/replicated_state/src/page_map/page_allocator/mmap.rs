@@ -438,19 +438,24 @@ impl MmapBasedPageAllocatorCore {
         file_descriptor: FileDescriptor,
         backing_file_owner: BackingFileOwner,
     ) -> Self {
-        // SAFETY: The file descriptor is valid.
-        let file_len = unsafe { get_file_length(file_descriptor.fd) };
-        Self {
+        let mut page_allocator = Self {
             id,
             allocation_area: Default::default(),
             allocated_pages: 0,
             deserialized_pages: 0,
             file_descriptor: file_descriptor.fd,
-            file_len,
+            file_len: 0,
             chunks: vec![],
             dropped_pages: vec![],
             backing_file_owner,
-        }
+        };
+        // SAFETY: The file descriptor is valid.
+        let file_len = unsafe { get_file_length(file_descriptor.fd) };
+        // Depending on how this page allocator is used, the existing pages in
+        // the file may be deserialized later on. We need to prepare for that
+        // potential deserialization.
+        page_allocator.grow_for_deserialization(file_len);
+        page_allocator
     }
 
     fn allocate_page(&mut self, page_allocator: &Arc<PageAllocatorInner>) -> PageInner {
