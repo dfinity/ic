@@ -1392,8 +1392,8 @@ impl IngressHistoryState {
         let new_pruning_times = Arc::make_mut(&mut self.pruning_times).split_off(&time);
 
         let statuses = Arc::make_mut(&mut self.statuses);
-        for t in self.pruning_times.as_ref().keys() {
-            for message_id in self.pruning_times.get(t).unwrap() {
+        for pruning_times in self.pruning_times.as_ref().values() {
+            for message_id in pruning_times {
                 if let Some(removed) = statuses.remove(message_id) {
                     self.memory_usage -= removed.payload_bytes();
                 }

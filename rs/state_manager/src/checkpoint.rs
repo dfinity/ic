@@ -207,14 +207,8 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         load_bitcoin_state(checkpoint_layout)?
     };
 
-    let state = ReplicatedState::new_from_checkpoint(
-        canister_states,
-        metadata,
-        subnet_queues,
-        // Consensus queue needs to be empty at the end of every round.
-        Vec::new(),
-        bitcoin,
-    );
+    let state =
+        ReplicatedState::new_from_checkpoint(canister_states, metadata, subnet_queues, bitcoin);
 
     Ok(state)
 }

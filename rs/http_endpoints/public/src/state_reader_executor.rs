@@ -102,7 +102,6 @@ mod tests {
                         BTreeMap::new(),
                         metadata,
                         CanisterQueues::default(),
-                        Vec::new(),
                         BitcoinState::default(),
                     )),
                 )
