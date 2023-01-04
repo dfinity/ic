@@ -401,11 +401,18 @@ impl SnsRootCanister {
             )
         });
 
-        // Get our status.
-        let root_status = get_root_status(env, governance_canister_id).await;
+        // Get root status.
+        let root_status = match get_root_status(env, governance_canister_id).await {
+            Ok(status) => Some(status),
+            Err(err) => {
+                println!("{}Getting root status failed: {}", LOG_PREFIX, err);
+                None
+            }
+        };
+
         let root_canister_summary = Some(CanisterSummary {
             canister_id: Some(own_canister_id.into()),
-            status: Some(root_status),
+            status: root_status,
         });
 
         // Get governance status.
@@ -583,10 +590,22 @@ impl SnsRootCanister {
                      canister ID: {err:#?}"
                 )
             });
-            let is_controllee = management_canister_client
+            let canister_status = match management_canister_client
                 .canister_status(&dapp_canister_id.into())
                 .await
-                .is_ok();
+            {
+                Err(_) => {
+                    panic!(
+                        "Could not get the status of canister: {}.  Root may not be a controller.",
+                        dapp_canister_id
+                    )
+                }
+                Ok(status) => status,
+            };
+            let is_controllee = canister_status
+                .controllers()
+                .contains(&own_canister_id.into());
+
             assert!(
                 is_controllee,
                 "Operation aborted due to an error; no changes have been made: \
@@ -779,25 +798,25 @@ impl SnsRootCanister {
 async fn get_root_status(
     env: &impl Environment,
     governance_id: PrincipalId,
-) -> CanisterStatusResultV2 {
-    let result = env
-        .call_canister(
-            CanisterId::new(governance_id).unwrap(),
-            "get_root_canister_status",
-            Encode!(&()).unwrap(),
+) -> Result<CanisterStatusResultV2, String> {
+    env.call_canister(
+        CanisterId::new(governance_id).unwrap(),
+        "get_root_canister_status",
+        Encode!(&()).unwrap(),
+    )
+    .await
+    .map_err(|err| {
+        let code = err.0.unwrap_or_default();
+        let msg = err.1;
+        format!(
+            "Could not get root status from governance: {}: {}",
+            code, msg
         )
-        .await
-        .map_err(|err| {
-            let code = err.0.unwrap_or_default();
-            let msg = err.1;
-            format!(
-                "Could not get root status from governance: {}: {}",
-                code, msg
-            )
-        })
-        .unwrap();
-
-    Decode!(&result, CanisterStatusResultV2).unwrap()
+    })
+    .and_then(|result| {
+        Decode!(&result, CanisterStatusResultV2)
+            .map_err(|e| format!("Could not decode response: {:?}", e))
+    })
 }
 
 async fn get_swap_status(
