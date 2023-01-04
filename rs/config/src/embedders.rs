@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use ic_base_types::NumBytes;
 use ic_sys::PAGE_SIZE;
 use ic_types::{NumInstructions, NumPages};
@@ -28,6 +30,18 @@ pub(crate) const DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION: NumInstructions =
 
 /// The number of rayon threads used by wasmtime to compile wasm binaries
 const DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS: usize = 10;
+
+/// Sandbox process eviction does not activate if the number of sandbox
+/// processes is below this threshold.
+pub(crate) const DEFAULT_MIN_SANDBOX_COUNT: usize = 500;
+
+/// Sandbox process eviction ensures that the number of sandbox processes is
+/// always below this threshold.
+pub(crate) const DEFAULT_MAX_SANDBOX_COUNT: usize = 2_000;
+
+/// A sandbox process may be evicted after it has been idle for this
+/// duration and sandbox process eviction is activated.
+pub(crate) const DEFAULT_MAX_SANDBOX_IDLE_TIME: Duration = Duration::from_secs(30 * 60);
 
 #[allow(non_upper_case_globals)]
 const KiB: u64 = 1024;
@@ -83,6 +97,18 @@ pub struct Config {
     // Maximum number of stable memory dirty pages that a single message execution
     // is allowed to produce.
     pub stable_memory_dirty_page_limit: NumPages,
+
+    /// Sandbox process eviction does not activate if the number of sandbox
+    /// processes is below this threshold.
+    pub min_sandbox_count: usize,
+
+    /// Sandbox process eviction ensures that the number of sandbox processes is
+    /// always below this threshold.
+    pub max_sandbox_count: usize,
+
+    /// A sandbox process may be evicted after it has been idle for this
+    /// duration and sandbox process eviction is activated.
+    pub max_sandbox_idle_time: Duration,
 }
 
 impl Config {
@@ -98,6 +124,9 @@ impl Config {
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
             feature_flags: FeatureFlags::default(),
             stable_memory_dirty_page_limit: NumPages::from(STABLE_MEMORY_DIRTY_PAGE_LIMIT),
+            min_sandbox_count: DEFAULT_MIN_SANDBOX_COUNT,
+            max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
+            max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
         }
     }
 }

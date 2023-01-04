@@ -292,7 +292,8 @@ impl SandboxMemory {
 /// The owner of the sandbox memory. It's destructor must close the
 /// corresponding memory in the sandbox process.
 pub trait SandboxMemoryOwner: std::fmt::Debug + Send + Sync {
-    fn get_id(&self) -> usize;
+    fn get_sandbox_memory_id(&self) -> usize;
+    fn get_sandbox_process_id(&self) -> Option<usize>;
 }
 
 /// A handle to the sandbox memory that keeps the corresponding memory in the
@@ -314,8 +315,14 @@ impl SandboxMemoryHandle {
 
     /// Returns a raw id of the memory in the sandbox process, which can be
     /// converted to sandbox `MemoryId` using `MemoryId::from()`.
-    pub fn get_id(&self) -> usize {
-        self.0.get_id()
+    pub fn get_sandbox_memory_id(&self) -> usize {
+        self.0.get_sandbox_memory_id()
+    }
+
+    /// Returns the id of the sandbox process if the process is still running.
+    /// Returns `None` if the sandbox process has exited.
+    pub fn get_sandbox_process_id(&self) -> Option<usize> {
+        self.0.get_sandbox_process_id()
     }
 }
 /// The part of the canister state that can be accessed during execution
