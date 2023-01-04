@@ -361,6 +361,13 @@ impl SubnetSnapshot {
             .expect("Could not transform from protobuf subnet type")
     }
 
+    pub fn subnet_canister_ranges(&self) -> Vec<CanisterIdRange> {
+        self.local_registry
+            .get_subnet_canister_ranges(self.registry_version, self.subnet_id)
+            .expect("Could not deserialize optional routing table from local registry.")
+            .expect("Optional routing table is None in local registry.")
+    }
+
     pub fn raw_subnet_record(&self) -> pb_subnet::SubnetRecord {
         self.local_registry
             .get_subnet_record(self.subnet_id, self.registry_version)
