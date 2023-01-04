@@ -203,13 +203,6 @@ function route(r) {
   const nodeIdx = Math.floor(Math.random() * nodeCount);
   const nodeId = subnetNodeIds[nodeIdx];
 
-  // Response Headers
-  r.headersOut["X-Ic-Subnet-Id"] = subnetId;
-  r.headersOut["X-Ic-Node-Id"] = nodeId;
-  if (!!canisterId) {
-    r.headersOut["X-Ic-Canister-Id"] = canisterId;
-  }
-
   return `${nodeId},${subnetId},${subnetType}`;
 }
 

@@ -17,6 +17,14 @@ server {
             rewrite ^(.*)$ /seo/$1 last;
         }
 
+        # Canister / Gateway (Header)
+        add_header "X-Ic-Gateway" "$primary_domain" always;
+        add_header "X-Ic-Canister-Id" "$inferred_canister_id" always;
+
+        # Canister / Gateway (Cookie)
+        add_header "Set-Cookie" "__Secure-IcGateway=$primary_domain; Path=/; SameSite=Strict; Secure" always;
+        add_header "Set-Cookie" "__Secure-IcCanisterId=$inferred_canister_id; Path=/; SameSite=Strict; Secure" always;
+
         try_files $uri /index.html;
     }
 
