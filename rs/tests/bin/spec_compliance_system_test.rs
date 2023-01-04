@@ -16,15 +16,15 @@ use anyhow::Result;
 use ic_registry_subnet_type::SubnetType;
 use ic_tests::driver::new::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
-use ic_tests::spec_compliance::{config_with_subnet_type, test_subnet};
+use ic_tests::spec_compliance::{config_impl, test_subnet};
 use ic_tests::systest;
 
 pub fn config(env: TestEnv) {
-    config_with_subnet_type(env, SubnetType::System);
+    config_impl(env);
 }
 
 pub fn test(env: TestEnv) {
-    test_subnet(env, SubnetType::System);
+    test_subnet(env, None, Some(SubnetType::Application));
 }
 
 fn main() -> Result<()> {

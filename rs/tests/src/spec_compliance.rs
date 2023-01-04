@@ -5,11 +5,13 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    IcNodeSnapshot,
+    SubnetSnapshot, TopologySnapshot,
 };
 use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
+use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::SubnetId;
 use slog::{info, Logger};
 use std::process::{Command, Stdio};
 
@@ -31,7 +33,7 @@ const EXCLUDED: &[&str] = &[
     "$0 ~ /metadata.absent/",
 ];
 
-pub fn config_with_subnet_type(env: TestEnv, subnet_type: SubnetType) {
+pub fn config_impl(env: TestEnv) {
     use crate::driver::test_env_api::{retry, secs};
     use crate::util::block_on;
     use hyper::client::connect::HttpConnector;
@@ -67,7 +69,15 @@ pub fn config_with_subnet_type(env: TestEnv, subnet_type: SubnetType) {
 
     InternetComputer::new()
         .add_subnet(
-            Subnet::new(subnet_type)
+            Subnet::new(SubnetType::System)
+                .with_features(SubnetFeatures {
+                    http_requests: true,
+                    ..SubnetFeatures::default()
+                })
+                .add_nodes(REPLICATION_FACTOR),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
                 .with_features(SubnetFeatures {
                     http_requests: true,
                     ..SubnetFeatures::default()
@@ -112,22 +122,33 @@ pub fn config_with_subnet_type(env: TestEnv, subnet_type: SubnetType) {
     .expect("Httpbin server should respond to incoming requests!");
 }
 
-pub fn test_subnet(env: TestEnv, subnet_type: SubnetType) {
+fn find_subnet(
+    topology_snapshot: &TopologySnapshot,
+    subnet_type: Option<SubnetType>,
+    skip: Vec<SubnetId>,
+) -> SubnetSnapshot {
+    match subnet_type {
+        None => topology_snapshot.root_subnet(),
+        Some(subnet_type) => topology_snapshot
+            .subnets()
+            .find(|s| s.subnet_type() == subnet_type && !skip.contains(&s.subnet_id))
+            .unwrap(),
+    }
+}
+
+pub fn test_subnet(
+    env: TestEnv,
+    test_subnet_type: Option<SubnetType>,
+    peer_subnet_type: Option<SubnetType>,
+) {
     let log = env.logger();
-    let topology_snapshot = env.topology_snapshot();
-    let node = match subnet_type {
-        SubnetType::VerifiedApplication | SubnetType::Application => {
-            let subnet = topology_snapshot
-                .subnets()
-                .find(|s| s.subnet_type() == SubnetType::Application)
-                .unwrap();
-            subnet.nodes().next().unwrap()
-        }
-        SubnetType::System => {
-            let subnet = topology_snapshot.root_subnet();
-            subnet.nodes().next().unwrap()
-        }
-    };
+    let topology_snapshot = &env.topology_snapshot();
+    let test_subnet = find_subnet(topology_snapshot, test_subnet_type, vec![]);
+    let peer_subnet = find_subnet(
+        topology_snapshot,
+        peer_subnet_type,
+        vec![test_subnet.subnet_id],
+    );
     let webserver_ipv6 = get_universal_vm_address(&env);
     let httpbin = format!("[{webserver_ipv6}]:20443");
     let ic_ref_test_path = env
@@ -135,41 +156,64 @@ pub fn test_subnet(env: TestEnv, subnet_type: SubnetType) {
         .into_os_string()
         .into_string()
         .unwrap();
-    let excl = match subnet_type {
-        SubnetType::VerifiedApplication | SubnetType::Application => {
-            [EXCLUDED.to_vec(), vec!["$0 ~ /only_system/"]].concat()
-        }
-        SubnetType::System => [EXCLUDED.to_vec(), vec!["$0 ~ /only_application/"]].concat(),
-    };
-    with_endpoint(node, subnet_type, httpbin, ic_ref_test_path, log, excl);
+    with_endpoint(
+        test_subnet,
+        peer_subnet,
+        httpbin,
+        ic_ref_test_path,
+        log,
+        EXCLUDED.to_vec(),
+    );
+}
+
+fn subnet_config(subnet: &SubnetSnapshot) -> String {
+    format!(
+        "(\"{}\",{},{},[{}])",
+        subnet.subnet_id,
+        match subnet.subnet_type() {
+            SubnetType::VerifiedApplication => "verified_application",
+            SubnetType::Application => "application",
+            SubnetType::System => "system",
+        },
+        REPLICATION_FACTOR,
+        subnet
+            .subnet_canister_ranges()
+            .iter()
+            .map(|r| format!(
+                "({},{})",
+                canister_id_into_u64(r.start),
+                canister_id_into_u64(r.end)
+            ))
+            .collect::<Vec<String>>()
+            .join(",")
+    )
 }
 
 pub fn with_endpoint(
-    endpoint: IcNodeSnapshot,
-    subnet_type: SubnetType,
+    test_subnet: SubnetSnapshot,
+    peer_subnet: SubnetSnapshot,
     httpbin: String,
     ic_ref_test_path: String,
     log: Logger,
     excluded_tests: Vec<&str>,
 ) {
-    let subnet_type_str = match subnet_type {
-        SubnetType::VerifiedApplication => "verified_application",
-        SubnetType::Application => "application",
-        SubnetType::System => "system",
-    };
-    let test_subnet_config = format!("({},{})", subnet_type_str, REPLICATION_FACTOR);
+    let node = test_subnet.nodes().next().unwrap();
+    let test_subnet_config = subnet_config(&test_subnet);
+    let peer_subnet_config = subnet_config(&peer_subnet);
+    info!(log, "test-subnet-config: {}", test_subnet_config);
+    info!(log, "peer-subnet-config: {}", peer_subnet_config);
     let status = Command::new(ic_ref_test_path)
-        .arg("-j12")
+        .arg("-j20")
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests))
         .arg("--endpoint")
-        .arg(endpoint.get_public_url().to_string())
+        .arg(node.get_public_url().to_string())
         .arg("--httpbin")
         .arg(&httpbin)
-        .arg("--ecid")
-        .arg(endpoint.effective_canister_id().to_string())
         .arg("--test-subnet-config")
         .arg(test_subnet_config)
+        .arg("--peer-subnet-config")
+        .arg(peer_subnet_config)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .status()
