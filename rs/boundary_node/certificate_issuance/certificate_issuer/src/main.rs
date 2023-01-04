@@ -80,6 +80,10 @@ struct Cli {
     #[arg(long, default_value = "127.0.0.1:3000")]
     api_addr: SocketAddr,
 
+    /// NNS public key
+    #[clap(long)]
+    root_key_path: Option<PathBuf>,
+
     #[clap(long, default_value = "identity.pem")]
     identity_path: PathBuf,
 
@@ -165,7 +169,17 @@ async fn main() -> Result<(), Error> {
             .with_transport(transport)
             .build()?;
 
-        agent.fetch_root_key().await?;
+        let root_key = cli
+            .root_key_path
+            .map(std::fs::read)
+            .transpose()
+            .context("failed to open root key")?;
+
+        if let Some(root_key) = &root_key {
+            agent
+                .set_root_key(root_key.clone())
+                .context("failed to set root key")?;
+        }
 
         Arc::new(agent)
     };
