@@ -35,7 +35,7 @@ const SUBNET_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(25 * GB);
 /// history on a given subnet. It is lower than the subnet messsage memory
 /// capacity because here we count actual memory consumption as opposed to
 /// memory plus reservations.
-const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(10 * GB);
+const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(4 * GB);
 
 /// This is the upper limit on how big heap deltas all the canisters together
 /// can produce on a subnet in between checkpoints. Once, the total delta size
