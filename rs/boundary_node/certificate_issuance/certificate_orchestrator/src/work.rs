@@ -108,6 +108,7 @@ impl Dispense for Dispenser {
                 }
             };
 
+            // Pop task
             let id = match tasks.borrow_mut().pop() {
                 None => return Err(DispenseError::NoTasksAvailable),
                 Some((id, _)) => id,
@@ -126,10 +127,9 @@ impl Dispense for Dispenser {
                 None => Err(DispenseError::NoTasksAvailable),
                 Some((id, Reverse(timestamp))) => {
                     if time().lt(timestamp) {
-                        Err(DispenseError::NoTasksAvailable)
-                    } else {
-                        Ok(id.clone())
+                        return Err(DispenseError::NoTasksAvailable);
                     }
+                    Ok(id.clone())
                 }
             }
         })
