@@ -39,12 +39,14 @@ function copy_files() {
     mkdir -p "${CFG_DIR}"
     cp "${IDENTITY_PEM}" "${CFG_DIR}/identity.pem"
     cp "${ENC_KEY_PEM}" "${CFG_DIR}/enc_key.pem"
+    get_nns_der >"${CFG_DIR}/root_key.der"
 }
 
 function generate_config() {
     mkdir -p $(dirname "${ENV_FILE}")
     cat >"${ENV_FILE}" <<EOF
 IDENTITY_PATH=${CFG_DIR}/identity.pem
+NNS_KEY_PATH="${CFG_DIR}/root_key.der"
 KEY_PATH=${CFG_DIR}/enc_key.pem
 ORCHESTRATOR_URI=${ORCHESTRATOR_URI}
 ORCHESTRATOR_CANISTER_ID=${ORCHESTRATOR_CANISTER_ID}

@@ -14,6 +14,7 @@ Restart=always
 EnvironmentFile=/run/ic-node/etc/default/certificate-issuer
 ExecStart=/opt/ic/bin/certificate-issuer \
     --api-addr                  "127.0.0.1:3000"              \
+    --root-key-path             "${NNS_KEY_PATH}"             \
     --identity-path             "${IDENTITY_PATH}"            \
     --orchestrator-uri          "${ORCHESTRATOR_URI}"         \
     --orchestrator-canister-id  "${ORCHESTRATOR_CANISTER_ID}" \
