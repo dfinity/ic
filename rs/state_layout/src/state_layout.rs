@@ -195,12 +195,7 @@ struct CheckpointRefData {
 
 /// `StateLayout` provides convenience functions to construct correct
 /// paths to individual components of the replicated execution
-/// state. It also utilizes filesystem specific checkpoint managers
-/// to create and manage checkpoints.
-///
-/// Following layout is overlayed on top of the filesystem specific
-/// checkpoint manager's internal layout. "checkpoints" directory
-/// is not owned by `StateLayout` and is internal to checkpoint manager
+/// state and checkpoints.
 ///
 /// ```text
 /// <root>

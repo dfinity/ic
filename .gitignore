@@ -118,6 +118,7 @@ scalability/results/
 bazel-build-log.json
 bazel-bep.pb
 bazel-bep.txt
+bazel-timestamp.txt
 user.bazelrc
 
 # Visual Studio Code
