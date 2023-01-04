@@ -334,7 +334,7 @@ pub struct ReplicatedState {
 }
 
 impl ReplicatedState {
-    /// Creates a new empty node state.
+    /// Creates a new empty replicated state.
     pub fn new(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> ReplicatedState {
         ReplicatedState {
             canister_states: BTreeMap::new(),
@@ -345,18 +345,18 @@ impl ReplicatedState {
         }
     }
 
+    /// Creates a replicated state from a checkpoint.
     pub fn new_from_checkpoint(
         canister_states: BTreeMap<CanisterId, CanisterState>,
         metadata: SystemMetadata,
         subnet_queues: CanisterQueues,
-        consensus_queue: Vec<Response>,
         bitcoin: BitcoinState,
     ) -> Self {
         let mut res = Self {
             canister_states,
             metadata,
             subnet_queues,
-            consensus_queue,
+            consensus_queue: Vec::new(),
             bitcoin,
         };
         res.update_stream_responses_size_bytes();

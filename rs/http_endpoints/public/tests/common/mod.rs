@@ -161,7 +161,6 @@ pub(crate) fn basic_state_manager_mock() -> MockStateManager {
                     BTreeMap::new(),
                     metadata,
                     CanisterQueues::default(),
-                    Vec::new(),
                     BitcoinState::default(),
                 )),
             )

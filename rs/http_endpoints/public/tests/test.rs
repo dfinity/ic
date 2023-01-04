@@ -195,7 +195,6 @@ fn test_healthy_behind() {
                     BTreeMap::new(),
                     metadata,
                     CanisterQueues::default(),
-                    Vec::new(),
                     BitcoinState::default(),
                 )),
             )
