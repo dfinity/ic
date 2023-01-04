@@ -35,7 +35,7 @@ impl From<State> for Action {
             State::Failed(_) | State::PendingOrder => Action::Order,
             State::PendingChallengeResponse => Action::Ready,
             State::PendingAcmeApproval => Action::Certificate,
-            State::Available => panic!(),
+            State::Available => Action::Order,
         }
     }
 }

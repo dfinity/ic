@@ -443,6 +443,16 @@ async fn main() -> Result<(), Error> {
 
                     match processor.process(&id, &task).await {
                         Ok(()) => {
+                            let d: Duration = Duration::from_secs(60 * 24 * 3600); // 60 days
+                            let t = SystemTime::now().duration_since(UNIX_EPOCH)? + d;
+                            let t = t.as_nanos() as u64;
+
+                            // Schedule renewal
+                            queuer
+                                .queue(&id, t)
+                                .await
+                                .context("failed to queue task {id}")?;
+
                             registration_updater
                                 .update(&id, &State::Available)
                                 .await
@@ -453,6 +463,7 @@ async fn main() -> Result<(), Error> {
                             let t = SystemTime::now().duration_since(UNIX_EPOCH)? + d;
                             let t = t.as_nanos() as u64;
 
+                            // Schedule retry
                             queuer
                                 .queue(&id, t)
                                 .await
