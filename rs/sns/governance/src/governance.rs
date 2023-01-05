@@ -305,10 +305,10 @@ impl GovernanceProto {
     ) {
         let neuron_ids = index.get_mut(principal);
         // Shouldn't fail if the index is broken, so just continue.
-        if neuron_ids.is_none() {
-            return;
-        }
-        let neuron_ids = neuron_ids.unwrap();
+        let neuron_ids = match neuron_ids {
+            None => return,
+            Some(ids) => ids,
+        };
         neuron_ids.remove(neuron_id);
         // If there are no neurons left, remove the entry from the index.
         if neuron_ids.is_empty() {
@@ -4153,6 +4153,8 @@ impl Governance {
     /// Checks if pending upgrade is complete and either updates deployed_version
     /// or clears pending_upgrade if beyond the limit.
     async fn check_upgrade_status(&mut self) {
+        // This expect is safe because we only call this after checking exactly that condition in
+        // should_check_upgrade_status
         let upgrade_in_progress =
             self.proto.pending_version.as_ref().expect(
                 "There must be pending_version or should_check_upgrade_status returns false",
