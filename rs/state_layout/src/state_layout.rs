@@ -1334,14 +1334,7 @@ where
     P: WritePolicy,
 {
     pub fn serialize(&self, value: T) -> Result<(), LayoutError> {
-        let mut serialized = Vec::new();
-        value.encode(&mut serialized).unwrap_or_else(|e| {
-            panic!(
-                "Failed to serialize an object of type {} to protobuf: {}",
-                std::any::type_name::<T>(),
-                e
-            )
-        });
+        let serialized = value.encode_to_vec();
 
         let file = open_for_write(&self.path)?;
         let mut writer = std::io::BufWriter::new(file);
