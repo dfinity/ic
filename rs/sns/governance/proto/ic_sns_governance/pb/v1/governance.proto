@@ -71,6 +71,12 @@ message ProposalId {
   uint64 id = 1;
 }
 
+message DisburseMaturityInProgress {
+  uint64 amount_e8s = 1;
+  uint64 timestamp_of_disbursement_seconds = 2;
+  Account account_to_disburse_to = 3;
+}
+
 // A neuron in the governance system.
 message Neuron {
   // The unique id of this neuron.
@@ -192,6 +198,12 @@ message Neuron {
   // years and dissolve delay to 1 year in order to prove that they are making a minimum 4 year commitment to the
   // project.
   optional uint64 vesting_period_seconds = 17;
+
+  // Disburse maturity operations that are currently underway.
+  // The entries are sorted by `timestamp_of_disbursement_seconds`-values,
+  // with the oldest entries first, i.e. it holds for all i that:
+  // entry[i].timestamp_of_disbursement_seconds <= entry[i+1].timestamp_of_disbursement_seconds
+  repeated DisburseMaturityInProgress disburse_maturity_in_progress = 18;
 }
 
 // The types of votes a neuron can issue.
@@ -968,6 +980,7 @@ message Governance {
       ManageNeuron.Follow follow = 10;
       Proposal make_proposal = 11;
       ManageNeuron.RegisterVote register_vote = 12;
+      ManageNeuron.FinalizeDisburseMaturity finalize_disburse_maturity = 13;
       SyncCommand sync_command = 20;
     }
   }
@@ -1159,6 +1172,10 @@ message Governance {
 
   // Version SNS is in process of upgrading to.
   UpgradeInProgress pending_version = 24;
+
+  // True if the heartbeat function is currently finalizing disburse maturity, meaning
+  // that it should finish before being called again.
+  optional bool is_finalizing_disburse_maturity = 25;
 }
 
 // Request message for 'get_metadata'.
@@ -1314,6 +1331,14 @@ message ManageNeuron {
     Account to_account = 2;
   }
 
+  message FinalizeDisburseMaturity {
+    // The amount to be disbursed in e8s of the governance token.
+    uint64 amount_to_be_disbursed_e8s = 1;
+
+    // The principal to which to transfer the stake (required).
+    Account to_account = 2;
+  }
+
   // The operation that adds a new follow relation to a neuron, specifying
   // that it follows a set of followee neurons for a given proposal function.
   // If the neuron already has a defined follow relation for this proposal
@@ -1451,10 +1476,9 @@ message ManageNeuronResponse {
     uint64 new_stake_e8s = 2;
   }
 
-  // The response to the DisburseMaturity command 'disburse_maturity'.
   message DisburseMaturityResponse {
-    // The block height at which the disburse maturity transfer happened.
-    uint64 transfer_block_height = 1;
+    reserved 1;
+    reserved "transfer_block_height";
 
     // The amount disbursed in e8s of the governance token.
     uint64 amount_disbursed_e8s = 2;

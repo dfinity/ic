@@ -9,6 +9,7 @@ pub mod reward;
 pub mod sns_upgrade;
 pub mod types;
 
+use crate::pb::v1::Subaccount as SubaccountProto;
 use std::{convert::TryInto, fmt::Debug};
 
 trait Len {
@@ -125,7 +126,7 @@ fn field_err(field_name: &str, field_value: impl Debug, defect: &str) -> Result<
     ))
 }
 
-pub fn account_from_proto(account: crate::pb::v1::Account) -> Result<ic_icrc1::Account, String> {
+pub fn account_from_proto(account: pb::v1::Account) -> Result<ic_icrc1::Account, String> {
     let owner = *validate_required_field("owner", &account.owner)?;
     let subaccount: Option<ic_icrc1::Subaccount> = match account.subaccount {
         Some(s) => match s.subaccount.as_slice().try_into() {
@@ -138,6 +139,16 @@ pub fn account_from_proto(account: crate::pb::v1::Account) -> Result<ic_icrc1::A
         None => Ok(None),
     }?;
     Ok(ic_icrc1::Account { owner, subaccount })
+}
+
+pub fn account_to_proto(account: ic_icrc1::Account) -> pb::v1::Account {
+    let maybe_subaccount_pb = account.subaccount.map(|subaccount| SubaccountProto {
+        subaccount: subaccount.into(),
+    });
+    pb::v1::Account {
+        owner: Some(account.owner),
+        subaccount: maybe_subaccount_pb,
+    }
 }
 
 #[cfg(test)]

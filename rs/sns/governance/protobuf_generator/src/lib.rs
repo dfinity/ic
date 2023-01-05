@@ -86,6 +86,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         .join(" "),
     );
     config.type_attribute(
+        "ic_sns_governance.pb.v1.DisburseMaturityInProgress",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
         "ic_sns_governance.pb.v1.Neuron",
         [
             "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
@@ -352,6 +356,10 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     );
     config.type_attribute(
         "ic_sns_governance.pb.v1.ManageNeuron.DisburseMaturity",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ManageNeuron.FinalizeDisburseMaturity",
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );
     config.type_attribute(

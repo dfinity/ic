@@ -1,31 +1,33 @@
-use crate::fixtures::{neuron_id, GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger};
-use ic_base_types::PrincipalId;
+use crate::fixtures::{
+    neuron_id, GovernanceCanisterFixture, GovernanceCanisterFixtureBuilder, NeuronBuilder,
+    TargetLedger,
+};
+use assert_matches::assert_matches;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
+use ic_sns_governance::account_to_proto;
 use ic_sns_governance::neuron::NeuronState;
-use ic_sns_governance::pb::v1::Neuron;
-use ic_sns_governance::{
-    pb::v1::{
-        governance_error::ErrorType,
-        manage_neuron,
-        manage_neuron::claim_or_refresh,
-        manage_neuron::{
-            configure::Operation, AddNeuronPermissions, ClaimOrRefresh, Configure, Disburse,
-            DisburseMaturity, Follow, IncreaseDissolveDelay, MergeMaturity, RegisterVote,
-            RemoveNeuronPermissions, Split, StakeMaturity,
-        },
-        manage_neuron_response::{
-            Command as CommandResponse, DisburseMaturityResponse, MergeMaturityResponse,
-            StakeMaturityResponse,
-        },
-        proposal::Action,
-        Account, Empty, GovernanceError, ManageNeuronResponse, Motion, NeuronPermission,
-        NeuronPermissionList, NeuronPermissionType, Proposal, ProposalId,
+use ic_sns_governance::pb::v1::{
+    governance_error::ErrorType,
+    manage_neuron,
+    manage_neuron::claim_or_refresh,
+    manage_neuron::{
+        configure::Operation, AddNeuronPermissions, ClaimOrRefresh, Configure, Disburse,
+        DisburseMaturity, Follow, IncreaseDissolveDelay, MergeMaturity, RegisterVote,
+        RemoveNeuronPermissions, Split, StakeMaturity,
     },
-    types::ONE_MONTH_SECONDS,
+    manage_neuron_response::{
+        Command as CommandResponse, DisburseMaturityResponse, MergeMaturityResponse,
+        StakeMaturityResponse,
+    },
+    proposal::Action,
+    Account as AccountProto, Empty, GovernanceError, ManageNeuronResponse, Motion, Neuron,
+    NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalId,
 };
+use ic_sns_governance::types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 
 pub mod fixtures;
 
@@ -63,7 +65,7 @@ async fn test_disburse_succeeds() {
         &neuron_id,
         manage_neuron::Command::Disburse(Disburse {
             amount: None, // Translates to all stake
-            to_account: Some(Account {
+            to_account: Some(AccountProto {
                 owner: Some(user_principal),
                 subaccount: None,
             }),
@@ -139,7 +141,7 @@ async fn test_disburse_fails_when_state_is_not_dissolving() {
         &neuron_id,
         manage_neuron::Command::Disburse(Disburse {
             amount: None, // Translates to all stake
-            to_account: Some(Account {
+            to_account: Some(AccountProto {
                 owner: Some(user_principal),
                 subaccount: None,
             }),
@@ -156,6 +158,438 @@ async fn test_disburse_fails_when_state_is_not_dissolving() {
         _ => panic!("Unexpected command response when disbursing the neuron"),
     };
     assert_eq!(error.error_type, ErrorType::PreconditionFailed as i32);
+}
+
+struct DisburseMaturityTestEnvironment {
+    pub gov_fixture: GovernanceCanisterFixture,
+    pub neuron_id: NeuronId,
+    pub controller: PrincipalId,
+}
+
+fn setup_test_environment_with_one_neuron_with_maturity(
+    earned_maturity_e8s: u64,
+    additional_accounts: Vec<PrincipalId>,
+) -> DisburseMaturityTestEnvironment {
+    let controller = PrincipalId::new_user_test_id(1000);
+    let neuron_id = neuron_id(controller, /*memo*/ 0);
+
+    // To enable minting, this account has to be added to SNS ledger, with sufficient funds.
+    let governance_canister_id = CanisterId::from_u64(0);
+
+    // Set up the test environment with a single neuron with maturity
+    let mut gov_fixture_builder = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(
+            NeuronBuilder::new(neuron_id.clone(), E8, NeuronPermission::all(&controller))
+                .set_maturity(earned_maturity_e8s),
+        )
+        .add_account_for(
+            governance_canister_id.get(),
+            1_000_000_000,
+            TargetLedger::Sns,
+        );
+    for account in additional_accounts {
+        gov_fixture_builder = gov_fixture_builder.add_account_for(account, 0, TargetLedger::Sns);
+    }
+    DisburseMaturityTestEnvironment {
+        gov_fixture: gov_fixture_builder.create(),
+        neuron_id,
+        controller,
+    }
+}
+
+#[test]
+fn test_disburse_maturity_succeeds_to_self() {
+    let earned_maturity_e8s = 12345678;
+    let mut env = setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![]);
+
+    // Record SNS ledger balance before disbursal.
+    let destination_account = ic_icrc1::Account {
+        owner: env.controller,
+        subaccount: None,
+    };
+    let account_balance_before_disbursal = env
+        .gov_fixture
+        .get_account_balance(&destination_account, TargetLedger::Sns);
+
+    // Disburse maturity to self.
+    let command_response = env
+        .gov_fixture
+        .manage_neuron(
+            &env.neuron_id,
+            manage_neuron::Command::DisburseMaturity(DisburseMaturity {
+                percentage_to_disburse: 100,
+                to_account: None,
+            }),
+            &env.controller,
+        )
+        .command
+        .expect("missing response from manage_neuron operation");
+    let response = match command_response {
+        CommandResponse::DisburseMaturity(response) => response,
+        _ => panic!("Wrong response to DisburseMaturity"),
+    };
+    assert_eq!(response.amount_disbursed_e8s, earned_maturity_e8s);
+
+    // Check the response and the disbursing maturity in progress.
+    let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
+    assert_eq!(neuron.maturity_e8s_equivalent, 0);
+    assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
+    let in_progress = &neuron.disburse_maturity_in_progress[0];
+    let target_account_proto = in_progress
+        .account_to_disburse_to
+        .as_ref()
+        .expect("Missing account_to_disburse_to")
+        .clone();
+    assert_eq!(in_progress.amount_e8s, earned_maturity_e8s);
+    let self_account_proto = AccountProto {
+        owner: Some(env.controller),
+        subaccount: None,
+    };
+    assert_eq!(target_account_proto, self_account_proto);
+    let now = env.gov_fixture.now() as i64;
+    let ts = in_progress.timestamp_of_disbursement_seconds as i64;
+    let d_age = now - ts;
+    assert!(
+        d_age >= 0,
+        "Disbursement timestamp {} is in the future (now = {})",
+        ts,
+        now
+    );
+    assert!(
+        d_age < 10,
+        "Disbursement timestamp {} is too old (now = {})",
+        ts,
+        now
+    );
+
+    // Check the disbursal is not transferred yet.
+    let account_balance = env
+        .gov_fixture
+        .get_account_balance(&destination_account, TargetLedger::Sns);
+    assert_eq!(account_balance_before_disbursal, account_balance);
+
+    // Advance time by a few days, but without triggering disbursal finalization.
+    env.gov_fixture.advance_time_by(6 * ONE_DAY_SECONDS);
+    env.gov_fixture.run_periodic_tasks();
+    let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
+    assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
+
+    // Advance more, to hit 7-day period, and to trigger disbursal finalization.
+    env.gov_fixture.advance_time_by(ONE_DAY_SECONDS + 10);
+    env.gov_fixture.run_periodic_tasks();
+    let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
+    assert_eq!(neuron.disburse_maturity_in_progress.len(), 0);
+
+    // Check that the target's account balance has increased the expected amount.
+    // There are no transaction fees, as the disbursal is a minting transfer.
+    let expected_account_balance_after_disbursal =
+        account_balance_before_disbursal + earned_maturity_e8s;
+    let account_balance = env
+        .gov_fixture
+        .get_account_balance(&destination_account, TargetLedger::Sns);
+    assert_eq!(account_balance, expected_account_balance_after_disbursal);
+}
+
+#[test]
+fn test_disburse_maturity_succeeds_to_other() {
+    let earned_maturity_e8s = 12345678;
+    let receiver = PrincipalId::new_user_test_id(111);
+    let destination_account = ic_icrc1::Account {
+        owner: receiver,
+        subaccount: None,
+    };
+    let destination_account_proto = account_to_proto(destination_account.clone());
+    let mut env =
+        setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![receiver]);
+    assert_ne!(env.controller, receiver);
+    let controller_account = ic_icrc1::Account {
+        owner: env.controller,
+        subaccount: None,
+    };
+
+    // Record SNS ledger balance before disbursal.
+    let receiver_balance_before_disbursal = env
+        .gov_fixture
+        .get_account_balance(&destination_account, TargetLedger::Sns);
+    let controller_balance_before_disbursal = env
+        .gov_fixture
+        .get_account_balance(&controller_account, TargetLedger::Sns);
+
+    // Disburse maturity to other.
+    let command_response = env
+        .gov_fixture
+        .manage_neuron(
+            &env.neuron_id,
+            manage_neuron::Command::DisburseMaturity(DisburseMaturity {
+                percentage_to_disburse: 100,
+                to_account: Some(destination_account_proto.clone()),
+            }),
+            &env.controller,
+        )
+        .command
+        .expect("missing response from manage_neuron operation");
+    let response = match command_response {
+        CommandResponse::DisburseMaturity(response) => response,
+        _ => panic!("Wrong response to DisburseMaturity"),
+    };
+    assert_eq!(response.amount_disbursed_e8s, earned_maturity_e8s);
+
+    // Check the response and the disbursing maturity in progress.
+    let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
+    assert_eq!(neuron.maturity_e8s_equivalent, 0);
+    assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
+    let in_progress = &neuron.disburse_maturity_in_progress[0];
+    let target_account_proto = in_progress
+        .account_to_disburse_to
+        .as_ref()
+        .expect("Missing account_to_disburse_to")
+        .clone();
+    assert_eq!(in_progress.amount_e8s, earned_maturity_e8s);
+    assert_eq!(target_account_proto, destination_account_proto);
+    let now = env.gov_fixture.now() as i64;
+    let ts = in_progress.timestamp_of_disbursement_seconds as i64;
+    let d_age = now - ts;
+    assert!(
+        d_age >= 0,
+        "Disbursement timestamp {} is in the future (now = {})",
+        ts,
+        now
+    );
+    assert!(
+        d_age < 10,
+        "Disbursement timestamp {} is too old (now = {})",
+        ts,
+        now
+    );
+
+    // Check the disbursal is not transferred yet.
+    let account_balance = env
+        .gov_fixture
+        .get_account_balance(&destination_account, TargetLedger::Sns);
+    assert_eq!(receiver_balance_before_disbursal, account_balance);
+
+    // Advance time by a few days, but without triggering disbursal finalization.
+    env.gov_fixture.advance_time_by(6 * ONE_DAY_SECONDS);
+    env.gov_fixture.run_periodic_tasks();
+    let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
+    assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
+
+    // Advance more, to hit 7-day period, and to trigger disbursal finalization.
+    env.gov_fixture.advance_time_by(ONE_DAY_SECONDS + 10);
+    env.gov_fixture.run_periodic_tasks();
+    let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
+    assert_eq!(neuron.disburse_maturity_in_progress.len(), 0);
+
+    // Check that the target's account balance has increased the expected amount.
+    // There are no transaction fees, as the disbursal is a minting transfer.
+    let expected_receiver_balance_after_disbursal =
+        receiver_balance_before_disbursal + earned_maturity_e8s;
+    let receiver_balance_after_disbursal = env
+        .gov_fixture
+        .get_account_balance(&destination_account, TargetLedger::Sns);
+    assert_eq!(
+        receiver_balance_after_disbursal,
+        expected_receiver_balance_after_disbursal
+    );
+
+    // Check that controller's balance remains unchanged.
+    let controller_balance_after_disbursal = env
+        .gov_fixture
+        .get_account_balance(&controller_account, TargetLedger::Sns);
+    assert_eq!(
+        controller_balance_before_disbursal,
+        controller_balance_after_disbursal
+    );
+}
+
+#[test]
+fn test_disburse_maturity_succeeds_with_multiple_operations() {
+    let earned_maturity_e8s = 1000000;
+    let receiver = PrincipalId::new_user_test_id(111);
+    let mut env =
+        setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![receiver]);
+    assert_ne!(env.controller, receiver);
+
+    // Disburse maturity repeatedly.
+    let mut remaining_maturity_e8s = earned_maturity_e8s;
+    let percentage_and_destination = vec![(50, receiver), (50, env.controller), (100, receiver)];
+    for (i, (percentage, destination)) in percentage_and_destination.iter().enumerate() {
+        let destination_account = ic_icrc1::Account {
+            owner: *destination,
+            subaccount: None,
+        };
+        let destination_account_proto = account_to_proto(destination_account.clone());
+        let command_response = env
+            .gov_fixture
+            .manage_neuron(
+                &env.neuron_id,
+                manage_neuron::Command::DisburseMaturity(DisburseMaturity {
+                    percentage_to_disburse: *percentage,
+                    to_account: Some(destination_account_proto.clone()),
+                }),
+                &env.controller,
+            )
+            .command
+            .expect("missing response from manage_neuron operation");
+        let response = match command_response {
+            CommandResponse::DisburseMaturity(response) => response,
+            _ => panic!("Wrong response to DisburseMaturity"),
+        };
+        let expected_amount_disbursed_e8s = remaining_maturity_e8s * (*percentage as u64) / 100;
+        remaining_maturity_e8s -= expected_amount_disbursed_e8s;
+        assert_eq!(response.amount_disbursed_e8s, expected_amount_disbursed_e8s);
+
+        // Check the response and the disbursing maturity in progress.
+        let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
+        assert_eq!(neuron.maturity_e8s_equivalent, remaining_maturity_e8s);
+        assert_eq!(neuron.disburse_maturity_in_progress.len(), i + 1);
+        let in_progress = &neuron.disburse_maturity_in_progress[i];
+        let target_account_proto = in_progress
+            .account_to_disburse_to
+            .as_ref()
+            .expect("Missing account_to_disburse_to")
+            .clone();
+        assert_eq!(
+            in_progress.amount_e8s, expected_amount_disbursed_e8s,
+            "pos: {}",
+            i
+        );
+        assert_eq!(target_account_proto, destination_account_proto);
+    }
+
+    // Advance time, to trigger disbursal finalization.
+    env.gov_fixture.advance_time_by(7 * ONE_DAY_SECONDS + 10);
+    let mut remaining_maturity_e8s = earned_maturity_e8s;
+    for (i, (percentage, destination)) in percentage_and_destination.iter().enumerate() {
+        let destination_account = ic_icrc1::Account {
+            owner: *destination,
+            subaccount: None,
+        };
+        let balance_before_disbursal = env
+            .gov_fixture
+            .get_account_balance(&destination_account, TargetLedger::Sns);
+        // Each call to run_periodic_tasks() "consumes" one entry of disburse_maturity_in_progress.
+        env.gov_fixture.run_periodic_tasks();
+        let neuron = env.gov_fixture.get_neuron(&env.neuron_id);
+        assert_eq!(
+            neuron.disburse_maturity_in_progress.len(),
+            percentage_and_destination.len() - i - 1
+        );
+
+        let expected_amount_disbursed_e8s = remaining_maturity_e8s * (*percentage as u64) / 100;
+        remaining_maturity_e8s -= expected_amount_disbursed_e8s;
+        // Check that the target's account balance has increased the expected amount.
+        // There are no transaction fees, as the disbursal is a minting transfer.
+        let expected_balance_after_disbursal =
+            balance_before_disbursal + expected_amount_disbursed_e8s;
+        let account_balance_after_disbursal = env
+            .gov_fixture
+            .get_account_balance(&destination_account, TargetLedger::Sns);
+        assert_eq!(
+            account_balance_after_disbursal,
+            expected_balance_after_disbursal
+        );
+    }
+}
+
+#[test]
+fn test_disburse_maturity_fails_if_maturity_too_low() {
+    let earned_maturity_e8s = 123;
+    let mut env = setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![]);
+
+    // Disburse maturity.
+    let command_response = env
+        .gov_fixture
+        .manage_neuron(
+            &env.neuron_id,
+            manage_neuron::Command::DisburseMaturity(DisburseMaturity {
+                percentage_to_disburse: 100,
+                to_account: None,
+            }),
+            &env.controller,
+        )
+        .command
+        .expect("missing response from manage_neuron operation");
+    assert_matches!(
+        command_response,
+        CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
+            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't merge an amount less than"));
+}
+
+#[test]
+fn test_disburse_maturity_fails_if_not_authorized() {
+    let earned_maturity_e8s = 1234567;
+    let mut env = setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![]);
+    let unauthorized_caller = PrincipalId::new_user_test_id(111);
+    // Disburse maturity.
+    let command_response = env
+        .gov_fixture
+        .manage_neuron(
+            &env.neuron_id,
+            manage_neuron::Command::DisburseMaturity(DisburseMaturity {
+                percentage_to_disburse: 100,
+                to_account: None,
+            }),
+            &unauthorized_caller,
+        )
+        .command
+        .expect("missing response from manage_neuron operation");
+    assert_matches!(
+        command_response,
+        CommandResponse::Error(GovernanceError{error_type: code, error_message: _msg})
+            if code == ErrorType::NotAuthorized as i32);
+}
+
+#[test]
+fn test_disburse_maturity_fails_on_non_existing_neuron() {
+    let earned_maturity_e8s = 12345767;
+    let mut env = setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![]);
+    let wrong_neuron_id = neuron_id(PrincipalId::new_user_test_id(111), 0);
+
+    // Disburse maturity.
+    let command_response = env
+        .gov_fixture
+        .manage_neuron(
+            &wrong_neuron_id,
+            manage_neuron::Command::DisburseMaturity(DisburseMaturity {
+                percentage_to_disburse: 100,
+                to_account: None,
+            }),
+            &env.controller,
+        )
+        .command
+        .expect("missing response from manage_neuron operation");
+    assert_matches!(
+        command_response,
+        CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
+            if code == ErrorType::NotFound as i32 && msg.to_lowercase().contains("neuron not found"));
+}
+
+#[test]
+fn test_disburse_maturity_fails_if_invalid_percentage_to_disburse() {
+    let earned_maturity_e8s = 12345767;
+    let mut env = setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![]);
+
+    // Disburse maturity.
+    for percentage in &[0, 101, 120] {
+        let command_response = env
+            .gov_fixture
+            .manage_neuron(
+                &env.neuron_id,
+                manage_neuron::Command::DisburseMaturity(DisburseMaturity {
+                    percentage_to_disburse: *percentage,
+                    to_account: None,
+                }),
+                &env.controller,
+            )
+            .command
+            .expect("missing response from manage_neuron operation");
+        assert_matches!(
+        command_response,
+        CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
+            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("percentage of maturity"),
+            "Didn't reject invalid percentage_to_disburse value {}", percentage);
+    }
 }
 
 /// Assert that manage_neuron operations on vesting neurons succeed and fail as expected.
@@ -228,7 +662,6 @@ fn test_vesting_neuron_manage_neuron_operations() {
     };
 
     let disburse_maturity_response = DisburseMaturityResponse {
-        transfer_block_height: 1,
         amount_disbursed_e8s: 100000,
     };
 
