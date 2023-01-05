@@ -323,9 +323,9 @@ pub fn get_replica_transport_config(
 
     TransportConfig {
         node_ip: "127.0.0.1".to_string(),
-        legacy_flow_tag: 0,
         listening_port: port,
         send_queue_size: 8,
+        ..Default::default()
     }
 }
 

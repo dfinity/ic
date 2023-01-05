@@ -387,9 +387,9 @@ where
 
         config.transport = TransportConfig {
             node_ip: "0.0.0.0".to_string(),
-            legacy_flow_tag: 0,
             listening_port: 1234,
             send_queue_size: 0,
+            ..Default::default()
         };
         let temp_node = node_id;
         let (

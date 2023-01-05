@@ -29,8 +29,7 @@ const NODE_ID_1: NodeId = NODE_1;
 const NODE_ID_2: NodeId = NODE_2;
 const NODE_ID_3: NodeId = NODE_3;
 const NODE_ID_4: NodeId = NODE_4;
-
-const TRANSPORT_CHANNEL_ID: u32 = 1234;
+const TRANSPORT_CHANNEL_ID: usize = 0;
 
 fn basic_transport_message() -> TransportPayload {
     TransportPayload(vec![0xb; 1_000_000])
@@ -574,8 +573,8 @@ fn start_connection_between_two_peers(
     let peer_a_config = TransportConfig {
         node_ip: "127.0.0.1".to_string(),
         listening_port: peer1_port,
-        legacy_flow_tag: TRANSPORT_CHANNEL_ID,
         send_queue_size,
+        ..Default::default()
     };
 
     let peer_a = create_transport(
@@ -595,8 +594,8 @@ fn start_connection_between_two_peers(
     let peer_b_config = TransportConfig {
         node_ip: "127.0.0.1".to_string(),
         listening_port: peer2_port,
-        legacy_flow_tag: TRANSPORT_CHANNEL_ID,
         send_queue_size,
+        ..Default::default()
     };
 
     let peer_b = create_transport(

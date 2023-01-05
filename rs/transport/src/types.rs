@@ -370,18 +370,32 @@ impl Drop for Connecting {
     }
 }
 
-/// Info about a flow in ConnectionState::Connected
-pub(crate) struct Connected {
-    /// Peer node
-    pub peer_addr: SocketAddr,
-
+pub(crate) struct StreamState {
     /// The read task handle
     pub read_task: JoinHandle<()>,
 
     /// The write task handle
     pub write_task: JoinHandle<()>,
+}
 
-    ///
+impl Drop for StreamState {
+    fn drop(&mut self) {
+        self.read_task.abort();
+        self.write_task.abort();
+    }
+}
+
+/// Info about a flow in ConnectionState::Connected
+pub(crate) struct Connected {
+    /// Peer node
+    pub peer_addr: SocketAddr,
+
+    /// Per stream state data. The field is not dead code because
+    /// Drop is implemented for StreamState.
+    #[allow(dead_code)]
+    pub stream_state: StreamState,
+
+    /// H2 connection polling task
     pub h2_conn: Option<JoinHandle<()>>,
 
     /// Our role
@@ -390,8 +404,6 @@ pub(crate) struct Connected {
 
 impl Drop for Connected {
     fn drop(&mut self) {
-        self.read_task.abort();
-        self.write_task.abort();
         if let Some(h2_conn) = self.h2_conn.take() {
             h2_conn.abort();
         }
@@ -525,8 +537,10 @@ mod tests {
         let write_task = tokio::task::spawn(async {});
         ConnectionState::Connected(Connected {
             peer_addr: "127.0.0.1:8080".parse().unwrap(),
-            read_task,
-            write_task,
+            stream_state: StreamState {
+                read_task,
+                write_task,
+            },
             h2_conn: None,
             role,
         })

@@ -68,7 +68,7 @@ const ARG_MSG_COUNT: &str = "count";
 
 const REG_V1: RegistryVersion = RegistryVersion::new(1);
 const SUBNET_ID: u8 = 100;
-const TRANSPORT_CHANNEL: u32 = 1234;
+const TRANSPORT_CHANNEL: usize = 0;
 
 const TEST_MESSAGE_LEN: usize = 1_000_000;
 
@@ -439,9 +439,9 @@ fn generate_config_and_registry(node_id: &NodeId) -> ConfigAndPeerSockets {
         if *node_id == n.0 {
             config = Some(TransportConfig {
                 node_ip: n.1.clone(),
-                legacy_flow_tag: TRANSPORT_CHANNEL,
                 listening_port: n.2,
                 send_queue_size: 1024,
+                ..Default::default()
             });
         }
 

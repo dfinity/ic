@@ -10,7 +10,6 @@
     // =======================================================
     transport: {
         node_ip: "{{ ipv6_address }}",
-        legacy_flow_tag: 1234,
         listening_port: 4100,
         send_queue_size: 51200,
     },

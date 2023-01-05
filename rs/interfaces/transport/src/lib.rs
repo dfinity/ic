@@ -77,7 +77,7 @@ pub type TransportEventHandler = BoxCloneService<TransportEvent, (), Infallible>
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TransportChannel;
 /// Identifier associated with a peer connection.
-pub type TransportChannelId = Id<TransportChannel, u32>;
+pub type TransportChannelId = Id<TransportChannel, usize>;
 
 /// The payload for the transport layer.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]

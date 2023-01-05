@@ -545,8 +545,7 @@ pub(crate) fn transport_config_to_endpoints(
     let mut flow_endpoints: Vec<String> = vec![];
 
     flow_endpoints.push(format!(
-        "{},{}",
-        transport_config.legacy_flow_tag,
+        "0,{}",
         get_endpoint(
             log,
             transport_config.node_ip.clone(),
@@ -625,15 +624,15 @@ mod tests {
     fn transport_config_endpoints_succeeds() {
         let transport_config = TransportConfig {
             node_ip: "::1".to_string(),
-            legacy_flow_tag: 1337,
             listening_port: 23,
             send_queue_size: 1,
+            ..Default::default()
         };
 
         with_test_replica_logger(|log| {
             assert_eq!(
                 transport_config_to_endpoints(&log, &transport_config).unwrap(),
-                vec!["1337,[::1]:23".to_string()]
+                vec!["0,[::1]:23".to_string()]
             )
         });
     }

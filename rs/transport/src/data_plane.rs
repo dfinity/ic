@@ -21,8 +21,8 @@ use crate::{
     metrics::{DataPlaneMetrics, IntGaugeResource},
     types::{
         ChannelReader, ChannelWriter, Connected, ConnectionRole, H2Reader, SendQueueReader,
-        StreamReadError, TransportHeader, TransportImpl, H2_FRAME_SIZE, H2_WINDOW_SIZE,
-        TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
+        StreamReadError, StreamState, TransportHeader, TransportImpl, H2_FRAME_SIZE,
+        H2_WINDOW_SIZE, TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
     },
 };
 use ic_base_types::NodeId;
@@ -419,8 +419,10 @@ pub(crate) async fn create_connected_state(
 
         Ok(Connected {
             peer_addr,
-            read_task,
-            write_task,
+            stream_state: StreamState {
+                read_task,
+                write_task,
+            },
             h2_conn: None,
             role,
         })
@@ -509,8 +511,10 @@ pub(crate) async fn create_connected_state_for_h2_client(
 
     Ok(Connected {
         peer_addr,
-        read_task,
-        write_task,
+        stream_state: StreamState {
+            read_task,
+            write_task,
+        },
         h2_conn: Some(h2_conn),
         role: ConnectionRole::Client,
     })
@@ -567,8 +571,10 @@ pub(crate) async fn create_connected_state_for_h2_server(
 
     Ok(Connected {
         peer_addr,
-        read_task,
-        write_task,
+        stream_state: StreamState {
+            read_task,
+            write_task,
+        },
         h2_conn: Some(h2_conn),
         role: ConnectionRole::Server,
     })
