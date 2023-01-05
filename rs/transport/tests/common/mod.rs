@@ -18,7 +18,6 @@ use tokio::net::TcpSocket;
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
 
-const TRANSPORT_CHANNEL_ID: u32 = 1234;
 pub const REG_V1: RegistryVersion = RegistryVersion::new(1);
 
 // Get a free port on this host to which we can connect transport to.
@@ -71,9 +70,9 @@ where
     let crypto = crypto_factory(registry_and_data, node_id);
     let config = TransportConfig {
         node_ip: "0.0.0.0".to_string(),
-        legacy_flow_tag: TRANSPORT_CHANNEL_ID,
         listening_port: port,
         send_queue_size: 10,
+        ..Default::default()
     };
     let peer = create_transport(
         node_id,

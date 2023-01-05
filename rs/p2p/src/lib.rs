@@ -155,14 +155,14 @@ pub fn start_p2p(
     log: ReplicaLogger,
     node_id: NodeId,
     subnet_id: SubnetId,
-    transport_config: TransportConfig,
+    _transport_config: TransportConfig,
     registry_client: Arc<dyn RegistryClient>,
     transport: Arc<dyn Transport>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     artifact_manager: Arc<dyn ArtifactManager>,
     advert_broadcaster: &AdvertBroadcaster,
 ) -> P2PThreadJoiner {
-    let p2p_transport_channels = vec![TransportChannelId::from(transport_config.legacy_flow_tag)];
+    let p2p_transport_channels = vec![TransportChannelId::from(0)];
     let gossip = Arc::new(gossip_protocol::GossipImpl::new(
         node_id,
         subnet_id,

@@ -37,6 +37,8 @@ enum TransportTlsHandshakeError {
     InvalidArgument,
 }
 
+const DEFAULT_CHANNEL_ID: usize = 0;
+
 /// Time to wait before retrying an unsuccessful connection attempt
 const CONNECT_RETRY_SECONDS: u64 = 3;
 
@@ -75,7 +77,7 @@ impl TransportImpl {
         }
 
         // TODO: P2P-514
-        let channel_id = TransportChannelId::from(self.config.legacy_flow_tag);
+        let channel_id = TransportChannelId::from(DEFAULT_CHANNEL_ID);
         if role == ConnectionRole::Server {
             let peer_label = get_peer_label(&peer_addr.ip().to_string(), peer_id);
             let peer_state = PeerState::new(
@@ -490,7 +492,7 @@ impl TransportImpl {
         let server_addr = SocketAddr::new(self.node_ip, self.config.listening_port);
         let tcp_listener = start_tcp_listener(server_addr);
 
-        let channel_id = TransportChannelId::from(self.config.legacy_flow_tag);
+        let channel_id = TransportChannelId::from(DEFAULT_CHANNEL_ID);
         let accept_task = self.spawn_accept_task(channel_id, tcp_listener);
         *self.accept_port.blocking_lock() = Some(ServerPortState { accept_task });
         *self.event_handler.blocking_lock() = Some(event_handler);
