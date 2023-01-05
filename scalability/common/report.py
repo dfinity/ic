@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import os
 import sys
@@ -8,6 +9,12 @@ from statistics import median
 
 from common.misc import mean_or_minus_one
 from termcolor import colored
+
+
+class WorkloadGeneratorSummaryUnmatched(Exception):
+    """Raised when the workload generator summary files cannot be matched to workload"""
+
+    pass
 
 
 def convert_duration(data: [dict]):
@@ -248,13 +255,34 @@ class ExperimentFile:
     xlabels: [int]
     t_experiment_start: int
     experiment_name: str
+    command_line: [str]
+    canister_id: dict
 
 
-def parse_experiment_file(experiment_file_content: dict):
+def parse_experiment_file(experiment_file_content: dict, strict=True):
     schema_keys = [f.name for f in list(fields(ExperimentFile))]
     # Filter out key value pairs that are experiment specific
+    if not strict:
+        experiment_file_content["command_line"] = experiment_file_content.get("command_line", [])
+        experiment_file_content["canister_id"] = experiment_file_content.get("canister_id", "{}")
     data = {k: v for k, v in experiment_file_content.items() if k in schema_keys}
-    return ExperimentFile(**data)
+    result = ExperimentFile(**data)
+    if type(result.canister_id) is str:
+        print("Parsing json data class .. ")
+        result = dataclasses.replace(result, canister_id=json.loads(result.canister_id))
+    # Older reports didn't store a dictionary for the canister ID, but only a single list.
+    # If the list only contains one canister, we can simply convert it to a list.
+    if type(result.canister_id) is list:
+        if len(result.canister_id) == 1:
+            print(colored(f"Converting canister ID {result.canister_id}"))
+            result = dataclasses.replace(result, canister_id={"unknown": result.canister_id})
+
+        if result.experiment_name == "run_xnet_experiment":
+            # We know the canisters are Xnet canisters ..
+            result = dataclasses.replace(result, canister_id={"xnet-test-canister": result.canister_id})
+
+    assert type(result.canister_id) is dict, f"Canister ID {result.canister_id} is not a dictionary"
+    return result
 
 
 def __cleanup_summary_file_name_from_map_file(filename: str, iter_dir_path: str):
@@ -290,7 +318,7 @@ def _legacy_get_experiment_summaries_for_iteration(iteration_dir: str):
     """
     experiment_json_file = os.path.join(os.path.dirname(iteration_dir), "experiment.json")
     experiment_json_content = json.loads(open(experiment_json_file, "r").read())
-    experiment_file = parse_experiment_file(experiment_json_content)
+    experiment_file = parse_experiment_file(experiment_json_content, strict=False)
 
     files = [
         os.path.join(iteration_dir, f)
@@ -315,7 +343,8 @@ def _legacy_get_experiment_summaries_for_iteration(iteration_dir: str):
             # The experiment json file claims there have been
             return {idx: val for idx, val in enumerate(sorted(files))}
 
-    raise Exception(f"{experiment_file} not supported in _legacy_get_experiment_summaries_for_iteration")
+    print(colored(f"{experiment_file} not supported in _legacy_get_experiment_summaries_for_iteration", "red"))
+    return None
 
 
 def find_experiment_summaries(base: str):
@@ -324,11 +353,19 @@ def find_experiment_summaries(base: str):
     for i in sorted([int(i) for i in os.listdir(base) if i.isnumeric()]):
         path = os.path.join(base, str(i))
         if os.path.isdir(path):
+            summaries = None
             try:
-                result[i] = _get_experiment_summaries_for_iteration(path)
-            except Exception as e:
+                summaries = _get_experiment_summaries_for_iteration(path)
+            except (KeyError, FileNotFoundError) as e:
                 print(f"Failed to parse workload summary map: {e}")
-                result[i] = _legacy_get_experiment_summaries_for_iteration(path)
+
+            if summaries is None:
+                summaries = _legacy_get_experiment_summaries_for_iteration(path)
+
+            if summaries is None:
+                raise WorkloadGeneratorSummaryUnmatched
+
+            result[i] = summaries
 
     return result
 

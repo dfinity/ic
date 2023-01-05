@@ -13,7 +13,7 @@ from datetime import datetime
 
 import gflags
 import pybars
-import requests
+from termcolor import colored
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common import misc  # noqa
@@ -45,13 +45,6 @@ BLACKLIST = [
 def convert_date(ts: int):
     # Also works in plotly: https://plotly.com/javascript/time-series/
     return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
-
-
-WATTS_PER_NODE = 700
-MAINNET_CURR_TRANSACTION_RATE = 3300  # per second
-# Total facility enery (incl compute + cooling) / IT equipment energy (only compute)
-# https://en.wikipedia.org/wiki/Power_usage_effectiveness
-PUE = 2.33
 
 
 def ensure_report_generated(githash, timestamp):
@@ -118,7 +111,7 @@ def copy_results(git_revision: str, timestamp: str):
             shutil.copy(svg, svg_target_dir)
 
 
-def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_data, raw_data, f):
+def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_data, raw_data, f, f_label=None):
 
     added = False
 
@@ -133,7 +126,51 @@ def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_d
 
         for workload_id, summary_files in workloads.items():
             # Find xlabel for given iteration
-            label = str(workload_id) + " " + str(experiment_file.xlabels[iteration - 1]) + " rps"
+            if f_label is None:
+                label = str(workload_id) + " " + str(experiment_file.xlabels[iteration - 1]) + " rps"
+            else:
+                path = os.path.join(base_dir, str(iteration), "workload_command_summary_map.json")
+                if os.path.exists(path):
+                    with open(path, "r") as summary_map_f:
+                        workload_command_summary_map = json.loads(summary_map_f.read())
+                        print(colored(workload_command_summary_map, "blue"))
+                        print("SKOUTPUT", colored(data, "blue"))
+                        if workload_id not in workload_command_summary_map.keys():
+                            print(
+                                colored(
+                                    f"Cannot find workload {workload_id} in {workload_command_summary_map} for {data}/{githash}",
+                                    "red",
+                                )
+                            )
+                            return
+                        data = json.loads(workload_command_summary_map[workload_id]["workload_description"])
+                        print(colored(data[0], "blue"))
+                        print(colored(data[1], "blue"))
+                        print(colored(data[3], "blue"))
+                        print(colored(data[5], "blue"))
+                        label = (
+                            ",".join(data[0])
+                            + " - "
+                            + str(data[1])
+                            + " - "
+                            + str(data[3])
+                            + "rps - payload: "
+                            + str(data[5])
+                        )
+
+                        # Attempt to replace the canister ID with canister names
+                        for canister_name, canister_ids in experiment_file.canister_id.items():
+                            for idx, canister_id in enumerate(canister_ids):
+                                label = label.replace(canister_id, f"{canister_name}_{idx}")
+
+                        if len(label) > 60:
+                            label = label[:58] + ".."
+
+                        print(colored(label, "blue"))
+                else:
+                    # No workload summary mapping file, so we cannot look up anything useful as label
+                    label = f"workload - {workload_id}"
+
             print(f"Summary files are: {summary_files}")
 
             evaluated_summaries = report.evaluate_summaries(summary_files)
@@ -172,13 +209,13 @@ def parse_rps_experiment_latency(data, githash, timestamp, meta_data, raw_data):
     )
 
 
-def parse_rps_experiment_max_capacity(data, githash, timestamp, meta_data, raw_data):
+def parse_rps_experiment_max_capacity(data, githash, experiment_timestamp, meta_data, raw_data):
     added = False
 
-    base_dir = os.path.join(FLAGS.experiment_data, githash, timestamp)
+    base_dir = os.path.join(FLAGS.experiment_data, githash, experiment_timestamp)
     assert os.path.exists(base_dir)
 
-    experiment_file = report.parse_experiment_file(data)
+    experiment_file = report.parse_experiment_file(data, strict=False)
     timestamp = experiment_file.t_experiment_start
     xvalue = timestamp
 
@@ -186,7 +223,9 @@ def parse_rps_experiment_max_capacity(data, githash, timestamp, meta_data, raw_d
     MAX_LATENCY = 20000
 
     experiment_details = report.parse_experiment_details_with_fallback_duration(data["experiment_details"])
+    experiment_summaries = None
     experiment_summaries = report.find_experiment_summaries(base_dir)
+
     max_rps_per_workload = report.get_maximum_capacity(
         experiment_summaries, MAX_FAILURE_RATE, MAX_LATENCY, experiment_details.iter_duration
     )
@@ -199,8 +238,8 @@ def parse_rps_experiment_max_capacity(data, githash, timestamp, meta_data, raw_d
 
         meta_data.append(
             {
-                "timestamp": timestamp,
-                "date": convert_date(int(timestamp)),
+                "timestamp": experiment_timestamp,
+                "date": convert_date(int(experiment_timestamp)),
                 "githash": githash,
                 "yvalue": yvalue,
                 "xvalue": xvalue,
@@ -279,6 +318,49 @@ def parse_statesync_experiment(data, githash, timestamp, meta_data, raw_data):
         return False
 
 
+def parse_qr_experiment(data, githash, experiment_timestamp, meta_data, raw_data):
+    parse_mixed_workload_experiment(data, githash, experiment_timestamp, meta_data, raw_data, "qr.toml")
+
+
+def parse_sha256_experiment(data, githash, experiment_timestamp, meta_data, raw_data):
+    parse_mixed_workload_experiment(data, githash, experiment_timestamp, meta_data, raw_data, "sha256.toml")
+
+
+def parse_http_outcall_experiment(data, githash, experiment_timestamp, meta_data, raw_data):
+    parse_mixed_workload_experiment(
+        data, githash, experiment_timestamp, meta_data, raw_data, "canister-http-benchmark.toml"
+    )
+
+
+def parse_mixed_counter_experiment(data, githash, experiment_timestamp, meta_data, raw_data):
+    parse_mixed_workload_experiment(data, githash, experiment_timestamp, meta_data, raw_data, "mixed-query-update.toml")
+
+
+def parse_mixed_workload_experiment(data, githash, experiment_timestamp, meta_data, raw_data, workload_file):
+    """Parse a mixed workload experiment."""
+    base_dir = os.path.join(FLAGS.experiment_data, githash, experiment_timestamp)
+    print(colored(f"Parsing: {base_dir}", "grey", attrs=["bold"]))
+    assert os.path.exists(base_dir)
+
+    experiment_file = report.parse_experiment_file(data)
+    if os.path.join("workloads", workload_file) in experiment_file.command_line:
+
+        try:
+            return parse_rps_experiment_with_evaluated_summary(
+                data,
+                githash,
+                experiment_timestamp,
+                meta_data,
+                raw_data,
+                lambda evaluated_summaries: evaluated_summaries.get_median_failure_rate(),
+                f_label=42,  # Replace with actual function later
+            )
+        except (report.WorkloadGeneratorSummaryUnmatched, FileNotFoundError):
+            print(colored(traceback.format_exc(), "red"))
+
+    return False
+
+
 @dataclass
 class ExperimentResultDirectory:
     """Represents a search result for find_results."""
@@ -316,12 +398,12 @@ def find_results(
                         timestamp,
                     ) not in BLACKLIST:
 
-                        report_file = report.parse_experiment_file(data)
+                        report_file = report.parse_experiment_file(data, strict=False)
                         results.append(ExperimentResultDirectory(result, report_file, githash, timestamp))
 
-            except Exception as e:
+            except ValueError as e:  # Replace with proper exception
                 print(traceback.format_exc())
-                print(f"Failed to check ${result} - error: {e}")
+                print(f"Failed to check {result} - error: {e}")
 
     return results
 
@@ -345,9 +427,6 @@ def render_results(
         githash = result.githash
         timestamp = result.timestamp
         data = json.loads(open(resultfile).read())
-
-        # if githash != "9008471a1b2d3447129c348fc42fb1e2c13aa2a3" and timestamp != "1669773930":
-        #     continue
 
         print("Result file content: ", result.result_file_content)
 
@@ -380,67 +459,33 @@ def render_results(
             }
         )
 
-    layout = {
-        "yaxis": {"title": yaxis_title, "range": [0, 1.2 * max(all_ydata)]},
-        "xaxis": {"title": "benchmark execution date [s]"},
-        "shapes": [
-            {
-                "type": "line",
-                "x0": convert_date(min(all_xdata)),
-                "y0": threshold,
-                "x1": convert_date(max(all_xdata)),
-                "y1": threshold,
-                "line": {
-                    "color": "red",
-                },
-            }
-        ],
-    }
+    if threshold is not None:
+        layout = {
+            "yaxis": {"title": yaxis_title, "range": [0, 1.2 * max(all_ydata)]},
+            "xaxis": {"title": "benchmark execution date [s]"},
+            "shapes": [
+                {
+                    "type": "line",
+                    "x0": convert_date(min(all_xdata)),
+                    "y0": threshold,
+                    "x1": convert_date(max(all_xdata)),
+                    "y1": threshold,
+                    "line": {
+                        "color": "red",
+                    },
+                }
+            ],
+        }
+    else:
+        layout = {}
 
     return {"plot": plots, "layout": layout, "data": meta_data}
-
-
-def get_application_subnets():
-    req = requests.get("https://ic-api.internetcomputer.org/api/v3/subnets")
-    num_application_subnets = 0
-    num_application_nodes = 0
-    for subnet in req.json()["subnets"]:
-        if subnet["subnet_type_name"] != "system":
-            subnet_id = subnet["subnet_id"]
-            num_application_subnets += 1
-            r = requests.get(
-                "https://ic-api.internetcomputer.org/api/v3/nodes", params={"include_status": "UP", "subnet": subnet_id}
-            )
-            num_application_nodes += len(r.json()["nodes"])
-
-    return (num_application_subnets, num_application_nodes)
-
-
-def get_num_nodes_mainnet():
-
-    req = requests.get("https://ic-api.internetcomputer.org/api/metrics/ic-subnet-total")
-    num_subnets = int(req.json()["ic_subnet_total"][1])
-
-    req = requests.get("https://ic-api.internetcomputer.org/api/metrics/ic-nodes-count")
-    num_nodes = int(req.json()["ic_nodes_count"][0][1])
-
-    num_application_subnets, num_application_nodes = get_application_subnets()
-    return (num_nodes, num_subnets, num_application_nodes, num_application_subnets)
-
-
-def get_num_boundary_nodes():
-    req = requests.get("https://ic-api.internetcomputer.org/api/metrics/boundary-nodes-count")
-    return int(req.json()["boundary_nodes_count"][1])
 
 
 if __name__ == "__main__":
 
     misc.load_artifacts("../artifacts/release")
     misc.parse_command_line_args()
-    num_nodes, num_subnets, num_app_nodes, num_app_subnets = get_num_nodes_mainnet()
-    num_boundary_nodes = get_num_boundary_nodes()
-    num_boundary_nodes = int(num_boundary_nodes)
-    print("Boundary nodes: ", num_boundary_nodes)
 
     with open(TEMPLATE_PATH, mode="r") as f:
         compiler = pybars.Compiler()
@@ -448,11 +493,6 @@ if __name__ == "__main__":
         template = compiler.compile(source)
 
         data = {
-            "num_subnets": num_subnets,
-            "num_nodes": num_nodes,
-            "num_app_subnets": num_app_subnets,
-            "num_app_nodes": num_app_nodes,
-            "num_boundary_nodes": num_boundary_nodes,
             "last_generated": int(time.time()),
         }
 
@@ -486,6 +526,38 @@ if __name__ == "__main__":
         )
 
         data["plot_xnet"] = render_results(["run_xnet_experiment"], ["query"], parse_xnet_experiment, 5500)
+
+        data["plot_qr"] = render_results(
+            ["run_mixed_workload_experiment"],
+            ["mixed"],
+            parse_qr_experiment,
+            None,
+            yaxis_title="Failure rate",
+        )
+
+        data["plot_sha256"] = render_results(
+            ["run_mixed_workload_experiment"],
+            ["mixed"],
+            parse_sha256_experiment,
+            None,
+            yaxis_title="Failure rate",
+        )
+
+        data["plot_http_outcall"] = render_results(
+            ["run_mixed_workload_experiment"],
+            ["mixed"],
+            parse_http_outcall_experiment,
+            None,
+            yaxis_title="Failure rate",
+        )
+
+        data["plot_mixed_counter"] = render_results(
+            ["run_mixed_workload_experiment"],
+            ["mixed"],
+            parse_mixed_counter_experiment,
+            None,
+            yaxis_title="Failure rate",
+        )
 
         # Render the internal CD overview
         with open(f"{FLAGS.experiment_data}/cd-overview.html", "w") as outfile:
