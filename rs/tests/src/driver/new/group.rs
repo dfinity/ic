@@ -112,7 +112,8 @@ fn is_task_visible_to_user(task_id: &TaskId) -> bool {
 /// A shortcut to represent the type of an event subscriber
 pub type Subs = Arc<dyn BroadcastingEventSubscriberFactory>;
 
-pub struct ComposeContext {
+pub struct ComposeContext<'a> {
+    rh: &'a Handle,
     group_ctx: GroupContext,
     empty_task_counter: u64,
     subs: Subs,
@@ -121,7 +122,6 @@ pub struct ComposeContext {
 }
 
 fn subproc(
-    rh: &Handle,
     task_id: TaskId,
     target_fn: impl SubprocessFn,
     ctx: &mut ComposeContext,
@@ -129,7 +129,7 @@ fn subproc(
     trace!(ctx.group_ctx.log(), "subproc(task_name={})", &task_id);
     SubprocessTask::new(
         task_id,
-        rh.clone(),
+        ctx.rh.clone(),
         target_fn,
         ctx.group_ctx.clone(),
         ctx.subs.clone(),
@@ -137,9 +137,9 @@ fn subproc(
 }
 
 fn timed(
-    rh: &Handle,
     plan: Plan<Box<dyn Task>>,
     timeout: Duration,
+    descriptor: Option<String>,
     ctx: &mut ComposeContext,
 ) -> Plan<Box<dyn Task>> {
     trace!(
@@ -149,10 +149,10 @@ fn timed(
         &timeout
     );
     let timeout_task = TimeoutTask::new(
-        rh.clone(),
+        ctx.rh.clone(),
         timeout,
         ctx.subs.clone(),
-        TaskId::Timeout(plan.root_task_id().name()),
+        TaskId::Timeout(descriptor.unwrap_or_else(|| plan.root_task_id().name())),
     );
     Plan::Supervised {
         supervisor: Box::from(timeout_task) as Box<dyn Task>,
@@ -271,14 +271,14 @@ impl SystemTestSubGroup {
         }
     }
 
-    pub fn into_plan(self, rh: &Handle, ctx: &mut ComposeContext) -> Plan<Box<dyn Task>> {
+    pub fn into_plan(self, ctx: &mut ComposeContext) -> Plan<Box<dyn Task>> {
         match self {
             SystemTestSubGroup::Multiple { tasks, ordering } => compose(
                 None,
                 ordering,
                 tasks
                     .into_iter()
-                    .map(|sub_group| sub_group.into_plan(rh, ctx))
+                    .map(|sub_group| sub_group.into_plan(ctx))
                     .collect(),
                 ctx,
             ),
@@ -295,13 +295,13 @@ impl SystemTestSubGroup {
                         task_fn(env)
                     }
                 };
-                let task = subproc(rh, task_id, closure, ctx);
+                let task = subproc(task_id, closure, ctx);
                 timed(
-                    rh,
                     Plan::Leaf {
                         task: Box::from(task),
                     },
                     ctx.timeout_per_test,
+                    None,
                     ctx,
                 )
             }
@@ -392,6 +392,7 @@ impl SystemTestGroup {
         debug!(group_ctx.log(), "SystemTestGroup.make_plan");
 
         let mut compose_ctx = ComposeContext {
+            rh,
             group_ctx: group_ctx.clone(),
             empty_task_counter: 0,
             subs: subs.clone(),
@@ -402,7 +403,6 @@ impl SystemTestGroup {
         // The ID of the root task is needed outside this function for awaiting when the plan execution finishes.
         let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
         let keepalive_task = Box::from(subproc(
-            rh,
             keepalive_task_id.clone(),
             {
                 let logger = group_ctx.logger().clone();
@@ -451,7 +451,6 @@ impl SystemTestGroup {
             let group_ctx = group_ctx.clone();
             let setup_fn = self.setup.unwrap();
             let setup_task = subproc(
-                rh,
                 TaskId::Test(String::from(SETUP_TASK_NAME)),
                 move || {
                     debug!(logger, ">>> setup_fn");
@@ -461,11 +460,11 @@ impl SystemTestGroup {
                 &mut compose_ctx,
             );
             timed(
-                rh,
                 Plan::Leaf {
                     task: Box::from(setup_task),
                 },
                 compose_ctx.timeout_per_test,
+                None,
                 &mut compose_ctx,
             )
         };
@@ -480,7 +479,7 @@ impl SystemTestGroup {
                     .chain(
                         self.tests
                             .into_iter()
-                            .map(|sub_group| sub_group.into_plan(rh, &mut compose_ctx)),
+                            .map(|sub_group| sub_group.into_plan(&mut compose_ctx)),
                     )
                     .collect(),
                 &mut compose_ctx,
@@ -494,9 +493,9 @@ impl SystemTestGroup {
             ))),
             EvalOrder::Sequential,
             vec![timed(
-                rh,
                 plan,
                 self.overall_timeout.unwrap_or(DEFAULT_OVERALL_TIMEOUT),
+                Some(String::from("::group")),
                 &mut compose_ctx,
             )],
             &mut compose_ctx,
