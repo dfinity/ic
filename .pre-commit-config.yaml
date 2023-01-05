@@ -43,10 +43,6 @@ repos:
         (?x)^(
             # Is this just test data?
             | rs/nns/empty\.did
-            # TODO: When SNS is released, delete the next line.
-            | rs/nns/sns-wasm/canister/sns-wasm\.did
-            # TODO: Remove the next line after MR 9519 is merged.
-            | rs/sns/governance/canister/governance\.did
         )$
     language: system
     always_run: true
