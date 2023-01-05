@@ -187,13 +187,12 @@ impl NodeRegistration {
     /// Checks if the nodes keys are properly registered and if there are some
     /// that aren't, try to register them.
     ///
-    /// Return true means all is done.
-    /// Return false means we will need to check it again later. Also we might
-    /// try to register it now, but will need to check the registration later.
-    pub async fn check_all_keys_registered_otherwise_register(&self, subnet_id: SubnetId) -> bool {
+    /// This method is intended to be called periodically, such that failed attempts
+    /// to generate or register keys are retried.
+    pub async fn check_all_keys_registered_otherwise_register(&self, subnet_id: SubnetId) {
         let registry_version = self.registry_client.get_latest_version();
         if !self.is_tecdsa_and_time_to_rotate(registry_version, subnet_id) {
-            return true;
+            return;
         }
         let key_handler = self.key_handler.clone();
         match tokio::task::spawn_blocking(move || {
@@ -221,14 +220,11 @@ impl NodeRegistration {
                     Err(e) => warn!(self.log, "Key rotation error: {:?}", e),
                 }
             }
-            Ok(PublicKeyRegistrationStatus::AllKeysRegistered) => {
-                return true; // keys are properly registered, we are all good
-            }
+            Ok(PublicKeyRegistrationStatus::AllKeysRegistered) => {}
             Err(e) => {
                 warn!(self.log, "Registry error: {:?}", e);
             }
         }
-        false
     }
 
     fn is_tecdsa_and_time_to_rotate(
