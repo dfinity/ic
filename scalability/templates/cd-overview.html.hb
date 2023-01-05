@@ -167,18 +167,6 @@
       in the experiment.<br />
       This is important since many canisters need to communicate with other canisters to complete user requests.
       The total number of such calls is cruicial for scaling up the IC.
-      
-      {{! <table> }}
-      {{!   <tr> }}
-      {{!     <td>Canister</td> }}
-      {{!     <td>Benchmark</td> }}
-      {{!   </tr> }}
-      {{!   <tr> }}
-      {{!     <td></td> }}
-      {{!     <td></td> }}
-      {{!   </tr> }}
-      {{! </table> }}
-      
     </p>
 
     <div style="background-color: orange;">
@@ -204,5 +192,133 @@
 
       }, false);
     </script>
+
+
+    <h2>Motoko QR code performance</h2>
+
+    <p>
+      Purpose: Motoko's QR benchmark from: <a href="https://github.com/dfinity/motoko/blob/master/test/perf/qr.mo">github</a>.
+    </p>
+
+    <div id="plot_qr" class="plot"></div>
+    <script>
+      const plot_qr_links = new Map();
+      {{#each plot_qr.data}}
+        plot_qr_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_qr');
+          Plotly.newPlot( plot, {{{ plot_qr.plot }}},  {{{plot_qr.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_qr_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+
+      }, false);
+    </script>
+
+    <h2>Motoko sha256 performance</h2>
+
+    <p>
+      Purpose: Motoko's sha256 benchmark from: <a href="https://github.com/dfinity/motoko/blob/master/test/perf/sha256.mo">github</a>.
+    </p>
+
+    <div id="plot_sha256" class="plot"></div>
+    <script>
+      const plot_sha256_links = new Map();
+      {{#each plot_sha256.data}}
+        plot_sha256_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_sha256');
+          Plotly.newPlot( plot, {{{ plot_sha256.plot }}},  {{{plot_sha256.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_sha256_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+
+      }, false);
+    </script>
+
+    <h2>HTTP outcall feature benchmark</h2>
+
+    <p>
+      Stress HTTP outcall feature from multiple canister.
+    </p>
+    <p>
+      A total of 8 HTTP outcall canisters are benchmarked, 4 of which executed <pre>send_request</pre> using with payload <pre>4449444c066c02cfbe93a404018daacd9408786c06efd6e40271e1edeb4a02a2f5ed880471ecdaccac0403abd5bc96067fc6a4a19806046b019681ba027f6b0198d6caa201716d056c02f1fee18d0371cbe4fdc7047101001768747470733a2f2f7777772e6578616d706c652e636f6d000000095472616e73666f726d0103646566036162630088526a74000000</pre>, which is:
+      <pre>
+'(
+    record {
+        cycles=500000000000:nat64;
+        request=record{
+            url="https://www.example.com";
+            max_response_byte=null;
+            headers=vec{ record { name="abc"; value="def" } };
+            body="";
+            method=variant { get };
+            transform=variant { function = "Transform" }
+        }
+    }
+)'
+      </pre><br />
+      The other 4 call <pre>check_response</pre> using with payload <pre>4449444c0001711768747470733a2f2f7777772e6578616d706c652e6f7267</pre>, whitch is:
+      <pre>
+'( "https://www.example.com" )'
+      </pre>
+
+    <div id="plot_http_outcall" class="plot"></div>
+    <script>
+      const plot_http_outcall_links = new Map();
+      {{#each plot_http_outcall.data}}
+        plot_http_outcall_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_http_outcall');
+          Plotly.newPlot( plot, {{{ plot_http_outcall.plot }}},  {{{plot_http_outcall.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_http_outcall_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+
+      }, false);
+    </script>
+    
+    <h2>Mixed update query workload</h2>
+
+    <p>
+      Purpose: Run a mixed update/query workload on the counter canister.</a>.
+    </p>
+
+    <div id="plot_mixed_counter" class="plot"></div>
+    <script>
+      const plot_mixed_counter_links = new Map();
+      {{#each plot_mixed_counter.data}}
+        plot_mixed_counter_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_mixed_counter');
+          Plotly.newPlot( plot, {{{ plot_mixed_counter.plot }}},  {{{plot_mixed_counter.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_mixed_counter_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+
+      }, false);
+    </script>
+
+
   </div> <!-- Container //-->
 </body>
