@@ -55,7 +55,7 @@ run_system_test = rule(
     },
 )
 
-def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", **kwargs):
+def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", flaky = True, **kwargs):
     """Declares a system-test.
 
     Args:
@@ -63,6 +63,7 @@ def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", **kwa
       runtime_deps: dependencies to make available to the test when it runs.
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
+      flaky: rerun in case of failure (up to 3 times).
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
     bin_name = name + "_bin"
@@ -79,9 +80,8 @@ def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", **kwa
         runtime_deps = runtime_deps,
         tags = tags + ["requires-network", "system_test"],
         timeout = test_timeout,
-        # TODO: remove when PFOPS-3148 is resolved
-        # We don't want reruns of hourly targets to reduce load on farm.
-        flaky = "system_test_hourly" not in tags,
+        # TODO: set flaky = False by default when PFOPS-3148 is resolved
+        flaky = flaky,
     )
 
 def _symlink_dir(ctx):

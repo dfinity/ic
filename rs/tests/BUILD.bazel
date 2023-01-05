@@ -364,6 +364,7 @@ system_test(
 
 system_test(
     name = "basic_health_test",
+    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -376,6 +377,7 @@ system_test(
 
 system_test(
     name = "workload_counter_canister_test",
+    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -388,6 +390,7 @@ system_test(
 
 system_test(
     name = "create_subnet_hourly_test",
+    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
@@ -419,6 +422,7 @@ system_test(
 
 system_test(
     name = "rejoin_test",
+    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
