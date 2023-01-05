@@ -504,6 +504,7 @@ impl SnsRootCanister {
                 s.governance_canister_id.unwrap(),
                 s.ledger_canister_id.unwrap(),
                 s.index_canister_id.unwrap(),
+                s.swap_canister_id.unwrap(),
                 own_canister_id.into(),
             ]
             .into_iter()
@@ -1141,6 +1142,64 @@ mod tests {
                 }
             );
         });
+    }
+
+    #[test]
+    fn register_dapp_canister_in_forbidden_list() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+        }
+        let (governance_canister_id, ledger_canister_id, swap_canister_id, index_canister_id) =
+            SNS_ROOT_CANISTER.with(|c| {
+                let canister = c.borrow();
+                (
+                    canister.governance_canister_id.unwrap(),
+                    canister.ledger_canister_id.unwrap(),
+                    canister.swap_canister_id.unwrap(),
+                    canister.index_canister_id.unwrap(),
+                )
+            });
+        let sns_root_canister_id = PrincipalId::new_user_test_id(5);
+        let archive_canister_id = PrincipalId::new_user_test_id(6);
+        // Add an archive canister to list
+        SNS_ROOT_CANISTER.with(|canister| {
+            canister
+                .borrow_mut()
+                .archive_canister_ids
+                .push(archive_canister_id)
+        });
+
+        // Step 2: Call the code under test.
+        for canister_id in [
+            governance_canister_id,
+            ledger_canister_id,
+            swap_canister_id,
+            index_canister_id,
+            sns_root_canister_id,
+            archive_canister_id,
+        ] {
+            let result = std::panic::catch_unwind(|| {
+                tokio::runtime::Runtime::new().unwrap().block_on(async {
+                    let mut management_canister_client = MockManagementCanisterClient {
+                        calls: vec![].into(),
+                    };
+
+                    SnsRootCanister::register_dapp_canister(
+                        &SNS_ROOT_CANISTER,
+                        &mut management_canister_client,
+                        sns_root_canister_id.try_into().unwrap(),
+                        RegisterDappCanisterRequest {
+                            canister_id: Some(canister_id),
+                        },
+                    )
+                    .await
+                })
+            });
+
+            // Assert that it is an error
+            assert!(result.is_err());
+        }
     }
 
     #[should_panic]

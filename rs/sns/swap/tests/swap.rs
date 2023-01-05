@@ -313,6 +313,11 @@ fn test_open() {
             .unwrap();
         assert!(r.is_err());
     }
+    // assert that before sale is open, no tokens are available for sale.
+    assert_eq!(
+        swap.sns_token_e8s().unwrap_err(),
+        "Sale not open, no tokens available.".to_string()
+    );
     // Funding is available - now we can open.
     {
         let r = swap
@@ -330,7 +335,7 @@ fn test_open() {
         assert!(r.is_ok());
     }
     // Check that state is updated.
-    assert_eq!(swap.sns_token_e8s(), params.sns_token_e8s);
+    assert_eq!(swap.sns_token_e8s().unwrap(), params.sns_token_e8s);
     assert_eq!(swap.lifecycle(), Lifecycle::Open);
 }
 
@@ -744,7 +749,7 @@ fn test_scenario_happy() {
         assert!(r.is_ok());
     }
     assert_eq!(swap.lifecycle(), Lifecycle::Open);
-    assert_eq!(swap.sns_token_e8s(), 200_000 * E8);
+    assert_eq!(swap.sns_token_e8s().unwrap(), 200_000 * E8);
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 900 ICP from one buyer.

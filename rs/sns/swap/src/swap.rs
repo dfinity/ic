@@ -169,14 +169,13 @@ impl Swap {
         self.init.as_ref().unwrap()
     }
 
-    /// The number of SNS tokens for sale, or zero if the sale hasn't
+    /// A Result with the number of SNS tokens for sale, or an Err if the sale hasn't
     /// been opened yet.
-    pub fn sns_token_e8s(&self) -> u64 {
-        if let Some(params) = &self.params {
-            params.sns_token_e8s
-        } else {
-            0
-        }
+    pub fn sns_token_e8s(&self) -> Result<u64, String> {
+        self.params
+            .as_ref()
+            .map(|params| params.sns_token_e8s)
+            .ok_or_else(|| "Sale not open, no tokens available.".to_string())
     }
 
     // The total amount of ICP contributed by direct investors and the
@@ -1266,10 +1265,8 @@ impl Swap {
         if !self.sufficient_participation() {
             return false;
         }
-        if !(self.swap_due(now_seconds) || self.icp_target_reached()) {
-            return false;
-        }
-        true
+        // If swap is due, or the target ICP has been reached, return true
+        self.swap_due(now_seconds) || self.icp_target_reached()
     }
 
     //
@@ -1280,9 +1277,16 @@ impl Swap {
     /// `sns_tokens_per_icp` will be 0 if `participant_total_icp_e8s` is 0.
     pub fn derived_state(&self) -> DerivedState {
         let participant_total_icp_e8s = self.participant_total_icp_e8s();
+        let tokens_available_for_sale = match self.sns_token_e8s() {
+            Ok(tokens) => tokens,
+            Err(err) => {
+                println!("{}ERROR: {}", LOG_PREFIX, err);
+                0
+            }
+        };
         DerivedState {
             buyer_total_icp_e8s: participant_total_icp_e8s,
-            sns_tokens_per_icp: i2d(self.sns_token_e8s())
+            sns_tokens_per_icp: i2d(tokens_available_for_sale)
                 .checked_div(i2d(participant_total_icp_e8s))
                 .and_then(|d| d.to_f32())
                 .unwrap_or(0.0),
@@ -1432,6 +1436,7 @@ impl Params {
         if self.min_icp_e8s == 0 {
             return Err("min_icp_e8s must be > 0".to_string());
         }
+
         if self.min_participants == 0 {
             return Err("min_participants must be > 0".to_string());
         }
@@ -1439,20 +1444,25 @@ impl Params {
         let transaction_fee_e8s = init
             .transaction_fee_e8s
             .expect("transaction_fee_e8s was not supplied.");
+
         let neuron_minimum_stake_e8s = init
             .neuron_minimum_stake_e8s
             .expect("neuron_minimum_stake_e8s was not supplied");
+
         let neuron_basket_count = self
             .neuron_basket_construction_parameters
             .as_ref()
             .expect("participant_neuron_basket not populated.")
             .count as u128;
+
         let min_participant_sns_e8s = self.min_participant_icp_e8s as u128
             * self.sns_token_e8s as u128
             / self.max_icp_e8s as u128;
-        let ok = min_participant_sns_e8s
+
+        let min_participant_icp_e8s_big_enough = min_participant_sns_e8s
             >= neuron_basket_count * (neuron_minimum_stake_e8s + transaction_fee_e8s) as u128;
-        if !ok {
+
+        if !min_participant_icp_e8s_big_enough {
             return Err(format!(
                 "min_participant_icp_e8s={} is too small. It needs to be \
                  large enough to ensure that participants will end up with \
@@ -1471,24 +1481,28 @@ impl Params {
         if self.sns_token_e8s == 0 {
             return Err("sns_token_e8s must be > 0".to_string());
         }
+
         if self.max_participant_icp_e8s < self.min_participant_icp_e8s {
             return Err(format!(
                 "max_participant_icp_e8s ({}) must be >= min_participant_icp_e8s ({})",
                 self.max_participant_icp_e8s, self.min_participant_icp_e8s
             ));
         }
+
         if self.min_icp_e8s > self.max_icp_e8s {
             return Err(format!(
                 "min_icp_e8s ({}) must be <= max_icp_e8s ({})",
                 self.min_icp_e8s, self.max_icp_e8s
             ));
         }
+
         if self.max_participant_icp_e8s > self.max_icp_e8s {
             return Err(format!(
                 "max_participant_icp_e8s ({}) must be <= max_icp_e8s ({})",
                 self.max_participant_icp_e8s, self.max_icp_e8s
             ));
         }
+
         // Cap `max_icp_e8s` at 1 billion ICP
         if self.max_icp_e8s > /* 1B */ 1_000_000_000 * /* e8s per ICP */ 100_000_000 {
             return Err(format!(
@@ -1496,6 +1510,7 @@ impl Params {
                 self.max_icp_e8s
             ));
         }
+
         // Cap `min_participant_icp_e8s` at 100.
         if self.min_participants > 100 {
             return Err(format!(
@@ -1503,11 +1518,13 @@ impl Params {
                 self.min_participants
             ));
         }
+
         // 100 * 1B * E8S should fit in a u64.
         assert!(self
             .max_icp_e8s
             .checked_mul(self.min_participants as u64)
             .is_some());
+
         if self.max_icp_e8s
             < (self.min_participants as u64).saturating_mul(self.min_participant_icp_e8s)
         {
