@@ -34,6 +34,22 @@ pub struct ProposalId {
     #[prost(uint64, tag = "1")]
     pub id: u64,
 }
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct DisburseMaturityInProgress {
+    #[prost(uint64, tag = "1")]
+    pub amount_e8s: u64,
+    #[prost(uint64, tag = "2")]
+    pub timestamp_of_disbursement_seconds: u64,
+    #[prost(message, optional, tag = "3")]
+    pub account_to_disburse_to: ::core::option::Option<Account>,
+}
 /// A neuron in the governance system.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[compare_default]
@@ -121,6 +137,12 @@ pub struct Neuron {
     /// project.
     #[prost(uint64, optional, tag = "17")]
     pub vesting_period_seconds: ::core::option::Option<u64>,
+    /// Disburse maturity operations that are currently underway.
+    /// The entries are sorted by `timestamp_of_disbursement_seconds`-values,
+    /// with the oldest entries first, i.e. it holds for all i that:
+    /// entry\[i\].timestamp_of_disbursement_seconds <= entry\[i+1\].timestamp_of_disbursement_seconds
+    #[prost(message, repeated, tag = "18")]
+    pub disburse_maturity_in_progress: ::prost::alloc::vec::Vec<DisburseMaturityInProgress>,
     /// The neuron's dissolve state, specifying whether the neuron is dissolving,
     /// non-dissolving, or dissolved.
     ///
@@ -1140,6 +1162,10 @@ pub struct Governance {
     /// Version SNS is in process of upgrading to.
     #[prost(message, optional, tag = "24")]
     pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
+    /// True if the heartbeat function is currently finalizing disburse maturity, meaning
+    /// that it should finish before being called again.
+    #[prost(bool, optional, tag = "25")]
+    pub is_finalizing_disburse_maturity: ::core::option::Option<bool>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -1159,7 +1185,7 @@ pub mod governance {
         pub timestamp: u64,
         #[prost(
             oneof = "neuron_in_flight_command::Command",
-            tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 20"
+            tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 20"
         )]
         pub command: ::core::option::Option<neuron_in_flight_command::Command>,
     }
@@ -1212,6 +1238,8 @@ pub mod governance {
             MakeProposal(super::super::Proposal),
             #[prost(message, tag = "12")]
             RegisterVote(super::super::manage_neuron::RegisterVote),
+            #[prost(message, tag = "13")]
+            FinalizeDisburseMaturity(super::super::manage_neuron::FinalizeDisburseMaturity),
             #[prost(message, tag = "20")]
             SyncCommand(SyncCommand),
         }
@@ -1733,6 +1761,22 @@ pub mod manage_neuron {
         #[prost(message, optional, tag = "2")]
         pub to_account: ::core::option::Option<super::Account>,
     }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct FinalizeDisburseMaturity {
+        /// The amount to be disbursed in e8s of the governance token.
+        #[prost(uint64, tag = "1")]
+        pub amount_to_be_disbursed_e8s: u64,
+        /// The principal to which to transfer the stake (required).
+        #[prost(message, optional, tag = "2")]
+        pub to_account: ::core::option::Option<super::Account>,
+    }
     /// The operation that adds a new follow relation to a neuron, specifying
     /// that it follows a set of followee neurons for a given proposal function.
     /// If the neuron already has a defined follow relation for this proposal
@@ -1984,7 +2028,6 @@ pub mod manage_neuron_response {
         #[prost(uint64, tag = "2")]
         pub new_stake_e8s: u64,
     }
-    /// The response to the DisburseMaturity command 'disburse_maturity'.
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -1994,9 +2037,6 @@ pub mod manage_neuron_response {
         ::prost::Message,
     )]
     pub struct DisburseMaturityResponse {
-        /// The block height at which the disburse maturity transfer happened.
-        #[prost(uint64, tag = "1")]
-        pub transfer_block_height: u64,
         /// The amount disbursed in e8s of the governance token.
         #[prost(uint64, tag = "2")]
         pub amount_disbursed_e8s: u64,

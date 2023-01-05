@@ -87,6 +87,7 @@ type Command_2 = variant {
   RegisterVote : RegisterVote;
   SyncCommand : record {};
   MakeProposal : Proposal;
+  FinalizeDisburseMaturity : FinalizeDisburseMaturity;
   ClaimOrRefreshNeuron : ClaimOrRefresh;
   RemoveNeuronPermissions : RemoveNeuronPermissions;
   AddNeuronPermissions : AddNeuronPermissions;
@@ -107,10 +108,12 @@ type DisburseMaturity = record {
   to_account : opt Account;
   percentage_to_disburse : nat32;
 };
-type DisburseMaturityResponse = record {
-  transfer_block_height : nat64;
-  amount_disbursed_e8s : nat64;
+type DisburseMaturityInProgress = record {
+  timestamp_of_disbursement_seconds : nat64;
+  amount_e8s : nat64;
+  account_to_disburse_to : opt Account;
 };
+type DisburseMaturityResponse = record { amount_disbursed_e8s : nat64 };
 type DisburseResponse = record { transfer_block_height : nat64 };
 type DissolveState = variant {
   DissolveDelaySeconds : nat64;
@@ -119,6 +122,10 @@ type DissolveState = variant {
 type ExecuteGenericNervousSystemFunction = record {
   function_id : nat64;
   payload : vec nat8;
+};
+type FinalizeDisburseMaturity = record {
+  amount_to_be_disbursed_e8s : nat64;
+  to_account : opt Account;
 };
 type Follow = record { function_id : nat64; followees : vec NeuronId };
 type Followees = record { followees : vec NeuronId };
@@ -155,6 +162,7 @@ type Governance = record {
   metrics : opt GovernanceCachedMetrics;
   mode : int32;
   parameters : opt NervousSystemParameters;
+  is_finalizing_disburse_maturity : opt bool;
   deployed_version : opt Version;
   sns_initialization_parameters : text;
   latest_reward_event : opt RewardEvent;
@@ -261,6 +269,7 @@ type Neuron = record {
   dissolve_state : opt DissolveState;
   voting_power_percentage_multiplier : nat64;
   vesting_period_seconds : opt nat64;
+  disburse_maturity_in_progress : vec DisburseMaturityInProgress;
   followees : vec record { nat64; Followees };
   neuron_fees_e8s : nat64;
 };

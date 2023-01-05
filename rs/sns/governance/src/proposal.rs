@@ -1054,6 +1054,7 @@ mod tests {
             deployed_version,
             pending_version: None,
             sns_initialization_parameters: "".to_string(),
+            is_finalizing_disburse_maturity: None,
         }
     }
 

@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use async_trait::async_trait;
 use candid::types::number::Nat;
 use canister_test::{Canister, Runtime};
@@ -14,6 +15,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_sns_governance::pb::v1::governance::SnsMetadata;
 use ic_sns_governance::pb::v1::manage_neuron::StakeMaturity;
 use ic_sns_governance::{
+    account_to_proto,
     governance::Governance,
     ledger::ICRC1Ledger,
     neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
@@ -29,11 +31,11 @@ use ic_sns_governance::{
         manage_neuron_response::Command as CommandResponse,
         neuron::DissolveState,
         proposal::Action,
-        Account as AccountProto, Ballot, Empty, Governance as GovernanceProto, ListNeurons,
-        ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion, NervousSystemParameters,
-        Neuron, NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal,
-        ProposalData, ProposalId, ProposalRewardStatus, RewardEvent, Vote, VotingRewardsParameters,
-        WaitForQuietState,
+        Account as AccountProto, Ballot, Empty, Governance as GovernanceProto, GovernanceError,
+        ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
+        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+        NeuronPermissionType, Proposal, ProposalData, ProposalId, ProposalRewardStatus,
+        RewardEvent, Vote, VotingRewardsParameters, WaitForQuietState,
     },
     types::{test_helpers::NativeEnvironment, Environment, DEFAULT_TRANSFER_FEE, ONE_YEAR_SECONDS},
 };
@@ -589,56 +591,34 @@ fn test_neuron_action_is_not_authorized() {
     });
 }
 
+// Returns the current time as perceived by SnsCanisters.
+// This is a bit hacky and fragile, as it depends on how `SnsCanisters` is setup.
+// TODO(NNS1-1892): expose SnsCanisters' current time via API.
+fn get_sns_canisters_now_seconds() -> i64 {
+    (NativeEnvironment::default().now() as i64)
+        + (NervousSystemParameters::with_default_values()
+            .initial_voting_period_seconds
+            .unwrap() as i64)
+        + 1
+}
+
 #[test]
-fn test_disburse_maturity() {
+fn test_disburse_maturity_succeeds_to_self() {
     local_test_on_sns_subnet(|runtime| async move {
+        // 1. Setup test environment.
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
             owner: user.get_principal_id(),
             subaccount: None,
         };
-        let alloc = Tokens::from_tokens(1000).unwrap();
-
-        let sys_params = NervousSystemParameters {
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: NeuronPermissionType::all(),
-            }),
-            voting_rewards_parameters: Some(VotingRewardsParameters {
-                round_duration_seconds: Some(10),
-                ..VOTING_REWARDS_PARAMETERS
-            }),
-            ..NervousSystemParameters::with_default_values()
-        };
-
-        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(account_identifier, alloc)
-            .with_nervous_system_parameters(sys_params.clone())
-            .build();
-
-        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
-
-        // Stake and claim a neuron capable of making a proposal
-        let neuron_id = sns_canisters
-            .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
-            .await;
-
-        let subaccount = neuron_id
-            .subaccount()
-            .expect("Error creating the subaccount");
-
-        // Earn some maturity to test disburse_maturity
-        sns_canisters
-            .earn_maturity(&neuron_id, &user)
-            .await
-            .expect("Error when earning maturity");
+        let (sns_canisters, neuron_id, subaccount) =
+            create_sns_canisters_with_staked_neuron_and_maturity(&runtime, &user).await;
 
         let neuron = sns_canisters.get_neuron(&neuron_id).await;
         let earned_maturity_e8s = neuron.maturity_e8s_equivalent;
         assert!(earned_maturity_e8s > 0);
 
-        let balance_before_disbursal = sns_canisters.get_user_account_balance(&user).await;
-
-        // Disburse all of the neuron's rewards aka maturity.
+        // 2. Disburse all of the neuron's rewards aka maturity.
         let manage_neuron_response: ManageNeuronResponse = sns_canisters
             .governance
             .update_from_sender(
@@ -660,75 +640,51 @@ fn test_disburse_maturity() {
             CommandResponse::DisburseMaturity(response) => response,
             response => panic!("Unexpected response from manage_neuron: {:?}", response),
         };
-        assert!(response.transfer_block_height > 0);
-        assert_eq!(response.amount_disbursed_e8s, earned_maturity_e8s);
 
+        // 3. Inspect the state after disbursal.
+        assert_eq!(response.amount_disbursed_e8s, earned_maturity_e8s);
         let neuron = sns_canisters.get_neuron(&neuron_id).await;
         assert_eq!(neuron.maturity_e8s_equivalent, 0);
-
-        let balance_after_disbursal = sns_canisters.get_user_account_balance(&user).await;
-        let expected_balance =
-            (balance_before_disbursal + Tokens::from_e8s(response.amount_disbursed_e8s)).unwrap();
-        assert_eq!(expected_balance, balance_after_disbursal);
+        assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
+        let in_progress = &neuron.disburse_maturity_in_progress[0];
+        let target_account = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
+        assert_eq!(in_progress.amount_e8s, earned_maturity_e8s);
+        assert_eq!(target_account, account_to_proto(account_identifier));
+        let now = get_sns_canisters_now_seconds();
+        let ts = in_progress.timestamp_of_disbursement_seconds as i64;
+        let d_age = now - ts;
+        assert!(
+            d_age >= 0,
+            "Disbursement timestamp {} is in the future (now = {})",
+            ts,
+            now
+        );
+        assert!(
+            d_age < 10,
+            "Disbursement timestamp {} is too old (now = {})",
+            ts,
+            now
+        );
 
         Ok(())
     });
 }
 
 #[test]
-fn test_disburse_maturity_to_different_account() {
+fn test_disburse_maturity_succeeds_to_other_account() {
     local_test_on_sns_subnet(|runtime| async move {
+        // 1. Setup test environment.
         let maturity_owner = Sender::from_keypair(&TEST_USER1_KEYPAIR);
-        let maturity_owner_account_identifier = Account {
-            owner: maturity_owner.get_principal_id(),
-            subaccount: None,
-        };
         let maturity_receiver = Sender::from_keypair(&TEST_USER2_KEYPAIR);
-
-        let alloc = Tokens::from_tokens(1000).unwrap();
-
-        let sys_params = NervousSystemParameters {
-            neuron_claimer_permissions: Some(NeuronPermissionList {
-                permissions: NeuronPermissionType::all(),
-            }),
-            voting_rewards_parameters: Some(VotingRewardsParameters {
-                round_duration_seconds: Some(10),
-                ..VOTING_REWARDS_PARAMETERS
-            }),
-            ..NervousSystemParameters::with_default_values()
-        };
-
-        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(maturity_owner_account_identifier, alloc)
-            .with_nervous_system_parameters(sys_params.clone())
-            .build();
-
-        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
-
-        // Stake and claim a neuron capable of making a proposal
-        let neuron_id = sns_canisters
-            .stake_and_claim_neuron(&maturity_owner, Some(ONE_YEAR_SECONDS as u32))
-            .await;
-
-        let subaccount = neuron_id
-            .subaccount()
-            .expect("Error creating the subaccount");
-
-        // Earn some maturity to test disburse_maturity
-        sns_canisters
-            .earn_maturity(&neuron_id, &maturity_owner)
-            .await
-            .expect("Error when earning maturity");
+        let (sns_canisters, neuron_id, subaccount) =
+            create_sns_canisters_with_staked_neuron_and_maturity(&runtime, &maturity_owner).await;
 
         let neuron = sns_canisters.get_neuron(&neuron_id).await;
         let earned_maturity_e8s = neuron.maturity_e8s_equivalent;
         assert!(earned_maturity_e8s > 0);
 
-        let balance_before_disbursal = sns_canisters
-            .get_user_account_balance(&maturity_receiver)
-            .await;
-
-        // Disburse half of maturity rewarded to neuron owned by user1. Funds are to be sent to user2's account.
+        // 2. Disburse half of maturity rewarded to neuron owned by maturity_owner.
+        // Funds are to be sent to maturity_receiver's account.
         let manage_neuron_response: ManageNeuronResponse = sns_canisters
             .governance
             .update_from_sender(
@@ -753,30 +709,50 @@ fn test_disburse_maturity_to_different_account() {
             CommandResponse::DisburseMaturity(response) => response,
             response => panic!("Unexpected response from manage_neuron: {:?}", response),
         };
-        assert!(response.transfer_block_height > 0);
+        // 3. Inspect the state after disbursal.
         // Disbursed 50% of the maturity
         assert_eq!(response.amount_disbursed_e8s, earned_maturity_e8s / 2);
 
         let neuron = sns_canisters.get_neuron(&neuron_id).await;
-        let balance_after_disbursal = sns_canisters
-            .get_user_account_balance(&maturity_receiver)
-            .await;
-        let expected_balance =
-            (balance_before_disbursal + Tokens::from_e8s(response.amount_disbursed_e8s)).unwrap();
         // Neuron should now have 50% of what it has earned.  We calculate this via subtraction of what was disbursed
         // to handle cases with odd numbers.
         assert_eq!(
             earned_maturity_e8s - response.amount_disbursed_e8s,
             neuron.maturity_e8s_equivalent
         );
-        assert_eq!(expected_balance, balance_after_disbursal);
+        assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
+        let in_progress = &neuron.disburse_maturity_in_progress[0];
+        let target_account = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
+        assert_eq!(in_progress.amount_e8s, response.amount_disbursed_e8s);
+        assert_eq!(
+            target_account,
+            account_to_proto(Account {
+                owner: maturity_receiver.get_principal_id(),
+                subaccount: None
+            })
+        );
+        let now = get_sns_canisters_now_seconds();
+        let ts = in_progress.timestamp_of_disbursement_seconds as i64;
+        let d_age = now - ts;
+        assert!(
+            d_age >= 0,
+            "Disbursement timestamp {} is in the future (now = {})",
+            ts,
+            now
+        );
+        assert!(
+            d_age < 10,
+            "Disbursement timestamp {} is too old (now = {})",
+            ts,
+            now
+        );
 
         Ok(())
     });
 }
 
 #[test]
-fn test_disbursing_maturity_with_no_maturity_fails() {
+fn test_disburse_maturity_fails_if_no_maturity() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
@@ -831,16 +807,10 @@ fn test_disbursing_maturity_with_no_maturity_fails() {
             .await
             .expect("Error calling the manage_neuron API.");
 
-        let response = match manage_neuron_response.command.unwrap() {
-            CommandResponse::Error(error) => error,
-            CommandResponse::DisburseMaturity(response) => panic!(
-                "Neuron should not have been able to disburse maturity: {:?}",
-                response
-            ),
-            response => panic!("Unexpected response from manage_neuron: {:?}", response),
-        };
-
-        assert_eq!(response.error_type, ErrorType::PreconditionFailed as i32);
+        assert_matches!(
+        manage_neuron_response.command.expect("Missing command response"),
+        CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
+            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't merge an amount less than"));
 
         Ok(())
     });

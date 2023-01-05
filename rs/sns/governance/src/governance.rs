@@ -1,4 +1,3 @@
-use crate::account_from_proto;
 use crate::canister_control::{
     get_canister_id, perform_execute_generic_nervous_system_function_call,
     upgrade_canister_directly,
@@ -15,17 +14,19 @@ use crate::pb::v1::{
         ClaimOrRefresh,
     },
     neuron::{DissolveState, Followees},
-    proposal, Ballot, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, DefaultFollowees, Empty,
-    GetMetadataRequest, GetMetadataResponse, GetNeuron, GetNeuronResponse, GetProposal,
-    GetProposalResponse, GetSnsInitializationParametersRequest,
-    GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
-    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
-    NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-    NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
-    ProposalRewardStatus, RewardEvent, Tally, TransferSnsTreasuryFunds,
-    UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+    proposal, Account as AccountProto, Ballot, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
+    DefaultFollowees, DisburseMaturityInProgress, Empty, GetMetadataRequest, GetMetadataResponse,
+    GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+    GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+    Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
+    ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
+    ManageNeuronResponse, ManageSnsMetadata, NervousSystemParameters, Neuron, NeuronId,
+    NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+    ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RewardEvent, Tally,
+    TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+    VotingRewardsParameters,
 };
+use crate::{account_from_proto, account_to_proto};
 use ic_base_types::PrincipalId;
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
@@ -54,7 +55,9 @@ use crate::neuron::{
     MAX_LIST_NEURONS_RESULTS,
 };
 use crate::pb::v1::{
-    manage_neuron::{AddNeuronPermissions, RemoveNeuronPermissions},
+    manage_neuron::{
+        AddNeuronPermissions, DisburseMaturity, FinalizeDisburseMaturity, RemoveNeuronPermissions,
+    },
     manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse},
     proposal::Action,
     ExecuteGenericNervousSystemFunction, NervousSystemFunction, WaitForQuietState,
@@ -64,7 +67,9 @@ use crate::proposal::{
     MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
 };
 
-use crate::pb::v1::governance::{SnsMetadata, UpgradeInProgress, Version};
+use crate::pb::v1::governance::{
+    neuron_in_flight_command, SnsMetadata, UpgradeInProgress, Version,
+};
 use crate::pb::v1::manage_neuron_response::StakeMaturityResponse;
 use crate::pb::v1::transfer_sns_treasury_funds::TransferFrom;
 use crate::sns_upgrade::{
@@ -97,6 +102,7 @@ pub const EXECUTE_NERVOUS_SYSTEM_FUNCTION_PAYLOAD_LISTING_BYTES_MAX: usize = 100
 
 const MAX_HEAP_SIZE_IN_KIB: usize = 4 * 1024 * 1024;
 const WASM32_PAGE_SIZE_IN_KIB: usize = 64;
+const SEVEN_DAYS_IN_SECONDS: u64 = 7 * 24 * 3600;
 
 /// The max number of wasm32 pages for the heap after which we consider that there
 /// is a risk to the ability to grow the heap.
@@ -1252,6 +1258,7 @@ impl Governance {
             staked_maturity_e8s_equivalent: None,
             auto_stake_maturity: parent_neuron.auto_stake_maturity,
             vesting_period_seconds: None,
+            disburse_maturity_in_progress: vec![],
         };
 
         // Add the child neuron's id to the set of neurons with ongoing operations.
@@ -1477,11 +1484,11 @@ impl Governance {
     /// - The neuron's id is not yet in the list of neurons with ongoing operations
     /// - The e8s equivalent of the amount of maturity to disburse is more
     ///   than the transaction fee.
-    pub async fn disburse_maturity(
+    pub fn disburse_maturity(
         &mut self,
         id: &NeuronId,
         caller: &PrincipalId,
-        disburse_maturity: &manage_neuron::DisburseMaturity,
+        disburse_maturity: &DisburseMaturity,
     ) -> Result<DisburseMaturityResponse, GovernanceError> {
         let neuron = self.get_neuron_result(id)?;
         neuron.check_authorized(caller, NeuronPermissionType::DisburseMaturity)?;
@@ -1502,6 +1509,7 @@ impl Governance {
                 )
             })?,
         };
+        let to_account_proto: AccountProto = account_to_proto(to_account);
 
         if disburse_maturity.percentage_to_disburse > 100
             || disburse_maturity.percentage_to_disburse == 0
@@ -1530,18 +1538,11 @@ impl Governance {
             ));
         }
 
-        // Do the transfer, this is a minting transfer, from the governance canister's
-        // main account (which is also the minting account) to the provided account.
-        let block_height = self
-            .ledger
-            .transfer_funds(
-                maturity_to_disburse,
-                0,    // Minting transfers don't pay a fee.
-                None, // This is a minting transfer, no 'from' account is needed
-                to_account,
-                self.env.now(), // The memo(nonce) for the ledger's transaction
-            )
-            .await?;
+        let disbursement_in_progress = DisburseMaturityInProgress {
+            amount_e8s: maturity_to_disburse,
+            timestamp_of_disbursement_seconds: self.env.now(),
+            account_to_disburse_to: Some(to_account_proto),
+        };
 
         // Re-borrow the neuron mutably to update now that the maturity has been
         // disbursed.
@@ -1549,9 +1550,11 @@ impl Governance {
         neuron.maturity_e8s_equivalent = neuron
             .maturity_e8s_equivalent
             .saturating_sub(maturity_to_disburse);
+        neuron
+            .disburse_maturity_in_progress
+            .push(disbursement_in_progress);
 
         Ok(DisburseMaturityResponse {
-            transfer_block_height: block_height,
             amount_disbursed_e8s: maturity_to_disburse,
         })
     }
@@ -3190,6 +3193,7 @@ impl Governance {
             staked_maturity_e8s_equivalent: None,
             auto_stake_maturity: None,
             vesting_period_seconds: None,
+            disburse_maturity_in_progress: vec![],
         };
 
         // This also verifies that there are not too many neurons already.
@@ -3328,6 +3332,7 @@ impl Governance {
                 staked_maturity_e8s_equivalent: None,
                 auto_stake_maturity: None,
                 vesting_period_seconds: None,
+                disburse_maturity_in_progress: vec![],
             };
 
             // This also verifies that there are not too many neurons already. This is a best effort
@@ -3608,7 +3613,6 @@ impl Governance {
                 .map(ManageNeuronResponse::stake_maturity_response),
             C::DisburseMaturity(d) => self
                 .disburse_maturity(&neuron_id, caller, d)
-                .await
                 .map(ManageNeuronResponse::disburse_maturity_response),
             C::Split(s) => self
                 .split_neuron(&neuron_id, caller, s)
@@ -3714,6 +3718,107 @@ impl Governance {
 
             By::NeuronId(_) => self.refresh_neuron(neuron_id).await,
         }
+    }
+
+    async fn finalize_disburse_maturity(&mut self) {
+        if !self.can_finalize_disburse_maturity() {
+            return;
+        }
+        self.proto.is_finalizing_disburse_maturity = Some(true);
+        let now_seconds = self.env.now();
+        let disbursion_delay_elapsed_seconds = now_seconds - SEVEN_DAYS_IN_SECONDS;
+        // Filter all the neurons that have some disbursing maturity in progress.
+        let neurons_with_disbursal: Vec<Neuron> = self
+            .proto
+            .neurons
+            .values()
+            .filter(|n| !n.disburse_maturity_in_progress.is_empty())
+            .cloned()
+            .collect();
+        for neuron in neurons_with_disbursal {
+            if !neuron.disburse_maturity_in_progress.is_empty() {
+                // The first entry is the oldest one, check whether it can be completed.
+                let d = neuron.disburse_maturity_in_progress[0].clone();
+                if d.timestamp_of_disbursement_seconds < disbursion_delay_elapsed_seconds {
+                    let neuron_id = neuron.id.as_ref().unwrap();
+                    // TODO(NNS1-1708) add modulation
+                    let maturity_to_disburse_after_modulation_e8s = d.amount_e8s;
+                    let fdm = FinalizeDisburseMaturity {
+                        amount_to_be_disbursed_e8s: maturity_to_disburse_after_modulation_e8s,
+                        to_account: d.account_to_disburse_to.clone(),
+                    };
+                    let in_flight_command = NeuronInFlightCommand {
+                        timestamp: self.env.now(),
+                        command: Some(neuron_in_flight_command::Command::FinalizeDisburseMaturity(
+                            fdm,
+                        )),
+                    };
+                    let _neuron_lock =
+                        match self.lock_neuron_for_command(neuron_id, in_flight_command) {
+                            Ok(neuron_lock) => neuron_lock,
+                            Err(_) => continue, // if locking fails, try next neuron
+                        };
+                    // Do the transfer, this is a minting transfer, from the governance canister's
+                    // main account (which is also the minting account) to the provided account.
+                    let account_proto = match d.account_to_disburse_to {
+                        Some(ref proto) => proto.clone(),
+                        None => {
+                            println!(
+                                "{}WARNING: invalid DisburseMaturityInProgress-entry {:?} for neuron {}, skipping.",
+                                log_prefix(), d, neuron_id
+                            );
+                            continue;
+                        }
+                    };
+                    let to_account = match account_from_proto(account_proto) {
+                        Ok(account) => account,
+                        Err(e) => {
+                            println!(
+                                "{}WARNING: failure parsing account of DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
+                                log_prefix(), d, neuron_id, e
+                            );
+                            continue;
+                        }
+                    };
+                    let transfer_result = self
+                        .ledger
+                        .transfer_funds(
+                            maturity_to_disburse_after_modulation_e8s,
+                            0,    // Minting transfers don't pay a fee.
+                            None, // This is a minting transfer, no 'from' account is needed
+                            to_account,
+                            self.env.now(), // The memo(nonce) for the ledger's transaction
+                        )
+                        .await;
+                    match transfer_result {
+                        Ok(block_index) => {
+                            println!(
+                                "{}INFO: transferring DisburseMaturityInProgress-entry {:?} for neuron {} at block {}.",
+                                log_prefix(), d, neuron_id, block_index
+                            );
+                            let neuron = match self.get_neuron_result_mut(neuron_id) {
+                                Ok(neuron) => neuron,
+                                Err(e) => {
+                                    println!(
+                                        "{}WARNING: failed updating DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
+                                        log_prefix(), d, neuron_id, e
+                                    );
+                                    continue;
+                                }
+                            };
+                            neuron.disburse_maturity_in_progress.remove(0);
+                        }
+                        Err(e) => {
+                            println!(
+                                "{}WARNING: failed transferring funds for DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
+                                log_prefix(), d, neuron_id, e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        self.proto.is_finalizing_disburse_maturity = None;
     }
 
     /// When a neuron is finally dissolved, if there is any staked maturity it is moved to regular maturity
@@ -3827,6 +3932,10 @@ impl Governance {
             }
         } else if self.should_check_upgrade_status() {
             self.check_upgrade_status().await;
+        }
+
+        if self.can_finalize_disburse_maturity() {
+            self.finalize_disburse_maturity().await;
         }
 
         self.maybe_move_staked_maturity();
@@ -4148,6 +4257,11 @@ impl Governance {
     /// Checks if there is a pending upgrade.
     fn should_check_upgrade_status(&self) -> bool {
         self.proto.pending_version.is_some()
+    }
+
+    fn can_finalize_disburse_maturity(&self) -> bool {
+        let finalizing_disburse_maturity = self.proto.is_finalizing_disburse_maturity;
+        finalizing_disburse_maturity.is_none() || !finalizing_disburse_maturity.unwrap()
     }
 
     /// Checks if pending upgrade is complete and either updates deployed_version
@@ -6976,6 +7090,358 @@ mod tests {
             neuron_2.staked_maturity_e8s_equivalent,
             Some(staked_maturity)
         );
+    }
+
+    struct DisburseMaturityTestSetup {
+        pub governance: Governance,
+        pub neuron_id: NeuronId,
+        pub controller: PrincipalId,
+    }
+
+    // Sets up an environment for a disburse-maturity test. The returned
+    // setup consists of:
+    // - an initialized governance, whose API can be called
+    // - an id of a neuron (with the specified maturity) contained in the initialized governace
+    // - an id of a principal that controls the neuron
+    fn prepare_setup_for_disburse_maturity_tests(
+        earned_maturity_e8s: u64,
+    ) -> DisburseMaturityTestSetup {
+        let controller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+        let neuron_id = test_neuron_id(controller);
+        let permission = NeuronPermission {
+            principal: Some(controller),
+            permission_type: vec![NeuronPermissionType::DisburseMaturity as i32],
+        };
+        let neuron = Neuron {
+            id: Some(neuron_id.clone()),
+            permissions: vec![permission],
+            maturity_e8s_equivalent: earned_maturity_e8s,
+            ..Default::default()
+        };
+        let mut governance_proto = basic_governance_proto();
+        governance_proto
+            .neurons
+            .insert(neuron_id.to_string(), neuron);
+        let governance = default_governance_with_proto(governance_proto);
+        DisburseMaturityTestSetup {
+            controller,
+            neuron_id,
+            governance,
+        }
+    }
+
+    #[test]
+    fn test_disburse_maturity_succeeds_to_self() {
+        // Step 1: Prepare the world and parameters.
+        let earned_maturity_e8s = 1_234_567;
+        let mut setup = prepare_setup_for_disburse_maturity_tests(earned_maturity_e8s);
+
+        // Step 2: Run code under test.
+        let disburse_maturity = DisburseMaturity {
+            percentage_to_disburse: 100,
+            to_account: None,
+        };
+        let result = setup.governance.disburse_maturity(
+            &setup.neuron_id,
+            &setup.controller,
+            &disburse_maturity,
+        );
+
+        // Step 3: Inspect result(s).
+        let response = result.expect("Operation failed unexpectedly.");
+        assert_eq!(response.amount_disbursed_e8s, earned_maturity_e8s);
+        let neuron = setup
+            .governance
+            .proto
+            .neurons
+            .get(&setup.neuron_id.to_string())
+            .expect("Missing neuron!");
+        assert_eq!(neuron.maturity_e8s_equivalent, 0);
+        assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
+        let in_progress = &neuron.disburse_maturity_in_progress[0];
+        assert_eq!(in_progress.amount_e8s, earned_maturity_e8s);
+        assert!(
+            in_progress.account_to_disburse_to.is_some(),
+            "Missing target account for disbursement."
+        );
+        let target_account_pb = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
+        assert_eq!(
+            account_from_proto(target_account_pb),
+            Ok(Account {
+                owner: setup.controller,
+                subaccount: None
+            })
+        );
+        let d_age = (setup.governance.env.now() as i64)
+            - (in_progress.timestamp_of_disbursement_seconds as i64);
+        assert!(d_age >= 0, "Disbursement timestamp is in the future");
+        assert!(d_age < 10, "Disbursement timestamp is too old");
+    }
+
+    #[test]
+    fn test_disburse_maturity_succeeds_to_other_account() {
+        // Step 1: Prepare the world and parameters.
+        let earned_maturity_e8s = 3_456_789;
+        let mut setup = prepare_setup_for_disburse_maturity_tests(earned_maturity_e8s);
+        let target_principal = *TEST_NEURON_2_OWNER_PRINCIPAL;
+        assert_ne!(target_principal, setup.controller);
+
+        // Step 2: Run code under test.
+        let disburse_maturity = DisburseMaturity {
+            percentage_to_disburse: 100,
+            to_account: Some(AccountProto {
+                owner: Some(target_principal),
+                subaccount: None,
+            }),
+        };
+        let result = setup.governance.disburse_maturity(
+            &setup.neuron_id,
+            &setup.controller,
+            &disburse_maturity,
+        );
+
+        // Step 3: Inspect result(s).
+        let response = result.expect("Operation failed unexpectedly.");
+        assert_eq!(response.amount_disbursed_e8s, earned_maturity_e8s);
+        let neuron = setup
+            .governance
+            .proto
+            .neurons
+            .get(&setup.neuron_id.to_string())
+            .expect("Missing neuron!");
+        assert_eq!(neuron.maturity_e8s_equivalent, 0);
+        assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
+        let in_progress = &neuron.disburse_maturity_in_progress[0];
+        assert_eq!(in_progress.amount_e8s, earned_maturity_e8s);
+        assert!(
+            in_progress.account_to_disburse_to.is_some(),
+            "Missing target account for disbursement."
+        );
+        let target_account_pb = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
+        assert_eq!(
+            account_from_proto(target_account_pb),
+            Ok(Account {
+                owner: target_principal,
+                subaccount: None
+            })
+        );
+        let d_age = (setup.governance.env.now() as i64)
+            - (in_progress.timestamp_of_disbursement_seconds as i64);
+        assert!(d_age >= 0, "Disbursement timestamp is in the future");
+        assert!(d_age < 10, "Disbursement timestamp is too old");
+    }
+
+    #[test]
+    fn test_disburse_maturity_succeeds_with_partial_percentage() {
+        // Step 1: Prepare the world and parameters.
+        let earned_maturity_e8s = 71_112_345;
+        let mut setup = prepare_setup_for_disburse_maturity_tests(earned_maturity_e8s);
+
+        // Step 2: Run code under test.
+        let partial_percentage = 72;
+        let disburse_maturity = DisburseMaturity {
+            percentage_to_disburse: partial_percentage,
+            to_account: None,
+        };
+        let result = setup.governance.disburse_maturity(
+            &setup.neuron_id,
+            &setup.controller,
+            &disburse_maturity,
+        );
+
+        // Step 3: Inspect result(s).
+        let response = result.expect("Operation failed unexpectedly.");
+        let expected_disbursing_maturity =
+            earned_maturity_e8s.saturating_mul(partial_percentage as u64) / 100;
+        assert_eq!(response.amount_disbursed_e8s, expected_disbursing_maturity);
+        let neuron = setup
+            .governance
+            .proto
+            .neurons
+            .get(&setup.neuron_id.to_string())
+            .expect("Missing neuron!");
+
+        assert_eq!(
+            neuron.maturity_e8s_equivalent,
+            earned_maturity_e8s - expected_disbursing_maturity
+        );
+        assert_eq!(neuron.disburse_maturity_in_progress.len(), 1);
+        let in_progress = &neuron.disburse_maturity_in_progress[0];
+        assert_eq!(in_progress.amount_e8s, expected_disbursing_maturity);
+        assert!(
+            in_progress.account_to_disburse_to.is_some(),
+            "Missing target account for disbursement."
+        );
+        let target_account_pb = in_progress.account_to_disburse_to.as_ref().unwrap().clone();
+        assert_eq!(
+            account_from_proto(target_account_pb),
+            Ok(Account {
+                owner: setup.controller,
+                subaccount: None
+            })
+        );
+        let d_age = (setup.governance.env.now() as i64)
+            - (in_progress.timestamp_of_disbursement_seconds as i64);
+        assert!(d_age >= 0, "Disbursement timestamp is in the future");
+        assert!(d_age < 10, "Disbursement timestamp is too old");
+    }
+
+    #[test]
+    fn test_disburse_maturity_succeeds_with_multiple_disbursals() {
+        // Step 1: Prepare the world and parameters.
+        let earned_maturity_e8s = 12345678;
+        let mut setup = prepare_setup_for_disburse_maturity_tests(earned_maturity_e8s);
+
+        // Step 2: Run code under test.
+        let percentages: Vec<u32> = vec![50, 20, 10];
+        for percentage_to_disburse in &percentages {
+            let disburse_maturity = DisburseMaturity {
+                percentage_to_disburse: *percentage_to_disburse,
+                to_account: None,
+            };
+            let result = setup.governance.disburse_maturity(
+                &setup.neuron_id,
+                &setup.controller,
+                &disburse_maturity,
+            );
+            assert_is_ok!(result);
+        }
+
+        // Step 3: Inspect result(s).
+        let neuron = setup
+            .governance
+            .proto
+            .neurons
+            .get(&setup.neuron_id.to_string())
+            .expect("Missing neuron!");
+        assert_eq!(
+            neuron.disburse_maturity_in_progress.len(),
+            percentages.len()
+        );
+        let mut remaining_maturity = earned_maturity_e8s;
+        for (i, percentage_to_disburse) in percentages.iter().enumerate() {
+            let expected_disbursing_maturity =
+                remaining_maturity.saturating_mul(*percentage_to_disburse as u64) / 100;
+            let in_progress = &neuron.disburse_maturity_in_progress[i];
+            println!(
+                "i: {}, {}, {}",
+                i, percentage_to_disburse, in_progress.amount_e8s
+            );
+            assert_eq!(
+                in_progress.amount_e8s, expected_disbursing_maturity,
+                "unexpected disbursing maturity for percentage {}",
+                percentage_to_disburse
+            );
+            remaining_maturity -= expected_disbursing_maturity;
+            if i > 0 {
+                let prev_in_progress = &neuron.disburse_maturity_in_progress[i - 1];
+                assert!(
+                    in_progress.timestamp_of_disbursement_seconds
+                        >= prev_in_progress.timestamp_of_disbursement_seconds,
+                    "disburse_maturity_in_progress is not sorted by the timestamp"
+                )
+            }
+        }
+        assert_eq!(neuron.maturity_e8s_equivalent, remaining_maturity);
+    }
+
+    #[test]
+    fn test_disburse_maturity_fails_on_non_exisiting_neuron() {
+        // Step 1: Prepare the world and parameters.
+        let mut setup = prepare_setup_for_disburse_maturity_tests(1000);
+        let non_existing_neuron_id = test_neuron_id(*TEST_NEURON_2_OWNER_PRINCIPAL);
+
+        // Step 2: Run code under test.
+        let disburse_maturity = DisburseMaturity {
+            percentage_to_disburse: 100,
+            to_account: None,
+        };
+        let result = setup.governance.disburse_maturity(
+            &non_existing_neuron_id,
+            &setup.controller,
+            &disburse_maturity,
+        );
+
+        // Step 3: Inspect result(s).
+        assert_matches!(
+        result,
+        Err(GovernanceError{error_type: code, error_message: msg})
+            if code == ErrorType::NotFound as i32 && msg.to_lowercase().contains("neuron not found")
+        );
+    }
+
+    #[test]
+    fn test_disburse_maturity_fails_if_maturity_too_low() {
+        // Step 1: Prepare the world and parameters.
+        let mut setup = prepare_setup_for_disburse_maturity_tests(1000);
+
+        // Step 2: Run code under test.
+        let disburse_maturity = DisburseMaturity {
+            percentage_to_disburse: 100,
+            to_account: None,
+        };
+        let result = setup.governance.disburse_maturity(
+            &setup.neuron_id,
+            &setup.controller,
+            &disburse_maturity,
+        );
+
+        // Step 3: Inspect result(s).
+        assert_matches!(
+        result,
+        Err(GovernanceError{error_type: code, error_message: msg})
+            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't merge an amount less than"));
+    }
+
+    #[test]
+    fn test_disburse_maturity_fails_if_not_authorized() {
+        // Step 1: Prepare the world and parameters.
+        let mut setup = prepare_setup_for_disburse_maturity_tests(1000000);
+        let not_authorized_controller = *TEST_NEURON_2_OWNER_PRINCIPAL;
+
+        // Step 2: Run code under test.
+        let disburse_maturity = DisburseMaturity {
+            percentage_to_disburse: 100,
+            to_account: None,
+        };
+        let result = setup.governance.disburse_maturity(
+            &setup.neuron_id,
+            &not_authorized_controller,
+            &disburse_maturity,
+        );
+
+        // Step 3: Inspect result(s).
+        assert_matches!(
+        result,
+        Err(GovernanceError{error_type: code, error_message: _msg})
+            if code == ErrorType::NotAuthorized as i32);
+    }
+
+    #[test]
+    fn test_disburse_maturity_fails_if_invalid_percentage_to_disburse() {
+        // Step 1: Prepare the world and parameters.
+        let mut setup = prepare_setup_for_disburse_maturity_tests(1000);
+
+        for percentage in &[0, 101, 120] {
+            // Step 2: Run code under test.
+            let disburse_maturity = DisburseMaturity {
+                percentage_to_disburse: *percentage,
+                to_account: None,
+            };
+            let result = setup.governance.disburse_maturity(
+                &setup.neuron_id,
+                &setup.controller,
+                &disburse_maturity,
+            );
+
+            // Step 3: Inspect result(s).
+            assert_matches!(
+            result,
+            Err(GovernanceError{error_type: code, error_message: msg})
+                if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("percentage of maturity"),
+            "Didn't reject invalid percentage_to_disburse value {}", percentage
+            );
+        }
     }
 
     #[test]

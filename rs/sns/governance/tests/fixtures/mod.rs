@@ -297,6 +297,7 @@ impl NeuronBuilder {
             followees: self.followees,
             voting_power_percentage_multiplier: self.voting_power_percentage_multiplier,
             vesting_period_seconds: self.vesting_period_seconds,
+            disburse_maturity_in_progress: vec![],
             ..Default::default()
         }
     }
