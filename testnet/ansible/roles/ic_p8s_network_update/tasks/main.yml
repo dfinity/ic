@@ -16,14 +16,7 @@
     mode: 0775
   become: true
   loop:
-    - boundary_node_control_plane
-    - boundary_node_denylist_updater
-    - boundary_node_ic_registry_replicator
-    - boundary_node_icx_proxy
-    - boundary_node_node_exporter
-    - boundary_node_process_exporter
-    - boundary_node_vector
-    - boundary_node_vector_nginx_exporter
+    - boundary_node
     - orchestrator
     - node_exporter
 
@@ -50,7 +43,7 @@
     ic: "{{ inventory_file | dirname | basename }}"
   template:
     src: "{{ item }}_scrape_config.tmpl"
-    dest: /var/lib/p8s-scrape/ic_networks/{{ item }}/{{ ic }}_{{ item }}_scrape_config.json
+    dest: /var/lib/p8s-scrape/ic_networks/boundary_node/{{ ic }}_{{ item }}_scrape_config.json
     group: p8s-scrape
     mode: 0664
     # Ensure the targets list in the generated file is non-zero length
