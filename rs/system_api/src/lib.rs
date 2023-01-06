@@ -622,7 +622,7 @@ impl MemoryUsage {
 
     /// Validates that `total_bytes >= message_bytes` holds. In debug build it
     /// will panic in case this condition does not hold. In release builds an
-    /// error will be logged. This is because panicing due to this inconsitency
+    /// error will be logged. This is because panicking due to this inconsistency
     /// has the potential to put the entire subnet in a crash loop.
     fn validate_requested_memory(&self, total_bytes: NumBytes, message_bytes: NumBytes) {
         debug_assert!(total_bytes >= message_bytes);
