@@ -126,8 +126,6 @@ mod tests {
                 private_api: vec![],
                 prometheus_metrics: vec!["http://1.2.3.4:3".parse()?],
                 p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:4".parse()?,
-                p2p_num_flows: 1,
-                p2p_start_flow_tag: 0,
                 node_operator_principal_id: None,
                 secret_key_store: None,
             },

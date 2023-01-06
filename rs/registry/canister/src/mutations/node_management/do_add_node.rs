@@ -129,15 +129,14 @@ pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
 /// The string is written in form: `flow,ipv4:port` or `flow,[ipv6]:port`.
 pub fn flow_endpoint_from_string(endpoint: &str) -> FlowEndpoint {
     let parts = endpoint.splitn(2, ',').collect::<Vec<&str>>();
+    parts[0].parse::<u32>().unwrap();
     println!("Parts are {:?} and {:?}", parts[0], parts[1]);
-    let flow = parts[0].parse::<u32>().unwrap();
     match parts[1].parse::<SocketAddr>() {
         Err(e) => panic!(
             "Could not convert '{:?}' to a connection endpoint: {:?}",
             endpoint, e
         ),
         Ok(sa) => FlowEndpoint {
-            flow_tag: flow,
             endpoint: Some(ConnectionEndpoint {
                 ip_addr: sa.ip().to_string(),
                 port: sa.port() as u32, // because protobufs don't have u16
@@ -411,7 +410,6 @@ mod tests {
         assert_eq!(
             flow_endpoint_from_string("1337,127.0.0.1:8080"),
             FlowEndpoint {
-                flow_tag: 1337,
                 endpoint: Some(ConnectionEndpoint {
                     ip_addr: "127.0.0.1".to_string(),
                     port: 8080u32,

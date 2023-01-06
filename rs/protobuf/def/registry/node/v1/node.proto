@@ -26,9 +26,9 @@ message ConnectionEndpoint {
 }
 
 message FlowEndpoint {
-  // The flow identifier (tag). This has to be unique per NodeRecord.
-  uint32 flow_tag = 1;
-
+  reserved 1;
+  reserved "flow_tag";
+  
   // The IP/port for this flow.
   ConnectionEndpoint endpoint = 2;
 }

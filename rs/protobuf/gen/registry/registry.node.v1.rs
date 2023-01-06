@@ -50,9 +50,6 @@ pub mod connection_endpoint {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FlowEndpoint {
-    /// The flow identifier (tag). This has to be unique per NodeRecord.
-    #[prost(uint32, tag = "1")]
-    pub flow_tag: u32,
     /// The IP/port for this flow.
     #[prost(message, optional, tag = "2")]
     pub endpoint: ::core::option::Option<ConnectionEndpoint>,

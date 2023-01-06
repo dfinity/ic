@@ -240,8 +240,6 @@ pub fn get_ic_config() -> IcConfig {
                 .parse()
                 .expect("can't fail"),
             prometheus_metrics: vec![],
-            p2p_num_flows: 1,
-            p2p_start_flow_tag: 0,
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
         },

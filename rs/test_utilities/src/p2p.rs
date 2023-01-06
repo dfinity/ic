@@ -252,7 +252,6 @@ pub fn test_group_set_registry(
             protocol: Protocol::P2p1Tls13 as i32,
         });
         let flow_end_point = FlowEndpoint {
-            flow_tag: 0,
             endpoint: connection_endpoint,
         };
         let flow_end_points = vec![flow_end_point];
