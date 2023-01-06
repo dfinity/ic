@@ -28,7 +28,7 @@
     declare -A image_dir=(
       [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
       [aux]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux"
-      [boundary]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary"
+      [boundary]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary{{ bn_image_type }}"
     )
 
     # Try to download first from the proxy and fallback to the CDN if that fails.
@@ -105,7 +105,7 @@
     declare -A image_dir=(
         [replica]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}"
         [aux]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/aux"
-        [boundary]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary"
+        [boundary]="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary{{ bn_image_type }}"
     )
 
     disk_types=()

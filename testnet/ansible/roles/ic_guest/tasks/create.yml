@@ -65,7 +65,7 @@
     set -eExuo pipefail
 
     # Deploy replica images
-    IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary"
+    IMAGE_DIR="/var/local/ic/disk/{{ ic_deployment_name }}/{{ ic_git_revision }}/boundary{{ bn_image_type }}"
     ITEMS=({{ boundary_nodes | join(' ') }})
     parallel -a <(printf '%s\n' "${ITEMS[@]}") --no-run-if-empty test -r /var/lib/libvirt/images/'{}.img' \|\| cp -v --reflink=auto --sparse=always "$IMAGE_DIR/disk.img" /var/lib/libvirt/images/'{}.img'
 
@@ -130,7 +130,7 @@
   tags: [ "ic_guest" ]
 
 - name: Check if dfinity-hsm-agent service exist
-  shell: service dfinity-hsm-agent status 
+  shell: service dfinity-hsm-agent status
   register: dfinity_hsm_agent_status
   failed_when: not(dfinity_hsm_agent_status.rc == 4 or dfinity_hsm_agent_status.rc == 3 or dfinity_hsm_agent_status.rc == 0)
 
