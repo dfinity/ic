@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     ".rclone.conf",
     ".rclone-anon.conf",
-    "bazel-timestamp.txt",
     "clippy.toml",
     "rustfmt.toml",
     "WORKSPACE.bazel",

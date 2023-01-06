@@ -1,2 +1,0 @@
-bazel/workspace_status.sh will write the current timestamp to this file on every run to prove an input to always changes for some targets.
-Changes to this file don't have to be commited, but the file needs to exist.
