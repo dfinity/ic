@@ -957,10 +957,7 @@ impl TestWasmExecutorCore {
                 num_instructions_left: NumInstructions::from(0),
                 allocated_bytes: NumBytes::from(0),
                 allocated_message_bytes: NumBytes::from(0),
-                instance_stats: InstanceStats {
-                    accessed_pages: 0,
-                    dirty_pages: 0,
-                },
+                instance_stats: InstanceStats::default(),
             };
             self.schedule
                 .push((self.round, canister_id, instructions_to_execute));
@@ -989,6 +986,8 @@ impl TestWasmExecutorCore {
         let instance_stats = InstanceStats {
             accessed_pages: message.dirty_pages,
             dirty_pages: message.dirty_pages,
+            read_before_write_count: message.dirty_pages,
+            direct_write_count: 0,
         };
         let slice = SliceExecutionOutput {
             executed_instructions: instructions_to_execute,
