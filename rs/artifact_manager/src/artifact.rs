@@ -1,13 +1,13 @@
 //! The module contains implementations for different artifact kinds.
-
 use ic_types::{
     artifact::*,
-    canister_http::CanisterHttpResponseAttribute,
-    canister_http::CanisterHttpResponseShare,
-    consensus::certification::CertificationMessageHash,
-    consensus::ecdsa::{ecdsa_msg_id, EcdsaMessageAttribute},
-    consensus::ConsensusMessageHashable,
-    crypto::CryptoHashOf,
+    canister_http::{CanisterHttpResponseAttribute, CanisterHttpResponseShare},
+    consensus::{
+        certification::CertificationMessageHash,
+        ecdsa::{ecdsa_msg_id, EcdsaMessageAttribute},
+        ConsensusMessageHashable,
+    },
+    crypto::crypto_hash,
     CountBytes,
 };
 use serde::{Deserialize, Serialize};
@@ -33,7 +33,7 @@ impl ArtifactKind for ConsensusArtifact {
             id: msg.get_id(),
             attribute,
             size,
-            integrity_hash: ic_types::crypto::crypto_hash(msg).get(),
+            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }
@@ -57,7 +57,7 @@ impl ArtifactKind for IngressArtifact {
             id: IngressMessageId::from(msg),
             attribute: IngressMessageAttribute::new(msg),
             size: msg.count_bytes(),
-            integrity_hash: ic_types::crypto::crypto_hash(msg.binary()).get(),
+            integrity_hash: crypto_hash(msg.binary()).get(),
         }
     }
 }
@@ -83,18 +83,14 @@ impl ArtifactKind for CertificationArtifact {
                 CertificationMessageAttribute::Certification(cert.height),
                 CertificationMessageId {
                     height: cert.height,
-                    hash: CertificationMessageHash::Certification(CryptoHashOf::from(
-                        ic_types::crypto::crypto_hash(cert).get(),
-                    )),
+                    hash: CertificationMessageHash::Certification(crypto_hash(cert)),
                 },
             ),
             CertificationShare(share) => (
                 CertificationMessageAttribute::CertificationShare(share.height),
                 CertificationMessageId {
                     height: share.height,
-                    hash: CertificationMessageHash::CertificationShare(CryptoHashOf::from(
-                        ic_types::crypto::crypto_hash(share).get(),
-                    )),
+                    hash: CertificationMessageHash::CertificationShare(crypto_hash(share)),
                 },
             ),
         };
@@ -102,7 +98,7 @@ impl ArtifactKind for CertificationArtifact {
             id,
             attribute,
             size: bincode::serialized_size(&msg).unwrap() as usize,
-            integrity_hash: ic_types::crypto::crypto_hash(msg).get(),
+            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }
@@ -126,7 +122,7 @@ impl ArtifactKind for DkgArtifact {
         let attribute = DkgMessageAttribute {
             interval_start_height: msg.content.dkg_id.start_block_height,
         };
-        let hash = ic_types::crypto::crypto_hash(msg);
+        let hash = crypto_hash(msg);
         Advert {
             id: hash.clone(),
             attribute,
@@ -156,7 +152,7 @@ impl ArtifactKind for EcdsaArtifact {
             id: ecdsa_msg_id(msg),
             attribute: EcdsaMessageAttribute::from(msg),
             size,
-            integrity_hash: ic_types::crypto::crypto_hash(msg).get(),
+            integrity_hash: crypto_hash(msg).get(),
         }
     }
 }
@@ -177,7 +173,7 @@ impl ArtifactKind for CanisterHttpArtifact {
     /// `CanisterHttpArtifact`.
     fn message_to_advert(msg: &CanisterHttpResponseShare) -> Advert<CanisterHttpArtifact> {
         let size = bincode::serialized_size(&msg).unwrap() as usize;
-        let hash = ic_types::crypto::crypto_hash(msg);
+        let hash = crypto_hash(msg);
         Advert {
             id: hash.clone(),
             attribute: CanisterHttpResponseAttribute::Share(
