@@ -19,6 +19,3 @@ git_tree_status=$(git diff-index --quiet HEAD -- && echo 'Clean' || echo 'Modifi
 echo "GIT_TREE_STATUS $git_tree_status"
 
 echo "HOME ${HOME}"
-
-# Generate a file that changes every time bazel runs. It can be used as dependency for targets we want to always rebuild.
-date '+%s' >"$(git rev-parse --show-toplevel)/bazel-timestamp.txt"

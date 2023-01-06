@@ -21,7 +21,7 @@ def _ic_version_or_git_sha_impl(ctx):
     ctx.actions.run(
         executable = ctx.executable._ic_version_or_git_sha_sh,
         arguments = [ctx.version_file.path, out.path],
-        inputs = [ctx.version_file, ctx.file._bazel_timestamp_txt],
+        inputs = [ctx.version_file],
         outputs = [out],
         env = {
             "VERSION": ctx.attr.ic_version[BuildSettingInfo].value,
@@ -34,6 +34,5 @@ ic_version_or_git_sha = rule(
     attrs = {
         "ic_version": attr.label(default = ":ic_version"),
         "_ic_version_or_git_sha_sh": attr.label(executable = True, cfg = "exec", default = ":ic_version_or_git_sha_sh"),
-        "_bazel_timestamp_txt": attr.label(allow_single_file = True, default = "//:bazel-timestamp.txt"),
     },
 )
