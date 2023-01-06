@@ -255,7 +255,7 @@ impl<T: Check> Check for CheckWithMetrics<T> {
 
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
-        gauge.observe(&cx, out.is_ok().into(), labels);
+        gauge.observe(&cx, out.is_ok().into(), labels.split_at(3).0); // Remove `status` label from gauge
 
         info!(
             action = action.as_str(),
