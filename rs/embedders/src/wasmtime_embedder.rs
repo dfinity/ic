@@ -424,10 +424,7 @@ impl WasmtimeEmbedder {
             memory_trackers,
             signal_stack,
             log: self.log.clone(),
-            instance_stats: InstanceStats {
-                accessed_pages: 0,
-                dirty_pages: 0,
-            },
+            instance_stats: InstanceStats::default(),
             store,
             write_barrier: self.config.feature_flags.write_barrier,
             modification_tracking,
@@ -516,6 +513,8 @@ pub struct StoreData<S> {
 pub struct PageAccessResults {
     pub dirty_pages: Vec<PageIndex>,
     pub num_accessed_pages: usize,
+    pub read_before_write_count: usize,
+    pub direct_write_count: usize,
 }
 
 /// Encapsulates a Wasmtime instance on the Internet Computer.
@@ -570,6 +569,8 @@ impl<S: SystemApi> WasmtimeInstance<S> {
             Ok(PageAccessResults {
                 dirty_pages: vec![],
                 num_accessed_pages: 0,
+                read_before_write_count: 0,
+                direct_write_count: 0,
             })
         } else {
             let dirty_pages = match self.modification_tracking {
@@ -601,10 +602,11 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                 .unwrap()
                 .lock()
                 .unwrap();
-            let num_accessed_pages = tracker.num_accessed_pages();
             Ok(PageAccessResults {
                 dirty_pages,
-                num_accessed_pages,
+                num_accessed_pages: tracker.num_accessed_pages(),
+                read_before_write_count: tracker.read_before_write_count(),
+                direct_write_count: tracker.direct_write_count(),
             })
         }
     }
@@ -686,6 +688,8 @@ impl<S: SystemApi> WasmtimeInstance<S> {
         let access = self.page_accesses()?;
         self.instance_stats.accessed_pages += access.num_accessed_pages;
         self.instance_stats.dirty_pages += access.dirty_pages.len();
+        self.instance_stats.read_before_write_count += access.read_before_write_count;
+        self.instance_stats.direct_write_count += access.direct_write_count;
 
         let stable_memory_dirty_pages: Vec<_> = self
             .store

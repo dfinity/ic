@@ -27,7 +27,7 @@ use tower::{limit::ConcurrencyLimit, util::BoxCloneService};
 /// Instance execution statistics. The stats are cumulative and
 /// contain measurements from the point in time when the instance was
 /// created up until the moment they are requested.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct InstanceStats {
     /// Total number of (host) pages accessed (read or written) by the instance
     /// and loaded into the linear memory.
@@ -37,6 +37,14 @@ pub struct InstanceStats {
     /// By definition a page that has been dirtied has also been accessed,
     /// hence this dirtied_pages <= accessed_pages
     pub dirty_pages: usize,
+
+    /// Number of times a write access is handled when the page has already been
+    /// read.
+    pub read_before_write_count: usize,
+
+    /// Number of times a write access is handled when the page has not yet been
+    /// read.
+    pub direct_write_count: usize,
 }
 
 /// Errors that can be returned when fetching the available memory on a subnet.

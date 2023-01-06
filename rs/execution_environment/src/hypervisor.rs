@@ -35,6 +35,8 @@ mod tests;
 pub struct HypervisorMetrics {
     accessed_pages: Histogram,
     dirty_pages: Histogram,
+    read_before_write_count: Histogram,
+    direct_write_count: Histogram,
     allocated_pages: IntGauge,
     executed_messages: IntCounterVec,
     largest_function_instruction_count: Histogram,
@@ -54,6 +56,16 @@ impl HypervisorMetrics {
             dirty_pages: metrics_registry.histogram(
                 "hypervisor_dirty_pages",
                 "Number of pages modified (dirtied) per execution round.",
+                exponential_buckets(1.0, 2.0, 22),
+            ),
+            read_before_write_count: metrics_registry.histogram(
+                "hypervisor_read_before_write_count",
+                "Number of wasm heap write accesses handled where the page had already been read.",
+                exponential_buckets(1.0, 2.0, 22),
+            ),
+            direct_write_count: metrics_registry.histogram(
+                "hypervisor_direct_write_count",
+                "Number of wasm heap write accesses handled where the page had not yet been read.",
                 exponential_buckets(1.0, 2.0, 22),
             ),
             allocated_pages: metrics_registry.int_gauge(
@@ -85,6 +97,10 @@ impl HypervisorMetrics {
                     .observe(output.instance_stats.accessed_pages as f64);
                 self.dirty_pages
                     .observe(output.instance_stats.dirty_pages as f64);
+                self.read_before_write_count
+                    .observe(output.instance_stats.read_before_write_count as f64);
+                self.direct_write_count
+                    .observe(output.instance_stats.direct_write_count as f64);
                 self.allocated_pages.set(allocated_pages_count() as i64);
 
                 match &output.wasm_result {

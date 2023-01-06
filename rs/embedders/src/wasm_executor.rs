@@ -468,10 +468,7 @@ pub fn wasm_execution_error(
             num_instructions_left,
             allocated_bytes: NumBytes::from(0),
             allocated_message_bytes: NumBytes::from(0),
-            instance_stats: InstanceStats {
-                accessed_pages: 0,
-                dirty_pages: 0,
-            },
+            instance_stats: InstanceStats::default(),
         },
         None,
     )
@@ -630,10 +627,7 @@ pub fn process(
                     num_instructions_left: NumInstructions::from(0),
                     allocated_bytes: NumBytes::from(0),
                     allocated_message_bytes: NumBytes::from(0),
-                    instance_stats: InstanceStats {
-                        accessed_pages: 0,
-                        dirty_pages: 0,
-                    },
+                    instance_stats: InstanceStats::default(),
                 },
                 None,
                 Err(system_api),

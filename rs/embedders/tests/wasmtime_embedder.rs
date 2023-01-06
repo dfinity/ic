@@ -614,4 +614,62 @@ mod test {
             HypervisorError::CalledTrap(std::str::from_utf8(&[0; 6]).unwrap().to_string())
         );
     }
+
+    #[test]
+    fn read_before_write_stats() {
+        // This wasm does a direct write to page 0.
+        let direct_wat = r#"
+            (module
+                (import "ic0" "msg_reply" (func $msg_reply))
+                (memory (export "memory") 1)
+                (func (export "canister_update write")
+                    (i32.store (i32.const 0) (i32.const 111))
+                    (call $msg_reply)
+                )
+            )"#;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_wat(direct_wat)
+            .with_api_type(ic_system_api::ApiType::update(
+                mock_time(),
+                vec![],
+                Cycles::zero(),
+                PrincipalId::new_user_test_id(0),
+                0.into(),
+            ))
+            .build();
+        instance
+            .run(FuncRef::Method(WasmMethod::Update("write".to_string())))
+            .unwrap();
+        let stats = instance.get_stats();
+        assert_eq!(stats.direct_write_count, 1);
+        assert_eq!(stats.read_before_write_count, 0);
+
+        // This wasm does a read then write to page 0.
+        let read_then_write_wat = r#"
+            (module
+                (import "ic0" "msg_reply" (func $msg_reply))
+                (memory (export "memory") 1)
+                (func (export "canister_update write")
+                    (drop (i32.load (i32.const 4096)))
+                    (i32.store (i32.const 4096) (i32.const 111))
+                    (call $msg_reply)
+                )
+            )"#;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_wat(read_then_write_wat)
+            .with_api_type(ic_system_api::ApiType::update(
+                mock_time(),
+                vec![],
+                Cycles::zero(),
+                PrincipalId::new_user_test_id(0),
+                0.into(),
+            ))
+            .build();
+        instance
+            .run(FuncRef::Method(WasmMethod::Update("write".to_string())))
+            .unwrap();
+        let stats = instance.get_stats();
+        assert_eq!(stats.direct_write_count, 0);
+        assert_eq!(stats.read_before_write_count, 1);
+    }
 }
