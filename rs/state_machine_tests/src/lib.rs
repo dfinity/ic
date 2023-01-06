@@ -652,7 +652,7 @@ impl StateMachine {
     }
 
     /// Triggers a single round of execution without any new inputs.  The state
-    /// machine will invoke hearbeats and make progress on pending async calls.
+    /// machine will invoke heartbeats and make progress on pending async calls.
     pub fn tick(&self) {
         self.execute_block_with_ingress_payload(IngressPayload::default())
     }
@@ -1234,6 +1234,15 @@ impl StateMachine {
     /// Returns the status of the ingress message with the specified ID.
     pub fn ingress_status(&self, msg_id: &MessageId) -> IngressStatus {
         (self.ingress_history_reader.get_latest_status())(msg_id)
+    }
+
+    /// Starts the canister with the specified ID.
+    pub fn start_canister(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
+        self.execute_ingress(
+            CanisterId::ic_00(),
+            "start_canister",
+            (CanisterIdRecord::from(canister_id)).encode(),
+        )
     }
 
     /// Stops the canister with the specified ID.

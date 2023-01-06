@@ -31,6 +31,17 @@ enum Request {
     AddCycles(AddCyclesArg),
     SetStableMemory(SetStableMemoryArg),
     ReadStableMemory(RawCanisterId),
+    Tick,
+    RunUntilCompletion(RunUntilCompletionArg),
+    StartCanister(RawCanisterId),
+    StopCanister(RawCanisterId),
+    DeleteCanister(RawCanisterId),
+}
+
+#[derive(Deserialize)]
+struct RunUntilCompletionArg {
+    // max_ticks until completion must be reached
+    max_ticks: u64,
 }
 
 #[derive(Deserialize)]
@@ -169,6 +180,23 @@ fn main() {
                 ),
                 &opts,
             ),
+            Tick => {
+                env.tick();
+                send_response((), &opts);
+            }
+            RunUntilCompletion(arg) => {
+                env.run_until_completion(arg.max_ticks as usize);
+                send_response((), &opts);
+            }
+            StartCanister(canister_id) => {
+                send_response(env.start_canister(CanisterId::from(canister_id)), &opts);
+            }
+            StopCanister(canister_id) => {
+                send_response(env.stop_canister(CanisterId::from(canister_id)), &opts);
+            }
+            DeleteCanister(canister_id) => {
+                send_response(env.delete_canister(CanisterId::from(canister_id)), &opts);
+            }
         }
     }
 }
