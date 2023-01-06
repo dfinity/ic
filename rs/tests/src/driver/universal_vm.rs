@@ -24,7 +24,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 /// A builder for the initial configuration of a universal VM.
-/// See: https://github.com/dfinity-lab/infra/tree/master/farm/universal-vm
+/// See: https://github.com/dfinity-lab/farm/tree/master/universal-vm
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UniversalVm {
     pub name: String,
