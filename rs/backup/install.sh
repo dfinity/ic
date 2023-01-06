@@ -22,7 +22,7 @@ PUBLIC_KEY_NAME="ic_public_key.pem"
 PUBLIC_KEY_FILE="${TMP_DIR}/${PUBLIC_KEY_NAME}"
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="7ac6026f5d05673e62f88ae66b23d53e71093e5d"
+DEFAULT_BUILD_ID="2377b0989ec50bca4aab6a1d8108e0f8e1b917d7"
 echo "Enter the BUILD_ID of the proper ic-backup version:"
 echo "(default: ${DEFAULT_BUILD_ID}):"
 read BUILD_ID
