@@ -1896,7 +1896,6 @@ pub mod tests {
         {
             let mut node_record: NodeRecord = Default::default();
             node_record.p2p_flow_endpoints.push(FlowEndpoint {
-                flow_tag: 2000,
                 endpoint: Some(ConnectionEndpoint {
                     ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
                     port: 200,
@@ -1913,7 +1912,6 @@ pub mod tests {
         {
             let mut node_record: NodeRecord = Default::default();
             node_record.p2p_flow_endpoints.push(FlowEndpoint {
-                flow_tag: 1000,
                 endpoint: Some(ConnectionEndpoint {
                     ip_addr: "2001:db8:0:1:1:1:1:1".to_string(),
                     port: 100,
@@ -1921,7 +1919,6 @@ pub mod tests {
                 }),
             });
             node_record.p2p_flow_endpoints.push(FlowEndpoint {
-                flow_tag: 2000,
                 endpoint: Some(ConnectionEndpoint {
                     ip_addr: "2001:db8:0:1:1:1:1:2".to_string(),
                     port: 200,

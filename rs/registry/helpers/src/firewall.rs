@@ -152,7 +152,6 @@ mod tests {
                         xnet: None,
                         http: None,
                         p2p_flow_endpoints: vec![FlowEndpoint {
-                            flow_tag: 1,
                             endpoint: Some(ConnectionEndpoint {
                                 ip_addr: ip.to_string(),
                                 port: 4000,

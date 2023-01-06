@@ -371,8 +371,6 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
         p2p_addr: format!("org.internetcomputer.p2p1://{}", p2p_addr)
             .parse()
             .expect("can't fail"),
-        p2p_num_flows: 1,
-        p2p_start_flow_tag: 1234,
         prometheus_metrics: vec![prometheus_addr.into()],
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,

@@ -81,32 +81,17 @@ pub(crate) fn check_endpoint_invariants(
         //      address-port-pair of different flow endpoints of the same node can be
         //      the same, but the flow identifier must be different. However, 2 nodes
         //      can have he same flow endpoints.
-        let mut flow_ids = BTreeSet::<u32>::new();
         for endpoint in node_record.p2p_flow_endpoints {
             let connection_endpoint = match endpoint.endpoint {
                 None => {
                     return Err(InvariantCheckError {
-                        msg: format!(
-                            "No connection endpoint specified for flow ({:?})",
-                            endpoint.flow_tag
-                        ),
+                        msg: "No connection endpoint specified".to_string(),
                         source: None,
                     })
                 }
                 Some(ep) => ep,
             };
             validate_endpoint(&connection_endpoint, strict)?;
-
-            if flow_ids.contains(&endpoint.flow_tag) {
-                return Err(InvariantCheckError {
-                    msg: format!(
-                        "Duplicate flow_tag for p2p flow endpoints: {}",
-                        endpoint.flow_tag
-                    ),
-                    source: None,
-                });
-            }
-            flow_ids.insert(endpoint.flow_tag);
         }
 
         if strict {
@@ -439,24 +424,13 @@ mod tests {
                 node_operator_id: vec![0],
                 xnet: None,
                 http: None,
-                p2p_flow_endpoints: vec![
-                    FlowEndpoint {
-                        flow_tag: 1,
-                        endpoint: Some(ConnectionEndpoint {
-                            ip_addr: "200.1.1.1".to_string(),
-                            port: 8080,
-                            protocol: Protocol::P2p1Tls13 as i32,
-                        }),
-                    },
-                    FlowEndpoint {
-                        flow_tag: 2,
-                        endpoint: Some(ConnectionEndpoint {
-                            ip_addr: "200.1.1.2".to_string(),
-                            port: 8080,
-                            protocol: Protocol::P2p1Tls13 as i32,
-                        }),
-                    },
-                ],
+                p2p_flow_endpoints: vec![FlowEndpoint {
+                    endpoint: Some(ConnectionEndpoint {
+                        ip_addr: "200.1.1.1".to_string(),
+                        port: 8080,
+                        protocol: Protocol::P2p1Tls13 as i32,
+                    }),
+                }],
                 prometheus_metrics_http: None,
                 public_api: vec![ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
@@ -485,24 +459,13 @@ mod tests {
                 node_operator_id: vec![0],
                 xnet: None,
                 http: None,
-                p2p_flow_endpoints: vec![
-                    FlowEndpoint {
-                        flow_tag: 1,
-                        endpoint: Some(ConnectionEndpoint {
-                            ip_addr: "200.1.1.3".to_string(),
-                            port: 8080,
-                            protocol: Protocol::P2p1Tls13 as i32,
-                        }),
-                    },
-                    FlowEndpoint {
-                        flow_tag: 2,
-                        endpoint: Some(ConnectionEndpoint {
-                            ip_addr: "200.1.1.1".to_string(),
-                            port: 8080,
-                            protocol: Protocol::P2p1Tls13 as i32,
-                        }),
-                    },
-                ],
+                p2p_flow_endpoints: vec![FlowEndpoint {
+                    endpoint: Some(ConnectionEndpoint {
+                        ip_addr: "200.1.1.3".to_string(),
+                        port: 8080,
+                        protocol: Protocol::P2p1Tls13 as i32,
+                    }),
+                }],
                 prometheus_metrics_http: None,
                 public_api: vec![ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
@@ -532,24 +495,13 @@ mod tests {
                 node_operator_id: vec![0],
                 xnet: None,
                 http: None,
-                p2p_flow_endpoints: vec![
-                    FlowEndpoint {
-                        flow_tag: 1,
-                        endpoint: Some(ConnectionEndpoint {
-                            ip_addr: "200.1.1.3".to_string(),
-                            port: 8080,
-                            protocol: Protocol::P2p1Tls13 as i32,
-                        }),
-                    },
-                    FlowEndpoint {
-                        flow_tag: 1,
-                        endpoint: Some(ConnectionEndpoint {
-                            ip_addr: "200.1.1.1".to_string(),
-                            port: 8080,
-                            protocol: Protocol::P2p1Tls13 as i32,
-                        }),
-                    },
-                ],
+                p2p_flow_endpoints: vec![FlowEndpoint {
+                    endpoint: Some(ConnectionEndpoint {
+                        ip_addr: "200.1.1.3".to_string(),
+                        port: 8080,
+                        protocol: Protocol::P2p1Tls13 as i32,
+                    }),
+                }],
                 prometheus_metrics_http: None,
                 public_api: vec![ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),
@@ -566,7 +518,7 @@ mod tests {
                 chip_id: vec![],
             }),
         );
-        assert!(check_endpoint_invariants(&snapshot, true).is_err());
+        check_endpoint_invariants(&snapshot, true).unwrap();
     }
 
     #[test]
