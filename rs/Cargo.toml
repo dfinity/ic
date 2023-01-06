@@ -257,6 +257,7 @@ members = [
   "tests/test_canisters/kv_store",
   "tests/test_canisters/message",
   "transport",
+  "transport/test_utils",
   "transport_test_client",
   "tree_deserializer",
   "types/types",

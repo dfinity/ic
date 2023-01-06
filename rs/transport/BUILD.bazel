@@ -3,6 +3,7 @@ load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = [
     "//rs/replica:__subpackages__",
+    "//rs/transport:__subpackages__",
     "//rs/transport_test_client:__subpackages__",
 ])
 
@@ -27,15 +28,9 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/crypto/temp_crypto",
     "//rs/crypto/tls_interfaces/mocks",
-    "//rs/registry/fake",
-    "//rs/registry/keys",
-    "//rs/registry/proto_data_provider",
     "//rs/test_utilities/logger",
-    "//rs/types/types_test_utils",
-    "@crate_index//:mockall",
-    "@crate_index//:tower-test",
+    "//rs/transport/test_utils",
 ]
 
 rust_library(
