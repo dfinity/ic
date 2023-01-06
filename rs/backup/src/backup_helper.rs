@@ -13,7 +13,7 @@ use rand::thread_rng;
 use slog::{error, info, warn, Logger};
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
-use std::fs::{read_dir, remove_dir_all, DirEntry, File};
+use std::fs::{create_dir_all, read_dir, remove_dir_all, DirEntry, File};
 use std::io::Write;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
@@ -32,11 +32,11 @@ pub struct BackupHelper {
     pub ssh_private_key: String,
     pub registry_client: Arc<RegistryClientImpl>,
     pub notification_client: NotificationClient,
-    pub downloads: Arc<Mutex<bool>>,
+    pub downloads_guard: Arc<Mutex<bool>>,
     pub disk_threshold_warn: u32,
     pub cold_storage_dir: PathBuf,
     pub versions_hot: usize,
-    pub artefacts: Mutex<bool>,
+    pub artifacts_guard: Mutex<bool>,
     pub log: Logger,
 }
 
@@ -52,7 +52,7 @@ enum DiskStats {
 
 impl BackupHelper {
     fn binary_dir(&self, replica_version: &ReplicaVersion) -> PathBuf {
-        self.root_dir.join(format!("binaries/{}", replica_version))
+        create_if_not_exists(self.root_dir.join(format!("binaries/{}", replica_version)))
     }
 
     fn binary_file(&self, executable: &str, replica_version: &ReplicaVersion) -> PathBuf {
@@ -60,7 +60,7 @@ impl BackupHelper {
     }
 
     fn logs_dir(&self) -> PathBuf {
-        self.root_dir.join("logs")
+        create_if_not_exists(self.root_dir.join("logs"))
     }
 
     fn spool_root_dir(&self) -> PathBuf {
@@ -84,7 +84,7 @@ impl BackupHelper {
     }
 
     fn state_dir(&self) -> PathBuf {
-        self.data_dir().join("ic_state")
+        create_if_not_exists(self.data_dir().join("ic_state"))
     }
 
     fn archive_root_dir(&self) -> PathBuf {
@@ -92,9 +92,27 @@ impl BackupHelper {
     }
 
     fn archive_dir(&self, last_height: u64) -> PathBuf {
-        self.archive_root_dir()
-            .join(format!("{}/{}", self.subnet_id, last_height))
+        create_if_not_exists(
+            self.archive_root_dir()
+                .join(format!("{}/{}", self.subnet_id, last_height)),
+        )
     }
+
+    fn work_dir(&self) -> PathBuf {
+        create_if_not_exists(self.root_dir.join(format!("work_dir/{}", self.subnet_id)))
+    }
+
+    fn cold_storage_artifacts_dir(&self) -> PathBuf {
+        create_if_not_exists(
+            self.cold_storage_dir
+                .join(format!("{}/artifacts", self.subnet_id)),
+        )
+    }
+
+    // fn cold_storage_state_dir(&self) -> PathBuf {
+    //     self.cold_storage_dir
+    //         .join(format!("{}/states", self.subnet_id))
+    // }
 
     fn username(&self) -> String {
         "backup".to_string()
@@ -120,11 +138,10 @@ impl BackupHelper {
             sleep_secs(30);
         }
         info!(self.log, "Start downloading binaries.");
-        let _guard = self.downloads.lock().expect("downloads mutex lock failed");
-        if !self.binary_dir(replica_version).exists() {
-            std::fs::create_dir_all(self.binary_dir(replica_version))
-                .expect("Failure creating a directory");
-        }
+        let _guard = self
+            .downloads_guard
+            .lock()
+            .expect("downloads mutex lock failed");
         self.download_binary("ic-replay", replica_version)?;
         self.download_binary("sandbox_launcher", replica_version)?;
         self.download_binary("canister_sandbox", replica_version)?;
@@ -183,7 +200,10 @@ impl BackupHelper {
     }
 
     fn rsync_node_backup(&self, node_ip: &IpAddr) {
-        let _guard = self.artefacts.lock().expect("artefacts mutex lock failed");
+        let _guard = self
+            .artifacts_guard
+            .lock()
+            .expect("artifacts mutex lock failed");
         info!(
             self.log,
             "Sync backup data from the node: {} for subnet_id: {}",
@@ -212,7 +232,7 @@ impl BackupHelper {
         }
         warn!(self.log, "Didn't sync at all with host: {}", node_ip);
         self.notification_client
-            .report_failure_slack("Couldn't pull artefacts from the nodes!".to_string());
+            .report_failure_slack("Couldn't pull artifacts from the nodes!".to_string());
     }
 
     fn rsync_config(&self, node_ip: &IpAddr, replica_version: &ReplicaVersion) {
@@ -272,17 +292,18 @@ impl BackupHelper {
 
     pub fn sync_files(&self, nodes: &Vec<IpAddr>) {
         let start_time = Instant::now();
-
-        if !self.spool_dir().exists() {
-            std::fs::create_dir_all(self.spool_dir()).expect("Failure creating a directory");
-        }
-
         for n in nodes {
             self.rsync_node_backup(n);
         }
         let duration = start_time.elapsed();
         let minutes = duration.as_secs() / 60;
         self.notification_client.push_metrics_sync_time(minutes);
+    }
+
+    pub fn create_spool_dir(&self) {
+        if !self.spool_dir().exists() {
+            create_dir_all(self.spool_dir()).expect("Failure creating a directory");
+        }
     }
 
     pub fn collect_nodes(&self, num_nodes: usize) -> Result<Vec<IpAddr>, String> {
@@ -335,13 +356,6 @@ impl BackupHelper {
         let start_height = self.last_state_checkpoint();
         let start_time = Instant::now();
         let mut current_replica_version = replica_version;
-
-        if !self.state_dir().exists() {
-            std::fs::create_dir_all(self.state_dir()).expect("Failure creating a directory");
-        }
-        if !self.logs_dir().exists() {
-            std::fs::create_dir_all(self.logs_dir()).expect("Failure creating a directory");
-        }
 
         // replay the current version once, but if there is upgrade do it again
         loop {
@@ -508,10 +522,6 @@ impl BackupHelper {
             state_dir.to_string_lossy(),
             archive_dir.to_string_lossy()
         );
-        if !archive_dir.exists() {
-            std::fs::create_dir_all(archive_dir.clone())
-                .unwrap_or_else(|e| panic!("Failure creating archive directory: {}", e));
-        }
 
         let mut cmd = Command::new("rsync");
         cmd.arg("-a");
@@ -571,54 +581,104 @@ impl BackupHelper {
         }
     }
 
-    fn fetch_spool_dirs(&self) -> Result<Vec<DirEntry>, String> {
-        Ok(match read_dir(self.spool_dir()) {
-            Ok(dirs) => dirs.flatten(),
-            Err(err) => return Err(format!("Error reading spool directory: {}", err)),
-        }
-        .collect())
-    }
-
     pub fn need_cold_storage_move(&self) -> Result<bool, String> {
-        let _guard = self.artefacts.lock().expect("artefacts mutex lock failed");
-        let spool_dirs = self.fetch_spool_dirs()?;
+        let _guard = self
+            .artifacts_guard
+            .lock()
+            .expect("artifacts mutex lock failed");
+        let spool_dirs = collect_only_dirs(&self.spool_dir())?;
         Ok(spool_dirs.len() > self.versions_hot)
     }
 
     pub fn do_move_cold_storage(&self) -> Result<(), String> {
-        let guard = self.artefacts.lock().expect("artefacts mutex lock failed");
+        let guard = self
+            .artifacts_guard
+            .lock()
+            .expect("artifacts mutex lock failed");
         info!(
             self.log,
             "Start moving old artifacts and states of subnet {:?} to the cold storage",
             self.subnet_id
         );
-        let spool_dirs = self.fetch_spool_dirs()?;
+        let spool_dirs = collect_only_dirs(&self.spool_dir())?;
         let mut dir_heights = BTreeMap::new();
         spool_dirs.iter().for_each(|replica_version_dir| {
-            let replica_version_path = replica_version_dir.path();
-            let height_bucket = last_dir_height(&replica_version_path, 10);
-            let top_height =
-                last_dir_height(&replica_version_path.join(format!("{}", height_bucket)), 10);
+            let (top_height, replica_version_path) = fetch_top_height(replica_version_dir);
             dir_heights.insert(top_height, replica_version_path);
         });
+        assert!(spool_dirs.len() == dir_heights.len());
         let mut max_height: u64 = 0;
         let to_clean = dir_heights.len() - self.versions_hot;
+        let work_dir = self.work_dir();
         for (height, dir) in dir_heights.iter().take(to_clean) {
             info!(
                 self.log,
-                "Artefact directory: {:?} needs to be moved to the cold storage", dir
+                "Artifact directory: {:?} needs to be moved to the cold storage", dir
             );
             max_height = max_height.max(*height);
-            // TODO: move artefact dirs
+            // move artifact dir(s)
+            let mut cmd = Command::new("mv");
+            cmd.arg(dir).arg(&work_dir);
+            info!(self.log, "Will execute: {:?}", cmd);
+            if let Err(e) = exec_cmd(&mut cmd) {
+                return Err(format!("Error moving artifacts: {}", e));
+            }
         }
+        // we have moved all the artifacts from the spool directory, so don't need the mutex guard anymore
         drop(guard);
-        // TODO tar/copy/delete moved artefact dirs
+
+        // process moved artifact dirs
+        let cold_storage_artifacts_dir = self.cold_storage_artifacts_dir();
+        let work_dir_str = work_dir
+            .clone()
+            .into_os_string()
+            .into_string()
+            .expect("proper work directory string");
+        let pack_dirs = collect_only_dirs(&work_dir)?;
+        for pack_dir in pack_dirs {
+            let replica_version = pack_dir
+                .file_name()
+                .into_string()
+                .expect("proper work directory entry");
+            info!(self.log, "Packing artifacts of {}", replica_version);
+            let timestamp = Utc::now().timestamp();
+            let (top_height, _) = fetch_top_height(&pack_dir);
+            let packed_file = format!(
+                "{}/{:010}_{:012}_{}.tar",
+                work_dir_str, timestamp, top_height, replica_version
+            );
+            let mut cmd = Command::new("tar");
+            cmd.arg("cvf"); // TODO: check if it's worth it to compress the data
+            cmd.arg(&packed_file);
+            cmd.arg("-C").arg(&work_dir);
+            cmd.arg(&replica_version);
+            info!(self.log, "Will execute: {:?}", cmd);
+            if let Err(e) = exec_cmd(&mut cmd) {
+                return Err(format!("Error packing artifacts: {}", e));
+            }
+            info!(self.log, "Copy packed file of {}", replica_version);
+            let mut cmd2 = Command::new("cp");
+            cmd2.arg(packed_file).arg(&cold_storage_artifacts_dir);
+            info!(self.log, "Will execute: {:?}", cmd2);
+            if let Err(e) = exec_cmd(&mut cmd2) {
+                return Err(format!("Error moving artifacts: {}", e));
+            }
+        }
+
+        info!(
+            self.log,
+            "Remove leftovers of the subnet {:?}", self.subnet_id
+        );
+        remove_dir_all(work_dir).map_err(|err| format!("Error deleting leftovers: {:?}", err))?;
+
         info!(
             self.log,
             "Moving states with height up to: {:?} from the archive to the cold storage",
             max_height
         );
+
         // TODO: clean up the archive directory now
+
         info!(
             self.log,
             "Finished moving old artifacts and states of subnet {:?} to the cold storage",
@@ -626,6 +686,21 @@ impl BackupHelper {
         );
         Ok(())
     }
+}
+
+fn collect_only_dirs(path: &PathBuf) -> Result<Vec<DirEntry>, String> {
+    Ok(read_dir(path)
+        .map_err(|e| format!("Error reading directory {path:?}: {e}"))?
+        .flatten()
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .collect())
+}
+
+fn fetch_top_height(replica_version_dir: &DirEntry) -> (u64, PathBuf) {
+    let replica_version_path = replica_version_dir.path();
+    let height_bucket = last_dir_height(&replica_version_path, 10);
+    let top_height = last_dir_height(&replica_version_path.join(format!("{}", height_bucket)), 10);
+    (top_height, replica_version_path)
 }
 
 fn height_from_dir_entry_radix(filename: &DirEntry, radix: u32) -> u64 {
@@ -658,4 +733,11 @@ fn last_dir_height(dir: &PathBuf, radix: u32) -> u64 {
 
 fn last_checkpoint(dir: &Path) -> u64 {
     last_dir_height(&dir.join("checkpoints"), 16)
+}
+
+fn create_if_not_exists(dir: PathBuf) -> PathBuf {
+    if !dir.exists() {
+        create_dir_all(&dir).unwrap_or_else(|e| panic!("Failure creating directory {dir:?}: {e}"));
+    }
+    dir
 }

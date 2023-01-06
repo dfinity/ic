@@ -170,11 +170,11 @@ impl BackupManager {
                 ssh_private_key: ssh_credentials_file.clone(),
                 registry_client: registry_client.clone(),
                 notification_client,
-                downloads: downloads.clone(),
+                downloads_guard: downloads.clone(),
                 disk_threshold_warn,
                 cold_storage_dir: cold_storage_dir.clone(),
                 versions_hot,
-                artefacts: Mutex::new(true),
+                artifacts_guard: Mutex::new(true),
                 log: log.clone(),
             };
             let sync_period = std::time::Duration::from_secs(s.sync_period_secs);
@@ -398,6 +398,7 @@ impl BackupManager {
         for i in 0..size {
             // should we sync the subnet
             if self.subnet_backups[i].sync_period >= Duration::from_secs(1) {
+                self.subnet_backups[i].backup_helper.create_spool_dir();
                 let m = self.clone();
                 thread::spawn(move || sync_subnet(m, i));
             }
@@ -449,6 +450,7 @@ impl BackupManager {
 fn sync_subnet(m: Arc<BackupManager>, i: usize) {
     let b = &m.subnet_backups[i];
     let subnet_id = &b.backup_helper.subnet_id;
+    info!(m.log, "Spawned sync subnet {:?} thread...", subnet_id);
     loop {
         let sync_last_time = m.get_value(subnet_id, |s| s.sync_last_time);
         if sync_last_time.elapsed() > b.sync_period {
@@ -466,6 +468,7 @@ fn sync_subnet(m: Arc<BackupManager>, i: usize) {
 }
 
 fn replay_subnets(m: Arc<BackupManager>) {
+    info!(m.log, "Spawned replay thread...");
     let size = m.subnet_backups.len();
     loop {
         for i in 0..size {
@@ -488,8 +491,8 @@ fn replay_subnets(m: Arc<BackupManager>) {
 }
 
 fn cold_store(m: Arc<BackupManager>) {
+    info!(m.log, "Spawned cold storage thread...");
     let size = m.subnet_backups.len();
-    // let subnet_id = &b.backup_helper.subnet_id;
     loop {
         for i in 0..size {
             let b = &m.subnet_backups[i];
@@ -519,7 +522,7 @@ fn cold_store(m: Arc<BackupManager>) {
                     .report_failure_slack(msg);
             }
         }
-        // make checks for archiving only once per hour or so
+        // make checks for cold storage archiving only once per hour or so
         sleep_secs(3600);
     }
 }
