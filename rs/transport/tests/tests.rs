@@ -1,52 +1,25 @@
-mod common;
-
-use common::{
-    create_mock_event_handler, get_free_localhost_port, setup_test_peer,
-    temp_crypto_component_with_tls_keys_in_registry, RegistryAndDataProvider, REG_V1,
-};
 use ic_base_types::{NodeId, RegistryVersion};
-use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{
     Transport, TransportChannelId, TransportError, TransportEvent, TransportEventHandler,
     TransportPayload,
 };
 use ic_logger::ReplicaLogger;
-use ic_metrics::MetricsRegistry;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_transport::transport::create_transport;
-use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
+use ic_transport_test_utils::{
+    basic_transport_message, basic_transport_message_v2, blocking_transport_message,
+    create_mock_event_handler, get_free_localhost_port, large_transport_message, setup_test_peer,
+    start_connection_between_two_peers, temp_crypto_component_with_tls_keys_in_registry,
+    RegistryAndDataProvider, NODE_ID_1, NODE_ID_2, NODE_ID_3, NODE_ID_4, REG_V1,
+    TRANSPORT_CHANNEL_ID,
+};
 use std::net::SocketAddr;
-use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::{
     mpsc::{channel, Receiver, Sender},
     Notify,
 };
 use tokio::time::Duration;
-
-const NODE_ID_1: NodeId = NODE_1;
-const NODE_ID_2: NodeId = NODE_2;
-const NODE_ID_3: NodeId = NODE_3;
-const NODE_ID_4: NodeId = NODE_4;
-const TRANSPORT_CHANNEL_ID: usize = 0;
-
-fn basic_transport_message() -> TransportPayload {
-    TransportPayload(vec![0xb; 1_000_000])
-}
-
-fn basic_transport_message_v2() -> TransportPayload {
-    TransportPayload(vec![0xb; 1_000_001])
-}
-
-fn blocking_transport_message() -> TransportPayload {
-    TransportPayload(vec![0xb; 1_000_002])
-}
-
-fn large_transport_message() -> TransportPayload {
-    // Currently largest use case (StateSync) may send up to 100MB
-    TransportPayload(vec![0xb; 100_000_000])
-}
 
 #[test]
 fn test_basic_conn_legacy() {
@@ -74,6 +47,8 @@ fn test_basic_conn_impl(use_h2: bool) {
             10,
             event_handler_1,
             event_handler_2,
+            NODE_ID_1,
+            NODE_ID_2,
             use_h2,
         );
 
@@ -91,7 +66,7 @@ fn test_basic_conn_impl(use_h2: bool) {
                 _ => panic!("Unexpected event"),
             }
         });
-        control_plane_2.stop_connection(&NODE_1);
+        control_plane_2.stop_connection(&NODE_ID_1);
         rt.block_on(async {
             match handle_1.next_request().await {
                 Some((TransportEvent::PeerDown(_), resp)) => {
@@ -187,6 +162,8 @@ fn test_send_big_message_succeeds(use_h2: bool) {
             1,
             peer_a_event_handler,
             peer_b_event_handler,
+            NODE_ID_1,
+            NODE_ID_2,
             use_h2,
         );
 
@@ -244,6 +221,8 @@ fn test_idle_connection_active_impl(use_h2: bool) {
             1,
             peer_a_event_handler,
             peer_b_event_handler,
+            NODE_ID_1,
+            NODE_ID_2,
             use_h2,
         );
         std::thread::sleep(Duration::from_secs(20));
@@ -501,7 +480,6 @@ fn connect_nodes_to_central_node<T>(central_node_data: &PeerData<T>, peer_data: 
 }
 
 // helper functions
-
 fn setup_message_ack_event_handler(
     rt: tokio::runtime::Handle,
     connected: Sender<TransportPayload>,
@@ -554,75 +532,6 @@ fn setup_blocking_event_handler(
     event_handler
 }
 
-fn start_connection_between_two_peers(
-    rt_handle: tokio::runtime::Handle,
-    logger: ReplicaLogger,
-    registry_version: RegistryVersion,
-    send_queue_size: usize,
-    event_handler_1: TransportEventHandler,
-    event_handler_2: TransportEventHandler,
-    use_h2: bool,
-) -> (Arc<dyn Transport>, Arc<dyn Transport>) {
-    // Setup registry and crypto component
-    let registry_and_data = RegistryAndDataProvider::new();
-    let crypto_1 = temp_crypto_component_with_tls_keys_in_registry(&registry_and_data, NODE_ID_1);
-    let crypto_2 = temp_crypto_component_with_tls_keys_in_registry(&registry_and_data, NODE_ID_2);
-    registry_and_data.registry.update_to_latest_version();
-
-    let peer1_port = get_free_localhost_port().expect("Failed to get free localhost port");
-    let peer_a_config = TransportConfig {
-        node_ip: "127.0.0.1".to_string(),
-        listening_port: peer1_port,
-        send_queue_size,
-        ..Default::default()
-    };
-
-    let peer_a = create_transport(
-        NODE_ID_1,
-        peer_a_config,
-        registry_version,
-        MetricsRegistry::new(),
-        Arc::new(crypto_1),
-        rt_handle.clone(),
-        logger.clone(),
-        use_h2,
-    );
-
-    peer_a.set_event_handler(event_handler_1);
-
-    let peer2_port = get_free_localhost_port().expect("Failed to get free localhost port");
-    let peer_b_config = TransportConfig {
-        node_ip: "127.0.0.1".to_string(),
-        listening_port: peer2_port,
-        send_queue_size,
-        ..Default::default()
-    };
-
-    let peer_b = create_transport(
-        NODE_ID_2,
-        peer_b_config,
-        registry_version,
-        MetricsRegistry::new(),
-        Arc::new(crypto_2),
-        rt_handle,
-        logger,
-        use_h2,
-    );
-    peer_b.set_event_handler(event_handler_2);
-    let peer_2_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", peer2_port)).unwrap();
-
-    peer_a
-        .start_connection(&NODE_ID_2, peer_2_addr, REG_V1)
-        .expect("start_connection");
-
-    let peer_1_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", peer1_port)).unwrap();
-    peer_b
-        .start_connection(&NODE_ID_1, peer_1_addr, REG_V1)
-        .expect("start_connection");
-
-    (peer_a, peer_b)
-}
-
 fn trigger_and_test_send_queue_full(
     rt_handle: tokio::runtime::Handle,
     logger: ReplicaLogger,
@@ -640,6 +549,8 @@ fn trigger_and_test_send_queue_full(
         send_queue_size,
         event_handler_a,
         event_handler_b,
+        NODE_ID_1,
+        NODE_ID_2,
         use_h2,
     );
     let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);

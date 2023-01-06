@@ -2,21 +2,42 @@ use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces_transport::Transport;
-use ic_interfaces_transport::{TransportEvent, TransportEventHandler};
+use ic_interfaces_transport::{Transport, TransportEvent, TransportEventHandler, TransportPayload};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_tls_cert_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_transport::transport::create_transport;
-use std::convert::Infallible;
-use std::net::SocketAddr;
-use std::str::FromStr;
-use std::sync::Arc;
+use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
+use std::{convert::Infallible, net::SocketAddr, str::FromStr, sync::Arc};
 use tokio::net::TcpSocket;
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
+
+pub const NODE_ID_1: NodeId = NODE_1;
+pub const NODE_ID_2: NodeId = NODE_2;
+pub const NODE_ID_3: NodeId = NODE_3;
+pub const NODE_ID_4: NodeId = NODE_4;
+
+pub const TRANSPORT_CHANNEL_ID: usize = 0;
+
+pub fn basic_transport_message() -> TransportPayload {
+    TransportPayload(vec![0xb; 1_000_000])
+}
+
+pub fn basic_transport_message_v2() -> TransportPayload {
+    TransportPayload(vec![0xb; 1_000_001])
+}
+
+pub fn blocking_transport_message() -> TransportPayload {
+    TransportPayload(vec![0xb; 1_000_002])
+}
+
+pub fn large_transport_message() -> TransportPayload {
+    // Currently largest use case (StateSync) may send up to 100MB
+    TransportPayload(vec![0xb; 100_000_000])
+}
 
 pub const REG_V1: RegistryVersion = RegistryVersion::new(1);
 
@@ -53,7 +74,7 @@ impl Default for RegistryAndDataProvider {
     }
 }
 
-pub(crate) fn setup_test_peer<F>(
+pub fn setup_test_peer<F>(
     log: ReplicaLogger,
     rt_handle: tokio::runtime::Handle,
     node_id: NodeId,
@@ -127,4 +148,75 @@ pub fn create_mock_event_handler() -> (TransportEventHandler, Handle<TransportEv
         }
     });
     (BoxCloneService::new(infallible_service), handle)
+}
+
+pub fn start_connection_between_two_peers(
+    rt_handle: tokio::runtime::Handle,
+    logger: ReplicaLogger,
+    registry_version: RegistryVersion,
+    send_queue_size: usize,
+    event_handler_1: TransportEventHandler,
+    event_handler_2: TransportEventHandler,
+    node_1: NodeId,
+    node_2: NodeId,
+    use_h2: bool,
+) -> (Arc<dyn Transport>, Arc<dyn Transport>) {
+    // Setup registry and crypto component
+    let registry_and_data = RegistryAndDataProvider::new();
+    let crypto_1 = temp_crypto_component_with_tls_keys_in_registry(&registry_and_data, node_1);
+    let crypto_2 = temp_crypto_component_with_tls_keys_in_registry(&registry_and_data, node_2);
+    registry_and_data.registry.update_to_latest_version();
+
+    let peer1_port = get_free_localhost_port().expect("Failed to get free localhost port");
+    let peer_a_config = TransportConfig {
+        node_ip: "127.0.0.1".to_string(),
+        listening_port: peer1_port,
+        send_queue_size,
+        ..Default::default()
+    };
+
+    let peer_a = create_transport(
+        node_1,
+        peer_a_config,
+        registry_version,
+        MetricsRegistry::new(),
+        Arc::new(crypto_1),
+        rt_handle.clone(),
+        logger.clone(),
+        use_h2,
+    );
+
+    peer_a.set_event_handler(event_handler_1);
+
+    let peer2_port = get_free_localhost_port().expect("Failed to get free localhost port");
+    let peer_b_config = TransportConfig {
+        node_ip: "127.0.0.1".to_string(),
+        listening_port: peer2_port,
+        send_queue_size,
+        ..Default::default()
+    };
+
+    let peer_b = create_transport(
+        node_2,
+        peer_b_config,
+        registry_version,
+        MetricsRegistry::new(),
+        Arc::new(crypto_2),
+        rt_handle,
+        logger,
+        use_h2,
+    );
+    peer_b.set_event_handler(event_handler_2);
+    let peer_2_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", peer2_port)).unwrap();
+
+    peer_a
+        .start_connection(&node_2, peer_2_addr, REG_V1)
+        .expect("start_connection");
+
+    let peer_1_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", peer1_port)).unwrap();
+    peer_b
+        .start_connection(&node_1, peer_1_addr, REG_V1)
+        .expect("start_connection");
+
+    (peer_a, peer_b)
 }
