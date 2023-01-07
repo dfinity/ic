@@ -298,7 +298,7 @@ pub(crate) async fn get_all_sns_canisters(
 
 impl Version {
     /// Get the new hashes from next_version as a list of (SnsCanisterType, wasm_hash)
-    fn changes_against(
+    pub(crate) fn changes_against(
         &self,
         next_version: &Self,
     ) -> Vec<(SnsCanisterType, Vec<u8> /*wasm hash*/)> {
@@ -332,6 +332,51 @@ impl Version {
         }
 
         differences
+    }
+    pub(crate) fn version_has_expected_hashes(
+        &self,
+        expected_hashes: &[(SnsCanisterType, Vec<u8> /* wasm hash*/)],
+    ) -> Result<(), Vec<String>> {
+        let results = expected_hashes
+            .iter()
+            .map(|(canister_type, expected_hash)| {
+                let actual_hash = self.get_hash_for_type(canister_type);
+                if &actual_hash == expected_hash {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Expected hash for {:?} to be: '{}', but it was '{}'",
+                        canister_type,
+                        hex::encode(expected_hash),
+                        hex::encode(actual_hash)
+                    ))
+                }
+            })
+            .collect::<Vec<Result<(), String>>>();
+
+        if results.iter().any(|r| r.is_err()) {
+            Err(results
+                .into_iter()
+                .flat_map(|result| match result {
+                    Ok(_) => None,
+                    Err(e) => Some(e),
+                })
+                .collect::<Vec<_>>())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn get_hash_for_type(&self, canister_type: &SnsCanisterType) -> Vec<u8> {
+        match canister_type {
+            SnsCanisterType::Unspecified => panic!("Cannot happen"),
+            SnsCanisterType::Root => self.root_wasm_hash.clone(),
+            SnsCanisterType::Governance => self.governance_wasm_hash.clone(),
+            SnsCanisterType::Ledger => self.ledger_wasm_hash.clone(),
+            SnsCanisterType::Swap => self.swap_wasm_hash.clone(),
+            SnsCanisterType::Archive => self.archive_wasm_hash.clone(),
+            SnsCanisterType::Index => self.index_wasm_hash.clone(),
+        }
     }
 }
 

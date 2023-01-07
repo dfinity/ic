@@ -94,8 +94,8 @@ pub fn add_wasm(
 }
 
 /// Make add_wasm request to a canister in the StateMachine
-pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm, hash: &[u8; 32]) {
-    let proposal_id = add_wasm_via_proposal_and_return_immediately(env, wasm, hash);
+pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm) {
+    let proposal_id = add_wasm_via_proposal_and_return_immediately(env, wasm);
 
     while get_proposal_info(env, proposal_id).unwrap().status == (ProposalStatus::Open as i32) {
         std::thread::sleep(Duration::from_millis(100));
@@ -106,8 +106,8 @@ pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm, hash: &[u8; 32])
 pub fn add_wasm_via_proposal_and_return_immediately(
     env: &StateMachine,
     wasm: SnsWasm,
-    hash: &[u8; 32],
 ) -> ProposalId {
+    let hash = wasm.sha256_hash();
     let payload = AddWasmRequest {
         hash: hash.to_vec(),
         wasm: Some(wasm),
@@ -293,28 +293,22 @@ pub fn get_next_sns_version(
 /// Adds non-functional wasms to the SNS-WASM canister (to avoid expensive init process in certain tests)
 pub fn add_dummy_wasms_to_sns_wasms(machine: &StateMachine) {
     let root_wasm = test_wasm(SnsCanisterType::Root);
-    let root_hash = root_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, root_wasm, &root_hash);
+    add_wasm_via_proposal(machine, root_wasm);
 
     let gov_wasm = test_wasm(SnsCanisterType::Governance);
-    let gov_hash = gov_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, gov_wasm, &gov_hash);
+    add_wasm_via_proposal(machine, gov_wasm);
 
     let ledger_wasm = test_wasm(SnsCanisterType::Ledger);
-    let ledger_hash = ledger_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, ledger_wasm, &ledger_hash);
+    add_wasm_via_proposal(machine, ledger_wasm);
 
     let swap_wasm = test_wasm(SnsCanisterType::Swap);
-    let swap_hash = swap_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, swap_wasm, &swap_hash);
+    add_wasm_via_proposal(machine, swap_wasm);
 
     let archive_wasm = test_wasm(SnsCanisterType::Archive);
-    let archive_hash = archive_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, archive_wasm, &archive_hash);
+    add_wasm_via_proposal(machine, archive_wasm);
 
     let index_wasm = test_wasm(SnsCanisterType::Index);
-    let index_hash = index_wasm.sha256_hash();
-    add_wasm_via_proposal(machine, index_wasm, &index_hash);
+    add_wasm_via_proposal(machine, index_wasm);
 }
 
 /// Adds real SNS wasms to the SNS-WASM canister for more robust tests, and returns
@@ -357,34 +351,25 @@ pub fn add_real_wasms_to_sns_wasms_and_return_immediately(
     machine: &StateMachine,
 ) -> HashMap<SnsCanisterType, (ProposalId, SnsWasm)> {
     let root_wasm = build_root_sns_wasm();
-    let root_hash = root_wasm.sha256_hash();
-    let root_proposal_id =
-        add_wasm_via_proposal_and_return_immediately(machine, root_wasm.clone(), &root_hash);
+    let root_proposal_id = add_wasm_via_proposal_and_return_immediately(machine, root_wasm.clone());
 
     let gov_wasm = build_governance_sns_wasm();
-    let gov_hash = gov_wasm.sha256_hash();
-    let gov_proposal_id =
-        add_wasm_via_proposal_and_return_immediately(machine, gov_wasm.clone(), &gov_hash);
+    let gov_proposal_id = add_wasm_via_proposal_and_return_immediately(machine, gov_wasm.clone());
 
     let ledger_wasm = build_ledger_sns_wasm();
-    let ledger_hash = ledger_wasm.sha256_hash();
     let ledger_proposal_id =
-        add_wasm_via_proposal_and_return_immediately(machine, ledger_wasm.clone(), &ledger_hash);
+        add_wasm_via_proposal_and_return_immediately(machine, ledger_wasm.clone());
 
     let swap_wasm = build_swap_sns_wasm();
-    let swap_hash = swap_wasm.sha256_hash();
-    let swap_proposal_id =
-        add_wasm_via_proposal_and_return_immediately(machine, swap_wasm.clone(), &swap_hash);
+    let swap_proposal_id = add_wasm_via_proposal_and_return_immediately(machine, swap_wasm.clone());
 
     let archive_wasm = build_archive_sns_wasm();
-    let archive_hash = archive_wasm.sha256_hash();
     let archive_proposal_id =
-        add_wasm_via_proposal_and_return_immediately(machine, archive_wasm.clone(), &archive_hash);
+        add_wasm_via_proposal_and_return_immediately(machine, archive_wasm.clone());
 
     let index_wasm = build_index_sns_wasm();
-    let index_hash = index_wasm.sha256_hash();
     let index_proposal_id =
-        add_wasm_via_proposal_and_return_immediately(machine, index_wasm.clone(), &index_hash);
+        add_wasm_via_proposal_and_return_immediately(machine, index_wasm.clone());
 
     hashmap! {
         SnsCanisterType::Root => (root_proposal_id, root_wasm),

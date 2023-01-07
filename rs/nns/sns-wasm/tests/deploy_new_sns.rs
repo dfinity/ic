@@ -310,8 +310,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         wasm: Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes(),
         canister_type: SnsCanisterType::Governance.into(),
     };
-    let bad_wasm_hash = bad_wasm.sha256_hash();
-    sns_wasm::add_wasm_via_proposal(&machine, bad_wasm, &bad_wasm_hash);
+    sns_wasm::add_wasm_via_proposal(&machine, bad_wasm);
 
     let response = sns_wasm::deploy_new_sns(
         &machine,
