@@ -16,7 +16,7 @@ fn test_basic_storage() {
     let get_wasm_response = sns_wasm::get_wasm(&machine, SNS_WASM_CANISTER_ID, &expected_hash);
     assert!(get_wasm_response.wasm.is_none());
 
-    sns_wasm::add_wasm_via_proposal(&machine, sns_wasm, &expected_hash);
+    sns_wasm::add_wasm_via_proposal(&machine, sns_wasm);
 
     let get_wasm_response = sns_wasm::get_wasm(&machine, SNS_WASM_CANISTER_ID, &expected_hash);
     assert!(get_wasm_response.wasm.is_some());

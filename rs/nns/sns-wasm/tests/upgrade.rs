@@ -22,7 +22,7 @@ fn test_sns_wasm_upgrade() {
     assert!(get_wasm_response.wasm.is_none());
 
     // Ensure we get the expected response
-    sns_wasm::add_wasm_via_proposal(&machine, sns_wasm, &expected_hash);
+    sns_wasm::add_wasm_via_proposal(&machine, sns_wasm);
 
     machine
         .upgrade_canister(SNS_WASM_CANISTER_ID, wasm.clone().bytes(), vec![])
@@ -51,7 +51,7 @@ fn test_sns_wasm_upgrade() {
     let get_wasm_response2 = sns_wasm::get_wasm(&machine, SNS_WASM_CANISTER_ID, &expected_hash2);
     assert!(get_wasm_response2.wasm.is_none());
 
-    sns_wasm::add_wasm_via_proposal(&machine, sns_wasm2, &expected_hash2);
+    sns_wasm::add_wasm_via_proposal(&machine, sns_wasm2);
 
     // Assert that this WASM can be retrieved after upgrade
     machine

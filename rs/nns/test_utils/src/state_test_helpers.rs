@@ -774,14 +774,45 @@ pub fn sns_wait_for_proposal_execution(
         let proposal = sns_get_proposal(machine, governance, proposal_id);
         assert!(
             attempt_count < 50,
-            "proposal {:?} not executed after {} attempts",
+            "proposal {:?} not executed after {} attempts: {:?}",
             proposal_id,
-            attempt_count
+            attempt_count,
+            proposal
         );
 
         if let Ok(p) = proposal {
             proposal_executed = p.executed_timestamp_seconds != 0;
         }
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        machine.advance_time(std::time::Duration::from_millis(100));
+    }
+}
+
+pub fn sns_wait_for_proposal_executed_or_failed(
+    machine: &StateMachine,
+    governance: CanisterId,
+    proposal_id: sns_pb::ProposalId,
+) {
+    // We create some blocks until the proposal has finished executing (machine.tick())
+    let mut attempt_count = 0;
+    let mut proposal_executed = false;
+    let mut proposal_failed = false;
+    while !proposal_executed && !proposal_failed {
+        attempt_count += 1;
+        machine.tick();
+
+        let proposal = sns_get_proposal(machine, governance, proposal_id);
+        assert!(
+            attempt_count < 50,
+            "proposal {:?} not executed after {} attempts: {:?}",
+            proposal_id,
+            attempt_count,
+            proposal
+        );
+
+        if let Ok(p) = proposal {
+            proposal_executed = p.executed_timestamp_seconds != 0;
+            proposal_failed = p.failed_timestamp_seconds != 0;
+        }
+        machine.advance_time(std::time::Duration::from_millis(100));
     }
 }
