@@ -583,17 +583,10 @@ impl GossipImpl {
     }
 
     /// The method adds the given peer to the list of current peers.
-    fn add_node(
-        &self,
-        node_id: NodeId,
-        peer_addr: SocketAddr,
-        registry_version: RegistryVersion,
-    ) -> P2PResult<()> {
+    fn add_node(&self, node_id: NodeId, peer_addr: SocketAddr, registry_version: RegistryVersion) {
         // Only add other peers to the peer list.
         if node_id == self.node_id {
-            return Err(P2PError {
-                p2p_error_code: P2PErrorCode::Failed,
-            });
+            return;
         }
 
         // Add the peer to the list of current peers and the event handler, and drop the
@@ -602,9 +595,7 @@ impl GossipImpl {
             let mut current_peers = self.current_peers.lock();
 
             if current_peers.contains_key(&node_id) {
-                return Err(P2PError {
-                    p2p_error_code: P2PErrorCode::Exists,
-                });
+                return;
             }
             current_peers
                 .entry(node_id)
@@ -612,16 +603,21 @@ impl GossipImpl {
             info!(self.log, "Nodes {:0} added", node_id);
         }
 
-        self.transport
+        match self
+            .transport
             .start_connection(&node_id, peer_addr, registry_version)
-            .map_err(|e| {
-                let mut current_peers = self.current_peers.lock();
-                current_peers.remove(&node_id);
+        {
+            Err(e) => {
                 warn!(self.log, "start connections failed {:?} {:?}", node_id, e);
-                P2PError {
-                    p2p_error_code: P2PErrorCode::InitFailed,
-                }
-            })
+                self.current_peers.lock().remove(&node_id);
+            }
+            Ok(()) => {
+                self.receive_check_caches.write().insert(
+                    node_id,
+                    ReceiveCheckCache::new(self.gossip_config.receive_check_cache_size as usize),
+                );
+            }
+        }
     }
 
     /// This helper method returns a list of tasks to be performed by this timer
@@ -684,7 +680,6 @@ impl GossipImpl {
         for peer_id in self.get_current_peer_ids().iter() {
             if !subnet_nodes.contains_key(peer_id) || self_not_in_subnet {
                 self.remove_node(*peer_id);
-                self.metrics.nodes_removed.inc();
             }
         }
         // If self is not subnet, exit early to avoid adding nodes to the list of peers.
@@ -694,29 +689,14 @@ impl GossipImpl {
         // Add in nodes to peer manager.
         for (node_id, node_record) in subnet_nodes.iter() {
             match get_peer_addr(node_record) {
-                Err(err) => {
-                    // If getting the peer socket fails, remove the node from current peer list.
-                    // This removal makes it possible to attempt a re-connection on the next registry refresh.
-                    self.current_peers.lock().remove(node_id);
+                None => {
                     // Invalid socket addresses should not be pushed in the registry/config on first place.
-                    error!(
-                        self.log,
-                        "Invalid socket addr: node_id = {:?}, error = {:?}.", *node_id, err
-                    );
+                    error!(self.log, "Invalid socket addr: node_id = {:?}", *node_id);
+                    // If getting the peer socket fails, remove the node. This removal makes it possible
+                    // to attempt a re-addition on the next refresh cycle.
+                    self.remove_node(*node_id)
                 }
-                Ok(peer_addr) => {
-                    if self
-                        .add_node(*node_id, peer_addr, latest_registry_version)
-                        .is_ok()
-                    {
-                        self.receive_check_caches.write().insert(
-                            *node_id,
-                            ReceiveCheckCache::new(
-                                self.gossip_config.receive_check_cache_size as usize,
-                            ),
-                        );
-                    }
-                }
+                Some(peer_addr) => self.add_node(*node_id, peer_addr, latest_registry_version),
             }
         }
     }
@@ -763,9 +743,9 @@ impl GossipImpl {
             self.transport.stop_connection(&node_id);
             // Remove the peer irrespective of the result of the stop_connection() call.
             current_peers.remove(&node_id);
-            info!(self.log, "Nodes {:0} removed", node_id);
         }
-
+        self.metrics.nodes_removed.inc();
+        info!(self.log, "Nodes {:0} removed", node_id);
         self.receive_check_caches.write().remove(&node_id);
         self.prioritizer
             .clear_peer_adverts(node_id, AdvertTrackerFinalAction::Abort)
@@ -1071,8 +1051,8 @@ impl GossipImpl {
     }
 }
 
-fn get_peer_addr(node_record: &NodeRecord) -> Result<SocketAddr, String> {
-    let socket_addr: (IpAddr, u16) = node_record
+fn get_peer_addr(node_record: &NodeRecord) -> Option<SocketAddr> {
+    node_record
         .p2p_flow_endpoints
         .get(0)
         .and_then(|flow_enpoint| flow_enpoint.endpoint.as_ref())
@@ -1082,9 +1062,7 @@ fn get_peer_addr(node_record: &NodeRecord) -> Result<SocketAddr, String> {
                 endpoint.port.try_into().ok()?,
             ))
         })
-        .ok_or("Failed to parse NodeRecord to (IpAddr,u16) tuple")?;
-
-    Ok(SocketAddr::from(socket_addr))
+        .map(|s| SocketAddr::from(s))
 }
 
 #[cfg(test)]
@@ -1891,7 +1869,7 @@ pub mod tests {
         {
             let node_record: NodeRecord = Default::default();
             let peer_addr = get_peer_addr(&node_record);
-            assert!(peer_addr.is_err());
+            assert!(peer_addr.is_none());
         }
         {
             let mut node_record: NodeRecord = Default::default();
