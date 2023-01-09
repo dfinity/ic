@@ -4,7 +4,7 @@ use crate::artifact::*;
 use crate::processors::ArtifactProcessorManager;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_ARTIFACT_MANAGER};
 use ic_interfaces::{
-    artifact_manager::{AdvertMismatchError, ArtifactAcceptance, ArtifactClient, OnArtifactError},
+    artifact_manager::{AdvertMismatchError, ArtifactClient, OnArtifactError},
     artifact_pool::{ArtifactPoolError, ReplicaVersionMismatch, UnvalidatedArtifact},
     canister_http::*,
     certification::{CertificationPool, CertifierGossip},
@@ -125,28 +125,21 @@ where
         peer_id: NodeId,
     ) -> Result<(), OnArtifactError<artifact::Artifact>> {
         match (artifact.try_into(), advert.try_into()) {
-            (Ok(msg), Ok(advert)) => {
-                let result = self
-                    .client
-                    .as_ref()
-                    .check_artifact_acceptance(msg, &peer_id)?;
-                match result {
-                    ArtifactAcceptance::Processed => (),
-                    ArtifactAcceptance::AcceptedForProcessing(message) => {
-                        Artifact::check_advert(&message, &advert).map_err(|expected| {
-                            AdvertMismatchError {
-                                received: advert.into(),
-                                expected: expected.into(),
-                            }
-                        })?;
-                        // this sends to an unbounded channel, which is what we want here
-                        self.processor.on_artifact(UnvalidatedArtifact {
-                            message,
-                            peer_id,
-                            timestamp: time_source.get_relative_time(),
-                        })
+            (Ok(message), Ok(advert)) => {
+                Artifact::check_advert(&message, &advert).map_err(|expected| {
+                    AdvertMismatchError {
+                        received: advert.into(),
+                        expected: expected.into(),
                     }
-                };
+                })?;
+                self.client.check_artifact_acceptance(&message, &peer_id)?;
+                // this sends to an unbounded channel, which is what we want here
+                self.processor.on_artifact(UnvalidatedArtifact {
+                    message,
+                    peer_id,
+                    timestamp: time_source.get_relative_time(),
+                });
+
                 Ok(())
             }
             (Err(artifact), _) => Err(OnArtifactError::NotProcessed(Box::new(artifact))),
@@ -280,11 +273,11 @@ impl<Pool: ConsensusPool + ConsensusGossipPool + Send + Sync> ArtifactClient<Con
     /// `ArtifactAcceptance` enum.
     fn check_artifact_acceptance(
         &self,
-        msg: ConsensusMessage,
+        msg: &ConsensusMessage,
         _peer_id: &NodeId,
-    ) -> Result<ArtifactAcceptance<ConsensusMessage>, ArtifactPoolError> {
-        check_protocol_version(&msg)?;
-        Ok(ArtifactAcceptance::AcceptedForProcessing(msg))
+    ) -> Result<(), ArtifactPoolError> {
+        check_protocol_version(msg)?;
+        Ok(())
     }
 
     /// The method returns `true` if and only if the *Consensus* pool contains
@@ -377,13 +370,13 @@ impl<Pool: IngressPool + IngressGossipPool + Send + Sync> ArtifactClient<Ingress
     /// neither in the past nor too far in the future.
     fn check_artifact_acceptance(
         &self,
-        msg: SignedIngress,
+        msg: &SignedIngress,
         peer_id: &NodeId,
-    ) -> Result<ArtifactAcceptance<SignedIngress>, ArtifactPoolError> {
+    ) -> Result<(), ArtifactPoolError> {
         #[cfg(feature = "malicious_code")]
         {
             if self.malicious_flags.maliciously_disable_ingress_validation {
-                return Ok(ArtifactAcceptance::AcceptedForProcessing(msg));
+                return Ok(());
             }
         }
 
@@ -412,8 +405,8 @@ impl<Pool: IngressPool + IngressGossipPool + Send + Sync> ArtifactClient<Ingress
             self.ingress_pool
                 .read()
                 .unwrap()
-                .check_quota(&msg, peer_id)?;
-            Ok(ArtifactAcceptance::AcceptedForProcessing(msg))
+                .check_quota(msg, peer_id)?;
+            Ok(())
         }
     }
 
@@ -486,10 +479,10 @@ impl<PoolCertification: CertificationPool + CertificationGossipPool + Send + Syn
     /// The method always accepts the given `CertificationMessage`.
     fn check_artifact_acceptance(
         &self,
-        msg: CertificationMessage,
+        _msg: &CertificationMessage,
         _peer_id: &NodeId,
-    ) -> Result<ArtifactAcceptance<CertificationMessage>, ArtifactPoolError> {
-        Ok(ArtifactAcceptance::AcceptedForProcessing(msg))
+    ) -> Result<(), ArtifactPoolError> {
+        Ok(())
     }
 
     /// The method checks if the certification pool contains a certification
@@ -573,11 +566,11 @@ impl<Pool: DkgPool + DkgGossipPool + Send + Sync> ArtifactClient<DkgArtifact> fo
     /// `ArtifactAcceptance` enum.
     fn check_artifact_acceptance(
         &self,
-        msg: DkgMessage,
+        msg: &DkgMessage,
         _peer_id: &NodeId,
-    ) -> Result<ArtifactAcceptance<DkgMessage>, ArtifactPoolError> {
-        check_protocol_version(&msg)?;
-        Ok(ArtifactAcceptance::AcceptedForProcessing(msg))
+    ) -> Result<(), ArtifactPoolError> {
+        check_protocol_version(msg)?;
+        Ok(())
     }
 
     /// The method checks if the DKG pool contains a DKG message with the given
@@ -627,10 +620,10 @@ impl<Pool: EcdsaPool + EcdsaGossipPool + Send + Sync> ArtifactClient<EcdsaArtifa
 {
     fn check_artifact_acceptance(
         &self,
-        msg: EcdsaMessage,
+        _msg: &EcdsaMessage,
         _peer_id: &NodeId,
-    ) -> Result<ArtifactAcceptance<EcdsaMessage>, ArtifactPoolError> {
-        Ok(ArtifactAcceptance::AcceptedForProcessing(msg))
+    ) -> Result<(), ArtifactPoolError> {
+        Ok(())
     }
 
     fn has_artifact(&self, msg_id: &EcdsaMessageId) -> bool {
@@ -677,10 +670,10 @@ impl<Pool: CanisterHttpPool + CanisterHttpGossipPool + Send + Sync>
 {
     fn check_artifact_acceptance(
         &self,
-        msg: CanisterHttpResponseShare,
+        _msg: &CanisterHttpResponseShare,
         _peer_id: &NodeId,
-    ) -> Result<ArtifactAcceptance<CanisterHttpResponseShare>, ArtifactPoolError> {
-        Ok(ArtifactAcceptance::AcceptedForProcessing(msg))
+    ) -> Result<(), ArtifactPoolError> {
+        Ok(())
     }
 
     fn has_artifact(&self, msg_id: &CanisterHttpResponseId) -> bool {

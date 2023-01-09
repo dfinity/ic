@@ -3,7 +3,7 @@ pub(crate) mod chunkable;
 use super::StateManagerImpl;
 use crate::{manifest::build_file_group_chunks, EXTRA_CHECKPOINTS_TO_KEEP};
 use ic_interfaces::{
-    artifact_manager::{ArtifactAcceptance, ArtifactClient, ArtifactProcessor, ProcessingResult},
+    artifact_manager::{ArtifactClient, ArtifactProcessor, ProcessingResult},
     artifact_pool::{ArtifactPoolError, UnvalidatedArtifact},
     time_source::TimeSource,
 };
@@ -56,28 +56,10 @@ impl ArtifactKind for StateSyncArtifact {
 impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
     fn check_artifact_acceptance(
         &self,
-        msg: StateSyncMessage,
-        peer_id: &NodeId,
-    ) -> Result<ArtifactAcceptance<StateSyncMessage>, ArtifactPoolError> {
-        let height = msg.height;
-        info!(
-            self.log,
-            "Received state {} from peer {}", msg.height, peer_id
-        );
-
-        let ro_layout = self
-            .state_layout
-            .checkpoint(height)
-            .expect("failed to create checkpoint layout");
-        let state = crate::checkpoint::load_checkpoint_parallel(
-            &ro_layout,
-            self.own_subnet_type,
-            &self.metrics.checkpoint_metrics,
-        )
-        .expect("failed to recover checkpoint");
-        self.on_synced_checkpoint(state, height, msg.manifest, msg.root_hash);
-
-        Ok(ArtifactAcceptance::Processed)
+        _msg: &StateSyncMessage,
+        _peer_id: &NodeId,
+    ) -> Result<(), ArtifactPoolError> {
+        Ok(())
     }
 
     fn get_validated_by_identifier(
@@ -276,8 +258,34 @@ impl ArtifactProcessor<StateSyncArtifact> for StateManagerImpl {
     fn process_changes(
         &self,
         _time_source: &dyn TimeSource,
-        _artifacts: Vec<UnvalidatedArtifact<StateSyncMessage>>,
+        artifacts: Vec<UnvalidatedArtifact<StateSyncMessage>>,
     ) -> (Vec<AdvertSendRequest<StateSyncArtifact>>, ProcessingResult) {
+        // Processes received state sync artifacts.
+        for UnvalidatedArtifact {
+            message,
+            peer_id,
+            timestamp: _,
+        } in artifacts
+        {
+            let height = message.height;
+            info!(
+                self.log,
+                "Received state {} from peer {}", message.height, peer_id
+            );
+
+            let ro_layout = self
+                .state_layout
+                .checkpoint(height)
+                .expect("failed to create checkpoint layout");
+            let state = crate::checkpoint::load_checkpoint_parallel(
+                &ro_layout,
+                self.own_subnet_type,
+                &self.metrics.checkpoint_metrics,
+            )
+            .expect("failed to recover checkpoint");
+            self.on_synced_checkpoint(state, height, message.manifest, message.root_hash);
+        }
+
         let filter = StateSyncFilter {
             height: self.states.read().last_advertised,
         };
