@@ -104,7 +104,7 @@ fn verify_certified_data(
     sig: &SignatureBytes,
     pk: &PublicKeyBytes,
 ) -> CryptoResult<()> {
-    ic_certification::verify_certified_data(
+    ic_certification::verify_certified_data_with_cache(
         certificate,
         canister_id,
         root_pubkey,
