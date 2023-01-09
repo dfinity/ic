@@ -31,4 +31,5 @@ cd "\\$$BUILD_WORKSPACE_DIRECTORY"
 EOF
     """,
     executable = True,
+    tags = ["manual"],
 )
