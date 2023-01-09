@@ -91,6 +91,23 @@ type InitArgs = record {
     min_confirmations: opt nat32;
 };
 
+// The upgrade parameters of the minter canister.
+type UpgradeArgs = record {
+    // The minimal amount of ckBTC that we allow to convert to BTC.
+    retrieve_btc_min_amount : opt nat64;
+
+    /// Maximum time of nanoseconds that a transaction should spend in the queue
+    /// before being sent.
+    max_time_in_queue_nanos : opt nat64;
+
+    /// The minimum number of confirmations required for the minter to
+    /// accept a Bitcoin transaction.
+    min_confirmations : opt nat32;
+
+    /// Flag that indicates if the minter is in read-only mode.
+    is_read_only : opt bool;
+};
+
 type RetrieveBtcStatus = variant {
     // The minter does not have any information on the specified
     // retrieval request.  It can be that nobody submitted the
@@ -136,6 +153,7 @@ type BitcoinAddress = variant {
 
 type Event = variant {
     init : InitArgs;
+    upgrade : UpgradeArgs;
     received_utxos : record { to_account : Account; utxos : vec Utxo };
     accepted_retrieve_btc_request : record {
         amount : nat64;

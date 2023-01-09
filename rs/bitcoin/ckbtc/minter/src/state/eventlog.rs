@@ -1,4 +1,5 @@
 use crate::lifecycle::init::InitArgs;
+use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::state::{
     ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, RetrieveBtcRequest,
     SubmittedBtcTransaction,
@@ -19,6 +20,10 @@ pub enum Event {
     /// the first event in the event log.
     #[serde(rename = "init")]
     Init(InitArgs),
+
+    /// Indicates the minter upgrade with specified arguments.
+    #[serde(rename = "upgrade")]
+    Upgrade(UpgradeArgs),
 
     /// Indicates that the minter received new UTXOs to the specified account.
     /// The minter emits this event _after_ it minted ckBTC.
@@ -107,6 +112,7 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
             Event::Init(args) => {
                 state.reinit(args);
             }
+            Event::Upgrade(args) => state.upgrade(args),
             Event::ReceivedUtxos {
                 to_account, utxos, ..
             } => state.add_utxos(to_account, utxos),

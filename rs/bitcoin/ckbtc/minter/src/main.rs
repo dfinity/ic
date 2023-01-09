@@ -2,6 +2,7 @@ use candid::candid_method;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{heartbeat, init, post_upgrade, query, update};
 use ic_ckbtc_minter::dashboard::build_dashboard;
+use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::InitArgs};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::RetrieveBtcStatusRequest;
@@ -73,8 +74,8 @@ async fn heartbeat() {
 }
 
 #[post_upgrade]
-fn post_upgrade(init_args: Option<InitArgs>) {
-    lifecycle::upgrade::post_upgrade(init_args)
+fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
+    lifecycle::upgrade::post_upgrade(upgrade_args)
 }
 
 #[candid_method(update)]

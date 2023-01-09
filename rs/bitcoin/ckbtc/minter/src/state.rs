@@ -12,6 +12,7 @@ pub mod audit;
 pub mod eventlog;
 
 use crate::lifecycle::init::InitArgs;
+use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::{address::BitcoinAddress, ECDSAPublicKey};
 use candid::{Deserialize, Principal};
 use ic_base_types::CanisterId;
@@ -202,6 +203,25 @@ impl CkBtcMinterState {
         self.max_time_in_queue_nanos = max_time_in_queue_nanos;
         if let Some(min_confirmations) = min_confirmations {
             self.min_confirmations = min_confirmations;
+        }
+    }
+
+    pub fn upgrade(
+        &mut self,
+        UpgradeArgs {
+            retrieve_btc_min_amount,
+            max_time_in_queue_nanos,
+            min_confirmations,
+        }: UpgradeArgs,
+    ) {
+        if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
+            self.retrieve_btc_min_amount = retrieve_btc_min_amount;
+        }
+        if let Some(max_time_in_queue_nanos) = max_time_in_queue_nanos {
+            self.max_time_in_queue_nanos = max_time_in_queue_nanos;
+        }
+        if let Some(min_conf) = min_confirmations {
+            self.min_confirmations = min_conf;
         }
     }
 
