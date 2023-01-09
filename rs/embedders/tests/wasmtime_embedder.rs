@@ -615,6 +615,7 @@ mod test {
         );
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn read_before_write_stats() {
         // This wasm does a direct write to page 0.
