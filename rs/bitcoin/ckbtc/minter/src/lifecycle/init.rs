@@ -29,6 +29,10 @@ pub struct InitArgs {
     /// required for the minter to accept a transaction.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min_confirmations: Option<u32>,
+
+    /// Flag that indicates if the minter is in read-only mode.
+    #[serde(default)]
+    pub is_read_only: bool,
 }
 
 pub fn init(args: InitArgs) {

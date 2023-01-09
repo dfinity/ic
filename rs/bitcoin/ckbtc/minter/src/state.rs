@@ -182,6 +182,9 @@ pub struct CkBtcMinterState {
     /// Process one heartbeat at a time
     #[serde(skip)]
     pub is_heartbeat_running: bool,
+
+    /// Flag that indicates if the read-only mode is activated.
+    pub is_read_only: bool,
 }
 
 impl CkBtcMinterState {
@@ -194,6 +197,7 @@ impl CkBtcMinterState {
             ledger_id,
             max_time_in_queue_nanos,
             min_confirmations,
+            is_read_only,
         }: InitArgs,
     ) {
         self.btc_network = btc_network;
@@ -201,6 +205,7 @@ impl CkBtcMinterState {
         self.retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.ledger_id = ledger_id;
         self.max_time_in_queue_nanos = max_time_in_queue_nanos;
+        self.is_read_only = is_read_only;
         if let Some(min_confirmations) = min_confirmations {
             self.min_confirmations = min_confirmations;
         }
@@ -212,6 +217,7 @@ impl CkBtcMinterState {
             retrieve_btc_min_amount,
             max_time_in_queue_nanos,
             min_confirmations,
+            is_read_only,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -222,6 +228,9 @@ impl CkBtcMinterState {
         }
         if let Some(min_conf) = min_confirmations {
             self.min_confirmations = min_conf;
+        }
+        if let Some(is_read_only) = is_read_only {
+            self.is_read_only = is_read_only;
         }
     }
 
@@ -593,6 +602,7 @@ impl From<InitArgs> for CkBtcMinterState {
             outpoint_account: Default::default(),
             utxos_state_addresses: Default::default(),
             is_heartbeat_running: false,
+            is_read_only: args.is_read_only,
         }
     }
 }

@@ -68,7 +68,7 @@ type BtcNetwork = variant {
 // The initialization parameters of the minter canister.
 type InitArgs = record {
     // The minter will interact with this Bitcoin network to wrap/unwrap BTC.
-    btc_network: BtcNetwork;
+    btc_network : BtcNetwork;
 
     // The principal of the ledger that handles the ckBTC transfers.
     // You must configure ledger to recognize the default account of
@@ -77,18 +77,21 @@ type InitArgs = record {
 
     // The name of the ECDSA key to use.
     // E.g., "dfx_test_key" on the local replica.
-    ecdsa_key_name: text;
+    ecdsa_key_name : text;
 
     // The minimal amount of ckBTC that we allow to convert to BTC.
-    retrieve_btc_min_amount: nat64;
+    retrieve_btc_min_amount : nat64;
 
     /// Maximum time of nanoseconds that a transaction should spend in the queue
     /// before being sent.
-    max_time_in_queue_nanos: nat64;
+    max_time_in_queue_nanos : nat64;
 
     /// The minimum number of confirmations required for the minter to
     /// accept a Bitcoin transaction.
-    min_confirmations: opt nat32;
+    min_confirmations : opt nat32;
+
+    /// Flag that indicates if the minter is in read-only mode.
+    is_read_only : bool;
 };
 
 // The upgrade parameters of the minter canister.

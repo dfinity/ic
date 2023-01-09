@@ -446,6 +446,9 @@ async fn finalize_requests() {
 }
 
 pub async fn heartbeat() {
+    if state::read_state(|s| s.is_read_only) {
+        return;
+    }
     let _heartbeat_guard = match guard::HeartbeatGuard::new() {
         Some(guard) => guard,
         None => return,

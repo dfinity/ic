@@ -1,8 +1,12 @@
-use candid::Encode;
+use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
 use ic_btc_types::Network;
 use ic_ckbtc_minter::lifecycle::init::InitArgs as CkbtcMinterInitArgs;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
+use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
+use ic_ckbtc_minter::updates::update_balance::{
+    UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult,
+};
 use ic_icrc1::Account;
 use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
 use ic_state_machine_tests::StateMachine;
@@ -67,6 +71,7 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
         ledger_id,
         max_time_in_queue_nanos: 0,
         min_confirmations: Some(1),
+        is_read_only: false,
     };
     env.install_canister(minter_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
@@ -84,11 +89,46 @@ fn test_upgrade() {
     let env = StateMachine::new();
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
+
+    // upgrade
     let upgrade_args = UpgradeArgs {
         retrieve_btc_min_amount: Some(100),
         min_confirmations: None,
         max_time_in_queue_nanos: Some(100),
+        is_read_only: Some(true),
     };
     env.upgrade_canister(minter_id, minter_wasm(), Encode!(&upgrade_args).unwrap())
         .expect("Failed to upgrade the minter canister");
+
+    // when is_read_only is true then no upgrade method should run
+
+    // 1. update_balance
+    let update_balance_args = UpdateBalanceArgs {
+        owner: None,
+        subaccount: None,
+    };
+    let res = env
+        .execute_ingress(
+            minter_id,
+            "update_balance",
+            Encode!(&update_balance_args).unwrap(),
+        )
+        .expect("Failed to call update_balance");
+    let res = Decode!(&res.bytes(), Result<UpdateBalanceResult, UpdateBalanceError>).unwrap();
+    assert!(res.is_err());
+
+    // 2. retrieve_btc
+    let retrieve_btc_args = RetrieveBtcArgs {
+        amount: 10,
+        address: "".into(),
+    };
+    let res = env
+        .execute_ingress(
+            minter_id,
+            "retrieve_btc",
+            Encode!(&retrieve_btc_args).unwrap(),
+        )
+        .expect("Failed to call retrieve_btc");
+    let res = Decode!(&res.bytes(), Result<RetrieveBtcOk, RetrieveBtcError>).unwrap();
+    assert!(res.is_err());
 }

@@ -10,6 +10,9 @@ type UpgradeAgs = record {
     /// The minimum number of confirmations required for the minter to
     /// accept a Bitcoin transaction.
     min_confirmations: opt nat32;
+
+    /// Flag that indicates if the minter is in read-only mode.
+    is_read_only: opt bool,
 };
 
 service : (opt UpgradeAgs) -> {
