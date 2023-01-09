@@ -21,6 +21,10 @@ pub struct UpgradeArgs {
     /// before being sent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_time_in_queue_nanos: Option<u64>,
+
+    /// Flag that indicates if the minter is in read-only mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_read_only: Option<bool>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {

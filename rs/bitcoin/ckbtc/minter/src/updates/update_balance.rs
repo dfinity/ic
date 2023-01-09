@@ -84,6 +84,11 @@ impl From<CallError> for UpdateBalanceError {
 pub async fn update_balance(
     args: UpdateBalanceArgs,
 ) -> Result<UpdateBalanceResult, UpdateBalanceError> {
+    if state::read_state(|s| s.is_read_only) {
+        return Err(UpdateBalanceError::TemporarilyUnavailable(
+            "minter is in read-only mode, retry later".to_string(),
+        ));
+    }
     let caller = ic_cdk::caller();
     init_ecdsa_public_key().await;
     let _guard = balance_update_guard(caller)?;

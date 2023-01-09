@@ -628,6 +628,7 @@ proptest! {
             ledger_id: CanisterId::from_u64(42),
             max_time_in_queue_nanos: 0,
             min_confirmations: None,
+            is_read_only: false,
         });
         for (utxo, acc_idx) in utxos_acc_idx {
             state.add_utxos(accounts[acc_idx].clone(), vec![utxo]);
@@ -649,6 +650,7 @@ proptest! {
             ledger_id: CanisterId::from_u64(42),
             max_time_in_queue_nanos: 0,
             min_confirmations: None,
+            is_read_only: false,
         });
 
         let mut available_amount = 0;

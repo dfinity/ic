@@ -267,6 +267,7 @@ pub(crate) async fn install_minter(
         ledger_id,
         max_time_in_queue_nanos,
         min_confirmations: Some(BTC_MIN_CONFIRMATIONS),
+        is_read_only: false,
     };
     install_rust_canister_from_path(
         canister,

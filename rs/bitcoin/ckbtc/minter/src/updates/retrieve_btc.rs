@@ -75,6 +75,11 @@ impl From<ParseAddressError> for RetrieveBtcError {
 }
 
 pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcError> {
+    if state::read_state(|s| s.is_read_only) {
+        return Err(RetrieveBtcError::TemporarilyUnavailable(
+            "minter is in read-only mode, retry later".to_string(),
+        ));
+    }
     let caller = ic_cdk::caller();
     init_ecdsa_public_key().await;
     let _guard = retrieve_btc_guard(caller)?;
