@@ -3,9 +3,7 @@
 //! Use this artifact pool *ONLY* for representing and testing pools backed by a
 //! filesystem tree like layout.
 
-use ic_interfaces::artifact_manager::{
-    ArtifactAcceptance, ArtifactClient, ArtifactProcessor, ProcessingResult,
-};
+use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor, ProcessingResult};
 use ic_interfaces::artifact_pool::{ArtifactPoolError, UnvalidatedArtifact};
 use ic_interfaces::time_source::TimeSource;
 use ic_replica_setup_ic_network::{
@@ -73,16 +71,16 @@ impl ArtifactProcessor<TestArtifact> for ArtifactChunkingTestImpl {
 impl ArtifactClient<TestArtifact> for ArtifactChunkingTestImpl {
     fn check_artifact_acceptance(
         &self,
-        artifact: TestArtifactMessage,
+        artifact: &TestArtifactMessage,
         peer_id: &NodeId,
-    ) -> Result<ArtifactAcceptance<FileTreeSyncArtifact>, ArtifactPoolError> {
+    ) -> Result<(), ArtifactPoolError> {
         println!(
             "Node-{} Receive complete for artifact {:?} from last node {}",
             self.node_id.get(),
             artifact,
             peer_id
         );
-        Ok(ArtifactAcceptance::Processed)
+        Ok(())
     }
 
     fn has_artifact(&self, message_id: &TestArtifactId) -> bool {

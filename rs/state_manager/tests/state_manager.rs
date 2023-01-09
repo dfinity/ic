@@ -3,6 +3,7 @@ use ic_config::state_manager::Config;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree};
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactProcessor},
+    artifact_pool::UnvalidatedArtifact,
     certification::Verifier,
 };
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
@@ -85,6 +86,7 @@ fn rejoining_node_doesnt_accumulate_states() {
                 let mut state = src_state_manager.take_tip().1;
                 insert_dummy_canister(&mut state, canister_test_id(100 + i));
                 src_state_manager.commit_and_certify(state, height(i), CertificationScope::Full);
+                let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
                 let hash = wait_for_checkpoint(&src_state_manager, height(i));
                 let id = StateSyncArtifactId {
@@ -97,9 +99,14 @@ fn rejoining_node_doesnt_accumulate_states() {
 
                 let chunkable = dst_state_manager.create_chunkable_state(&id);
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_manager
-                    .check_artifact_acceptance(dst_msg, &node_test_id(0))
-                    .expect("Failed to process state sync artifact");
+                dst_state_manager.process_changes(
+                    time_source.as_ref(),
+                    vec![UnvalidatedArtifact {
+                        message: dst_msg,
+                        peer_id: node_test_id(0),
+                        timestamp: mock_time(),
+                    }],
+                );
 
                 assert_eq!(
                     src_state_manager.get_latest_state().take(),
@@ -1682,6 +1689,7 @@ fn can_do_simple_state_sync_transfer() {
     state_manager_test(|src_metrics, src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
+        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&src_state_manager, height(1));
@@ -1702,9 +1710,14 @@ fn can_do_simple_state_sync_transfer() {
             let chunkable = dst_state_manager.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager
-                .check_artifact_acceptance(dst_msg, &node_test_id(0))
-                .expect("Failed to process state sync artifact");
+            dst_state_manager.process_changes(
+                time_source.as_ref(),
+                vec![UnvalidatedArtifact {
+                    message: dst_msg,
+                    peer_id: node_test_id(0),
+                    timestamp: mock_time(),
+                }],
+            );
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -1734,6 +1747,7 @@ fn can_state_sync_from_cache() {
     state_manager_test(|src_metrics, src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
+        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&src_state_manager, height(1));
@@ -1795,9 +1809,14 @@ fn can_state_sync_from_cache() {
 
                 // Download chunk 1
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_manager
-                    .check_artifact_acceptance(dst_msg, &node_test_id(0))
-                    .expect("Failed to process state sync artifact");
+                dst_state_manager.process_changes(
+                    time_source.as_ref(),
+                    vec![UnvalidatedArtifact {
+                        message: dst_msg,
+                        peer_id: node_test_id(0),
+                        timestamp: mock_time(),
+                    }],
+                );
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(2))
@@ -1829,9 +1848,14 @@ fn can_state_sync_from_cache() {
                 // The manifest alone is enough to complete the sync
                 let dst_msg = pipe_manifest(&msg, &mut *chunkable).unwrap();
 
-                dst_state_manager
-                    .check_artifact_acceptance(dst_msg, &node_test_id(0))
-                    .expect("Failed to process state sync artifact");
+                dst_state_manager.process_changes(
+                    time_source.as_ref(),
+                    vec![UnvalidatedArtifact {
+                        message: dst_msg,
+                        peer_id: node_test_id(0),
+                        timestamp: mock_time(),
+                    }],
+                );
 
                 let recovered_state = dst_state_manager
                     .get_state_at(height(3))
@@ -1864,6 +1888,7 @@ fn can_state_sync_into_existing_checkpoint() {
     state_manager_test(|src_metrics, src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
+        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state.clone(), height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&src_state_manager, height(1));
@@ -1889,9 +1914,14 @@ fn can_state_sync_into_existing_checkpoint() {
             );
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager
-                .check_artifact_acceptance(dst_msg, &node_test_id(0))
-                .expect("Failed to process state sync artifact");
+            dst_state_manager.process_changes(
+                time_source.as_ref(),
+                vec![UnvalidatedArtifact {
+                    message: dst_msg,
+                    peer_id: node_test_id(0),
+                    timestamp: mock_time(),
+                }],
+            );
 
             assert_eq!(
                 0,
@@ -1907,6 +1937,7 @@ fn can_group_small_files_in_state_sync() {
     state_manager_test(|src_metrics, src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();
         let num_canisters = 200;
+        let time_source = ic_test_utilities::FastForwardTimeSource::new();
         for id in 100..(100 + num_canisters) {
             insert_canister_with_many_controllers(&mut state, canister_test_id(id), 400);
         }
@@ -1963,9 +1994,14 @@ fn can_group_small_files_in_state_sync() {
 
             let dst_msg = pipe_state_sync(msg, chunkable);
 
-            dst_state_manager
-                .check_artifact_acceptance(dst_msg, &node_test_id(0))
-                .expect("Failed to process state sync artifact");
+            dst_state_manager.process_changes(
+                time_source.as_ref(),
+                vec![UnvalidatedArtifact {
+                    message: dst_msg,
+                    peer_id: node_test_id(0),
+                    timestamp: mock_time(),
+                }],
+            );
 
             let recovered_state = dst_state_manager
                 .get_state_at(height(1))
@@ -1986,6 +2022,7 @@ fn can_commit_after_prev_state_is_gone() {
         let (_height, mut tip) = src_state_manager.take_tip();
         insert_dummy_canister(&mut tip, canister_test_id(100));
         src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
+        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         let (_height, tip) = src_state_manager.take_tip();
         src_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
@@ -2014,9 +2051,14 @@ fn can_commit_after_prev_state_is_gone() {
 
             let chunkable = dst_state_manager.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager
-                .check_artifact_acceptance(dst_msg, &node_test_id(0))
-                .expect("Failed to process state sync artifact");
+            dst_state_manager.process_changes(
+                time_source.as_ref(),
+                vec![UnvalidatedArtifact {
+                    message: dst_msg,
+                    peer_id: node_test_id(0),
+                    timestamp: mock_time(),
+                }],
+            );
 
             dst_state_manager.remove_states_below(height(2));
 
@@ -2045,6 +2087,7 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
         let (_height, mut tip) = src_state_manager.take_tip();
         insert_dummy_canister(&mut tip, canister_test_id(100));
         src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
+        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         let (_height, tip) = src_state_manager.take_tip();
         src_state_manager.commit_and_certify(tip, height(2), CertificationScope::Metadata);
@@ -2071,9 +2114,14 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
 
             let chunkable = dst_state_manager.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager
-                .check_artifact_acceptance(dst_msg, &node_test_id(0))
-                .expect("Failed to process state sync artifact");
+            dst_state_manager.process_changes(
+                time_source.as_ref(),
+                vec![UnvalidatedArtifact {
+                    message: dst_msg,
+                    peer_id: node_test_id(0),
+                    timestamp: mock_time(),
+                }],
+            );
 
             assert_eq!(height(3), dst_state_manager.latest_state_height());
             let (tip_height, tip) = dst_state_manager.take_tip();
@@ -2092,6 +2140,7 @@ fn can_state_sync_based_on_old_checkpoint() {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(200));
@@ -2118,9 +2167,14 @@ fn can_state_sync_based_on_old_checkpoint() {
             let chunkable = dst_state_manager.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager
-                .check_artifact_acceptance(dst_msg, &node_test_id(0))
-                .expect("failed to process state sync artifact");
+            dst_state_manager.process_changes(
+                time_source.as_ref(),
+                vec![UnvalidatedArtifact {
+                    message: dst_msg,
+                    peer_id: node_test_id(0),
+                    timestamp: mock_time(),
+                }],
+            );
 
             let expected_state = src_state_manager.get_latest_state();
 
@@ -2190,6 +2244,7 @@ fn can_recover_from_corruption_on_state_sync() {
         let (_height, mut state) = src_state_manager.take_tip();
         populate_original_state(&mut state);
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         let hash_1 = wait_for_checkpoint(&src_state_manager, height(1));
 
@@ -2304,9 +2359,14 @@ fn can_recover_from_corruption_on_state_sync() {
 
             let chunkable = dst_state_manager.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager
-                .check_artifact_acceptance(dst_msg, &node_test_id(0))
-                .expect("failed to process state sync artifact");
+            dst_state_manager.process_changes(
+                time_source.as_ref(),
+                vec![UnvalidatedArtifact {
+                    message: dst_msg,
+                    peer_id: node_test_id(0),
+                    timestamp: mock_time(),
+                }],
+            );
 
             let expected_state = src_state_manager.get_latest_state();
 
@@ -2332,6 +2392,7 @@ fn can_commit_below_state_sync() {
     state_manager_test(|src_metrics, src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
+        let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state.clone(), height(1), CertificationScope::Full);
         let hash = wait_for_checkpoint(&src_state_manager, height(1));
@@ -2350,9 +2411,14 @@ fn can_commit_below_state_sync() {
             let chunkable = dst_state_manager.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager
-                .check_artifact_acceptance(dst_msg, &node_test_id(0))
-                .expect("Failed to process state sync artifact");
+            dst_state_manager.process_changes(
+                time_source.as_ref(),
+                vec![UnvalidatedArtifact {
+                    message: dst_msg,
+                    peer_id: node_test_id(0),
+                    timestamp: mock_time(),
+                }],
+            );
 
             dst_state_manager.take_tip();
             // Check committing an old state doesn't panic

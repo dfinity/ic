@@ -8,19 +8,6 @@ use derive_more::From;
 use ic_types::artifact::{ArtifactPriorityFn, PriorityFn};
 use ic_types::{artifact, chunkable, p2p, NodeId};
 
-#[derive(Debug)]
-/// The result of a successful 'check_artifact_acceptance' processing either
-/// indicates the artifact is fully processed (consumed), or it is accepted for
-/// processing.
-///
-/// In the latter case, they will be batched by the 'ArtifactManager'
-/// and passed onto the corresponding 'ArtifactProcessor' component for
-/// further processing.
-pub enum ArtifactAcceptance<T> {
-    Processed,
-    AcceptedForProcessing(T),
-}
-
 #[allow(clippy::large_enum_variant)]
 #[derive(From, Debug)]
 /// An error type that combines 'NotProcessed' status with an actual
@@ -44,8 +31,7 @@ pub struct AdvertMismatchError {
 /// 'Artifact' type.
 pub trait ArtifactClient<Artifact: artifact::ArtifactKind>: Send + Sync {
     /// When a new artifact is received, `check_artifact_acceptance` function is
-    /// called to perform basic pre-processing and check if the artifact matches
-    /// the advert used to request it if one is passed along.
+    /// called to perform basic pre-processing.
     /// Note that this function should not modify the artifact pool.
     ///
     /// If it passes the pre-processing, the same artifact should be
@@ -55,9 +41,9 @@ pub trait ArtifactClient<Artifact: artifact::ArtifactKind>: Send + Sync {
     /// The default implementation is to accept unconditionally.
     fn check_artifact_acceptance(
         &self,
-        msg: Artifact::Message,
+        msg: &Artifact::Message,
         peer_id: &NodeId,
-    ) -> Result<ArtifactAcceptance<Artifact::Message>, ArtifactPoolError>;
+    ) -> Result<(), ArtifactPoolError>;
 
     /// Checks if the node already has the artifact in the pool by its
     /// identifier.
