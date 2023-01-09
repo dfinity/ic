@@ -392,7 +392,6 @@ impl ExecutionTest {
         let mut args = ProvisionalCreateCanisterWithCyclesArgs::new(Some(cycles.get()), None);
         args.settings = Some(CanisterSettingsArgs::new(
             None,
-            None,
             compute_allocation,
             memory_allocation,
             None,
@@ -421,13 +420,7 @@ impl ExecutionTest {
     ) -> Result<WasmResult, UserError> {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
-            settings: CanisterSettingsArgs::new(
-                None,
-                None,
-                compute_allocation,
-                memory_allocation,
-                None,
-            ),
+            settings: CanisterSettingsArgs::new(None, compute_allocation, memory_allocation, None),
         }
         .encode();
         self.subnet_message(Method::UpdateSettings, payload)
@@ -492,13 +485,7 @@ impl ExecutionTest {
     ) -> Result<WasmResult, UserError> {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
-            settings: CanisterSettingsArgs::new(
-                None,
-                None,
-                None,
-                None,
-                Some(freezing_threshold.get()),
-            ),
+            settings: CanisterSettingsArgs::new(None, None, None, Some(freezing_threshold.get())),
         }
         .encode();
         self.subnet_message(Method::UpdateSettings, payload)
@@ -512,7 +499,7 @@ impl ExecutionTest {
     ) -> Result<WasmResult, UserError> {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
-            settings: CanisterSettingsArgs::new(None, Some(vec![controller]), None, None, None),
+            settings: CanisterSettingsArgs::new(Some(vec![controller]), None, None, None),
         }
         .encode();
         self.subnet_message(Method::UpdateSettings, payload)

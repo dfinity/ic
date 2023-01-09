@@ -60,6 +60,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
     type Error = UpdateSettingsError;
 
     fn try_from(input: CanisterSettingsArgs) -> Result<Self, Self::Error> {
+        let controller = input.get_controller();
         let compute_allocation = match input.compute_allocation {
             Some(ca) => Some(ComputeAllocation::try_from(ca.0.to_u64().ok_or_else(
                 || UpdateSettingsError::ComputeAllocation(InvalidComputeAllocationError::new(ca)),
@@ -84,7 +85,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
         };
 
         Ok(CanisterSettings::new(
-            input.controller,
+            controller,
             input.controllers,
             compute_allocation,
             memory_allocation,

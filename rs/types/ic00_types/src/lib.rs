@@ -34,6 +34,7 @@ pub enum Method {
     ECDSAPublicKey,
     InstallCode,
     RawRand,
+    // SetController is deprecated and should not be used in new code
     SetController,
     SetupInitialDKG,
     SignWithECDSA,
@@ -489,6 +490,13 @@ pub struct UpdateSettingsArgs {
 }
 
 impl UpdateSettingsArgs {
+    pub fn new(canister_id: CanisterId, settings: CanisterSettingsArgs) -> Self {
+        Self {
+            canister_id: canister_id.into(),
+            settings,
+        }
+    }
+
     pub fn get_canister_id(&self) -> CanisterId {
         // Safe as this was converted from CanisterId when Self was constructed.
         CanisterId::new(self.canister_id).unwrap()
@@ -499,14 +507,15 @@ impl Payload<'_> for UpdateSettingsArgs {}
 
 /// Struct used for encoding/decoding
 /// `(record {
-///     controller : opt principal;
+///     controller: opt principal;
 ///     controllers: opt vec principal;
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
 /// })`
 #[derive(Default, Clone, CandidType, Deserialize, Debug)]
 pub struct CanisterSettingsArgs {
-    pub controller: Option<PrincipalId>,
+    /// The field controller is deprecated and should not be used in new code.
+    controller: Option<PrincipalId>,
     pub controllers: Option<Vec<PrincipalId>>,
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
@@ -517,19 +526,22 @@ impl Payload<'_> for CanisterSettingsArgs {}
 
 impl CanisterSettingsArgs {
     pub fn new(
-        controller: Option<PrincipalId>,
         controllers: Option<Vec<PrincipalId>>,
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
         freezing_threshold: Option<u64>,
     ) -> Self {
         Self {
-            controller,
+            controller: None,
             controllers,
             compute_allocation: compute_allocation.map(candid::Nat::from),
             memory_allocation: memory_allocation.map(candid::Nat::from),
             freezing_threshold: freezing_threshold.map(candid::Nat::from),
         }
+    }
+
+    pub fn get_controller(&self) -> Option<PrincipalId> {
+        self.controller
     }
 }
 
@@ -562,6 +574,7 @@ impl CreateCanisterArgs {
     }
 }
 
+/// This API is deprecated and should not be used in new code.
 /// Struct used for encoding/decoding
 /// `(record {
 ///     canister_id : principal;
@@ -574,13 +587,6 @@ pub struct SetControllerArgs {
 }
 
 impl SetControllerArgs {
-    pub fn new(canister_id: CanisterId, controller: PrincipalId) -> Self {
-        Self {
-            canister_id: canister_id.into(),
-            new_controller: controller,
-        }
-    }
-
     pub fn get_canister_id(&self) -> CanisterId {
         // Safe as this was converted from CanisterId when Self was constructed.
         CanisterId::new(self.canister_id).unwrap()

@@ -62,10 +62,12 @@ impl CanisterApi for CanisterApiImpl {
             &Method::CreateCanister.to_string(),
             candid_one,
             CreateCanisterArgs {
-                settings: Some(CanisterSettingsArgs {
-                    controller: Some(controller_id),
-                    ..CanisterSettingsArgs::default()
-                }),
+                settings: Some(CanisterSettingsArgs::new(
+                    Some(vec![controller_id]),
+                    None,
+                    None,
+                    None,
+                )),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
         )
@@ -136,14 +138,7 @@ impl CanisterApi for CanisterApiImpl {
     ) -> Result<(), String> {
         let args = UpdateSettingsArgs {
             canister_id: canister.get(),
-            settings: CanisterSettingsArgs {
-                controllers: Some(controllers),
-                // Leave everything else alone.
-                controller: None,
-                compute_allocation: None,
-                memory_allocation: None,
-                freezing_threshold: None,
-            },
+            settings: CanisterSettingsArgs::new(Some(controllers), None, None, None),
         };
 
         let result: Result<(), (Option<i32>, String)> =

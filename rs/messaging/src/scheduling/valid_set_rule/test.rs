@@ -1,6 +1,5 @@
 use super::*;
 
-use candid::Nat;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_ic00_types::{CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00};
 use ic_logger::replica_logger::no_op_logger;
@@ -802,10 +801,7 @@ fn management_message_update_setting_is_inducted_but_not_charged() {
 
     let payload = UpdateSettingsArgs {
         canister_id: canister_id.get(),
-        settings: CanisterSettingsArgs {
-            freezing_threshold: Some(Nat::from(1 << 20)),
-            ..Default::default()
-        },
+        settings: CanisterSettingsArgs::new(None, None, None, Some(1 << 20)),
     }
     .encode();
     let ingress = SignedIngressBuilder::new()

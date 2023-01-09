@@ -348,11 +348,11 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
 
     let res: Result<(), (i32, String)> = Rt::call(
         IC_00,
-        "set_controller",
+        "update_settings",
         0,
-        (ic_ic00_types::SetControllerArgs::new(
+        (ic_ic00_types::UpdateSettingsArgs::new(
             node_canister_id,
-            controller_id,
+            ic_ic00_types::CanisterSettingsArgs::new(Some(vec![controller_id]), None, None, None),
         ),),
     )
     .await;

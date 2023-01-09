@@ -16,7 +16,6 @@ fn test_memory_test_canisters() {
             Some(CanisterSettingsArgs::new(
                 None,
                 None,
-                None,
                 Some(8 * 1024 * 1024 * 1024), // 8GiB
                 None,
             )),

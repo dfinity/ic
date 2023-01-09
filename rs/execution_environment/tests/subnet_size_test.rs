@@ -187,13 +187,12 @@ fn simulate_one_gib_per_second_cost(
         .build();
     let canister_id = env.create_canister_with_cycles(
         DEFAULT_CYCLES_PER_NODE * subnet_size,
-        Some(CanisterSettingsArgs {
-            controller: None,
-            controllers: None,
-            compute_allocation: Some(candid::Nat::from(compute_allocation.as_percent())),
-            memory_allocation: Some(candid::Nat::from(one_gib)),
-            freezing_threshold: None,
-        }),
+        Some(CanisterSettingsArgs::new(
+            None,
+            Some(compute_allocation.as_percent()),
+            Some(one_gib),
+            None,
+        )),
     );
 
     // The time delta is long enough that allocation charging should be triggered.

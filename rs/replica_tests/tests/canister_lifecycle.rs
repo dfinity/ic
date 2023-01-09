@@ -3,8 +3,9 @@ use candid::Encode;
 use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_ic00_types::{
-    self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterStatusResultV2,
-    CanisterStatusType, EmptyBlob, InstallCodeArgs, Method, Payload, SetControllerArgs, IC_00,
+    self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs,
+    CanisterStatusResultV2, CanisterStatusType, EmptyBlob, InstallCodeArgs, Method, Payload,
+    UpdateSettingsArgs, IC_00,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replica_tests as utils;
@@ -123,10 +124,18 @@ fn full_canister_lifecycle_ingress() {
             "update",
             wasm().call_with_cycles(
                 ic00::IC_00,
-                Method::SetController,
+                Method::UpdateSettings,
                 call_args().other_side(
-                    SetControllerArgs::new(expected_canister_id, PrincipalId::new_anonymous())
-                        .encode(),
+                    UpdateSettingsArgs::new(
+                        expected_canister_id,
+                        CanisterSettingsArgs::new(
+                            Some(vec![PrincipalId::new_anonymous()]),
+                            None,
+                            None,
+                            None,
+                        ),
+                    )
+                    .encode(),
                 ),
                 num_cycles.into_parts(),
             ),
@@ -197,8 +206,12 @@ fn delete_canister_delete_self_fails() {
         assert_eq!(
             test.ingress(
                 IC_00,
-                Method::SetController,
-                SetControllerArgs::new(canister_id, canister_id.get()).encode()
+                Method::UpdateSettings,
+                UpdateSettingsArgs::new(
+                    canister_id,
+                    CanisterSettingsArgs::new(Some(vec![canister_id.get()]), None, None, None)
+                )
+                .encode()
             ),
             Ok(WasmResult::Reply(EmptyBlob.encode()))
         );
@@ -238,8 +251,12 @@ fn delete_running_canister_fails() {
         assert_eq!(
             test.ingress(
                 IC_00,
-                Method::SetController,
-                ic00::SetControllerArgs::new(canister_b, canister_a.get()).encode()
+                Method::UpdateSettings,
+                UpdateSettingsArgs::new(
+                    canister_b,
+                    CanisterSettingsArgs::new(Some(vec![canister_a.into()]), None, None, None)
+                )
+                .encode()
             ),
             Ok(WasmResult::Reply(EmptyBlob.encode()))
         );
@@ -277,8 +294,12 @@ fn delete_stopped_canister_succeeds() {
         // Set the controller of canister_b to be canister_a
         test.ingress(
             IC_00,
-            Method::SetController,
-            ic00::SetControllerArgs::new(canister_b, canister_a.get()).encode(),
+            Method::UpdateSettings,
+            UpdateSettingsArgs::new(
+                canister_b,
+                CanisterSettingsArgs::new(Some(vec![canister_a.get()]), None, None, None),
+            )
+            .encode(),
         )
         .unwrap();
 
@@ -650,8 +671,12 @@ fn can_get_canister_information() {
         assert_eq!(
             test.ingress(
                 IC_00,
-                Method::SetController,
-                ic00::SetControllerArgs::new(canister_b, canister_a.get()).encode()
+                Method::UpdateSettings,
+                UpdateSettingsArgs::new(
+                    canister_b,
+                    CanisterSettingsArgs::new(Some(vec![canister_a.get()]), None, None, None)
+                )
+                .encode()
             ),
             Ok(WasmResult::Reply(EmptyBlob.encode()))
         );

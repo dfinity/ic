@@ -1106,10 +1106,7 @@ pub fn create_canister_with_empty_settings(env: TestEnv) {
 
 /// Sending a field with some settings
 pub fn create_canister_with_settings(env: TestEnv) {
-    let settings = CanisterSettingsArgs {
-        compute_allocation: Some(candid::Nat::from(50)),
-        ..Default::default()
-    };
+    let settings = CanisterSettingsArgs::new(None, Some(50_u64), None, None);
     let records = CreateCanisterArgs {
         settings: Some(settings),
     };
@@ -1154,10 +1151,12 @@ pub fn create_canister_with_freezing_threshold(env: TestEnv) {
                         &Principal::management_canister(),
                         "create_canister",
                         CreateCanisterArgs {
-                            settings: Some(CanisterSettingsArgs {
-                                freezing_threshold: Some(candid::Nat::from(*valid_value)),
-                                ..Default::default()
-                            }),
+                            settings: Some(CanisterSettingsArgs::new(
+                                None,
+                                None,
+                                None,
+                                Some(*valid_value),
+                            )),
                         }
                         .encode(),
                         Cycles::from(2_000_000_000_000u64),
