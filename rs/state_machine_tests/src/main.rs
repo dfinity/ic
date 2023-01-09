@@ -33,9 +33,6 @@ enum Request {
     ReadStableMemory(RawCanisterId),
     Tick,
     RunUntilCompletion(RunUntilCompletionArg),
-    StartCanister(RawCanisterId),
-    StopCanister(RawCanisterId),
-    DeleteCanister(RawCanisterId),
 }
 
 #[derive(Deserialize)]
@@ -188,15 +185,6 @@ fn main() {
                 env.run_until_completion(arg.max_ticks as usize);
                 send_response((), &opts);
             }
-            StartCanister(canister_id) => {
-                send_response(env.start_canister(CanisterId::from(canister_id)), &opts);
-            }
-            StopCanister(canister_id) => {
-                send_response(env.stop_canister(CanisterId::from(canister_id)), &opts);
-            }
-            DeleteCanister(canister_id) => {
-                send_response(env.delete_canister(CanisterId::from(canister_id)), &opts);
-            }
         }
     }
 }
@@ -239,6 +227,21 @@ fn management_call(env: &StateMachine, call: &ParsedCanisterCall, opts: &Opts) {
             };
             let success = candid::encode_one(()).unwrap();
             send_response(result.map(|_| WasmResult::Reply(success)), opts);
+        }
+        "start_canister" => {
+            let canister_id: CanisterIdRecord = candid::decode_one(&call.arg)
+                .expect("failed to decode candid argument for 'start_canister'");
+            send_response(env.start_canister(canister_id.get_canister_id()), opts);
+        }
+        "stop_canister" => {
+            let canister_id: CanisterIdRecord = candid::decode_one(&call.arg)
+                .expect("failed to decode candid argument for 'start_canister'");
+            send_response(env.stop_canister(canister_id.get_canister_id()), opts);
+        }
+        "delete_canister" => {
+            let canister_id: CanisterIdRecord = candid::decode_one(&call.arg)
+                .expect("failed to decode candid argument for 'start_canister'");
+            send_response(env.delete_canister(canister_id.get_canister_id()), opts);
         }
         other => {
             panic!("unsupported management canister call: {}", other)
