@@ -2,6 +2,7 @@ use candid::Encode;
 use ic_base_types::CanisterId;
 use ic_btc_types::Network;
 use ic_ckbtc_minter::lifecycle::init::InitArgs as CkbtcMinterInitArgs;
+use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_icrc1::Account;
 use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
 use ic_state_machine_tests::StateMachine;
@@ -83,6 +84,11 @@ fn test_upgrade() {
     let env = StateMachine::new();
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
-    env.upgrade_canister(minter_id, minter_wasm(), Encode!().unwrap())
+    let upgrade_args = UpgradeArgs {
+        retrieve_btc_min_amount: Some(100),
+        min_confirmations: None,
+        max_time_in_queue_nanos: Some(100),
+    };
+    env.upgrade_canister(minter_id, minter_wasm(), Encode!(&upgrade_args).unwrap())
         .expect("Failed to upgrade the minter canister");
 }
