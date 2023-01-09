@@ -33,9 +33,13 @@ data_centers:
     vars:
       ipv6_prefix: "2600:c00:2:100"
       ipv6_subnet: "/64"
-  sf1:
+  sf1-old:
     vars:
       ipv6_prefix: "2607:fb58:9005:42"
+      ipv6_subnet: "/64"
+  sf1:
+    vars:
+      ipv6_prefix: "2602:fb2b:100:10"
       ipv6_subnet: "/64"
   zh1:
     vars:
@@ -111,12 +115,14 @@ boundary:
     ipv6_http_ips:
       - "2001:4d78:40d::/48"  # FR1
       - "2607:f6f0:3004::/48" # CH1
-      - "2607:fb58:9005::/48" # SF1
+      - "2607:fb58:9005::/48" # SF1-old
+      - "2602:fb2b:100::/48"  # SF1
       - "2a00:fb01:400::/56"  # ZH1
     ipv6_debug_ips:
       - "2001:4d78:40d::/48"  # FR1
       - "2607:f6f0:3004::/48" # CH1
-      - "2607:fb58:9005::/48" # SF1
+      - "2607:fb58:9005::/48" # SF1-old
+      - "2602:fb2b:100::/48"  # SF1
       - "2a00:fb01:400::/56"  # ZH1
     ipv6_monitoring_ips:
       - "2a05:d01c:e2c:a700::/56" # AWS eu-west-2 London Monitoring VPC

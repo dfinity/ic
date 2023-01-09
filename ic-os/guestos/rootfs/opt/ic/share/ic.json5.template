@@ -214,7 +214,7 @@ table ip6 filter {\n\
   chain OUTPUT {\n\
     type filter hook output priority 0; policy accept;\n\
     meta skuid ic-http-adapter ip6 daddr { ::1/128 } ct state { new } tcp dport { 1-19999 } reject # Block restricted localhost ic-http-adapter HTTPS access\n\
-    meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2001:4d78:40d::/48, 2607:fb58:9005::/48, 2607:f6f0:3004::/48, 2a05:d01c:d9:2b00::/56, 2a05:d01c:e2c:a700::/56 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
+    meta skuid ic-http-adapter ip6 daddr { 2a00:fb01:400:42::/64, 2001:4d78:40d::/48, 2607:fb58:9005::/48, 2602:fb2b:100::/48, 2607:f6f0:3004::/48, 2a05:d01c:d9:2b00::/56, 2a05:d01c:e2c:a700::/56 } ct state { new } tcp dport { 1-19999 } reject # Block restricted outbound ic-http-adapter HTTPS access\n\
     <<IPv6_OUTBOUND_RULES>>\n\
   }\n\
 }\n",
@@ -273,6 +273,7 @@ table ip6 filter {\n\
             "2607:f758:1220::/64",
             "2607:f758:c300::/64",
             "2607:fb58:9005::/48",
+            "2602:fb2b:100::/48",
             "2607:ff70:3:2::/64",
             "2610:190:6000:1::/64",
             "2610:190:df01:5::/64",
