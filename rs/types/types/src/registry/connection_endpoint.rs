@@ -466,8 +466,8 @@ mod connection_endpoint_test {
     /// Converting from a p2p1 Url with an IPv6 address should work.
     #[test]
     fn from_url_p2p1_addr_v6_ok() {
-        let want = "org.internetcomputer.p2p1://[2607:fb58:9005:42:5054:ffff:fe0c:1d05]:4100";
-        let url = "org.internetcomputer.p2p1://[2607:fb58:9005:42:5054:ffff:fe0c:1d05]:4100"
+        let want = "org.internetcomputer.p2p1://[2602:fb2b:100:10:5054:ffff:fe0c:1d05]:4100";
+        let url = "org.internetcomputer.p2p1://[2602:fb2b:100:10:5054:ffff:fe0c:1d05]:4100"
             .parse::<Url>()
             .unwrap();
         let ce = ConnectionEndpoint::try_from(url).unwrap();
@@ -576,10 +576,10 @@ mod pb_connection_endpoint_test {
             TestData {
                 // IPv6. Note that `ip_addr` *is not* expected to be enclosed in
                 // `[` and `]`, per https://tools.ietf.org/html/rfc5952#section-4
-                source: "http://[2607:fb58:9005:42:5054:ffff:fe0c:1d05]:4100",
+                source: "http://[2602:fb2b:100:10:5054:ffff:fe0c:1d05]:4100",
                 pb_connection_endpoint: pbConnectionEndpoint {
                     protocol: Protocol::Http1 as i32,
-                    ip_addr: "2607:fb58:9005:42:5054:ffff:fe0c:1d05".to_string(),
+                    ip_addr: "2602:fb2b:100:10:5054:ffff:fe0c:1d05".to_string(),
                     port: 4100,
                 },
             },
@@ -595,10 +595,10 @@ mod pb_connection_endpoint_test {
             TestData {
                 // p2p, ipv6. Note that `ip_addr` *is not* expected to be enclosed in
                 // `[` and `]`, per https://tools.ietf.org/html/rfc5952#section-4
-                source: "org.internetcomputer.p2p1://[2607:fb58:9005:42:5054:ffff:fe0c:1d05]:4100",
+                source: "org.internetcomputer.p2p1://[2602:fb2b:100:10:5054:ffff:fe0c:1d05]:4100",
                 pb_connection_endpoint: pbConnectionEndpoint {
                     protocol: Protocol::P2p1Tls13 as i32,
-                    ip_addr: "2607:fb58:9005:42:5054:ffff:fe0c:1d05".to_string(),
+                    ip_addr: "2602:fb2b:100:10:5054:ffff:fe0c:1d05".to_string(),
                     port: 4100,
                 },
             },
