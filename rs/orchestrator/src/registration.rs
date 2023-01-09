@@ -97,7 +97,6 @@ impl NodeRegistration {
         {
             warn!(self.log, "Node keys are not setup: {:?}", e);
             self.retry_register_node().await;
-            self.touch_eject_file();
         }
         // postcondition: node keys are registered
     }
@@ -474,18 +473,6 @@ impl NodeRegistration {
         match self.registry_client.get_ecdsa_config(subnet_id, version) {
             Ok(Some(config)) => !config.key_ids.is_empty(),
             _ => false,
-        }
-    }
-
-    /// Create file that signal the host vm to eject the keycard.
-    fn touch_eject_file(&self) {
-        if let Err(e) = std::fs::File::create(
-            self.node_config
-                .registration
-                .eject_keycard_signal_file
-                .as_path(),
-        ) {
-            warn!(self.log, "Could not create ejection file: {:?}", e);
         }
     }
 }
