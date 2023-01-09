@@ -2,7 +2,7 @@ use candid::{candid_method, Nat};
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{
     api::{caller, data_certificate, print, set_certified_data, trap_with},
-    over, over_async, over_init, printer, setup, stable, BytesS,
+    over, over_async, over_async_may_reject, over_init, printer, setup, stable, BytesS,
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -219,12 +219,6 @@ async fn icrc1_send(
     to: AccountIdentifier,
     created_at_time: Option<TimeStamp>,
 ) -> Result<BlockIndex, ic_icrc1::endpoints::TransferError> {
-    let caller_principal_id = caller();
-
-    if !LEDGER.read().unwrap().can_send(&caller_principal_id) {
-        return Err(ic_icrc1::endpoints::TransferError::TemporarilyUnavailable);
-    }
-
     let from = AccountIdentifier::from(from_account);
     let minting_acc = LEDGER
         .read()
@@ -238,8 +232,9 @@ async fn icrc1_send(
                 expected_fee: Nat::from(0u64),
             });
         }
-        let balance = LEDGER.read().unwrap().balances.account_balance(&from);
-        let min_burn_amount = LEDGER.read().unwrap().transfer_fee.min(balance);
+        let ledger = LEDGER.read().unwrap();
+        let balance = ledger.balances.account_balance(&from);
+        let min_burn_amount = ledger.transfer_fee.min(balance);
         if amount < min_burn_amount {
             return Err(ic_icrc1::endpoints::TransferError::BadBurn {
                 min_burn_amount: Nat::from(min_burn_amount.get_e8s()),
@@ -247,7 +242,7 @@ async fn icrc1_send(
         }
         if amount == Tokens::ZERO {
             return Err(ic_icrc1::endpoints::TransferError::BadBurn {
-                min_burn_amount: Nat::from(LEDGER.read().unwrap().transfer_fee.get_e8s()),
+                min_burn_amount: Nat::from(ledger.transfer_fee.get_e8s()),
             });
         }
         Operation::Burn { from, amount }
@@ -272,8 +267,8 @@ async fn icrc1_send(
             fee: expected_fee,
         }
     };
-    let res: BlockIndex;
-    {
+
+    let block_index = {
         let mut ledger = LEDGER.write().unwrap();
         let tx = Transaction {
             operation,
@@ -283,15 +278,15 @@ async fn icrc1_send(
         };
         let (block_index, hash) = apply_transaction(&mut *ledger, tx, now)
             .map_err(|e| ic_icrc1::endpoints::TransferError::from(e))?;
+
         set_certified_data(&hash.into_bytes());
-        res = block_index;
-        // Don't put anything that could ever trap after this call or people using this
-        // endpoint. If something did panic the payment would appear to fail, but would
-        // actually succeed on chain.
-    }
+
+        block_index
+    };
+
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
     archive_blocks::<Access>(max_msg_size).await;
-    Ok(res)
+    Ok(block_index)
 }
 
 /// You can notify a canister that you have made a payment to it. The
@@ -513,14 +508,7 @@ fn account_balance(account: AccountIdentifier) -> Tokens {
 
 #[candid_method(query, rename = "icrc1_balance_of")]
 fn icrc1_balance_of(acc: Account) -> Nat {
-    Nat::from(
-        LEDGER
-            .read()
-            .unwrap()
-            .balances
-            .account_balance(&AccountIdentifier::from(acc))
-            .get_e8s(),
-    )
+    Nat::from(account_balance(AccountIdentifier::from(acc)).get_e8s())
 }
 
 #[candid_method(query, rename = "icrc1_supported_standards")]
@@ -761,33 +749,27 @@ async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError>
 }
 
 #[candid_method(update, rename = "icrc1_transfer")]
-async fn icrc1_transfer(ag: TransferArg) -> Result<Nat, ic_icrc1::endpoints::TransferError> {
-    let to = AccountIdentifier::from(ag.to);
+async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, ic_icrc1::endpoints::TransferError> {
+    let to = AccountIdentifier::from(arg.to);
     let from_account = Account {
         owner: PrincipalId::from(ic_cdk::api::caller()),
-        subaccount: ag.from_subaccount,
+        subaccount: arg.from_subaccount,
     };
-    let amount = match ag.amount.0.to_u64() {
+    let amount = match arg.amount.0.to_u64() {
         Some(n) => Tokens::from_e8s(n),
         None => {
             // No one can have so many tokens
-            let balance = Nat::from(
-                LEDGER
-                    .read()
-                    .unwrap()
-                    .balances
-                    .account_balance(&AccountIdentifier::from(from_account))
-                    .get_e8s(),
-            );
-            assert!(balance < ag.amount);
+            let balance =
+                Nat::from(account_balance(AccountIdentifier::from(from_account)).get_e8s());
+            assert!(balance < arg.amount);
             return Err(ic_icrc1::endpoints::TransferError::InsufficientFunds { balance });
         }
     };
-    let created_at_time = ag
+    let created_at_time = arg
         .created_at_time
         .map(TimeStamp::from_nanos_since_unix_epoch);
     Ok(Nat::from(
-        icrc1_send(ag.memo, amount, ag.fee, from_account, to, created_at_time).await?,
+        icrc1_send(arg.memo, amount, arg.fee, from_account, to, created_at_time).await?,
     ))
 }
 
@@ -798,7 +780,13 @@ fn transfer() {
 
 #[export_name = "canister_update icrc1_transfer"]
 fn icrc1_transfer_candid() {
-    over_async(candid_one, icrc1_transfer)
+    over_async_may_reject(candid_one, |arg: TransferArg| async {
+        if !LEDGER.read().unwrap().can_send(&caller()) {
+            return Err("Anonymous principal cannot hold tokens on the ledger.".to_string());
+        }
+
+        Ok(icrc1_transfer(arg).await)
+    })
 }
 
 /// See caveats of use on send_dfx
