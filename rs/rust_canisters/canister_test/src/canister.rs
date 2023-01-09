@@ -677,13 +677,7 @@ impl<'a> Canister<'a> {
                 dfn_candid::candid_multi_arity,
                 (UpdateSettingsArgs {
                     canister_id: self.canister_id.into(),
-                    settings: CanisterSettingsArgs {
-                        controller: None,
-                        controllers: Some(controllers),
-                        compute_allocation: None,
-                        memory_allocation: None,
-                        freezing_threshold: None,
-                    },
+                    settings: CanisterSettingsArgs::new(Some(controllers), None, None, None),
                 },),
             )
             .await
@@ -693,9 +687,12 @@ impl<'a> Canister<'a> {
         self.runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_(
-                ic00::Method::SetController.to_string(),
+                ic00::Method::UpdateSettings.to_string(),
                 dfn_candid::candid_multi_arity,
-                (SetControllerArgs::new(self.canister_id, new_controller),),
+                (UpdateSettingsArgs::new(
+                    self.canister_id,
+                    CanisterSettingsArgs::new(Some(vec![new_controller]), None, None, None),
+                ),),
             )
             .await
     }

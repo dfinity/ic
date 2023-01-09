@@ -600,6 +600,7 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
+            // This API is deprecated and should not be used in new code.
             Ok(Ic00Method::SetController) => {
                 let res = match SetControllerArgs::decode(payload) {
                     Err(err) => Err(candid_error_to_user_error(err)),

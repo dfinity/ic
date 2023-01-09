@@ -21,10 +21,12 @@ async fn create_canisters_in_batch(
             CanisterId::ic_00(),
             "create_canister",
             &ic_ic00_types::CreateCanisterArgs {
-                settings: Some(ic_ic00_types::CanisterSettingsArgs {
-                    controller: Some(dfn_core::api::id().get()),
-                    ..ic_ic00_types::CanisterSettingsArgs::default()
-                }),
+                settings: Some(ic_ic00_types::CanisterSettingsArgs::new(
+                    Some(vec![dfn_core::api::id().get()]),
+                    None,
+                    None,
+                    None,
+                )),
             }
             .encode(),
             dfn_core::api::Funds::new(INITIAL_CYCLES_BALANCE),

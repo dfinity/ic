@@ -1522,10 +1522,12 @@ async fn create_canister(
             &Method::CreateCanister.to_string(),
             dfn_candid::candid_one,
             CreateCanisterArgs {
-                settings: Some(CanisterSettingsArgs {
-                    controller: Some(controller_id),
-                    ..CanisterSettingsArgs::default()
-                }),
+                settings: Some(CanisterSettingsArgs::new(
+                    Some(vec![controller_id]),
+                    None,
+                    None,
+                    None,
+                )),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
         )

@@ -315,13 +315,7 @@ fn test_canister_out_of_cycles() {
     let canister_id = env.install_canister_wat(
         TEST_CANISTER,
         vec![],
-        Some(CanisterSettingsArgs {
-            controller: None,
-            controllers: None,
-            compute_allocation: Some(candid::Nat::from(1)),
-            memory_allocation: None,
-            freezing_threshold: None,
-        }),
+        Some(CanisterSettingsArgs::new(None, Some(1), None, None)),
     );
 
     // Since all computation/storage is free, calling an update method should
@@ -378,13 +372,7 @@ fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
-            Some(CanisterSettingsArgs {
-                controller: None,
-                controllers: None,
-                compute_allocation: Some(candid::Nat::from(1)),
-                memory_allocation: None,
-                freezing_threshold: None,
-            }),
+            Some(CanisterSettingsArgs::new(None, Some(1), None, None)),
             INITIAL_CYCLES_BALANCE,
         )
         .unwrap();
@@ -673,13 +661,7 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
-            Some(CanisterSettingsArgs {
-                controller: None,
-                controllers: None,
-                compute_allocation: None,
-                memory_allocation: None,
-                freezing_threshold: None,
-            }),
+            Some(CanisterSettingsArgs::new(None, None, None, None)),
             INITIAL_CYCLES_BALANCE,
         )
         .unwrap();
@@ -688,13 +670,7 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
     let res = env
         .update_settings(
             &canister_id,
-            CanisterSettingsArgs {
-                controller: None,
-                controllers: None,
-                compute_allocation: None,
-                memory_allocation: Some(candid::Nat::from(20u64 * 1024 * 1024 + 1)),
-                freezing_threshold: None,
-            },
+            CanisterSettingsArgs::new(None, None, Some(20u64 * 1024 * 1024 + 1), None),
         )
         .unwrap_err();
     assert_eq!(res.code(), ErrorCode::SubnetOversubscribed);
@@ -702,13 +678,7 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
     // Set the memory to exactly 20MiB. Should succeed.
     env.update_settings(
         &canister_id,
-        CanisterSettingsArgs {
-            controller: None,
-            controllers: None,
-            compute_allocation: None,
-            memory_allocation: Some(candid::Nat::from(20u64 * 1024 * 1024)),
-            freezing_threshold: None,
-        },
+        CanisterSettingsArgs::new(None, None, Some(20u64 * 1024 * 1024), None),
     )
     .unwrap();
 }
@@ -750,13 +720,7 @@ fn exceeding_memory_capacity_fails_during_message_execution() {
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
-            Some(CanisterSettingsArgs {
-                controller: None,
-                controllers: None,
-                compute_allocation: None,
-                memory_allocation: None,
-                freezing_threshold: None,
-            }),
+            Some(CanisterSettingsArgs::new(None, None, None, None)),
             INITIAL_CYCLES_BALANCE,
         )
         .unwrap();
@@ -815,13 +779,7 @@ fn max_canister_memory_respected_even_when_no_memory_allocation_is_set() {
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
-            Some(CanisterSettingsArgs {
-                controller: None,
-                controllers: None,
-                compute_allocation: None,
-                memory_allocation: None,
-                freezing_threshold: None,
-            }),
+            Some(CanisterSettingsArgs::new(None, None, None, None)),
             INITIAL_CYCLES_BALANCE,
         )
         .unwrap();

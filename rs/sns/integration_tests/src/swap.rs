@@ -94,7 +94,7 @@ fn set_controllers(
 ) {
     let request = Encode!(&UpdateSettingsArgs {
         canister_id: target.into(),
-        settings: CanisterSettingsArgs::new(None, Some(controllers), None, None, None,),
+        settings: CanisterSettingsArgs::new(Some(controllers), None, None, None,),
     })
     .unwrap();
 
