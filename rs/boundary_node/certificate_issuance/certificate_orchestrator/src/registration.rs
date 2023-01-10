@@ -1,13 +1,16 @@
+use std::cmp::Reverse;
+
 use anyhow::anyhow;
 use candid::Principal;
 use certificate_orchestrator_interface::{Id, Name, NameError, Registration, State};
-use ic_cdk::caller;
+use ic_cdk::{api::time, caller};
 use ic_stable_structures::StableBTreeMap;
+use priority_queue::PriorityQueue;
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
     id::Generate,
-    LocalRef, Memory,
+    LocalRef, Memory, REGISTRATION_EXPIRATION_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -30,6 +33,7 @@ pub struct Creator {
     id_generator: LocalRef<Box<dyn Generate>>,
     registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
     names: LocalRef<StableBTreeMap<Memory, Name, Id>>,
+    expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
 }
 
 impl Creator {
@@ -37,11 +41,13 @@ impl Creator {
         id_generator: LocalRef<Box<dyn Generate>>,
         registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
         names: LocalRef<StableBTreeMap<Memory, Name, Id>>,
+        expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     ) -> Self {
         Self {
             id_generator,
             registrations,
             names,
+            expirations,
         }
     }
 }
@@ -76,9 +82,18 @@ impl Create for Creator {
         self.names.with(|names| {
             names
                 .borrow_mut()
-                .insert(name.to_owned(), id.clone())
+                .insert(name.to_owned(), id.to_owned())
                 .map_err(|err| anyhow!(format!("failed to insert: {err}")))
         })?;
+
+        // Schedule expiration
+        self.expirations.with(|expirations| {
+            let mut expirations = expirations.borrow_mut();
+            expirations.push(
+                id.to_owned(),
+                Reverse(time() + REGISTRATION_EXPIRATION_TTL.as_nanos() as u64),
+            );
+        });
 
         Ok(id)
     }
@@ -157,11 +172,18 @@ pub trait Update {
 
 pub struct Updater {
     registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+    expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
 }
 
 impl Updater {
-    pub fn new(registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>) -> Self {
-        Self { registrations }
+    pub fn new(
+        registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+        expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+    ) -> Self {
+        Self {
+            registrations,
+            expirations,
+        }
     }
 }
 
@@ -176,17 +198,22 @@ impl Update for Updater {
 
             regs.borrow_mut()
                 .insert(
-                    id,
+                    id.to_owned(),
                     Registration {
                         name: domain,
                         canister,
-                        state,
+                        state: state.to_owned(),
                     },
                 )
-                .map_err(|err| UpdateError::from(anyhow!(format!("failed to insert: {err}"))))?;
+                .map_err(|err| UpdateError::from(anyhow!(format!("failed to insert: {err}"))))
+        })?;
 
-            Ok(())
-        })
+        // Successful registrations should not be expired
+        if state == State::Available {
+            self.expirations.with(|exps| exps.borrow_mut().remove(&id));
+        }
+
+        Ok(())
     }
 }
 
@@ -200,5 +227,82 @@ impl<T: Update, A: Authorize> Update for WithAuthorize<T, A> {
         };
 
         self.0.update(id, state)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ExpireError {
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+pub trait Expire {
+    fn expire(&self, t: u64) -> Result<(), ExpireError>;
+}
+
+pub struct Expirer {
+    registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+    names: LocalRef<StableBTreeMap<Memory, Name, Id>>,
+    tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+    expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+}
+
+impl Expirer {
+    pub fn new(
+        registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+        names: LocalRef<StableBTreeMap<Memory, Name, Id>>,
+        tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+        expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+    ) -> Self {
+        Self {
+            registrations,
+            names,
+            tasks,
+            expirations,
+        }
+    }
+}
+
+impl Expire for Expirer {
+    fn expire(&self, t: u64) -> Result<(), ExpireError> {
+        self.expirations.with(|exps| {
+            let mut exps = exps.borrow_mut();
+
+            #[allow(clippy::while_let_loop)]
+            loop {
+                // Check for next expiration
+                let p = match exps.peek() {
+                    Some((_, p)) => p.0,
+                    None => break,
+                };
+
+                if p > t {
+                    break;
+                }
+
+                let id = match exps.pop() {
+                    Some((id, _)) => id,
+                    None => break,
+                };
+
+                // Remove registration and name mapping
+                let name = self
+                    .registrations
+                    .with(|regs| match regs.borrow().get(&id) {
+                        Some(reg) => Ok(reg.name),
+                        None => Err(anyhow!("expired registration not found")),
+                    })?;
+
+                self.registrations
+                    .with(|regs| regs.borrow_mut().remove(&id));
+
+                self.names.with(|names| names.borrow_mut().remove(&name));
+
+                // Remove task
+                self.tasks.with(|tasks| tasks.borrow_mut().remove(&id));
+            }
+
+            Ok(())
+        })
     }
 }
