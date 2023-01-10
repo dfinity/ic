@@ -30,16 +30,19 @@ macro_rules! declare_log_buffer {
 /// ```
 #[macro_export]
 macro_rules! log {
-    ($buf:expr, $message:expr $(,$args:expr)* $(,)*) => {{
-        $buf.with(|cell| {
-            cell.borrow_mut().append($crate::LogEntry {
-                timestamp: $crate::now(),
-                message: std::format!($message $(,$args)*),
-                file: std::file!(),
-                line: std::line!(),
-            });
-        })
+    ($sink:expr, $message:expr $(,$args:expr)* $(,)*) => {{
+        use $crate::Sink;
+        (&$sink).append($crate::LogEntry {
+            timestamp: $crate::now(),
+            message: std::format!($message $(,$args)*),
+            file: std::file!(),
+            line: std::line!(),
+        });
     }}
+}
+
+pub trait Sink {
+    fn append(&self, entry: LogEntry);
 }
 
 /// An entry in the canister log.
@@ -59,6 +62,13 @@ impl fmt::Display for LogEntry {
             self.timestamp, self.file, self.line, self.message
         )
     }
+}
+
+#[derive(Clone)]
+pub struct DevNull;
+
+impl Sink for DevNull {
+    fn append(&self, _: LogEntry) {}
 }
 
 /// A circular buffer for log messages.
@@ -91,6 +101,12 @@ impl LogBuffer {
 }
 
 pub type GlobalBuffer = LocalKey<RefCell<LogBuffer>>;
+
+impl Sink for &'static GlobalBuffer {
+    fn append(&self, entry: LogEntry) {
+        self.with(|cell| cell.borrow_mut().append(entry))
+    }
+}
 
 mod private {
     #[cfg(target_arch = "wasm32")]

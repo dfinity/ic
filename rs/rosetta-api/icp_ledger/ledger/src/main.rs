@@ -6,6 +6,7 @@ use dfn_core::{
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_canister_log::{LogEntry, Sink};
 use ic_icrc1::{
     endpoints::{StandardRecord, TransferArg, Value},
     Account,
@@ -37,6 +38,15 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
+
+#[derive(Clone)]
+struct DebugOutSink;
+
+impl Sink for DebugOutSink {
+    fn append(&self, entry: LogEntry) {
+        print!("{}", entry.message)
+    }
+}
 
 /// Initialize the ledger canister
 ///
@@ -207,7 +217,7 @@ async fn send(
     // endpoint. If something did panic the payment would appear to fail, but would
     // actually succeed on chain.
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
-    archive_blocks::<Access>(max_msg_size).await;
+    archive_blocks::<Access>(DebugOutSink, max_msg_size).await;
     Ok(height)
 }
 
@@ -285,7 +295,7 @@ async fn icrc1_send(
     };
 
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
-    archive_blocks::<Access>(max_msg_size).await;
+    archive_blocks::<Access>(DebugOutSink, max_msg_size).await;
     Ok(block_index)
 }
 

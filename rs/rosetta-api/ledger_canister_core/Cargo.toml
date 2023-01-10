@@ -10,6 +10,7 @@ candid = "0.8.1"
 ic-base-types = { path = "../../types/base_types" }
 ic-constants = { path = "../../constants" }
 ic-ic00-types = { path = "../../types/ic00_types" }
+ic-canister-log = { path = "../../rust_canisters/canister_log" }
 ic-ledger-core = { path = "../ledger_core" }
 ic-utils = { path = "../../utils" }
 serde = "1.0"

@@ -1,6 +1,8 @@
 use candid::candid_method;
 use candid::types::number::Nat;
 use ic_base_types::PrincipalId;
+use ic_canister_log::{declare_log_buffer, export};
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{
@@ -23,6 +25,8 @@ const MAX_MESSAGE_SIZE: usize = 1024 * 1024;
 thread_local! {
     static LEDGER: RefCell<Option<Ledger>> = RefCell::new(None);
 }
+
+declare_log_buffer!(name = LOG, capacity = 1000);
 
 struct Access;
 impl LedgerAccess for Access {
@@ -124,9 +128,41 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     })
 }
 
-#[export_name = "canister_query http_request"]
-fn http_request() {
-    dfn_http_metrics::serve_metrics(encode_metrics);
+#[candid_method(query)]
+#[query]
+fn http_request(req: HttpRequest) -> HttpResponse {
+    if req.path() == "/metrics" {
+        let mut writer =
+            ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
+
+        match encode_metrics(&mut writer) {
+            Ok(()) => HttpResponseBuilder::ok()
+                .header("Content-Type", "text/plain; version=0.0.4")
+                .with_body_and_content_length(writer.into_inner())
+                .build(),
+            Err(err) => {
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                    .build()
+            }
+        }
+    } else if req.path() == "/logs" {
+        use std::io::Write;
+        let mut buf = vec![];
+        for entry in export(&LOG) {
+            writeln!(
+                &mut buf,
+                "{} {}:{} {}",
+                entry.timestamp, entry.file, entry.line, entry.message
+            )
+            .unwrap();
+        }
+        HttpResponseBuilder::ok()
+            .header("Content-Type", "text/plain; charset=utf-8")
+            .with_body_and_content_length(buf)
+            .build()
+    } else {
+        HttpResponseBuilder::not_found().build()
+    }
 }
 
 #[query]
@@ -259,7 +295,7 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
     // blockchain state agrees with the certificate while archiving is in progress.
     ic_cdk::api::set_certified_data(&Access::with_ledger(Ledger::root_hash));
 
-    archive_blocks::<Access>(MAX_MESSAGE_SIZE).await;
+    archive_blocks::<Access>(&LOG, MAX_MESSAGE_SIZE).await;
     Ok(Nat::from(block_idx))
 }
 
