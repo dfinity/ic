@@ -11,9 +11,6 @@ use pem::Pem;
 struct Cli {
     #[clap(long, default_value = "key.pem")]
     key_path: PathBuf,
-
-    #[clap(long, default_value = "2048")]
-    bit_size: usize,
 }
 
 #[tokio::main]
