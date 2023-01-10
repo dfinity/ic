@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 async-trait = "0.1.31"
 hyper = { version = "0.14.18" , features = ["full", "tcp"] }
+ic-async-utils = { path = "../../async_utils" }
 ic-base-types = { path = "../../types/base_types" }
 ic-canonical-state = { path = "../../canonical_state" }
 ic-constants = { path = "../../constants" }

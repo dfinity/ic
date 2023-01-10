@@ -2,7 +2,7 @@ use byte_unit::Byte;
 use derive_more::Display;
 use futures_util::StreamExt;
 use hyper::{body::HttpBody, Body};
-use std::time::Duration;
+use std::{error::Error, time::Duration};
 use tokio::time::timeout;
 
 #[derive(Debug, PartialEq, Eq, Display)]
@@ -11,6 +11,8 @@ pub enum BodyReceiveError {
     Timeout(String),
     Unavailable(String),
 }
+
+impl Error for BodyReceiveError {}
 
 pub async fn receive_body_without_timeout(
     mut body: Body,

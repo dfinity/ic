@@ -9192,6 +9192,7 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "hyper",
+ "ic-async-utils",
  "ic-base-types",
  "ic-canonical-state",
  "ic-config",
