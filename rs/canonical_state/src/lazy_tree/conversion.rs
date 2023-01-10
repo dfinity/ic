@@ -77,6 +77,10 @@ impl<'a> LazyFork<'a> for FiniteMap<'a> {
     fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + '_> {
         Box::new(self.0.iter().map(|(l, lazy)| (l.clone(), lazy.force())))
     }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 /// LabelLike defines a (partial) conversion between a type and a label.
@@ -183,6 +187,10 @@ where
             )
         }))
     }
+
+    fn len(&self) -> usize {
+        self.map.len()
+    }
 }
 
 /// A special type of fork that describes a stream-indexed queue.
@@ -212,6 +220,10 @@ impl<'a, T> LazyFork<'a> for StreamQueueFork<'a, T> {
                 (self.mk_tree)(idx, v, self.certification_version),
             )
         }))
+    }
+
+    fn len(&self) -> usize {
+        self.queue.len()
     }
 }
 
@@ -337,6 +349,10 @@ impl<'a> LazyFork<'a> for IngressHistoryFork<'a> {
                 .statuses()
                 .map(|(id, status)| (Label::from(id.as_bytes()), status_to_tree(status, self.1))),
         )
+    }
+
+    fn len(&self) -> usize {
+        self.0.len()
     }
 }
 

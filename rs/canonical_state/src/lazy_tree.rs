@@ -42,6 +42,14 @@ pub trait LazyFork<'a> {
 
     /// Enumerates all the children in this fork and their labels.
     fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + '_>;
+
+    /// The number of children
+    fn len(&self) -> usize;
+
+    /// True if there are no children
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 /// A tree that can lazily expand while it's being traversed.
