@@ -4,7 +4,7 @@ module.exports = {
   testEnvironment: 'jsdom',
   roots: ['src/'],
   testMatch: ['**/src/**/?(*.)+(spec|test).[jt]s?(x)'],
-  setupFiles: [`<rootDir>/test-setup.ts`],
+  setupFiles: [`<rootDir>/test-setup.ts`, 'fake-indexeddb/auto'],
   moduleDirectories: ['node_modules'],
   transform: {
     '^.+\\.[tj]s$': 'ts-jest',

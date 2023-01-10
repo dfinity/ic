@@ -117,18 +117,60 @@ export type Token = { type: <T>() => IDL.Type<T> };
       # Open Chat
       127.0.0.1 6hsbt-vqaaa-aaaaf-aaafq-cai.ic0.local
       127.0.0.1 oc.ic0.local
+
+      # Local custom domains for service worker
+      127.0.0.1 demo.ic.local
+      127.0.0.1 internetcomputer.ic.local
+      127.0.0.1 distrikt.ic.local
+      127.0.0.1 dscvr.ic.local
+      127.0.0.1 nns.ic.local
       ```
-1. Set the `hostnameCanisterIdMap` value in the `http_request.ts` file (make sure to revert this before commiting):
+1. Set the `hostnameCanisterIdMap` value in the `domains/static.ts` file (make sure to revert this before commiting):
       ```shell
-      const hostnameCanisterIdMap: Record<string, [string, string]> = {
-            'identity.ic0.local': ['rdmx6-jaaaa-aaaaa-aaadq-cai', 'ic0.app'],
-            'nns.ic0.local': ['qoctq-giaaa-aaaaa-aaaea-cai', 'ic0.app'],
-            'dscvr.ic0.local': ['h5aet-waaaa-aaaab-qaamq-cai', 'ic0.app'],
-            'distrikt.ic0.local': ['az5sd-cqaaa-aaaae-aaarq-cai', 'ic0.app'],
-            'distrikt-staging.ic0.local': ['am2do-dyaaa-aaaae-aaasa-cai', 'ic0.app'],
-            'nuance.ic0.local': ['exwqn-uaaaa-aaaaf-qaeaa-cai', 'ic0.app'],
-            'oc.ic0.local': ['6hsbt-vqaaa-aaaaf-aaafq-cai', 'ic0.app'],
-      };
+      Object.entries({
+            'identity.ic0.local': {
+                  canister: {
+                        principal: Principal.from('rdmx6-jaaaa-aaaaa-aaadq-cai'),
+                        gateway: DEFAULT_GATEWAY,
+                  },
+            },
+            'nns.ic0.local': {
+                  canister: {
+                        principal: Principal.from('qoctq-giaaa-aaaaa-aaaea-cai'),
+                        gateway: DEFAULT_GATEWAY,
+                  },
+            },
+            'dscvr.ic0.local': {
+                  canister: {
+                        principal: Principal.from('h5aet-waaaa-aaaab-qaamq-cai'),
+                        gateway: DEFAULT_GATEWAY,
+                  },
+            },
+            'distrikt.ic0.local': {
+                  canister: {
+                        principal: Principal.from('az5sd-cqaaa-aaaae-aaarq-cai'),
+                        gateway: DEFAULT_GATEWAY,
+                  },
+            },
+            'distrikt-staging.ic0.local': {
+                  canister: {
+                        principal: Principal.from('am2do-dyaaa-aaaae-aaasa-cai'),
+                        gateway: DEFAULT_GATEWAY,
+                  },
+            },
+            'nuance.ic0.local': {
+                  canister: {
+                        principal: Principal.from('exwqn-uaaaa-aaaaf-qaeaa-cai'),
+                        gateway: DEFAULT_GATEWAY,
+                  },
+            },
+            'oc.ic0.local': {
+                  canister: {
+                        principal: Principal.from('6hsbt-vqaaa-aaaaf-aaafq-cai'),
+                        gateway: DEFAULT_GATEWAY,
+                  },
+            },
+      });
       ```
 1. Build and watch the service worker:
       ```shell
