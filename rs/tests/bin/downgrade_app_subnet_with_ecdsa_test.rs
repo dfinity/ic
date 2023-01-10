@@ -12,24 +12,3 @@ fn main() -> Result<()> {
 
     Ok(())
 }
-
-// vec![
-//     pot_with_setup(
-//         "upgrade_downgrade_app_subnet",
-//         orchestrator::upgrade_downgrade::config,
-//         par(vec![sys_t(
-//             "upgrade_downgrade_app_subnet",
-//             orchestrator::upgrade_downgrade::upgrade_downgrade_app_subnet,
-//         )]),
-//     ),
-//     pot_with_setup(
-//         "upgrade_downgrade_nns_subnet",
-//         orchestrator::upgrade_downgrade::config,
-//         par(vec![sys_t(
-//             "upgrade_downgrade_nns_subnet",
-//             orchestrator::upgrade_downgrade::upgrade_downgrade_nns_subnet,
-//         )]),
-//     ),
-// ],
-// )
-// .with_alert(ENG_ORCHESTRATOR_CHANNEL),

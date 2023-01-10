@@ -11,7 +11,6 @@ date
 end=$(date +%s)
 export PYTHONPATH="${CI_PROJECT_DIR}/gitlab-ci/src"
 
-ENG_OR_CHANNEL="eng-orchestrator"
 ENG_CONS_CHANNEL="eng-consensus-test-failures"
 INGRESS_MNGR_PROPTEST_NAME="ingress-manager-proptests-nightly"
 NNS_STATE_TEST_NAME="nns-state-deployment-test-nightly"
@@ -38,7 +37,7 @@ if [[ "$CI_JOB_STATUS" == "failed" ]]; then
     cd "${CI_PROJECT_DIR}/gitlab-ci/src" || true
     # and old bash-test that was introduced with OR-187, failures are dispatched to OR-team directly
     if [[ "$CI_JOB_NAME" == "$NNS_STATE_TEST_NAME" ]]; then
-        notify_slack/notify_slack.py "$MESSAGE" --channel "$ENG_OR_CHANNEL" || true
+        notify_slack/notify_slack.py "$MESSAGE" --channel "$ENG_CONS_CHANNEL" || true
     fi
     # test signals for ingress manager proptests are sent to CONS directly
     if [[ "$CI_JOB_NAME" == "$INGRESS_MNGR_PROPTEST_NAME" ]]; then
