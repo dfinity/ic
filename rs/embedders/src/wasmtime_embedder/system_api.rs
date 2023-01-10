@@ -1230,7 +1230,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_canister_cycles_balance128(dst, memory)
+                    system_api.ic0_canister_cycle_balance128(dst, memory)
                 })?;
                 if feature_flags.write_barrier == FlagStatus::Enabled {
                     mark_writes_on_bytemap(&mut caller, dst as usize, 16)

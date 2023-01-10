@@ -63,7 +63,7 @@ Local  (new) profile:release-lto commit:04f38ce0 branch:master
 | update/ic0_time()                          |    1.34G |    1.28G |     -5% |      5.47s |
 | update/ic0_performance_counter()           |          |    4.56G |       - |      1.54s |
 | update/ic0_canister_cycle_balance()        |    1.30G |    1.26G |     -4% |      5.56s |
-| update/ic0_canister_cycles_balance128()    |     224M |     190M |    -16% |     36.84s |
+| update/ic0_canister_cycle_balance128()     |     224M |     190M |    -16% |     36.84s |
 | update/ic0_msg_cycles_available()          |     786M |     777M |     -2% |      9.01s |
 | update/ic0_msg_cycles_available128()       |     206M |     175M |    -16% |     40.00s |
 | update/ic0_msg_cycles_accept()             |     514M |     486M |     -6% |     14.40s |
@@ -135,7 +135,7 @@ Average speedup of the local (new) changes: +3% (throughput)
 | update/ic0_time()                          |   8.18ms |   8.57ms |     +4% |
 | update/ic0_performance_counter()           |          |   46.4ms |       - |
 | update/ic0_canister_cycle_balance()        |   8.43ms |   8.71ms |     +3% |
-| update/ic0_canister_cycles_balance128()    |   48.9ms |   57.6ms |    +17% |
+| update/ic0_canister_cycle_balance128()     |   48.9ms |   57.6ms |    +17% |
 | update/ic0_msg_cycles_available()          |   13.9ms |   14.1ms |     +1% |
 | update/ic0_msg_cycles_available128()       |   53.3ms |   62.7ms |    +17% |
 | update/ic0_msg_cycles_accept()             |   23.3ms |   24.6ms |     +5% |

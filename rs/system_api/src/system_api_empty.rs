@@ -226,7 +226,7 @@ impl SystemApi for SystemApiEmpty {
     fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn ic0_canister_cycles_balance128(&self, _: u32, _: &mut [u8]) -> HypervisorResult<()> {
+    fn ic0_canister_cycle_balance128(&self, _: u32, _: &mut [u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_msg_cycles_available(&self) -> HypervisorResult<u64> {

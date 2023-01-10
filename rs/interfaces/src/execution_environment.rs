@@ -694,7 +694,7 @@ pub trait SystemApi {
         additional_pages: u32,
     ) -> HypervisorResult<i32>;
 
-    /// (deprecated) Please use `ic0_canister_cycles_balance128` instead.
+    /// (deprecated) Please use `ic0_canister_cycle_balance128` instead.
     /// This API supports only 64-bit values.
     ///
     /// Returns the current balance in cycles.
@@ -708,7 +708,7 @@ pub trait SystemApi {
     /// The amount of cycles is represented by a 128-bit value
     /// and is copied in the canister memory starting
     /// starting at the location `dst`.
-    fn ic0_canister_cycles_balance128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
+    fn ic0_canister_cycle_balance128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()>;
 
     /// (deprecated) Please use `ic0_msg_cycles_available128` instead.
     /// This API supports only 64-bit values.
