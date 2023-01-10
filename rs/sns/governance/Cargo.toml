@@ -81,6 +81,7 @@ ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto-sha = { path = "../../crypto/sha/" }
 ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
+ic-nervous-system-common-test-utils = { path = "../../nervous_system/common/test_utils" }
 ic-sns-governance = { path = ".", features = ["test"] }
 ic-sns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-sns-test-utils = { path = "../test_utils" }

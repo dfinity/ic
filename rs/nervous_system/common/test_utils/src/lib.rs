@@ -1,15 +1,16 @@
-//! Utilities to help with testing interleavings of calls to the governance
-//! canister
+//! Utilities to help with testing interleavings of calls to canisters
 use async_trait::async_trait;
-use futures::channel::{
-    mpsc::UnboundedSender as USender,
-    oneshot::{self, Sender as OSender},
+use dfn_core::CanisterId;
+use futures::{
+    channel::{
+        mpsc::{UnboundedReceiver, UnboundedSender},
+        oneshot::{self, Sender as OneShotSender},
+    },
+    StreamExt,
 };
-use ic_base_types::CanisterId;
 use ic_icrc1::{Account, Subaccount};
-use ic_ledger_core::Tokens;
-use ic_nervous_system_common::NervousSystemError;
-use ic_sns_governance::ledger::ICRC1Ledger;
+use ic_nervous_system_common::{ledger::ICRC1Ledger, NervousSystemError};
+use icp_ledger::Tokens;
 use std::sync::{atomic, atomic::Ordering as AtomicOrdering};
 
 /// Reifies the methods of the Ledger trait, such that they can be sent over a
@@ -27,11 +28,11 @@ pub enum LedgerMessage {
     BalanceQuery(Account),
 }
 
-pub type LedgerControlMessage = (LedgerMessage, OSender<Result<(), NervousSystemError>>);
+pub type LedgerControlMessage = (LedgerMessage, OneShotSender<Result<(), NervousSystemError>>);
 
-pub type LedgerObserver = USender<LedgerControlMessage>;
+pub type LedgerObserver = UnboundedSender<LedgerControlMessage>;
 
-/// A mock ledger to test interleavings of governance method calls.
+/// A mock ledger to test interleavings of canister method calls using ledger.
 pub struct InterleavingTestLedger {
     underlying: Box<dyn ICRC1Ledger>,
     observer: LedgerObserver,
@@ -52,13 +53,29 @@ impl InterleavingTestLedger {
         }
     }
 
-    // Notifies the observer that a ledger method has been called, and blocks until
-    // it receives a message to continue.
+    /// Notifies the observer that a ledger method has been called, and blocks until
+    /// it receives a message to continue.
     async fn notify(&self, msg: LedgerMessage) -> Result<(), NervousSystemError> {
         let (tx, rx) = oneshot::channel::<Result<(), NervousSystemError>>();
         self.observer.unbounded_send((msg, tx)).unwrap();
         rx.await
             .map_err(|_e| NervousSystemError::new_with_message("Operation unavailable"))?
+    }
+
+    /// Closes the observer channel so the UnboundedReceiver can terminate. This
+    /// should be called after the InterleavingTestLedger is no longer being used
+    /// in the test, and no other calls to the underlying Ledger will be issued.
+    pub fn close_channel(&self) {
+        self.observer.close_channel()
+    }
+}
+
+/// Closes the InterleavingTestLedger's observer channel when InterleavingTestLedger
+/// exits its scope. `close_channel` is idempotent so multiple calls will not cause
+/// any unexpected panics.
+impl Drop for InterleavingTestLedger {
+    fn drop(&mut self) {
+        self.close_channel()
     }
 }
 
@@ -101,5 +118,18 @@ impl ICRC1Ledger for InterleavingTestLedger {
 
     fn canister_id(&self) -> CanisterId {
         CanisterId::from_u64(1)
+    }
+}
+
+/// Drains an UnboundedReceiver channel by sending `Ok()` signals for all incoming
+/// LedgerControlMessages messages, ignoring the response.
+pub async fn drain_receiver_channel(
+    receiver_channel: &mut UnboundedReceiver<LedgerControlMessage>,
+) {
+    // Drain the channel to finish the test.
+    while let Some((_msg, ledger_control_message)) = receiver_channel.next().await {
+        ledger_control_message
+            .send(Ok(()))
+            .expect("Error draining the receiver_channel");
     }
 }

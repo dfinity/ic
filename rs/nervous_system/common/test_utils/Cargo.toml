@@ -1,0 +1,12 @@
+[package]
+name = "ic-nervous-system-common-test-utils"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1.42"
+dfn_core = { path = "../../../rust_canisters/dfn_core" }
+futures = "0.3.13"
+ic-icrc1 = { path = "../../../rosetta-api/icrc1" }
+icp-ledger = { path = "../../../rosetta-api/icp_ledger" }
+ic-nervous-system-common = { path = "../../common" }

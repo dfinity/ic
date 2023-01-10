@@ -6656,6 +6656,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-common-test-utils"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "dfn_core",
+ "futures",
+ "ic-icrc1",
+ "ic-nervous-system-common",
+ "icp-ledger",
+]
+
+[[package]]
 name = "ic-nervous-system-root"
 version = "0.1.0"
 dependencies = [
@@ -8045,6 +8057,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-common-test-utils",
  "ic-nervous-system-root",
  "ic-nns-constants",
  "ic-protobuf",
@@ -8244,6 +8257,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-common-test-utils",
  "ic-nervous-system-root",
  "ic-nns-common",
  "ic-protobuf",
@@ -8252,6 +8266,7 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "ic-types",
  "icp-ledger",
+ "itertools",
  "lazy_static",
  "maplit",
  "on_wire",
@@ -8268,6 +8283,7 @@ dependencies = [
  "strum_macros 0.18.0",
  "tempfile",
  "tokio",
+ "tokio-test",
 ]
 
 [[package]]

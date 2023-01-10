@@ -7812,7 +7812,9 @@ async fn fetch_swap_background_information(
         .expect("`init` field is not set in GetStateResponse.swap.");
 
     // Call the SNS root canister's `get_sns_canisters_summary` method.
-    let sns_root_canister_id = swap_init.sns_root();
+    // TODO IC-1448 - This panic will eventually go away when SNS Governance
+    // no longer depends on the Sale canister to provide this data.
+    let sns_root_canister_id = swap_init.sns_root_or_panic();
     let get_sns_canisters_summary_result = env
         .call_canister_method(
             sns_root_canister_id,

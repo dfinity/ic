@@ -1,51 +1,55 @@
-use async_trait::async_trait;
-use candid::Principal;
-use futures::future::FutureExt;
+use crate::common::doubles::{
+    ExplodingSnsRootClient, LedgerCall, LedgerExpect, NnsGovernanceClientCall,
+    SnsGovernanceClientCall, SnsGovernanceClientReply, SnsRootClientCall, SnsRootClientReply,
+    SpyLedger, SpyNnsGovernanceClient, SpySnsGovernanceClient, SpySnsRootClient,
+};
+use crate::common::{
+    create_single_neuron_recipe, extract_canister_call_error, extract_set_dapp_controller_response,
+    i2principal_id_string, mock_stub, successful_set_dapp_controllers_call_result,
+    successful_settle_community_fund_participation_result, verify_participant_balances,
+    TestInvestor,
+};
+use futures::{channel::mpsc, future::FutureExt, StreamExt};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::{Account, Subaccount};
+use ic_icrc1::Account;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
-    assert_is_err, assert_is_ok, ledger::compute_neuron_staking_subaccount_bytes,
-    NervousSystemError, E8,
+    assert_is_err, assert_is_ok, ledger::compute_neuron_staking_subaccount_bytes, E8,
+    SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
 };
-use ic_sns_governance::{
-    ledger::ICRC1Ledger,
-    pb::v1::{
-        governance,
-        manage_neuron_response::{self, ClaimOrRefreshResponse},
-        ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse,
-        SetMode, SetModeResponse,
-    },
+use ic_nervous_system_common_test_utils::{
+    drain_receiver_channel, InterleavingTestLedger, LedgerControlMessage,
 };
-
-// TODO(NNS1-1589): Unhack.
-// use ic_sns_root::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
-use ic_sns_swap::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
-
+use ic_sns_governance::{
+    pb::v1::{governance, ClaimSwapNeuronsResponse, SetMode},
+    types::ONE_MONTH_SECONDS,
+};
+use ic_sns_swap::pb::v1::sns_neuron_recipe::{Investor, NeuronAttributes};
 use ic_sns_swap::{
     pb::v1::{
         params::NeuronBasketConstructionParameters,
-        Lifecycle::{Committed, Open},
-        *,
+        Lifecycle::{Aborted, Committed, Open, Pending, Unspecified},
+        SetDappControllersRequest, SetDappControllersResponse, *,
     },
-    swap::{principal_to_subaccount, NnsGovernanceClient, SnsGovernanceClient, SECONDS_PER_DAY},
+    swap::principal_to_subaccount,
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use maplit::{btreemap, hashset};
 use std::{
     collections::HashSet,
+    pin::Pin,
     str::FromStr,
-    sync::{Arc, Mutex},
+    sync::{atomic, atomic::Ordering as AtomicOrdering, Arc, Mutex},
+    thread,
 };
 
-use ic_sns_swap::swap::SnsRootClient;
+mod common;
 
-fn i2principal_id_string(i: u64) -> String {
-    Principal::from(PrincipalId::new_user_test_id(i)).to_text()
-}
+// TODO(NNS1-1589): Unhack.
+// use ic_sns_root::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
 
 // For tests only. This does not imply that the canisters must have these IDs.
 pub const SWAP_CANISTER_ID: CanisterId = CanisterId::from_u64(1152);
@@ -58,6 +62,9 @@ pub const SNS_GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1380);
 pub const SNS_LEDGER_CANISTER_ID: CanisterId = CanisterId::from_u64(1571);
 
 const OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID: u64 = 746114;
+
+const START_TIMESTAMP_SECONDS: u64 = START_OF_2022_TIMESTAMP_SECONDS + 42 * SECONDS_PER_DAY;
+const END_TIMESTAMP_SECONDS: u64 = START_TIMESTAMP_SECONDS + 7 * SECONDS_PER_DAY;
 
 /// Returns a valid Init.
 fn init() -> Init {
@@ -74,18 +81,6 @@ fn init() -> Init {
     };
     assert_is_ok!(result.validate());
     result
-}
-
-const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1640991600;
-const START_TIMESTAMP_SECONDS: u64 = START_OF_2022_TIMESTAMP_SECONDS + 42 * SECONDS_PER_DAY;
-const END_TIMESTAMP_SECONDS: u64 = START_TIMESTAMP_SECONDS + 7 * SECONDS_PER_DAY;
-
-/// Intermediate structure that helps structure data needed to calculate an investor's SNS NeuronId
-enum Investor {
-    /// The CommunityFund Investor with the memo used to calculate it's SNS NeuronId
-    CommunityFund(u64),
-    /// The Individual Investor with the PrincipalId used to calculate its SNS NeuronId
-    Direct(PrincipalId),
 }
 
 fn params() -> Params {
@@ -107,46 +102,32 @@ fn params() -> Params {
     result
 }
 
-/// Test helper.
-fn select_direct_investment_neurons<'a>(
-    ns: &'a Vec<SnsNeuronRecipe>,
-    buyer_principal: &str,
-) -> Vec<&'a SnsNeuronRecipe> {
-    let mut neurons = vec![];
-    for n in ns {
-        match &n.investor {
-            Some(sns_neuron_recipe::Investor::Direct(DirectInvestment {
-                buyer_principal: buyer,
-            })) => {
-                if buyer == buyer_principal {
-                    neurons.push(n);
-                }
-            }
-            _ => continue,
-        }
-    }
-    if neurons.is_empty() {
-        panic!("Cannot find principal {}", buyer_principal);
-    }
+fn create_generic_committed_swap() -> Swap {
+    let init = init();
 
-    neurons
-}
-
-/// Test helper.
-fn verify_participant_balances(
-    swap: &Swap,
-    buyer_principal: &PrincipalId,
-    icp_balance_e8s: u64,
-    sns_balance_e8s: u64,
-) {
-    let buyer = swap.buyers.get(&buyer_principal.to_string()).unwrap();
-    assert_eq!(icp_balance_e8s, buyer.amount_icp_e8s());
-    let total_neuron_recipe_sns_e8s_for_principal: u64 =
-        select_direct_investment_neurons(&swap.neuron_recipes, &buyer_principal.to_string())
-            .iter()
-            .map(|neuron_recipe| neuron_recipe.amount_e8s())
-            .sum();
-    assert_eq!(total_neuron_recipe_sns_e8s_for_principal, sns_balance_e8s);
+    let params = Params {
+        min_participants: 1,
+        neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+            count: 1,
+            dissolve_delay_interval_seconds: ONE_MONTH_SECONDS,
+        }),
+        ..params()
+    };
+    Swap {
+        lifecycle: Committed as i32,
+        init: Some(init),
+        params: Some(params.clone()),
+        buyers: btreemap! {
+            i2principal_id_string(1001) => BuyerState::new(50 * E8),
+        },
+        cf_participants: vec![],
+        neuron_recipes: vec![create_single_neuron_recipe(
+            params.sns_token_e8s,
+            i2principal_id_string(1001),
+        )],
+        open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
+        finalize_swap_in_progress: None,
+    }
 }
 
 #[test]
@@ -172,81 +153,6 @@ fn transaction_fee_e8s_is_required() {
         ..init()
     };
     assert_is_err!(init.validate());
-}
-
-/// Expectation of one call on the mock Ledger.
-#[derive(Debug, Clone)]
-enum LedgerExpect {
-    AccountBalance(Account, Result<Tokens, i32>),
-    TransferFunds(u64, u64, Option<Subaccount>, Account, u64, Result<u64, i32>),
-}
-
-struct MockLedger {
-    expect: Arc<Mutex<Vec<LedgerExpect>>>,
-}
-
-impl MockLedger {
-    fn pop(&self) -> Option<LedgerExpect> {
-        (*self.expect).lock().unwrap().pop()
-    }
-}
-
-#[async_trait]
-impl ICRC1Ledger for MockLedger {
-    async fn transfer_funds(
-        &self,
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: Account,
-        memo: u64,
-    ) -> Result<u64, NervousSystemError> {
-        match self.pop() {
-            Some(LedgerExpect::TransferFunds(
-                amount_e8s_,
-                fee_e8s_,
-                from_subaccount_,
-                to_,
-                memo_,
-                result,
-            )) => {
-                assert_eq!(amount_e8s_, amount_e8s);
-                assert_eq!(fee_e8s_, fee_e8s);
-                assert_eq!(from_subaccount_, from_subaccount);
-                assert_eq!(to_, to);
-                assert_eq!(memo_, memo);
-                return result.map_err(|x| NervousSystemError::new_with_message(format!("{}", x)));
-            }
-            x => panic!(
-                "Received transfer_funds({}, {}, {:?}, {}, {}), expected {:?}",
-                amount_e8s, fee_e8s, from_subaccount, to, memo, x
-            ),
-        }
-    }
-
-    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        unimplemented!()
-    }
-
-    async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
-        match self.pop() {
-            Some(LedgerExpect::AccountBalance(account_, result)) => {
-                assert_eq!(account_, account);
-                return result.map_err(|x| NervousSystemError::new_with_message(format!("{}", x)));
-            }
-            x => panic!("Received account_balance({}), expected {:?}", account, x),
-        }
-    }
-
-    fn canister_id(&self) -> CanisterId {
-        CanisterId::from_u64(1)
-    }
-}
-
-fn mock_stub(mut expect: Vec<LedgerExpect>) -> MockLedger {
-    expect.reverse();
-    let e = Arc::new(Mutex::new(expect));
-    MockLedger { expect: e }
 }
 
 #[test]
@@ -336,7 +242,7 @@ fn test_open() {
     }
     // Check that state is updated.
     assert_eq!(swap.sns_token_e8s().unwrap(), params.sns_token_e8s);
-    assert_eq!(swap.lifecycle(), Lifecycle::Open);
+    assert_eq!(swap.lifecycle(), Open);
 }
 
 fn now_fn(is_after: bool) -> u64 {
@@ -385,7 +291,7 @@ fn test_min_icp() {
             .unwrap();
         assert!(r.is_ok());
     }
-    assert_eq!(swap.lifecycle(), Lifecycle::Open);
+    assert_eq!(swap.lifecycle(), Open);
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 2 ICP from one buyer.
@@ -440,7 +346,7 @@ fn test_min_icp() {
     assert!(!swap.can_commit(END_TIMESTAMP_SECONDS));
     // This should now abort as the minimum hasn't been reached.
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
-    assert_eq!(swap.lifecycle(), Lifecycle::Aborted);
+    assert_eq!(swap.lifecycle(), Aborted);
     {
         // "Sweep" all ICP, which should go back to the buyers.
         let SweepResult {
@@ -476,7 +382,8 @@ fn test_min_icp() {
                 ]),
             )
             .now_or_never()
-            .unwrap();
+            .unwrap()
+            .expect("Expected sweep_icp to succeed");
         assert_eq!(skipped, 0);
         assert_eq!(success, 2);
         assert_eq!(failure, 0);
@@ -519,7 +426,7 @@ fn test_min_max_icp_per_buyer() {
             .unwrap();
         assert!(r.is_ok());
     }
-    assert_eq!(swap.lifecycle(), Lifecycle::Open);
+    assert_eq!(swap.lifecycle(), Open);
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Try to deposit 0.99999999 ICP, slightly less than the minimum.
@@ -629,7 +536,7 @@ fn test_max_icp() {
             .unwrap();
         assert!(r.is_ok());
     }
-    assert_eq!(swap.lifecycle(), Lifecycle::Open);
+    assert_eq!(swap.lifecycle(), Open);
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 6 ICP from one buyer.
@@ -683,7 +590,7 @@ fn test_max_icp() {
     assert!(swap.can_commit(END_TIMESTAMP_SECONDS - 1));
     // This should commit...
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
-    assert_eq!(swap.lifecycle(), Lifecycle::Committed);
+    assert_eq!(swap.lifecycle(), Committed);
     // Check that buyer balances are correct. Total SNS balance is 1M
     // and total ICP is 10, so 100k SNS tokens per ICP.
     verify_participant_balances(&swap, &TEST_USER1_PRINCIPAL, 6 * E8, 600000 * E8);
@@ -748,7 +655,7 @@ fn test_scenario_happy() {
             .unwrap();
         assert!(r.is_ok());
     }
-    assert_eq!(swap.lifecycle(), Lifecycle::Open);
+    assert_eq!(swap.lifecycle(), Open);
     assert_eq!(swap.sns_token_e8s().unwrap(), 200_000 * E8);
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
@@ -805,7 +712,7 @@ fn test_scenario_happy() {
     {
         let mut abort_swap = swap.clone();
         assert!(abort_swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
-        assert_eq!(abort_swap.lifecycle(), Lifecycle::Aborted);
+        assert_eq!(abort_swap.lifecycle(), Aborted);
     }
     // Deposit 400 ICP from a third buyer.
     assert!(swap
@@ -838,7 +745,7 @@ fn test_scenario_happy() {
     assert!(swap.can_commit(END_TIMESTAMP_SECONDS));
     // This should commit...
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
-    assert_eq!(swap.lifecycle(), Lifecycle::Committed);
+    assert_eq!(swap.lifecycle(), Committed);
     // Check that buyer balances are correct. Total SNS balance is
     // 200k and total ICP is 2k.
     verify_participant_balances(&swap, &TEST_USER1_PRINCIPAL, 900 * E8, 90000 * E8);
@@ -890,7 +797,8 @@ fn test_scenario_happy() {
                 ]),
             )
             .now_or_never()
-            .unwrap();
+            .unwrap()
+            .expect("Expected sweep_icp to succeed");
         assert_eq!(skipped, 0);
         assert_eq!(success, 2);
         assert_eq!(failure, 1);
@@ -914,7 +822,8 @@ fn test_scenario_happy() {
                 )]),
             )
             .now_or_never()
-            .unwrap();
+            .unwrap()
+            .expect("Expected sweep_icp to succeed");
         assert_eq!(skipped, 2);
         assert_eq!(success, 1);
         assert_eq!(failure, 0);
@@ -936,17 +845,17 @@ fn test_scenario_happy() {
         }
 
         let sns_transaction_fee_e8s = *swap
-            .init()
+            .init_or_panic()
             .transaction_fee_e8s
             .as_ref()
             .expect("Transaction fee not known.");
         let neuron_basket_transfer_fund_calls =
-            |amount_sns_tokens_e8s: u64, count: u64, investor: Investor| -> Vec<LedgerExpect> {
+            |amount_sns_tokens_e8s: u64, count: u64, investor: TestInvestor| -> Vec<LedgerExpect> {
                 let split_amount = Swap::split(amount_sns_tokens_e8s, count);
 
                 let starting_memo = match investor {
-                    Investor::CommunityFund(starting_memo) => starting_memo,
-                    Investor::Direct(_) => 0,
+                    TestInvestor::CommunityFund(starting_memo) => starting_memo,
+                    TestInvestor::Direct(_) => 0,
                 };
 
                 split_amount
@@ -954,10 +863,10 @@ fn test_scenario_happy() {
                     .enumerate()
                     .map(|(ledger_account_memo, amount)| {
                         let to = match investor {
-                            Investor::CommunityFund(_) => {
+                            TestInvestor::CommunityFund(_) => {
                                 cf(starting_memo + ledger_account_memo as u64)
                             }
-                            Investor::Direct(principal_id) => {
+                            TestInvestor::Direct(principal_id) => {
                                 dst(principal_id, ledger_account_memo as u64)
                             }
                         };
@@ -984,32 +893,32 @@ fn test_scenario_happy() {
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             60_000 * E8,
             neurons_per_investor,
-            Investor::Direct(*TEST_USER2_PRINCIPAL),
+            TestInvestor::Direct(*TEST_USER2_PRINCIPAL),
         ));
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             40_000 * E8,
             neurons_per_investor,
-            Investor::Direct(*TEST_USER3_PRINCIPAL),
+            TestInvestor::Direct(*TEST_USER3_PRINCIPAL),
         ));
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             90_000 * E8,
             neurons_per_investor,
-            Investor::Direct(*TEST_USER1_PRINCIPAL),
+            TestInvestor::Direct(*TEST_USER1_PRINCIPAL),
         ));
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             5_000 * E8,
             neurons_per_investor,
-            Investor::CommunityFund(/* memo */ 0),
+            TestInvestor::CommunityFund(/* memo */ 0),
         ));
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             3_000 * E8,
             neurons_per_investor,
-            Investor::CommunityFund(/* memo */ 3),
+            TestInvestor::CommunityFund(/* memo */ 3),
         ));
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             2_000 * E8,
             neurons_per_investor,
-            Investor::CommunityFund(/* memo */ 6),
+            TestInvestor::CommunityFund(/* memo */ 6),
         ));
 
         let SweepResult {
@@ -1019,182 +928,11 @@ fn test_scenario_happy() {
         } = swap
             .sweep_sns(now_fn, &mock_stub(mock_ledger_calls))
             .now_or_never()
-            .unwrap();
+            .unwrap()
+            .expect("Expected sweep_sns to succeed");
         assert_eq!(skipped, 0);
         assert_eq!(failure, 0);
         assert_eq!(success, 18);
-    }
-}
-
-// Expect that no SNS root calls will be made.
-#[derive(Default, Debug)]
-struct ExplodingSnsRootClient;
-#[async_trait]
-impl SnsRootClient for ExplodingSnsRootClient {
-    async fn set_dapp_controllers(
-        &mut self,
-        _request: SetDappControllersRequest,
-    ) -> Result<SetDappControllersResponse, CanisterCallError> {
-        unimplemented!();
-    }
-}
-#[derive(Default, Debug)]
-struct SpySnsRootClient {
-    observed_calls: Vec<SetDappControllersRequest>,
-}
-#[async_trait]
-impl SnsRootClient for SpySnsRootClient {
-    async fn set_dapp_controllers(
-        &mut self,
-        request: SetDappControllersRequest,
-    ) -> Result<SetDappControllersResponse, CanisterCallError> {
-        self.observed_calls.push(request);
-        Ok(SetDappControllersResponse {
-            failed_updates: vec![],
-        })
-    }
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, PartialEq)]
-enum SnsGovernanceClientCall {
-    ClaimSwapNeurons(ClaimSwapNeuronsRequest),
-    ManageNeuron(ManageNeuron),
-    SetMode(SetMode),
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, PartialEq)]
-#[allow(unused)]
-enum SnsGovernanceClientReply {
-    ClaimSwapNeurons(ClaimSwapNeuronsResponse),
-    ManageNeuron(ManageNeuronResponse),
-    SetMode(SetModeResponse),
-    CanisterCallError(CanisterCallError),
-}
-
-#[derive(Default, Debug)]
-struct SpySnsGovernanceClient {
-    calls: Vec<SnsGovernanceClientCall>,
-    replies: Vec<SnsGovernanceClientReply>,
-}
-#[async_trait]
-impl SnsGovernanceClient for SpySnsGovernanceClient {
-    async fn manage_neuron(
-        &mut self,
-        request: ManageNeuron,
-    ) -> Result<ManageNeuronResponse, CanisterCallError> {
-        self.calls
-            .push(SnsGovernanceClientCall::ManageNeuron(request));
-        Ok(ManageNeuronResponse {
-            command: Some(manage_neuron_response::Command::ClaimOrRefresh(
-                // Even an empty value can be used here, because it is not
-                // actually used in this scenario (yet).
-                ClaimOrRefreshResponse::default(),
-            )),
-        })
-    }
-    async fn set_mode(&mut self, request: SetMode) -> Result<SetModeResponse, CanisterCallError> {
-        self.calls.push(SnsGovernanceClientCall::SetMode(request));
-        Ok(SetModeResponse {})
-    }
-
-    async fn claim_swap_neurons(
-        &mut self,
-        request: ClaimSwapNeuronsRequest,
-    ) -> Result<ClaimSwapNeuronsResponse, CanisterCallError> {
-        self.calls
-            .push(SnsGovernanceClientCall::ClaimSwapNeurons(request));
-        match self.replies.pop().unwrap() {
-            SnsGovernanceClientReply::ClaimSwapNeurons(reply) => Ok(reply),
-            SnsGovernanceClientReply::CanisterCallError(error) => Err(error),
-            unexpected_reply => panic!("Unexpected reply on the stack: {:?}", unexpected_reply),
-        }
-    }
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, PartialEq)]
-enum NnsGovernanceClientCall {
-    SettleCommunityFundParticipation(SettleCommunityFundParticipation),
-}
-#[derive(Default, Debug)]
-struct SpyNnsGovernanceClient {
-    calls: Vec<NnsGovernanceClientCall>,
-}
-#[async_trait]
-impl NnsGovernanceClient for SpyNnsGovernanceClient {
-    async fn settle_community_fund_participation(
-        &mut self,
-        request: SettleCommunityFundParticipation,
-    ) -> Result<Result<(), GovernanceError>, CanisterCallError> {
-        self.calls
-            .push(NnsGovernanceClientCall::SettleCommunityFundParticipation(
-                request,
-            ));
-        Ok(Ok(()))
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, PartialOrd, Ord, Eq, Hash)]
-enum LedgerCall {
-    TransferFunds {
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: Account,
-        memo: u64,
-    },
-
-    AccountBalance {
-        account_id: Account,
-    },
-}
-
-struct SpyLedger {
-    calls: Arc<Mutex<Vec<LedgerCall>>>,
-}
-impl SpyLedger {
-    fn new(calls: Arc<Mutex<Vec<LedgerCall>>>) -> Self {
-        Self { calls }
-    }
-}
-#[async_trait]
-impl ICRC1Ledger for SpyLedger {
-    async fn transfer_funds(
-        &self,
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: Account,
-        memo: u64,
-    ) -> Result</* block_height: */ u64, NervousSystemError> {
-        self.calls.lock().unwrap().push(LedgerCall::TransferFunds {
-            amount_e8s,
-            fee_e8s,
-            from_subaccount,
-            to,
-            memo,
-        });
-
-        Ok(42)
-    }
-
-    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        unimplemented!();
-    }
-
-    async fn account_balance(&self, account_id: Account) -> Result<Tokens, NervousSystemError> {
-        self.calls
-            .lock()
-            .unwrap()
-            .push(LedgerCall::AccountBalance { account_id });
-
-        Ok(Tokens::from_e8s(10 * E8))
-    }
-
-    fn canister_id(&self) -> CanisterId {
-        CanisterId::from_u64(1)
     }
 }
 
@@ -1235,21 +973,20 @@ async fn test_finalize_swap_ok() {
         cf_participants: vec![],
         neuron_recipes: vec![],
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
+        finalize_swap_in_progress: None,
     };
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Committed);
 
     let mut sns_root_client = ExplodingSnsRootClient::default();
-    let mut sns_governance_client = SpySnsGovernanceClient::default();
-    sns_governance_client
-        .replies
-        .push(SnsGovernanceClientReply::ClaimSwapNeurons(
+    let mut sns_governance_client =
+        SpySnsGovernanceClient::new(vec![SnsGovernanceClientReply::ClaimSwapNeurons(
             ClaimSwapNeuronsResponse {
                 successful_claims: 9,
                 skipped_claims: 0,
                 failed_claims: 0,
             },
-        ));
+        )]);
     let mut nns_governance_client = SpyNnsGovernanceClient::default();
 
     // Step 2: Run the code under test. To wit, finalize_swap.
@@ -1294,6 +1031,7 @@ async fn test_finalize_swap_ok() {
                         })),
                     }
                 ),
+                error_message: None,
             },
         );
     }
@@ -1309,7 +1047,7 @@ async fn test_finalize_swap_ok() {
         .calls
         .iter()
         .filter_map(|c| {
-            use SnsGovernanceClientCall as Call;
+            use common::doubles::SnsGovernanceClientCall as Call;
             match c {
                 Call::ManageNeuron(_) => None,
                 Call::SetMode(_) => None,
@@ -1341,7 +1079,7 @@ async fn test_finalize_swap_ok() {
 
     // Assert that ICP and SNS tokens were sent.
     let sns_transaction_fee_e8s = *swap
-        .init()
+        .init_or_panic()
         .transaction_fee_e8s
         .as_ref()
         .expect("Transaction fee not known.");
@@ -1449,7 +1187,7 @@ async fn test_finalize_swap_ok() {
     actual_sns_ledger_calls.sort();
     assert_eq!(actual_sns_ledger_calls, expected_sns_ledger_calls);
 
-    // Assert that NNS governance was notified of positive outcome (i.e. ended in Lifecycle::Committed).
+    // Assert that NNS governance was notified of positive outcome (i.e. ended in Committed).
     {
         use settle_community_fund_participation::{Committed, Result};
         assert_eq!(
@@ -1505,12 +1243,18 @@ async fn test_finalize_swap_abort() {
         },
         neuron_recipes: vec![],
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
+        finalize_swap_in_progress: None,
     };
 
     assert!(swap.try_commit_or_abort(/* now_seconds: */ END_TIMESTAMP_SECONDS + 1));
-    assert_eq!(swap.lifecycle(), Lifecycle::Aborted);
+    assert_eq!(swap.lifecycle(), Aborted);
 
-    let mut sns_root_client = SpySnsRootClient::default();
+    let mut sns_root_client = SpySnsRootClient::new(vec![
+        // SNS Root will respond with zero errors
+        SnsRootClientReply::SetDappControllers(SetDappControllersResponse {
+            failed_updates: vec![],
+        }),
+    ]);
     let mut sns_governance_client = SpySnsGovernanceClient::default();
     let mut nns_governance_client = SpyNnsGovernanceClient::default();
 
@@ -1555,6 +1299,7 @@ async fn test_finalize_swap_abort() {
                         })),
                     }
                 ),
+                error_message: None,
             },
         );
     }
@@ -1596,12 +1341,14 @@ async fn test_finalize_swap_abort() {
         .collect();
     assert_eq!(
         sns_root_client.observed_calls,
-        vec![SetDappControllersRequest {
-            controller_principal_ids
-        }],
+        vec![SnsRootClientCall::SetDappControllers(
+            SetDappControllersRequest {
+                controller_principal_ids
+            }
+        )],
     );
 
-    // Assert that NNS governance was notified of negative outcome (i.e. ended in Lifecycle::Aborted).
+    // Assert that NNS governance was notified of negative outcome (i.e. ended in Aborted).
     {
         use settle_community_fund_participation::{Aborted, Result};
         assert_eq!(
@@ -1653,7 +1400,7 @@ fn test_error_refund() {
             .unwrap();
         assert!(r.is_ok());
     }
-    assert_eq!(swap.lifecycle(), Lifecycle::Open);
+    assert_eq!(swap.lifecycle(), Open);
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 6 ICP from one buyer.
@@ -1715,7 +1462,7 @@ fn test_error_refund() {
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Commit when due.
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
-    assert_eq!(swap.lifecycle(), Lifecycle::Committed);
+    assert_eq!(swap.lifecycle(), Committed);
     // Check that buyer balance is correct. Total SNS balance is 100k and total ICP is 6.
     verify_participant_balances(&swap, &TEST_USER1_PRINCIPAL, 6 * E8, 100_000 * E8);
 
@@ -1857,7 +1604,8 @@ fn test_error_refund() {
             )]),
         )
         .now_or_never()
-        .unwrap();
+        .unwrap()
+        .expect("Expected sweep_icp to succeed");
     assert_eq!(skipped, 0);
     assert_eq!(success, 1);
     assert_eq!(failure, 0);
@@ -1945,7 +1693,7 @@ fn test_get_buyer_state() {
             .unwrap();
         assert!(r.is_ok());
     }
-    assert_eq!(swap.lifecycle(), Lifecycle::Open);
+    assert_eq!(swap.lifecycle(), Open);
     // Deposit 6 ICP from one buyer.
     assert!(swap
         .refresh_buyer_token_e8s(
@@ -2026,4 +1774,655 @@ fn test_get_buyer_state() {
         })
         .buyer_state
         .is_none());
+}
+
+/// Test that the locking mechanism of finalize_swap works. Use the InterleavingTestLedger
+/// to have one thread block on Ledger calls. Meanwhile, call the finalize_swap API once
+/// the lock has been acquired, and assert that the request is rejected.
+#[test]
+fn test_finalize_swap_rejects_concurrent_calls() {
+    // Step 1: Prepare the world.
+
+    // The setup of the swap is irrelevant to the test, so use some generic swap state.
+    // Make sure finalize_swap is unlocked.
+    let swap = create_generic_committed_swap();
+    assert!(!swap.is_finalize_swap_locked());
+
+    // The swap canister relies on a static variable that's reused by multiple
+    // canister calls. To avoid using static variables in the test, and yet
+    // allow two mutable references to the same value, we'll take both a mutable
+    // reference and a raw pointer to it that we'll (unsafely) dereference later.
+    // To make sure that the pointer keeps pointing to the same reference, we'll pin
+    // the mutable reference.
+    let mut boxed_swap = Box::pin(swap);
+    let raw_ptr_swap = unsafe { Pin::get_unchecked_mut(boxed_swap.as_mut()) as *mut Swap };
+
+    // We control the interleaving of finalize calls by using channels. The ledger provided
+    // to the finalize method will block on ledger calls, and continue only when messages are
+    // drained from the channel. We can use this technique to guarantee ordering of API calls
+    // across message blocks.
+    let (sender_channel, mut receiver_channel) = mpsc::unbounded::<LedgerControlMessage>();
+
+    let underlying_icp_ledger: SpyLedger = SpyLedger::default();
+    let interleaving_ledger =
+        InterleavingTestLedger::new(Box::new(underlying_icp_ledger), sender_channel);
+
+    // Step 2: Call finalize and have the thread block
+
+    // Spawn a call to finalize in a new thread; meanwhile, on the main thread we'll await
+    // for the signal that the ICP Ledger transfer has been initiated
+    let thread_handle = thread::spawn(move || {
+        let finalize_result = tokio_test::block_on(boxed_swap.finalize(
+            now_fn,
+            &mut ExplodingSnsRootClient::default(),
+            &mut SpySnsGovernanceClient::with_dummy_replies(),
+            &interleaving_ledger,
+            &SpyLedger::default(), // SNS Token Ledger
+            &mut SpyNnsGovernanceClient::default(),
+        ));
+
+        // Assert that this call to finalize returned a response. As we are only testing the
+        // locking mechanism, assert that the values aren't set to None.
+        assert!(
+            finalize_result.error_message.is_none(),
+            "{:?}",
+            finalize_result.error_message
+        );
+        // Assert that the lock was released.
+        assert!(!boxed_swap.is_finalize_swap_locked());
+    });
+
+    // Block the current main thread until an ICP Ledger transfer is triggered in the spawned thread
+    // by the InterleavingTestLedger. A message will be sent to the receiver_channel to notify.
+    let (_, ledger_control_message) =
+        tokio_test::block_on(async { receiver_channel.next().await.unwrap() });
+
+    // Step 3: Call finalize concurrently and inspect results
+
+    // To add some safety measures given the unsafe block, add an Atomic Fence that will
+    // guarantee (along with the fencing in the InterleavingTestLedger) that the unsafe block
+    // sees the same memory as the other thread.
+    atomic::fence(AtomicOrdering::SeqCst);
+    unsafe {
+        // Assert the lock exists in Swap's state
+        assert!((*raw_ptr_swap).is_finalize_swap_locked());
+
+        // Interleave a call to finalize using the raw pointer. This call should return a
+        // default FinalizeSwapResponse with an error message after hitting the lock.
+        let response = (*raw_ptr_swap)
+            .finalize(
+                now_fn,
+                &mut ExplodingSnsRootClient::default(),
+                &mut SpySnsGovernanceClient::default(),
+                &SpyLedger::default(),
+                &SpyLedger::default(),
+                &mut SpyNnsGovernanceClient::default(),
+            )
+            .now_or_never()
+            .unwrap();
+
+        // This would fail before introducing the locking mechanism
+        match response.error_message {
+            None => panic!("Expected finalize_swap to reject this concurrent request"),
+            Some(error_message) => {
+                assert!(error_message
+                    .contains("The Sale canister has finalize_swap call already in progress"))
+            }
+        }
+
+        // Assert not other subactions were started
+        assert!(response.sweep_icp.is_none());
+        assert!(response
+            .settle_community_fund_participation_result
+            .is_none());
+        assert!(response.set_dapp_controllers_result.is_none());
+        assert!(response.sweep_sns.is_none());
+        assert!(response.create_neuron.is_none());
+        assert!(response.sns_governance_normal_mode_enabled.is_none());
+    }
+
+    // Step 4: Assert finalize finished and released the lock
+
+    // Resume the spawned thread's execution of finalize.
+    ledger_control_message
+        .send(Ok(()))
+        .expect("Error when continuing blocked finalize");
+
+    // Drain the channel to finish the test.
+    tokio_test::block_on(drain_receiver_channel(&mut receiver_channel));
+
+    // Join the thread_handle to make sure the thread didn't exit unexpectedly
+    thread_handle
+        .join()
+        .expect("Expected the spawned thread to succeed");
+
+    atomic::fence(AtomicOrdering::SeqCst);
+    // Assert that the lock was released after finalize succeeded.
+    unsafe {
+        assert!(!(*raw_ptr_swap).is_finalize_swap_locked());
+    }
+}
+
+/// Test that the Sale canister must be in the terminal state (Aborted || Committed)
+/// for finalize to be invoked correctly.
+#[tokio::test]
+async fn test_sale_must_be_terminal_to_invoke_finalize() {
+    let invalid_finalize_lifecycles = vec![Open, Unspecified, Pending];
+
+    for lifecycle in invalid_finalize_lifecycles {
+        let mut swap = Swap {
+            lifecycle: lifecycle as i32,
+            init: Some(init()),
+            params: Some(params()),
+            ..Default::default()
+        };
+
+        let response = swap
+            .finalize(
+                now_fn,
+                &mut ExplodingSnsRootClient::default(),
+                &mut SpySnsGovernanceClient::default(),
+                &SpyLedger::default(), // ICP Ledger
+                &SpyLedger::default(), // SNS Ledger
+                &mut SpyNnsGovernanceClient::default(),
+            )
+            .await;
+
+        let error_message = response
+            .error_message
+            .expect("Expected the error_message to be set");
+
+        // Assert the error message contains the correct message
+        assert!(
+            error_message
+                .contains("The Sale can only be finalized in the COMMITTED or ABORTED states"),
+            "{}",
+            error_message,
+        );
+
+        // Assert not other subactions were started
+        assert!(response.sweep_icp.is_none());
+        assert!(response
+            .settle_community_fund_participation_result
+            .is_none());
+        assert!(response.set_dapp_controllers_result.is_none());
+        assert!(response.sweep_sns.is_none());
+        assert!(response.create_neuron.is_none());
+        assert!(response.sns_governance_normal_mode_enabled.is_none());
+
+        // Assert that the finalize_swap lock was released
+        assert!(!swap.is_finalize_swap_locked());
+    }
+}
+
+/// Test that sweep_icp will handle missing required state gracefully with an error.
+#[tokio::test]
+async fn test_sweep_icp_handles_missing_state() {
+    // Step 1: Prepare the world
+
+    // sweep_icp depends on init being set
+    let mut swap = Swap {
+        init: None,
+        ..Default::default()
+    };
+
+    // Step 2: Call sweep_icp
+    let result = swap.sweep_icp(now_fn, &SpyLedger::default()).await;
+
+    // Step 3: Inspect results
+
+    // sweep_icp should gracefully handle missing state by returning an error
+    assert!(result.is_err());
+}
+
+/// Test that sweep_icp will handles invalid BuyerStates gracefully by incrementing the correct
+/// SweepResult fields
+#[tokio::test]
+async fn test_sweep_icp_handles_invalid_buyer_states() {
+    // Step 1: Prepare the world
+
+    // Create some valid and invalid buyers in the state
+    let mut swap = Swap {
+        lifecycle: Committed as i32,
+        init: Some(init()),
+        params: Some(params()),
+        buyers: btreemap! {
+            i2principal_id_string(1001) => BuyerState::new(50 * E8), // Valid
+            "GARBAGE_PRINCIPAL_ID".to_string() => BuyerState::new(50 * E8), // Invalid
+            i2principal_id_string(1003) => BuyerState::default(), // Invalid
+        },
+        ..Default::default()
+    };
+
+    // Step 2: Call sweep_icp
+    let result = swap.sweep_icp(now_fn, &SpyLedger::default()).await;
+
+    let sweep_result = match result {
+        Ok(res) => res,
+        Err(msg) => panic!(
+            "Expected sweep_icp to return a SweepResult, got Err: {:?}",
+            msg
+        ),
+    };
+
+    assert_eq!(
+        sweep_result,
+        SweepResult {
+            success: 1, // Single valid buyer
+            skipped: 0, // No skips
+            failure: 2, // Two invalid buyers
+        }
+    )
+}
+
+/// Test that sweep_sns will handle missing required state gracefully with an error.
+#[tokio::test]
+async fn test_sweep_sns_handles_missing_state() {
+    // Step 1: Prepare the world
+
+    // sweep_sns depends on init being set
+    let mut swap = Swap {
+        init: None,
+        ..Default::default()
+    };
+
+    // Step 2: Call sweep_sns
+    let result = swap.sweep_sns(now_fn, &SpyLedger::default()).await;
+
+    // Step 3: Inspect results
+
+    // sweep_sns should gracefully handle missing state by returning an error
+    assert!(result.is_err());
+}
+
+/// Test that sweep_sns will handles invalid SnsNeuronRecipes gracefully by incrementing the correct
+/// SweepResult fields
+#[tokio::test]
+async fn test_sweep_sns_handles_invalid_buyer_states() {
+    // Step 1: Prepare the world
+
+    // Create some valid and invalid buyers in the state
+    let mut swap = Swap {
+        lifecycle: Committed as i32,
+        init: Some(init()),
+        params: Some(params()),
+        neuron_recipes: vec![
+            // Invalid: Missing NeuronAttributes field
+            SnsNeuronRecipe {
+                neuron_attributes: None, // Invalid
+                ..Default::default()
+            },
+            // Invalid: Missing Investor field
+            SnsNeuronRecipe {
+                neuron_attributes: Some(NeuronAttributes::default()),
+                investor: None, // Invalid
+                ..Default::default()
+            },
+            // Invalid: buyer_principal is not a valid PrincipalId
+            SnsNeuronRecipe {
+                neuron_attributes: Some(NeuronAttributes::default()),
+                investor: Some(Investor::Direct(DirectInvestment {
+                    // Invalid
+                    buyer_principal: "GARBAGE_DATA".to_string(),
+                })),
+                ..Default::default()
+            },
+            // Invalid: sns field set to None
+            SnsNeuronRecipe {
+                neuron_attributes: Some(NeuronAttributes::default()),
+                investor: Some(Investor::Direct(DirectInvestment {
+                    buyer_principal: (*TEST_USER1_PRINCIPAL).to_string(),
+                })),
+                sns: None, // Invalid
+            },
+            // Valid
+            SnsNeuronRecipe {
+                neuron_attributes: Some(NeuronAttributes::default()),
+                investor: Some(Investor::Direct(DirectInvestment {
+                    buyer_principal: (*TEST_USER1_PRINCIPAL).to_string(),
+                })),
+                sns: Some(TransferableAmount {
+                    amount_e8s: 10 * E8,
+                    ..Default::default()
+                }),
+            },
+        ],
+        ..Default::default()
+    };
+
+    // Step 2: Call sweep_sns
+    let result = swap.sweep_sns(now_fn, &SpyLedger::default()).await;
+
+    // Step 2: Inspect Results
+    let sweep_result = match result {
+        Ok(res) => res,
+        Err(msg) => panic!(
+            "Expected sweep_sns to return a SweepResult, got Err: {:?}",
+            msg
+        ),
+    };
+
+    assert_eq!(
+        sweep_result,
+        SweepResult {
+            success: 1, // Single valid buyer
+            skipped: 0, // No skips
+            failure: 4, // Four invalid buyers
+        }
+    )
+}
+
+/// Test that settle_community_fund_participation will handle missing required state
+/// gracefully with an error.
+#[tokio::test]
+async fn test_settle_community_fund_participation_handles_missing_state() {
+    // Step 1: Prepare the world
+
+    // settle_community_fund_participation depends on init being set
+    let swap = Swap {
+        init: None,
+        ..Default::default()
+    };
+
+    // Step 2: Call settle_community_fund_participation
+    let result = swap
+        .settle_community_fund_participation(&mut SpyNnsGovernanceClient::default())
+        .await;
+
+    // Step 3: Inspect results
+
+    // settle_community_fund_participation should gracefully handle missing state by returning an error
+    assert!(result.is_err());
+}
+
+/// Tests that when finalize is called with Lifecycle::Aborted, only a subset of subactions are
+/// performed.
+#[tokio::test]
+async fn test_finalize_swap_abort_executes_correct_subactions() {
+    // Step 1: Prepare the world
+
+    // Create a swap in state aborted
+    let mut swap = Swap {
+        lifecycle: Aborted as i32,
+        init: Some(init()),
+        params: Some(params()),
+        buyers: btreemap! {
+            i2principal_id_string(1001) => BuyerState::new(50 * E8), // Valid
+        },
+        ..Default::default()
+    };
+
+    let mut sns_root_client = SpySnsRootClient::new(vec![
+        // Add a mock reply of a successful call to SNS Root
+        SnsRootClientReply::successful_set_dapp_controllers(),
+    ]);
+
+    let response = swap
+        .finalize(
+            now_fn,
+            &mut sns_root_client,
+            &mut SpySnsGovernanceClient::default(),
+            &SpyLedger::default(), // ICP Ledger
+            &SpyLedger::default(), // SNS Ledger
+            &mut SpyNnsGovernanceClient::default(),
+        )
+        .await;
+
+    // Assert not other subactions were started
+
+    // Successful sweep_icp
+    assert_eq!(
+        response.sweep_icp,
+        Some(SweepResult {
+            success: 1, // Single valid buyer
+            skipped: 0,
+            failure: 0,
+        })
+    );
+
+    // Successful settle_community_fund_participation
+    assert_eq!(
+        response.settle_community_fund_participation_result,
+        Some(successful_settle_community_fund_participation_result()),
+    );
+
+    // Successful set_dapp_controllers
+    assert_eq!(
+        response.set_dapp_controllers_result,
+        Some(successful_set_dapp_controllers_call_result()),
+    );
+
+    // No other subactions should have been performed
+    assert!(response.sweep_sns.is_none());
+    assert!(response.create_neuron.is_none());
+    assert!(response.sns_governance_normal_mode_enabled.is_none());
+
+    // Assert that the finalize_swap lock was released
+    assert!(!swap.is_finalize_swap_locked());
+}
+
+/// Test that the restore_dapp_controllers API will reject callers that
+/// are not NNS Governance.
+#[tokio::test]
+#[should_panic(expected = "This method can only be called by NNS Governance")]
+async fn test_restore_dapp_controllers_rejects_unauthorized() {
+    // Step 1: Prepare the world.
+
+    // Explicitly set the nns_governance_canister_id.
+    let init = Init {
+        nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
+        ..init()
+    };
+    let mut swap = Swap {
+        lifecycle: Pending as i32,
+        init: Some(init),
+        params: Some(params()),
+        ..Default::default()
+    };
+
+    // Step 2: Call restore_dapp_controllers with an unauthorized caller
+    swap.restore_dapp_controllers(
+        &mut ExplodingSnsRootClient::default(),
+        PrincipalId::new_anonymous(),
+    )
+    .await;
+}
+
+/// Test that the restore_dapp_controllers API will gracefully handle invalid
+/// fallback_controller_ids
+#[tokio::test]
+async fn test_restore_dapp_controllers_cannot_parse_fallback_controllers() {
+    // Step 1: Prepare the world.
+
+    let init = Init {
+        fallback_controller_principal_ids: vec![
+            PrincipalId::new_anonymous().to_string(), // Valid
+            CanisterId::from_u64(1).to_string(),      // Valid
+            "GARBAGE_DATA_IN".to_string(),            // Invalid
+        ],
+        ..init()
+    };
+    let mut swap = Swap {
+        lifecycle: Pending as i32,
+        init: Some(init),
+        params: Some(params()),
+        ..Default::default()
+    };
+
+    // Step 2: Call restore_dapp_controllers
+    let restore_dapp_controllers_response = swap
+        .restore_dapp_controllers(
+            &mut ExplodingSnsRootClient::default(), // Should fail before using RootClient
+            NNS_GOVERNANCE_CANISTER_ID.get(),
+        )
+        .await;
+
+    // Step 3: Inspect Results
+
+    // Match the error case, panic with message for all other cases
+    let canister_call_error = extract_canister_call_error(&restore_dapp_controllers_response);
+
+    // Assert that the error message contains what is expected
+    assert!(
+        canister_call_error.description.contains(
+            "Could not set_dapp_controllers, \
+            one or more fallback_controller_principal_ids \
+            could not be parsed as a PrincipalId"
+        ),
+        "{}",
+        canister_call_error.description
+    );
+
+    // Assert that even with a failure, the Lifecycle of the Sale has been set to aborted
+    assert_eq!(swap.lifecycle(), Aborted);
+}
+
+/// Test that the restore_dapp_controllers API will gracefully handle external failures
+/// from SNS Root.
+#[tokio::test]
+async fn test_restore_dapp_controllers_handles_external_root_failures() {
+    // Step 1: Prepare the world.
+
+    let mut swap = Swap {
+        lifecycle: Pending as i32,
+        init: Some(init()),
+        params: Some(params()),
+        ..Default::default()
+    };
+
+    // Set up the series of mocked replies from the SNS Root canister
+    let mut sns_root_client = SpySnsRootClient::default();
+
+    // Step 2: Call restore_dapp_controllers
+
+    // The call to SNS Root will fail due to external reasons to SNS Root
+    sns_root_client.push_reply(SnsRootClientReply::CanisterCallError(CanisterCallError {
+        code: Some(0),
+        description: "EXTERNAL FAILURE".to_string(),
+    }));
+
+    let restore_dapp_controllers_response = swap
+        .restore_dapp_controllers(&mut sns_root_client, NNS_GOVERNANCE_CANISTER_ID.get())
+        .await;
+
+    // Step 3: Inspect results
+
+    let canister_call_error = extract_canister_call_error(&restore_dapp_controllers_response);
+
+    // Assert that the error message contains what is expected
+    assert!(
+        canister_call_error.description.contains("EXTERNAL FAILURE"),
+        "{}",
+        canister_call_error.description
+    );
+
+    // Assert that the error code is expected
+    assert_eq!(canister_call_error.code, Some(0));
+
+    // Assert that even with a failure, the Lifecycle of the Sale has been set to aborted
+    assert_eq!(swap.lifecycle(), Aborted);
+}
+
+/// Test that the restore_dapp_controllers API will gracefully handle internal failures
+/// from SNS Root.
+#[tokio::test]
+async fn test_restore_dapp_controllers_handles_internal_root_failures() {
+    // Step 1: Prepare the world.
+
+    let mut swap = Swap {
+        lifecycle: Pending as i32,
+        init: Some(init()),
+        params: Some(params()),
+        ..Default::default()
+    };
+
+    // Set up the series of mocked replies from the SNS Root canister
+    let mut sns_root_client = SpySnsRootClient::default();
+
+    // Step 2: Call restore_dapp_controllers
+
+    // The call to SNS Root will fail due to internal reasons to SNS Root
+    sns_root_client.push_reply(SnsRootClientReply::SetDappControllers(
+        SetDappControllersResponse {
+            failed_updates: vec![set_dapp_controllers_response::FailedUpdate::default()],
+        },
+    ));
+
+    let restore_dapp_controllers_response = swap
+        .restore_dapp_controllers(&mut sns_root_client, NNS_GOVERNANCE_CANISTER_ID.get())
+        .await;
+
+    // Step 3: Inspect results
+
+    let set_dapp_controller_response =
+        extract_set_dapp_controller_response(&restore_dapp_controllers_response);
+
+    // Assert that the response contains the expected failures
+    assert_eq!(
+        set_dapp_controller_response.failed_updates,
+        vec![set_dapp_controllers_response::FailedUpdate::default()],
+    );
+
+    // Assert that even with a failure, the Lifecycle of the Sale has been set to aborted
+    assert_eq!(swap.lifecycle(), Aborted);
+}
+
+/// Test the restore_dapp_controllers API happy case
+#[tokio::test]
+async fn test_restore_dapp_controllers_happy() {
+    // Create the set of controllers that we will later use to assert with
+    let mut fallback_controllers = vec![(*TEST_USER1_PRINCIPAL), CanisterId::from_u64(1).get()];
+
+    let init = Init {
+        // Provide the fallback controllers in their expected form
+        fallback_controller_principal_ids: fallback_controllers
+            .iter()
+            .map(|pid| pid.to_string())
+            .collect(),
+        ..init()
+    };
+
+    let mut swap = Swap {
+        lifecycle: Pending as i32,
+        init: Some(init),
+        params: Some(params()),
+        ..Default::default()
+    };
+
+    // Set up the series of mocked replies from the SNS Root canister
+    let mut sns_root_client = SpySnsRootClient::default();
+
+    // Step 2: Call restore_dapp_controllers
+
+    // The call to SNS Root will succeed
+    sns_root_client.push_reply(SnsRootClientReply::SetDappControllers(
+        SetDappControllersResponse {
+            failed_updates: vec![],
+        },
+    ));
+
+    let restore_dapp_controllers_response = swap
+        .restore_dapp_controllers(&mut sns_root_client, NNS_GOVERNANCE_CANISTER_ID.get())
+        .await;
+
+    // Step 3: Inspect results
+
+    let set_dapp_controller_response =
+        extract_set_dapp_controller_response(&restore_dapp_controllers_response);
+
+    // Assert that the response contains no failures
+    assert_eq!(set_dapp_controller_response.failed_updates, vec![],);
+
+    // Assert that with a successful call the Lifecycle of the Sale has been set to aborted
+    assert_eq!(swap.lifecycle(), Aborted);
+
+    // Inspect the request to SNS Root and that it has all the fallback controllers
+    match sns_root_client.pop_observed_call() {
+        SnsRootClientCall::SetDappControllers(mut request) => {
+            // Sort the vec so they can be compared
+            request.controller_principal_ids.sort();
+            fallback_controllers.sort();
+            assert_eq!(request.controller_principal_ids, fallback_controllers);
+        }
+    }
 }

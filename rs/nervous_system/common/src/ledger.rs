@@ -12,9 +12,7 @@ use icp_ledger::{
 };
 
 pub struct IcpLedgerCanister {
-    // TODO This field should be private and requires the icrc1 trait implementation
-    // of this struct to be moved to this crate.
-    pub id: CanisterId,
+    id: CanisterId,
 }
 
 impl IcpLedgerCanister {

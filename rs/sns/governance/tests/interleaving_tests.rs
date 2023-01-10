@@ -2,12 +2,13 @@
 //! (in particular, when one method is suspended when it calls out to the ledger
 //! canister).
 use crate::fixtures::TargetLedger;
-use crate::{
-    fixtures::{neuron_id, GovernanceCanisterFixtureBuilder, NeuronBuilder},
-    interleaving::{InterleavingTestLedger, LedgerControlMessage},
-};
+use crate::fixtures::{neuron_id, GovernanceCanisterFixtureBuilder, NeuronBuilder};
 use futures::{channel::mpsc, FutureExt, StreamExt};
 use ic_base_types::PrincipalId;
+use ic_nervous_system_common::E8;
+use ic_nervous_system_common_test_utils::{
+    drain_receiver_channel, InterleavingTestLedger, LedgerControlMessage,
+};
 use ic_sns_governance::{
     governance::Governance as GovernanceCanister,
     pb::v1::{
@@ -20,8 +21,6 @@ use std::{
     sync::{atomic, atomic::Ordering as AOrdering},
     thread,
 };
-
-mod interleaving;
 
 // TODO - remove macro when used in tests - NNS1-1260
 #[allow(dead_code)]
@@ -39,7 +38,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
         .add_neuron(
             NeuronBuilder::new(
                 neuron_id.clone(),
-                10,
+                E8,
                 NeuronPermission::all(&user_principal),
             )
             .set_dissolve_state(None),
@@ -49,9 +48,6 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // We use channels to control how the disbursing and delay increase are
     // interleaved
     let (tx, mut rx) = mpsc::unbounded::<LedgerControlMessage>();
-    // Once we're done with disbursing, we will need to manually close the above
-    // channel to terminate the test.
-    let finish_tx = tx.clone();
 
     let canister_fixture = canister_fixture_builder
         .add_ledger_transform(
@@ -77,7 +73,7 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
     // Spawn disbursing in a new thread; meanwhile, on the main thread we'll await
     // for the signal that the ledger transfer has been initiated
     let neuron_id_clone = neuron_id.clone();
-    thread::spawn(move || {
+    let thread_handle = thread::spawn(move || {
         let manage_neuron = ManageNeuron {
             subaccount: neuron_id_clone.id,
             command: Some(manage_neuron::Command::Disburse(Disburse {
@@ -96,9 +92,6 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
             "Got an unexpected error while disbursing: {:?}",
             disburse_result
         );
-        // As the main thread will try to drain the channel, it's important to close the
-        // channel once disbursing is done, otherwise the main thread will hang.
-        finish_tx.close_channel();
     });
 
     // Block the current thread until the ledger transfer is initiated, then try to
@@ -150,14 +143,11 @@ fn test_cant_increase_dissolve_delay_while_disbursing() {
         continue_disbursing.send(Ok(())).is_ok(),
         "Error in trying to continue disbursing",
     );
-    tokio_test::block_on(async {
-        while let Some((_msg, tx)) = rx.next().await {
-            assert!(
-                tx.send(Ok(())).is_ok(),
-                "Error in trying to continue disbursing",
-            );
-        }
-    });
+    tokio_test::block_on(drain_receiver_channel(&mut rx));
+
+    thread_handle
+        .join()
+        .expect("Expected the spawned thread to succeed");
 }
 
 pub async fn increase_dissolve_delay(

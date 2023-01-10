@@ -664,7 +664,8 @@ fn swap_n_accounts(
                             governance_error: None,
                         })),
                     }
-                )
+                ),
+                error_message: None,
             }
         );
     }
@@ -1076,7 +1077,8 @@ fn swap_lifecycle_sad() {
                             governance_error: None,
                         })),
                     }
-                )
+                ),
+                error_message: None,
             }
         );
     }

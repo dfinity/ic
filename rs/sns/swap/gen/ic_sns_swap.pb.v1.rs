@@ -160,6 +160,16 @@ pub struct Swap {
     /// (that field is required at the application level).
     #[prost(uint64, optional, tag = "9")]
     pub open_sns_token_swap_proposal_id: ::core::option::Option<u64>,
+    /// A lock stored in Swap state. If set to true, then a finalize_swap
+    /// call is in progress. In that case, new finalize_swap calls return
+    /// immediately without doing any real work.
+    ///
+    /// The implementation of the lock should result in the lock being
+    /// released when the finalize_swap method returns. If
+    /// a lock is not released, upgrades of the Swap canister can
+    /// release the lock in the post upgrade hook.
+    #[prost(bool, optional, tag = "10")]
+    pub finalize_swap_in_progress: ::core::option::Option<bool>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.
@@ -712,6 +722,10 @@ pub struct RefreshBuyerTokensResponse {
     ::prost::Message,
 )]
 pub struct FinalizeSwapRequest {}
+/// Response from the `finalize_swap` canister API.
+///
+/// TODO NNS1-1715 - Add diagnostic information that would maximize the chances
+/// that an operator would be able to figure out what corrective action(s) to take
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -735,6 +749,9 @@ pub struct FinalizeSwapResponse {
     #[prost(message, optional, tag = "6")]
     pub settle_community_fund_participation_result:
         ::core::option::Option<SettleCommunityFundParticipationResult>,
+    /// Explains what (if anything) went wrong.
+    #[prost(string, optional, tag = "7")]
+    pub error_message: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(
     candid::CandidType,
