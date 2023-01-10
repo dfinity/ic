@@ -50,7 +50,12 @@ fn example_block() -> Block {
         Memo(456),
         TimeStamp::new(2_000_000_000, 123_456_789),
     );
-    Block::from_transaction(None, transaction, TimeStamp::new(1, 1))
+    Block::from_transaction(
+        None,
+        transaction,
+        TimeStamp::new(1, 1),
+        DEFAULT_TRANSFER_FEE,
+    )
 }
 
 async fn simple_send(

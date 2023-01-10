@@ -12,6 +12,10 @@ BlockContent = {
   ;; Contents of the transaction.
   tx: TransactionContent,
 
+  ;; If the ledger took a transaction fee that is not specified in the transfer,
+  ;; this field will be set to that fee.
+  ? fee: Amount,
+
   ;; IC time at which the ledger constructed the block.
   ts: Timestamp
 }

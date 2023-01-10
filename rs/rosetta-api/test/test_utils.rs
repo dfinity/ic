@@ -196,6 +196,7 @@ impl LedgerAccess for TestLedger {
                 memo,
                 created_at_time,
                 self.next_block_timestamp(),
+                DEFAULT_TRANSFER_FEE,
             )
             .map_err(ApiError::internal_error)?;
 

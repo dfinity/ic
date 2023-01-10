@@ -238,7 +238,7 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
             }
         };
 
-        let tx = if &arg.to == ledger.minting_account() {
+        let (tx, effective_fee) = if &arg.to == ledger.minting_account() {
             let expected_fee = Nat::from(0u64);
             if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {
                 return Err(TransferError::BadFee { expected_fee });
@@ -257,37 +257,46 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
                 });
             }
 
-            Transaction {
-                operation: Operation::Burn {
-                    from: from_account,
-                    amount: amount.get_e8s(),
+            (
+                Transaction {
+                    operation: Operation::Burn {
+                        from: from_account,
+                        amount: amount.get_e8s(),
+                    },
+                    created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
+                    memo: arg.memo,
                 },
-                created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
-                memo: arg.memo,
-            }
+                Tokens::ZERO,
+            )
         } else if &from_account == ledger.minting_account() {
             let expected_fee = Nat::from(0u64);
             if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {
                 return Err(TransferError::BadFee { expected_fee });
             }
-            Transaction::mint(arg.to, amount, created_at_time, arg.memo)
+            (
+                Transaction::mint(arg.to, amount, created_at_time, arg.memo),
+                Tokens::ZERO,
+            )
         } else {
             let expected_fee_tokens = ledger.transfer_fee();
             let expected_fee = Nat::from(expected_fee_tokens.get_e8s());
             if arg.fee.is_some() && arg.fee.as_ref() != Some(&expected_fee) {
                 return Err(TransferError::BadFee { expected_fee });
             }
-            Transaction::transfer(
-                from_account,
-                arg.to,
-                amount,
+            (
+                Transaction::transfer(
+                    from_account,
+                    arg.to,
+                    amount,
+                    arg.fee.map(|_| expected_fee_tokens),
+                    created_at_time,
+                    arg.memo,
+                ),
                 expected_fee_tokens,
-                created_at_time,
-                arg.memo,
             )
         };
 
-        let (block_idx, _) = apply_transaction(ledger, tx, now)?;
+        let (block_idx, _) = apply_transaction(ledger, tx, now, effective_fee)?;
         Ok(block_idx)
     })?;
 

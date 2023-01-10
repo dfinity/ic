@@ -150,7 +150,11 @@ impl LedgerTransaction for Transaction {
         HashOf::new(state.finish())
     }
 
-    fn apply<S>(&self, balances: &mut Balances<Self::AccountId, S>) -> Result<(), BalanceError>
+    fn apply<S>(
+        &self,
+        balances: &mut Balances<Self::AccountId, S>,
+        _effective_fee: Tokens,
+    ) -> Result<(), BalanceError>
     where
         S: Default + BalancesStore<Self::AccountId>,
     {
@@ -198,6 +202,7 @@ impl Block {
         memo: Memo,
         created_at_time: TimeStamp, // transaction timestamp
         timestamp: TimeStamp,       // block timestamp
+        effective_fee: Tokens,
     ) -> Result<Self, String> {
         let transaction = Transaction {
             operation,
@@ -205,7 +210,12 @@ impl Block {
             icrc1_memo: None,
             created_at_time: Some(created_at_time),
         };
-        Ok(Self::from_transaction(parent_hash, transaction, timestamp))
+        Ok(Self::from_transaction(
+            parent_hash,
+            transaction,
+            timestamp,
+            effective_fee,
+        ))
     }
 
     #[inline]
@@ -213,8 +223,9 @@ impl Block {
         parent_hash: Option<HashOf<EncodedBlock>>,
         transaction: Transaction,
         timestamp: TimeStamp,
+        effective_fee: Tokens,
     ) -> Self {
-        Self::from_transaction(parent_hash, transaction, timestamp)
+        Self::from_transaction(parent_hash, transaction, timestamp, effective_fee)
     }
 
     pub fn transaction(&self) -> Cow<Transaction> {
@@ -255,6 +266,7 @@ impl BlockType for Block {
         parent_hash: Option<HashOf<EncodedBlock>>,
         transaction: Self::Transaction,
         timestamp: TimeStamp,
+        _effective_fee: Tokens,
     ) -> Self {
         Self {
             parent_hash,

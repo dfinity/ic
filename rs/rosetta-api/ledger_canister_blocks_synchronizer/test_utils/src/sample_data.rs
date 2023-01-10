@@ -105,11 +105,12 @@ impl Scribe {
         self.buy(address, balance);
     }
 
-    pub fn add_block(&mut self, transaction: Transaction) {
+    pub fn add_block(&mut self, transaction: Transaction, effective_fee: Tokens) {
         let parent_hash = self.blockchain.back().map(|hb| hb.hash);
         let index = self.next_index();
 
-        let block = Block::from_transaction(parent_hash, transaction, self.time().into());
+        let block =
+            Block::from_transaction(parent_hash, transaction, self.time().into(), effective_fee);
 
         self.blockchain
             .push_back(HashedBlock::hash_block(block.encode(), parent_hash, index));
@@ -127,7 +128,7 @@ impl Scribe {
             created_at_time: Some(self.time().into()),
         };
         self.balance_history.push_back(self.balance_book.clone());
-        self.add_block(transaction);
+        self.add_block(transaction, Tokens::ZERO);
     }
 
     pub fn sell(&mut self, uid: AccountIdentifier, amount: u64) {
@@ -142,7 +143,7 @@ impl Scribe {
             created_at_time: Some(self.time().into()),
         };
         self.balance_history.push_back(self.balance_book.clone());
-        self.add_block(transaction);
+        self.add_block(transaction, Tokens::ZERO);
     }
 
     pub fn transfer(&mut self, src: AccountIdentifier, dst: AccountIdentifier, amount: u64) {
@@ -164,7 +165,7 @@ impl Scribe {
             created_at_time: Some(self.time().into()),
         };
         self.balance_history.push_back(self.balance_book.clone());
-        self.add_block(transaction);
+        self.add_block(transaction, DEFAULT_TRANSFER_FEE);
     }
 
     pub fn get_rand_account(&mut self, min_amount: Tokens) -> AccountIdentifier {

@@ -15,6 +15,7 @@ use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::{
     block::{BlockIndex, BlockType, EncodedBlock, HashOf},
     timestamp::TimeStamp,
+    tokens::Tokens,
 };
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use num_traits::cast::ToPrimitive;
@@ -72,6 +73,7 @@ fn mint_block() -> EncodedBlock {
             memo: Some(Memo::from([1; 32])),
         },
         TimeStamp::new(3, 4),
+        Tokens::ZERO,
     )
     .encode()
 }

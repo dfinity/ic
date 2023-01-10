@@ -150,6 +150,7 @@ impl Ledger {
                 &mut ledger,
                 Transaction::mint(account.clone(), Tokens::from_e8s(balance), Some(now), None),
                 now,
+                Tokens::ZERO,
             )
             .unwrap_or_else(|err| {
                 panic!("failed to mint {} e8s to {}: {:?}", balance, account, err)

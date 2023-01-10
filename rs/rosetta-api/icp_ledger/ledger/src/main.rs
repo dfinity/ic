@@ -236,7 +236,7 @@ async fn icrc1_send(
         .minting_account_id
         .expect("Minting canister id not initialized");
     let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
-    let operation = if to == minting_acc {
+    let (operation, effective_fee) = if to == minting_acc {
         if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
             return Err(ic_icrc1::endpoints::TransferError::BadFee {
                 expected_fee: Nat::from(0u64),
@@ -255,14 +255,14 @@ async fn icrc1_send(
                 min_burn_amount: Nat::from(ledger.transfer_fee.get_e8s()),
             });
         }
-        Operation::Burn { from, amount }
+        (Operation::Burn { from, amount }, Tokens::ZERO)
     } else if from == minting_acc {
         if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
             return Err(ic_icrc1::endpoints::TransferError::BadFee {
                 expected_fee: Nat::from(0u64),
             });
         }
-        Operation::Mint { to, amount }
+        (Operation::Mint { to, amount }, Tokens::ZERO)
     } else {
         let expected_fee = LEDGER.read().unwrap().transfer_fee;
         if fee.is_some() && fee.as_ref() != Some(&Nat::from(expected_fee.get_e8s())) {
@@ -270,12 +270,15 @@ async fn icrc1_send(
                 expected_fee: Nat::from(expected_fee.get_e8s()),
             });
         }
-        Operation::Transfer {
-            from,
-            to,
-            amount,
-            fee: expected_fee,
-        }
+        (
+            Operation::Transfer {
+                from,
+                to,
+                amount,
+                fee: expected_fee,
+            },
+            expected_fee,
+        )
     };
 
     let block_index = {
@@ -286,7 +289,7 @@ async fn icrc1_send(
             icrc1_memo: memo.map(|x| x.0),
             created_at_time,
         };
-        let (block_index, hash) = apply_transaction(&mut *ledger, tx, now)
+        let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)
             .map_err(|e| ic_icrc1::endpoints::TransferError::from(e))?;
 
         set_certified_data(&hash.into_bytes());

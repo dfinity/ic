@@ -223,6 +223,11 @@ impl Ledger {
         created_at_time: Option<TimeStamp>,
         now: TimeStamp,
     ) -> Result<(BlockIndex, HashOf<EncodedBlock>), PaymentError> {
+        let effective_fee = match &operation {
+            Operation::Transfer { .. } => self.transfer_fee,
+            Operation::Mint { .. } => Tokens::from_e8s(0),
+            Operation::Burn { .. } => Tokens::from_e8s(0),
+        };
         core_ledger::apply_transaction(
             self,
             Transaction {
@@ -233,6 +238,7 @@ impl Ledger {
                 created_at_time: created_at_time.or(Some(now)),
             },
             now,
+            effective_fee,
         )
         .map_err(|e| {
             use ic_ledger_canister_core::ledger::TransferError as CTE;

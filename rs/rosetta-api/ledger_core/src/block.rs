@@ -1,4 +1,5 @@
 use crate::timestamp::TimeStamp;
+use crate::Tokens;
 use candid::types::internal::Type;
 use candid::CandidType;
 use serde::{
@@ -177,14 +178,15 @@ pub trait BlockType: Sized {
     /// Law:
     ///
     /// ```text
-    /// forall PH, TX, TS:
-    ///     from_transaction(PH, TX, TS).parent_hash() = PH
-    ///   ∧ from_transaction(PH, TX, TS).timestamp() = TS
+    /// forall PH, TX, TS, FEE:
+    ///     from_transaction(PH, TX, TS, FEE).parent_hash() = PH
+    ///   ∧ from_transaction(PH, TX, TS, FEE).timestamp() = TS
     /// ```
     fn from_transaction(
         parent_hash: Option<HashOf<EncodedBlock>>,
         tx: Self::Transaction,
         block_timestamp: TimeStamp,
+        effective_fee: Tokens,
     ) -> Self;
 
     /// Encodes this block into a binary representation.
