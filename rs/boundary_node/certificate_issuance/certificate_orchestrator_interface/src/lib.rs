@@ -73,7 +73,7 @@ impl Storable for Name {
     }
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(Debug, CandidType, Clone, PartialEq, Eq, Deserialize)]
 pub enum State {
     #[serde(rename = "failed")]
     Failed(String),

@@ -1,4 +1,4 @@
-use std::{cell::RefCell, cmp::Reverse, mem::size_of, thread::LocalKey};
+use std::{cell::RefCell, cmp::Reverse, mem::size_of, thread::LocalKey, time::Duration};
 
 use candid::{CandidType, Deserialize};
 use certificate_orchestrator_interface::{
@@ -9,7 +9,10 @@ use certificate_orchestrator_interface::{
     QueueTaskResponse, Registration, State, UpdateRegistrationError, UpdateRegistrationResponse,
     UploadCertificateError, UploadCertificateResponse, NAME_MAX_LEN,
 };
-use ic_cdk::{caller, export::Principal, post_upgrade, pre_upgrade, trap};
+use ic_cdk::{
+    api::time, caller, export::Principal, post_upgrade, pre_upgrade, timer::set_timer_interval,
+    trap,
+};
 use ic_cdk_macros::{init, query, update};
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
@@ -22,7 +25,8 @@ use crate::{
     certificate::{Export, ExportError, Exporter, Upload, UploadError, Uploader},
     id::{Generate, Generator},
     registration::{
-        Create, CreateError, Creator, Get, GetError, Getter, Update, UpdateError, Updater,
+        Create, CreateError, Creator, Expire, Expirer, Get, GetError, Getter, Update, UpdateError,
+        Updater,
     },
     work::{Dispense, DispenseError, Dispenser, Queue, QueueError, Queuer},
 };
@@ -54,6 +58,8 @@ const ENCRYPED_PRIVATE_KEY_LEN: u32 = KB; // 1 * KB
 const ENCRYPED_CERTIFICATE_LEN: u32 = 8 * KB;
 const ENCRYPTED_PAIR_LEN: u32 = ENCRYPED_PRIVATE_KEY_LEN + ENCRYPED_CERTIFICATE_LEN;
 
+const REGISTRATION_EXPIRATION_TTL: Duration = Duration::from_secs(6 * 3600); // 6 Hours
+
 // Memory
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
@@ -68,6 +74,7 @@ const MEMORY_ID_REGISTRATIONS: u8 = 4;
 const MEMORY_ID_NAMES: u8 = 5;
 const MEMORY_ID_ENCRPYTED_CERTIFICATES: u8 = 6;
 const MEMORY_ID_TASKS: u8 = 7;
+const MEMORY_ID_EXPIRATIONS: u8 = 8;
 
 // ACLs
 thread_local! {
@@ -142,8 +149,10 @@ thread_local! {
         )
     );
 
+    static EXPIRATIONS: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
+
     static CREATOR: RefCell<Box<dyn Create>> = RefCell::new({
-        let c = Creator::new(&ID_GENERATOR, &REGISTRATIONS, &NAMES);
+        let c = Creator::new(&ID_GENERATOR, &REGISTRATIONS, &NAMES, &EXPIRATIONS);
         let c = WithAuthorize(c, &MAIN_AUTHORIZER);
         Box::new(c)
     });
@@ -155,7 +164,7 @@ thread_local! {
     });
 
     static UPDATER: RefCell<Box<dyn Update>> = RefCell::new({
-        let u = Updater::new(&REGISTRATIONS);
+        let u = Updater::new(&REGISTRATIONS, &EXPIRATIONS);
         let u = WithAuthorize(u, &MAIN_AUTHORIZER);
         Box::new(u)
     });
@@ -202,6 +211,30 @@ thread_local! {
     });
 }
 
+// Registration expirations
+
+thread_local! {
+    static EXPIRER: RefCell<Box<dyn Expire>> = RefCell::new({
+        let e = Expirer::new(&REGISTRATIONS, &NAMES, &TASKS, &EXPIRATIONS);
+        Box::new(e)
+    });
+}
+
+// Timers
+
+fn init_timers_fn() {
+    set_timer_interval(
+        Duration::from_secs(60), // 1 Minute
+        || {
+            if let Err(err) = EXPIRER.with(|e| e.borrow().expire(time())) {
+                trap(&format!("failed to run expire: {err}"));
+            }
+        },
+    );
+}
+
+// Init / Upgrade
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct InitArg {
     #[serde(rename = "rootPrincipals")]
@@ -230,6 +263,8 @@ fn init_fn(
         let mut s = s.borrow_mut();
         s.insert((), id_seed).unwrap();
     });
+
+    init_timers_fn();
 }
 
 #[pre_upgrade]
@@ -240,6 +275,13 @@ fn pre_upgrade_fn() {
         TASKS.with(|tasks| {
             if let Err(err) = persistence::store(m.get(MemoryId::new(MEMORY_ID_TASKS)), tasks) {
                 trap(&format!("failed to persist tasks: {err}"));
+            }
+        });
+
+        EXPIRATIONS.with(|exps| {
+            if let Err(err) = persistence::store(m.get(MemoryId::new(MEMORY_ID_EXPIRATIONS)), exps)
+            {
+                trap(&format!("failed to persist expirations: {err}"));
             }
         });
     });
@@ -256,7 +298,16 @@ fn post_upgrade_fn() {
                 Err(err) => trap(&format!("failed to load tasks: {err}")),
             };
         });
+
+        EXPIRATIONS.with(|exps| {
+            match persistence::load(m.get(MemoryId::new(MEMORY_ID_EXPIRATIONS))) {
+                Ok(v) => *exps.borrow_mut() = v,
+                Err(err) => trap(&format!("failed to load expirations: {err}")),
+            };
+        });
     });
+
+    init_timers_fn();
 }
 
 // Registration
