@@ -250,11 +250,11 @@ fn global_timer_can_be_cancelled() {
         .unwrap();
     assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().into()));
 
-    let cancel_global_counter = wasm().api_global_timer_set(0).reply_int64().build();
+    let cancel_global_timer = wasm().api_global_timer_set(0).reply_int64().build();
 
     // Cancel the timer
     let result = env
-        .execute_ingress(canister_id, "update", cancel_global_counter)
+        .execute_ingress(canister_id, "update", cancel_global_timer)
         .unwrap();
     assert_eq!(
         result,
@@ -640,4 +640,101 @@ fn global_timer_set_returns_zero_in_canister_global_timer_method() {
     // Now there should be zero, as the timer value is reset before executing the timer handler
     let result = env.query(canister_id, "read_value", vec![]).unwrap();
     assert_eq!(result, WasmResult::Reply(0_u64.to_le_bytes().into()));
+}
+
+#[test]
+fn global_timer_runs_if_set_in_stopped_canister_post_upgrade() {
+    let env = StateMachine::new();
+    let canister_id = env.install_canister_wat("(module)", vec![], None);
+
+    // Stop the canister.
+    let result = env.stop_canister(canister_id);
+    assert_matches!(result, Ok(_));
+
+    // Upgrade the canister.
+    let set_global_timer_in_post_upgrade = wasm()
+        .set_global_timer_method(wasm().inc_global_counter().api_global_timer_set(1))
+        .api_global_timer_set(1)
+        .build();
+    let result = env.upgrade_canister(
+        canister_id,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        set_global_timer_in_post_upgrade,
+    );
+    assert_eq!(result, Ok(()));
+
+    // The timer should not be triggered as the canister is stopped.
+    env.advance_time(Duration::from_secs(1));
+    env.tick();
+
+    // Any update calls should fail as the canister is stopped.
+    let result = env.execute_ingress(canister_id, "update", vec![]);
+    assert_matches!(result, Err(_));
+
+    // Start the canister.
+    let result = env.start_canister(canister_id);
+    assert_matches!(result, Ok(_));
+
+    // The timer should be triggered and reactivated each round.
+    for _ in 1..5 {
+        env.advance_time(Duration::from_secs(1));
+        env.tick();
+    }
+
+    // Assert the global timer is running.
+    let get_global_counter = wasm().get_global_counter().reply_int64().build();
+    let result = env.query(canister_id, "query", get_global_counter).unwrap();
+    assert_eq!(result, WasmResult::Reply(5_u64.to_le_bytes().into()));
+}
+
+#[test]
+fn global_timer_resumes_after_canister_is_being_stopped_and_started_again() {
+    let env = StateMachine::new();
+
+    // Install a canister with a periodic timer.
+    let set_global_timer_in_post_upgrade = wasm()
+        .set_global_timer_method(wasm().inc_global_counter().api_global_timer_set(1))
+        .api_global_timer_set(1)
+        .build();
+    let canister_id = env
+        .install_canister(
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            set_global_timer_in_post_upgrade,
+            None,
+        )
+        .unwrap();
+
+    // The timer should be triggered and reactivated each round.
+    for _ in 1..5 {
+        env.advance_time(Duration::from_secs(1));
+        env.tick();
+    }
+
+    // Assert the global timer is running.
+    let get_global_counter = wasm().get_global_counter().reply_int64().build();
+    let result = env.query(canister_id, "query", get_global_counter).unwrap();
+    assert_eq!(result, WasmResult::Reply(5_u64.to_le_bytes().into()));
+
+    // Stop the canister.
+    let result = env.stop_canister(canister_id);
+    assert_matches!(result, Ok(_));
+
+    // The timer should not be triggered as the canister is stopped.
+    env.advance_time(Duration::from_secs(1));
+    env.tick();
+
+    // Start the canister.
+    let result = env.start_canister(canister_id);
+    assert_matches!(result, Ok(_));
+
+    // The timer should be triggered and reactivated each round.
+    for _ in 6..10 {
+        env.advance_time(Duration::from_secs(1));
+        env.tick();
+    }
+
+    // Assert the global timer is running.
+    let get_global_counter = wasm().get_global_counter().reply_int64().build();
+    let result = env.query(canister_id, "query", get_global_counter).unwrap();
+    assert_eq!(result, WasmResult::Reply(10_u64.to_le_bytes().into()));
 }

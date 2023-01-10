@@ -540,10 +540,12 @@ impl SchedulerImpl {
                 .start_timer();
             let now = state.time();
             for canister in state.canisters_iter_mut() {
-                // Do not add `Heartbeat` or `GlobalTimer` for stopped canisters
-                // as they should not be executing any more messages.
-                if canister.system_state.status == CanisterStatus::Stopped {
-                    continue;
+                // Add `Heartbeat` or `GlobalTimer` for running canisters only.
+                match canister.system_state.status {
+                    CanisterStatus::Running { .. } => {}
+                    CanisterStatus::Stopping { .. } | CanisterStatus::Stopped => {
+                        continue;
+                    }
                 }
 
                 let global_timer_has_reached_deadline =
