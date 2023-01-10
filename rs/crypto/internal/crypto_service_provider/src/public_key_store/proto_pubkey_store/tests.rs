@@ -51,10 +51,10 @@ fn should_contain_correct_keys_after_opening_existing_pubkey_store() {
         store.ni_dkg_dealing_encryption_pubkey(),
         generated_keys.dkg_dealing_encryption_pk
     );
-    assert_eq!(
-        store.idkg_dealing_encryption_pubkeys(),
-        generated_keys.idkg_dealing_encryption_pks
-    );
+    assert!(equal_ignoring_timestamp(
+        &store.idkg_dealing_encryption_pubkeys(),
+        &generated_keys.idkg_dealing_encryption_pks
+    ));
     assert_eq!(
         store.tls_certificate(),
         generated_keys.tls_certificate.as_ref()
@@ -115,10 +115,10 @@ fn should_set_pubkeys_if_not_set() {
         ),
         Ok(())
     );
-    assert_eq!(
-        store.idkg_dealing_encryption_pubkeys(),
-        generated_keys.idkg_dealing_encryption_pks
-    );
+    assert!(equal_ignoring_timestamp(
+        &store.idkg_dealing_encryption_pubkeys(),
+        &generated_keys.idkg_dealing_encryption_pks
+    ));
 }
 
 #[test]
@@ -200,11 +200,11 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
     assert!(store
         .set_idkg_dealing_encryption_pubkeys(generated_keys.idkg_dealing_encryption_pks.clone())
         .is_ok());
-    assert_eq!(
-        ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
+    assert!(equal_ignoring_timestamp(
+        &ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
             .idkg_dealing_encryption_pubkeys(),
-        generated_keys.idkg_dealing_encryption_pks
-    );
+        &generated_keys.idkg_dealing_encryption_pks
+    ));
 }
 
 #[test]
@@ -360,6 +360,14 @@ fn should_deserialize_existing_public_key_store() {
             ),
         })
     );
+}
+
+fn equal_ignoring_timestamp(left: &Vec<PublicKey>, right: &Vec<PublicKey>) -> bool {
+    left.len() == right.len()
+        && left
+            .iter()
+            .zip(right.iter())
+            .all(|(left_pk, right_pk)| left_pk.equal_ignoring_timestamp(right_pk))
 }
 
 mod timestamps {

@@ -419,7 +419,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
     ) -> Result<MEGaPublicKey, CspCreateMEGaKeyError> {
         let seed = self.generate_seed();
         let (public_key, csp_secret_key, key_id) = generate_idkg_key_material_from_seed(seed)?;
-        let public_key_proto = idkg_dealing_encryption_pk_to_proto(public_key.clone());
+        let mut public_key_proto = idkg_dealing_encryption_pk_to_proto(public_key.clone());
+        self.set_timestamp(&mut public_key_proto);
         self.idkg_store_secret_and_public_keys(key_id, csp_secret_key, public_key_proto)?;
         Ok(public_key)
     }

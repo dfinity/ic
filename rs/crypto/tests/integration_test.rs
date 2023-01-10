@@ -4,7 +4,6 @@ use crate::keygen_utils::TestKeygenCrypto;
 use assert_matches::assert_matches;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;
-use ic_crypto::time::CurrentSystemTimeSource;
 use ic_crypto::CryptoComponent;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
     get_temp_file_path, start_new_remote_csp_vault_server_for_test,
@@ -15,6 +14,7 @@ use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoCom
 use ic_crypto_test_utils::files::temp_dir;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
+use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::{KeyManager, PublicKeyRegistrationStatus};
 use ic_interfaces::time_source::TimeSource;
 use ic_logger::replica_logger::no_op_logger;

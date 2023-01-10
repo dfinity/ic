@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
-use ic_crypto::time::CurrentSystemTimeSource;
 use ic_crypto::{CryptoComponent, CryptoComponentFatClient};
 use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
@@ -14,6 +13,7 @@ use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake, TlsPublicKeyCert,
     TlsServerHandshakeError, TlsStream,
 };
+use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
     CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError, IDkgProtocol, KeyManager,

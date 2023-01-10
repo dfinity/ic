@@ -14,15 +14,18 @@ mod threshold_sig;
 mod tls;
 
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
-use crate::public_key_store::PublicKeyStore;
+use crate::public_key_store::{PublicKeyGenerationTimestamps, PublicKeyStore};
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::CspRwLock;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
+use ic_crypto_utils_time::CurrentSystemTimeSource;
+use ic_interfaces::time_source::TimeSource;
 use ic_logger::replica_logger::no_op_logger;
-use ic_logger::ReplicaLogger;
+use ic_logger::{new_logger, ReplicaLogger};
+use ic_protobuf::registry::crypto::v1::PublicKey;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
@@ -58,6 +61,18 @@ use tempfile::TempDir;
 /// Public methods of this struct may be called by implementers of the
 /// [crate::vault::remote_csp_vault::TarpcCspVault] trait in a separate
 /// thread. Panicking should therefore be avoided not to kill that thread.
+///
+/// We deliberately chose the RNG and the key stores to be generic for
+/// performance reasons to avoid the runtime costs associated with dynamic
+/// dispatch. We did so because these costs are potentially significant (see,
+/// e.g., [1], giving a factor between 1.2 and 3.4) and because the RNG and the
+/// key stores are accessed frequently.
+/// For the time source, we are using a trait object (i.e., dynamic dispatch)
+/// because performance is secondary here as it is accessed very rarely (i.e.,
+/// only during node key generation and rotation).
+///
+/// [1]: https://medium.com/digitalfrontiers/rust-dynamic-dispatching-deep-dive-236a5896e49b
+
 pub struct LocalCspVault<
     R: Rng + CryptoRng,
     S: SecretKeyStore,
@@ -69,6 +84,7 @@ pub struct LocalCspVault<
     node_secret_key_store: CspRwLock<S>,
     canister_secret_key_store: CspRwLock<C>,
     public_key_store: CspRwLock<P>,
+    time_source: Arc<dyn TimeSource>,
     logger: ReplicaLogger,
     metrics: Arc<CryptoMetrics>,
 }
@@ -98,6 +114,7 @@ impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicK
             node_secret_key_store,
             canister_secret_key_store,
             public_key_store,
+            Arc::new(CurrentSystemTimeSource::new(new_logger!(&logger))),
             metrics,
             logger,
         )
@@ -131,6 +148,7 @@ impl<R: Rng + CryptoRng>
             sks,
             canister_sks,
             public_key_store,
+            Arc::new(CurrentSystemTimeSource::new(no_op_logger())),
             Arc::new(CryptoMetrics::none()),
             no_op_logger(),
         );
@@ -152,6 +170,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, P: PublicKeyStore>
             node_secret_key_store,
             VolatileSecretKeyStore::new(),
             public_key_store,
+            Arc::new(CurrentSystemTimeSource::new(no_op_logger())),
             metrics,
             no_op_logger(),
         )
@@ -166,6 +185,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         node_secret_key_store: S,
         canister_secret_key_store: C,
         public_key_store: P,
+        time_source: Arc<dyn TimeSource>,
         metrics: Arc<CryptoMetrics>,
         logger: ReplicaLogger,
     ) -> Self {
@@ -183,9 +203,23 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 public_key_store,
                 Arc::clone(&metrics),
             ),
+            time_source,
             logger,
             metrics,
         }
+    }
+
+    pub fn set_timestamp(&self, public_key: &mut PublicKey) {
+        public_key.timestamp = Some(
+            self.time_source
+                .get_relative_time()
+                .as_millis_since_unix_epoch(),
+        );
+    }
+
+    //TODO CRP-1860: modify or remove this method depending on the chosen solution
+    pub fn public_keys_generation_timestamps(&self) -> PublicKeyGenerationTimestamps {
+        self.public_key_store.read().generation_timestamps()
     }
 }
 
@@ -256,12 +290,14 @@ pub mod builder {
     use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
     use crate::secret_key_store::test_utils::TempSecretKeyStore;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+    use ic_test_utilities::FastForwardTimeSource;
 
     pub struct LocalCspVaultBuilder<R, S, C, P> {
         csprng: Box<dyn FnOnce() -> R>,
         node_secret_key_store: Box<dyn FnOnce() -> S>,
         canister_secret_key_store: Box<dyn FnOnce() -> C>,
         public_key_store: Box<dyn FnOnce() -> P>,
+        time_source: Arc<dyn TimeSource>,
     }
 
     impl Default
@@ -278,6 +314,7 @@ pub mod builder {
                 node_secret_key_store: Box::new(|| TempSecretKeyStore::new()),
                 canister_secret_key_store: Box::new(|| TempSecretKeyStore::new()),
                 public_key_store: Box::new(|| TempPublicKeyStore::new()),
+                time_source: FastForwardTimeSource::new(),
             }
         }
     }
@@ -318,6 +355,7 @@ pub mod builder {
                 node_secret_key_store: self.node_secret_key_store,
                 canister_secret_key_store: self.canister_secret_key_store,
                 public_key_store: self.public_key_store,
+                time_source: self.time_source,
             }
         }
 
@@ -330,6 +368,7 @@ pub mod builder {
                 node_secret_key_store: Box::new(|| node_secret_key_store),
                 canister_secret_key_store: self.canister_secret_key_store,
                 public_key_store: self.public_key_store,
+                time_source: self.time_source,
             }
         }
 
@@ -342,6 +381,7 @@ pub mod builder {
                 node_secret_key_store: self.node_secret_key_store,
                 canister_secret_key_store: Box::new(|| canister_secret_key_store),
                 public_key_store: self.public_key_store,
+                time_source: self.time_source,
             }
         }
 
@@ -354,7 +394,13 @@ pub mod builder {
                 node_secret_key_store: self.node_secret_key_store,
                 canister_secret_key_store: self.canister_secret_key_store,
                 public_key_store: Box::new(|| public_key_store),
+                time_source: self.time_source,
             }
+        }
+
+        pub fn with_time_source(mut self, time_source: Arc<dyn TimeSource>) -> Self {
+            self.time_source = time_source;
+            self
         }
 
         pub fn build(self) -> LocalCspVault<R, S, C, P> {
@@ -363,6 +409,7 @@ pub mod builder {
                 (self.node_secret_key_store)(),
                 (self.canister_secret_key_store)(),
                 (self.public_key_store)(),
+                self.time_source,
                 Arc::new(CryptoMetrics::none()),
                 no_op_logger(),
             )

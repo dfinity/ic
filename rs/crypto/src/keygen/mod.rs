@@ -538,7 +538,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         key_rotation_period: Duration,
     ) -> bool {
         let time_of_registration = Time::from_millis_since_unix_epoch(timestamp_in_millis)
-            .expect("should not happen before around 580 years");
+            .expect("conversion error to happen in the year 2554");
         let current_time = self.time_source.get_relative_time();
         current_time > time_of_registration + key_rotation_period
     }
