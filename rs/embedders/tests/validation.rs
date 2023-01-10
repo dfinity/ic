@@ -12,16 +12,15 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::replica_logger::no_op_logger;
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 
-fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wabt::Error> {
-    let mut features = wabt::Features::new();
-    features.enable_multi_value();
-    wabt::wat2wasm_with_features(wat, features).map(BinaryEncodedWasm::new)
-}
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
 use ic_types::{NumBytes, NumInstructions};
 use maplit::btreemap;
+
+fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
+    wat::parse_str(wat).map(BinaryEncodedWasm::new)
+}
 
 fn validate_wasm_binary(
     wasm: &BinaryEncodedWasm,
@@ -712,7 +711,7 @@ fn can_validate_module_with_reserved_symbols() {
     for reserved_symbol in RESERVED_SYMBOLS.iter() {
         // A wasm that exports a global with a reserved name. Should fail validation.
         let wasm_global = BinaryEncodedWasm::new(
-            wabt::wat2wasm(format!(
+            wat::parse_str(format!(
                 r#"
                 (module
                     (global (;0;) (mut i32) (i32.const 0))
@@ -729,7 +728,7 @@ fn can_validate_module_with_reserved_symbols() {
 
         // A wasm that exports a func with a reserved name. Should fail validation.
         let wasm_func = BinaryEncodedWasm::new(
-            wabt::wat2wasm(format!(
+            wat::parse_str(format!(
                 r#"
                 (module
                     (func $x)

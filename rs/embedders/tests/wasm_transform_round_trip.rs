@@ -1,7 +1,3 @@
-use std::fs;
-
-use wabt::Features;
-
 use ic_embedders::wasm_utils::wasm_transform::Module;
 
 fn round_trip(testname: &str, folder: &str) {
@@ -11,18 +7,12 @@ fn round_trip(testname: &str, folder: &str) {
         folder,
         testname
     );
-    let content = fs::read_to_string(filename).expect("couldn't read the input file");
-    let mut features = Features::new();
-    features.enable_bulk_memory();
-    let buff = wabt::wat2wasm_with_features(content, features.clone())
-        .expect("couldn't convert the input wat to Wasm");
+    let buff = wat::parse_file(filename).expect("couldn't convert the input wat to Wasm");
 
     let module = Module::parse(&buff, false).unwrap();
     let result = module.encode().unwrap();
-    let out = wabt::wasm2wat_with_features(result, features.clone())
-        .expect("couldn't translated Wasm to wat");
-    let original = wabt::wasm2wat_with_features(buff, features)
-        .expect("couldn't convert original Wasm to wat");
+    let out = wasmprinter::print_bytes(result).expect("couldn't translated Wasm to wat");
+    let original = wasmprinter::print_bytes(buff).expect("couldn't convert original Wasm to wat");
     assert_eq!(out, original);
 }
 

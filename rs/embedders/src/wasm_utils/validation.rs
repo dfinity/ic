@@ -1030,23 +1030,18 @@ fn test_extract_section_name() {
     assert_eq!(extract_custom_section_name("eth:private"), Ok(None));
 }
 
-// Performs the following checks to validate the custom sections:
-// * Ensures that the names of the custom sections are unique
-// * Check that visibility level is provided to a custom section
-//      * `icp:public`
-//      * `icp:private`
-// * Checks that no more than `max_custom_sections` are defined in the
-// module.
-// * Checks that the size of a custom section does not exceed
-// `max_custom_section_size`.
-//
-// Returns the validated custom sections.
-
-// Public for usage in tests.
-// TODO(EXC-787): Use validate `validate_wam_binary` once wabt fully supports
-// custom sections.
-#[doc(hidden)]
-pub fn validate_custom_section(
+/// Performs the following checks to validate the custom sections:
+/// * Ensures that the names of the custom sections are unique
+/// * Check that visibility level is provided to a custom section
+///      * `icp:public`
+///      * `icp:private`
+/// * Checks that no more than `max_custom_sections` are defined in the
+/// module.
+/// * Checks that the size of a custom section does not exceed
+/// `max_custom_section_size`.
+///
+/// Returns the validated custom sections.
+fn validate_custom_section(
     module: &Module,
     config: &EmbeddersConfig,
 ) -> Result<WasmMetadata, WasmValidationError> {

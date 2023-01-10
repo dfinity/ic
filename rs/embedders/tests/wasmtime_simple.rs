@@ -15,7 +15,7 @@ pub fn wasmtime_instantiate_and_call_run(wasm: &BinaryEncodedWasm) {
     let mut wasmtime = WasmtimeSimple::new();
 
     let (imports_module_instance, imports_module_exports) = {
-        let imports_wasm = wabt::wat2wasm(
+        let imports_wasm = wat::parse_str(
             r#"
             (module
                 (func (export "out_of_instructions"))
@@ -51,7 +51,7 @@ pub struct WasmtimeSimple {
 /// Example:
 ///
 /// ```
-/// let wasm = wabt::wat2wasm(
+/// let wasm = wat::parse_str(
 ///     r#"(module
 ///       (import "__" "magic_number" (func $magic_number (result i32)))
 ///       (func (export "run") (result i32) (call $magic_number))
@@ -61,7 +61,7 @@ pub struct WasmtimeSimple {
 /// let wasmtime = ic_test_utilities::wasmtime_simple::WasmtimeSimple::new();
 ///
 /// let (imports_module_instance, imports_module_exports) = {
-///     let imports_wasm = wabt::wat2wasm(
+///     let imports_wasm = wat::parse_str(
 ///         r#"(module
 ///           (func (export "magic_number") (result i32) (i32.const 42))
 ///         )"#,

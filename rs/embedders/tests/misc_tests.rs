@@ -37,7 +37,7 @@ fn test_instrument_module_rename_memory_table() {
     let output = validate_and_instrument_for_testing(
         &embedder,
         &BinaryEncodedWasm::new(
-            wabt::wat2wasm(
+            wat::parse_str(
                 r#"
                         (module
                             (memory (export "mem") 1 2)
@@ -69,7 +69,7 @@ fn test_instrument_module_export_memory_table() {
     let output = validate_and_instrument_for_testing(
         &embedder,
         &BinaryEncodedWasm::new(
-            wabt::wat2wasm(
+            wat::parse_str(
                 r#"
                         (module
                             (memory 1 2)
@@ -99,7 +99,7 @@ fn test_instrument_module_with_exported_global() {
     let output = validate_and_instrument_for_testing(
         &embedder,
         &BinaryEncodedWasm::new(
-            wabt::wat2wasm(
+            wat::parse_str(
                 r#"
                 (module
                   (func $run (export "run")

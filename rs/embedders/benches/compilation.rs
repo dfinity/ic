@@ -15,7 +15,7 @@ fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
             "simple".to_string(),
             NumInstructions::from(180_000),
             BinaryEncodedWasm::new(
-                wabt::wat2wasm(
+                wat::parse_str(
                     r#"
 			        (module
 				        (import "ic0" "msg_arg_data_copy"
@@ -33,7 +33,7 @@ fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
             "empty".to_string(),
             NumInstructions::from(90_000),
             BinaryEncodedWasm::new(
-                wabt::wat2wasm(
+                wat::parse_str(
                     r#"
                     (module)
 			        "#,
@@ -51,7 +51,7 @@ fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
     result.push((
         "many_adds".to_string(),
         NumInstructions::from(1_200_162_000),
-        BinaryEncodedWasm::new(wabt::wat2wasm(many_adds).expect("Failed to convert wat to wasm")),
+        BinaryEncodedWasm::new(wat::parse_str(many_adds).expect("Failed to convert wat to wasm")),
     ));
 
     let mut many_funcs = "(module".to_string();
@@ -62,7 +62,7 @@ fn generate_binaries() -> Vec<(String, NumInstructions, BinaryEncodedWasm)> {
     result.push((
         "many_funcs".to_string(),
         NumInstructions::from(3_300_090_000),
-        BinaryEncodedWasm::new(wabt::wat2wasm(many_funcs).expect("Failed to convert wat to wasm")),
+        BinaryEncodedWasm::new(wat::parse_str(many_funcs).expect("Failed to convert wat to wasm")),
     ));
 
     // This benchmark uses a real-world wasm which is stored as a binary file in this repo.
