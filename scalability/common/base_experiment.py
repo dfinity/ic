@@ -301,7 +301,10 @@ class BaseExperiment:
             return cached_value
 
         if nns_url not in self.cached_topologies:
-            print(f"Getting topology from ic-admin ({nns_url})")
+            print(
+                f"Getting topology from ic-admin ({nns_url}) - ",
+                colored("use --cache_path=/tmp/cache to cache", "yellow"),
+            )
             res = subprocess.check_output(
                 [self._get_ic_admin_path(), "--nns-url", nns_url, "get-topology"], encoding="utf-8"
             )

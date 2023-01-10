@@ -1,7 +1,15 @@
 # Benchmarking Suite for the IC
 
+The benchmark suites goal is to provide an easy to use tool to stress test the IC. It should be easy to customize and allow interactive development, although the focus is on collecting a lot of data during non-interactive CD runs.
+
+The suite is orthogonal to testnet deployment and does not offer a way to deploy node machines.
+Instead, it can run against arbitrary instances of the IC, such as testnet, farm-based instances as well as mainnet.
+
+Wrappers for easier use are provided for testnets.
+
 The benchmarking suite is structured as follows:
 
+- A set of base experiments (workload experiment, icpy experiment, base experiment)
 - An abstraction for experiments together with a set of experiments {1, 2, 3, .. ,n}
 - An abstraction for metrics, with an implementation of flamegraph and prometheus metrics.
 - A report generator that renders a human-friendly summary report from those experiments.
@@ -28,12 +36,50 @@ The code is as follows:
    - `prometheus.py`: Downloads metrics collected during benchmark execution on Prometheus.
 - `ssh.py`: Helpers to execute commands remotely via SSH
 - `experiment.py`: Base class for experiments. Implements common functionality like installing canisters or running the workload generator.
-   - `workload_experiment.py`: Base class for workload generator based experiments. In addition to `experiment.py`, those experiments have built-in support for running the workload generator.
+   - `workload_experiment.py`, `base_experiment.py` and `icpy_stress_experiment.py`: A set of different experiment classes to specialize on (see section on base experiments)
    - `run_*_experiment.py`: Each of those implement a single benchmark as descrobed in IC-562
    - `max_capacity_*.py`: Maximum capacity variants of the experiments - increases loads iteratively until the system starts to fail.
  - `report.py` and `generate_report.py`: Scripts to generate HTML reports out of collected measurements from experiment executions.
    - `templates/`: folder for storing templates to generate HTML reports. There is one main`experiment.html.hb` is the main experiment report template, with `experiment_*.html.hb` defining the template for the experiment-specific part of the report. The name of the template file has to match what's given as first argument to `write_summary_file`.
 
+# Experiment classes
+
+The suite offers a set of base experiments to build on.
+
+## Base experiment
+
+The most basic experiment class. Manages the collection of metrics and persisting of results. Given its basic nature, implementing experiment on top of this class is the most work.
+
+Example: experiments/run_statesync_experiment.py
+
+## Workload experiment
+
+A type of experiment based on the workload generator. Manages load generator machines and starts workload generator instances on top of those via SSH.
+
+Custom code needs to be written to specialize the workload generator invocation.
+
+Example: experiments/run_system_baseline_experiment.py
+
+## Mixed workload experiments
+
+A kind of workoad experiment where the workload is defined in a .toml file (under workloads/).
+
+It requires no code. All customization happens in .toml files.
+
+Example: workloads/canister-http-benchmark.toml
+
+## (incomple) IcPy based workload experiments
+
+Provides a foundation for stress tests using the Python agent. Python code is parallelized through processes as well as asyncio.
+
+Very flexible, since code can be writte in Python. Allows to implement statefull or flow based benchmarks, where calls are not 
+identical to each other (as with the workload generator), but can be customized for each call. 
+
+Has delegation support.
+
+Generally allows lower request rates (as performance is worse). Up to around 150 requests/s on a laptop.
+
+Example: experiments/run_delegation_experiment.py
 
 # Install dependencies
 

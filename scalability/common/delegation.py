@@ -20,8 +20,10 @@ def install_ii_canister(hostname: str):
 
     Write the canister ID to a file, which can re-read on next try for re-use.
     """
+    args = ["dfx", "deploy", "--network", hostname, "--no-wallet"]
+    logging.info("II: Installing canister: " + " ".join(args))
     output = subprocess.run(
-        ["dfx", "deploy", "--network", hostname],
+        args,
         cwd="ii/",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -37,7 +39,48 @@ def install_ii_canister(hostname: str):
     raise Exception("Could not find canister ID in output")
 
 
-def get_delegation(host_url):
+def get_ii_canister_id(host_url):
+    """Ensure II canister is installed and return the II's canister ID."""
+    identity = Identity()
+    client = Client(url=host_url)
+    agent = Agent(identity, client)
+
+    with open("ii/identity.did", "r") as f:
+        identity_canister_did = f.read()
+
+    ii_canister_id = None
+    if os.path.exists("ii/canister_id"):
+        with open("ii/canister_id", "r") as f:
+            ii_canister_id = f.read().strip()
+
+    challenge = None
+    if ii_canister_id is not None:
+        try:
+            identityCanister = Canister(agent=agent, canister_id=ii_canister_id, candid=identity_canister_did)
+            logging.info(
+                (
+                    "II: Attempting to creating challenge with canister id in ii/canister_id .. "
+                    "delete file and rerun if it gets stuck"
+                )
+            )
+            challenge = identityCanister.create_challenge()
+            logging.debug(challenge)
+        except Exception:
+            logging.debug("Getting a challenge from the II canister failed. Trying to reinstall")
+
+    # Attempted call against previous canister ID failed
+    if challenge is None:
+        logging.info("II: Installing II canister .. ")
+        ii_canister_id = install_ii_canister(host_url)
+
+        identityCanister = Canister(agent=agent, canister_id=ii_canister_id, candid=identity_canister_did)
+        logging.info("Initializing salt ..")
+        identityCanister.init_salt()
+
+    return ii_canister_id
+
+
+def get_delegation(host_url, ii_canister_id):
     """
     Get delegation from the Internet Identity canister.
 
@@ -53,33 +96,16 @@ def get_delegation(host_url):
     with open("ii/identity.did", "r") as f:
         identity_canister_did = f.read()
 
-    ii_canister_id = "not-available"  # any invalid canister ID should do here.
-    if os.path.exists("ii/canister_id"):
-        with open("ii/canister_id", "r") as f:
-            ii_canister_id = f.read().strip()
-
-    challenge = None
-    try:
-        identityCanister = Canister(agent=agent, canister_id=ii_canister_id, candid=identity_canister_did)
-        logging.info("II: Creating challenge .. ")
-        challenge = identityCanister.create_challenge()
-        logging.debug(challenge)
-    except Exception:
-        logging.debug("Getting a challenge from the II canister failed. Trying to reinstall")
-
-    # Attempted call against previous canister ID failed
-    if challenge is None:
-        ii_canister_id = install_ii_canister(host_url)
-        identityCanister = Canister(agent=agent, canister_id=ii_canister_id, candid=identity_canister_did)
-        logging.info("II: Creating challenge .. ")
-        challenge = identityCanister.create_challenge()
+    identityCanister = Canister(agent=agent, canister_id=ii_canister_id, candid=identity_canister_did)
+    logging.info(f"II: Creating challenge .. on {host_url} using canister {ii_canister_id}")
+    challenge = identityCanister.create_challenge()
 
     # Call still failed after reinstalling
     if challenge is None:
         raise Exception(
             (
                 "Failed to get a challenge from II. Check if the II canister has "
-                f"been installed correctly under {ii_canister_id}"
+                f"been installed correctly under {ii_canister_id} - also try deleting ii/.dfx"
             )
         )
 

@@ -114,8 +114,8 @@ def main(argv):
                     "2",
                     "--num_tasks",
                     "2",
-                    "--num_requests",
-                    "5",
+                    "--iter_duration",
+                    "20",
                 ]
                 + base_arguments
             )
