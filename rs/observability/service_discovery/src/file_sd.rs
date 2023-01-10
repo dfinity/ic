@@ -8,10 +8,7 @@ use std::{
 };
 
 use super::TargetGroup;
-use crate::{
-    config_generator::ConfigGenerator, job_types::JobType,
-    service_discovery_record::ServiceDiscoveryRecord,
-};
+use crate::{job_types::JobType, service_discovery_record::ServiceDiscoveryRecord};
 
 #[derive(Clone, Debug)]
 pub struct FileSd {
@@ -65,15 +62,5 @@ impl FileSd {
         })?;
         last_targets.insert(job.to_string(), p8s_target_groups);
         Ok(())
-    }
-}
-
-impl ConfigGenerator for FileSd {
-    fn generate_config(
-        &self,
-        job: JobType,
-        p8s_target_groups: BTreeSet<TargetGroup>,
-    ) -> std::io::Result<()> {
-        self.write_sd_config(job, p8s_target_groups)
     }
 }

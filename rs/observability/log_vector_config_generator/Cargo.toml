@@ -30,6 +30,7 @@ serde_json = "1.0.54"
 ic-utils = { path = "../../utils/" }
 regex = "1.7.0"
 url = "2.2.2"
+config_writer_common = { path = "../config_writer_common" }
 
 [[bin]]
 name = "log_vector_config_generator"

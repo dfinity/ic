@@ -2,13 +2,16 @@ use std::collections::HashMap;
 use std::vec;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
-use crate::config_writer_loop::config_writer_loop;
+use crate::vector_config_structure::VectorConfigBuilderImpl;
 use anyhow::{bail, Result};
 use clap::Parser;
+use config_writer_common::config_writer_loop::config_writer_loop;
+use config_writer_common::filters::{NodeIDRegexFilter, TargetGroupFilter, TargetGroupFilterList};
 use futures_util::FutureExt;
 use humantime::parse_duration;
 use ic_async_utils::shutdown_signal;
 use ic_metrics::MetricsRegistry;
+use regex::Regex;
 use service_discovery::job_types::{JobType, NodeOS};
 use service_discovery::registry_sync::sync_local_registry;
 use service_discovery::IcServiceDiscoveryImpl;
@@ -16,8 +19,6 @@ use service_discovery::{metrics::Metrics, poll_loop::make_poll_loop};
 use slog::{info, o, Drain, Logger};
 use url::Url;
 
-mod config_writer;
-mod config_writer_loop;
 mod vector_config_structure;
 
 fn main() -> Result<()> {
@@ -64,14 +65,24 @@ fn main() -> Result<()> {
     let join_handle = std::thread::spawn(poll_loop);
     handles.push(join_handle);
 
+    let mut filters_vec: Vec<Box<dyn TargetGroupFilter>> = vec![];
+    if let Some(filter_node_id_regex) = &cli_args.filter_node_id_regex {
+        filters_vec.push(Box::new(NodeIDRegexFilter::new(
+            filter_node_id_regex.clone(),
+        )));
+    };
+
+    let filters = TargetGroupFilterList::new(filters_vec);
+
     let config_generator_loop = config_writer_loop(
         log.clone(),
         ic_discovery,
-        cli_args.gatewayd_logs_target_filter,
+        filters,
         stop_signal_rcv,
-        JobType::NodeExporter(NodeOS::Guest),
+        vec![JobType::NodeExporter(NodeOS::Guest)],
         update_signal_rcv,
         cli_args.vector_config_dir,
+        VectorConfigBuilderImpl::new(),
     );
     info!(log, "Spawning config generator thread.");
     let config_join_handle = std::thread::spawn(config_generator_loop);
@@ -134,20 +145,13 @@ The HTTP-request timeout used when quering for registry updates.
     registry_query_timeout: Duration,
 
     #[clap(
-        long = "logs-target-filter",
+        long = "filter-node-id-regex",
         help = r#"
-A filter of the format `<key>=<value>`. If specified and --pull-gatewayd-logs is
-specified, the given filter is applied to the list of targets from which to pull
-logs.
-
-Example:
-  --gatewayd-logs-target-filter node_id=n76p6-epjz2-5ensc-gwvgv-niomg-4v3mb-rj4rr-nek67-g7hez-wlv6q-vqe
-
-  Filters the list of targets used for scraping logs.
+Regex used to filter the node IDs
 
 "#
     )]
-    gatewayd_logs_target_filter: Option<String>,
+    filter_node_id_regex: Option<Regex>,
 
     #[clap(
         long = "generation-dir",
@@ -195,29 +199,8 @@ impl CliArgs {
             bail!("Directory does not exist: {:?}", parent_dir);
         }
 
-        if let Some(log_filter) = &self.gatewayd_logs_target_filter {
-            check_logs_filter_format(log_filter)?;
-        }
-
         Ok(self)
     }
-}
-
-fn check_logs_filter_format(log_filter: &str) -> Result<()> {
-    let items = log_filter.split('=').collect::<Vec<_>>();
-    if items.len() != 2 {
-        bail!("Invalid filter {:?}", log_filter);
-    }
-
-    let key = items[0];
-    if !(key == "node_id" || key == "subnet_id") {
-        bail!(
-            "A filter must be of the form node_id=<> or subnet_id=<>: {:?}",
-            log_filter
-        );
-    }
-
-    Ok(())
 }
 
 fn get_jobs() -> HashMap<JobType, u16> {
@@ -226,17 +209,4 @@ fn get_jobs() -> HashMap<JobType, u16> {
     x.insert(JobType::NodeExporter(NodeOS::Guest), 9100);
 
     x
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn correct_filter_is_accepted() {
-        check_logs_filter_format(
-            "node_id=25p5a-3yzir-ifqqt-5lggj-g4nxg-v2qe2-vxw57-qkxtd-wjohn-kfbfp-bqe",
-        )
-        .unwrap()
-    }
 }

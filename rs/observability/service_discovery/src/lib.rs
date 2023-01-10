@@ -40,7 +40,6 @@ use job_types::{JobType, NodeOS};
 use slog::{warn, Logger};
 use thiserror::Error;
 
-pub mod config_generator;
 pub mod file_sd;
 pub mod job_types;
 pub mod mainnet_registry;
