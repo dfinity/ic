@@ -1,59 +1,58 @@
 use std::collections::{BTreeSet, HashMap};
 
+use config_writer_common::vector_config_structure::{
+    VectorConfigBuilder, VectorConfigEnriched, VectorSource, VectorTransform,
+};
 use serde::Serialize;
 use std::string::ParseError;
 
 use regex::Regex;
-use service_discovery::TargetGroup;
-#[derive(Debug, Serialize)]
-pub struct VectorServiceDiscoveryConfigEnriched {
-    sources: HashMap<String, VectorSource>,
-    transforms: HashMap<String, VectorTransform>,
+use service_discovery::{job_types::JobType, TargetGroup};
+
+pub struct VectorConfigBuilderImpl {}
+
+impl VectorConfigBuilderImpl {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+impl VectorConfigBuilder for VectorConfigBuilderImpl {
+    fn build(&self, target_groups: BTreeSet<TargetGroup>, _job: JobType) -> VectorConfigEnriched {
+        from_targets_into_vector_config(target_groups)
+    }
 }
 
-impl VectorServiceDiscoveryConfigEnriched {
-    fn new() -> Self {
-        Self {
-            sources: HashMap::new(),
-            transforms: HashMap::new(),
-        }
-    }
-
-    fn add_target_group(&mut self, target_group: TargetGroup) {
-        let key = target_group
+pub fn from_targets_into_vector_config(records: BTreeSet<TargetGroup>) -> VectorConfigEnriched {
+    let mut config = VectorConfigEnriched::new();
+    for record in records {
+        let key = record
             .clone()
             .targets
             .into_iter()
             .map(|t| t.to_string())
             .next()
             .unwrap();
-        self.sources.insert(
-            format!("{}-source", key),
-            target_group.clone().try_into().unwrap(),
-        );
-        self.transforms
-            .insert(format!("{}-transform", key), target_group.into());
+        let source: VectorSystemdGatewayJournaldSource = record.clone().try_into().unwrap();
+        let transform: VectorSystemdGatewayJournaldTransform = record.clone().into();
+        config.add_target_group(key, Box::new(source), Box::new(transform));
     }
+    config
 }
 
-impl From<BTreeSet<TargetGroup>> for VectorServiceDiscoveryConfigEnriched {
-    fn from(records: BTreeSet<TargetGroup>) -> Self {
-        let mut config = Self::new();
-        for record in records {
-            config.add_target_group(record);
-        }
-        config
-    }
-}
-
-#[derive(Debug, Serialize)]
-struct VectorSource {
+#[derive(Debug, Serialize, Clone)]
+struct VectorSystemdGatewayJournaldSource {
     #[serde(rename = "type")]
     _type: String,
     endpoint: String,
 }
 
-impl TryFrom<TargetGroup> for VectorSource {
+impl VectorSource for VectorSystemdGatewayJournaldSource {
+    fn clone_dyn(&self) -> Box<dyn VectorSource> {
+        Box::new(self.clone())
+    }
+}
+
+impl TryFrom<TargetGroup> for VectorSystemdGatewayJournaldSource {
     type Error = ParseError;
 
     fn try_from(target_group: TargetGroup) -> Result<Self, Self::Error> {
@@ -82,12 +81,18 @@ impl TryFrom<TargetGroup> for VectorSource {
     }
 }
 
-#[derive(Debug, Serialize)]
-struct VectorTransform {
+#[derive(Debug, Serialize, Clone)]
+struct VectorSystemdGatewayJournaldTransform {
     #[serde(rename = "type")]
     _type: String,
     inputs: Vec<String>,
     source: String,
+}
+
+impl VectorTransform for VectorSystemdGatewayJournaldTransform {
+    fn clone_dyn(&self) -> Box<dyn VectorTransform> {
+        Box::new(self.clone())
+    }
 }
 
 const IC_NAME: &str = "ic";
@@ -95,7 +100,7 @@ const IC_NODE: &str = "ic_node";
 const IC_SUBNET: &str = "ic_subnet";
 const DC: &str = "dc";
 
-impl From<TargetGroup> for VectorTransform {
+impl From<TargetGroup> for VectorSystemdGatewayJournaldTransform {
     fn from(target_group: TargetGroup) -> Self {
         let mut labels: HashMap<String, String> = HashMap::new();
         labels.insert(IC_NAME.into(), target_group.ic_name);

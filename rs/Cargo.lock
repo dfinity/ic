@@ -1758,6 +1758,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "config_writer_common"
+version = "0.1.0"
+dependencies = [
+ "crossbeam",
+ "crossbeam-channel",
+ "erased-serde",
+ "ic-types",
+ "ic-utils 0.8.0",
+ "regex",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "service-discovery",
+ "slog",
+ "slog-async",
+ "slog-term",
+]
+
+[[package]]
 name = "console"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10243,6 +10262,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 3.2.23",
+ "config_writer_common",
  "crossbeam",
  "crossbeam-channel",
  "futures-util",
@@ -15047,6 +15067,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap 3.2.23",
+ "config_writer_common",
  "crossbeam",
  "crossbeam-channel",
  "futures-util",

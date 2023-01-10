@@ -150,6 +150,7 @@ members = [
   "determinism_test",
   "observability/log_vector_config_generator",
   "observability/service_discovery",
+  "observability/config_writer_common",
   "observability/vector_config_generator",
   "orchestrator",
   "orchestrator/dashboard",

@@ -3,6 +3,8 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::{bail, Result};
 use clap::Parser;
+use config_writer_common::config_writer_loop::config_writer_loop;
+use config_writer_common::filters::{NodeIDRegexFilter, TargetGroupFilter, TargetGroupFilterList};
 use futures_util::FutureExt;
 use humantime::parse_duration;
 use ic_async_utils::shutdown_signal;
@@ -18,10 +20,10 @@ use service_discovery::{
 use slog::{info, o, Drain, Logger};
 use url::Url;
 
-use crate::config_writer_loop::config_writer_loop;
+use crate::custom_filters::OldMachinesFilter;
+use crate::vector_configuration::VectorConfigBuilderImpl;
 
-mod config_writer;
-mod config_writer_loop;
+mod custom_filters;
 mod vector_configuration;
 
 #[derive(Clone, Debug)]
@@ -126,17 +128,30 @@ fn main() -> Result<()> {
         "Scraping thread spawned. Interval: {:?}", cli_args.poll_interval
     );
 
+    let mut filters_vec: Vec<Box<dyn TargetGroupFilter>> = vec![];
+    if let Some(filter_node_id_regex) = &cli_args.filter_node_id_regex {
+        filters_vec.push(Box::new(NodeIDRegexFilter::new(
+            filter_node_id_regex.clone(),
+        )));
+    };
+
+    filters_vec.push(Box::new(OldMachinesFilter {}));
+
+    let filters = TargetGroupFilterList::new(filters_vec);
+
     let config_writer_loop = config_writer_loop(
         log.clone(),
         ic_discovery,
+        filters,
         stop_signal_rcv,
         jobs.into_iter().map(|(job, _)| job).collect(),
-        get_jobs_parameters(),
         update_signal_rcv,
         cli_args.generation_dir,
-        cli_args.filter_node_id_regex,
-        cli_args.scrape_interval,
-        cli_args.proxy_url,
+        VectorConfigBuilderImpl::new(
+            cli_args.proxy_url,
+            cli_args.scrape_interval,
+            get_jobs_parameters(),
+        ),
     );
     let config_join_handle = std::thread::spawn(config_writer_loop);
     handles.push(config_join_handle);
