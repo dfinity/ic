@@ -178,13 +178,12 @@ impl Transport for ThreadPort {
         node_id: &NodeId,
         _peer_addr: SocketAddr,
         _registry_version: RegistryVersion,
-    ) -> Result<(), TransportError> {
+    ) {
         info!(
             self.log,
             "Node{} -> Connections to peer {} started", self.id, node_id
         );
         self.replay_deferred(*node_id);
-        Ok(())
     }
 
     /// Remove the peer from the set of valid neighbors, and tear down the

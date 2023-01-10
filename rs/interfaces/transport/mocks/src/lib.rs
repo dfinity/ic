@@ -19,7 +19,7 @@ mock! {
             peer_id: &NodeId,
             peer_addr: SocketAddr,
             registry_version: RegistryVersion,
-        ) -> Result<(), TransportError>;
+        );
 
         fn stop_connection(
             &self,

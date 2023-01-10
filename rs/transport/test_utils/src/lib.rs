@@ -209,14 +209,8 @@ pub fn start_connection_between_two_peers(
     peer_b.set_event_handler(event_handler_2);
     let peer_2_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", peer2_port)).unwrap();
 
-    peer_a
-        .start_connection(&node_2, peer_2_addr, REG_V1)
-        .expect("start_connection");
-
+    peer_a.start_connection(&node_2, peer_2_addr, REG_V1);
     let peer_1_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", peer1_port)).unwrap();
-    peer_b
-        .start_connection(&node_1, peer_1_addr, REG_V1)
-        .expect("start_connection");
-
+    peer_b.start_connection(&node_1, peer_1_addr, REG_V1);
     (peer_a, peer_b)
 }

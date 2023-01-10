@@ -49,7 +49,7 @@ pub trait Transport: Send + Sync {
         peer_id: &NodeId,
         peer_addr: SocketAddr,
         registry_version: RegistryVersion,
-    ) -> Result<(), TransportError>;
+    );
 
     /// Terminates the connection with the peer.
     fn stop_connection(&self, peer_id: &NodeId);

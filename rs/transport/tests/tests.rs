@@ -469,13 +469,8 @@ fn connect_nodes_to_central_node<T>(central_node_data: &PeerData<T>, peer_data: 
     for peer_data_i in peer_data {
         let (peer_i, peer_i_addr, peer_i_id, _) = peer_data_i;
 
-        central_node
-            .start_connection(peer_i_id, *peer_i_addr, REG_V1)
-            .expect("start_connection");
-
-        peer_i
-            .start_connection(central_node_id, *central_node_addr, REG_V1)
-            .expect("start_connection");
+        central_node.start_connection(peer_i_id, *peer_i_addr, REG_V1);
+        peer_i.start_connection(central_node_id, *central_node_addr, REG_V1);
     }
 }
 

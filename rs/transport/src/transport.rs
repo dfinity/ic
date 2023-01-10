@@ -168,12 +168,12 @@ impl Transport for TransportImpl {
         peer_id: &NodeId,
         peer_addr: SocketAddr,
         registry_version: RegistryVersion,
-    ) -> Result<(), TransportError> {
+    ) {
         info!(
             self.log,
             "Transport::start_connection(): peer_id = {:?}", peer_id
         );
-        self.start_peer_connection(peer_id, peer_addr, registry_version)
+        self.start_peer_connection(peer_id, peer_addr, registry_version);
     }
 
     /// Remove the peer from the set of valid neighbors, and tear down the
