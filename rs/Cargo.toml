@@ -254,6 +254,7 @@ members = [
   "test_utilities/metrics",
   "test_utilities/tmpdir",
   "tests",
+  "tests/httpbin-rs",
   "tests/test_canisters/http_counter",
   "tests/test_canisters/kv_store",
   "tests/test_canisters/message",

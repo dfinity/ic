@@ -3,8 +3,6 @@
 ############ Configures Universal VM to run httpbin service on HTTP and HTTPS ############
 ##########################################################################################
 
-# TODO(VER-2052): the docker image for httpbin has a smaller size and is built from source
-
 # 1 - read ipv6 and ipv4 of current node
 ipv6=""
 while true; do
@@ -51,12 +49,11 @@ mv $ipv6 ipv6 # updateing service certificate folder name so it can be fed to ss
 chmod -R 755 ipv6
 
 # 3 - setting up httpbin on port 20443
-# TODO(VER-2052): the docker image for httpbin has a smaller size and is built from source
-
 docker run \
     --rm \
     -d \
     -p 20443:80 \
     -v "$(pwd)/ipv6":/certs \
     --name httpbin \
-    registry.gitlab.com/dfinity-lab/open/public-docker-registry/mraszyk/httpbin
+    registry.gitlab.com/dfinity-lab/open/public-docker-registry/dfinity/httpbin \
+    --cert-file /certs/cert.pem --key-file /certs/key.pem --port 80

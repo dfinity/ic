@@ -337,6 +337,9 @@ def external_crates_repository(name, annotations):
             "http-body": crate.spec(
                 version = "^0.4",
             ),
+            "httparse": crate.spec(
+                version = "^1.5.1",
+            ),
             "httptest": crate.spec(
                 version = "^0.15.4",
             ),
