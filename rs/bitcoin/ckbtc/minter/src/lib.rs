@@ -13,7 +13,7 @@ pub mod address;
 pub mod dashboard;
 pub mod guard;
 pub mod lifecycle;
-mod logs;
+pub mod logs;
 pub mod management;
 pub mod metrics;
 pub mod queries;

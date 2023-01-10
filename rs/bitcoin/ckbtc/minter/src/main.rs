@@ -1,4 +1,5 @@
 use candid::candid_method;
+use ic_canister_log::export as export_logs;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{heartbeat, init, post_upgrade, query, update};
 use ic_ckbtc_minter::dashboard::build_dashboard;
@@ -132,6 +133,34 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         HttpResponseBuilder::ok()
             .header("Content-Type", "text/html; charset=utf-8")
             .with_body_and_content_length(dashboard)
+            .build()
+    } else if req.path() == "/logs" {
+        use std::io::Write;
+        let mut buf = vec![];
+
+        writeln!(&mut buf, "P0 logs:").unwrap();
+        for entry in export_logs(&ic_ckbtc_minter::logs::P0) {
+            writeln!(
+                &mut buf,
+                "{} {}:{} {}",
+                entry.timestamp, entry.file, entry.line, entry.message
+            )
+            .unwrap();
+        }
+
+        writeln!(&mut buf, "P1 logs:").unwrap();
+        for entry in export_logs(&ic_ckbtc_minter::logs::P1) {
+            writeln!(
+                &mut buf,
+                "{} {}:{} {}",
+                entry.timestamp, entry.file, entry.line, entry.message
+            )
+            .unwrap();
+        }
+
+        HttpResponseBuilder::ok()
+            .header("Content-Type", "text/plain; charset=utf-8")
+            .with_body_and_content_length(buf)
             .build()
     } else {
         HttpResponseBuilder::not_found().build()
