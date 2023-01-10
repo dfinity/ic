@@ -93,8 +93,6 @@ pub fn config_impl(env: TestEnv) {
     });
 
     let log = env.logger();
-    let webserver_ipv6 = get_universal_vm_address(&env);
-    let httpbin = format!("https://[{webserver_ipv6}]:20443");
     retry(log.clone(), secs(300), secs(10), || {
         block_on(async {
             let mut http_connector = HttpConnector::new();
@@ -103,10 +101,11 @@ pub fn config_impl(env: TestEnv) {
             https_connector.https_only(true);
             let client = Client::builder().build::<_, hyper::Body>(https_connector);
 
-            let addr = format!("{}/ip", httpbin);
+            let webserver_ipv6 = get_universal_vm_address(&env);
+            let httpbin = format!("https://[{webserver_ipv6}]:20443");
             let req = hyper::Request::builder()
                 .method(hyper::Method::GET)
-                .uri(addr)
+                .uri(httpbin)
                 .body(hyper::Body::from(""))?;
 
             let resp = client.request(req).await?;

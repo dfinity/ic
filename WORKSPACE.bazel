@@ -218,6 +218,13 @@ container_pull(
     repository = "distroless/cc-debian11",
 )
 
+container_pull(
+    name = "ubuntu_base",
+    digest = "sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
+    registry = "docker.io",
+    repository = "ubuntu:latest",
+)
+
 # Third party dependencies that require special treatment
 
 wabt_rs_repository(name = "wabt_rs")
@@ -353,8 +360,8 @@ http_archive(
 package(default_visibility = ["//visibility:public"])
 filegroup(name = "artifacts", srcs = glob(["build/*", "test-data/*"]), visibility = ["//visibility:public"])
       """,
-    sha256 = "cfee80acb5048bddeb0219478f07154dca834efce18259db1e0861bf78c33484",
-    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-4cd1c3d3-x86_64-linux.tar.gz"],
+    sha256 = "fa78af4b4e4411d54759ff32e0445b468db5334fc4cdb7c42053c73b2b8bb891",
+    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-9607be0c-x86_64-linux.tar.gz"],
 )
 
 # Bitcoin canister

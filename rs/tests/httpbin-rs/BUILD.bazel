@@ -1,0 +1,91 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@io_bazel_rules_docker//container:container.bzl", "container_image", "container_push")
+load("@io_bazel_rules_docker//contrib:passwd.bzl", "passwd_entry", "passwd_file")
+load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "@crate_index//:clap",
+    "@crate_index//:httparse",
+    "@crate_index//:openssl",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
+rust_binary(
+    name = "httpbin",
+    srcs = ["src/main.rs"],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = DEPENDENCIES,
+)
+
+# httpbin docker image
+
+## Create a layer with a httpbin user
+
+passwd_entry(
+    name = "root_user",
+    uid = 0,
+    username = "root",
+)
+
+passwd_entry(
+    name = "httpbin_user",
+    home = "/home/httpbin",
+    info = "httpbin user",
+    uid = 1002,
+    username = "httpbin",
+)
+
+passwd_file(
+    name = "passwd",
+    entries = [
+        ":httpbin_user",
+        ":root_user",
+    ],
+)
+
+pkg_tar(
+    name = "passwd_tar",
+    srcs = [":passwd"],
+    mode = "0644",
+    package_dir = "etc",
+)
+
+## An intermediate image with the passwd file and empty directories.
+
+container_image(
+    name = "httpbin_image_base",
+    base = "@ubuntu_base//image",
+    tags = ["manual"],
+    tars = [
+        ":passwd_tar",
+    ],
+)
+
+## The final image we can publish.
+
+container_image(
+    name = "httpbin_image",
+    base = ":httpbin_image_base",
+    directory = "/home/httpbin",
+    entrypoint = [
+        "/home/httpbin/httpbin",
+    ],
+    files = [
+        ":httpbin",
+    ],
+    tags = ["manual"],
+    user = "httpbin",
+    workdir = "/home/httpbin",
+)
+
+container_push(
+    name = "push_httpbin_image",
+    format = "Docker",
+    image = ":httpbin_image",
+    registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
+    repository = "dfinity/httpbin",
+    tags = ["manual"],
+)
