@@ -23,6 +23,8 @@ mod idkg_gen_dealing_encryption_key_pair {
     use ic_crypto_internal_seed::Seed;
     use ic_crypto_internal_threshold_sig_ecdsa::EccCurveType;
     use ic_protobuf::registry::crypto::v1::PublicKey;
+    use ic_test_utilities::FastForwardTimeSource;
+    use ic_types::Time;
     use mockall::Sequence;
     use proptest::prelude::*;
     use std::collections::HashSet;
@@ -230,6 +232,28 @@ mod idkg_gen_dealing_encryption_key_pair {
 
         assert!(vault.idkg_gen_dealing_encryption_key_pair().is_ok());
     }
+
+    #[test]
+    fn should_generate_idkg_dealing_encryption_public_key_with_timestamp() {
+        let time_source = FastForwardTimeSource::new();
+        let timestamp = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
+        time_source.set_time(timestamp).expect("wrong time");
+        let vault = LocalCspVault::builder()
+            .with_time_source(time_source)
+            .build();
+
+        let _ = vault
+            .idkg_gen_dealing_encryption_key_pair()
+            .expect("failed to create keys");
+
+        assert_eq!(
+            vault
+                .public_keys_generation_timestamps()
+                .last_idkg_dealing_encryption_public_key
+                .expect("missing IDKG key generation timestamp"),
+            timestamp
+        );
+    }
 }
 
 mod idkg_retain_active_keys {
@@ -242,16 +266,13 @@ mod idkg_retain_active_keys {
     use crate::vault::local_csp_vault::test_utils::temp_local_csp_server::TempLocalCspVault;
     use crate::LocalCspVault;
     use assert_matches::assert_matches;
-    use ic_crypto_internal_logmon::metrics::CryptoMetrics;
     use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
     use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint};
     use ic_crypto_internal_types::scope::{ConstScope, Scope};
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_logger::replica_logger::no_op_logger;
     use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
     use mockall::Sequence;
     use std::collections::BTreeSet;
-    use std::sync::Arc;
 
     #[test]
     fn should_fail_when_idkg_oldest_public_key_not_found() {
@@ -404,14 +425,11 @@ mod idkg_retain_active_keys {
             .withf(|_filter, scope| *scope == Scope::Const(ConstScope::IDkgThresholdKeys))
             .return_const(Ok(()));
 
-        let vault = LocalCspVault::new_internal(
-            reproducible_rng(),
-            node_sks,
-            canister_sks,
-            pks,
-            Arc::new(CryptoMetrics::none()),
-            no_op_logger(),
-        );
+        let vault = LocalCspVault::builder()
+            .with_node_secret_key_store(node_sks)
+            .with_canister_secret_key_store(canister_sks)
+            .with_public_key_store(pks)
+            .build();
 
         assert!(vault
             .idkg_retain_active_keys(BTreeSet::new(), oldest_public_key)

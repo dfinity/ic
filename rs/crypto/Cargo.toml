@@ -27,6 +27,7 @@ ic-crypto-node-key-generation = { path = "node_key_generation" }
 ic-crypto-tls-cert-validation = { path = "node_key_validation/tls_cert_validation" }
 ic-crypto-tls-interfaces = { path = "tls_interfaces" }
 ic-crypto-utils-basic-sig = { path = "utils/basic_sig" }
+ic-crypto-utils-time = { path = "utils/time" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-logger = { path = "../monitoring/logger" }

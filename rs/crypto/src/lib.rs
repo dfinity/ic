@@ -15,7 +15,6 @@
 mod common;
 mod keygen;
 mod sign;
-pub mod time;
 mod tls;
 
 pub use sign::utils::{
@@ -26,13 +25,13 @@ pub use sign::utils::{
 pub use sign::{get_mega_pubkey, get_tecdsa_master_public_key, MegaKeyFromRegistryError};
 
 use crate::sign::ThresholdSigDataStoreImpl;
-use crate::time::CurrentSystemTimeSource;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::NodePublicKeyData;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_generation::derive_node_id;
 use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::{BasicSigner, KeyManager, ThresholdSigVerifierByPublicKey};
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_registry::RegistryClient;
