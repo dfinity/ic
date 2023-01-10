@@ -7,7 +7,6 @@ package(default_visibility = [
 ])
 
 DEPENDENCIES = [
-    "//rs/artifact_manager",
     "//rs/config",
     "//rs/interfaces",
     "//rs/interfaces/p2p",
@@ -39,6 +38,7 @@ MACRO_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
+    "//rs/artifact_manager",
     "//rs/canister_http/client",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
