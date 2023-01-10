@@ -13,6 +13,7 @@ rust_library(
     deps = [
         "//rs/constants",
         "//rs/rosetta-api/ledger_core",
+        "//rs/rust_canisters/canister_log",
         "//rs/types/base_types",
         "//rs/types/ic00_types",
         "//rs/utils",

@@ -1,5 +1,6 @@
 use crate::{archive::ArchiveCanisterWasm, blockchain::Blockchain, range_utils, runtime::Runtime};
 use ic_base_types::CanisterId;
+use ic_canister_log::{log, Sink};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::ops::Range;
@@ -341,15 +342,11 @@ fn select_accounts_to_trim<L: LedgerData>(ledger: &L) -> Vec<(Tokens, L::Account
 ///
 /// NOTE: only one archiving task can run at each point in time.
 /// If archiving is already in process, this function returns immediately.
-pub async fn archive_blocks<LA: LedgerAccess>(max_message_size: usize) {
+pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_message_size: usize) {
     use crate::archive::{
         send_blocks_to_archive, ArchivingGuard, ArchivingGuardError, FailedToArchiveBlocks,
     };
     use std::sync::Arc;
-
-    fn print<LA: LedgerAccess>(msg: &str) {
-        <<<LA as LedgerAccess>::Ledger as LedgerData>::Runtime as Runtime>::print(msg);
-    }
 
     let archive_arc = LA::with_ledger(|ledger| ledger.blockchain().archive.clone());
 
@@ -377,9 +374,15 @@ pub async fn archive_blocks<LA: LedgerAccess>(max_message_size: usize) {
     }
 
     let num_blocks = blocks_to_archive.len();
-    print::<LA>(&format!("[ledger] archiving {} blocks", num_blocks));
+    log!(sink, "[ledger] archiving {} blocks", num_blocks);
 
-    let result = send_blocks_to_archive(archive_arc, blocks_to_archive, max_message_size).await;
+    let result = send_blocks_to_archive(
+        sink.clone(),
+        archive_arc,
+        blocks_to_archive,
+        max_message_size,
+    )
+    .await;
 
     LA::with_ledger_mut(|ledger| match result {
         Ok(num_sent_blocks) => ledger
@@ -389,10 +392,13 @@ pub async fn archive_blocks<LA: LedgerAccess>(max_message_size: usize) {
             ledger
                 .blockchain_mut()
                 .remove_archived_blocks(num_sent_blocks);
-            print::<LA>(&format!(
+            log!(
+                sink,
                 "[ledger] archived only {} out of {} blocks; error: {}",
-                num_sent_blocks, num_blocks, err
-            ));
+                num_sent_blocks,
+                num_blocks,
+                err
+            );
         }
     });
 }

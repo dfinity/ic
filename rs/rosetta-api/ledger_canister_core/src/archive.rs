@@ -1,6 +1,7 @@
 use crate::{runtime::Runtime, spawn};
 use candid::{CandidType, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_canister_log::{log, Sink};
 use ic_ic00_types::IC_00;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -193,11 +194,12 @@ fn inspect_archive<R, Rt: Runtime, Wasm: ArchiveCanisterWasm>(
 /// On success, returns the number of blocks archived (equal to blocks.len()).
 /// On failure, returns the number of successfully archived blocks and a description of the error.
 pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
+    log_sink: impl Sink + Clone,
     archive: Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
     mut blocks: VecDeque<EncodedBlock>,
     max_ledger_msg_size_bytes: usize,
 ) -> Result<usize, (usize, FailedToArchiveBlocks)> {
-    Rt::print("[archive] send_blocks_to_archive(): start");
+    log!(log_sink, "[archive] send_blocks_to_archive(): start");
 
     let max_chunk_size = inspect_archive(&archive, |archive| {
         archive
@@ -207,15 +209,16 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
 
     let mut num_sent_blocks = 0usize;
     while !blocks.is_empty() {
-        Rt::print(format!(
+        log!(
+            log_sink,
             "[archive] send_blocks_to_archive(): number of blocks remaining: {}",
             blocks.len()
-        ));
+        );
 
         // Get the CanisterId and remaining capacity of the node that can
         // accept at least the first block
         let (node_canister_id, node_index, remaining_capacity) =
-            node_and_capacity(&archive, blocks[0].size_bytes())
+            node_and_capacity(log_sink.clone(), &archive, blocks[0].size_bytes())
                 .await
                 .map_err(|e| (num_sent_blocks, e))?;
 
@@ -225,12 +228,12 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
             return Err((num_sent_blocks, FailedToArchiveBlocks("empty chunk".into())));
         }
 
-        Rt::print(format!(
-                "[archive] appending blocks to node {:?}. number of blocks that fit: {}, remaining blocks to archive: {}",
-                node_canister_id.get(),
-                first_blocks.len(),
-                blocks.len()
-            ));
+        log!(log_sink,
+             "[archive] appending blocks to node {:?}. number of blocks that fit: {}, remaining blocks to archive: {}",
+             node_canister_id.get(),
+             first_blocks.len(),
+             blocks.len()
+        );
 
         // Additionally, need to respect the inter-canister message size
         while !first_blocks.is_empty() {
@@ -239,10 +242,11 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
             if chunk.is_empty() {
                 return Err((num_sent_blocks, FailedToArchiveBlocks("empty chunk".into())));
             }
-            Rt::print(format!(
+            log!(
+                log_sink,
                 "[archive] calling append_blocks() with a chunk of size {}",
                 chunk_len
-            ));
+            );
             match Rt::call(node_canister_id, "append_blocks", 0, (chunk,)).await {
                 Ok(()) => num_sent_blocks += chunk_len as usize,
                 Err((_, msg)) => return Err((num_sent_blocks, FailedToArchiveBlocks(msg))),
@@ -276,22 +280,25 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
                 archive.nodes_block_ranges.get(node_index).cloned().unwrap()
             });
 
-            Rt::print(format!(
+            log!(
+                log_sink,
                 "[archive] archive node [{}] block heights {:?}",
-                node_index, heights
-            ));
+                node_index,
+                heights
+            );
         }
     }
 
-    Rt::print("[archive] send_blocks_to_archive() done");
+    log!(log_sink, "[archive] send_blocks_to_archive() done");
     Ok(num_sent_blocks)
 }
 
 // Helper function to create a canister and install the node Wasm bytecode.
 async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
+    log_sink: impl Sink,
     archive: &Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
 ) -> Result<(CanisterId, usize, usize), FailedToArchiveBlocks> {
-    Rt::print("[archive] calling create_canister()");
+    log!(log_sink, "[archive] calling create_canister()");
 
     let (
         cycles_for_archive_creation,
@@ -318,7 +325,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         .await
         .map_err(|(code, msg)| FailedToArchiveBlocks(format!("{} {}", code, msg)))?;
 
-    Rt::print("[archive] calling install_code()");
+    log!(log_sink, "[archive] calling install_code()");
 
     spawn::install_code::<Rt>(
         node_canister_id,
@@ -341,10 +348,11 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         ))
     })?;
 
-    Rt::print(format!(
+    log!(
+        log_sink,
         "[archive] setting controller_id for archive node: {}",
         controller_id
-    ));
+    );
 
     let res: Result<(), (i32, String)> = Rt::call(
         IC_00,
@@ -380,6 +388,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
 /// Helper function to find the CanisterId of the node that can accept
 /// blocks, or create one, and find how many blocks can be accepted.
 async fn node_and_capacity<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
+    log_sink: impl Sink + Clone,
     archive: &Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
     needed: usize,
 ) -> Result<(CanisterId, usize, usize), FailedToArchiveBlocks> {
@@ -389,13 +398,15 @@ async fn node_and_capacity<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
     match last_node_canister_id {
         // Not a single archive node exists. Create one.
         None => {
-            Rt::print("[archive] creating the first archive node");
+            log!(log_sink, "[archive] creating the first archive node");
             let (node_canister_id, node_index, remaining_capacity) =
-                create_and_initialize_node_canister(archive).await?;
-            Rt::print(format!(
+                create_and_initialize_node_canister(log_sink.clone(), archive).await?;
+            log!(
+                log_sink,
                 "[archive] node canister id: {}, index: {}",
-                node_canister_id, node_index
-            ));
+                node_canister_id,
+                node_index
+            );
 
             Ok((node_canister_id, node_index, remaining_capacity))
         }
@@ -408,20 +419,28 @@ async fn node_and_capacity<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
                     .map_err(|(_, msg)| FailedToArchiveBlocks(msg))?;
 
             if remaining_capacity < needed {
-                Rt::print("[archive] last node is full. creating a new archive node");
+                log!(
+                    log_sink,
+                    "[archive] last node is full. creating a new archive node"
+                );
                 let (node_canister_id, node_index, remaining_capacity) =
-                    create_and_initialize_node_canister(archive).await?;
-                Rt::print(format!(
+                    create_and_initialize_node_canister(log_sink.clone(), archive).await?;
+                log!(
+                    log_sink,
                     "[archive] node canister id: {}, index: {}",
-                    node_canister_id, node_index
-                ));
+                    node_canister_id,
+                    node_index
+                );
                 Ok((node_canister_id, node_index, remaining_capacity))
             } else {
                 let node_index = inspect_archive(archive, |archive| archive.last_node_index());
-                Rt::print(format!(
+                log!(
+                    log_sink,
                     "[archive] reusing existing last node {} with index {} and capacity {}",
-                    last_node_canister_id, node_index, remaining_capacity
-                ));
+                    last_node_canister_id,
+                    node_index,
+                    remaining_capacity
+                );
                 Ok((last_node_canister_id, node_index, remaining_capacity))
             }
         }

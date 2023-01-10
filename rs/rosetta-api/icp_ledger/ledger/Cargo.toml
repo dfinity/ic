@@ -13,6 +13,7 @@ dfn_core = { path = "../../../rust_canisters/dfn_core" }
 dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
 ic-base-types = { path = "../../../types/base_types" }
+ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-constants = { path = "../../../constants" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ledger-core = { path = "../../ledger_core" }
