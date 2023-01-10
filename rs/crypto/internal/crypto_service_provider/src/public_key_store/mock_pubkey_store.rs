@@ -1,3 +1,4 @@
+use crate::public_key_store::PublicKeyGenerationTimestamps;
 use crate::public_key_store::PublicKeySetOnceError;
 use crate::public_key_store::PublicKeyStore;
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -44,5 +45,7 @@ mock! {
         ) -> Result<(), std::io::Error>;
 
         fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKey>;
+
+        fn generation_timestamps(&self) -> PublicKeyGenerationTimestamps;
         }
 }

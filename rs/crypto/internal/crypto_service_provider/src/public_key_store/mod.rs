@@ -2,6 +2,7 @@
 use crate::PUBLIC_KEY_STORE_DATA_FILENAME;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
+use ic_types::Time;
 use prost::Message;
 use std::fs;
 use std::path::Path;
@@ -114,4 +115,23 @@ pub trait PublicKeyStore: Send + Sync {
     /// The ordering of the keys is guaranteed to be same as when the keys were set.
     /// Note: any timestamp in [`PublicKeyProto`] will be stripped off.
     fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKeyProto>;
+
+    /// Gets the timestamps of when public keys were generated.
+    fn generation_timestamps(&self) -> PublicKeyGenerationTimestamps;
+}
+
+/// Timestamps of when public keys were generated.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct PublicKeyGenerationTimestamps {
+    /// Timestamp of when the node signing public key was generated.
+    pub node_signing_public_key: Option<Time>,
+
+    /// Timestamp of when the committee signing public key was generated.
+    pub committee_signing_public_key: Option<Time>,
+
+    /// Timestamp of when the NIDKG dealing encryption public key was generated.
+    pub dkg_dealing_encryption_public_key: Option<Time>,
+
+    /// Timestamp of when the last IDKG dealing encryption public key was generated.
+    pub last_idkg_dealing_encryption_public_key: Option<Time>,
 }
