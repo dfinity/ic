@@ -1,9 +1,10 @@
-use candid::{types::number::Nat, Decode, Encode};
+use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::{CanisterSettingsArgs, UpdateSettingsArgs};
 use ic_icrc1::Account;
-use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{ExplosiveTokens, E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{
+    ledger::compute_neuron_staking_subaccount, ExplosiveTokens, E8, SECONDS_PER_DAY,
+    START_OF_2022_TIMESTAMP_SECONDS,
+};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL,
 };
@@ -15,8 +16,9 @@ use ic_nns_constants::{
 use ic_nns_governance::pb::v1::{
     self as nns_governance_pb,
     manage_neuron::{self, RegisterVote},
-    manage_neuron_response, proposal, ManageNeuron, OpenSnsTokenSwap, Proposal, ProposalStatus,
-    Vote,
+    manage_neuron_response,
+    neuron::DissolveState::DissolveDelaySeconds,
+    proposal, ManageNeuron, OpenSnsTokenSwap, Proposal, ProposalStatus, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -25,22 +27,27 @@ use ic_nns_test_utils::{
         add_real_wasms_to_sns_wasms_and_return_immediately, deploy_new_sns,
         wait_for_proposal_status,
     },
-    state_test_helpers::{self, set_up_universal_canister, setup_nns_canisters},
+    state_test_helpers::{
+        icrc1_balance, ledger_account_balance, nns_governance_get_full_neuron,
+        nns_governance_get_proposal_info, nns_governance_make_proposal, set_controllers,
+        set_up_universal_canister, setup_nns_canisters,
+    },
 };
-use ic_sns_governance::pb::v1::{ListNeurons, ListNeuronsResponse};
+use ic_sns_governance::pb::v1::ListNeurons;
 use ic_sns_init::pb::v1::{
     sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
     FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
     TreasuryDistribution,
 };
-use ic_sns_root::{
-    pb::v1::{RegisterDappCanisterRequest, RegisterDappCanisterResponse},
-    CanisterIdRecord, CanisterStatusResultV2,
-};
+use ic_sns_root::{pb::v1::RegisterDappCanisterRequest, CanisterIdRecord, CanisterStatusResultV2};
 use ic_sns_swap::pb::v1::{
     self as swap_pb, error_refund_icp_response, params::NeuronBasketConstructionParameters,
     set_dapp_controllers_call_result, ErrorRefundIcpRequest, ErrorRefundIcpResponse,
     SetDappControllersCallResult, SetDappControllersResponse,
+};
+use ic_sns_test_utils::state_test_helpers::{
+    participate_in_swap, send_participation_funds, sns_governance_list_neurons,
+    sns_root_register_dapp_canister, swap_get_state,
 };
 use ic_sns_wasm::pb::v1::SnsCanisterIds;
 use ic_state_machine_tests::StateMachine;
@@ -50,13 +57,13 @@ use ic_types::{
     Cycles,
 };
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs as AccountBalanceArgs, Memo, TransferArgs,
+    AccountIdentifier, BinaryAccountBalanceArgs as AccountBalanceArgs,
     DEFAULT_TRANSFER_FEE as DEFAULT_TRANSFER_FEE_TOKENS,
 };
 use lazy_static::lazy_static;
-use num_traits::ToPrimitive;
+use maplit::hashmap;
 use pretty_assertions::assert_eq;
-use rand::SeedableRng;
+use rand::{thread_rng, Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
 use std::{
     collections::{hash_map, HashMap, HashSet},
@@ -65,6 +72,8 @@ use std::{
 
 const ONE_TRILLION: u128 = 1_000_000_000_000;
 const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION;
+
+const DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR: f64 = 0.01;
 
 lazy_static! {
     static ref INITIAL_ICP_BALANCE: ExplosiveTokens = ExplosiveTokens::from_e8s(100 * E8);
@@ -86,23 +95,7 @@ struct SwapPerformanceResults {
     time_to_finalize_swap: Duration,
 }
 
-fn set_controllers(
-    state_machine: &mut StateMachine,
-    sender: PrincipalId,
-    target: CanisterId,
-    controllers: Vec<PrincipalId>,
-) {
-    let request = Encode!(&UpdateSettingsArgs {
-        canister_id: target.into(),
-        settings: CanisterSettingsArgs::new(Some(controllers), None, None, None,),
-    })
-    .unwrap();
-
-    state_machine
-        .execute_ingress_as(sender, CanisterId::ic_00(), "update_settings", request)
-        .unwrap();
-}
-
+// TODO: Move this to one of the state_test_helpers.rs files.
 fn canister_status(
     state_machine: &mut StateMachine,
     sender: PrincipalId,
@@ -167,11 +160,13 @@ fn begin_swap(
     planned_participation_amount_per_account: ExplosiveTokens,
     planned_community_fund_participation_amount: ExplosiveTokens,
     neuron_basket_count: u64,
+    max_community_fund_relative_error: f64,
 ) -> (
     SnsCanisterIds,
     /* community_fund_nns_neurons */ Vec<nns_governance_pb::Neuron>,
     FractionalDeveloperVotingPower,
     /* dapp_canister_id */ CanisterId,
+    NnsProposalId,
 ) {
     let num_accounts = accounts.len().max(1) as u64;
     // Give TEST_USER2 and everyone in `accounts` some ICP so that they can buy into the swap.
@@ -268,13 +263,19 @@ fn begin_swap(
         }
     }
 
+    let fund_raising_amount_icp_e8s = (planned_participation_amount_per_account * num_accounts
+        + planned_community_fund_participation_amount)
+        .into_e8s();
+    // Scale up SNS tokens to ensure that participants get enough SNS tokens to form neurons.
+    let sns_token_e8s = fund_raising_amount_icp_e8s * neuron_basket_count;
+
     // Create, configure, and init SNS canisters.
     let mut sns_init_payload: SnsInitPayload = SnsInitPayload::with_valid_values_for_testing();
     sns_init_payload.fallback_controller_principal_ids = vec![TEST_USER1_PRINCIPAL.to_string()];
     let fractional_developer_voting_power = FractionalDeveloperVotingPower {
         swap_distribution: Some(SwapDistribution {
-            total_e8s: 100 * num_accounts * neuron_basket_count * E8,
-            initial_swap_amount_e8s: 100 * num_accounts * neuron_basket_count * E8,
+            total_e8s: sns_token_e8s,
+            initial_swap_amount_e8s: sns_token_e8s,
         }),
         airdrop_distribution: Some(AirdropDistribution {
             airdrop_neurons: vec![NeuronDistribution::with_valid_values_for_testing()],
@@ -290,6 +291,10 @@ fn begin_swap(
         ));
     let cycle_count = EXPECTED_SNS_CREATION_FEE;
     let wallet_canister = set_up_universal_canister(state_machine, Some(Cycles::new(cycle_count)));
+    println!(
+        "BEGIN sns_init_payload\n{:#?}\nEND sns_init_payload",
+        sns_init_payload
+    );
     let deploy_new_sns_response = deploy_new_sns(
         state_machine,
         wallet_canister,
@@ -317,11 +322,13 @@ fn begin_swap(
         },
     );
 
-    // Propose that a swap be scheduled to start 3 days from now, and last for
-    // 10 days.
-    let fund_raising_amount_e8s = (planned_participation_amount_per_account * num_accounts
-        + planned_community_fund_participation_amount)
-        .into_e8s();
+    // Make OpenSnsTokenSwap proposal.
+    let min_icp_e8s =
+        if max_community_fund_relative_error == DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR {
+            fund_raising_amount_icp_e8s - 1
+        } else {
+            ((1.0 - max_community_fund_relative_error) * fund_raising_amount_icp_e8s as f64) as u64
+        };
     let proposal = Proposal {
         title: Some("Schedule SNS Token Sale".to_string()),
         summary: "".to_string(),
@@ -329,13 +336,13 @@ fn begin_swap(
         action: Some(proposal::Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
             target_swap_canister_id: Some(canister_ids.swap.unwrap()),
             params: Some(swap_pb::Params {
-                // Succeed as soon as we raise `fund_raising_amount_e8s`. In this case,
+                // Succeed as soon as we raise `fund_raising_amount_icp_e8s`. In this case,
                 // SNS tokens and ICP trade at a ratio of `neuron_basket` so each
                 // created neron reached minimum stake requirements.
-                max_icp_e8s: fund_raising_amount_e8s,
+                max_icp_e8s: fund_raising_amount_icp_e8s,
                 // We want to make sure our test is exactly right, so we set the
                 // minimum to be just one e8 less than the maximum.
-                min_icp_e8s: fund_raising_amount_e8s - 1,
+                min_icp_e8s,
 
                 // We need at least one participant, but they can contribute whatever
                 // amount they want (subject to max_icp_e8s for the whole swap).
@@ -347,10 +354,7 @@ fn begin_swap(
 
                 swap_due_timestamp_seconds: *SWAP_DUE_TIMESTAMP_SECONDS,
 
-                // With setting the sns_tokens_e8s to fund_raising_amount_e8s * neuron_basket_count,
-                // max_icp_e8s fund_raising_amount_e8s, the neurons that are created within the neuron basket
-                // should reach the minimum staking requirement of governance
-                sns_token_e8s: fund_raising_amount_e8s * neuron_basket_count,
+                sns_token_e8s,
                 neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
                     count: neuron_basket_count,
                     dissolve_delay_interval_seconds: 7890000, // 3 months,
@@ -363,14 +367,19 @@ fn begin_swap(
         })),
     };
     println!("proposal = {:#?}", proposal);
-    let response = nns_governance_make_proposal(
+    let response = match nns_governance_make_proposal(
         state_machine,
         *TEST_NEURON_1_OWNER_PRINCIPAL, // sender
         nns_common_pb::NeuronId {
             id: TEST_NEURON_1_ID,
         },
         &proposal,
-    );
+    )
+    .command
+    {
+        Some(manage_neuron_response::Command::MakeProposal(response)) => response,
+        command => panic!("Response was not of type MakeProposal: {:#?}", command),
+    };
     let proposal_id = response
         .proposal_id
         .unwrap_or_else(|| panic!("Response did not contain a proposal_id: {:#?}", response));
@@ -382,6 +391,11 @@ fn begin_swap(
         &neuron_id_to_principal_id,
         Vote::Yes,
     );
+
+    // Proposal executed successfully.
+    let proposal = nns_governance_get_proposal_info(state_machine, proposal_id.id);
+    assert_eq!(proposal.failure_reason, None, "{:#?}", proposal);
+    assert!(proposal.executed_timestamp_seconds > 0, "{:#?}", proposal);
 
     // Make sure that the swap is now open.
     {
@@ -406,6 +420,7 @@ fn begin_swap(
         community_fund_neurons,
         fractional_developer_voting_power,
         dapp_canister_id,
+        proposal_id.into(),
     )
 }
 
@@ -438,6 +453,9 @@ fn stuff_ballot_box(
             )
             .unwrap();
     }
+
+    let proposal = nns_governance_get_proposal_info(state_machine, proposal_id.0);
+    assert!(proposal.decided_timestamp_seconds > 0, "{:#?}", proposal);
 }
 
 #[test]
@@ -446,6 +464,7 @@ fn swap_lifecycle_happy_one_neuron() {
         1,                                  // num_accounts
         &[],                                // additional_nns_neurons
         ExplosiveTokens::from_e8s(30 * E8), // planned_community_fund_participation_amount
+        DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR,
     );
 }
 
@@ -455,6 +474,7 @@ fn swap_lifecycle_happy_two_neurons() {
         2,                                  // num_accounts
         &[],                                // additional_nns_neurons
         ExplosiveTokens::from_e8s(30 * E8), // planned_community_fund_participation_amount
+        DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR,
     );
 }
 
@@ -464,6 +484,163 @@ fn swap_lifecycle_happy_more_neurons() {
         101,                                // num_accounts
         &[],                                // additional_nns_neurons
         ExplosiveTokens::from_e8s(10 * E8), // planned_community_fund_participation_amount
+        DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR,
+    );
+}
+
+lazy_static! {
+    static ref COMMUNITY_FUND_NEURON_TEMPLATE: nns_governance_pb::Neuron = nns_governance_pb::Neuron {
+        // These fields need to be filled in.
+        id: None,
+        account: vec![],
+        controller: None,
+        // Technically, you could just leave this as is, but a CF neuron with no maturity is kinda
+        // useless.
+        maturity_e8s_equivalent: 0,
+
+        // Fields that we want to have non-default values.
+        cached_neuron_stake_e8s: 10 * E8,
+        joined_community_fund_timestamp_seconds: Some(START_OF_2022_TIMESTAMP_SECONDS),
+        created_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
+        aging_since_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
+        dissolve_state: Some(DissolveDelaySeconds(4 * 365 * SECONDS_PER_DAY)),
+
+        // Fields where we want the default value. (These are filled in explicitly instead of using
+        // ..Default::default so that if/when new fields are added to Neuron, the compiler will tell
+        // the programmer to update this test.)
+        hot_keys: vec![],
+        neuron_fees_e8s: 0,
+        spawn_at_timestamp_seconds: None,
+        followees: hashmap! {},
+        recent_ballots: vec![],
+        kyc_verified: false,
+        transfer: None,
+        staked_maturity_e8s_equivalent: None,
+        auto_stake_maturity: None,
+        not_for_profit: false,
+        known_neuron_data: None,
+    };
+}
+
+fn craft_community_fund_neuron(maturity_e8s_equivalent: u64) -> nns_governance_pb::Neuron {
+    let controller = PrincipalId::new_user_test_id(thread_rng().gen());
+    let account = AccountIdentifier::new(
+        NNS_GOVERNANCE_CANISTER_ID.into(),
+        Some(compute_neuron_staking_subaccount(
+            controller, /* nonce = */ 0,
+        )),
+    )
+    .to_address();
+
+    nns_governance_pb::Neuron {
+        id: Some(nns_common_pb::NeuronId {
+            id: thread_rng().gen(),
+        }),
+        account: account.into(),
+        controller: Some(controller),
+        maturity_e8s_equivalent,
+        ..COMMUNITY_FUND_NEURON_TEMPLATE.clone()
+    }
+}
+
+// Swap should succeed when there are many large Community Fund neurons (i.e. CF
+// neurons with a large amount of maturity), and few small ones.
+#[test]
+fn many_large_community_fund_neurons_and_some_small_ones() {
+    let maturities_e8s = [
+        // Large neurons.
+        100_000 * E8,
+        101_000 * E8,
+        102_000 * E8,
+        103_000 * E8,
+        104_000 * E8,
+        105_000 * E8,
+        106_000 * E8,
+        107_000 * E8,
+        108_000 * E8,
+        109_000 * E8,
+        // More large neurons.
+        110_000 * E8,
+        111_000 * E8,
+        112_000 * E8,
+        113_000 * E8,
+        114_000 * E8,
+        115_000 * E8,
+        116_000 * E8,
+        117_000 * E8,
+        118_000 * E8,
+        119_000 * E8,
+        // Small Neurons.
+        E8 + 1,
+        E8 + 2,
+        E8 + 3,
+    ];
+    let additional_nns_neurons = maturities_e8s
+        .iter()
+        .cloned() // "dereference" &u64 en masse.
+        .map(craft_community_fund_neuron)
+        .collect::<Vec<_>>();
+
+    let num_accounts = 20;
+    let planned_community_fund_participation_amount =
+        ExplosiveTokens::from_e8s((100..121_u64).sum::<u64>() * E8 / 2);
+    let max_community_fund_relative_error = 0.025;
+    swap_n_accounts(
+        num_accounts,
+        &additional_nns_neurons,
+        planned_community_fund_participation_amount,
+        max_community_fund_relative_error,
+    );
+}
+
+// Similar to the pervious test, swap should succeed when there are many small
+// Community Fund neurons (i.e. CF neurons with a large amount of maturity), and
+// few large ones.
+#[test]
+fn many_small_community_fund_neurons_and_some_large_ones() {
+    let maturities_e8s = [
+        // Large neurons.
+        100_000 * E8,
+        101_000 * E8,
+        102_000 * E8,
+        // Small Neurons.
+        100 * E8 / 10,
+        101 * E8 / 10,
+        102 * E8 / 10,
+        103 * E8 / 10,
+        104 * E8 / 10,
+        105 * E8 / 10,
+        106 * E8 / 10,
+        107 * E8 / 10,
+        108 * E8 / 10,
+        109 * E8 / 10,
+        // More small neurons.
+        200 * E8 / 10,
+        201 * E8 / 10,
+        202 * E8 / 10,
+        203 * E8 / 10,
+        204 * E8 / 10,
+        205 * E8 / 10,
+        206 * E8 / 10,
+        207 * E8 / 10,
+        208 * E8 / 10,
+        209 * E8 / 10,
+    ];
+    let additional_nns_neurons = maturities_e8s
+        .iter()
+        .cloned() // "dereference" &u64 en masse.
+        .map(craft_community_fund_neuron)
+        .collect::<Vec<_>>();
+
+    let num_accounts = 20;
+    let planned_community_fund_participation_amount =
+        ExplosiveTokens::from_e8s((100..103_u64).sum::<u64>() * E8 / 2);
+    let max_community_fund_relative_error = 0.10;
+    swap_n_accounts(
+        num_accounts,
+        &additional_nns_neurons,
+        planned_community_fund_participation_amount,
+        max_community_fund_relative_error,
     );
 }
 
@@ -471,6 +648,7 @@ fn swap_n_accounts(
     num_accounts: u64,
     additional_nns_neurons: &[nns_governance_pb::Neuron],
     planned_community_fund_participation_amount: ExplosiveTokens,
+    max_community_fund_relative_error: f64,
 ) -> SwapPerformanceResults {
     assert!(
         num_accounts > 0,
@@ -489,6 +667,7 @@ fn swap_n_accounts(
         community_fund_neurons,
         _fractional_developer_voting_power,
         _dapp_canister_id,
+        sns_proposal_id,
     ) = begin_swap(
         &mut state_machine,
         &accounts,
@@ -496,6 +675,7 @@ fn swap_n_accounts(
         planned_participation_amount_per_account,
         planned_community_fund_participation_amount,
         neuron_basket_count,
+        max_community_fund_relative_error,
     );
 
     let original_total_community_fund_maturity = {
@@ -505,6 +685,13 @@ fn swap_n_accounts(
         }
         result
     };
+    let original_id_to_community_fund_neuron = community_fund_neurons
+        .iter()
+        .map(|neuron| {
+            let id = neuron.id.as_ref().unwrap().id;
+            (id, neuron)
+        })
+        .collect::<HashMap<_, _>>();
     let community_fund_spent = |state_machine: &mut StateMachine| -> ExplosiveTokens {
         let mut current_community_fund_total = ExplosiveTokens::from_e8s(0);
         for original_neuron in &community_fund_neurons {
@@ -547,7 +734,10 @@ fn swap_n_accounts(
             }
         };
 
-    // We'll do this again after finalizing the swap.
+    // Inspect the amount of participation by Community Fund neurons. We'll do this again after
+    // finalizing the swap to make sure settlement happened correctly (currently, the funds are
+    // still in escrow).
+    let community_fund_in_escrow = community_fund_spent(&mut state_machine);
     if additional_nns_neurons.is_empty() {
         assert_community_fund_neuron_maturities(
             &mut state_machine,
@@ -557,24 +747,40 @@ fn swap_n_accounts(
             ],
         );
     } else {
-        let spent = community_fund_spent(&mut state_machine);
-        let relative_error = (planned_community_fund_participation_amount - spent).into_e8s()
-            as f64
+        let relative_error = (planned_community_fund_participation_amount
+            - community_fund_in_escrow)
+            .into_e8s() as f64
             / planned_community_fund_participation_amount.get_e8s() as f64;
         assert!(
-            (0.0..=0.01).contains(&relative_error),
+            (0.0..=max_community_fund_relative_error).contains(&relative_error),
             "{} vs. {} ({}% error)",
-            spent,
+            community_fund_in_escrow,
             planned_community_fund_participation_amount,
             100.0 * relative_error,
         );
     }
 
+    let community_fund_neuron_id_to_participation_amount_e8s = original_id_to_community_fund_neuron
+        .iter()
+        .map(|(id, original_neuron)| {
+            let new_neuron = nns_governance_get_full_neuron(
+                &mut state_machine,
+                original_neuron.controller.unwrap(),
+                original_neuron.id.as_ref().unwrap().id,
+            )
+            .unwrap();
+            (
+                *id,
+                original_neuron.maturity_e8s_equivalent - new_neuron.maturity_e8s_equivalent,
+            )
+        })
+        .collect::<HashMap<u64, u64>>();
+
     // Step 2: Run code under test.
 
     // Have all the accounts we created participate in the swap
     for (index, principal_id) in accounts.iter().enumerate() {
-        println!("Swapping user {index}/{num_accounts}");
+        println!("Direct participant {}/{}", index + 1, num_accounts);
         if index == num_accounts as usize - 1 {
             time_finalization_started = Some(SystemTime::now());
             instructions_consumed_swapping =
@@ -586,6 +792,13 @@ fn swap_n_accounts(
             *principal_id,
             planned_participation_amount_per_account,
         );
+    }
+
+    // If caller asked for a larger Community Fund fudge factor, swap probably won't reach Committed
+    // early via "short circuit". Instead, we probably need to wait until it is due. In that case,
+    // we fast forward to some time after the due date.
+    if max_community_fund_relative_error > DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR {
+        state_machine.advance_time(Duration::from_secs(15 * SECONDS_PER_DAY));
     }
 
     // Make sure the swap reached the Committed state.
@@ -633,9 +846,14 @@ fn swap_n_accounts(
 
     // Step 3.1: Inspect finalize_swap_response.
     {
+        let participating_community_fund_neuron_count =
+            community_fund_neuron_id_to_participation_amount_e8s
+                .iter()
+                .filter(|(_, e8s): &(_, &u64)| **e8s > 0)
+                .count() as u64;
         use swap_pb::settle_community_fund_participation_result::{Possibility, Response};
-        let expected_neuron_count =
-            ((num_accounts + community_fund_neurons.len() as u64) * neuron_basket_count) as u32;
+        let expected_neuron_count = ((num_accounts + participating_community_fund_neuron_count)
+            * neuron_basket_count) as u32;
         assert_eq!(
             finalize_swap_response,
             swap_pb::FinalizeSwapResponse {
@@ -673,8 +891,11 @@ fn swap_n_accounts(
     // Step 3.2.1: Inspect ICP balances.
 
     // SNS governance should get the ICP.
+
+    let total_icp_transferred =
+        planned_participation_amount_per_account * num_accounts + community_fund_in_escrow;
     {
-        let observed_balance = ledger_account_balance(
+        let observed_sns_governance_icp_balance = ledger_account_balance(
             &mut state_machine,
             ICP_LEDGER_CANISTER_ID,
             &AccountBalanceArgs {
@@ -682,11 +903,20 @@ fn swap_n_accounts(
                     .to_address(),
             },
         );
-        let total_transferred = planned_participation_amount_per_account * num_accounts
-            + planned_community_fund_participation_amount;
         let total_paid_in_transfer_fee = *DEFAULT_TRANSFER_FEE * num_accounts;
-        let expected_balance = total_transferred - total_paid_in_transfer_fee;
-        assert_eq!(observed_balance, expected_balance.into());
+        let expected_balance = total_icp_transferred - total_paid_in_transfer_fee;
+        assert_eq!(
+            observed_sns_governance_icp_balance,
+            expected_balance.into(),
+            "planned_participation_amount_per_account={} \
+             num_accounts={} \
+             community_fund_in_escrow={} \
+             transfer_fee={}",
+            planned_participation_amount_per_account,
+            num_accounts,
+            community_fund_in_escrow,
+            DEFAULT_TRANSFER_FEE.into_e8s(),
+        );
     }
     // All the users still has the change left over from their participation in the swap/sale.
     for principal_id in accounts.iter() {
@@ -702,39 +932,46 @@ fn swap_n_accounts(
         assert_eq!(observed_balance, expected_balance.into());
     }
 
+    let sns_tokens_being_offered_e8s =
+        match &nns_governance_get_proposal_info(&mut state_machine, sns_proposal_id.0)
+            .proposal
+            .as_ref()
+            .unwrap()
+            .action
+        {
+            Some(proposal::Action::OpenSnsTokenSwap(OpenSnsTokenSwap {
+                params: Some(swap_pb::Params { sns_token_e8s, .. }),
+                ..
+            })) => *sns_token_e8s,
+            action => panic!("{:#?}", action),
+        };
+
     // Step 3.2.2: Inspect SNS token balances.
-    let community_fund_total_maturity_e8s: u64 = community_fund_neurons
-        .iter()
-        .map(|neuron| neuron.maturity_e8s_equivalent)
-        .sum();
-
-    let sns_tokens_per_icp = {
-        let swap_state = swap_get_state(
-            &mut state_machine,
-            sns_canister_ids.swap.unwrap().try_into().unwrap(),
-            &swap_pb::GetStateRequest {},
-        );
-        swap_state.derived.unwrap().sns_tokens_per_icp as f64
-    };
-
+    // Expected reward amount = participation amount (ICP) * sns_tokens_per_icp.
     let expected_principal_id_to_gross_sns_token_participation_amount_e8s = community_fund_neurons
         .iter()
-        .map(|nns_neuron| {
+        .filter_map(|nns_neuron| {
             let principal_id = nns_neuron.controller.unwrap();
-            let icp_participation = planned_community_fund_participation_amount.mul_div_or_die(
-                nns_neuron.maturity_e8s_equivalent,
-                community_fund_total_maturity_e8s,
-            );
+            let original_maturity_e8s = original_id_to_community_fund_neuron
+                .get(&nns_neuron.id.as_ref().unwrap().id)
+                .unwrap()
+                .maturity_e8s_equivalent;
+            let icp_participation_e8s = original_maturity_e8s - nns_neuron.maturity_e8s_equivalent;
+            // Skip Community Fund neurons that were too small to participate.
+            if icp_participation_e8s == 0 {
+                return None;
+            }
 
             let expected_sns_tokens_e8s =
-                (icp_participation.into_e8s() as f64 * sns_tokens_per_icp) as u64;
-
-            (principal_id, expected_sns_tokens_e8s)
+                (icp_participation_e8s as u128 * sns_tokens_being_offered_e8s as u128
+                    / total_icp_transferred.get_e8s() as u128) as u64;
+            Some((principal_id, expected_sns_tokens_e8s))
         })
         .chain(accounts.iter().map(|principal_id| {
-            let expected_sns_tokens_e8s = (planned_participation_amount_per_account.into_e8s()
-                as f64
-                * sns_tokens_per_icp) as u64;
+            let expected_sns_tokens_e8s =
+                (planned_participation_amount_per_account.into_e8s() as u128
+                    * sns_tokens_being_offered_e8s as u128
+                    / total_icp_transferred.get_e8s() as u128) as u64;
             (*principal_id, expected_sns_tokens_e8s)
         }))
         .collect::<Vec<(
@@ -758,20 +995,20 @@ fn swap_n_accounts(
 
         let mut actual_total_sns_tokens_e8s = 0;
 
-        for neuron in distributed_neurons {
-            let subaccount = neuron.id.unwrap().subaccount().unwrap();
+        // Make sure cached stake in reward SNS neurons match their respective balances.
+        // Also, add up stakes.
+        for neuron in &distributed_neurons {
+            let subaccount = neuron.id.as_ref().unwrap().subaccount().unwrap();
 
-            let observed_balance_e8s = icrc1_balance_of(
-                &mut state_machine,
+            let observed_balance_e8s = icrc1_balance(
+                &state_machine,
                 sns_canister_ids.ledger.unwrap().try_into().unwrap(),
-                &Account {
+                Account {
                     owner: sns_canister_ids.governance.unwrap(),
                     subaccount: Some(subaccount),
                 },
             )
-            .0
-            .to_u64()
-            .unwrap();
+            .get_e8s();
 
             // Check that the cached balance of the neuron is equal to the neuron's account in the ledger
             assert_eq!(neuron.cached_neuron_stake_e8s, observed_balance_e8s);
@@ -781,7 +1018,16 @@ fn swap_n_accounts(
             actual_total_sns_tokens_e8s += observed_balance_e8s + DEFAULT_TRANSFER_FEE.get_e8s();
         }
 
-        assert_eq!(actual_total_sns_tokens_e8s, *expected_sns_tokens_e8s);
+        assert_eq!(
+            actual_total_sns_tokens_e8s,
+            *expected_sns_tokens_e8s,
+            "principal_id: {}\n\
+             planned_participation_amount_per_account.into_e8s(): {}\n\
+             distributed_neurons:\n{:#?}",
+            principal_id,
+            planned_participation_amount_per_account.into_e8s(),
+            distributed_neurons,
+        );
     }
 
     // Step 3.3: Inspect SNS neurons.
@@ -834,10 +1080,18 @@ fn swap_n_accounts(
         )
         .neurons;
 
-        assert!(!sns_neurons.is_empty(), "{}", controller);
-        let expected_source_neuron_id = community_fund_neuron.id.as_ref().map(|id| id.id);
+        let expected_source_neuron_id = community_fund_neuron.id.as_ref().unwrap().id;
+        let participation_amount_e8s = *community_fund_neuron_id_to_participation_amount_e8s
+            .get(&expected_source_neuron_id)
+            .unwrap();
+        if participation_amount_e8s > 0 {
+            assert!(!sns_neurons.is_empty(), "{}", controller);
+        }
         for sns_neuron in sns_neurons {
-            assert_eq!(sns_neuron.source_nns_neuron_id, expected_source_neuron_id);
+            assert_eq!(
+                sns_neuron.source_nns_neuron_id,
+                Some(expected_source_neuron_id)
+            );
         }
     }
 
@@ -862,14 +1116,10 @@ fn swap_n_accounts(
     }
 
     // STEP 3.4: NNS governance is responsible for "settling" CF participation.
-    // In this case, that means that a total of 30 ICP was minted and sent to
-    // the the default account of the SNS governance canister, 10 ICP coming
-    // from NNS neuron 1 and 20 ICP from neuron 2 (more accurately, from their
-    // maturity).
     //
-    // We already noticed the 30 ICP being added to the SNS governance
+    // We already noticed the ICP being added to the SNS governance
     // canister's (default) account in step 3.2.1. Therefore, all that remains
-    // for us to verify is that the maturity of the two CF neurons have been
+    // for us to verify is that the maturity of the CF neurons have been
     // decreased by the right amounts.
     if additional_nns_neurons.is_empty() {
         assert_community_fund_neuron_maturities(
@@ -885,7 +1135,7 @@ fn swap_n_accounts(
             as f64
             / planned_community_fund_participation_amount.get_e8s() as f64;
         assert!(
-            (0.0..=0.01).contains(&relative_error),
+            (0.0..=max_community_fund_relative_error).contains(&relative_error),
             "{} vs. {} ({}% error)",
             spent,
             planned_community_fund_participation_amount,
@@ -915,6 +1165,7 @@ fn swap_lifecycle_sad() {
         community_fund_neurons,
         fractional_developer_voting_power,
         dapp_canister_id,
+        _sns_proposal_id,
     ) = begin_swap(
         &mut state_machine,
         &[], // accounts
@@ -922,6 +1173,7 @@ fn swap_lifecycle_sad() {
         planned_contribution_per_account,
         planned_community_fund_participation_amount,
         neuron_basket_count,
+        DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR,
     );
 
     let assert_community_fund_neuron_maturities =
@@ -1150,17 +1402,15 @@ fn swap_lifecycle_sad() {
         // Assert that the swap/sale canister's SNS token balance is unchanged.
         // Since this is the entire supply, we can be sure that nobody else has
         // any SNS tokens.
-        let observed_balance_e8s = icrc1_balance_of(
-            &mut state_machine,
+        let observed_balance_e8s = icrc1_balance(
+            &state_machine,
             sns_canister_ids.ledger.unwrap().try_into().unwrap(),
-            &ic_icrc1::Account {
+            ic_icrc1::Account {
                 owner: sns_canister_ids.swap.unwrap(),
                 subaccount: None,
             },
         )
-        .0
-        .to_u64()
-        .unwrap();
+        .get_e8s();
         assert_eq!(observed_balance_e8s, 100 * neuron_basket_count * E8);
     }
 
@@ -1213,210 +1463,6 @@ fn swap_lifecycle_sad() {
     assert_community_fund_neuron_maturities(&mut state_machine, &[zero, zero]);
 }
 
-fn participate_in_swap(
-    state_machine: &mut StateMachine,
-    swap_canister_id: CanisterId,
-    participant_principal_id: PrincipalId,
-    amount: ExplosiveTokens,
-) {
-    // First, transfer ICP to swap. Needs to go into a special subaccount...
-    send_participation_funds(
-        state_machine,
-        swap_canister_id,
-        participant_principal_id,
-        amount,
-    );
-
-    // ... then, swap must be notified about that transfer.
-    state_machine
-        .execute_ingress(
-            swap_canister_id,
-            "refresh_buyer_tokens",
-            Encode!(&swap_pb::RefreshBuyerTokensRequest {
-                buyer: participant_principal_id.to_string(),
-            })
-            .unwrap(),
-        )
-        .unwrap();
-}
-
-fn send_participation_funds(
-    state_machine: &mut StateMachine,
-    swap_canister_id: CanisterId,
-    participant_principal_id: PrincipalId,
-    amount: ExplosiveTokens,
-) {
-    let subaccount = icp_ledger::Subaccount(ic_sns_swap::swap::principal_to_subaccount(
-        &participant_principal_id,
-    ));
-    let request = Encode!(&TransferArgs {
-        memo: Memo(0),
-        amount: amount.into(),
-        fee: (*DEFAULT_TRANSFER_FEE).into(),
-        from_subaccount: None,
-        to: AccountIdentifier::new(swap_canister_id.into(), Some(subaccount)).to_address(),
-        created_at_time: None,
-    })
-    .unwrap();
-    state_machine
-        .execute_ingress_as(
-            participant_principal_id,
-            ICP_LEDGER_CANISTER_ID,
-            "transfer",
-            request,
-        )
-        .unwrap();
-}
-
-fn nns_governance_make_proposal(
-    state_machine: &mut StateMachine,
-    sender: PrincipalId,
-    neuron_id: nns_common_pb::NeuronId,
-    proposal: &Proposal,
-) -> manage_neuron_response::MakeProposalResponse {
-    let result = state_test_helpers::nns_governance_make_proposal(
-        state_machine,
-        sender,
-        neuron_id,
-        proposal,
-    );
-
-    match result.command {
-        Some(manage_neuron_response::Command::MakeProposal(response)) => response,
-        _ => panic!("Response was not of type MakeProposal: {:#?}", result),
-    }
-}
-
-fn nns_governance_get_full_neuron(
-    state_machine: &mut StateMachine,
-    sender: PrincipalId,
-    neuron_id: u64,
-) -> Result<nns_governance_pb::Neuron, nns_governance_pb::GovernanceError> {
-    let result = state_machine
-        .execute_ingress_as(
-            sender,
-            NNS_GOVERNANCE_CANISTER_ID,
-            "get_full_neuron",
-            Encode!(&neuron_id).unwrap(),
-        )
-        .unwrap();
-
-    let result = match result {
-        WasmResult::Reply(reply) => reply,
-        WasmResult::Reject(reject) => {
-            panic!(
-                "get_full_neuron was rejected by the NNS governance canister: {:#?}",
-                reject
-            )
-        }
-    };
-    Decode!(&result, Result<nns_governance_pb::Neuron, nns_governance_pb::GovernanceError>).unwrap()
-}
-
-fn sns_root_register_dapp_canister(
-    state_machine: &mut StateMachine,
-    target_canister_id: CanisterId,
-    request: &RegisterDappCanisterRequest,
-) -> RegisterDappCanisterResponse {
-    let result = state_machine
-        .execute_ingress(
-            target_canister_id,
-            "register_dapp_canister",
-            Encode!(&request).unwrap(),
-        )
-        .unwrap();
-    let result = match result {
-        WasmResult::Reply(reply) => reply,
-        WasmResult::Reject(reject) => {
-            panic!(
-                "register_dapp_canister was rejected by the swap canister: {:#?}",
-                reject
-            )
-        }
-    };
-    Decode!(&result, RegisterDappCanisterResponse).unwrap()
-}
-
-fn sns_governance_list_neurons(
-    state_machine: &mut StateMachine,
-    sns_governance_canister_id: CanisterId,
-    request: &ListNeurons,
-) -> ListNeuronsResponse {
-    let result = state_machine
-        .execute_ingress(
-            sns_governance_canister_id,
-            "list_neurons",
-            Encode!(&request).unwrap(),
-        )
-        .unwrap();
-    let result = match result {
-        WasmResult::Reply(reply) => reply,
-        WasmResult::Reject(reject) => {
-            panic!("get_state was rejected by the swap canister: {:#?}", reject)
-        }
-    };
-    Decode!(&result, ListNeuronsResponse).unwrap()
-}
-
-fn icrc1_balance_of(
-    state_machine: &mut StateMachine,
-    target_canister_id: CanisterId,
-    request: &ic_icrc1::Account,
-) -> Nat {
-    let result = state_machine
-        .execute_ingress(
-            target_canister_id,
-            "icrc1_balance_of",
-            Encode!(&request).unwrap(),
-        )
-        .unwrap();
-    let result = match result {
-        WasmResult::Reply(reply) => reply,
-        WasmResult::Reject(reject) => {
-            panic!("get_state was rejected by the swap canister: {:#?}", reject)
-        }
-    };
-    Decode!(&result, Nat).unwrap()
-}
-
-fn ledger_account_balance(
-    state_machine: &mut StateMachine,
-    ledger_canister_id: CanisterId,
-    request: &AccountBalanceArgs,
-) -> Tokens {
-    let result = state_machine
-        .execute_ingress(
-            ledger_canister_id,
-            "account_balance",
-            Encode!(&request).unwrap(),
-        )
-        .unwrap();
-    let result = match result {
-        WasmResult::Reply(reply) => reply,
-        WasmResult::Reject(reject) => {
-            panic!("get_state was rejected by the swap canister: {:#?}", reject)
-        }
-    };
-    Decode!(&result, Tokens).unwrap()
-}
-
-fn swap_get_state(
-    state_machine: &mut StateMachine,
-    swap_canister_id: CanisterId,
-    request: &swap_pb::GetStateRequest,
-) -> swap_pb::GetStateResponse {
-    let result = state_machine
-        .execute_ingress(swap_canister_id, "get_state", Encode!(request).unwrap())
-        .unwrap();
-    let result = match result {
-        WasmResult::Reply(reply) => reply,
-        WasmResult::Reject(reject) => {
-            panic!("get_state was rejected by the swap canister: {:#?}", reject)
-        }
-    };
-    Decode!(&result, swap_pb::GetStateResponse).unwrap()
-}
-
 /// Results get printed to stderr, and such lines are prefixed with
 /// "swap_load_test result:". Thus, if out.txt contains output sent to stderr,
 /// then results can be obtained by running the following command:
@@ -1442,15 +1488,9 @@ fn swap_get_state(
 #[cfg(feature = "long_bench")]
 #[test]
 fn swap_load_test() {
-    use ic_nervous_system_common::{
-        ledger::compute_neuron_staking_subaccount, START_OF_2022_TIMESTAMP_SECONDS,
-    };
-    use ic_nns_governance::pb::v1::neuron::DissolveState::DissolveDelaySeconds;
-    use maplit::hashmap;
-    use rand::{thread_rng, Rng};
     use std::env::var as get_env_var;
 
-    // By default, this is 100_000, but can be overridden using MAX_ACCOUNTS
+    // By default, this is 6_400, but can be overridden using MAX_ACCOUNTS
     // environment varaible. Hint: to set this in bazel, use the --test_env
     // flag.
     let max_accounts = get_env_var("MAX_ACCOUNTS")
@@ -1494,22 +1534,7 @@ fn swap_load_test() {
                     controller: Some(controller),
                     cached_neuron_stake_e8s: 100 * E8,
                     maturity_e8s_equivalent: 100 * E8,
-                    joined_community_fund_timestamp_seconds: Some(START_OF_2022_TIMESTAMP_SECONDS),
-
-                    hot_keys: vec![],
-                    neuron_fees_e8s: 0,
-                    created_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
-                    aging_since_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
-                    spawn_at_timestamp_seconds: None,
-                    dissolve_state: Some(DissolveDelaySeconds(4 * 365 * SECONDS_PER_DAY)),
-                    followees: hashmap! {},
-                    recent_ballots: vec![],
-                    kyc_verified: false,
-                    transfer: None,
-                    staked_maturity_e8s_equivalent: None,
-                    auto_stake_maturity: None,
-                    not_for_profit: false,
-                    known_neuron_data: None,
+                    ..COMMUNITY_FUND_NEURON_TEMPLATE.clone()
                 }
             })
             .collect()
@@ -1536,6 +1561,7 @@ fn swap_load_test() {
             num_accounts,
             &additional_nns_neurons,
             ExplosiveTokens::from_e8s(20 * E8 * additional_nns_neurons.len() as u64),
+            DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR,
         );
 
         print_result_record(&format!(

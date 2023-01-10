@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/nns/constants",
     "//rs/nns/test_utils",
     "//rs/state_machine_tests",
+    "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/client",
     "//rs/rosetta-api/icrc1/index",

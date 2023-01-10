@@ -10,7 +10,7 @@ use dfn_protobuf::ToProto;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha::Sha256;
-use ic_nervous_system_common::E8;
+use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
@@ -52,15 +52,17 @@ use ic_nns_governance::{
         neuron::{self, DissolveState, Followees},
         proposal::{self, Action},
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
-        swap_background_information, AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot,
-        BallotInfo, DerivedProposalInformation, Empty, ExecuteNnsFunction,
-        Governance as GovernanceProto, GovernanceError, KnownNeuron, KnownNeuronData, ListNeurons,
-        ListNeuronsResponse, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron,
-        NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData,
+        settle_community_fund_participation, swap_background_information, AddOrRemoveNodeProvider,
+        ApproveGenesisKyc, Ballot, BallotInfo, DerivedProposalInformation, Empty,
+        ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, KnownNeuron,
+        KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo, ManageNeuron, Motion,
+        NetworkEconomics, Neuron, NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap,
+        Proposal, ProposalData,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees,
-        SwapBackgroundInformation, Tally, Topic, UpdateNodeProvider, Vote,
+        SettleCommunityFundParticipation, SwapBackgroundInformation, Tally, Topic,
+        UpdateNodeProvider, Vote,
     },
 };
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
@@ -11139,6 +11141,55 @@ async fn test_open_sns_token_swap_proposal_happy() {
             swap_background_information: Some(EXPECTED_SWAP_BACKGROUND_INFORMATION.clone()),
         }),
     );
+
+    // Cannot be purged yet, because Community Fund participation has not been settled yet.
+    let proposal = ProposalData {
+        reward_event_round: 1, // Pretend that proposal is now settled.
+        ..proposal.clone()
+    };
+    let now = DEFAULT_TEST_START_TIMESTAMP_SECONDS + 999 * SECONDS_PER_DAY;
+    let voting_period_seconds = gov.voting_period_seconds()(proposal.topic());
+    assert_eq!(
+        proposal.reward_status(now, voting_period_seconds),
+        ProposalRewardStatus::Settled,
+    );
+    assert!(!proposal.can_be_purged(now, voting_period_seconds));
+
+    // Settle CF participation (Aborted).
+    {
+        use settle_community_fund_participation::{Aborted, Result};
+        gov.settle_community_fund_participation(
+            *TARGET_SWAP_CANISTER_ID,
+            &SettleCommunityFundParticipation {
+                open_sns_token_swap_proposal_id: Some(proposal.id.unwrap().id),
+                result: Some(Result::Aborted(Aborted::default())),
+            },
+        )
+        .await
+        .unwrap();
+
+        // Re-inspect the proposal.
+        let mut proposals: Vec<(_, _)> = gov.proto.proposals.iter().collect();
+        assert_eq!(proposals.len(), 1);
+        let (_id, proposal) = proposals.pop().unwrap();
+
+        // Force proposal to be seen as Settled (from a voting rewards point of view).
+        let proposal = ProposalData {
+            reward_event_round: 1,
+            ..proposal.clone()
+        };
+        assert_eq!(
+            proposal.reward_status(now, voting_period_seconds),
+            ProposalRewardStatus::Settled,
+        );
+
+        // Unlike a short while ago (right before this block), we are now settled
+        assert_eq!(
+            proposal.sns_token_swap_lifecycle,
+            Some(sns_swap_pb::Lifecycle::Aborted as i32),
+        );
+        assert!(proposal.can_be_purged(now, voting_period_seconds));
+    }
 }
 
 #[tokio::test]

@@ -17,7 +17,7 @@ use ic_nns_constants::{
     LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
 };
-use ic_nns_governance::pb::v1::Governance;
+use ic_nns_governance::pb::v1::{self as nns_governance_pb, Governance, ProposalInfo};
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::universal_canister::{
@@ -39,11 +39,11 @@ use ic_nns_governance::pb::v1::{
     manage_neuron::{self},
     ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Proposal,
 };
-use ic_sns_governance::pb::v1;
-use ic_sns_governance::pb::v1 as sns_pb;
-use ic_sns_governance::pb::v1::manage_neuron_response::Command as SnsCommandResponse;
-use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
-use icp_ledger::{BlockIndex, Tokens};
+use ic_sns_governance::{
+    pb::v1::{self as sns_pb, manage_neuron_response::Command as SnsCommandResponse},
+    types::DEFAULT_TRANSFER_FEE,
+};
+use icp_ledger::{BinaryAccountBalanceArgs, BlockIndex, Tokens};
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
 pub fn reduce_state_machine_logging_unless_env_set() {
@@ -436,6 +436,57 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
     setup_nns_sns_wasms_with_correct_canister_id(machine, init_payloads.sns_wasms);
 }
 
+pub fn nns_governance_get_full_neuron(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: u64,
+) -> Result<nns_governance_pb::Neuron, nns_governance_pb::GovernanceError> {
+    let result = state_machine
+        .execute_ingress_as(
+            sender,
+            GOVERNANCE_CANISTER_ID,
+            "get_full_neuron",
+            Encode!(&neuron_id).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get_full_neuron was rejected by the NNS governance canister: {:#?}",
+                reject
+            )
+        }
+    };
+    Decode!(&result, Result<nns_governance_pb::Neuron, nns_governance_pb::GovernanceError>).unwrap()
+}
+
+pub fn nns_governance_get_proposal_info(
+    state_machine: &mut StateMachine,
+    proposal_id: u64,
+) -> ProposalInfo {
+    let result = state_machine
+        .execute_ingress(
+            GOVERNANCE_CANISTER_ID,
+            "get_proposal_info",
+            Encode!(&proposal_id).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get_proposal_info was rejected by the NNS governance canister: {:#?}",
+                reject
+            )
+        }
+    };
+
+    Decode!(&result, Option<ProposalInfo>).unwrap().unwrap()
+}
+
 fn manage_neuron(
     state_machine: &mut StateMachine,
     sender: PrincipalId,
@@ -557,6 +608,27 @@ pub fn sns_stake_neuron(
     .unwrap()
 }
 
+pub fn ledger_account_balance(
+    state_machine: &mut StateMachine,
+    ledger_canister_id: CanisterId,
+    request: &BinaryAccountBalanceArgs,
+) -> Tokens {
+    let result = state_machine
+        .execute_ingress(
+            ledger_canister_id,
+            "account_balance",
+            Encode!(&request).unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!("get_state was rejected by the swap canister: {:#?}", reject)
+        }
+    };
+    Decode!(&result, Tokens).unwrap()
+}
+
 pub fn icrc1_balance(machine: &StateMachine, ledger_id: CanisterId, account: Account) -> Tokens {
     let result = query(
         machine,
@@ -608,7 +680,7 @@ pub fn sns_claim_staked_neuron(
         governance_canister_id,
         "manage_neuron",
         candid_one,
-        v1::ManageNeuron {
+        sns_pb::ManageNeuron {
             subaccount: to_subaccount.to_vec(),
             command: Some(sns_pb::manage_neuron::Command::ClaimOrRefresh(
                 sns_pb::manage_neuron::ClaimOrRefresh {
@@ -711,7 +783,7 @@ pub fn sns_make_proposal(
     sender: PrincipalId,
     // subaccount: &[u8],
     neuron_id: sns_pb::NeuronId,
-    proposal: v1::Proposal,
+    proposal: sns_pb::Proposal,
 ) -> Result<sns_pb::ProposalId, sns_pb::GovernanceError> {
     let sub_account = neuron_id.subaccount().unwrap();
 

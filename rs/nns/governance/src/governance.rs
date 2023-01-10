@@ -1238,7 +1238,7 @@ impl Action {
 }
 
 impl ProposalData {
-    pub(crate) fn topic(&self) -> Topic {
+    pub fn topic(&self) -> Topic {
         if let Some(proposal) = &self.proposal {
             proposal.topic()
         } else {
@@ -1514,7 +1514,7 @@ impl ProposalData {
 
     /// Return true if this proposal can be purged from storage, e.g.,
     /// if it is allowed to be garbage collected.
-    pub(crate) fn can_be_purged(&self, now_seconds: u64, voting_period_seconds: u64) -> bool {
+    pub fn can_be_purged(&self, now_seconds: u64, voting_period_seconds: u64) -> bool {
         if !self.status().is_final() {
             return false;
         }
@@ -1529,14 +1529,52 @@ impl ProposalData {
         if let Some(Action::OpenSnsTokenSwap(_)) =
             self.proposal.as_ref().and_then(|p| p.action.as_ref())
         {
-            return self
-                .sns_token_swap_lifecycle
-                .and_then(sns_swap_pb::Lifecycle::from_i32)
-                .unwrap_or(sns_swap_pb::Lifecycle::Unspecified)
-                .is_terminal();
+            return self.open_sns_token_swap_can_be_purged();
         }
 
         true
+    }
+
+    // Precondition: action must be OpenSnsTokenSwap (behavior is undefined otherwise).
+    //
+    // The idea here is that we must wait until Community Fund participation has
+    // been settled (part of swap finalization), because in that case, we are
+    // holding CF participation in escrow.
+    //
+    // We can tell whether CF participation settlement has been taken care of by
+    // looking at the sns_token_swap_lifecycle field.
+    fn open_sns_token_swap_can_be_purged(&self) -> bool {
+        match self.status() {
+            ProposalStatus::Rejected => {
+                // Because nothing has been taken from the community fund yet (and never
+                // will). We handle this specially, because in this case,
+                // sns_token_swap_lifecycle will be None, which is later treated as not
+                // terminal.
+                true
+            }
+
+            ProposalStatus::Failed => {
+                // Because because maturity is refunded to the Community Fund before setting
+                // execution status to failed.
+                true
+            }
+
+            ProposalStatus::Executed => {
+                // Need to wait for settle_communify_fund_participation.
+                self.sns_token_swap_lifecycle
+                    .and_then(sns_swap_pb::Lifecycle::from_i32)
+                    .unwrap_or(sns_swap_pb::Lifecycle::Unspecified)
+                    .is_terminal()
+            }
+
+            status => {
+                println!(
+                    "{}WARNING: Proposal status unexpectedly {:?}. self={:#?}",
+                    LOG_PREFIX, status, self,
+                );
+                false
+            }
+        }
     }
 }
 
@@ -6938,7 +6976,7 @@ impl Governance {
     ///
     /// This function is "curried" to alleviate lifetime issues on the
     /// `self` parameter.
-    fn voting_period_seconds(&self) -> impl Fn(Topic) -> u64 {
+    pub fn voting_period_seconds(&self) -> impl Fn(Topic) -> u64 {
         let short = self.proto.short_voting_period_seconds;
         let normal = self.proto.wait_for_quiet_threshold_seconds;
         move |topic| {
@@ -8991,14 +9029,34 @@ mod tests {
             decided_timestamp_seconds: 1, // has been decided
             reward_event_round: 1,        // has been rewarded
             proposal: Some(Proposal::default()),
+            executed_timestamp_seconds: 1,
+            latest_tally: Some(Tally {
+                yes: 1,
+                no: 0,
+                total: 1,
+                timestamp_seconds: now_seconds,
+            }),
             ..Default::default()
         };
+        assert_eq!(subject.status(), ProposalStatus::Executed);
         assert!(subject.can_be_purged(now_seconds, voting_period_seconds));
 
         // Modify subject slightly to make it no longer ineligible for purge.
         subject.proposal.as_mut().unwrap().action =
             Some(Action::OpenSnsTokenSwap(OpenSnsTokenSwap::default()));
         assert!(!subject.can_be_purged(now_seconds, voting_period_seconds));
+
+        let rejected_proposal_data = ProposalData {
+            latest_tally: Some(Tally {
+                yes: 0,
+                no: 1,
+                total: 1,
+                timestamp_seconds: now_seconds,
+            }),
+            ..subject.clone()
+        };
+        assert_eq!(rejected_proposal_data.status(), ProposalStatus::Rejected);
+        assert!(rejected_proposal_data.can_be_purged(now_seconds, voting_period_seconds));
 
         // Modify again to make it purge-able.
         subject.sns_token_swap_lifecycle = Some(sns_swap_pb::Lifecycle::Aborted as i32);
