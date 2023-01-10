@@ -10,6 +10,7 @@
 /hs/                      @dfinity-lab/teams/ic-testing-verification
 /licenses/                @dfinity-lab/teams/idx
 /outsource/               @dfinity-lab/teams/idx
+/bin/ict                  @dfinity-lab/teams/ic-testing-verification
 
 # [Bazel]
 /bazel/                   @dfinity-lab/teams/idx
