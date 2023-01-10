@@ -124,6 +124,7 @@ members = [
   "nervous_system/common/build_metadata",
   "nervous_system/common/test_canister",
   "nervous_system/common/test_keys",
+  "nervous_system/common/test_utils",
   "nervous_system/root",
   "nns/constants",
   "nns/common",

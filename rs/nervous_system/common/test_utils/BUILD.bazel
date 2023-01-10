@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = [
+    "//rs/nervous_system/common/test_utils:ic_nervous_system_common_test_utils_visibility",
+])
+
+package_group(
+    name = "ic_nervous_system_common_test_utils_visibility",
+    packages = [
+        "//rs/nervous_system/common/...",
+        "//rs/nns/...",
+        "//rs/sns/...",
+    ],
+)
+
+DEPENDENCIES = [
+    "//rs/nervous_system/common",
+    "//rs/rosetta-api/icp_ledger",
+    "//rs/rosetta-api/icrc1",
+    "//rs/rust_canisters/dfn_core",
+    "@crate_index//:futures",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+rust_library(
+    name = "test_utils",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_nervous_system_common_test_utils",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)

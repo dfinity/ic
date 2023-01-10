@@ -1,39 +1,42 @@
 use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid_one, CandidOne};
-use dfn_core::CanisterId;
 use dfn_core::{
     api::{caller, id, now},
-    over, over_async, over_init, println,
+    over, over_async, over_init, println, CanisterId,
 };
 use ic_base_types::PrincipalId;
 use ic_ic00_types::CanisterStatusResultV2;
 use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
-use ic_sns_governance::ledger::LedgerCanister;
-use ic_sns_governance::pb::v1::{
-    ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode,
-    SetModeResponse,
+use ic_sns_governance::{
+    ledger::LedgerCanister,
+    pb::v1::{
+        ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse,
+        SetMode, SetModeResponse,
+    },
+};
+use ic_sns_swap::{
+    pb::v1::{
+        CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
+        FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest,
+        GetBuyersTotalResponse, GetCanisterStatusRequest, GetStateRequest, GetStateResponse,
+        GovernanceError, Init, OpenRequest, OpenResponse, RefreshBuyerTokensRequest,
+        RefreshBuyerTokensResponse, RestoreDappControllersRequest, RestoreDappControllersResponse,
+        SetDappControllersRequest, SetDappControllersResponse, SettleCommunityFundParticipation,
+        Swap,
+    },
+    swap::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient, LOG_PREFIX},
+};
+use prost::Message;
+use std::{
+    str::FromStr,
+    time::{Duration, SystemTime},
 };
 
 // TODO(NNS1-1589): Unhack.
 // use ic_sns_root::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
-use ic_sns_swap::pb::v1::{
-    GovernanceError, RestoreDappControllersRequest, RestoreDappControllersResponse,
-    SetDappControllersRequest, SetDappControllersResponse, SettleCommunityFundParticipation,
-};
-
-use ic_sns_swap::pb::v1::{
-    CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
-    FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest,
-    GetBuyersTotalResponse, GetCanisterStatusRequest, GetStateRequest, GetStateResponse, Init,
-    OpenRequest, OpenResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Swap,
-};
-use ic_sns_swap::swap::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient, LOG_PREFIX};
-use prost::Message;
-use std::str::FromStr;
-use std::time::{Duration, SystemTime};
 
 /// Size of the buffer for stable memory reads and writes.
 const STABLE_MEM_BUFFER_SIZE: u32 = 1024 * 1024; // 1MiB
@@ -110,14 +113,14 @@ fn open() {
 async fn open_(req: OpenRequest) -> OpenResponse {
     println!("{}open", LOG_PREFIX);
     // Require authorization.
-    let allowed_canister = swap().init().nns_governance();
+    let allowed_canister = swap().init_or_panic().nns_governance_or_panic();
     if caller() != PrincipalId::from(allowed_canister) {
         panic!(
             "This method can only be called by canister {}",
             allowed_canister
         );
     }
-    let sns_ledger = create_real_icrc1_ledger(swap().init().sns_ledger());
+    let sns_ledger = create_real_icrc1_ledger(swap().init_or_panic().sns_ledger_or_panic());
     match swap_mut().open(id(), &sns_ledger, now_seconds(), req).await {
         Ok(res) => res,
         Err(msg) => panic!("{}", msg),
@@ -139,7 +142,7 @@ async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTo
     } else {
         PrincipalId::from_str(&arg.buyer).unwrap()
     };
-    let icp_ledger = create_real_icp_ledger(swap().init().icp_ledger());
+    let icp_ledger = create_real_icp_ledger(swap().init_or_panic().icp_ledger_or_panic());
     match swap_mut()
         .refresh_buyer_token_e8s(p, id(), &icp_ledger)
         .await
@@ -271,12 +274,15 @@ fn finalize_swap() {
 /// See Swap.finalize.
 #[candid_method(update, rename = "finalize_swap")]
 async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
-    // Helpers.
-    let mut sns_root_client = RealSnsRootClient::new(swap().init().sns_root());
-    let mut sns_governance_client = RealSnsGovernanceClient::new(swap().init().sns_governance());
-    let icp_ledger = create_real_icp_ledger(swap().init().icp_ledger());
-    let sns_ledger = create_real_icrc1_ledger(swap().init().sns_ledger());
-    let mut nns_governance_client = RealNnsGovernanceClient::new(swap().init().nns_governance());
+    println!("{}finalize_swap", LOG_PREFIX);
+    let mut sns_root_client = RealSnsRootClient::new(swap().init_or_panic().sns_root_or_panic());
+    let mut sns_governance_client =
+        RealSnsGovernanceClient::new(swap().init_or_panic().sns_governance_or_panic());
+    let icp_ledger = create_real_icp_ledger(swap().init_or_panic().icp_ledger_or_panic());
+    let sns_ledger = create_real_icrc1_ledger(swap().init_or_panic().sns_ledger_or_panic());
+    let mut nns_governance_client =
+        RealNnsGovernanceClient::new(swap().init_or_panic().nns_governance_or_panic());
+
     swap_mut()
         .finalize(
             now_fn,
@@ -296,7 +302,7 @@ fn error_refund_icp() {
 
 #[candid_method(update, rename = "error_refund_icp")]
 async fn error_refund_icp_(request: ErrorRefundIcpRequest) -> ErrorRefundIcpResponse {
-    let icp_ledger = create_real_icp_ledger(swap().init().icp_ledger());
+    let icp_ledger = create_real_icp_ledger(swap().init_or_panic().icp_ledger_or_panic());
     swap().error_refund_icp(id(), &request, &icp_ledger).await
 }
 
@@ -359,29 +365,26 @@ async fn get_buyers_total_(_request: GetBuyersTotalRequest) -> GetBuyersTotalRes
     swap().get_buyers_total()
 }
 
+/// Restores all dapp canisters to the fallback controllers as specified
+/// in the SNS initialization process, marking the Sale as aborted in the
+/// process. `restore_dapp_controllers` is only callable by NNS Governance.
 #[export_name = "canister_update restore_dapp_controllers"]
 fn restore_dapp_controllers() {
     over_async(candid_one, restore_dapp_controllers_)
 }
 
+/// Restores all dapp canisters to the fallback controllers as specified
+/// in the SNS initialization process, marking the Sale as aborted in the
+/// process. `restore_dapp_controllers` is only callable by NNS Governance.
 #[candid_method(update, rename = "restore_dapp_controllers")]
 async fn restore_dapp_controllers_(
     _request: RestoreDappControllersRequest,
 ) -> RestoreDappControllersResponse {
-    println!("{}retore_dapp_controllers", LOG_PREFIX);
-    // Require authorization.
-    let allowed_canister = swap().init().nns_governance();
-    if caller() != PrincipalId::from(allowed_canister) {
-        panic!(
-            "This method can only be called by canister {}",
-            allowed_canister
-        );
-    }
-    let mut sns_root_client = RealSnsRootClient::new(swap().init().sns_root());
+    println!("{}restore_dapp_controllers", LOG_PREFIX);
+    let mut sns_root_client = RealSnsRootClient::new(swap().init_or_panic().sns_root_or_panic());
     swap_mut()
-        .restore_dapp_controllers(&mut sns_root_client)
+        .restore_dapp_controllers(&mut sns_root_client, caller())
         .await
-        .into()
 }
 
 // =============================================================================

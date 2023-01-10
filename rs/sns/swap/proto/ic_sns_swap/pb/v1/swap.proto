@@ -168,14 +168,18 @@ message Swap {
 
   // The current lifecycle of the swap.
   Lifecycle lifecycle = 3;
+
   // Specified on creation. That is, always specified and immutable.
   Init init = 1;
+
   // Specified in the transition from PENDING to OPEN and immutable
   // thereafter.
   Params params = 4;
+
   // Community fund participation.  Specified in the transition from
   // PENDING to OPEN and immutable thereafter.
   repeated CfParticipant cf_participants = 5;
+
   // Empty in the PENDING state. In the OPEN state, new buyers can be
   // added and existing buyers can increase their bids. In the
   // COMMITTED and ABORTED states, the amount cannot be modified, and
@@ -184,12 +188,24 @@ message Swap {
   // The key is the textual representation of the buyer's principal
   // and the value represents the bid.
   map<string, BuyerState> buyers = 6;
+
   // When the swap is committed, this field is initialized according
   // to the outcome of the swap.
   repeated SnsNeuronRecipe neuron_recipes = 7;
+
   // Gets set to whatever value is in the corresponding field of OpenRequest
   // (that field is required at the application level).
   optional uint64 open_sns_token_swap_proposal_id = 9;
+
+  // A lock stored in Swap state. If set to true, then a finalize_swap
+  // call is in progress. In that case, new finalize_swap calls return
+  // immediately without doing any real work.
+  //
+  // The implementation of the lock should result in the lock being
+  // released when the finalize_swap method returns. If
+  // a lock is not released, upgrades of the Swap canister can
+  // release the lock in the post upgrade hook.
+  optional bool finalize_swap_in_progress = 10;
 }
 
 // The initialisation data of the canister. Always specified on
@@ -474,6 +490,10 @@ message RefreshBuyerTokensResponse {
 // distributed, and, if the swap was committed, neurons created.
 message FinalizeSwapRequest {}
 
+// Response from the `finalize_swap` canister API.
+//
+// TODO NNS1-1715 - Add diagnostic information that would maximize the chances
+// that an operator would be able to figure out what corrective action(s) to take
 message FinalizeSwapResponse {
   SweepResult sweep_icp = 1;
   SweepResult sweep_sns = 2;
@@ -481,6 +501,9 @@ message FinalizeSwapResponse {
   SetModeCallResult sns_governance_normal_mode_enabled = 4;
   SetDappControllersCallResult set_dapp_controllers_result = 5;
   SettleCommunityFundParticipationResult settle_community_fund_participation_result = 6;
+
+  // Explains what (if anything) went wrong.
+  optional string error_message = 7;
 }
 
 message SweepResult {

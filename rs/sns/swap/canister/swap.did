@@ -39,6 +39,7 @@ type FailedUpdate = record {
 };
 type FinalizeSwapResponse = record {
   settle_community_fund_participation_result : opt SettleCommunityFundParticipationResult;
+  error_message : opt text;
   set_dapp_controllers_result : opt SetDappControllersCallResult;
   sns_governance_normal_mode_enabled : opt SetModeCallResult;
   sweep_icp : opt SweepResult;
@@ -111,6 +112,7 @@ type SnsNeuronRecipe = record {
 };
 type Swap = record {
   neuron_recipes : vec SnsNeuronRecipe;
+  finalize_swap_in_progress : opt bool;
   cf_participants : vec CfParticipant;
   init : opt Init;
   lifecycle : int32;

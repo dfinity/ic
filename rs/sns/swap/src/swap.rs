@@ -17,8 +17,9 @@ use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::i2d;
-use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
+use ic_nervous_system_common::{
+    i2d, ledger::compute_neuron_staking_subaccount_bytes, SECONDS_PER_DAY,
+};
 use ic_sns_governance::{
     ledger::ICRC1Ledger,
     pb::v1::{
@@ -27,14 +28,15 @@ use ic_sns_governance::{
     },
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
+use itertools::{Either, Itertools};
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use rust_decimal::prelude::ToPrimitive;
-use std::ops::Div;
-
-use std::num::NonZeroU128;
-use std::num::NonZeroU64;
-use std::str::FromStr;
+use std::{
+    num::{NonZeroU128, NonZeroU64},
+    ops::Div,
+    str::FromStr,
+};
 
 // TODO(NNS1-1589): Get these from the canonical location.
 use crate::pb::v1::{
@@ -42,11 +44,7 @@ use crate::pb::v1::{
     SetDappControllersRequest, SetDappControllersResponse, SettleCommunityFundParticipation,
 };
 
-// TODO: remove when not used.
-pub const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1640995200;
-
 pub const LOG_PREFIX: &str = "[Swap] ";
-pub const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 
 /// Result of a token transfer (commit or abort) on a ledger (ICP or
 /// SNS) for a single buyer.
@@ -112,6 +110,29 @@ impl From<Result<SetDappControllersResponse, CanisterCallError>>
     }
 }
 
+impl From<Result<Result<(), GovernanceError>, CanisterCallError>>
+    for SettleCommunityFundParticipationResult
+{
+    fn from(original: Result<Result<(), GovernanceError>, CanisterCallError>) -> Self {
+        use settle_community_fund_participation_result::{Possibility, Response};
+
+        match original {
+            Ok(inner) => Self {
+                possibility: Some(Possibility::Ok(Response {
+                    governance_error: match inner {
+                        Ok(()) => None,
+                        Err(governance_error) => Some(governance_error),
+                    },
+                })),
+            },
+
+            Err(err) => Self {
+                possibility: Some(Possibility::Err(err)),
+            },
+        }
+    }
+}
+
 #[async_trait]
 pub trait SnsGovernanceClient {
     async fn manage_neuron(
@@ -160,13 +181,23 @@ impl Swap {
             buyers: Default::default(), // Btree map
             neuron_recipes: vec![],
             open_sns_token_swap_proposal_id: None,
+            finalize_swap_in_progress: Some(false),
         }
     }
 
     /// Retrieve a reference to the `init` field. The `init` field
-    /// must always be not-`None` given how `new` is implemented.
-    pub fn init(&self) -> &Init {
-        self.init.as_ref().unwrap()
+    /// is unlikely to be `None` given how `new` is implemented.
+    pub fn init_or_panic(&self) -> &Init {
+        self.init
+            .as_ref()
+            .expect("Expected the init field to be populated in the Sale canister state")
+    }
+
+    /// Retrieve a reference to the `init` field without panicking.
+    pub fn init(&self) -> Result<&Init, String> {
+        self.init
+            .as_ref()
+            .ok_or_else(|| "The Init field is not populated in the Sale canister state".to_string())
     }
 
     /// A Result with the number of SNS tokens for sale, or an Err if the sale hasn't
@@ -178,14 +209,14 @@ impl Swap {
             .ok_or_else(|| "Sale not open, no tokens available.".to_string())
     }
 
-    // The total amount of ICP contributed by direct investors and the
-    // community fund.
+    /// The total amount of ICP contributed by direct investors and the
+    /// community fund.
     pub fn participant_total_icp_e8s(&self) -> u64 {
         self.direct_investor_total_icp_e8s()
             .saturating_add(self.cf_total_icp_e8s())
     }
 
-    // The total amount of ICP contributed by the community fund.
+    /// The total amount of ICP contributed by the community fund.
     pub fn cf_total_icp_e8s(&self) -> u64 {
         self.cf_participants
             .iter()
@@ -193,12 +224,18 @@ impl Swap {
             .fold(0, |sum, v| sum.saturating_add(v))
     }
 
-    // The total amount of ICP contributed by direct investors.
+    /// The total amount of ICP contributed by direct investors.
     fn direct_investor_total_icp_e8s(&self) -> u64 {
         self.buyers
             .values()
             .map(|x| x.amount_icp_e8s())
             .fold(0, |sum, v| sum.saturating_add(v))
+    }
+
+    /// Determine if the Sale is in it's terminal state
+    /// based on it's lifecycle.
+    fn lifecycle_is_terminal(&self) -> bool {
+        self.lifecycle().is_terminal()
     }
 
     //
@@ -242,7 +279,7 @@ impl Swap {
             return Err("Invalid lifecycle state to OPEN the swap: must be PENDING".to_string());
         }
 
-        req.validate(now_seconds, self.init())?;
+        req.validate(now_seconds, self.init_or_panic())?;
         let params = req.params.as_ref().expect("The params field has no value.");
 
         let sns_token_amount = Self::get_sns_tokens(this_canister, sns_ledger).await?;
@@ -638,10 +675,122 @@ impl Swap {
 
      */
 
+    /// Restores all dapp(s) canisters to te fallback controllers as specified
+    /// in the SNS initialization process. `restore_dapp_controllers` is only
+    /// callable by NNS Governance.
+    pub async fn restore_dapp_controllers(
+        &mut self,
+        sns_root_client: &mut impl SnsRootClient,
+        caller: PrincipalId,
+    ) -> RestoreDappControllersResponse {
+        // Require authorization.
+        let nns_governance = self.init_or_panic().nns_governance_or_panic();
+        if caller != nns_governance.get() {
+            panic!(
+                "This method can only be called by NNS Governance({}). Current caller is {}",
+                nns_governance, caller,
+            );
+        }
+
+        // With the restoration of the dapp(s) to the fallback controllers, the Sale
+        // is now aborted.
+        self.set_lifecycle(Lifecycle::Aborted);
+
+        let set_dapp_controllers_result = self.set_dapp_controllers(sns_root_client).await;
+        match set_dapp_controllers_result {
+            Ok(set_dapp_controllers_response) => set_dapp_controllers_response.into(),
+            // `restore_dapp_controllers` is called by NNS Governance which expects a
+            // RestoreDappControllersResponse. Since this is after the The error response in that Response
+            // object is a CanisterCallError, so transform the error_message to a
+            // CanisterCallError even though this is not technically a CanisterCallError.
+            //
+            // TODO IC-1448: In the Single Proposal SNS Initialization, a more robust
+            // response object can include errors that are not limited to CanisterCallError.
+            Err(error_message) => Err(CanisterCallError {
+                description: error_message,
+                ..Default::default()
+            })
+            .into(),
+        }
+    }
+
+    /// Determines if the conditions have been met in order to
+    /// restore the dapp canisters to the fallback controller ids.
+    /// The lifecycle MUST be set to Aborted via the commit method.
+    pub fn should_restore_dapp_control(&self) -> bool {
+        self.lifecycle() == Lifecycle::Aborted
+    }
+
+    /// set_dapp_controllers calls SNS Root with the Sale canister's configured
+    /// `fallback_controller_principal_ids`. set_dapp_controllers is generic and
+    /// used for the various Sale APIs that need to return control of the dapp(s)
+    /// back to the devs.
+    pub async fn set_dapp_controllers(
+        &self,
+        sns_root_client: &mut impl SnsRootClient,
+    ) -> Result<Result<SetDappControllersResponse, CanisterCallError>, String> {
+        let (controller_principal_ids, errors): (Vec<PrincipalId>, Vec<String>) = self
+            .init()?
+            .fallback_controller_principal_ids
+            .iter()
+            .map(|maybe_principal_id| PrincipalId::from_str(maybe_principal_id))
+            .partition_map(|result| match result {
+                Ok(p) => Either::Left(p),
+                Err(msg) => Either::Right(msg.to_string()),
+            });
+
+        if !errors.is_empty() {
+            return Err(format!(
+                "Could not set_dapp_controllers, one or more fallback_controller_principal_ids \
+                could not be parsed as a PrincipalId. {:?}",
+                errors.join("\n")
+            ));
+        }
+
+        Ok(sns_root_client
+            .set_dapp_controllers(SetDappControllersRequest {
+                controller_principal_ids,
+            })
+            .await)
+    }
+
+    /// Acquire the lock on `finalize_swap`.
+    pub fn lock_finalize_swap(&mut self) -> Result<(), String> {
+        match self.is_finalize_swap_locked() {
+            true => Err("The Sale canister has finalize_swap call already in progress".to_string()),
+            false => {
+                self.finalize_swap_in_progress = Some(true);
+                Ok(())
+            }
+        }
+    }
+
+    /// Releases the lock on `finalize_swap`.
+    fn unlock_finalize_swap(&mut self) {
+        match self.is_finalize_swap_locked() {
+            true => self.finalize_swap_in_progress = Some(false),
+            false => {
+                println!(
+                    "{}ERROR: Unexpected condition when unlocking finalize_swap_in_progress. \
+                    The lock was not held: {:?}.",
+                    LOG_PREFIX, self.finalize_swap_in_progress
+                );
+            }
+        }
+    }
+
+    /// Checks the internal state of `finalize_swap_in_progress` lock.
+    pub fn is_finalize_swap_locked(&self) -> bool {
+        match self.finalize_swap_in_progress {
+            Some(true) => true,
+            None | Some(false) => false,
+        }
+    }
+
     /// Distributes funds, and if the swap was successful, creates neurons. Returns
     /// a summary of (sub)actions that were performed.
     ///
-    /// If the swap is not over yet, panics.
+    /// If the swap is not over yet, returns an error message.
     ///
     /// If swap was successful (i.e. it is in the Lifecycle::Committed phase), then
     /// ICP is sent to the SNS governance canister, and SNS tokens are sent to SNS
@@ -656,6 +805,11 @@ impl Swap {
     /// an argument that is 'false' to get the timestamp when a
     /// transfer is initiated and 'true' to get the timestamp when a
     /// transfer is successful.
+    ///
+    /// While finalize is marked asynchronous to allow awaits across
+    /// IC messages boundaries, it only allows one invocation at a time.
+    /// Additional attempts to invoke finalize will return without
+    /// performing any subactions.
     pub async fn finalize(
         &mut self,
         now_fn: fn(bool) -> u64,
@@ -665,98 +819,153 @@ impl Swap {
         sns_ledger: &dyn ICRC1Ledger,
         nns_governance_client: &mut impl NnsGovernanceClient,
     ) -> FinalizeSwapResponse {
-        let lifecycle = self.lifecycle();
-        assert!(
-            lifecycle == Lifecycle::Committed || lifecycle == Lifecycle::Aborted,
-            "Swap can only be finalized in the COMMITTED or ABORTED states - was {:?}",
-            lifecycle
-        );
-        let swap_is_committed = lifecycle == Lifecycle::Committed;
-
-        let sweep_icp = self.sweep_icp(now_fn, icp_ledger).await;
-
-        let settle_community_fund_participation_result = Some({
-            use settle_community_fund_participation::{Aborted, Committed, Result};
-
-            let result = if swap_is_committed {
-                Result::Committed(Committed {
-                    sns_governance_canister_id: Some(self.init().sns_governance().into()),
-                })
-            } else {
-                Result::Aborted(Aborted {})
-            };
-
-            nns_governance_client
-                .settle_community_fund_participation(SettleCommunityFundParticipation {
-                    open_sns_token_swap_proposal_id: self.open_sns_token_swap_proposal_id,
-                    result: Some(result),
-                })
-                .await
-                .into()
-        });
-
-        if !swap_is_committed {
-            // Restore controllers of dapp canisters to their original owners (i.e. self.init.fallback_controller_principal_ids).
-            let set_dapp_controllers_result = self.restore_dapp_controllers(sns_root_client).await;
-
-            return FinalizeSwapResponse {
-                sweep_icp: Some(sweep_icp),
-                sweep_sns: None,
-                create_neuron: None,
-                sns_governance_normal_mode_enabled: None,
-                set_dapp_controllers_result: Some(set_dapp_controllers_result.into()),
-                settle_community_fund_participation_result,
-            };
+        // Acquire the lock or return a FinalizeSwapResponse with an error message.
+        if let Err(error_message) = self.lock_finalize_swap() {
+            return FinalizeSwapResponse::with_error(error_message);
         }
 
-        let sweep_sns = self.sweep_sns(now_fn, sns_ledger).await;
-
-        let create_neuron = self
-            .claim_neurons(sns_governance_client, DEFAULT_TRANSFER_FEE)
-            .await;
-
-        let sns_governance_normal_mode_enabled =
-            Self::set_sns_governance_to_normal_mode_if_all_neurons_claimed(
+        // The lock is now acquired and asynchronous calls to finalize are blocked.
+        // Perform all subactions.
+        let finalize_swap_response = self
+            .finalize_inner(
+                now_fn,
+                sns_root_client,
                 sns_governance_client,
-                &create_neuron,
+                icp_ledger,
+                sns_ledger,
+                nns_governance_client,
             )
             .await;
 
-        FinalizeSwapResponse {
-            sweep_icp: Some(sweep_icp),
-            sweep_sns: Some(sweep_sns),
-            create_neuron: Some(create_neuron),
-            sns_governance_normal_mode_enabled,
-            set_dapp_controllers_result: None,
-            settle_community_fund_participation_result,
-        }
+        // Release the lock. Note,
+        self.unlock_finalize_swap();
+
+        finalize_swap_response
     }
 
-    /// Restore control over the dapp to the fallback controllers.
-    pub async fn restore_dapp_controllers(
+    /// Perform the subactions of finalize.
+    ///
+    /// IMPORTANT: As the canister awaits across message barriers to make
+    /// inter-canister calls, finalize_inner and all subsequent methods MUST
+    /// avoid panicking or the lock resource will not be released.
+    ///
+    /// In the case of an unexpected panic, the Sale canister can be upgraded
+    /// and a post-upgrade hook can release the lock.
+    pub async fn finalize_inner(
         &mut self,
+        now_fn: fn(bool) -> u64,
         sns_root_client: &mut impl SnsRootClient,
-    ) -> Result<SetDappControllersResponse, CanisterCallError> {
-        self.set_lifecycle(Lifecycle::Aborted);
-        sns_root_client.set_dapp_controllers(
-            SetDappControllersRequest {
-                controller_principal_ids: self
-                    .init()
-                    .fallback_controller_principal_ids
-                    .iter()
-                    .map(|s| PrincipalId::from_str(s)
-                        .expect("Unable to parse element in fallback_controller_principal_ids as a PrincipalId.")
-                    )
-                    .collect(),
+        sns_governance_client: &mut impl SnsGovernanceClient,
+        icp_ledger: &dyn ICRC1Ledger,
+        sns_ledger: &dyn ICRC1Ledger,
+        nns_governance_client: &mut impl NnsGovernanceClient,
+    ) -> FinalizeSwapResponse {
+        let mut finalize_swap_response = FinalizeSwapResponse::default();
+
+        if !self.lifecycle_is_terminal() {
+            finalize_swap_response.set_error_message(format!(
+                "The Sale can only be finalized in the COMMITTED or ABORTED states. Current state is {:?}",
+                self.lifecycle()
+            ));
+            return finalize_swap_response;
+        }
+
+        // Transfer the ICP tokens from the Sale canister.
+        match self.sweep_icp(now_fn, icp_ledger).await {
+            Ok(sweep_result) => finalize_swap_response.set_sweep_icp(sweep_result),
+            Err(error_message) => {
+                finalize_swap_response.set_error_message(error_message);
+                return finalize_swap_response;
             }
-        ).await
+        };
+
+        // Settle the CommunityFund's participation in the Sale (if any).
+        match self
+            .settle_community_fund_participation(nns_governance_client)
+            .await
+        {
+            Ok(result) => {
+                finalize_swap_response.set_settle_community_fund_participation_result(result)
+            }
+            Err(error_message) => {
+                finalize_swap_response.set_error_message(error_message);
+                return finalize_swap_response;
+            }
+        };
+
+        if self.should_restore_dapp_control() {
+            // Restore controllers of dapp canisters to their original
+            // owners (i.e. self.init.fallback_controller_principal_ids).
+            match self.set_dapp_controllers(sns_root_client).await {
+                Ok(result) => finalize_swap_response.set_set_dapp_controllers_result(result.into()),
+                Err(error_message) => finalize_swap_response.set_error_message(error_message),
+            };
+
+            // In the case of returning control of the dapp(s) to the fallback
+            // controllers, finalize() need not do any more work, so always return
+            // and end execution of finalize().
+            return finalize_swap_response;
+        }
+
+        // Transfer the SNS tokens from the Sale canister.
+        match self.sweep_sns(now_fn, sns_ledger).await {
+            Ok(sweep_result) => finalize_swap_response.set_sweep_sns(sweep_result),
+            Err(error_message) => {
+                finalize_swap_response.set_error_message(error_message);
+                return finalize_swap_response;
+            }
+        };
+
+        // Once SNS tokens have been distributed to the correct accounts, claim
+        // them as neurons on behalf of the Sale participants.
+        match self.claim_neurons(sns_governance_client).await {
+            Ok(create_neuron_result) => {
+                finalize_swap_response.set_create_neuron(create_neuron_result)
+            }
+            Err(error_message) => {
+                finalize_swap_response.set_error_message(error_message);
+                return finalize_swap_response;
+            }
+        };
+
+        // TODO NNS1-1715: Allow for should_set_sns_governance_to_normal_mode to succeed if
+        // all non-terminally broken neurons have been claimed
+        if Self::should_set_sns_governance_to_normal_mode(&finalize_swap_response) {
+            let set_mode_call_result =
+                Self::set_sns_governance_to_normal_mode(sns_governance_client).await;
+            finalize_swap_response.set_sns_governance_normal_mode_enabled(set_mode_call_result);
+        }
+
+        finalize_swap_response
     }
 
     async fn claim_neurons(
         &self,
         sns_governance_client: &mut impl SnsGovernanceClient,
-        transfer_fee: Tokens,
-    ) -> SweepResult {
+    ) -> Result<SweepResult, String> {
+        if self.lifecycle() != Lifecycle::Committed {
+            return Err(format!(
+                "SNS Tokens cannot be distributed if Lifecycle \
+                is not COMMITTED. Current Lifecycle: {:?}",
+                self.lifecycle()
+            ));
+        }
+
+        let init = self.init()?;
+        let nns_governance = init.nns_governance()?;
+        let sns_transaction_fee_e8s = match init.transaction_fee_e8s {
+            None => {
+                // This case should not be hit as the canister_init method guarantees the
+                // field is populated. If through some bug or upgrade issue, this field is
+                // indeed unpopulated, a post-upgrade hook can be used to repopulate this
+                // field and retry finalization.
+                return Err(
+                    "Cannot claim SNS Neurons, SNS Ledger Transaction Fee is unknown".to_string(),
+                );
+            }
+            Some(transaction_fee_e8s) => transaction_fee_e8s,
+        };
+
         let (skipped, sns_neuron_recipes) = self.neuron_recipes_for_create_neuron();
         let mut result = SweepResult {
             success: 0,
@@ -768,48 +977,79 @@ impl Swap {
             neuron_parameters: vec![],
         };
 
-        let nns_governance = self.init().nns_governance();
         for recipe in &sns_neuron_recipes {
-            let (hotkey, controller, source_nns_neuron_id) =
-                match &recipe.investor.as_ref().unwrap() {
-                    Investor::Direct(DirectInvestment { buyer_principal: p }) => {
-                        (None, PrincipalId::from_str(p).unwrap(), None)
-                    }
-                    Investor::CommunityFund(CfInvestment {
-                        hotkey_principal,
-                        nns_neuron_id,
-                    }) => (
-                        Some(PrincipalId::from_str(hotkey_principal).unwrap()), // TODO it would be great if this was a principalId instead of string
+            let (hotkey, controller, source_nns_neuron_id) = match recipe.investor.as_ref() {
+                Some(Investor::Direct(DirectInvestment { buyer_principal })) => {
+                    let parsed_buyer_principal = match string_to_principal(buyer_principal) {
+                        Some(p) => p,
+                        None => {
+                            result.failure += 1;
+                            continue;
+                        }
+                    };
+
+                    (None, parsed_buyer_principal, None)
+                }
+                Some(Investor::CommunityFund(CfInvestment {
+                    hotkey_principal,
+                    nns_neuron_id,
+                })) => {
+                    let parsed_hotkey_principal = match string_to_principal(hotkey_principal) {
+                        Some(p) => p,
+                        None => {
+                            result.failure += 1;
+                            continue;
+                        }
+                    };
+
+                    (
+                        Some(parsed_hotkey_principal),
                         nns_governance.into(),
                         Some(*nns_neuron_id),
-                    ),
-                };
+                    )
+                }
+                None => {
+                    println!(
+                        "{}ERROR: missing investor information for neuron recipe {:?}",
+                        LOG_PREFIX, recipe,
+                    );
+                    result.failure += 1;
+                    continue;
+                }
+            };
 
-            let _neuron_attributes = recipe
-                .neuron_attributes
-                .as_ref()
-                .expect("Expected the neuron_attributes to be present");
+            let (dissolve_delay_seconds, memo) = match recipe.neuron_attributes.as_ref() {
+                Some(neuron_attribute) => (
+                    neuron_attribute.dissolve_delay_seconds,
+                    neuron_attribute.memo,
+                ),
+                None => {
+                    println!(
+                        "{}ERROR: missing neuron_attributes information for neuron recipe {:?}",
+                        LOG_PREFIX, recipe,
+                    );
+                    result.failure += 1;
+                    continue;
+                }
+            };
+
             claim_swap_neuron_requests
                 .neuron_parameters
                 .push(NeuronParameters {
                     controller: Some(controller),
                     hotkey,
-                    // Since we use a permission-ed API on governance, account for the transfer_fee
-                    // that is applied with the sns ledger transfer
-                    stake_e8s: Some(recipe.amount_e8s() - transfer_fee.get_e8s()),
-                    memo: Some(recipe.neuron_attributes.as_ref().unwrap().memo),
-                    dissolve_delay_seconds: Some(
-                        recipe
-                            .neuron_attributes
-                            .as_ref()
-                            .unwrap()
-                            .dissolve_delay_seconds,
-                    ),
+                    // Since claim_swap_neurons is  a permission-ed API on governance, account
+                    // for the transfer_fee that is applied with the sns ledger transfer
+                    stake_e8s: Some(recipe.amount_e8s() - sns_transaction_fee_e8s),
+                    memo: Some(memo),
+                    dissolve_delay_seconds: Some(dissolve_delay_seconds),
                     source_nns_neuron_id,
                 });
         }
 
-        // Try to batch claim SNS neurons that were just funded
+        // Try to batch claim SNS neurons that were just funded.
+        // The SnsGovernanceClient ensures that all errors are transformed
+        // into a CanisterCallError and do not cause a panic.
         let response = sns_governance_client
             .claim_swap_neurons(claim_swap_neuron_requests)
             .await;
@@ -829,27 +1069,33 @@ impl Swap {
             );
             result.failure += sns_neuron_recipes.len() as u32;
         }
-        result
+
+        Ok(result)
     }
 
-    async fn set_sns_governance_to_normal_mode_if_all_neurons_claimed(
-        sns_governance_client: &mut impl SnsGovernanceClient,
-        create_neuron: &SweepResult,
-    ) -> Option<SetModeCallResult> {
-        let all_neurons_created = create_neuron.failure == 0;
-
-        if !all_neurons_created {
-            return None;
+    fn should_set_sns_governance_to_normal_mode(
+        finalize_swap_response: &FinalizeSwapResponse,
+    ) -> bool {
+        if let Some(create_neurons) = finalize_swap_response.create_neuron.as_ref() {
+            if create_neurons.failure == 0 {
+                return true;
+            }
         }
 
-        Some(
-            sns_governance_client
-                .set_mode(SetMode {
-                    mode: governance::Mode::Normal as i32,
-                })
-                .await
-                .into(),
-        )
+        false
+    }
+
+    async fn set_sns_governance_to_normal_mode(
+        sns_governance_client: &mut impl SnsGovernanceClient,
+    ) -> SetModeCallResult {
+        // The SnsGovernanceClient Trait converts any errors to Err(CanisterCallError)
+        // No panics should occur when issuing this message.
+        sns_governance_client
+            .set_mode(SetMode {
+                mode: governance::Mode::Normal as i32,
+            })
+            .await
+            .into()
     }
 
     /// Requests a refund of ICP tokens transferred to the Swap
@@ -976,37 +1222,37 @@ impl Swap {
         }
     }
 
-    /// In state COMMITTED or ABORTED. Transfer ICP tokens from
-    /// buyer's subaccounts to the SNS governance canister if
-    /// COMMITTED or back to the buyer if ABORTED.
+    /// Transfer ICP tokens from buyer's subaccounts to the SNS governance
+    /// canister if COMMITTED or back to the buyer if ABORTED.
     ///
     /// Returns the following values:
     /// - the number of skipped buyers due balance less than fee or operation already in progress
     /// - the number of successful transfers
     /// - the number of errors
+    ///
+    /// Pre-conditions:
+    /// - The Sale canister's `Lifecycle` is either ABORTED or COMMITTED
     pub async fn sweep_icp(
         &mut self,
         now_fn: fn(bool) -> u64,
         icp_ledger: &dyn ICRC1Ledger,
-    ) -> SweepResult {
+    ) -> Result<SweepResult, String> {
         let lifecycle = self.lifecycle();
-        assert!(lifecycle == Lifecycle::Committed || lifecycle == Lifecycle::Aborted);
-        let sns_governance = self.init().sns_governance();
+        let sns_governance = self.init()?.sns_governance()?;
+
         let mut skipped: u32 = 0;
         let mut success: u32 = 0;
         let mut failure: u32 = 0;
+
         for (principal_str, buyer_state) in self.buyers.iter_mut() {
-            let principal = match PrincipalId::from_str(principal_str) {
-                Ok(p) => p,
-                Err(msg) => {
-                    println!(
-                        "{}ERROR: cannot parse principal {} for disbursal: {}",
-                        LOG_PREFIX, principal_str, msg
-                    );
+            let principal = match string_to_principal(principal_str) {
+                Some(p) => p,
+                None => {
                     failure += 1;
                     continue;
                 }
             };
+
             let subaccount = principal_to_subaccount(&principal);
             let dst = if lifecycle == Lifecycle::Committed {
                 // This Account should be given a name, such as SNS ICP Treasury...
@@ -1020,10 +1266,20 @@ impl Swap {
                     subaccount: None,
                 }
             };
-            let result = buyer_state
-                .icp
-                .as_mut()
-                .unwrap()
+
+            let icp_transferable_amount = match buyer_state.icp.as_mut() {
+                Some(transferable_amount) => transferable_amount,
+                None => {
+                    println!(
+                        "{}ERROR: PrincipalId {} has corrupted BuyerState: {:?}",
+                        LOG_PREFIX, principal, buyer_state
+                    );
+                    failure += 1;
+                    continue;
+                }
+            };
+
+            let result = icp_transferable_amount
                 .transfer_helper(
                     now_fn,
                     DEFAULT_TRANSFER_FEE,
@@ -1044,11 +1300,11 @@ impl Swap {
                 }
             }
         }
-        SweepResult {
+        Ok(SweepResult {
             success,
             failure,
             skipped,
-        }
+        })
     }
 
     /// In state COMMITTED. Transfer SNS tokens from the swap
@@ -1062,39 +1318,45 @@ impl Swap {
         &mut self,
         now_fn: fn(bool) -> u64,
         sns_ledger: &dyn ICRC1Ledger,
-    ) -> SweepResult {
-        assert!(self.lifecycle() == Lifecycle::Committed);
-        let sns_governance = self.init().sns_governance();
-        let nns_governance = self.init().nns_governance();
-        let sns_transaction_fee_e8s = Tokens::from_e8s(
-            self.init()
-                .transaction_fee_e8s
-                .expect("Transfer fee not known."),
-        );
+    ) -> Result<SweepResult, String> {
+        if self.lifecycle() != Lifecycle::Committed {
+            return Err(format!("SNS Tokens cannot be distributed if Lifecycle is not COMMITTED. Current Lifecycle: {:?}", self.lifecycle()));
+        }
+
+        let init = self.init()?;
+        let sns_governance = init.sns_governance()?;
+        let nns_governance = init.nns_governance()?;
+        let sns_transaction_fee_tokens = match init.transaction_fee_e8s {
+            None => {
+                return Err(
+                    "Cannot Transfer SNS Tokens, SNS Ledger Transaction Fee is unknown".to_string(),
+                )
+            }
+            Some(transaction_fee_e8s) => Tokens::from_e8s(transaction_fee_e8s),
+        };
+
         let mut skipped: u32 = 0;
         let mut success: u32 = 0;
         let mut failure: u32 = 0;
+
         for recipe in self.neuron_recipes.iter_mut() {
             let neuron_memo = match recipe.neuron_attributes.as_ref() {
                 None => {
                     println!(
-                        "{}ERROR: missing neuron attributes information for neuron recipe",
-                        LOG_PREFIX
+                        "{}ERROR: missing neuron attributes information for neuron recipe {:?}",
+                        LOG_PREFIX, recipe
                     );
-                    skipped += 1;
+                    failure += 1;
                     continue;
                 }
                 Some(neuron_attributes) => neuron_attributes.memo,
             };
+
             let dst_subaccount = match &recipe.investor {
                 Some(Investor::Direct(DirectInvestment { buyer_principal })) => {
-                    match PrincipalId::from_str(buyer_principal) {
-                        Ok(p) => compute_neuron_staking_subaccount_bytes(p, neuron_memo),
-                        Err(msg) => {
-                            println!(
-                                "{}ERROR: cannot parse principal {} for disbursal: {}",
-                                LOG_PREFIX, buyer_principal, msg
-                            );
+                    match string_to_principal(buyer_principal) {
+                        Some(p) => compute_neuron_staking_subaccount_bytes(p, neuron_memo),
+                        None => {
                             failure += 1;
                             continue;
                         }
@@ -1106,10 +1368,10 @@ impl Swap {
                 })) => compute_neuron_staking_subaccount_bytes(nns_governance.into(), neuron_memo),
                 None => {
                     println!(
-                        "{}ERROR: missing investor information for neuron",
-                        LOG_PREFIX
+                        "{}ERROR: missing investor information for neuron recipe {:?}",
+                        LOG_PREFIX, recipe,
                     );
-                    skipped += 1;
+                    failure += 1;
                     continue;
                 }
             };
@@ -1117,13 +1379,23 @@ impl Swap {
                 owner: sns_governance.get(),
                 subaccount: Some(dst_subaccount),
             };
-            let result = recipe
-                .sns
-                .as_mut()
-                .unwrap()
+
+            let sns_transferable_amount = match recipe.sns.as_mut() {
+                Some(transferable_amount) => transferable_amount,
+                None => {
+                    println!(
+                        "{}ERROR: missing transfer information for neuron recipe {:?}",
+                        LOG_PREFIX, recipe,
+                    );
+                    failure += 1;
+                    continue;
+                }
+            };
+
+            let result = sns_transferable_amount
                 .transfer_helper(
                     now_fn,
-                    sns_transaction_fee_e8s,
+                    sns_transaction_fee_tokens,
                     /* src_subaccount= */ None,
                     &dst,
                     sns_ledger,
@@ -1141,11 +1413,11 @@ impl Swap {
                 }
             }
         }
-        SweepResult {
+        Ok(SweepResult {
             success,
             failure,
             skipped,
-        }
+        })
     }
 
     /// Returns list of neuron recipes for which an SNS neuron may need to
@@ -1178,6 +1450,34 @@ impl Swap {
             skipped += 1;
         }
         (skipped, recipes)
+    }
+
+    /// Requests the NNS Governance canister to settle the CommunityFund
+    /// participation in the Sale. If the Sale is committed, ICP will be
+    /// minted. If the Sale is aborted, maturity will be refunded to
+    /// CF Neurons.
+    pub async fn settle_community_fund_participation(
+        &self,
+        nns_governance_client: &mut impl NnsGovernanceClient,
+    ) -> Result<SettleCommunityFundParticipationResult, String> {
+        use settle_community_fund_participation::{Aborted, Committed, Result};
+
+        let sns_governance = self.init()?.sns_governance()?;
+        let result = if self.lifecycle() == Lifecycle::Committed {
+            Result::Committed(Committed {
+                sns_governance_canister_id: Some(sns_governance.get()),
+            })
+        } else {
+            Result::Aborted(Aborted {})
+        };
+
+        Ok(nns_governance_client
+            .settle_community_fund_participation(SettleCommunityFundParticipation {
+                open_sns_token_swap_proposal_id: self.open_sns_token_swap_proposal_id,
+                result: Some(result),
+            })
+            .await
+            .into())
     }
 
     //
@@ -1385,21 +1685,40 @@ impl ErrorRefundIcpResponse {
 }
 
 impl Init {
-    pub fn nns_governance(&self) -> CanisterId {
+    pub fn nns_governance_or_panic(&self) -> CanisterId {
         CanisterId::new(PrincipalId::from_str(&self.nns_governance_canister_id).unwrap()).unwrap()
     }
-    pub fn sns_root(&self) -> CanisterId {
+
+    pub fn nns_governance(&self) -> Result<CanisterId, String> {
+        let principal_id = PrincipalId::from_str(&self.nns_governance_canister_id)
+            .map_err(|err| err.to_string())?;
+
+        CanisterId::new(principal_id).map_err(|err| err.to_string())
+    }
+
+    pub fn sns_root_or_panic(&self) -> CanisterId {
         CanisterId::new(PrincipalId::from_str(&self.sns_root_canister_id).unwrap()).unwrap()
     }
-    pub fn sns_governance(&self) -> CanisterId {
+
+    pub fn sns_governance_or_panic(&self) -> CanisterId {
         CanisterId::new(PrincipalId::from_str(&self.sns_governance_canister_id).unwrap()).unwrap()
     }
-    pub fn sns_ledger(&self) -> CanisterId {
+
+    pub fn sns_governance(&self) -> Result<CanisterId, String> {
+        let principal_id = PrincipalId::from_str(&self.sns_governance_canister_id)
+            .map_err(|err| err.to_string())?;
+
+        CanisterId::new(principal_id).map_err(|err| err.to_string())
+    }
+
+    pub fn sns_ledger_or_panic(&self) -> CanisterId {
         CanisterId::new(PrincipalId::from_str(&self.sns_ledger_canister_id).unwrap()).unwrap()
     }
-    pub fn icp_ledger(&self) -> CanisterId {
+
+    pub fn icp_ledger_or_panic(&self) -> CanisterId {
         CanisterId::new(PrincipalId::from_str(&self.icp_ledger_canister_id).unwrap()).unwrap()
     }
+
     pub fn validate(&self) -> Result<(), String> {
         validate_canister_id(&self.nns_governance_canister_id)?;
         validate_canister_id(&self.sns_governance_canister_id)?;
@@ -1633,6 +1952,7 @@ impl TransferableAmount {
         }
         Ok(())
     }
+
     async fn transfer_helper(
         &mut self,
         now_fn: fn(bool) -> u64,
@@ -1651,6 +1971,9 @@ impl TransferableAmount {
             return TransferResult::AlreadyStarted;
         }
         self.transfer_start_timestamp_seconds = now_fn(false);
+
+        // The ICRC1Ledger Trait converts any errors to Err(NervousSystemError).
+        // No panics should occur when issuing this transfer.
         let result = ledger
             .transfer_funds(
                 amount.get_e8s().saturating_sub(fee.get_e8s()),
@@ -1814,6 +2137,21 @@ pub fn principal_to_subaccount(principal_id: &PrincipalId) -> Subaccount {
     subaccount
 }
 
+/// A common pattern throughout the Sale canister is parsing the String
+/// representation of a PrincipalId and logging the error if any.
+fn string_to_principal(maybe_principal_id: &String) -> Option<PrincipalId> {
+    match PrincipalId::from_str(maybe_principal_id) {
+        Ok(principal_id) => Some(principal_id),
+        Err(error_message) => {
+            println!(
+                "{}ERROR: cannot parse principal {} for use in Sale Canister: {}",
+                LOG_PREFIX, maybe_principal_id, error_message
+            );
+            None
+        }
+    }
+}
+
 impl Lifecycle {
     pub fn is_terminal(&self) -> bool {
         match self {
@@ -1831,26 +2169,46 @@ impl Lifecycle {
     }
 }
 
-impl From<Result<Result<(), GovernanceError>, CanisterCallError>>
-    for SettleCommunityFundParticipationResult
-{
-    fn from(original: Result<Result<(), GovernanceError>, CanisterCallError>) -> Self {
-        use settle_community_fund_participation_result::{Possibility, Response};
-
-        match original {
-            Ok(inner) => Self {
-                possibility: Some(Possibility::Ok(Response {
-                    governance_error: match inner {
-                        Ok(()) => None,
-                        Err(governance_error) => Some(governance_error),
-                    },
-                })),
-            },
-
-            Err(err) => Self {
-                possibility: Some(Possibility::Err(err)),
-            },
+impl FinalizeSwapResponse {
+    pub fn with_error(error_message: String) -> Self {
+        FinalizeSwapResponse {
+            error_message: Some(error_message),
+            ..Default::default()
         }
+    }
+
+    pub fn set_error_message(&mut self, error_message: String) {
+        self.error_message = Some(error_message)
+    }
+
+    pub fn set_sweep_icp(&mut self, sweep_icp: SweepResult) {
+        self.sweep_icp = Some(sweep_icp)
+    }
+
+    pub fn set_settle_community_fund_participation_result(
+        &mut self,
+        result: SettleCommunityFundParticipationResult,
+    ) {
+        self.settle_community_fund_participation_result = Some(result)
+    }
+
+    pub fn set_set_dapp_controllers_result(&mut self, result: SetDappControllersCallResult) {
+        self.set_dapp_controllers_result = Some(result)
+    }
+
+    pub fn set_sweep_sns(&mut self, sweep_sns: SweepResult) {
+        self.sweep_sns = Some(sweep_sns)
+    }
+
+    pub fn set_create_neuron(&mut self, create_neuron: SweepResult) {
+        self.create_neuron = Some(create_neuron)
+    }
+
+    pub fn set_sns_governance_normal_mode_enabled(
+        &mut self,
+        set_mode_call_result: SetModeCallResult,
+    ) {
+        self.sns_governance_normal_mode_enabled = Some(set_mode_call_result)
     }
 }
 
@@ -1893,7 +2251,7 @@ mod tests {
         };
 
         // Fill out Init just enough to test Params validation. These values are
-        // similar to, but not the same analgous values in NNS.
+        // similar to, but not the same analogous values in NNS.
         static ref INIT: Init = Init {
             transaction_fee_e8s: Some(12_345),
             neuron_minimum_stake_e8s: Some(123_456_789),

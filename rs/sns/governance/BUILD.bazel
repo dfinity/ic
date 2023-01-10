@@ -65,6 +65,7 @@ DEV_DEPENDENCIES = [
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/nervous_system/common/test_keys",
+    "//rs/nervous_system/common/test_utils",
     "//rs/sns/governance/protobuf_generator:lib",
     "//rs/sns/test_utils",
     "//rs/test_utilities",
@@ -182,13 +183,11 @@ rust_test_suite_with_extra_srcs(
         exclude = [
             "tests/check_generated_files.rs",
             "tests/fixtures/mod.rs",
-            "tests/interleaving/mod.rs",
         ],
     ),
     aliases = ALIASES,
     extra_srcs = [
         "tests/fixtures/mod.rs",
-        "tests/interleaving/mod.rs",
     ],
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
