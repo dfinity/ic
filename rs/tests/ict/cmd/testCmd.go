@@ -33,7 +33,7 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 			command = append(command, "--test_tmpdir="+cfg.testTmpDir)
 		}
 		// Print Bazel command for debugging puroposes.
-		cmd.Println(CYAN + "Raw Bazel command to be invoked: \n$" + strings.Join(command, " ") + NC)
+		cmd.Println(CYAN + "Raw Bazel command to be invoked: \n$ " + strings.Join(command, " ") + NC)
 		if cfg.isDryRun {
 			return nil
 		} else {
