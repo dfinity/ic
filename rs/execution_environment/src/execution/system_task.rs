@@ -13,7 +13,7 @@ use ic_replicated_state::{
 };
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types::{Cycles, NumBytes, NumInstructions, Time};
+use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
 use prometheus::IntCounter;
 use std::sync::Arc;
 
@@ -68,13 +68,16 @@ fn validate_canister(
     method: WasmMethod,
 ) -> Result<(ExecutionState, SystemState, SchedulerState), SystemTaskResult> {
     // Check that the status of the canister is Running.
-    if canister.status() != CanisterStatusType::Running {
-        let status = canister.status();
-        return Err(SystemTaskResult::new(
-            canister,
-            NumInstructions::from(0),
-            Err(CanisterSystemTaskError::CanisterNotRunning { status }),
-        ));
+    let status = canister.status();
+    match status {
+        CanisterStatusType::Running => {}
+        CanisterStatusType::Stopping | CanisterStatusType::Stopped => {
+            return Err(SystemTaskResult::new(
+                canister,
+                NumInstructions::from(0),
+                Err(CanisterSystemTaskError::CanisterNotRunning { status }),
+            ));
+        }
     }
 
     let (execution_state, old_system_state, scheduler_state) = canister.into_parts();
@@ -194,6 +197,11 @@ pub fn execute_system_task(
             )
         }
     };
+
+    // The global timer is one-off
+    if system_task == SystemMethod::CanisterGlobalTimer {
+        system_state.global_timer = CanisterTimer::Inactive;
+    }
 
     // Execute canister system method.
     let call_context_id = system_state
