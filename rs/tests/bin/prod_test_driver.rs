@@ -493,7 +493,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "node_assign_test",
                     orchestrator::node_assign_test::test,
                 )]),
-            ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+            ).with_alert(ENG_CONSENSUS_CHANNEL),
             pot_with_setup(
                 "node_graceful_leaving_pot",
                 consensus::node_graceful_leaving_test::config,
@@ -575,7 +575,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     "rotate_ecdsa_idkg_key_test",
                     orchestrator::rotate_ecdsa_idkg_key::test,
                 )]),
-            ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+            ).with_alert(ENG_CONSENSUS_CHANNEL),
             pot_with_setup(
                 "transaction_ledger_correctness_pot",
                 ledger_tests::transaction_ledger_correctness::config,
@@ -837,7 +837,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "node_reassignment_test",
                         orchestrator::node_reassignment_test::test,
                     )]),
-                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "token_fault_tolerance_pot",
                     ledger_tests::token_fault_tolerance::config,
@@ -881,7 +881,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "nns_backup_test",
                         orchestrator::nns_backup::test,
                     )]),
-                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "tecdsa_signature_same_subnet_pot",
                     tecdsa::tecdsa_signature_test::config,
@@ -921,7 +921,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "unassigned_node_upgrade_test",
                         orchestrator::unassigned_node_upgrade_test::test,
                     )]),
-                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "unstuck_subnet_test_pot",
                     orchestrator::unstuck_subnet_test::config,
@@ -929,7 +929,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "unstuck_subnet_test",
                         orchestrator::unstuck_subnet_test::test,
                     )]),
-                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "upgrade_with_alternative_urls_pot",
                     orchestrator::upgrade_with_alternative_urls::config,
@@ -937,7 +937,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "upgrade_with_alternative_urls",
                         orchestrator::upgrade_with_alternative_urls::test,
                     )]),
-                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "subnet_recovery_app_no_upgrade_with_tecdsa",
                     orchestrator::subnet_recovery_app_subnet::setup_same_nodes_tecdsa,
@@ -945,7 +945,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "subnet_recovery_app_no_upgrade_with_tecdsa",
                         orchestrator::subnet_recovery_app_subnet::test_no_upgrade_with_tecdsa,
                     )]),
-                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "subnet_recovery_app_same_nodes_with_tecdsa",
                     orchestrator::subnet_recovery_app_subnet::setup_same_nodes_tecdsa,
@@ -953,7 +953,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "subnet_recovery_app_same_nodes_with_tecdsa",
                         orchestrator::subnet_recovery_app_subnet::test_with_tecdsa,
                     )]),
-                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "subnet_recovery_app_failover_nodes_with_tecdsa",
                     orchestrator::subnet_recovery_app_subnet::setup_failover_nodes_tecdsa,
@@ -961,7 +961,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "subnet_recovery_app_failover_nodes_with_tecdsa",
                         orchestrator::subnet_recovery_app_subnet::test_with_tecdsa,
                     )]),
-                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "subnet_recovery_app_no_upgrade_enable_tecdsa",
                     orchestrator::subnet_recovery_app_subnet::setup_same_nodes,
@@ -969,7 +969,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "subnet_recovery_app_no_upgrade_enable_tecdsa",
                         orchestrator::subnet_recovery_app_subnet::test_no_upgrade_with_tecdsa,
                     )]),
-                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "subnet_recovery_app_same_nodes_enable_tecdsa",
                     orchestrator::subnet_recovery_app_subnet::setup_same_nodes,
@@ -977,7 +977,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "subnet_recovery_app_same_nodes_enable_tecdsa",
                         orchestrator::subnet_recovery_app_subnet::test_with_tecdsa,
                     )]),
-                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "subnet_recovery_app_failover_nodes_enable_tecdsa",
                     orchestrator::subnet_recovery_app_subnet::setup_failover_nodes,
@@ -985,7 +985,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "subnet_recovery_app_failover_nodes_enable_tecdsa",
                         orchestrator::subnet_recovery_app_subnet::test_with_tecdsa,
                     )]),
-                ).with_alert(ENG_ORCHESTRATOR_CHANNEL),
+                ).with_alert(ENG_CONSENSUS_CHANNEL),
             ],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
@@ -1054,7 +1054,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
             ],
         )
-        .with_alert(ENG_ORCHESTRATOR_CHANNEL)
+        .with_alert(ENG_CONSENSUS_CHANNEL)
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
@@ -1096,7 +1096,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
             ],
         )
-        .with_alert(ENG_ORCHESTRATOR_CHANNEL),
+        .with_alert(ENG_CONSENSUS_CHANNEL),
     );
 
     m.add_suite(
