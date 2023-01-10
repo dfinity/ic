@@ -49,7 +49,7 @@ ic-sns-wasm-proto-generator = { path = "./proto_generator" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.23.1", features = ["full"] }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }

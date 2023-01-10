@@ -15,7 +15,7 @@ prometheus = { version = "0.12.0", features = [ "process" ] }
 serde = { version = "1.0.99", features = [ "derive" ] }
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 thiserror = "1.0.37"
-tokio = "1.15.0"
+tokio = "1.23.1"
 tokio-io-timeout = "1.2.0"
 tower = "0.4.13"
 

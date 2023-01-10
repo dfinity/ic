@@ -50,7 +50,7 @@ strum_macros = "0.23.0"
 tarpc = { version = "0.31", features = ["full"] }
 tempfile = "3.1.0"
 threadpool = "1.8.1"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.23.1", features = ["full"] }
 tokio-openssl = "0.6.0"
 tokio-serde = { version = "0.8", features = ["json", "bincode"] }
 tokio-util = { version = "0.7.4", features = ["codec"] }

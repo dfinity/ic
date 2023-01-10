@@ -21,7 +21,7 @@ service-discovery = { path = "../service_discovery" }
 slog = { version = "2.5.2", features = ["nested-values"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.23.1", features = ["full"] }
 url = { version = "2.1.1", features = ["serde"] }
 config_writer_common = { path = "../config_writer_common" }
 

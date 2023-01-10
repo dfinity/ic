@@ -13,7 +13,7 @@ ic-registry-local-store = { path = "../local_store" }
 ic-registry-transport = { path = "../transport" }
 ic-types = { path = "../../types/types" }
 thiserror = "1.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.23.1", features = ["full"] }
 url = { version = "2.1.1", features = ["serde"] }
 
 [dev-dependencies]

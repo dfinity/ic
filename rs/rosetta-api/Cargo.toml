@@ -50,7 +50,7 @@ serde_json = "1.0"
 strum = "0.23"
 strum_macros = "0.23"
 tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.23.1", features = ["full"] }
 url = "2.2.1"
 
 [dev-dependencies]

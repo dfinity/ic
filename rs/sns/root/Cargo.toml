@@ -32,7 +32,7 @@ serde = { version = "1.0", features = ["derive"] }
 ic-sns-root-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = [ "full" ] }
+tokio = { version = "1.23.1", features = [ "full" ] }
 
 [build-dependencies]
 # This MUST be kept in sync with build-info in the [dependencies] section!

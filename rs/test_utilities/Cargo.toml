@@ -73,7 +73,7 @@ slog-term = "2.6.0"
 socket2 = { version = "0.3.19", features = ["reuseport"] }
 strum = "0.23.0"
 tempfile = "3.1.0"
-tokio = { version = "1.15.0" }
+tokio = { version = "1.23.1" }
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 tower = "0.4.13"
 

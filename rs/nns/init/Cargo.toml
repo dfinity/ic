@@ -21,7 +21,7 @@ ic-test-identity = {path="../../test_utilities/identity"}
 ic-sys = { path = "../../sys" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 prost = "0.11.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.23.1", features = ["full"] }
 url = "2.2.0"
 
 [[bin]]

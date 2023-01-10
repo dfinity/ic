@@ -55,7 +55,7 @@ slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debu
 strum = "0.23.0"
 strum_macros = "0.23.0"
 tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.23.1", features = ["full"] }
 tokio-openssl = "0.6.0"
 # We use the `dangerous_configuration` flag for rustls to be able to set custom `ClientCertVerifier` and
 # `ServerCertVerifier` in order to verify node certificates.

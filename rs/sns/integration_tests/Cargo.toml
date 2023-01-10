@@ -68,7 +68,7 @@ lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 pretty_assertions = "1.0"
 on_wire = { path = "../../rust_canisters/on_wire" }
-tokio = { version = "1.17.0", features = ["time"] }
+tokio = { version = "1.23.1", features = ["time"] }
 wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"

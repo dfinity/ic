@@ -9,7 +9,7 @@ edition = "2021"
 ic-p8s-service-discovery-log = { path = "../../ic_p8s_service_discovery/log" }
 service-discovery = { path = "../service_discovery" }
 ic-types = { path = "../../types/types" }
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.23.1", features = ["full"] }
 slog = { version = "2.5.2", features = ["nested-values"] }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"

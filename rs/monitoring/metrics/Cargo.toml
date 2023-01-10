@@ -11,7 +11,7 @@ libc = "0.2.91"
 prometheus = { version = "0.12.0", features = [ "process" ] }
 slog = "2.7.0"
 slog-async = "2.7.0"
-tokio = { version = "1.16.0", features = ["full"] }
+tokio = { version = "1.23.1", features = ["full"] }
 
 [dev-dependencies]
 ic-logger = { path = "../logger" }

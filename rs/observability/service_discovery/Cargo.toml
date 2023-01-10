@@ -30,7 +30,7 @@ serde = { version = "1.0.115", features = ["derive"] }
 serde_json = "1.0.54"
 ic-utils = { path = "../../utils/" }
 ic-registry-keys = { path = "../../registry/keys" }
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.23.1", features = ["full"] }
 crossbeam = "0.8.0"
 crossbeam-channel = "0.5.5"
 ic-async-utils = { path = "../../async_utils" }

@@ -23,4 +23,4 @@ build-info-build = { version="0.0.26", default-features = false, features = [] }
 canister-test = { path = "../../../rust_canisters/canister_test" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-types = { path = "../../../types/types" }
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.23.1", features = ["full"] }

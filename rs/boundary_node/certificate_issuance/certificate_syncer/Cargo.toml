@@ -19,6 +19,6 @@ prometheus = "0.13.3"
 serde = { version = "1.0.150", features = ["serde_derive"] }
 serde_json = "1.0.89"
 thiserror = "1.0.37"
-tokio = { version = "1.23.0", features = ["full"] }
+tokio = { version = "1.23.1", features = ["full"] }
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["json"] }
