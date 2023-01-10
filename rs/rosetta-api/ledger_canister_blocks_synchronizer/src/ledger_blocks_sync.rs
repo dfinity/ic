@@ -424,7 +424,9 @@ mod test {
     use ic_ledger_core::timestamp::TimeStamp;
     use ic_ledger_core::Tokens;
     use ic_types::PrincipalId;
-    use icp_ledger::{AccountIdentifier, Block, BlockIndex, Memo, TipOfChainRes};
+    use icp_ledger::{
+        AccountIdentifier, Block, BlockIndex, Memo, TipOfChainRes, DEFAULT_TRANSFER_FEE,
+    };
 
     use crate::blocks_access::BlocksAccess;
     use crate::ledger_blocks_sync::LedgerBlocksSynchronizer;
@@ -506,9 +508,16 @@ mod test {
         let timestamp = TimeStamp::from_nanos_since_unix_epoch(
             1656347498000000000, /* 27 June 2022 18:31:38 GMT+02:00 DST */
         );
-        Block::new(parent_hash, operation, Memo(0), timestamp, timestamp)
-            .unwrap()
-            .encode()
+        Block::new(
+            parent_hash,
+            operation,
+            Memo(0),
+            timestamp,
+            timestamp,
+            DEFAULT_TRANSFER_FEE,
+        )
+        .unwrap()
+        .encode()
     }
 
     fn dummy_blocks(n: usize) -> Vec<EncodedBlock> {

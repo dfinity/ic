@@ -311,7 +311,9 @@ impl From<Block> for Transaction {
                     from,
                     to,
                     amount: Nat::from(amount),
-                    fee: Some(Nat::from(fee)),
+                    fee: fee
+                        .map(Nat::from)
+                        .or_else(|| b.effective_fee.map(Nat::from)),
                     created_at_time,
                     memo,
                 });

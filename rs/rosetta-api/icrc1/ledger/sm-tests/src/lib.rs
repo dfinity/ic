@@ -319,14 +319,18 @@ fn arb_account() -> impl Strategy<Value = Account> {
 }
 
 fn arb_transfer() -> impl Strategy<Value = Operation> {
-    (arb_account(), arb_account(), arb_amount(), arb_amount()).prop_map(
-        |(from, to, amount, fee)| Operation::Transfer {
+    (
+        arb_account(),
+        arb_account(),
+        arb_amount(),
+        proptest::option::of(arb_amount()),
+    )
+        .prop_map(|(from, to, amount, fee)| Operation::Transfer {
             from,
             to,
             amount,
             fee,
-        },
-    )
+        })
 }
 
 fn arb_mint() -> impl Strategy<Value = Operation> {
@@ -355,13 +359,18 @@ fn arb_transaction() -> impl Strategy<Value = Transaction> {
 }
 
 fn arb_block() -> impl Strategy<Value = Block> {
-    (any::<Option<[u8; 32]>>(), arb_transaction(), any::<u64>()).prop_map(
-        |(parent_hash, transaction, ts)| Block {
+    (
+        any::<Option<[u8; 32]>>(),
+        arb_transaction(),
+        proptest::option::of(any::<u64>()),
+        any::<u64>(),
+    )
+        .prop_map(|(parent_hash, transaction, effective_fee, ts)| Block {
             parent_hash: parent_hash.map(HashOf::new),
             transaction,
+            effective_fee,
             timestamp: ts,
-        },
-    )
+        })
 }
 
 fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
@@ -653,6 +662,23 @@ where
         Err(TransferError::Duplicate {
             duplicate_of: Nat::from(block_idx)
         })
+    );
+
+    // Same transaction, but with the fee set explicitly.
+    // The Ledger should not deduplicate.
+    let args = TransferArg {
+        fee: Some(Nat::from(10_000)),
+        ..transfer_args.clone()
+    };
+    let block_idx = send_transfer(&env, canister_id, p1, &args)
+        .expect("transfer should not be deduplicated because the fee was set explicitly this time");
+
+    // This time the transaction is a duplicate.
+    assert_eq!(
+        Err(TransferError::Duplicate {
+            duplicate_of: Nat::from(block_idx)
+        }),
+        send_transfer(&env, canister_id, p1, &args,)
     );
 
     env.advance_time(TX_WINDOW + Duration::from_secs(5 * 60));

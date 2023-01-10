@@ -176,7 +176,8 @@ pub enum Operation {
         to: Account,
         #[serde(rename = "amt")]
         amount: u64,
-        fee: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fee: Option<u64>,
     },
     #[serde(rename = "burn")]
     Burn {
@@ -308,7 +309,11 @@ impl LedgerTransaction for Transaction {
             })
     }
 
-    fn apply<S>(&self, balances: &mut Balances<Self::AccountId, S>) -> Result<(), BalanceError>
+    fn apply<S>(
+        &self,
+        balances: &mut Balances<Self::AccountId, S>,
+        effective_fee: Tokens,
+    ) -> Result<(), BalanceError>
     where
         S: Default + BalancesStore<Self::AccountId>,
     {
@@ -318,7 +323,12 @@ impl LedgerTransaction for Transaction {
                 to,
                 amount,
                 fee,
-            } => balances.transfer(from, to, Tokens::from_e8s(*amount), Tokens::from_e8s(*fee)),
+            } => balances.transfer(
+                from,
+                to,
+                Tokens::from_e8s(*amount),
+                fee.map(Tokens::from_e8s).unwrap_or(effective_fee),
+            ),
             Operation::Burn { from, amount } => balances.burn(from, Tokens::from_e8s(*amount)),
             Operation::Mint { to, amount } => balances.mint(to, Tokens::from_e8s(*amount)),
         }
@@ -346,7 +356,7 @@ impl Transaction {
         from: Account,
         to: Account,
         amount: Tokens,
-        fee: Tokens,
+        fee: Option<Tokens>,
         created_at_time: Option<TimeStamp>,
         memo: Option<Memo>,
     ) -> Self {
@@ -355,7 +365,7 @@ impl Transaction {
                 from,
                 to,
                 amount: amount.get_e8s(),
-                fee: fee.get_e8s(),
+                fee: fee.map(Tokens::get_e8s),
             },
             created_at_time: created_at_time.map(|t| t.as_nanos_since_unix_epoch()),
             memo,
@@ -370,6 +380,9 @@ pub struct Block {
     pub parent_hash: Option<HashOf<EncodedBlock>>,
     #[serde(rename = "tx")]
     pub transaction: Transaction,
+    #[serde(rename = "fee")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_fee: Option<u64>,
     #[serde(rename = "ts")]
     pub timestamp: u64,
 }
@@ -417,10 +430,17 @@ impl BlockType for Block {
         parent_hash: Option<HashOf<EncodedBlock>>,
         transaction: Self::Transaction,
         timestamp: TimeStamp,
+        effective_fee: Tokens,
     ) -> Self {
+        let effective_fee = if let Operation::Transfer { fee, .. } = &transaction.operation {
+            fee.is_none().then_some(effective_fee.get_e8s())
+        } else {
+            None
+        };
         Self {
             parent_hash,
             transaction,
+            effective_fee,
             timestamp: timestamp.as_nanos_since_unix_epoch(),
         }
     }

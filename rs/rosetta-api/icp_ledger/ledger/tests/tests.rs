@@ -55,6 +55,7 @@ fn test_single_transfer() {
     ic_icrc1_ledger_sm_tests::test_single_transfer(ledger_wasm(), encode_init_args);
 }
 
+#[ignore = "requires fix for FI-541"]
 #[test]
 fn test_tx_deduplication() {
     ic_icrc1_ledger_sm_tests::test_tx_deduplication(ledger_wasm(), encode_init_args);

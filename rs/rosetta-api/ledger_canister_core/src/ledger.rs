@@ -39,7 +39,11 @@ pub trait LedgerTransaction: Sized {
     fn hash(&self) -> HashOf<Self>;
 
     /// Applies this transaction to the balance book.
-    fn apply<S>(&self, balances: &mut Balances<Self::AccountId, S>) -> Result<(), BalanceError>
+    fn apply<S>(
+        &self,
+        balances: &mut Balances<Self::AccountId, S>,
+        effective_fee: Tokens,
+    ) -> Result<(), BalanceError>
     where
         S: Default + BalancesStore<Self::AccountId>;
 }
@@ -129,6 +133,7 @@ pub fn apply_transaction<L: LedgerData>(
     ledger: &mut L,
     transaction: L::Transaction,
     now: TimeStamp,
+    effective_fee: Tokens,
 ) -> Result<(BlockIndex, HashOf<EncodedBlock>), TransferError> {
     let num_pruned = purge_old_transactions(ledger, now);
 
@@ -162,14 +167,19 @@ pub fn apply_transaction<L: LedgerData>(
     }
 
     transaction
-        .apply(ledger.balances_mut())
+        .apply(ledger.balances_mut(), effective_fee)
         .map_err(|e| match e {
             BalanceError::InsufficientFunds { balance } => {
                 TransferError::InsufficientFunds { balance }
             }
         })?;
 
-    let block = L::Block::from_transaction(ledger.blockchain().last_hash, transaction, now);
+    let block = L::Block::from_transaction(
+        ledger.blockchain().last_hash,
+        transaction,
+        now,
+        effective_fee,
+    );
     let block_timestamp = block.timestamp();
 
     let height = ledger
@@ -202,14 +212,19 @@ pub fn apply_transaction<L: LedgerData>(
         let burn_tx = L::Transaction::burn(account, balance, Some(now), Some(TRIMMED_MEMO));
 
         burn_tx
-            .apply(ledger.balances_mut())
+            .apply(ledger.balances_mut(), Tokens::from_e8s(0))
             .expect("failed to burn funds that must have existed");
 
         let parent_hash = ledger.blockchain().last_hash;
 
         ledger
             .blockchain_mut()
-            .add_block(L::Block::from_transaction(parent_hash, burn_tx, now))
+            .add_block(L::Block::from_transaction(
+                parent_hash,
+                burn_tx,
+                now,
+                Tokens::from_e8s(0),
+            ))
             .unwrap();
     }
 
