@@ -2,6 +2,7 @@ import asyncio
 import dataclasses
 import functools
 import logging
+import math
 import multiprocessing
 import random
 import time
@@ -11,7 +12,8 @@ from dataclasses import dataclass
 import gflags
 import matplotlib.pyplot as plt
 from common.base_experiment import BaseExperiment
-from common.delegation import get_delegation  # noqa
+from common.delegation import get_delegation
+from common.delegation import get_ii_canister_id
 from ic.agent import Agent
 from ic.agent import sign_request
 from ic.client import Client
@@ -22,7 +24,7 @@ from termcolor import colored
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("num_procs", 16, "Number of Python processes to use")
 gflags.DEFINE_integer("num_tasks", 10, "Number of asyncio tasks per process")
-gflags.DEFINE_integer("num_requests", 5, "Number of requests per task")
+gflags.DEFINE_integer("num_identities", 10, "Number of identities to issue load with")
 
 # Offset in miliseconds before issuing the first call
 # If the offset is too small, the first few calls will be sent in a burst
@@ -47,8 +49,11 @@ class StressConfiguration:
 
     t_start: float
     rate: float
+    num_requests: int
     agents: [Agent]
     canister_id: str
+    pid: int
+    tid: int
 
 
 def reduce_request_result(a: RequestResult, b: RequestResult):
@@ -72,12 +77,13 @@ async def initiate_update_calls(config: StressConfiguration):
     There is typically one call to this function per asyncio task.
     """
     assert config.rate < 1000, "Cannot produce requests at a higher frequency than every ms right now"
+    print(f"{config.pid}/{config.tid} Starting {config.num_requests} calls at rate {config.rate}")
     ms_between_calls = 1000.0 / config.rate
     num_failed = 0
     num_succ_submit = 0
     req_ids = []
     call_times = []
-    for i in range(FLAGS.num_requests):
+    for i in range(config.num_requests):
         try:
             this_agent = config.agents[i % len(config.agents)]
             cid = config.canister_id
@@ -105,7 +111,7 @@ async def initiate_update_calls(config: StressConfiguration):
             num_succ_submit += 1
             req_ids.append(req_id)
         except Exception:
-            logging.debug(logging.traceback.format_exc())
+            logging.warning(logging.traceback.format_exc())
             num_failed += 1
     return RequestResult(num_failed, num_succ_submit, call_times, req_ids, [], {})
 
@@ -131,8 +137,15 @@ async def poll_existing_requests(config, req_ids):
             status, result = await this_agent.poll_async(cid, req_id, timeout=req_timeout)
             status_histogram[status] = status_histogram.get(status, 0) + 1
             logging.debug(status, result)
-        except Exception:
-            logging.debug(logging.traceback.format_exc())
+        except TypeError:
+            key = "type_error"
+            status_histogram[key] = status_histogram.get(key, 0) + 1
+        # Ideally, we wouldn't want to catch all here, but since the ic-agent's error handling seems quite basic, there isn't much else we can do here.
+        except Exception as e:
+            key = str(e)[:50]
+            status_histogram[key] = status_histogram.get(key, 0) + 1
+            logging.warning(logging.traceback.format_exc())
+
     return status_histogram
 
 
@@ -153,8 +166,12 @@ async def run_all_async(config):
 
     t_start indicates a common start time to be used to calculate duration and other statistics.
     """
-    per_task_config = dataclasses.replace(config, rate=config.rate / FLAGS.num_tasks)
-    calls = [initiate_update_calls(per_task_config) for _ in range(FLAGS.num_tasks)]
+    per_task_config = dataclasses.replace(
+        config,
+        rate=config.rate / FLAGS.num_tasks,
+        num_requests=int(math.ceil(config.num_requests / FLAGS.num_tasks)),
+    )
+    calls = [initiate_update_calls(dataclasses.replace(per_task_config, tid=i)) for i in range(FLAGS.num_tasks)]
     raw_results = await asyncio.gather(*calls)
     # The first request is only issued after START_OFFSET_MS miliseconds
     first_request_start_secs = config.t_start + (START_OFFSET_MS / 1000.0)
@@ -212,22 +229,45 @@ class IcPyStressExperiment(BaseExperiment):
         super().__init__(request_type="update")
         self.host_ip = self.get_machine_to_instrument()
         self.host_url = f"http://[{self.host_ip}]:8080"
+        ii_canister_id = get_ii_canister_id(self.host_url)
         if use_delegation:
-            delegated_identity, _, _ = get_delegation(self.host_url)
-            self.identity = delegated_identity
+            with multiprocessing.Pool(FLAGS.num_procs) as pool:
+                # We get all delegates from the same host
+                raw_result = pool.starmap(get_delegation, [(self.host_url, ii_canister_id)] * FLAGS.num_identities)
+                self.identities = [element[0] for element in raw_result]
         else:
-            self.identity = Identity()
+            self.identities = [Identity() for _ in range(FLAGS.num_identities)]
 
-    def get_agent_for_ip(self, u):
-        return Agent(self.identity, Client(url=f"http://[{u}]:8080"))
+    def get_agents_for_ip(self, u):
+        return [Agent(identity, Client(url=f"http://[{u}]:8080")) for identity in self.identities]
 
-    def run_all(self, rps: float, target_ipaddresses: [str], canister_id: str):
-        print(f"Running with load {rps} on targets {target_ipaddresses}")
+    def run_all(self, rps: float, duration: int, target_ipaddresses: [str], canister_id: str):
+
+        num_requests = int(math.ceil(rps * duration))
+        print(f"Running with load {rps} on targets {target_ipaddresses} for {duration} seconds")
 
         assert len(target_ipaddresses) > 0
-        agents = [self.get_agent_for_ip(u) for u in target_ipaddresses]
-        config = StressConfiguration(time.time(), rps / FLAGS.num_procs, agents, canister_id)
+        agents = []
+        for u in target_ipaddresses:
+            agents += self.get_agents_for_ip(u)
 
+        config = StressConfiguration(
+            time.time(),
+            rps / FLAGS.num_procs,
+            int(math.ceil(num_requests / FLAGS.num_procs)),
+            agents,
+            canister_id,
+            pid=-1,
+            tid=-1,
+        )
+
+        t_start = time.time()
+        print(f"Running {FLAGS.num_procs} processes - each with {config.num_requests} requests at {config.rate} rps")
+        result = None
         with multiprocessing.Pool(FLAGS.num_procs) as pool:
-            raw_result = pool.map(run_proc, [config] * FLAGS.num_procs)
-            return functools.reduce(reduce_request_result, raw_result)
+            raw_result = pool.map(run_proc, [dataclasses.replace(config, pid=i) for i in range(FLAGS.num_procs)])
+            result = functools.reduce(reduce_request_result, raw_result)
+        print(f"Finished load after {time.time()-t_start}s")
+        for status, number in result.status_codes.items():
+            print(f"{str(status):10} - {number:10.0f}")
+        return result

@@ -16,6 +16,7 @@ from common.icpy_stress_experiment import IcPyStressExperiment, StressConfigurat
 from common.delegation import get_delegation  # noqa
 from common.report import EvaluatedSummaries  # noqa
 
+
 FLAGS = gflags.FLAGS
 gflags.DEFINE_string("rps", "30", "Coma seperated list of rps rates to test.")
 
@@ -32,10 +33,12 @@ class DelegationExperiment(IcPyStressExperiment):
         self.target_canister = self.install_canister()
 
     def run_experiment_internal(self, config):
-        agent = self.get_agent_for_ip(self.get_machine_to_instrument())
+        # Get a single agent for sanity checks.
+        # This agent is not used for actual benchmarking.
+        agent = self.get_agents_for_ip(self.get_machine_to_instrument())[0]
         counter_start = parse_counter_return(agent.update_raw(self.target_canister, "read", []))
         machines = self.get_machines_to_target()
-        r = self.run_all(config["rps"], machines, self.target_canister)
+        r = self.run_all(config["rps"], FLAGS.iter_duration, machines, self.target_canister)
         counter_end = parse_counter_return(agent.update_raw(self.target_canister, "read", []))
         counter_diff = counter_end - counter_start
 
@@ -44,11 +47,20 @@ class DelegationExperiment(IcPyStressExperiment):
             # Remove request IDs (they are not Json serializable) and write to file
             f.write(json.dumps(dataclasses.replace(r, req_ids=[]).__dict__, indent=4))
 
-        if counter_diff != r.num_succ_submit:
+        if counter_diff > r.num_succ_submit:
             print(
                 colored(
-                    f"Number of successful calls {r.num_succ_submit} does not match counter value {counter_diff}", "red"
-                )
+                    f"Counter value difference {counter_diff} is larger than the number of successful calls {r.num_succ_submit}",
+                    "red",
+                ),
+            )
+        if counter_diff < r.num_succ_submit:
+            print(
+                colored(
+                    f"Counter value difference {counter_diff} is smaller than the number of successful calls {r.num_succ_submit}. ",
+                    "yellow",
+                ),
+                "This is not unexpected, since a submitted request might not be executed.",
             )
         num_total = r.num_succ_submit + r.num_fail_submit
         failure_rate = r.num_fail_submit / num_total
