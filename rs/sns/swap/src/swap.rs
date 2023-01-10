@@ -290,10 +290,12 @@ impl Swap {
         // advertised, as this would lead to a dead end, because there
         // is no way to take the tokens back.
         if sns_token_amount.get_e8s() < params.sns_token_e8s {
-            return Err(
-                "Cannot OPEN, because the expected number of SNS tokens is not available"
-                    .to_string(),
-            );
+            return Err(format!(
+                "Cannot OPEN, because the expected number of SNS tokens is not \
+                 available. expected={} available={}",
+                params.sns_token_e8s,
+                sns_token_amount.get_e8s(),
+            ));
         }
 
         assert!(self.params.is_none());
