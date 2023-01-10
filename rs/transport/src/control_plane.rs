@@ -15,9 +15,7 @@ use crate::{
 use ic_async_utils::start_tcp_listener;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_tls_interfaces::{AllowedClients, AuthenticatedPeer, TlsStream};
-use ic_interfaces_transport::{
-    TransportChannelId, TransportError, TransportEvent, TransportEventHandler,
-};
+use ic_interfaces_transport::{TransportChannelId, TransportEvent, TransportEventHandler};
 use ic_logger::{error, warn};
 use std::{net::SocketAddr, time::Duration};
 use strum::AsRefStr;
@@ -64,7 +62,7 @@ impl TransportImpl {
         peer_id: &NodeId,
         peer_addr: SocketAddr,
         registry_version: RegistryVersion,
-    ) -> Result<(), TransportError> {
+    ) {
         let role = connection_role(&self.node_id, peer_id);
         // If we are the server, we should add the peer to the allowed_clients.
         if role == ConnectionRole::Server {
@@ -73,14 +71,14 @@ impl TransportImpl {
         *self.registry_version.blocking_write() = registry_version;
         let mut peer_map = self.peer_map.blocking_write();
         if peer_map.get(peer_id).is_some() {
-            return Err(TransportError::AlreadyExists);
+            return;
         }
 
         // TODO: P2P-514
         let channel_id = TransportChannelId::from(DEFAULT_CHANNEL_ID);
-        if role == ConnectionRole::Server {
-            let peer_label = get_peer_label(&peer_addr.ip().to_string(), peer_id);
-            let peer_state = PeerState::new(
+        let peer_label = get_peer_label(&peer_addr.ip().to_string(), peer_id);
+        let peer_state = match role {
+            ConnectionRole::Server => PeerState::new(
                 self.log.clone(),
                 channel_id,
                 peer_label,
@@ -88,28 +86,25 @@ impl TransportImpl {
                 self.config.send_queue_size,
                 self.send_queue_metrics.clone(),
                 self.control_plane_metrics.clone(),
-            );
-            peer_map.insert(*peer_id, RwLock::new(peer_state));
-            return Ok(());
-        }
-
-        let peer_label = get_peer_label(&peer_addr.ip().to_string(), peer_id);
-        let connecting_task = self.spawn_connect_task(channel_id, *peer_id, peer_addr);
-        let connecting_state = Connecting {
-            peer_addr,
-            connecting_task,
+            ),
+            ConnectionRole::Client => {
+                let connecting_task = self.spawn_connect_task(channel_id, *peer_id, peer_addr);
+                let connecting_state = Connecting {
+                    peer_addr,
+                    connecting_task,
+                };
+                PeerState::new(
+                    self.log.clone(),
+                    channel_id,
+                    peer_label,
+                    ConnectionState::Connecting(connecting_state),
+                    self.config.send_queue_size,
+                    self.send_queue_metrics.clone(),
+                    self.control_plane_metrics.clone(),
+                )
+            }
         };
-        let peer_state = PeerState::new(
-            self.log.clone(),
-            channel_id,
-            peer_label,
-            ConnectionState::Connecting(connecting_state),
-            self.config.send_queue_size,
-            self.send_queue_metrics.clone(),
-            self.control_plane_metrics.clone(),
-        );
         peer_map.insert(*peer_id, RwLock::new(peer_state));
-        Ok(())
     }
 
     /// Starts the async task to accept the incoming TcpStreams in server mode.

@@ -118,13 +118,8 @@ fn test_single_transient_failure_of_tls_client_handshake_impl(use_h2: bool) {
         );
         registry_and_data.registry.update_to_latest_version();
 
-        assert!(peer_1
-            .start_connection(&NODE_ID_2, peer_2_addr, REG_V1)
-            .is_ok());
-
-        assert!(peer_2
-            .start_connection(&NODE_ID_1, peer_1_addr, REG_V1)
-            .is_ok());
+        peer_1.start_connection(&NODE_ID_2, peer_2_addr, REG_V1);
+        peer_2.start_connection(&NODE_ID_1, peer_1_addr, REG_V1);
 
         rt.block_on(async {
             match handle_1.next_request().await {
@@ -258,14 +253,8 @@ fn test_single_transient_failure_of_tls_server_handshake_impl(use_h2: bool) {
         );
         registry_and_data.registry.update_to_latest_version();
 
-        assert!(peer_1
-            .start_connection(&NODE_ID_2, peer_2_addr, REG_V1)
-            .is_ok());
-
-        assert!(peer_2
-            .start_connection(&NODE_ID_1, peer_1_addr, REG_V1)
-            .is_ok());
-
+        peer_1.start_connection(&NODE_ID_2, peer_2_addr, REG_V1);
+        peer_2.start_connection(&NODE_ID_1, peer_1_addr, REG_V1);
         rt.block_on(async {
             match handle_1.next_request().await {
                 Some((TransportEvent::PeerUp(_), resp)) => {

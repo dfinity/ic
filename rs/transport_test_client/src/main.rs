@@ -143,26 +143,11 @@ impl TestClient {
         }
     }
 
-    fn start_connection(&self) -> Result<(), TransportError> {
+    fn start_connection(&self) {
         self.transport
-            .start_connection(&self.prev, self.prev_node_record, self.registry_version)
-            .map_err(|e| {
-                warn!(
-                    self.log,
-                    "Failed to start_connection(): peer = {:?} err = {:?}", self.prev, e
-                );
-                e
-            })?;
+            .start_connection(&self.prev, self.prev_node_record, self.registry_version);
         self.transport
-            .start_connection(&self.next, self.next_node_record, self.registry_version)
-            .map_err(|e| {
-                warn!(
-                    self.log,
-                    "Failed to start_connection(): peer = {:?} err = {:?}", self.next, e
-                );
-                e
-            })?;
-        Ok(())
+            .start_connection(&self.next, self.next_node_record, self.registry_version);
     }
 
     fn stop_connection(&self) {
@@ -560,9 +545,7 @@ fn task_main(
         active_flag.clone(),
     );
     println!("starting connections... [Node: {}]", node_id_val);
-    test_client
-        .start_connection()
-        .map_err(TestClientErrorCode::TransportError)?;
+    test_client.start_connection();
 
     println!("starting test... [Node: {}]", node_id_val);
     match role {

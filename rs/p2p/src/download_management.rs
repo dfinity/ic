@@ -603,21 +603,12 @@ impl GossipImpl {
             info!(self.log, "Nodes {:0} added", node_id);
         }
 
-        match self
-            .transport
-            .start_connection(&node_id, peer_addr, registry_version)
-        {
-            Err(e) => {
-                warn!(self.log, "start connections failed {:?} {:?}", node_id, e);
-                self.current_peers.lock().remove(&node_id);
-            }
-            Ok(()) => {
-                self.receive_check_caches.write().insert(
-                    node_id,
-                    ReceiveCheckCache::new(self.gossip_config.receive_check_cache_size as usize),
-                );
-            }
-        }
+        self.transport
+            .start_connection(&node_id, peer_addr, registry_version);
+        self.receive_check_caches.write().insert(
+            node_id,
+            ReceiveCheckCache::new(self.gossip_config.receive_check_cache_size as usize),
+        );
     }
 
     /// This helper method returns a list of tasks to be performed by this timer
