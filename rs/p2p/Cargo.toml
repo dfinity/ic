@@ -7,7 +7,6 @@ edition = "2021"
 async-trait = "0.1.36"
 bincode = "1.2.1"
 futures = "0.3.10"
-ic-artifact-manager = { path = "../artifact_manager" }
 ic-config = { path = "../config" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-p2p = { path = "../interfaces/p2p" }
@@ -32,6 +31,7 @@ tokio = { version = "1.15.0", features = ["full"] }
 tower = "0.4.12"
 
 [dev-dependencies]
+ic-artifact-manager = { path = "../artifact_manager" }
 ic-canister-http-adapter-client = { path = "../canister_http/client" }
 ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-execution-environment = { path = "../execution_environment" }
