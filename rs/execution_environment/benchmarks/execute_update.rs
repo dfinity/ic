@@ -306,7 +306,7 @@ lazy_static! {
             11_000_004,
         ),
         common::Benchmark(
-            "ic0_canister_cycles_balance128()",
+            "ic0_canister_cycle_balance128()",
             Module::Test.from_ic0("canister_cycle_balance128", Param1(0), Result::No),
             11_000_004,
         ),

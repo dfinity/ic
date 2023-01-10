@@ -1003,7 +1003,7 @@ impl SystemApiImpl {
         }
     }
 
-    fn ic0_canister_cycles_balance_helper(&self, method_name: &str) -> HypervisorResult<Cycles> {
+    fn ic0_canister_cycle_balance_helper(&self, method_name: &str) -> HypervisorResult<Cycles> {
         match &self.api_type {
             ApiType::Start {} => Err(self.error_for(method_name)),
             ApiType::Init { .. }
@@ -2452,7 +2452,7 @@ impl SystemApi for SystemApiImpl {
     fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64> {
         let result = {
             let (high_amount, low_amount) = self
-                .ic0_canister_cycles_balance_helper("ic0_canister_cycles_balance")?
+                .ic0_canister_cycle_balance_helper("ic0_canister_cycle_balance")?
                 .into_parts();
             if high_amount != 0 {
                 return Err(HypervisorError::Trapped(CyclesAmountTooBigFor64Bit));
@@ -2463,16 +2463,16 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_canister_cycles_balance128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
+    fn ic0_canister_cycle_balance128(&self, dst: u32, heap: &mut [u8]) -> HypervisorResult<()> {
         let result = {
-            let method_name = "ic0_canister_cycles_balance128";
-            let cycles = self.ic0_canister_cycles_balance_helper(method_name)?;
+            let method_name = "ic0_canister_cycle_balance128";
+            let cycles = self.ic0_canister_cycle_balance_helper(method_name)?;
             copy_cycles_to_heap(cycles, dst, heap, method_name)?;
             Ok(())
         };
         trace_syscall!(
             self,
-            ic0_canister_cycles_balance128,
+            ic0_canister_cycle_balance128,
             dst,
             summarize(heap, dst, 16)
         );
