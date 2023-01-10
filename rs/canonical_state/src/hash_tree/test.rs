@@ -43,6 +43,10 @@ impl<'a> LazyFork<'a> for FlatMapFork<'a> {
     fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {
         Box::new(self.0.iter().map(|(l, t)| (l.clone(), as_lazy(t))))
     }
+
+    fn len(&self) -> usize {
+        self.0.len()
+    }
 }
 
 fn as_lazy(t: &LabeledTree<Vec<u8>>) -> LazyTree<'_> {

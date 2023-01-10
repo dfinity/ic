@@ -206,17 +206,11 @@ impl HashTree {
         NodeId::leaf(id)
     }
 
-    fn preallocate_nodes(
-        &mut self,
-        labels: impl Iterator<Item = Label>,
-        parent: NodeId,
-    ) -> Range<usize> {
+    fn preallocate_nodes(&mut self, len: usize, parent: NodeId) -> Range<usize> {
         let old_len = self.node_labels.len();
-        for label in labels {
-            self.node_labels.push(label)
-        }
-        let new_len = self.node_labels.len();
+        let new_len = old_len + len;
 
+        self.node_labels.resize(new_len, Default::default());
         self.node_digests.resize(new_len, Digest([0; 32]));
         self.node_children.resize(new_len, NodeId::empty());
         self.node_children_labels_ranges.resize(new_len, (0, 0));
@@ -509,18 +503,17 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> HashTree {
                 ht.new_leaf(h.finalize())
             }
             LazyTree::LazyFork(f) => {
-                let range = ht.preallocate_nodes(f.labels(), parent);
+                let range = ht.preallocate_nodes(f.len(), parent);
                 let mut nodes = VecDeque::new();
 
                 for (i, (label, child)) in range.zip(f.children()) {
-                    debug_assert_eq!(label, ht.node_labels[i]);
-
                     let child = go(&child, ht, NodeId::node(i));
                     let mut h = Hasher::for_domain("ic-hashtree-labeled");
                     h.update(label.as_bytes());
                     h.update(ht.digest(child).as_bytes());
                     ht.node_digests[i] = h.finalize();
                     ht.node_children[i] = child;
+                    ht.node_labels[i] = label;
                     nodes.push_back(NodeId::node(i));
                 }
 

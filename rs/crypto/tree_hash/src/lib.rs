@@ -124,6 +124,14 @@ enum LabelRepr {
     Ref(Vec<u8>),
 }
 
+impl Default for Label {
+    fn default() -> Self {
+        // The default value is only used as a placeholder
+        // It's not so important what the actual value is
+        Self(LabelRepr::Value([0; SMALL_LABEL_SIZE + 1]))
+    }
+}
+
 impl PartialEq for Label {
     fn eq(&self, rhs: &Self) -> bool {
         self.as_bytes() == rhs.as_bytes()
