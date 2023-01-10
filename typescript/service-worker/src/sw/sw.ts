@@ -1,3 +1,5 @@
+import { ServiceWorkerEvents } from '../typings';
+import { CanisterResolver } from './domains';
 import { handleRequest } from './http_request';
 
 declare const self: ServiceWorkerGlobalScope;
@@ -30,5 +32,17 @@ self.addEventListener('fetch', (event) => {
       );
     }
     event.respondWith(new Response('Internal Error', { status: 502 }));
+  }
+});
+
+// handle events from the client messages
+self.addEventListener('message', async (event) => {
+  const body = event.data;
+  switch (body?.action) {
+    case ServiceWorkerEvents.SaveICHostInfo: {
+      const resolver = await CanisterResolver.setup();
+      await resolver.saveICHostInfo(body.data);
+      break;
+    }
   }
 });

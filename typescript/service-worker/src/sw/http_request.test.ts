@@ -13,6 +13,7 @@ import { IDL } from '@dfinity/candid';
 import { fromHex } from '@dfinity/agent/lib/cjs/utils/buffer';
 import { Principal } from '@dfinity/principal';
 import { HttpRequest } from '../http-interface/canister_http_interface_types';
+import { CanisterResolver } from './domains';
 
 const CANISTER_ID = 'qoctq-giaaa-aaaaa-aaaea-cai';
 const CERT_MAX_TIME_OFFSET = 300_000; // 5 Minutes
@@ -539,6 +540,23 @@ it('should accept valid certification using multiple callbacks with structured t
 it('should do update call on upgrade flag', async () => {
   jest.setSystemTime(TEST_DATA.update_call.request_time); // required because request id is dependent on time
   jest.spyOn(global.Math, 'random').mockReturnValue(0.5); // required because request id is dependent on 'random' nonce
+  jest.spyOn(CanisterResolver, 'setup').mockReturnValue(
+    // required because CanisterResolver is used to resolve domains
+    new Promise<CanisterResolver>((resolve) => {
+      CanisterResolver.setup().then((canisterResolver) => {
+        jest
+          .spyOn(canisterResolver, 'getCurrentGateway')
+          .mockResolvedValue(new URL('https://ic0.app'));
+        jest.spyOn(canisterResolver, 'lookup').mockResolvedValue({
+          canister: {
+            principal: Principal.fromText(CANISTER_ID),
+            gateway: new URL('https://ic0.app'),
+          },
+        });
+        resolve(canisterResolver);
+      });
+    })
+  );
   mockFetchResponses(TEST_DATA.update_call.root_key, {
     query: createUpgradeQueryResponse(),
     update: createHttpUpdateResponsePayload(TEST_DATA.update_call.certificate),
@@ -602,11 +620,11 @@ it('should reject redirects', async () => {
 });
 
 function decodeContent<T>(
-  [_, request]: [unknown, RequestInit],
+  [_, request]: [unknown, RequestInit | undefined],
   argType: IDL.Type
 ): [QueryRequest | CallRequest, T] {
   let decodedRequest = Agent.Cbor.decode<UnSigned<QueryRequest | CallRequest>>(
-    request.body as ArrayBuffer
+    request?.body as ArrayBuffer
   );
   // @ts-ignore
   let decodedArg = IDL.decode([argType], decodedRequest.content.arg)[0] as T;
@@ -680,7 +698,7 @@ function mockFetchResponses(
         Agent.Cbor.decode(body);
       let request = IDL.decode([HttpRequestType], cborDecoded.content.arg)[0];
       if (
-        !httpPayloads[fetchCounter].reqValidator(
+        !httpPayloads[fetchCounter].reqValidator?.(
           request as unknown as HttpRequest
         )
       ) {

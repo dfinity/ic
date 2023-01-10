@@ -13,134 +13,9 @@ import {
 } from '../http-interface/canister_http_interface_types';
 import { idlFactory } from '../http-interface/canister_http_interface';
 import { streamContent } from './streaming';
-
-const hostnameCanisterIdMap: Record<string, [string, string]> = {
-  'identity.ic0.app': ['rdmx6-jaaaa-aaaaa-aaadq-cai', 'ic0.app'],
-  'nns.ic0.app': ['qoctq-giaaa-aaaaa-aaaea-cai', 'ic0.app'],
-  'dscvr.one': ['h5aet-waaaa-aaaab-qaamq-cai', 'ic0.app'],
-  'dscvr.ic0.app': ['h5aet-waaaa-aaaab-qaamq-cai', 'ic0.app'],
-  'personhood.ic0.app': ['g3wsl-eqaaa-aaaan-aaaaa-cai', 'ic0.app'],
-};
+import { CanisterResolver } from './domains';
 
 const shouldFetchRootKey = Boolean(process.env.FORCE_FETCH_ROOT_KEY);
-
-function getServiceWorkerDomain(): string {
-  const swLocation = new URL(self.location.toString());
-
-  return (
-    splitHostnameForCanisterId(swLocation.hostname)?.[1] ?? swLocation.hostname
-  );
-}
-const swDomains = getServiceWorkerDomain();
-
-/**
- * Split a hostname up-to the first valid canister ID from the right.
- * @param hostname The hostname to analyze.
- * @returns A canister ID followed by all subdomains that are after it, or null if no
- *     canister ID were found.
- */
-function splitHostnameForCanisterId(
-  hostname: string
-): [Principal, string] | null {
-  const maybeFixed = hostnameCanisterIdMap[hostname];
-  if (maybeFixed) {
-    return [Principal.fromText(maybeFixed[0]), maybeFixed[1]];
-  }
-
-  const subdomains = hostname.split('.').reverse();
-  const topdomains: string[] = [];
-  for (const domain of subdomains) {
-    try {
-      const principal = Principal.fromText(domain);
-      return [principal, topdomains.reverse().join('.')];
-    } catch (_) {
-      topdomains.push(domain);
-    }
-  }
-
-  return null;
-}
-
-/**
- * Try to resolve the Canister ID to contact in the domain name.
- * @param hostname The domain name to look up.
- * @returns A Canister ID or null if none were found.
- */
-function maybeResolveCanisterIdFromHostName(
-  hostname: string
-): Principal | null {
-  // Try to resolve from the right to the left.
-  const maybeCanisterId = splitHostnameForCanisterId(hostname);
-  if (maybeCanisterId && swDomains === maybeCanisterId[1]) {
-    return maybeCanisterId[0];
-  }
-
-  return null;
-}
-
-/**
- * Try to resolve the Canister ID to contact in the search params.
- * @param searchParams The URL Search params.
- * @returns A Canister ID or null if none were found.
- */
-function maybeResolveCanisterIdFromSearchParam(
-  searchParams: URLSearchParams
-): Principal | null {
-  const maybeCanisterId = searchParams.get('canisterId');
-  if (maybeCanisterId) {
-    try {
-      return Principal.fromText(maybeCanisterId);
-    } catch (e) {
-      // Do nothing.
-    }
-  }
-
-  return null;
-}
-
-/**
- * Try to resolve the Canister ID to contact from a URL string.
- * @param urlString The URL in string format (normally from the request).
- * @returns A Canister ID or null if none were found.
- */
-function resolveCanisterIdFromUrl(urlString: string): Principal | null {
-  try {
-    const url = new URL(urlString);
-    return (
-      maybeResolveCanisterIdFromHostName(url.hostname) ||
-      maybeResolveCanisterIdFromSearchParam(url.searchParams)
-    );
-  } catch (_) {
-    return null;
-  }
-}
-
-/**
- * Try to resolve the Canister ID to contact from headers.
- * @param headers Headers from the HttpRequest.
- * @returns A Canister ID or null if none were found.
- */
-function maybeResolveCanisterIdFromHeaders(headers: Headers): Principal | null {
-  const maybeHostHeader = headers.get('host');
-  if (maybeHostHeader) {
-    // Remove the port.
-    const maybeCanisterId = maybeResolveCanisterIdFromHostName(
-      maybeHostHeader.replace(/:\d+$/, '')
-    );
-    if (maybeCanisterId) {
-      return maybeCanisterId;
-    }
-  }
-
-  return null;
-}
-
-function maybeResolveCanisterIdFromHttpRequest(request: Request) {
-  return (
-    maybeResolveCanisterIdFromHeaders(request.headers) ||
-    resolveCanisterIdFromUrl(request.url)
-  );
-}
 
 /**
  * Decode a body (ie. deflate or gunzip it) based on its content-encoding.
@@ -162,12 +37,11 @@ function decodeBody(body: Uint8Array, encoding: string): Uint8Array {
 }
 
 async function createAgentAndActor(
-  url: string,
+  gatewayUrl: URL,
   canisterId: Principal,
   fetchRootKey: boolean
 ): Promise<[HttpAgent, ActorSubclass<_SERVICE>]> {
-  const replicaUrl = new URL(url);
-  const agent = new HttpAgent({ host: replicaUrl.toString() });
+  const agent = new HttpAgent({ host: gatewayUrl.toString() });
   if (fetchRootKey) {
     await agent.fetchRootKey();
   }
@@ -177,6 +51,11 @@ async function createAgentAndActor(
   });
   return [agent, actor];
 }
+
+const legacyGateways = new Set([
+  'boundary.dfinity.network',
+  'boundary.ic0.app',
+]);
 
 /**
  * Removes legacy sub domains from the URL of the request.
@@ -188,12 +67,12 @@ async function createAgentAndActor(
  * as the UIntArray that is read.
  */
 async function removeLegacySubDomains(
-  originalRequest: Request
+  originalRequest: Request,
+  gatewayUrl: URL
 ): Promise<Request> {
   const url = new URL(originalRequest.url);
-  const urlWithoutLegacySubdomain = `${url.protocol}//${swDomains}${url.pathname}`;
 
-  if (url.href !== urlWithoutLegacySubdomain) {
+  if (legacyGateways.has(url.hostname)) {
     console.warn(
       `${url.hostname} refers to a legacy, deprecated sub domain. Please migrate to the latest version of @dfinity/agent-js and remove any subdomains from your 'host' configuration when creating the agent.`
     );
@@ -232,7 +111,10 @@ async function removeLegacySubDomains(
     requestInit['body'] = await originalRequest.arrayBuffer();
   }
 
-  return new Request(urlWithoutLegacySubdomain, requestInit as unknown);
+  return new Request(
+    `${url.protocol}//${gatewayUrl.hostname}${url.pathname}`,
+    requestInit as unknown
+  );
 }
 
 /**
@@ -255,16 +137,18 @@ export async function handleRequest(request: Request): Promise<Response> {
   /**
    * We try to do an HTTP Request query.
    */
-  const maybeCanisterId = maybeResolveCanisterIdFromHttpRequest(request);
+  const canisterResolver = await CanisterResolver.setup();
+  const currentGateway = await canisterResolver.getCurrentGateway();
+  const lookup = await canisterResolver.lookupFromHttpRequest(request);
 
   /**
-   * We forward all requests to /api/ to the replica, as is.
+   * We forward all requests to /api/ to the gateway, as is.
    */
-  if (
-    url.pathname.startsWith('/api/') &&
-    (maybeCanisterId || url.hostname.endsWith(swDomains))
-  ) {
-    const cleanedRequest = await removeLegacySubDomains(request);
+  if (canisterResolver.isAPICall(request, currentGateway, lookup)) {
+    const cleanedRequest = await removeLegacySubDomains(
+      request,
+      currentGateway
+    );
     const response = await fetch(cleanedRequest);
     // force the content-type to be cbor as /api/ is exclusively used for canister calls
     const sanitizedHeaders = new Headers(response.headers);
@@ -277,12 +161,11 @@ export async function handleRequest(request: Request): Promise<Response> {
     });
   }
 
-  if (maybeCanisterId) {
+  if (lookup.canister) {
     try {
-      const origin = splitHostnameForCanisterId(url.hostname);
       const [agent, actor] = await createAgentAndActor(
-        origin ? url.protocol + '//' + origin[1] : url.origin,
-        maybeCanisterId,
+        lookup.canister.gateway,
+        lookup.canister.principal,
         shouldFetchRootKey
       );
       const requestHeaders: [string, string][] = [['Host', url.hostname]];
@@ -368,7 +251,7 @@ export async function handleRequest(request: Request): Promise<Response> {
           buffer,
           await streamContent(
             agent,
-            maybeCanisterId,
+            lookup.canister.principal,
             httpResponse.streaming_strategy[0]
           )
         );
@@ -382,7 +265,7 @@ export async function handleRequest(request: Request): Promise<Response> {
       if (!upgradeCall && certificate && tree) {
         // Try to validate the body as is.
         bodyValid = await validateBody(
-          maybeCanisterId,
+          lookup.canister.principal,
           url.pathname,
           body.buffer,
           certificate,
@@ -395,7 +278,7 @@ export async function handleRequest(request: Request): Promise<Response> {
           // If that didn't work, try to validate its identity version. This is for
           // backward compatibility.
           bodyValid = await validateBody(
-            maybeCanisterId,
+            lookup.canister.principal,
             url.pathname,
             identity.buffer,
             certificate,
@@ -423,14 +306,12 @@ export async function handleRequest(request: Request): Promise<Response> {
     }
   }
 
-  // Last check. IF this is not part of the same domain, then we simply let it load as is.
-  // The same domain will always load using our service worker, and not the same domain
+  // Last check. IF this is not an ic domain, then we simply let it load as is.
+  // An ic domain will always load using our service worker, and not an ic domain
   // would load by reference. If you want security for your users at that point you
   // should use SRI to make sure the resource matches.
-  if (
-    !url.hostname.endsWith(swDomains) ||
-    url.hostname.endsWith(`raw.${swDomains}`)
-  ) {
+  const isIcDomain = await canisterResolver.isIcDomain(request);
+  if (!isIcDomain) {
     console.log('Direct call ...');
     // todo: Do we need to check for headers and certify the content here?
     return await fetch(request);

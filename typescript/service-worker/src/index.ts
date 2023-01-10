@@ -1,8 +1,29 @@
+import {
+  ICHostInfoEvent,
+  SaveICHostInfoMessage,
+  ServiceWorkerEvents,
+} from './typings';
+import { getValueFromCookie } from './utils';
+
 function updateStatus(message: string) {
   const statusEl = document.getElementById('status');
   if (statusEl) {
     statusEl.innerText = message;
   }
+}
+
+function resolveICHostInfo(): ICHostInfoEvent | null {
+  const gateway = getValueFromCookie('__Secure-IcGateway');
+  const canisterId = getValueFromCookie('__Secure-IcCanisterId');
+  if (gateway && canisterId) {
+    return {
+      hostname: window.location.hostname,
+      canisterId,
+      gateway,
+    };
+  }
+
+  return null;
 }
 
 window.addEventListener('load', async () => {
@@ -11,6 +32,7 @@ window.addEventListener('load', async () => {
     ['serviceWorker', window.navigator.serviceWorker],
     ['BigInt', window.BigInt],
     ['WebAssembly', window.WebAssembly],
+    ['indexedDB', window.indexedDB],
   ]
     .filter((tuple) => !tuple[1])
     .map((tuple) => tuple[0])
@@ -35,7 +57,17 @@ window.addEventListener('load', async () => {
   await navigator.serviceWorker.register('/sw.js');
 
   // delays code execution until serviceworker is ready
-  await navigator.serviceWorker.ready;
+  const worker = await navigator.serviceWorker.ready;
+
+  // caches the domain ic host equivalent to avoid an additional fetch call
+  const icHostInfo = resolveICHostInfo();
+  if (icHostInfo) {
+    const message: SaveICHostInfoMessage = {
+      action: ServiceWorkerEvents.SaveICHostInfo,
+      data: icHostInfo,
+    };
+    worker.active.postMessage(message);
+  }
 
   // // reload the page so the service worker can intercept the requests
   window.location.reload();
