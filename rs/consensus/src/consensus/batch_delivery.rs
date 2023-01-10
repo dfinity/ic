@@ -11,7 +11,7 @@ use crate::consensus::{
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
 use ic_crypto::get_tecdsa_master_public_key;
-use ic_ic00_types::SetupInitialDKGResponse;
+use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGResponse};
 use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
@@ -21,7 +21,10 @@ use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
 use ic_types::{
     canister_http::*,
     consensus::ecdsa::{CompletedSignature, EcdsaBlockReader},
-    crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+    crypto::{
+        canister_threshold_sig::MasterEcdsaPublicKey,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
+    },
     messages::{CallbackId, Response},
     ReplicaVersion,
 };
@@ -102,32 +105,21 @@ pub fn deliver_batches(
                 }
 
                 let randomness = Randomness::from(crypto_hashable_to_seed(&tape));
-                let ecdsa_subnet_public_key = pool.dkg_summary_block(&block).and_then(|summary| {
-                    let ecdsa_payload = block.payload.as_ref().as_ecdsa();
-                    ecdsa_payload.and_then(|ecdsa| {
-                        let chain = build_consensus_block_chain(pool.pool(), &summary, &block);
-                        let block_reader = EcdsaBlockReaderImpl::new(chain);
-                        let transcript_ref = match &ecdsa.key_transcript.current {
-                            Some(unmasked) => *unmasked.as_ref(),
-                            None => return None,
-                        };
-                        match block_reader.transcript(&transcript_ref) {
-                            Ok(transcript) =>  {
-                                get_tecdsa_master_public_key(&transcript)
-                                    .ok()
-                                    .map(|public_key| (ecdsa.key_transcript.key_id.clone(), public_key))
-                            }
-                            Err(err) => {
-                                warn!(
-                                    log,
-                                    "deliver_batches(): failed to translate transcript ref {:?}: {:?}",
-                                    transcript_ref, err
-                                );
-                                None
-                            }
-                        }
-                    })
-                });
+
+                let ecdsa_subnet_public_key = match get_ecdsa_subnet_public_key(&block, pool, log) {
+                    Ok(maybe_key) => maybe_key,
+                    Err(e) => {
+                        // Do not deliver batch if we can't find a previous summary block,
+                        // this means we should continue with the latest CUP.
+                        warn!(
+                            every_n_seconds => 5,
+                            log,
+                            "Do not deliver height {:?}: {}", h, e
+                        );
+                        return Ok(last_delivered_batch_height);
+                    }
+                };
+
                 let block_stats = BlockStats::from(&block);
 
                 // This flag can only be true, if we've called deliver_batches with a height
@@ -185,6 +177,60 @@ pub fn deliver_batches(
         }
     }
     Ok(last_delivered_batch_height)
+}
+
+/// This function returns the ECDSA subnet public key to be added to the batch, if required.
+/// We return `Ok(Some(key))`, if
+/// - The block contains an ECDSA payload with current key transcript ref, and
+/// - the corresponding transcript exists in past blocks, and
+/// - we can extract the tECDSA master public key from the transcript.
+/// Otherwide `Ok(None)` is returned.
+/// Additionally, we return `Err(string)` if we were unable to find a dkg summary block for the height
+/// of the given block (as the lower bound for past blocks to lookup the transcript in). In that case
+/// a newer CUP is already present in the pool and we should continue from there.
+pub fn get_ecdsa_subnet_public_key(
+    block: &Block,
+    pool: &PoolReader<'_>,
+    log: &ReplicaLogger,
+) -> Result<Option<(EcdsaKeyId, MasterEcdsaPublicKey)>, String> {
+    let maybe_ecdsa_and_transcript_ref = block.payload.as_ref().as_ecdsa().and_then(|ecdsa| {
+        ecdsa
+            .key_transcript
+            .current
+            .as_ref()
+            .map(|unmasked| (ecdsa, *unmasked.as_ref()))
+    });
+    let ecdsa_subnet_public_key =
+        if let Some((ecdsa, transcript_ref)) = maybe_ecdsa_and_transcript_ref {
+            let summary = match pool.dkg_summary_block_for_finalized_height(block.height) {
+                Some(b) => b,
+                None => {
+                    return Err(format!(
+                        "Failed to find dkg summary block for height {}",
+                        block.height
+                    ))
+                }
+            };
+            let chain = build_consensus_block_chain(pool.pool(), &summary, block);
+            let block_reader = EcdsaBlockReaderImpl::new(chain);
+            match block_reader.transcript(&transcript_ref) {
+                Ok(transcript) => get_tecdsa_master_public_key(&transcript)
+                    .ok()
+                    .map(|public_key| (ecdsa.key_transcript.key_id.clone(), public_key)),
+                Err(err) => {
+                    warn!(
+                        log,
+                        "deliver_batches(): failed to translate transcript ref {:?}: {:?}",
+                        transcript_ref,
+                        err
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+    Ok(ecdsa_subnet_public_key)
 }
 
 /// This function creates responses to the system calls that are redirected to

@@ -480,6 +480,26 @@ impl<'a> PoolReader<'a> {
         }
     }
 
+    /// Returns the DKG summary block for the given *finalized* height. Returns None
+    /// if the height isn't finalized, a higher CUP exists, or the DKG summary block
+    /// cannot be found.
+    pub fn dkg_summary_block_for_finalized_height(&self, height: Height) -> Option<Block> {
+        let cup = self.cache.catch_up_package();
+        if height < cup.height() || height > self.get_finalized_height() {
+            return None;
+        }
+
+        let mut current_summary = Some(cup.content.block.into_inner());
+        while let Some(block) = current_summary.as_ref() {
+            let summary = block.payload.as_ref().as_summary();
+            if summary.dkg.current_interval_includes(height) {
+                return current_summary;
+            }
+            current_summary = self.get_finalized_block(summary.dkg.get_next_start_height());
+        }
+        None
+    }
+
     /// Returns the set of DKG messages (indexed by the dealer Id) from the
     /// finalized tip to the highest summary block.
     pub fn get_dkg_payloads(&self) -> BTreeMap<NodeId, NiDkgDealing> {
@@ -550,6 +570,10 @@ pub mod test {
             assert!(block.payload.is_summary());
             let pool_reader = PoolReader::new(&pool);
             assert_eq!(Some(block.clone()), pool_reader.dkg_summary_block(&block));
+            assert_eq!(
+                Some(block.clone()),
+                pool_reader.dkg_summary_block_for_finalized_height(block.height)
+            );
 
             // Now, we'll capture the next block after the current summary block.
             pool.advance_round_normal_operation();
@@ -560,6 +584,10 @@ pub mod test {
             let pool_reader = PoolReader::new(&pool);
             // Make sure we do not get summaries for too old blocks.
             assert_eq!(None, pool_reader.dkg_summary_block(&block2));
+            assert_eq!(
+                None,
+                pool_reader.dkg_summary_block_for_finalized_height(block2.height)
+            );
 
             // Get the new summary block and make sure it's a summary.
             let block3 = pool.get_cache().finalized_block();
@@ -569,7 +597,47 @@ pub mod test {
             let block4 = pool.get_cache().finalized_block();
             // Make sure block4 points to the latest summary.
             let pool_reader = PoolReader::new(&pool);
-            assert_eq!(Some(block3), pool_reader.dkg_summary_block(&block4));
+            assert_eq!(Some(block3.clone()), pool_reader.dkg_summary_block(&block4));
+            assert_eq!(
+                Some(block3.clone()),
+                pool_reader.dkg_summary_block_for_finalized_height(block4.height)
+            );
+
+            // Advance the pool into the next interval, but don't create a CUP yet.
+            pool.advance_round_normal_operation_no_cup_n(interval_length + 1);
+            let block5 = pool.get_cache().finalized_block();
+            // A summary block higher than block4 exists. While `dkg_summary_block` should return `None`,
+            // `dkg_summary_block_for_finalized_height` should continue to return block3.
+            let pool_reader = PoolReader::new(&pool);
+            assert_eq!(None, pool_reader.dkg_summary_block(&block4));
+            assert_eq!(
+                Some(block3),
+                pool_reader.dkg_summary_block_for_finalized_height(block4.height)
+            );
+            // The summary of block5 should be the highest summary block eventhough no CUP was created at that height.
+            let summary = pool_reader.get_highest_summary_block();
+            assert_eq!(
+                Some(summary.clone()),
+                pool_reader.dkg_summary_block(&block5)
+            );
+            assert_eq!(
+                Some(summary),
+                pool_reader.dkg_summary_block_for_finalized_height(block5.height)
+            );
+
+            // `dkg_summary_block_for_finalized_height` should return none for blocks below a CUP and non-finalized blocks.
+            assert_eq!(
+                None,
+                pool_reader.dkg_summary_block_for_finalized_height(
+                    pool_reader.get_finalized_height().increment()
+                )
+            );
+            assert_eq!(
+                None,
+                pool_reader.dkg_summary_block_for_finalized_height(
+                    pool_reader.get_catch_up_height().decrement()
+                )
+            );
         })
     }
 
