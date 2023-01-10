@@ -364,13 +364,18 @@ fn should_deserialize_existing_public_key_store() {
 
 mod timestamps {
     use super::*;
+    use crate::public_key_store::PublicKeyGenerationTimestamps;
+    use ic_types::Time;
+    use std::time::Duration;
+
+    const GENESIS_TIMESTAMP: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
 
     #[test]
     fn should_strip_timestamp_when_returning_node_signing_pubkey() {
         let temp_dir = temp_dir();
         let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
         store
-            .set_once_node_signing_pubkey(public_key_with_timestamp())
+            .set_once_node_signing_pubkey(public_key_with_timestamp(GENESIS_TIMESTAMP))
             .expect("cannot set public key");
 
         let retrieved_public_key = store.node_signing_pubkey().expect("missing public key");
@@ -383,7 +388,7 @@ mod timestamps {
         let temp_dir = temp_dir();
         let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
         store
-            .set_once_committee_signing_pubkey(public_key_with_timestamp())
+            .set_once_committee_signing_pubkey(public_key_with_timestamp(GENESIS_TIMESTAMP))
             .expect("cannot set public key");
 
         let retrieved_public_key = store
@@ -398,7 +403,7 @@ mod timestamps {
         let temp_dir = temp_dir();
         let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
         store
-            .set_once_ni_dkg_dealing_encryption_pubkey(public_key_with_timestamp())
+            .set_once_ni_dkg_dealing_encryption_pubkey(public_key_with_timestamp(GENESIS_TIMESTAMP))
             .expect("cannot set public key");
 
         let retrieved_public_key = store
@@ -414,9 +419,9 @@ mod timestamps {
         let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
         store
             .set_idkg_dealing_encryption_pubkeys(vec![
-                public_key_with_timestamp(),
+                public_key_with_timestamp(GENESIS_TIMESTAMP),
                 public_key_with_key_value(42),
-                public_key_with_timestamp(),
+                public_key_with_timestamp(GENESIS_TIMESTAMP + Duration::from_millis(1)),
             ])
             .expect("cannot set public key");
 
@@ -425,13 +430,140 @@ mod timestamps {
         }
     }
 
-    fn public_key_with_timestamp() -> PublicKey {
+    #[test]
+    fn should_retrieve_generated_public_keys_timestamps() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        let node_signing_pk_timestamp =
+            Time::from_millis_since_unix_epoch(1_620_328_630_000).expect("should not overflow");
+        let committee_signing_pk_timestamp = node_signing_pk_timestamp + Duration::from_millis(1);
+        let nidkg_dealing_encryption_pk_timestamp =
+            node_signing_pk_timestamp + Duration::from_millis(2);
+        let last_idkg_dealing_encryption_pk_timestamp =
+            node_signing_pk_timestamp + Duration::from_millis(3);
+        store
+            .set_once_node_signing_pubkey(public_key_with_timestamp(node_signing_pk_timestamp))
+            .expect("error setting public key");
+        store
+            .set_once_committee_signing_pubkey(public_key_with_timestamp(
+                committee_signing_pk_timestamp,
+            ))
+            .expect("error setting public key");
+        store
+            .set_once_ni_dkg_dealing_encryption_pubkey(public_key_with_timestamp(
+                nidkg_dealing_encryption_pk_timestamp,
+            ))
+            .expect("error setting public key");
+        store
+            .set_idkg_dealing_encryption_pubkeys(vec![public_key_with_timestamp(
+                last_idkg_dealing_encryption_pk_timestamp,
+            )])
+            .expect("error setting public key");
+
+        let timestamps = store.generation_timestamps();
+
+        assert_eq!(
+            timestamps,
+            PublicKeyGenerationTimestamps {
+                node_signing_public_key: Some(node_signing_pk_timestamp),
+                committee_signing_public_key: Some(committee_signing_pk_timestamp),
+                dkg_dealing_encryption_public_key: Some(nidkg_dealing_encryption_pk_timestamp),
+                last_idkg_dealing_encryption_public_key: Some(
+                    last_idkg_dealing_encryption_pk_timestamp
+                )
+            }
+        )
+    }
+
+    #[test]
+    fn should_retrieve_timestamp_of_last_idkg_dealing_encryption_public_key() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        store
+            .set_idkg_dealing_encryption_pubkeys(vec![
+                public_key_with_timestamp(GENESIS_TIMESTAMP),
+                public_key_with_key_value(42),
+                public_key_with_timestamp(GENESIS_TIMESTAMP + Duration::from_millis(1)),
+                public_key_with_timestamp(GENESIS_TIMESTAMP + Duration::from_millis(2)),
+            ])
+            .expect("cannot set public key");
+
+        let last_idkg_generated_pk_timestamp = store
+            .generation_timestamps()
+            .last_idkg_dealing_encryption_public_key
+            .expect("missing IDKG timestamp");
+
+        assert_eq!(
+            last_idkg_generated_pk_timestamp,
+            GENESIS_TIMESTAMP + Duration::from_millis(2)
+        );
+    }
+
+    #[test]
+    fn should_not_have_timestamps_when_public_keys_unset() {
+        let temp_dir = temp_dir();
+        let store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+
+        let timestamps = store.generation_timestamps();
+
+        assert_eq!(
+            timestamps,
+            PublicKeyGenerationTimestamps {
+                node_signing_public_key: None,
+                committee_signing_public_key: None,
+                dkg_dealing_encryption_public_key: None,
+                last_idkg_dealing_encryption_public_key: None
+            }
+        )
+    }
+
+    #[test]
+    fn should_not_have_timestamp_when_public_key_does_not_have_one() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        store
+            .set_once_node_signing_pubkey(public_key_without_timestamp())
+            .expect("error setting public key");
+
+        let generation_timestamp = store.generation_timestamps().node_signing_public_key;
+
+        assert!(generation_timestamp.is_none());
+    }
+
+    #[test]
+    fn should_discard_timestamp_when_cannot_be_converted_to_u64_nanos() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        store
+            .set_once_node_signing_pubkey(public_key_with_raw_timestamp(u64::MAX))
+            .expect("error setting public key");
+
+        let node_signing_key_timestamp = store.generation_timestamps().node_signing_public_key;
+
+        assert!(node_signing_key_timestamp.is_none());
+    }
+
+    fn public_key_with_timestamp(time: Time) -> PublicKey {
+        public_key_with_raw_timestamp(time.as_millis_since_unix_epoch())
+    }
+
+    fn public_key_with_raw_timestamp(millis_since_epoch: u64) -> PublicKey {
         PublicKey {
             version: 1,
             algorithm: AlgorithmId::Ed25519 as i32,
             key_value: [42; 10].to_vec(),
             proof_data: None,
-            timestamp: Some(1_620_328_630_000),
+            timestamp: Some(millis_since_epoch),
+        }
+    }
+
+    fn public_key_without_timestamp() -> PublicKey {
+        PublicKey {
+            version: 1,
+            algorithm: AlgorithmId::Ed25519 as i32,
+            key_value: [42; 10].to_vec(),
+            proof_data: None,
+            timestamp: None,
         }
     }
 }

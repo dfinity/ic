@@ -2,6 +2,9 @@
 #![cfg_attr(test, allow(clippy::unit_arg))]
 //! Defines the [`Time`] type used by the Internet Computer.
 
+#[cfg(test)]
+mod tests;
+
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
@@ -9,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
 use std::time::Duration;
+use thiserror::Error;
 
 /// Time since UNIX_EPOCH (in nanoseconds). Just like 'std::time::Instant' or
 /// 'std::time::SystemTime', [Time] does not implement the [Default] trait.
@@ -19,6 +23,8 @@ pub struct Time(u64);
 
 /// The unix epoch.
 pub const UNIX_EPOCH: Time = Time(0);
+
+const NANOS_PER_MILLI: u64 = 1_000_000;
 
 impl std::ops::Add<Duration> for Time {
     type Output = Time;
@@ -34,9 +40,9 @@ impl std::ops::AddAssign<Duration> for Time {
 }
 
 impl std::ops::Sub<Time> for Time {
-    type Output = std::time::Duration;
+    type Output = Duration;
 
-    fn sub(self, other: Time) -> std::time::Duration {
+    fn sub(self, other: Time) -> Duration {
         let lhs = Duration::from_nanos(self.0);
         let rhs = Duration::from_nanos(other.0);
         lhs - rhs
@@ -62,19 +68,44 @@ impl Time {
         Time(nanos)
     }
 
+    /// Number of milliseconds since UNIX EPOCH
+    pub fn as_millis_since_unix_epoch(self) -> u64 {
+        self.as_nanos_since_unix_epoch() / NANOS_PER_MILLI
+    }
+
+    pub fn from_millis_since_unix_epoch(millis: u64) -> Result<Self, TimeInstantiationError> {
+        millis
+            .checked_mul(NANOS_PER_MILLI )
+            .map(Time)
+            .ok_or_else(|| {
+                TimeInstantiationError::Overflow(format!(
+                    "The number of milliseconds {} is too large and cannot be converted into a u64 of nanoseconds",
+                    millis
+                ))
+            })
+    }
+
     /// A private function to cast from [Duration] to [Time].
     fn from_duration(t: Duration) -> Self {
         Time(t.as_nanos() as u64)
     }
 }
 
+#[derive(Error, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum TimeInstantiationError {
+    #[error("Time cannot be instantiated as it would overflow: {0}")]
+    Overflow(String),
+}
+
 impl TryFrom<Duration> for Time {
-    type Error = &'static str;
+    type Error = TimeInstantiationError;
     fn try_from(d: Duration) -> Result<Self, Self::Error> {
         u64::try_from(d.as_nanos())
-            .or(Err(
-                "Duration is too large to be converted into a u64 of nanoseconds!",
-            ))
+            .map_err(|_| {
+                TimeInstantiationError::Overflow(
+                    "Duration is too large to be converted into a u64 of nanoseconds!".to_string(),
+                )
+            })
             .map(Time)
     }
 }

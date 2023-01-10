@@ -1,6 +1,9 @@
-use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
+use crate::public_key_store::{
+    PublicKeyGenerationTimestamps, PublicKeySetOnceError, PublicKeyStore,
+};
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
+use ic_types::Time;
 use prost::Message;
 use std::io::{Error, ErrorKind};
 use std::path::{Path, PathBuf};
@@ -147,6 +150,19 @@ impl PublicKeyStore for ProtoPublicKeyStore {
             .map(|pk| remove_timestamp(pk.clone()))
             .collect()
     }
+
+    fn generation_timestamps(&self) -> PublicKeyGenerationTimestamps {
+        PublicKeyGenerationTimestamps {
+            node_signing_public_key: timestamp(self.keys.node_signing_pk.as_ref()),
+            committee_signing_public_key: timestamp(self.keys.committee_signing_pk.as_ref()),
+            dkg_dealing_encryption_public_key: timestamp(
+                self.keys.dkg_dealing_encryption_pk.as_ref(),
+            ),
+            last_idkg_dealing_encryption_public_key: timestamp(
+                self.keys.idkg_dealing_encryption_pks.last(),
+            ),
+        }
+    }
 }
 
 fn remove_timestamp(public_key: PublicKeyProto) -> PublicKeyProto {
@@ -154,4 +170,10 @@ fn remove_timestamp(public_key: PublicKeyProto) -> PublicKeyProto {
         timestamp: None,
         ..public_key
     }
+}
+
+fn timestamp(public_key: Option<&PublicKeyProto>) -> Option<Time> {
+    public_key
+        .and_then(|pk| pk.timestamp)
+        .and_then(|millis| Time::from_millis_since_unix_epoch(millis).ok())
 }
