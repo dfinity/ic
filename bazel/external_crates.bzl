@@ -1073,6 +1073,9 @@ def external_crates_repository(name, annotations):
             "wasmparser": crate.spec(
                 version = "^0.94.0",
             ),
+            "wasmprinter": crate.spec(
+                version = "^0.2.45",
+            ),
             "wasmtime": crate.spec(
                 version = "^3.0.1",
                 default_features = False,
@@ -1090,6 +1093,9 @@ def external_crates_repository(name, annotations):
             ),
             "wast": crate.spec(
                 version = "^48.0.0",
+            ),
+            "wat": crate.spec(
+                version = "^1.0.52",
             ),
             "webpki": crate.spec(
                 version = "^0.21.4",

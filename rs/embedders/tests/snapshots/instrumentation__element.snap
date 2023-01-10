@@ -1,7 +1,6 @@
 ---
 source: embedders/tests/instrumentation.rs
 expression: out
-
 ---
 (module
   (type (;0;) (func))
@@ -22,10 +21,11 @@ expression: out
     global.get 0
     i64.const 0
     i64.lt_s
-    if  ;; label = @1
+    if ;; label = @1
       call 0
     end
-    i64.const 5)
+    i64.const 5
+  )
   (func (;5;) (type 2) (param i64) (result i64)
     global.get 0
     i64.const 2
@@ -34,11 +34,12 @@ expression: out
     global.get 0
     i64.const 0
     i64.lt_s
-    if  ;; label = @1
+    if ;; label = @1
       call 0
     end
     local.get 0
-    call 2)
+    call 2
+  )
   (func (;6;) (type 3) (param i32)
     global.get 0
     i64.const 2
@@ -47,11 +48,12 @@ expression: out
     global.get 0
     i64.const 0
     i64.lt_s
-    if  ;; label = @1
+    if ;; label = @1
       call 0
     end
     local.get 0
-    call_indirect (type 0))
+    call_indirect (type 0)
+  )
   (func (;7;) (type 5) (param i32) (result i32)
     global.get 0
     local.get 0
@@ -61,16 +63,17 @@ expression: out
     global.get 0
     i64.const 0
     i64.lt_s
-    if  ;; label = @1
+    if ;; label = @1
       call 0
     end
-    local.get 0)
+    local.get 0
+  )
   (table (;0;) 5 5 funcref)
-  (global (;0;) (mut i64) (i64.const 0))
+  (global (;0;) (mut i64) i64.const 0)
   (export "Mt.call" (func 2))
   (export "call Mt.call" (func 5))
   (export "call" (func 6))
   (export "table" (table 0))
   (export "canister counter_instructions" (global 0))
-  (elem (;0;) (i32.const 0) func 4 4 4 3 2))
-
+  (elem (;0;) (i32.const 0) func 4 4 4 3 2)
+)

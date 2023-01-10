@@ -14,8 +14,6 @@ use ic_sys::{PageIndex, PAGE_SIZE};
 use ic_wasm_types::BinaryEncodedWasm;
 use insta::assert_snapshot;
 use pretty_assertions::assert_eq;
-use std::fs;
-use wabt::{wat2wasm, Features};
 
 /// Assert what the output of wasm instrumentation should be using the [`insta`]
 /// crate.
@@ -32,11 +30,7 @@ fn inject_and_cmp(testname: &str) {
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
         testname
     );
-    let content = fs::read_to_string(filename).expect("couldn't read the input file");
-    let mut features = Features::new();
-    features.enable_bulk_memory();
-    let buff = wabt::wat2wasm_with_features(content, features.clone())
-        .expect("couldn't convert the input wat to Wasm");
+    let buff = wat::parse_file(&filename).expect("couldn't read the input file");
 
     let output = validate_and_instrument_for_testing(
         &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
@@ -45,7 +39,7 @@ fn inject_and_cmp(testname: &str) {
     .expect("couldn't instrument Wasm code")
     .1;
 
-    let out = wabt::wasm2wat_with_features(output.binary.as_slice(), features.clone())
+    let out = wasmprinter::print_bytes(output.binary.as_slice())
         .expect("couldn't convert metered Wasm to wat");
 
     assert_snapshot!(testname, out);
@@ -143,7 +137,7 @@ fn test_get_data() {
     let output = validate_and_instrument_for_testing(
         &embedder,
         &BinaryEncodedWasm::new(
-            wabt::wat2wasm(
+            wat::parse_str(
                 r#"(module
                 (memory 1)
                 (data (i32.const 2)  "a tree")
@@ -193,7 +187,7 @@ fn test_chunks_to_pages() {
 
 #[test]
 fn test_exports_only_reserved_symbols() {
-    let wasm = wat2wasm(
+    let wasm = wat::parse_str(
         r#"
         (module
             (import "ic0" "msg_reply" (func $msg_reply))

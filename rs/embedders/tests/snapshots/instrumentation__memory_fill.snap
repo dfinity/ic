@@ -1,7 +1,6 @@
 ---
 source: embedders/tests/instrumentation.rs
 expression: out
-
 ---
 (module
   (type (;0;) (func))
@@ -17,14 +16,15 @@ expression: out
     global.get 0
     i64.const 0
     i64.lt_s
-    if  ;; label = @1
+    if ;; label = @1
       call 0
     end
     i32.const 0
     i32.const 1
     i32.const 16
     call 3
-    memory.fill)
+    memory.fill
+  )
   (func (;3;) (type 2) (param i32) (result i32)
     global.get 0
     local.get 0
@@ -34,12 +34,13 @@ expression: out
     global.get 0
     i64.const 0
     i64.lt_s
-    if  ;; label = @1
+    if ;; label = @1
       call 0
     end
-    local.get 0)
+    local.get 0
+  )
   (memory (;0;) 1)
-  (global (;0;) (mut i64) (i64.const 0))
+  (global (;0;) (mut i64) i64.const 0)
   (export "memory" (memory 0))
-  (export "canister counter_instructions" (global 0)))
-
+  (export "canister counter_instructions" (global 0))
+)

@@ -362,8 +362,8 @@ const TEST_NUM_WRITES: usize = 2000;
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const BYTES_PER_INSTRUCTION: usize = 1;
 
-fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wabt::Error> {
-    wabt::wat2wasm(wat).map(BinaryEncodedWasm::new)
+fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
+    wat::parse_str(wat).map(BinaryEncodedWasm::new)
 }
 
 #[cfg(test)]

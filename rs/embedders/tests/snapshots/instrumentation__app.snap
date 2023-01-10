@@ -1,14 +1,13 @@
 ---
 source: embedders/tests/instrumentation.rs
 expression: out
-
 ---
 (module
   (type (;0;) (func (param i32) (result i32)))
   (type (;1;) (func))
   (type (;2;) (func (param i32 i32) (result i32)))
-  (import "__" "out_of_instructions" (func (;0;) (type 1)))
-  (import "__" "update_available_memory" (func (;1;) (type 2)))
+  (import "__" "out_of_instructions" (func $compute (;0;) (type 1)))
+  (import "__" "update_available_memory" (func $double (;1;) (type 2)))
   (func (;2;) (type 0) (param i32) (result i32)
     (local i32 i32)
     global.get 0
@@ -18,8 +17,8 @@ expression: out
     global.get 0
     i64.const 0
     i64.lt_s
-    if  ;; label = @1
-      call 0
+    if ;; label = @1
+      call $compute
     end
     i32.const 0
     local.set 1
@@ -34,7 +33,7 @@ expression: out
     i32.gt_s
     select
     local.set 2
-    block  ;; label = @1
+    block ;; label = @1
       global.get 0
       i64.const 4
       i64.sub
@@ -43,7 +42,7 @@ expression: out
       i32.const 1
       i32.lt_s
       br_if 0 (;@1;)
-      loop  ;; label = @2
+      loop ;; label = @2
         global.get 0
         i64.const 15
         i64.sub
@@ -51,8 +50,8 @@ expression: out
         global.get 0
         i64.const 0
         i64.lt_s
-        if  ;; label = @3
-          call 0
+        if ;; label = @3
+          call $compute
         end
         local.get 1
         i32.const -1
@@ -64,7 +63,7 @@ expression: out
         local.set 2
         local.get 0
         local.get 1
-        loop  ;; label = @3
+        loop ;; label = @3
           global.get 0
           i64.const 8
           i64.sub
@@ -72,8 +71,8 @@ expression: out
           global.get 0
           i64.const 0
           i64.lt_s
-          if  ;; label = @4
-            call 0
+          if ;; label = @4
+            call $compute
           end
           i32.const 1
           drop
@@ -95,7 +94,8 @@ expression: out
     i32.const 97
     i32.mul
     i32.const 100
-    i32.div_s)
+    i32.div_s
+  )
   (func (;3;) (type 0) (param i32) (result i32)
     global.get 0
     i64.const 3
@@ -104,12 +104,13 @@ expression: out
     global.get 0
     i64.const 0
     i64.lt_s
-    if  ;; label = @1
-      call 0
+    if ;; label = @1
+      call $compute
     end
     local.get 0
     local.get 0
-    i32.mul)
+    i32.mul
+  )
   (func (;4;) (type 0) (param i32) (result i32)
     global.get 0
     local.get 0
@@ -119,14 +120,15 @@ expression: out
     global.get 0
     i64.const 0
     i64.lt_s
-    if  ;; label = @1
-      call 0
+    if ;; label = @1
+      call $compute
     end
-    local.get 0)
+    local.get 0
+  )
   (memory (;0;) 17)
-  (global (;0;) (mut i64) (i64.const 0))
+  (global (;0;) (mut i64) i64.const 0)
   (export "memory" (memory 0))
   (export "compute" (func 2))
   (export "double" (func 3))
-  (export "canister counter_instructions" (global 0)))
-
+  (export "canister counter_instructions" (global 0))
+)

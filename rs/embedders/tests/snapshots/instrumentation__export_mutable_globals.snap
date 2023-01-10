@@ -1,7 +1,6 @@
 ---
 source: embedders/tests/instrumentation.rs
 expression: out
-
 ---
 (module
   (type (;0;) (func))
@@ -18,17 +17,18 @@ expression: out
     global.get 4
     i64.const 0
     i64.lt_s
-    if  ;; label = @1
+    if ;; label = @1
       call 0
     end
-    local.get 0)
-  (global (;0;) (mut i32) (i32.const 0))
-  (global (;1;) i32 (i32.const 1))
-  (global (;2;) i32 (i32.const 2))
-  (global (;3;) (mut i32) (i32.const 3))
-  (global (;4;) (mut i64) (i64.const 0))
+    local.get 0
+  )
+  (global (;0;) (mut i32) i32.const 0)
+  (global (;1;) i32 i32.const 1)
+  (global (;2;) i32 i32.const 2)
+  (global (;3;) (mut i32) i32.const 3)
+  (global (;4;) (mut i64) i64.const 0)
   (export "_g_0" (global 0))
   (export "_g_1" (global 1))
   (export "__persistent_mutable_global_3" (global 3))
-  (export "canister counter_instructions" (global 4)))
-
+  (export "canister counter_instructions" (global 4))
+)
