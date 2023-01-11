@@ -1,0 +1,98 @@
+// Protobuf messages for `prost` deterministic encoding test, covering fields of
+// all supported  proto3` types and combinations thereof (e.g. repeated, nested,
+// `oneof`, etc.).
+
+syntax = "proto3";
+package determinism_test.v1;
+
+// A message with plain and repeated scalar fields.
+message Scalars {
+  float v_float = 1;
+  double v_double = 2;
+
+  int32 v_i32 = 3;
+  int64 v_i64 = 4;
+
+  uint32 v_u32 = 5;
+  uint64 v_u64 = 6;
+
+  sint32 v_s32 = 7;
+  sint64 v_s64 = 8;
+
+  fixed32 v_fu32 = 9;
+  fixed64 v_fu64 = 10;
+
+  sfixed32 v_fi32 = 11;
+  sfixed64 v_fi64 = 12;
+
+  bool v_bool = 13;
+
+  string v_string = 14;
+  bytes v_bytes = 15;
+
+  repeated float r_float = 16;
+  repeated double r_double = 17;
+
+  repeated int32 r_i32 = 18;
+  repeated int64 r_i64 = 19;
+
+  repeated uint32 r_u32 = 20;
+  repeated uint64 r_u64 = 21;
+
+  repeated sint32 r_s32 = 22;
+  repeated sint64 r_s64 = 23;
+
+  repeated fixed32 r_fu32 = 24;
+  repeated fixed64 r_fu64 = 25;
+
+  repeated sfixed32 r_fi32 = 26;
+  repeated sfixed64 r_fi64 = 27;
+
+  repeated bool r_bool = 28;
+
+  repeated string r_string = 29;
+  repeated bytes r_bytes = 30;
+}
+
+// Simple message to be included into a composite message.
+message Simple {
+  int64 v_i64 = 1;
+  string v_string = 2;
+}
+
+// An enum type with a couple of variants with a gap between them.
+enum Enum {
+  ENUM_UNSPECIFIED = 0;
+  ENUM_ONE = 1;
+  ENUM_MANY = 10;
+}
+
+// A message containing other messages, enums, oneoffs.
+message Composite {
+  message NestedInner {
+    uint64 inner_u64 = 1;
+  }
+
+  Simple v_simple = 1;
+  repeated Simple r_simple = 2;
+
+  Enum v_enum = 3;
+  repeated Enum r_enum = 4;
+
+  map<string, uint64> v_map = 5;
+
+  oneof v_oneof {
+    string oneof_string = 6;
+    NestedInner oneof_inner = 7;
+  }
+}
+
+// A message with out-of-order fields.
+message Ordering {
+  int64 v_i64 = 16;
+  string v_string = 5;
+  bytes v_bytes = 14;
+  repeated bool r_bool = 3;
+  Composite.NestedInner v_inner = 2;
+  reserved 1;
+}
