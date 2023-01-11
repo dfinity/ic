@@ -133,3 +133,23 @@ It will ask for your HSM pin, and it will read out the command it is going to ex
 confirmation by typing "yes" when asked if you want to proceed.
 
 
+## Getting test coverage data with `get_test_coverage.sh`
+
+This tool uses [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov)
+to generate coverage reports for the specified canister.
+
+### Pre-requisites
+
+- cargo-llvm-cov: see [installation instructions](https://github.com/taiki-e/cargo-llvm-cov#installation)
+
+### Usage
+
+```
+get_test_coverage.sh <ns-instance> <canister-name>
+```
+
+For example, to get coverage of SNS governace canister run
+
+```
+get_test_coverage.sh sns governance
+```

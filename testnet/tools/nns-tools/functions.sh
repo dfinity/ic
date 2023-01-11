@@ -14,10 +14,6 @@ source "$SCRIPT_DIR/../lib.sh"
 MY_DOWNLOAD_DIR="/tmp/$(whoami)_deploy_scripts"
 mkdir -p $MY_DOWNLOAD_DIR
 
-repo_root() {
-    git rev-parse --show-toplevel
-}
-
 is_variable_set() {
     set +u
     if [ -z "${!1}" ]; then
