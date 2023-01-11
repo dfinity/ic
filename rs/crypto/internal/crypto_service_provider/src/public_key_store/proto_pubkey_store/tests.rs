@@ -373,17 +373,16 @@ fn equal_ignoring_timestamp(left: &Vec<PublicKey>, right: &Vec<PublicKey>) -> bo
 mod timestamps {
     use super::*;
     use crate::public_key_store::PublicKeyGenerationTimestamps;
+    use ic_types::time::GENESIS;
     use ic_types::Time;
     use std::time::Duration;
-
-    const GENESIS_TIMESTAMP: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
 
     #[test]
     fn should_strip_timestamp_when_returning_node_signing_pubkey() {
         let temp_dir = temp_dir();
         let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
         store
-            .set_once_node_signing_pubkey(public_key_with_timestamp(GENESIS_TIMESTAMP))
+            .set_once_node_signing_pubkey(public_key_with_timestamp(GENESIS))
             .expect("cannot set public key");
 
         let retrieved_public_key = store.node_signing_pubkey().expect("missing public key");
@@ -396,7 +395,7 @@ mod timestamps {
         let temp_dir = temp_dir();
         let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
         store
-            .set_once_committee_signing_pubkey(public_key_with_timestamp(GENESIS_TIMESTAMP))
+            .set_once_committee_signing_pubkey(public_key_with_timestamp(GENESIS))
             .expect("cannot set public key");
 
         let retrieved_public_key = store
@@ -411,7 +410,7 @@ mod timestamps {
         let temp_dir = temp_dir();
         let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
         store
-            .set_once_ni_dkg_dealing_encryption_pubkey(public_key_with_timestamp(GENESIS_TIMESTAMP))
+            .set_once_ni_dkg_dealing_encryption_pubkey(public_key_with_timestamp(GENESIS))
             .expect("cannot set public key");
 
         let retrieved_public_key = store
@@ -427,9 +426,9 @@ mod timestamps {
         let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
         store
             .set_idkg_dealing_encryption_pubkeys(vec![
-                public_key_with_timestamp(GENESIS_TIMESTAMP),
+                public_key_with_timestamp(GENESIS),
                 public_key_with_key_value(42),
-                public_key_with_timestamp(GENESIS_TIMESTAMP + Duration::from_millis(1)),
+                public_key_with_timestamp(GENESIS + Duration::from_millis(1)),
             ])
             .expect("cannot set public key");
 
@@ -489,10 +488,10 @@ mod timestamps {
         let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
         store
             .set_idkg_dealing_encryption_pubkeys(vec![
-                public_key_with_timestamp(GENESIS_TIMESTAMP),
+                public_key_with_timestamp(GENESIS),
                 public_key_with_key_value(42),
-                public_key_with_timestamp(GENESIS_TIMESTAMP + Duration::from_millis(1)),
-                public_key_with_timestamp(GENESIS_TIMESTAMP + Duration::from_millis(2)),
+                public_key_with_timestamp(GENESIS + Duration::from_millis(1)),
+                public_key_with_timestamp(GENESIS + Duration::from_millis(2)),
             ])
             .expect("cannot set public key");
 
@@ -503,7 +502,7 @@ mod timestamps {
 
         assert_eq!(
             last_idkg_generated_pk_timestamp,
-            GENESIS_TIMESTAMP + Duration::from_millis(2)
+            GENESIS + Duration::from_millis(2)
         );
     }
 

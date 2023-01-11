@@ -71,6 +71,7 @@ use ic_types::crypto::{
 };
 use ic_types::messages::{CallbackId, Certificate};
 use ic_types::signature::ThresholdSignature;
+use ic_types::time::GENESIS;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload},
     canister_http::CanisterHttpRequestContext,
@@ -111,8 +112,6 @@ impl Verifier for FakeVerifier {
         Ok(())
     }
 }
-
-const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
 
 /// Constructs the initial version of the registry containing a subnet with the
 /// specified SUBNET_ID, with the nodes with the specified NODE_IDs.

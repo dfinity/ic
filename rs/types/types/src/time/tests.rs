@@ -4,12 +4,12 @@ use assert_matches::assert_matches;
 
 mod millis {
     use super::*;
+    use crate::time::GENESIS;
     use std::time::Duration;
 
     #[test]
     fn should_convert_genesis_to_millis() {
-        let genesis = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
-        let genesis_millis = genesis.as_millis_since_unix_epoch();
+        let genesis_millis = GENESIS.as_millis_since_unix_epoch();
         assert_eq!(genesis_millis, 1_620_328_630_000);
     }
 
@@ -22,21 +22,17 @@ mod millis {
 
     #[test]
     fn should_ignore_sub_millis_precision() {
-        let genesis = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
         let sub_milli_offset = Duration::from_millis(1) - Duration::from_nanos(1);
 
-        let result_in_millis = (genesis + sub_milli_offset).as_millis_since_unix_epoch();
+        let result_in_millis = (GENESIS + sub_milli_offset).as_millis_since_unix_epoch();
 
         assert_eq!(result_in_millis, 1_620_328_630_000);
     }
 
     #[test]
     fn should_not_overflow() {
-        let genesis = Time::from_millis_since_unix_epoch(1_620_328_630_000);
-        assert_matches!(
-            genesis,
-            Ok(time) if time == Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000)
-        )
+        let genesis_millis = Time::from_millis_since_unix_epoch(1_620_328_630_000);
+        assert_matches!( genesis_millis, Ok(time) if time == GENESIS )
     }
 
     #[test]
