@@ -157,8 +157,13 @@ impl WasmtimeEmbedder {
         let mut config = wasmtime::Config::default();
         config.cranelift_opt_level(OptLevel::None);
         ensure_determinism(&mut config);
-        if embedder_config.feature_flags.write_barrier == FlagStatus::Enabled {
+        if embedder_config.feature_flags.write_barrier == FlagStatus::Enabled
+            || embedder_config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled
+        {
             config.wasm_multi_memory(true);
+        }
+        if embedder_config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled {
+            config.wasm_memory64(true);
         }
         config
             // maximum size in bytes where a linear memory is considered
