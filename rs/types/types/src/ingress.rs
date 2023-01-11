@@ -33,6 +33,26 @@ pub enum IngressState {
     Done,
 }
 
+impl IngressState {
+    /// Returns `true` if this is one of the terminal states (`Completed`, `Failed`
+    /// or `Done`) that automatically expire after a timeout.
+    pub fn is_terminal(&self) -> bool {
+        match self {
+            Self::Received | Self::Processing => false,
+            Self::Completed(_) | Self::Failed(_) | Self::Done => true,
+        }
+    }
+
+    /// Returns `true` if this is one of the terminal states (that automatically
+    /// expire after a timeout) with a payload (`Completed` or `Failed`).
+    pub fn is_terminal_with_payload(&self) -> bool {
+        match self {
+            Self::Received | Self::Processing | Self::Done => false,
+            Self::Completed(_) | Self::Failed(_) => true,
+        }
+    }
+}
+
 /// The status of an ingress message.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum IngressStatus {
