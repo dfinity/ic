@@ -230,26 +230,6 @@ impl CanisterIdRanges {
             .flat_map(|range| range.generate_canister_id(previous_canister_id))
             .next()
     }
-
-    /// Given location 'loc' in the range [0, total_count()), select a Canister
-    /// ID that falls into the Canister ID ranges.
-    pub fn locate(&self, loc: u64) -> CanisterId {
-        let mut loc = loc as u128;
-        assert!(loc < self.total_count());
-        for range in self.0.iter() {
-            let len =
-                1_u128 + canister_id_into_u128(range.end) - canister_id_into_u128(range.start);
-            if loc < len {
-                return CanisterId::from(canister_id_into_u64(range.start) + loc as u64);
-            }
-            loc -= len;
-        }
-        unreachable!(
-            "We asserted that loc {} is less than total_count {} so should not get here.",
-            loc,
-            self.total_count()
-        );
-    }
 }
 
 /// A helper function to help insert a new subnet to the routing table
@@ -271,8 +251,9 @@ pub fn routing_table_insert_subnet(
 }
 
 /// Stores an ordered map mapping CanisterId ranges to SubnetIds.  The ranges
-/// tracked are inclusive of start and end i.e. can be denoted as [a, b].
-// INVARIANT: self.well_formed() == Ok(())
+/// tracked are inclusive of start and end, i.e. can be denoted as `[a, b]`.
+///
+/// INVARIANT: `self.well_formed() == Ok(())`
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RoutingTable(BTreeMap<CanisterIdRange, SubnetId>);
 
