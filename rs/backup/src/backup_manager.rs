@@ -30,6 +30,7 @@ const DEFAULT_SYNC_NODES: usize = 5;
 const DEFAULT_SYNC_PERIOD: u64 = 30;
 const DEFAULT_REPLAY_PERIOD: u64 = 240;
 const DEFAULT_VERSIONS_HOT: usize = 2;
+const SECONDS_IN_DAY: u64 = 24u64 * 60 * 60;
 
 struct SubnetBackup {
     pub nodes_syncing: usize,
@@ -162,6 +163,9 @@ impl BackupManager {
                 subnet: s.subnet_id.to_string(),
                 log: log.clone(),
             };
+            let daily_replays: usize = SECONDS_IN_DAY
+                .checked_div(s.replay_period_secs)
+                .unwrap_or(0) as usize;
             let backup_helper = BackupHelper {
                 subnet_id: s.subnet_id,
                 nns_url: nns_url.to_string(),
@@ -175,6 +179,7 @@ impl BackupManager {
                 cold_storage_dir: cold_storage_dir.clone(),
                 versions_hot,
                 artifacts_guard: Mutex::new(true),
+                daily_replays,
                 log: log.clone(),
             };
             let sync_period = std::time::Duration::from_secs(s.sync_period_secs);
