@@ -18,11 +18,9 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
-use ic_types::{
-    ingress::WasmResult, methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId, Time,
-};
+use ic_types::{methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId, Time};
 use ic_wasm_types::CanisterModule;
-use prometheus::{Histogram, IntCounterVec, IntGauge};
+use prometheus::{Histogram, IntGauge};
 use std::{path::PathBuf, sync::Arc};
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
@@ -38,7 +36,6 @@ pub struct HypervisorMetrics {
     read_before_write_count: Histogram,
     direct_write_count: Histogram,
     allocated_pages: IntGauge,
-    executed_messages: IntCounterVec,
     largest_function_instruction_count: Histogram,
     compile: Histogram,
 }
@@ -72,11 +69,6 @@ impl HypervisorMetrics {
                 "hypervisor_allocated_pages",
                 "Total number of currently allocated pages.",
             ),
-            executed_messages: metrics_registry.int_counter_vec(
-                "hypervisor_executed_messages_total",
-                "Number of messages executed, by type and status.",
-                &["api_type", "status"],
-            ),
             largest_function_instruction_count: metrics_registry.histogram(
                 "hypervisor_largest_function_instruction_count",
                 "Size of the largest compiled wasm function in a canister by number of wasm instructions.",
@@ -90,31 +82,18 @@ impl HypervisorMetrics {
         }
     }
 
-    fn observe(&self, api_type: &str, result: &WasmExecutionResult) {
-        let status = match result {
-            WasmExecutionResult::Finished(_, output, ..) => {
-                self.accessed_pages
-                    .observe(output.instance_stats.accessed_pages as f64);
-                self.dirty_pages
-                    .observe(output.instance_stats.dirty_pages as f64);
-                self.read_before_write_count
-                    .observe(output.instance_stats.read_before_write_count as f64);
-                self.direct_write_count
-                    .observe(output.instance_stats.direct_write_count as f64);
-                self.allocated_pages.set(allocated_pages_count() as i64);
-
-                match &output.wasm_result {
-                    Ok(Some(WasmResult::Reply(_))) => "success",
-                    Ok(Some(WasmResult::Reject(_))) => "Reject",
-                    Ok(None) => "NoResponse",
-                    Err(e) => e.as_str(),
-                }
-            }
-            WasmExecutionResult::Paused(_, _) => "paused",
-        };
-        self.executed_messages
-            .with_label_values(&[api_type, status])
-            .inc();
+    fn observe(&self, result: &WasmExecutionResult) {
+        if let WasmExecutionResult::Finished(_, output, ..) = result {
+            self.accessed_pages
+                .observe(output.instance_stats.accessed_pages as f64);
+            self.dirty_pages
+                .observe(output.instance_stats.dirty_pages as f64);
+            self.read_before_write_count
+                .observe(output.instance_stats.read_before_write_count as f64);
+            self.direct_write_count
+                .observe(output.instance_stats.direct_write_count as f64);
+            self.allocated_pages.set(allocated_pages_count() as i64);
+        }
     }
 
     fn observe_compilation_metrics(&self, compilation_result: &CompilationResult) {
@@ -390,7 +369,6 @@ impl Hypervisor {
                 execution_parameters.instruction_limits.slice()
             ),
         }
-        let api_type_str = api_type.as_str();
         let static_system_state = SandboxSafeSystemState::new(
             system_state,
             *self.cycles_account_manager,
@@ -414,7 +392,7 @@ impl Hypervisor {
             self.metrics
                 .observe_compilation_metrics(&compilation_result);
         }
-        self.metrics.observe(api_type_str, &execution_result);
+        self.metrics.observe(&execution_result);
         execution_result
     }
 
