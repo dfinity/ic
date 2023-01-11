@@ -441,6 +441,34 @@ fn testnet_requests_are_routed_to_testnet_canister() {
 }
 
 #[test]
+fn regtest_requests_are_routed_to_testnet_canister() {
+    let bitcoin_canister_id: CanisterId =
+        CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
+
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        SubnetConfigs::default().own_subnet_config(SubnetType::System),
+        HypervisorConfig {
+            bitcoin: BitcoinConfig {
+                testnet_canister_id: Some(bitcoin_canister_id),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    ));
+
+    let canister_id = env.install_canister_wat(
+        &mock_bitcoin_canister_wat(BitcoinNetwork::Regtest),
+        vec![],
+        None,
+    );
+
+    // The canister we installed had the ID we expected.
+    assert_eq!(canister_id, bitcoin_canister_id);
+
+    test_canister_routing(env, vec![BitcoinNetwork::Regtest, BitcoinNetwork::regtest]);
+}
+
+#[test]
 fn mainnet_requests_are_routed_to_mainnet_canister() {
     let bitcoin_canister_id: CanisterId =
         CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
@@ -486,6 +514,8 @@ fn requests_are_rejected_if_no_bitcoin_canisters_are_set() {
         BitcoinNetwork::testnet,
         BitcoinNetwork::Mainnet,
         BitcoinNetwork::mainnet,
+        BitcoinNetwork::Regtest,
+        BitcoinNetwork::regtest,
     ] {
         let tests = [
             (

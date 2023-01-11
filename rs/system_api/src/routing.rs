@@ -268,7 +268,10 @@ fn route_bitcoin_message(
     own_subnet: SubnetId,
 ) -> PrincipalId {
     match network {
-        BitcoinNetwork::Testnet | BitcoinNetwork::testnet => {
+        BitcoinNetwork::Testnet
+        | BitcoinNetwork::testnet
+        | BitcoinNetwork::Regtest
+        | BitcoinNetwork::regtest => {
             // Route according to the following priority:
             //
             // 1. Route to the bitcoin testnet canister if that canister exists.
@@ -277,6 +280,9 @@ fn route_bitcoin_message(
             //    enabled if one exists).
             //
             // 3. Route to own subnet.
+            //
+            // NOTE: Local deployments can run regtest mode for testing, and that routes to the
+            // same canister ID as the bitcoin testnet.
             if let Some(canister_id) = network_topology.bitcoin_testnet_canister_id {
                 // Does the canister exist?
                 if network_topology
@@ -305,10 +311,6 @@ fn route_bitcoin_message(
                 .bitcoin_mainnet_canister_id
                 .unwrap_or_else(|| CanisterId::from(own_subnet))
                 .get()
-        }
-        BitcoinNetwork::Regtest | BitcoinNetwork::regtest => {
-            // We don't support a bitcoin regtest canister. Redirect to own subnet.
-            own_subnet.get()
         }
     }
 }
