@@ -1,5 +1,7 @@
 //! Metrics exported by crypto
 
+mod bls12_381_sig_cache;
+
 use convert_case::{Case, Casing};
 use core::fmt;
 use ic_metrics::MetricsRegistry;
@@ -165,6 +167,22 @@ impl CryptoMetrics {
                     method_name,
                 ])
                 .observe(size as f64);
+        }
+    }
+
+    /// Observes the cache statistics for the verification of threshold BLS12-381 signatures.
+    pub fn observe_bls12_381_sig_cache_stats(&self, size: usize, hits: u64, misses: u64) {
+        if let Some(metrics) = &self.metrics {
+            let m = &metrics.crypto_bls12_381_sig_cache_metrics;
+            m.cache_size.set(size as i64);
+
+            let prev_hits = m.cache_hits.get();
+            debug_assert!(prev_hits <= hits);
+            m.cache_hits.inc_by(hits - prev_hits);
+
+            let prev_misses = m.cache_misses.get();
+            debug_assert!(prev_misses <= misses);
+            m.cache_misses.inc_by(misses - prev_misses);
         }
     }
 }
@@ -344,6 +362,9 @@ struct Metrics {
     /// The 'service_type' label indicates whether the observation is made by the `client` or `server`
     /// The 'message_type' label indicates whether the message is a request or a response.
     pub crypto_vault_message_sizes: HistogramVec,
+
+    /// Metrics for the cache of successfully verified BLS12-381 threshold signatures.
+    pub crypto_bls12_381_sig_cache_metrics: bls12_381_sig_cache::Metrics,
 }
 
 impl Display for MetricsDomain {
@@ -471,6 +492,18 @@ impl Metrics {
                 ],
                 &["service_type", "message_type", "domain", "method_name"],
             ),
+            crypto_bls12_381_sig_cache_metrics: bls12_381_sig_cache::Metrics {
+                cache_size: r.int_gauge(
+                    "crypto_bls12_381_sig_cache_size",
+                    "Size of cache for successfully verified BLS12-381 threshold signatures",
+                ),
+                cache_hits: r.int_counter(
+                    "crypto_bls12_381_sig_cache_hits",
+                "Number of cache hits for successfully verified BLS12-381 threshold signatures"),
+                cache_misses: r.int_counter(
+                    "crypto_bls12_381_sig_cache_misses",
+                "Number of cache misses for successfully verified BLS12-381 threshold signatures"), 
+            }
         }
     }
 }
