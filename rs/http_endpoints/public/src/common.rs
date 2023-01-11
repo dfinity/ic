@@ -129,7 +129,7 @@ pub(crate) fn map_box_error_to_response(err: BoxError) -> Response<Body> {
 
     if err.is::<Overloaded>() {
         make_plaintext_response(
-            StatusCode::SERVICE_UNAVAILABLE,
+            StatusCode::TOO_MANY_REQUESTS,
             "The service is overloaded.".to_string(),
         )
     } else if err.is::<Elapsed>() {
