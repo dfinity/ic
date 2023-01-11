@@ -8,6 +8,7 @@ use crate::sign::threshold_sig::{ThresholdSigVerifierInternal, ThresholdSignerIn
 pub use canister_threshold_sig::ecdsa::get_tecdsa_master_public_key;
 use ic_crypto_internal_csp::types::{CspPublicKey, CspSignature};
 use ic_crypto_internal_csp::CryptoServiceProvider;
+use ic_crypto_internal_threshold_sig_bls12381::api::bls_signature_cache_statistics;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
     MultiSigVerifier, MultiSigner, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
@@ -682,6 +683,15 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
             public_key,
             registry_version,
         );
+
+        // Processing of the cache statistics for metrics is deliberatly
+        // part of the canister signature run time metric. It is expected to take
+        // very little time, but if something goes wrong, e.g., due to a mutex
+        // locking congestion or similar, we should be able to notice that.
+        let stats = bls_signature_cache_statistics();
+        self.metrics
+            .observe_bls12_381_sig_cache_stats(stats.size, stats.hits, stats.misses);
+
         self.metrics.observe_duration_seconds(
             MetricsDomain::IcCanisterSignature,
             MetricsScope::Full,
