@@ -1019,6 +1019,97 @@ fn ingress_history_roundtrip_encode() {
     assert_eq!(ingress_history, ingress_history_proto.try_into().unwrap());
 }
 
+#[test]
+fn ingress_history_split() {
+    use IngressState::*;
+    let own_subnet_id = subnet_test_id(13);
+    let canister_1 = canister_test_id(1);
+    let canister_2 = canister_test_id(2);
+
+    let mut ingress_history = IngressHistoryState::new();
+
+    let states = &[
+        Received,
+        Processing,
+        Completed(WasmResult::Reply(vec![1, 2, 3])),
+        Failed(UserError::new(ErrorCode::CanisterTrapped, "Oops")),
+        Done,
+    ];
+
+    // Populates the provided `ingress_history` with messages having each state in
+    // `states` for `canister_1`; and messages having each state in `states` for
+    // `canister_2`; if `filter` accepts them.
+    let populate = |ingress_history: &mut IngressHistoryState,
+                    filter: &dyn Fn(PrincipalId, &IngressState) -> bool| {
+        let mut i = 169;
+        for receiver in [canister_1.get(), canister_2.get()] {
+            for state in states.iter().cloned() {
+                i += 1;
+                if !filter(receiver, &state) {
+                    continue;
+                }
+                let time = Time::from_nanos_since_unix_epoch(i);
+                ingress_history.insert(
+                    message_test_id(i),
+                    IngressStatus::Known {
+                        receiver,
+                        user_id: user_test_id(i),
+                        time,
+                        state,
+                    },
+                    time,
+                    NumBytes::from(u64::MAX),
+                );
+            }
+        }
+    };
+
+    populate(&mut ingress_history, &|_, _| true);
+    // We should have 10 messages, 5 for each canister.
+    assert_eq!(10, ingress_history.len());
+    // Bump `next_terminal_time` to the time of the oldest terminal state (canister_1, Completed).
+    ingress_history.forget_terminal_statuses(NumBytes::from(u64::MAX));
+    assert_ne!(
+        0,
+        ingress_history
+            .next_terminal_time
+            .as_nanos_since_unix_epoch()
+    );
+
+    // Try a no-op split first.
+    let routing_table = RoutingTable::try_from(btreemap! {
+        CanisterIdRange{ start: canister_1, end: canister_2 } => own_subnet_id,
+    })
+    .unwrap();
+
+    // All messages should be retained.
+    assert_eq!(
+        ingress_history,
+        ingress_history.clone().split(own_subnet_id, &routing_table)
+    );
+
+    // Do an actual split, with only canister_2 hosted by own_subnet_id.
+    let routing_table = RoutingTable::try_from(btreemap! {
+        CanisterIdRange{ start: canister_2, end: canister_2 } => own_subnet_id,
+    })
+    .unwrap();
+
+    // Expect all messages for canister_2; as well as all terminal statuses; to be retained.
+    let mut expected = IngressHistoryState::new();
+    populate(&mut expected, &|receiver, state| {
+        receiver == canister_2.get() || state.is_terminal()
+    });
+    // We should only have 8 messages, 3 terminal ones for canister_1 and 5 for canister_2.
+    assert_eq!(8, expected.len());
+    // Bump `next_terminal_time` to the time of the oldest terminal state (canister_1, Completed).
+    expected.forget_terminal_statuses(NumBytes::from(u64::MAX));
+
+    assert_eq!(
+        expected,
+        ingress_history.split(own_subnet_id, &routing_table)
+    );
+}
+
 #[derive(Clone)]
 struct SignalConfig {
     end: u64,

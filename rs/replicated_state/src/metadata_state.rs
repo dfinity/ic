@@ -1323,17 +1323,12 @@ impl IngressHistoryState {
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
         if let IngressStatus::Known { state, .. } = &status {
-            if matches!(
-                state,
-                IngressState::Completed(_) | IngressState::Failed(_) | IngressState::Done
-            ) {
+            if state.is_terminal() {
                 let timeout = time + MAX_INGRESS_TTL;
 
                 // Reset `self.next_terminal_time` in case it is after the current timout
                 // and the entry is completed or failed.
-                if self.next_terminal_time > timeout
-                    && matches!(state, IngressState::Completed(_) | IngressState::Failed(_))
-                {
+                if self.next_terminal_time > timeout && state.is_terminal_with_payload() {
                     self.next_terminal_time = timeout;
                 }
                 Arc::make_mut(&mut self.pruning_times)
@@ -1442,16 +1437,16 @@ impl IngressHistoryState {
 
             for id in ids.iter() {
                 match statuses.get(id).map(Arc::as_ref) {
-                    Some(&IngressStatus::Known {
+                    Some(IngressStatus::Known {
                         receiver,
                         user_id,
                         time,
-                        state: IngressState::Completed(_) | IngressState::Failed(_),
-                    }) => {
+                        state,
+                    }) if state.is_terminal_with_payload() => {
                         let done_status = Arc::new(IngressStatus::Known {
-                            receiver,
-                            user_id,
-                            time,
+                            receiver: *receiver,
+                            user_id: *user_id,
+                            time: *time,
                             state: IngressState::Done,
                         });
                         self.memory_usage += done_status.payload_bytes();
@@ -1484,6 +1479,49 @@ impl IngressHistoryState {
 
     fn compute_memory_usage(statuses: &BTreeMap<MessageId, Arc<IngressStatus>>) -> usize {
         statuses.values().map(|status| status.payload_bytes()).sum()
+    }
+
+    /// Splits the ingress history (as part of subnet splitting), retaining:
+    ///
+    ///  * all terminal states (since they are immutable and will get pruned); and
+    ///  * all non-terminal states for ingress messages addressed to `own_subnet_id`
+    ///    (as determined by the provided routing table).
+    #[allow(dead_code)]
+    fn split(self, new_subnet_id: SubnetId, routing_table: &RoutingTable) -> Self {
+        // Take apart `self` and put it back together, in order for the compiler to
+        // enforce an explicit decision whenever any structural changes are made.
+        let Self {
+            mut statuses,
+            pruning_times,
+            next_terminal_time,
+            memory_usage: _,
+        } = self;
+
+        // Implements the filter described in the doc comment above.
+        let should_retain = |status: &IngressStatus| match status {
+            IngressStatus::Known {
+                receiver, state, ..
+            } => state.is_terminal() || routing_table.route(*receiver) == Some(new_subnet_id),
+            IngressStatus::Unknown => false,
+        };
+
+        // Filter `statuses`. `pruning_times` stay the same on both subnets because we
+        // preserved all messages in terminal states, regardless of canister.
+        let mut_statuses = Arc::make_mut(&mut statuses);
+        let message_ids_to_retain: BTreeSet<_> = mut_statuses
+            .iter()
+            .filter(|(_, status)| should_retain(status.as_ref()))
+            .map(|(message_id, _)| message_id.clone())
+            .collect();
+        mut_statuses.retain(|message_id, _| message_ids_to_retain.contains(message_id));
+        let memory_usage = Self::compute_memory_usage(mut_statuses);
+
+        Self {
+            statuses,
+            pruning_times,
+            next_terminal_time,
+            memory_usage,
+        }
     }
 }
 
