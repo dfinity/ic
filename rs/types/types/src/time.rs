@@ -24,6 +24,10 @@ pub struct Time(u64);
 /// The unix epoch.
 pub const UNIX_EPOCH: Time = Time(0);
 
+/// The Genesis launch timestamp.
+/// Corresponds to 2021-05-06T19:17:10 UTC
+pub const GENESIS: Time = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
+
 const NANOS_PER_MILLI: u64 = 1_000_000;
 
 impl std::ops::Add<Duration> for Time {

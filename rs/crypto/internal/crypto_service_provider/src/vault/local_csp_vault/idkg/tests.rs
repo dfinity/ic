@@ -24,7 +24,7 @@ mod idkg_gen_dealing_encryption_key_pair {
     use ic_crypto_internal_threshold_sig_ecdsa::EccCurveType;
     use ic_protobuf::registry::crypto::v1::PublicKey;
     use ic_test_utilities::FastForwardTimeSource;
-    use ic_types::Time;
+    use ic_types::time::GENESIS;
     use mockall::Sequence;
     use proptest::prelude::*;
     use std::collections::HashSet;
@@ -236,8 +236,7 @@ mod idkg_gen_dealing_encryption_key_pair {
     #[test]
     fn should_generate_idkg_dealing_encryption_public_key_with_timestamp() {
         let time_source = FastForwardTimeSource::new();
-        let timestamp = Time::from_nanos_since_unix_epoch(1_620_328_630_000_000_000);
-        time_source.set_time(timestamp).expect("wrong time");
+        time_source.set_time(GENESIS).expect("wrong time");
         let vault = LocalCspVault::builder()
             .with_time_source(time_source)
             .build();
@@ -251,7 +250,7 @@ mod idkg_gen_dealing_encryption_key_pair {
                 .public_keys_generation_timestamps()
                 .last_idkg_dealing_encryption_public_key
                 .expect("missing IDKG key generation timestamp"),
-            timestamp
+            GENESIS
         );
     }
 }
