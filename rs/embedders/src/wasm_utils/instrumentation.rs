@@ -93,18 +93,32 @@
 //! blocks to optimize for performance. The maximal overflow in that case is
 //! bound by the length of the longest execution path consisting of
 //! non-reentrant basic blocks.
+//!
+//! # Wasm-native stable memory
+//!
+//! Two additional memories are inserted for stable memory. One is the actual
+//! stable memory and the other is a bytemap to track dirty pages in the stable
+//! memory.
+//! ```wasm
+//! (memory (export "stable_memory") i64 (i64.const 0) (i64.const MAX_STABLE_MEMORY_SIZE))
+//! (memory (export "stable_memory_bytemap") i32 (i64.const STABLE_BYTEMAP_SIZE) (i64.const STABLE_BYTEMAP_SIZE))
+//! ```
+//!
 
 use super::{InstrumentationOutput, Segments};
 use ic_config::flag_status::FlagStatus;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::PAGE_SIZE;
-use ic_types::NumInstructions;
 use ic_types::{methods::WasmMethod, MAX_WASM_MEMORY_IN_BYTES};
+use ic_types::{NumInstructions, MAX_STABLE_MEMORY_IN_BYTES};
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
 use wasmtime_environ::WASM_PAGE_SIZE;
 
 use crate::wasm_utils::wasm_transform::{self, Module};
-use crate::wasmtime_embedder::{WASM_HEAP_BYTEMAP_MEMORY_NAME, WASM_HEAP_MEMORY_NAME};
+use crate::wasmtime_embedder::{
+    STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
+    WASM_HEAP_MEMORY_NAME,
+};
 use wasmparser::{
     BlockType, ConstExpr, Export, ExternalKind, FuncType, Global, GlobalType, Import, MemoryType,
     Operator, Type, TypeRef, ValType,
@@ -157,6 +171,10 @@ const CANISTER_START_STR: &str = "canister_start";
 /// There is one byte for each OS page in the wasm heap.
 const BYTEMAP_SIZE_IN_WASM_PAGES: u64 =
     MAX_WASM_MEMORY_IN_BYTES / (PAGE_SIZE as u64) / (WASM_PAGE_SIZE as u64);
+
+const MAX_STABLE_MEMORY_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64);
+/// There is one byte for each OS page in the stable memory.
+const STABLE_BYTEMAP_SIZE_IN_WASM_PAGES: u64 = MAX_STABLE_MEMORY_IN_WASM_PAGES / (PAGE_SIZE as u64);
 
 fn add_type(module: &mut Module, ty: Type) -> u32 {
     let Type::Func(sig) = &ty;
@@ -248,10 +266,13 @@ pub(super) fn instrument(
     module: Module<'_>,
     cost_to_compile_wasm_instruction: NumInstructions,
     write_barrier: FlagStatus,
+    wasm_native_stable_memory: FlagStatus,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
+    let mut _stable_memory_index = 0;
     let mut module = inject_helper_functions(module);
     module = export_table(module);
-    module = export_memory(module, write_barrier);
+    (module, _stable_memory_index) =
+        update_memories(module, write_barrier, wasm_native_stable_memory);
 
     let mut extra_strs: Vec<String> = Vec::new();
     module = export_mutable_globals(module, &mut extra_strs);
@@ -321,10 +342,14 @@ pub(super) fn instrument(
         .filter_map(|export| WasmMethod::try_from(export.name.to_string()).ok())
         .collect();
 
-    let expected_memories = match write_barrier {
-        FlagStatus::Enabled => 2,
-        FlagStatus::Disabled => 1,
-    };
+    let expected_memories =
+        1 + match write_barrier {
+            FlagStatus::Enabled => 1,
+            FlagStatus::Disabled => 0,
+        } + match wasm_native_stable_memory {
+            FlagStatus::Enabled => 2,
+            FlagStatus::Disabled => 0,
+        };
     if module.memories.len() > expected_memories {
         return Err(WasmInstrumentationError::IncorrectNumberMemorySections {
             expected: expected_memories,
@@ -900,7 +925,16 @@ fn export_table(mut module: Module) -> Module {
     module
 }
 
-fn export_memory(mut module: Module, write_barrier: FlagStatus) -> Module {
+/// Exports existing memories and injects new memories. Returns the index of an
+/// injected stable memory when using wasm-native stable memory. The bytemap for
+/// the stable memory will always be inserted directly after the stable memory.
+fn update_memories(
+    mut module: Module,
+    write_barrier: FlagStatus,
+    wasm_native_stable_memory: FlagStatus,
+) -> (Module, usize) {
+    let mut stable_index = 0;
+
     let mut memory_already_exported = false;
     for export in &mut module.exports {
         if let ExternalKind::Memory = export.kind {
@@ -933,7 +967,36 @@ fn export_memory(mut module: Module, write_barrier: FlagStatus) -> Module {
         });
     }
 
-    module
+    if wasm_native_stable_memory == FlagStatus::Enabled {
+        stable_index = module.memories.len();
+        module.memories.push(MemoryType {
+            memory64: true,
+            shared: false,
+            initial: 0,
+            maximum: Some(MAX_STABLE_MEMORY_IN_WASM_PAGES),
+        });
+
+        module.exports.push(Export {
+            name: STABLE_MEMORY_NAME,
+            kind: ExternalKind::Memory,
+            index: stable_index as u32,
+        });
+
+        module.memories.push(MemoryType {
+            memory64: false,
+            shared: false,
+            initial: 0,
+            maximum: Some(STABLE_BYTEMAP_SIZE_IN_WASM_PAGES),
+        });
+
+        module.exports.push(Export {
+            name: STABLE_BYTEMAP_MEMORY_NAME,
+            kind: ExternalKind::Memory,
+            index: stable_index as u32 + 1,
+        })
+    }
+
+    (module, stable_index)
 }
 
 // Mutable globals must be exported to be persisted.
