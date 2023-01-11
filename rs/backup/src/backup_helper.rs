@@ -37,6 +37,7 @@ pub struct BackupHelper {
     pub cold_storage_dir: PathBuf,
     pub versions_hot: usize,
     pub artifacts_guard: Mutex<bool>,
+    pub daily_replays: usize,
     pub log: Logger,
 }
 
@@ -87,15 +88,12 @@ impl BackupHelper {
         create_if_not_exists(self.data_dir().join("ic_state"))
     }
 
-    fn archive_root_dir(&self) -> PathBuf {
-        self.root_dir.join("archive")
+    fn archive_dir(&self) -> PathBuf {
+        self.root_dir.join(format!("archive/{}", self.subnet_id))
     }
 
-    fn archive_dir(&self, last_height: u64) -> PathBuf {
-        create_if_not_exists(
-            self.archive_root_dir()
-                .join(format!("{}/{}", self.subnet_id, last_height)),
-        )
+    fn archive_height_dir(&self, last_height: u64) -> PathBuf {
+        create_if_not_exists(self.archive_dir().join(format!("{}", last_height)))
     }
 
     fn work_dir(&self) -> PathBuf {
@@ -109,10 +107,16 @@ impl BackupHelper {
         )
     }
 
-    // fn cold_storage_state_dir(&self) -> PathBuf {
-    //     self.cold_storage_dir
-    //         .join(format!("{}/states", self.subnet_id))
-    // }
+    fn cold_storage_states_dir(&self) -> PathBuf {
+        create_if_not_exists(
+            self.cold_storage_dir
+                .join(format!("{}/states", self.subnet_id)),
+        )
+    }
+
+    fn trash_dir(&self) -> PathBuf {
+        create_if_not_exists(self.root_dir.join("trash"))
+    }
 
     fn username(&self) -> String {
         "backup".to_string()
@@ -217,7 +221,7 @@ impl BackupHelper {
             self.subnet_id
         );
         for _ in 0..RETRIES_RSYNC_HOST {
-            match self.rsync_cmd(
+            match self.rsync_remote_cmd(
                 remote_dir.clone(),
                 &self.spool_dir().into_os_string(),
                 &["-qa", "--append-verify"],
@@ -249,7 +253,7 @@ impl BackupHelper {
             node_ip
         );
         for _ in 0..RETRIES_RSYNC_HOST {
-            match self.rsync_cmd(
+            match self.rsync_remote_cmd(
                 remote_dir.clone(),
                 &self.ic_config_file_local(replica_version).into_os_string(),
                 &["-q"],
@@ -267,7 +271,7 @@ impl BackupHelper {
             .report_failure_slack("Couldn't pull ic.json5 from the nodes!".to_string());
     }
 
-    fn rsync_cmd(
+    fn rsync_remote_cmd(
         &self,
         remote_dir: String,
         local_dir: &OsStr,
@@ -478,7 +482,7 @@ impl BackupHelper {
             DiskStats::Inodes => "-i",
             DiskStats::Space => "-k",
         });
-        cmd.arg(self.archive_root_dir());
+        cmd.arg(&self.root_dir);
         match exec_cmd(&mut cmd) {
             Ok(str) => {
                 if let Some(val) = str
@@ -515,21 +519,20 @@ impl BackupHelper {
 
     fn archive_state(&self, last_height: u64) -> Result<(), String> {
         let state_dir = self.data_dir().join(".");
-        let archive_dir = self.archive_dir(last_height);
+        let archive_last_dir = self.archive_height_dir(last_height);
         info!(
             self.log,
             "Archiving: {} to: {}",
             state_dir.to_string_lossy(),
-            archive_dir.to_string_lossy()
+            archive_last_dir.to_string_lossy()
         );
 
         let mut cmd = Command::new("rsync");
         cmd.arg("-a");
-        cmd.arg("--info=progress2");
         for dir in &self.excluded_dirs {
             cmd.arg("--exclude").arg(dir);
         }
-        cmd.arg(state_dir).arg(&archive_dir);
+        cmd.arg(state_dir).arg(&archive_last_dir);
         info!(self.log, "Will execute: {:?}", cmd);
         if let Err(e) = exec_cmd(&mut cmd) {
             error!(self.log, "Error: {}", e);
@@ -538,11 +541,11 @@ impl BackupHelper {
             return Err(e.to_string());
         }
         // leave only one archived checkpoint
-        let checkpoints_dir = archive_dir.join("ic_state/checkpoints");
+        let checkpoints_dir = archive_last_dir.join("ic_state/checkpoints");
         if !checkpoints_dir.exists() {
             return Err("Archiving didn't succeed - missing checkpoints directory".to_string());
         }
-        let archived_checkpoint = last_checkpoint(&archive_dir.join("ic_state"));
+        let archived_checkpoint = last_checkpoint(&archive_last_dir.join("ic_state"));
         if archived_checkpoint == 0 {
             return Err("No proper archived checkpoint".to_string());
         }
@@ -561,7 +564,7 @@ impl BackupHelper {
 
         let now: DateTime<Utc> = Utc::now();
         let now_str = format!("{}\n", now.to_rfc2822());
-        let mut file = File::create(archive_dir.join("archiving_timestamp.txt"))
+        let mut file = File::create(archive_last_dir.join("archiving_timestamp.txt"))
             .map_err(|err| format!("Error creating timestamp file: {:?}", err))?;
         file.write_all(now_str.as_bytes())
             .map_err(|err| format!("Error writing timestamp: {:?}", err))?;
@@ -620,9 +623,7 @@ impl BackupHelper {
             let mut cmd = Command::new("mv");
             cmd.arg(dir).arg(&work_dir);
             info!(self.log, "Will execute: {:?}", cmd);
-            if let Err(e) = exec_cmd(&mut cmd) {
-                return Err(format!("Error moving artifacts: {}", e));
-            }
+            exec_cmd(&mut cmd).map_err(|err| format!("Error moving artifacts: {:?}", err))?;
         }
         // we have moved all the artifacts from the spool directory, so don't need the mutex guard anymore
         drop(guard);
@@ -644,25 +645,22 @@ impl BackupHelper {
             let timestamp = Utc::now().timestamp();
             let (top_height, _) = fetch_top_height(&pack_dir);
             let packed_file = format!(
-                "{}/{:010}_{:012}_{}.tar",
+                "{}/{:010}_{:012}_{}.tgz",
                 work_dir_str, timestamp, top_height, replica_version
             );
             let mut cmd = Command::new("tar");
-            cmd.arg("cvf"); // TODO: check if it's worth it to compress the data
+            cmd.arg("czvf");
             cmd.arg(&packed_file);
             cmd.arg("-C").arg(&work_dir);
             cmd.arg(&replica_version);
             info!(self.log, "Will execute: {:?}", cmd);
-            if let Err(e) = exec_cmd(&mut cmd) {
-                return Err(format!("Error packing artifacts: {}", e));
-            }
+            exec_cmd(&mut cmd).map_err(|err| format!("Error packing artifacts: {:?}", err))?;
+
             info!(self.log, "Copy packed file of {}", replica_version);
             let mut cmd2 = Command::new("cp");
             cmd2.arg(packed_file).arg(&cold_storage_artifacts_dir);
             info!(self.log, "Will execute: {:?}", cmd2);
-            if let Err(e) = exec_cmd(&mut cmd2) {
-                return Err(format!("Error moving artifacts: {}", e));
-            }
+            exec_cmd(&mut cmd2).map_err(|err| format!("Error copying artifacts: {:?}", err))?;
         }
 
         info!(
@@ -677,7 +675,41 @@ impl BackupHelper {
             max_height
         );
 
-        // TODO: clean up the archive directory now
+        // clean up the archive directory now
+        let archive_dirs = collect_only_dirs(&self.archive_dir())?;
+        let mut old_state_dirs = BTreeMap::new();
+        archive_dirs.iter().for_each(|state_dir| {
+            let height = height_from_dir_entry_radix(state_dir, 10);
+            if height <= max_height {
+                old_state_dirs.insert(height, state_dir.path());
+            }
+        });
+
+        let mut reversed = old_state_dirs.iter().rev();
+        while let Some(dir) = reversed.next() {
+            info!(self.log, "Will copy to cold storage: {:?}", dir.1);
+            let mut cmd = Command::new("rsync");
+            cmd.arg("-a");
+            cmd.arg(dir.1).arg(self.cold_storage_states_dir());
+            info!(self.log, "Will execute: {:?}", cmd);
+            exec_cmd(&mut cmd).map_err(|err| format!("Error copying states: {:?}", err))?;
+            // skip some of the states if we replay more than one per day
+            if self.daily_replays > 1 {
+                // one element is consumed in the next() call above, and one in the nth(), hence the substract 2
+                reversed.nth(self.daily_replays - 2);
+            }
+        }
+
+        let trash_dir = self.trash_dir();
+        for dir in old_state_dirs {
+            info!(self.log, "Will move to trash directory {:?}", dir.1);
+            let mut cmd = Command::new("mv");
+            cmd.arg(dir.1).arg(&trash_dir);
+            info!(self.log, "Will execute: {:?}", cmd);
+            exec_cmd(&mut cmd).map_err(|err| format!("Error moving artifacts: {:?}", err))?;
+        }
+
+        remove_dir_all(trash_dir).map_err(|err| format!("Error deleting trashdir: {:?}", err))?;
 
         info!(
             self.log,
