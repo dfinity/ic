@@ -1071,22 +1071,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 ),
                 pot_with_setup(
-                    "upgrade_downgrade_app_subnet",
-                    orchestrator::upgrade_downgrade::config,
-                    par(vec![sys_t(
-                        "upgrade_downgrade_app_subnet",
-                        orchestrator::upgrade_downgrade::upgrade_downgrade_app_subnet,
-                    )]),
-                ),
-                pot_with_setup(
-                    "upgrade_downgrade_nns_subnet",
-                    orchestrator::upgrade_downgrade::config,
-                    par(vec![sys_t(
-                        "upgrade_downgrade_nns_subnet",
-                        orchestrator::upgrade_downgrade::upgrade_downgrade_nns_subnet,
-                    )]),
-                ),
-                pot_with_setup(
                     "backup_manager_pot",
                     orchestrator::backup_manager::config,
                     par(vec![sys_t(
