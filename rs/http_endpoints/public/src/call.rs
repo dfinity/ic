@@ -261,7 +261,7 @@ impl Service<Request<Vec<u8>>> for CallService {
             let response = match ingress_sender.call(msg).await {
                 Err(_) => panic!("Can't panic on Infallible"),
                 Ok(Err(IngressError::Overloaded)) => make_plaintext_response(
-                    StatusCode::SERVICE_UNAVAILABLE,
+                    StatusCode::TOO_MANY_REQUESTS,
                     "Service is overloaded, try again later.".to_string(),
                 ),
                 Ok(Ok(())) => {
