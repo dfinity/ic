@@ -7418,6 +7418,7 @@ dependencies = [
  "bincode",
  "candid",
  "erased-serde",
+ "hex",
  "ic-protobuf-generator",
  "ic-test-utilities-compare-dirs",
  "maplit",

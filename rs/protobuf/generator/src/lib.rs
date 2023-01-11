@@ -50,6 +50,7 @@ pub fn generate_prost_files(def: &Path, out: &Path) {
     build_p2p_proto(def, out);
     build_bitcoin_proto(def, out);
     build_canister_http_proto(def, out);
+    build_determinism_test_proto(def, out);
     rustfmt(out).unwrap_or_else(|e| {
         panic!(
             "failed to rustfmt on files at directory {}: {}",
@@ -385,6 +386,12 @@ fn build_canister_http_proto(def: &Path, out: &Path) {
     config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
     let files = [def.join("canister_http/v1/canister_http.proto")];
     compile_protos(config, def, &files);
+}
+
+/// Generates Rust structs from `determinism_test` Protobuf messages.
+fn build_determinism_test_proto(def: &Path, out: &Path) {
+    let files = [def.join("determinism_test/v1/determinism_test.proto")];
+    compile_protos(base_config(out, "determinism_test"), def, &files);
 }
 
 /// Compiles the given `proto_files`.
