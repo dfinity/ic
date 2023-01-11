@@ -30,12 +30,18 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, SubnetId};
 use k256::ecdsa::VerifyingKey;
 use slog::{info, Logger};
-use std::env;
+use std::{env, time::Duration};
 
 pub const MIN_HASH_LENGTH: usize = 8; // in bytes
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
+
+// Pre-master tests should not run for more than 5..6 minutes. The Upgrade/Downgrade tests run on
+// pre-master and are a known exception to this rule. The test itself takes around 10 minutes,
+// while the setup takes a little more than one minute to complete.
+pub const UP_DOWNGRADE_OVERALL_TIMEOUT: Duration = Duration::from_secs(18 * 60);
+pub const UP_DOWNGRADE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 pub fn config(env: TestEnv) {
     env.ensure_group_setup_created();
