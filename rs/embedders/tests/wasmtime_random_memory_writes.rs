@@ -10,6 +10,7 @@ use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType, SystemApiImpl};
 use ic_system_api::{DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits};
+use ic_test_utilities::execution_environment::default_memory_for_system_api;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     mock_time,
@@ -80,7 +81,7 @@ fn test_api_for_update(
             execution_mode: ExecutionMode::Replicated,
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
-        Memory::default(),
+        default_memory_for_system_api(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         log,
     )
@@ -370,7 +371,7 @@ fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
 mod tests {
     use super::*;
 
-    use ic_embedders::wasm_executor::compute_page_delta;
+    use ic_embedders::{wasm_executor::compute_page_delta, wasmtime_embedder::CanisterMemoryType};
     // Get .current() trait method
     use ic_interfaces::execution_environment::{HypervisorError, SystemApi};
     use ic_logger::ReplicaLogger;
@@ -442,8 +443,9 @@ mod tests {
 
                 // Compare the written regions.
                 let wasm_heap: &[u8] = unsafe {
-                    let addr = instance.heap_addr();
-                    let size_in_bytes = instance.heap_size().get() as usize * WASM_PAGE_SIZE_BYTES;
+                    let addr = instance.heap_addr(CanisterMemoryType::Heap);
+                    let size_in_bytes = instance.heap_size(CanisterMemoryType::Heap).get() as usize
+                        * WASM_PAGE_SIZE_BYTES;
                     std::slice::from_raw_parts_mut(addr as *mut _, size_in_bytes)
                 };
                 let start = write.dst as usize;
@@ -470,7 +472,11 @@ mod tests {
                         "page({}) of test buffer and Wasm heap doesn't match",
                         i
                     );
-                    page_map.update(&compute_page_delta(&mut instance, &result.dirty_pages));
+                    page_map.update(&compute_page_delta(
+                        &mut instance,
+                        &result.dirty_pages,
+                        CanisterMemoryType::Heap,
+                    ));
                 }
             }
 
@@ -1062,9 +1068,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let wat = make_module_wat_for_api_calls(TEST_NUM_PAGES);
             let wasm = wat2wasm(&wat).unwrap();
-            let mut config = Config::default();
-            config.feature_flags.write_barrier = FlagStatus::Enabled;
-            let embedder = WasmtimeEmbedder::new(config, log);
+            let embedder = WasmtimeEmbedder::new(Config::default(), log);
             let (embedder_cache, result) = compile(&embedder, &wasm);
             result.unwrap();
 

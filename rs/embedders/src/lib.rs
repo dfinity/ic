@@ -9,8 +9,7 @@ use std::{sync::Arc, time::Duration};
 
 pub use compilation_cache::CompilationCache;
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_replicated_state::{Global, NumWasmPages, PageIndex};
-use ic_sys::PageBytes;
+use ic_replicated_state::{Global, PageIndex};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, ExecutionParameters,
 };
@@ -32,8 +31,7 @@ pub struct WasmExecutionInput {
 #[derive(Debug)]
 pub struct InstanceRunResult {
     pub dirty_pages: Vec<PageIndex>,
-    pub stable_memory_size: NumWasmPages,
-    pub stable_memory_dirty_pages: Vec<(PageIndex, PageBytes)>,
+    pub stable_memory_dirty_pages: Vec<PageIndex>,
     pub exported_globals: Vec<Global>,
 }
 

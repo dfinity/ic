@@ -8,12 +8,13 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, SubnetTopology, SystemState};
+use ic_replicated_state::{CallOrigin, NetworkTopology, SubnetTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
     ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
 use ic_test_utilities::{
+    execution_environment::default_memory_for_system_api,
     mock_time,
     types::ids::{call_context_test_id, subnet_test_id, user_test_id},
 };
@@ -127,7 +128,7 @@ pub fn get_system_api(
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
         SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
-        Memory::default(),
+        default_memory_for_system_api(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     )

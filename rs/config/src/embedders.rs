@@ -56,6 +56,7 @@ pub struct FeatureFlags {
     pub rate_limiting_of_debug_prints: FlagStatus,
     /// Track dirty pages with a write barrier instead of the signal handler.
     pub write_barrier: FlagStatus,
+    pub wasm_native_stable_memory: FlagStatus,
 }
 
 impl Default for FeatureFlags {
@@ -63,6 +64,7 @@ impl Default for FeatureFlags {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
+            wasm_native_stable_memory: FlagStatus::Disabled,
         }
     }
 }

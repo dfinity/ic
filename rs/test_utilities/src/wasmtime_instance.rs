@@ -119,7 +119,10 @@ impl WasmtimeInstanceBuilder {
                 execution_mode: ExecutionMode::Replicated,
             },
             SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
-            Memory::default(),
+            match embedder.config().feature_flags.wasm_native_stable_memory {
+                FlagStatus::Enabled => None,
+                FlagStatus::Disabled => Some(Memory::default()),
+            },
             Arc::new(ic_system_api::DefaultOutOfInstructionsHandler {}),
             log,
         );

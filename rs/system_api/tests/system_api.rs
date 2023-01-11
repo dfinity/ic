@@ -1,5 +1,7 @@
 use ic_base_types::NumSeconds;
-use ic_config::subnet_config::SchedulerConfig;
+use ic_config::{
+    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
@@ -18,6 +20,7 @@ use ic_system_api::{
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
+    execution_environment::default_memory_for_system_api,
     mock_time,
     state::SystemStateBuilder,
     types::{
@@ -1533,7 +1536,7 @@ fn stable_grow_updates_subnet_available_memory() {
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
         subnet_available_memory,
-        Memory::default(),
+        default_memory_for_system_api(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
@@ -1565,7 +1568,16 @@ fn stable_grow_returns_allocated_memory_on_error() {
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
         subnet_available_memory,
-        Memory::new(PageMap::new_for_testing(), NumWasmPages::new(1 << 32)),
+        match EmbeddersConfig::default()
+            .feature_flags
+            .wasm_native_stable_memory
+        {
+            FlagStatus::Enabled => None,
+            FlagStatus::Disabled => Some(Memory::new(
+                PageMap::new_for_testing(),
+                NumWasmPages::new(1 << 32),
+            )),
+        },
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
@@ -1608,7 +1620,7 @@ fn update_available_memory_updates_subnet_available_memory() {
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
         subnet_available_memory,
-        Memory::default(),
+        default_memory_for_system_api(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
@@ -1653,7 +1665,7 @@ fn take_execution_result_properly_frees_memory() {
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
         subnet_available_memory,
-        Memory::default(),
+        default_memory_for_system_api(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
@@ -1717,7 +1729,7 @@ fn push_output_request_respects_memory_limits() {
             CANISTER_CURRENT_MEMORY_USAGE,
             execution_parameters(),
             subnet_available_memory,
-            Memory::default(),
+            default_memory_for_system_api(),
             Arc::new(DefaultOutOfInstructionsHandler {}),
             no_op_logger(),
         );
@@ -1820,7 +1832,7 @@ fn push_output_request_oversized_request_memory_limits() {
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
         subnet_available_memory,
-        Memory::default(),
+        default_memory_for_system_api(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );

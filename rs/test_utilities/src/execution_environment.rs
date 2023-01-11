@@ -1,10 +1,11 @@
+use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_interfaces::execution_environment::RegistryExecutionSettings;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{NetworkTopology, NodeTopology, SubnetTopology};
+use ic_replicated_state::{Memory, NetworkTopology, NodeTopology, SubnetTopology};
 use ic_types::{CanisterId, SubnetId};
 use ic_types_test_utils::ids::node_test_id;
 use maplit::btreemap;
@@ -81,5 +82,15 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
         max_ecdsa_queue_size: 20,
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
+    }
+}
+
+pub fn default_memory_for_system_api() -> Option<Memory> {
+    match EmbeddersConfig::default()
+        .feature_flags
+        .wasm_native_stable_memory
+    {
+        FlagStatus::Enabled => None,
+        FlagStatus::Disabled => Some(Memory::default()),
     }
 }
