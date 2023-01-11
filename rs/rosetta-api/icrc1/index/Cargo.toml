@@ -9,9 +9,8 @@ edition = "2018"
 async-trait = "0.1.53"
 candid = "0.8.1"
 ciborium = "0.2"
-dfn_core = { path = "../../../rust_canisters/dfn_core" }
-dfn_http_metrics = { path = "../../../rust_canisters/dfn_http_metrics" }
 ic-base-types = { path = "../../../types/base_types" }
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = "0.6.0"
 ic-cdk-macros = "0.6.0"
 ic-icrc1 = { path = ".." }

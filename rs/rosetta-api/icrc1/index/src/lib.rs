@@ -404,13 +404,18 @@ fn get_oldest_txid(account: &Account) -> Option<Nat> {
 pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
     w.encode_gauge(
         "index_stable_memory_pages",
-        dfn_core::api::stable_memory_size_in_pages() as f64,
+        ic_cdk::api::stable::stable_size() as f64,
         "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
     )?;
     w.encode_gauge(
         "index_stable_memory_bytes",
-        (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64,
+        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister.",
+    )?;
+    w.encode_gauge(
+        "index_cycle_balance",
+        ic_cdk::api::canister_balance128() as f64,
+        "Cycle balance on this canister.",
     )?;
     w.encode_gauge(
         "index_number_of_transactions",

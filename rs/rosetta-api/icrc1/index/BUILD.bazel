@@ -6,8 +6,6 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
-    "//rs/rust_canisters/dfn_core",
-    "//rs/rust_canisters/dfn_http_metrics",
     "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
@@ -45,7 +43,10 @@ rust_canister(
         "INDEX_DID_PATH": "$(execpath :index.did)",
     },
     service_file = ":index.did",
-    deps = [":index"] + DEPENDENCIES,
+    deps = [
+        ":index",
+        "//rs/rust_canisters/http_types",
+    ] + DEPENDENCIES,
 )
 
 rust_test(

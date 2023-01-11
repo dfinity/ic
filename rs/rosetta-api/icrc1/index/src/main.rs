@@ -1,9 +1,11 @@
 use candid::candid_method;
-use dfn_core::CanisterId;
+use ic_base_types::CanisterId;
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::Subaccount;
 use ic_icrc1_index::{
-    GetAccountTransactionsArgs, GetTransactionsResult, InitArgs, ListSubaccountsArgs,
+    encode_metrics, GetAccountTransactionsArgs, GetTransactionsResult, InitArgs,
+    ListSubaccountsArgs,
 };
 
 fn main() {}
@@ -36,9 +38,26 @@ fn ledger_id() -> CanisterId {
     ic_icrc1_index::ledger_id()
 }
 
-#[export_name = "canister_query http_request"]
-fn http_request() {
-    dfn_http_metrics::serve_metrics(ic_icrc1_index::encode_metrics);
+#[candid_method(query)]
+#[query]
+fn http_request(req: HttpRequest) -> HttpResponse {
+    if req.path() == "/metrics" {
+        let mut writer =
+            ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
+
+        match encode_metrics(&mut writer) {
+            Ok(()) => HttpResponseBuilder::ok()
+                .header("Content-Type", "text/plain; version=0.0.4")
+                .with_body_and_content_length(writer.into_inner())
+                .build(),
+            Err(err) => {
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                    .build()
+            }
+        }
+    } else {
+        HttpResponseBuilder::not_found().build()
+    }
 }
 
 #[pre_upgrade]
