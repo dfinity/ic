@@ -10,6 +10,7 @@ use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
 
+use crate::wasmtime_embedder::CanisterMemoryType;
 use crate::{
     wasm_utils::{compile, decoding::decode_wasm, Segments, WasmImportsDetails},
     wasmtime_embedder::WasmtimeInstance,
@@ -481,9 +482,10 @@ pub fn wasm_execution_error(
 pub fn compute_page_delta<'a, S: SystemApi>(
     instance: &'a mut WasmtimeInstance<S>,
     dirty_pages: &[PageIndex],
+    canister_memory_type: CanisterMemoryType,
 ) -> Vec<(PageIndex, &'a PageBytes)> {
     // heap pointer is only valid as long as the `Instance` is alive.
-    let heap_addr: *const u8 = unsafe { instance.heap_addr() };
+    let heap_addr: *const u8 = unsafe { instance.heap_addr(canister_memory_type) };
 
     let mut pages = vec![];
 
@@ -598,7 +600,10 @@ pub fn process(
         canister_current_memory_usage,
         execution_parameters,
         subnet_available_memory,
-        stable_memory.clone(),
+        match embedder.config().feature_flags.wasm_native_stable_memory {
+            FlagStatus::Enabled => None,
+            FlagStatus::Disabled => Some(stable_memory.clone()),
+        },
         out_of_instructions_handler,
         logger,
     );
@@ -670,7 +675,7 @@ pub fn process(
         .system_api
         .take_execution_result(run_result.as_ref().err());
 
-    let wasm_heap_size_after = instance.heap_size();
+    let wasm_heap_size_after = instance.heap_size(CanisterMemoryType::Heap);
     let wasm_heap_limit =
         NumWasmPages::from(wasmtime_environ::WASM32_MAX_PAGES as usize) - wasm_reserved_pages;
 
@@ -686,19 +691,35 @@ pub fn process(
             match modification_tracking {
                 ModificationTracking::Track => {
                     // Update the Wasm memory and serialize the delta.
-                    let wasm_memory_delta = wasm_memory
-                        .page_map
-                        .update(&compute_page_delta(&mut instance, &run_result.dirty_pages));
-                    wasm_memory.size = instance.heap_size();
+                    wasm_memory.size = instance.heap_size(CanisterMemoryType::Heap);
+                    let wasm_memory_delta = wasm_memory.page_map.update(&compute_page_delta(
+                        &mut instance,
+                        &run_result.dirty_pages,
+                        CanisterMemoryType::Heap,
+                    ));
 
                     // Update the stable memory and serialize the delta.
-                    let stable_memory_delta = stable_memory.page_map.update(
-                        &instance
-                            .store_data_mut()
-                            .system_api
-                            .stable_memory_dirty_pages(),
-                    );
-                    stable_memory.size = run_result.stable_memory_size;
+                    let stable_memory_delta =
+                        match embedder.config().feature_flags.wasm_native_stable_memory {
+                            FlagStatus::Enabled => {
+                                stable_memory.size = instance.heap_size(CanisterMemoryType::Stable);
+                                stable_memory.page_map.update(&compute_page_delta(
+                                    &mut instance,
+                                    &run_result.stable_memory_dirty_pages,
+                                    CanisterMemoryType::Stable,
+                                ))
+                            }
+                            FlagStatus::Disabled => {
+                                stable_memory.size =
+                                    instance.store_data().system_api.stable_memory_size();
+                                stable_memory.page_map.update(
+                                    &instance
+                                        .store_data_mut()
+                                        .system_api
+                                        .stable_memory_dirty_pages(),
+                                )
+                            }
+                        };
                     allocated_bytes = instance.store_data().system_api.get_allocated_bytes();
                     allocated_message_bytes = instance
                         .store_data()
@@ -786,6 +807,6 @@ pub fn get_initial_globals_and_memory(
     Ok((
         instance.get_exported_globals(),
         wasm_memory_delta,
-        instance.heap_size(),
+        instance.heap_size(CanisterMemoryType::Heap),
     ))
 }
