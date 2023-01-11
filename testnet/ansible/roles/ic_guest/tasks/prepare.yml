@@ -21,3 +21,7 @@
 - name: Install GNU parallel
   apt: name=parallel state=present
   tags: [ "ic_guest" ]
+
+- name: Install zstd
+  apt: name=zstd state=present
+  tags: [ "ic_guest" ]

@@ -10,7 +10,7 @@ set -o errexit
 set -o pipefail
 
 BASE_DIR="$(dirname "${BASH_SOURCE[0]}")/.."
-REPO_ROOT=$(git rev-parse --show-toplevel)
+REPO_ROOT=${REPO_ROOT:-$(git rev-parse --show-toplevel)}
 
 # Set argument defaults
 DEBUG=0
