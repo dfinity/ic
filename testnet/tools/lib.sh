@@ -22,6 +22,25 @@ log() {
     echo "   $*"
 }
 
+log_stderr() {
+    echo "   $*" >&2
+}
+
+debug_log() {
+    if [ ! -z ${DEBUG_BASH+x} ]; then
+        log_stderr "$*"
+    fi
+}
+
+error() {
+    print_red "ERROR: $1"
+    exit 1
+}
+
+repo_root() {
+    git rev-parse --show-toplevel
+}
+
 STEPS_PATTERN="^(${STEPS:-.*})([.].*|$)"
 NUM_STEPS_MATCHED=0
 step() {
