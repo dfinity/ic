@@ -44,3 +44,9 @@ dfx deploy ledger --network ic --argument '(record { minting_account = record { 
 ```shell
 dfx deploy index --network ic --argument '(record { ledger_id = principal "mc6ru-gyaaa-aaaar-qaaaq-cai" })'
 ```
+
+## Upgrading the archive ([`m62lf-ryaaa-aaaar-qaacq-cai`](https://dashboard.internetcomputer.org/canister/m62lf-ryaaa-aaaar-qaacq-cai))
+
+```shell
+dfx deploy --network ic archive --argument '(principal "mc6ru-gyaaa-aaaar-qaaaq-cai", 0, opt 3_221_225_472, null)'
+```

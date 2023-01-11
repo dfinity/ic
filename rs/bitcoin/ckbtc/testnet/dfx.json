@@ -16,6 +16,13 @@
       "candid": "../../../rosetta-api/icrc1/ledger/icrc1.did",
       "shrink": false
     },
+    "archive": {
+      "type": "custom",
+      "build": ["bazel build //rs/rosetta-api/icrc1/archive:archive_canister"],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/archive/archive_canister.wasm",
+      "candid": "../../../rosetta-api/icrc1/archive/archive.did",
+      "shrink": false
+    },
     "index": {
       "type": "custom",
       "build": ["bazel build //rs/rosetta-api/icrc1/index:index_canister"],
