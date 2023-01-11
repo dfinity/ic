@@ -19,7 +19,7 @@ use ic_icrc1::endpoints::{NumTokens, TransferArg, TransferError};
 use ic_icrc1::Account;
 use ic_nns_test_utils::sns_wasm::{
     build_archive_sns_wasm, build_governance_sns_wasm, build_index_sns_wasm, build_ledger_sns_wasm,
-    build_root_sns_wasm, build_swap_sns_wasm,
+    build_root_sns_wasm, build_swap_sns_wasm, create_modified_wasm,
 };
 use ic_sns_governance::pb::v1::governance::{Mode, Version};
 use ic_sns_governance::pb::v1::proposal::Action;
@@ -137,6 +137,9 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
     let root = CanisterId::new(root.unwrap()).unwrap();
     let governance = CanisterId::new(governance.unwrap()).unwrap();
 
+    // Validate that upgrading Swap doesn't prevent upgrading other SNS canisters
+    let old_version = upgrade_swap(&machine, &wasm_map, governance);
+
     let original_hash = wasm_map.get(&canister_type).unwrap().sha256_hash();
 
     let sns_wasm_to_add =
@@ -163,7 +166,6 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
     )
     .unwrap();
 
-    let old_version = wasm_map_to_version(&wasm_map);
     sns_wait_for_pending_upgrade(&machine, governance);
 
     // After the pending upgrade is set, but before upgrade has completed, we expect the old
@@ -245,6 +247,67 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
 
     assert!(version_response.pending_version.is_none());
     assert_eq!(version_response.deployed_version, Some(next_version));
+}
+
+/// Publishes a new Swap WASM to SNS-WASM and then submits and executes an SNS upgrade proposal
+fn upgrade_swap(
+    machine: &StateMachine,
+    wasm_map: &BTreeMap<SnsCanisterType, SnsWasm>,
+    governance: CanisterId,
+) -> Version {
+    let user = PrincipalId::new_user_test_id(0);
+    let original_swap_hash = wasm_map.get(&SnsCanisterType::Swap).unwrap().sha256_hash();
+
+    let swap_wasm_to_add =
+        create_modified_wasm(wasm_map.get(&SnsCanisterType::Swap).unwrap(), None);
+    let new_swap_hash = swap_wasm_to_add.sha256_hash();
+
+    assert_ne!(new_swap_hash, original_swap_hash);
+
+    sns_wasm::add_wasm_via_proposal(machine, swap_wasm_to_add);
+
+    let neuron_id =
+        state_test_helpers::sns_claim_staked_neuron(machine, governance, user, 0, Some(1_000_000));
+    let proposal_id = state_test_helpers::sns_make_proposal(
+        machine,
+        governance,
+        user,
+        neuron_id,
+        Proposal {
+            title: "Upgrade Canister.".into(),
+            action: Some(Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {})),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    state_test_helpers::sns_wait_for_proposal_execution(machine, governance, proposal_id);
+
+    let old_version = wasm_map_to_version(wasm_map);
+    let version_with_new_swap = Version {
+        swap_wasm_hash: new_swap_hash.to_vec(),
+        ..old_version
+    };
+
+    let version_response = Decode!(
+        &query(
+            machine,
+            governance,
+            "get_running_sns_version",
+            Encode!(&GetRunningSnsVersionRequest {}).unwrap(),
+        )
+        .unwrap(),
+        GetRunningSnsVersionResponse
+    )
+    .unwrap();
+
+    assert_eq!(
+        version_response.deployed_version,
+        Some(version_with_new_swap.clone())
+    );
+    assert!(version_response.pending_version.is_none());
+
+    version_with_new_swap
 }
 
 /// This test uses a different setup than the other 3 because it is difficult to get ledgers to spawn
