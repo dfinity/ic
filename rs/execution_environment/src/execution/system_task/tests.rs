@@ -452,8 +452,10 @@ fn system_task_metrics_are_observable() {
         env.advance_time(Duration::from_secs(1));
         env.tick();
     }
-    let executed_messages =
-        fetch_int_counter_vec(env.metrics_registry(), "hypervisor_executed_messages_total");
+    let executed_messages = fetch_int_counter_vec(
+        env.metrics_registry(),
+        "sandboxed_execution_executed_message_slices_total",
+    );
 
     let heartbeat_no_response = btreemap! {
         "api_type".into() => "heartbeat".into(),
@@ -492,8 +494,10 @@ fn global_timer_is_not_set_if_execution_traps() {
         env.advance_time(Duration::from_secs(1));
         env.tick();
     }
-    let executed_messages =
-        fetch_int_counter_vec(env.metrics_registry(), "hypervisor_executed_messages_total");
+    let executed_messages = fetch_int_counter_vec(
+        env.metrics_registry(),
+        "sandboxed_execution_executed_message_slices_total",
+    );
 
     let global_timer_called_trap = btreemap! {
         "api_type".into() => "global timer".into(),
