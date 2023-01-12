@@ -265,40 +265,42 @@ mod database_access {
     pub fn get_block_idx_by_transaction_hash(
         connection: &mut Connection,
         hash: &HashOf<icp_ledger::Transaction>,
-    ) -> Result<u64, BlockStoreError> {
-        get_block_idx_by_hash(
-            connection,
-            &hash.into_bytes().to_vec(),
-            "SELECT block_idx from transactions where tx_hash = ?",
-        )
-    }
-    fn get_block_idx_by_hash(
-        connection: &mut Connection,
-        hash: &Vec<u8>,
-        command: &str,
-    ) -> Result<u64, BlockStoreError> {
+    ) -> Result<Vec<u64>, BlockStoreError> {
         let mut stmt = connection
-            .prepare(command)
+            .prepare("SELECT block_idx from transactions where tx_hash = ?")
             .map_err(|e| BlockStoreError::Other(e.to_string()))
             .unwrap();
-        let block_idx = stmt
-            .query_map(params![hash], |row| Ok(row.get(0).unwrap()))
-            .unwrap()
-            .next()
-            .ok_or_else(|| BlockStoreError::Other("Hash Not Found".to_string()))
-            .map(|block| block.unwrap())?;
-        Ok(block_idx)
+        let mut rows = stmt
+            .query(params![&hash.into_bytes().to_vec()])
+            .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+
+        let mut result = vec![];
+        while let Some(row) = rows.next().unwrap() {
+            let block_idx: u64 = row
+                .get(0)
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+            result.push(block_idx);
+        }
+        Ok(result)
     }
 
     pub fn get_block_idx_by_block_hash(
         connection: &mut Connection,
         hash: &HashOf<EncodedBlock>,
     ) -> Result<u64, BlockStoreError> {
-        get_block_idx_by_hash(
-            connection,
-            &hash.into_bytes().to_vec(),
-            "SELECT idx from blocks where hash = ?",
-        )
+        let mut stmt = connection
+            .prepare("SELECT idx from blocks where hash = ?")
+            .map_err(|e| BlockStoreError::Other(e.to_string()))
+            .unwrap();
+        let block_idx = stmt
+            .query_map(params![&hash.into_bytes().to_vec()], |row| {
+                Ok(row.get(0).unwrap())
+            })
+            .unwrap()
+            .next()
+            .ok_or_else(|| BlockStoreError::Other("Hash Not Found".to_string()))
+            .map(|block| block.unwrap())?;
+        Ok(block_idx)
     }
     // The option is left None if both verified and unverified blocks should be querried. It is set to False for only unverified blocks and True for only verified blocks
     pub fn get_first_hashed_block(
@@ -493,7 +495,9 @@ mod database_access {
             .query(params![])
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         while let Some(row) = rows.next().unwrap() {
-            let account: String = row.get(0).unwrap();
+            let account: String = row
+                .get(0)
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
             accounts.push(AccountIdentifier::from_hex(account.as_str()).unwrap());
         }
         Ok(accounts)
@@ -704,7 +708,7 @@ impl Blocks {
                 to_account VARCHAR(64) ,
                 amount INTEGER NOT NULL,
                 fee INTEGER,
-                PRIMARY KEY(tx_hash),
+                PRIMARY KEY(block_idx),
                 FOREIGN KEY(block_idx) REFERENCES blocks(idx)
             )
             "#,
@@ -760,10 +764,10 @@ impl Blocks {
         database_access::get_block_idx_by_block_hash(&mut connection, hash)
     }
 
-    pub fn get_block_idx_by_transaction_hash(
+    pub fn get_block_idxs_by_transaction_hash(
         &self,
         hash: &HashOf<icp_ledger::Transaction>,
-    ) -> Result<u64, BlockStoreError> {
+    ) -> Result<Vec<u64>, BlockStoreError> {
         let mut connection = self.connection.lock().unwrap();
         database_access::get_block_idx_by_transaction_hash(&mut connection, hash)
     }

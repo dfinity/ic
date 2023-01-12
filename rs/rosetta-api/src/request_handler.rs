@@ -470,9 +470,11 @@ impl RosettaRequestHandler {
             let tid = ic_ledger_core::block::HashOf::try_from(tid)
                 .map_err(|e| ApiError::InvalidTransactionId(false, e.into()))?;
 
-            if let Ok(i) = blocks.get_block_idx_by_transaction_hash(&tid) {
-                heights.push(i);
-                total_count += 1;
+            if let Ok(indices) = blocks.get_block_idxs_by_transaction_hash(&tid) {
+                for idx in indices {
+                    heights.push(idx);
+                    total_count += 1;
+                }
             }
         }
 
