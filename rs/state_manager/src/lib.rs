@@ -76,8 +76,9 @@ const CRITICAL_ERROR_REUSED_CHUNK_HASH: &str =
 /// Critical error tracking unexpectedly corrupted chunks.
 const CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS: &str = "state_sync_corrupted_chunks";
 
-/// How long to keep diverged state.
+/// How long to keep archived and diverged states.
 const ARCHIVED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
+const DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
 /// Labels for manifest metrics
 const LABEL_TYPE: &str = "type";
@@ -566,8 +567,11 @@ type Deallocation = Box<dyn std::any::Any + Send + 'static>;
 // deallocation objects goes above the threshold.
 const DEALLOCATION_BACKLOG_THRESHOLD: usize = 500;
 
-/// The number of diverged states to keep before we start deleting the old ones.
+/// The number of archived states to keep before we start deleting the old ones.
 const MAX_ARCHIVED_CHECKPOINTS_TO_KEEP: usize = 2;
+
+/// The number of diverged states to keep before we start deleting the old ones.
+const MAX_DIVERGED_CHECKPOINTS_TO_KEEP: usize = 1;
 
 /// The number of diverged state markers to keep.
 const MAX_DIVERGED_STATE_MARKERS_TO_KEEP: usize = 100;
@@ -700,16 +704,18 @@ fn path_age(log: &ReplicaLogger, path: &Path) -> Duration {
 }
 
 /// Deletes obsolete diverged states and state backups, keeping at most
-/// MAX_ARCHIVED_CHECKPOINTS_TO_KEEP checkpoints and backups no older than
-/// ARCHIVED_CHECKPOINT_MAX_AGE
+/// MAX_ARCHIVED_CHECKPOINTS_TO_KEEP archived checkpoints and backups no older than
+/// ARCHIVED_CHECKPOINT_MAX_AGE. For diverged states, it does the same,
+/// but with MAX_DIVERGED_CHECKPOINTS_TO_KEEP and DIVERGED_CHECKPOINT_MAX_AGE
+/// respectively.
 fn cleanup_diverged_states(log: &ReplicaLogger, layout: &StateLayout) {
     if let Ok(diverged_heights) = layout.diverged_checkpoint_heights() {
         let to_remove = diverged_heights
             .len()
-            .saturating_sub(MAX_ARCHIVED_CHECKPOINTS_TO_KEEP);
+            .saturating_sub(MAX_DIVERGED_CHECKPOINTS_TO_KEEP);
         for (i, h) in diverged_heights.iter().enumerate() {
             if i < to_remove
-                || path_age(log, &layout.diverged_checkpoint_path(*h)) > ARCHIVED_CHECKPOINT_MAX_AGE
+                || path_age(log, &layout.diverged_checkpoint_path(*h)) > DIVERGED_CHECKPOINT_MAX_AGE
             {
                 match layout.remove_diverged_checkpoint(*h) {
                     Ok(()) => info!(log, "Successfully removed diverged state {}", *h),
