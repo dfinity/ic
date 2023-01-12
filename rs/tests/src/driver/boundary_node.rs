@@ -32,7 +32,7 @@ use reqwest::Url;
 use slog::info;
 use ssh2::Session;
 
-use super::test_env_api::HasIcDependencies;
+use super::{farm::FileId, test_env_api::HasIcDependencies};
 // The following default values are the same as for replica nodes
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(4);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
@@ -248,7 +248,7 @@ fn create_and_upload_config_disk_image(
     env: &TestEnv,
     group_name: &str,
     farm: &Farm,
-) -> anyhow::Result<String> {
+) -> anyhow::Result<FileId> {
     let boundary_node_dir = env
         .base_path()
         .join(BOUNDARY_NODE_VMS_DIR)
