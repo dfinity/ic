@@ -55,7 +55,7 @@
     },
     "cargo-flamegraph": {
         "branch": "master",
-        "repo": "ssh://git@github.com/dfinity-lab/flamegraph",
+        "repo": "https://github.com/dfinity-lab/flamegraph.git",
         "rev": "99cf0a7ca8a695f5da474e245d5d46c9367d9e80",
         "type": "git"
     },
@@ -127,7 +127,7 @@
     },
     "idl2json": {
         "branch": "main",
-        "repo": "ssh://git@github.com/dfinity-lab/idl2json",
+        "repo": "https://github.com/dfinity-lab/idl2json.git",
         "rev": "bcb27ac567eba7a7c14c9d70aedd3fb777af281b",
         "type": "git"
     },
@@ -159,7 +159,7 @@
     },
     "motoko": {
         "branch": "release",
-        "repo": "ssh://git@github.com/dfinity/motoko",
+        "repo": "https://github.com/dfinity/motoko.git",
         "rev": "43f3547ccbf7d48e5d25e1bf5222f11df8df2940",
         "tag": "0.5.10",
         "type": "git"
