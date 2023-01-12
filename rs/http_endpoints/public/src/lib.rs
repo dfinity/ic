@@ -335,6 +335,7 @@ pub fn start_server(
         nns_subnet_id,
         Arc::clone(&registry_client),
         Arc::clone(&health_status),
+        state_reader_executor.clone(),
     );
     let dashboard_service =
         DashboardService::new_service(config.clone(), subnet_type, state_reader_executor.clone());

@@ -9,7 +9,7 @@ use crate::{
         message_id::hash_of_map, MessageId, ReadState, SignedIngressContent, UserQuery,
         UserSignature,
     },
-    Time, UserId,
+    Height, Time, UserId,
 };
 use derive_more::Display;
 use ic_base_types::{CanisterId, CanisterIdError, PrincipalId};
@@ -620,13 +620,14 @@ pub struct HttpStatusResponse {
     pub impl_hash: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replica_health_status: Option<ReplicaHealthStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub certified_height: Option<Height>,
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-
-    use crate::time::UNIX_EPOCH;
+    use crate::{time::UNIX_EPOCH, AmountOf};
     use pretty_assertions::assert_eq;
     use serde::Serialize;
     use serde_cbor::Value;
@@ -696,6 +697,7 @@ mod test {
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
                 replica_health_status: Some(ReplicaHealthStatus::Starting),
+                certified_height: None,
             },
             Value::Map(btreemap! {
                 text("ic_api_version") => text("foobar"),
@@ -714,6 +716,7 @@ mod test {
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
                 replica_health_status: Some(ReplicaHealthStatus::Healthy),
+                certified_height: None,
             },
             Value::Map(btreemap! {
                 text("ic_api_version") => text("foobar"),
@@ -733,11 +736,33 @@ mod test {
                 impl_version: Some("0.0".to_string()),
                 impl_hash: None,
                 replica_health_status: None,
+                certified_height: None,
             },
             Value::Map(btreemap! {
                 text("ic_api_version") => text("foobar"),
                 text("root_key") => bytes(&[1, 2, 3]),
                 text("impl_version") => text("0.0"),
+            }),
+        );
+    }
+
+    #[test]
+    fn encoding_status_with_certified_height() {
+        assert_cbor_ser_equal(
+            &HttpStatusResponse {
+                ic_api_version: "foobar".to_string(),
+                root_key: Some(Blob(vec![1, 2, 3])),
+                impl_version: Some("0.0".to_string()),
+                impl_hash: None,
+                replica_health_status: Some(ReplicaHealthStatus::Healthy),
+                certified_height: Some(AmountOf::new(1)),
+            },
+            Value::Map(btreemap! {
+                text("ic_api_version") => text("foobar"),
+                text("root_key") => bytes(&[1, 2, 3]),
+                text("impl_version") => text("0.0"),
+                text("replica_health_status") => text("healthy"),
+                text("certified_height") => serde_cbor::Value::Integer(1),
             }),
         );
     }
