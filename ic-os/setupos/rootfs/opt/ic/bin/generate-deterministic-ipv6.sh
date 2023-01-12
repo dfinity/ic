@@ -20,7 +20,7 @@ for argument in "${@}"; do
 Generate Deterministic IPv6 Address
 
 Arguments:
-  -c=, --config=        specify the config.ini configuration file (Default: /config/tmp/config.ini)
+  -c=, --config=        specify the config.ini configuration file (Default: /var/ic/config/config.ini)
   -h, --help            show this help message and exit
   -i=, --index=         mandatory: specify the single digit node index (Examples: host: 0, guest: 1, boundary: 2)
 '
@@ -38,7 +38,7 @@ Arguments:
 done
 
 # Set arguments if undefined
-CONFIG="${CONFIG:=/config/tmp/config.ini}"
+CONFIG="${CONFIG:=/var/ic/config/config.ini}"
 
 function validate_arguments() {
     if [ "${CONFIG}" == "" -o "${INDEX}" == "" ]; then
