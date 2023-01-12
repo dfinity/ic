@@ -316,7 +316,7 @@ impl Process for Processor {
             }
 
             Action::Certificate => {
-                // Phase 9 - Upload resulting certificate to repository
+                // Phase 9 - Obtain the certificate once the order is finalized
                 let (certificate_chain_pem, private_key_pem) = self
                     .acme_finalize
                     .finalize(&task.name)

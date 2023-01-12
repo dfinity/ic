@@ -97,7 +97,7 @@ struct Cli {
     #[clap(long, default_value = "key.pem")]
     key_path: PathBuf,
 
-    /// A domain clients are required to delegate their DNS-0 challenge to.
+    /// A domain clients are required to delegate their DNS-01 challenge to.
     #[arg(long)]
     delegation_domain: String,
 
