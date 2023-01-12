@@ -713,7 +713,7 @@ fn test_pre_upgrade_support() {
     assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
     assert_api_supported(api.ic0_time());
     assert_api_supported(api.ic0_canister_version());
-    assert_api_not_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
+    assert_api_supported(api.ic0_global_timer_set(time::UNIX_EPOCH));
     assert_api_supported(
         api.ic0_performance_counter(PerformanceCounterType::Instructions(0.into())),
     );

@@ -53,6 +53,25 @@ fn global_timer_is_executed() {
 }
 
 #[test]
+fn ic0_global_timer_set_is_supported_in_pre_upgrade() {
+    let env = StateMachine::new();
+    let wat = r#"
+        (module
+            (import "ic0" "global_timer_set"
+                (func $global_timer_set (param i64) (result i64))
+            )
+            (func (export "canister_pre_upgrade")
+                (drop (call $global_timer_set (i64.const 1)))
+            )
+        )"#;
+    let canister_id = env.install_canister_wat(wat, vec![], None);
+
+    let empty_binary = wabt::wat2wasm("(module)").unwrap();
+    let result = env.upgrade_canister(canister_id, empty_binary, vec![]);
+    assert_eq!(result, Ok(()));
+}
+
+#[test]
 fn heartbeat_produces_heap_delta() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"

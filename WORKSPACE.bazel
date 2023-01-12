@@ -360,8 +360,8 @@ http_archive(
 package(default_visibility = ["//visibility:public"])
 filegroup(name = "artifacts", srcs = glob(["build/*", "test-data/*"]), visibility = ["//visibility:public"])
       """,
-    sha256 = "fa78af4b4e4411d54759ff32e0445b468db5334fc4cdb7c42053c73b2b8bb891",
-    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-9607be0c-x86_64-linux.tar.gz"],
+    sha256 = "e104cbf30fd704121f7f739dca4e9e81d11a12a26d821080d210e5f51c29f63b",
+    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-67029cb8-x86_64-linux.tar.gz"],
 )
 
 # Bitcoin canister
