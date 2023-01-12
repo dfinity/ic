@@ -2402,12 +2402,12 @@ impl SystemApi for SystemApiImpl {
             ApiType::Start { .. }
             | ApiType::NonReplicatedQuery { .. }
             | ApiType::ReplicatedQuery { .. }
-            | ApiType::PreUpgrade { .. }
             | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_global_timer_set")),
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
             | ApiType::Cleanup { .. }
+            | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
                 let prev_time = self.sandbox_safe_system_state.global_timer().to_time();
