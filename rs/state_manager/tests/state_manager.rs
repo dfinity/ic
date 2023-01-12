@@ -3087,7 +3087,7 @@ fn remove_too_many_diverged_checkpoints() {
         ],
         |_metrics, state_manager| {
             assert_eq!(
-                vec![height(2), height(3)],
+                vec![height(3)],
                 state_manager
                     .state_layout()
                     .diverged_checkpoint_heights()
