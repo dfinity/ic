@@ -3,8 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
-    "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
-    "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
+    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/secrets_containers",
     "//rs/crypto/utils/basic_sig",
@@ -23,9 +22,7 @@ MACRO_DEPENDENCIES = []
 
 MACRO_DEV_DEPENDENCIES = []
 
-ALIASES = {
-    "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1": "ecdsa_secp256k1",
-}
+ALIASES = {}
 
 rust_library(
     name = "sender",

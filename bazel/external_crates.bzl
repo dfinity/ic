@@ -458,6 +458,8 @@ def external_crates_repository(name, annotations):
                 features = [
                     "arithmetic",
                     "ecdsa",
+                    "pem",
+                    "pkcs8",
                 ],
                 default_features = False,
             ),

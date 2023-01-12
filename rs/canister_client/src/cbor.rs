@@ -410,16 +410,11 @@ mod tests {
         // Set up an arbitrary legal input
         let (sk, pk) = {
             let mut rng = ChaChaRng::seed_from_u64(89_u64);
-            let sk = libsecp256k1::SecretKey::random(&mut rng);
-            let pk = libsecp256k1::PublicKey::from_secret_key(&sk);
-            (sk.serialize(), pk.serialize())
+            let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_using_rng(&mut rng);
+            let pk = sk.public_key();
+            (sk, pk)
         };
-        let sender_id = UserId::from(PrincipalId::new_self_authenticating(
-            &ecdsa_secp256k1::api::public_key_to_der(
-                &ecdsa_secp256k1::types::PublicKeyBytes::from(pk.to_vec()),
-            )
-            .expect("DER encoding failed"),
-        ));
+        let sender_id = UserId::from(PrincipalId::new_self_authenticating(&pk.serialize_der()));
         let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: Blob(vec![51]),
@@ -430,7 +425,8 @@ mod tests {
                 ingress_expiry: expiry_time.as_nanos_since_unix_epoch(),
             },
         };
-        let sender = Sender::from_secp256k1_keys(&sk, &pk);
+        let sender =
+            Sender::from_secp256k1_keys(&sk.serialize_sec1(), &pk.serialize_sec1(false)).unwrap();
         let (submit, id) = sign_submit(content.clone(), &sender).unwrap();
 
         // The wrapped content is content, without modification
@@ -548,17 +544,12 @@ mod tests {
         // Set up an arbitrary legal input
         let (sk, pk) = {
             let mut rng = ChaChaRng::seed_from_u64(89_u64);
-            let sk = libsecp256k1::SecretKey::random(&mut rng);
-            let pk = libsecp256k1::PublicKey::from_secret_key(&sk);
-            (sk.serialize(), pk.serialize())
+            let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::generate_using_rng(&mut rng);
+            let pk = sk.public_key();
+            (sk, pk)
         };
 
-        let sender_id = UserId::from(PrincipalId::new_self_authenticating(
-            &ecdsa_secp256k1::api::public_key_to_der(
-                &ecdsa_secp256k1::types::PublicKeyBytes::from(pk.to_vec()),
-            )
-            .expect("DER encoding failed"),
-        ));
+        let sender_id = UserId::from(PrincipalId::new_self_authenticating(&pk.serialize_der()));
         let content = HttpQueryContent::Query {
             query: HttpUserQuery {
                 canister_id: Blob(vec![67, 3]),
@@ -575,7 +566,8 @@ mod tests {
         )
         .unwrap();
 
-        let sender = Sender::from_secp256k1_keys(&sk, &pk);
+        let sender =
+            Sender::from_secp256k1_keys(&sk.serialize_sec1(), &pk.serialize_sec1(false)).unwrap();
         let read = sign_query(content, &sender).unwrap();
 
         // The wrapped content is content, without modification

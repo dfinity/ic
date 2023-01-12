@@ -4,7 +4,6 @@ mod tests;
 
 use ic_base_types::PrincipalId;
 use ic_crypto_internal_types::sign::eddsa::ed25519::SecretKey as Ed25519SecretKey;
-use ic_crypto_sha::Sha256;
 use ic_crypto_utils_basic_sig::conversions::Ed25519PemParseError;
 use ic_crypto_utils_basic_sig::conversions::Ed25519SecretKeyConversions;
 use ic_types::crypto::DOMAIN_IC_REQUEST;
@@ -19,18 +18,9 @@ pub type SignMessageId = Arc<dyn Fn(&MessageId) -> Result<Vec<u8>, Box<dyn Error
 /// A secp256k1 key pair
 #[derive(Clone)]
 pub struct Secp256k1KeyPair {
-    /// The DER encoded secret key and the curve parameters.
-    ///
-    /// The data structure expected downstream is that used by
-    /// [https://www.openssl.org/docs/man1.0.2/man3/d2i_ECPrivate_key.html]()
-    /// so while sk doesn't match the ed25519 structure below, it is what
-    /// is needed.
-    ///
-    /// TODO: Check with downstream developers; perhaps we can add a "der" field
-    /// with the current data and keep just the 32 byes of the key itself in sk.
-    sk: ecdsa_secp256k1::types::SecretKeyBytes,
+    sk: ic_crypto_ecdsa_secp256k1::PrivateKey,
     /// The public key bytes only.
-    pk: ecdsa_secp256k1::types::PublicKeyBytes,
+    pk: ic_crypto_ecdsa_secp256k1::PublicKey,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -121,10 +111,16 @@ impl Sender {
         Sender::SigKeys(SigKeys::Ed25519(keys))
     }
 
-    pub fn from_secp256k1_keys(sk_bytes: &[u8], pk_bytes: &[u8]) -> Self {
-        let pk = ecdsa_secp256k1::types::PublicKeyBytes::from(pk_bytes.to_vec());
-        let sk = ecdsa_secp256k1::api::secret_key_from_components(sk_bytes, &pk).unwrap();
-        Sender::SigKeys(SigKeys::EcdsaSecp256k1(Secp256k1KeyPair { sk, pk }))
+    pub fn from_secp256k1_keys(
+        sk_bytes: &[u8],
+        pk_bytes: &[u8],
+    ) -> Result<Self, ic_crypto_ecdsa_secp256k1::KeyDecodingError> {
+        let pk = ic_crypto_ecdsa_secp256k1::PublicKey::deserialize_sec1(pk_bytes)?;
+        let sk = ic_crypto_ecdsa_secp256k1::PrivateKey::deserialize_sec1(sk_bytes)?;
+        Ok(Sender::SigKeys(SigKeys::EcdsaSecp256k1(Secp256k1KeyPair {
+            sk,
+            pk,
+        })))
     }
 
     pub fn from_external_hsm(pub_key: Vec<u8>, sign: SignBytes) -> Self {
@@ -141,9 +137,9 @@ impl Sender {
                 SigKeys::Ed25519(key_pair) => PrincipalId::new_self_authenticating(
                     &ed25519_public_key_to_der(key_pair.public_key.to_vec()),
                 ),
-                SigKeys::EcdsaSecp256k1(key_pair) => PrincipalId::new_self_authenticating(
-                    &ecdsa_secp256k1::api::public_key_to_der(&key_pair.pk).unwrap(),
-                ),
+                SigKeys::EcdsaSecp256k1(key_pair) => {
+                    PrincipalId::new_self_authenticating(&key_pair.pk.serialize_der())
+                }
             },
             Self::ExternalHsm { pub_key, .. } => PrincipalId::new_self_authenticating(pub_key),
             Self::Anonymous => PrincipalId::new_anonymous(),
@@ -172,18 +168,7 @@ impl Sender {
         match self {
             Self::SigKeys(sig_keys) => match sig_keys {
                 SigKeys::Ed25519(key_pair) => Ok(Some(key_pair.sign(&msg).to_vec())),
-                SigKeys::EcdsaSecp256k1(key_pair) => {
-                    // ECDSA CLib impl. does not hash the message (as hash algorithm can vary
-                    // in ECDSA), so we do it here with SHA256, which is the only
-                    // supported hash currently.
-                    let msg_hash = Sha256::hash(&msg);
-                    Ok(Some(
-                        ecdsa_secp256k1::api::sign(&msg_hash, &key_pair.sk)
-                            .expect("ECDSA-secp256k1 signing failed")
-                            .0
-                            .to_vec(),
-                    ))
-                }
+                SigKeys::EcdsaSecp256k1(key_pair) => Ok(Some(key_pair.sk.sign_message(&msg))),
             },
             Self::ExternalHsm { sign, .. } => sign(&msg).map(Some),
             Self::Anonymous => Ok(None),
@@ -198,9 +183,7 @@ impl Sender {
                 SigKeys::Ed25519(key_pair) => {
                     Some(ed25519_public_key_to_der(key_pair.public_key.to_vec()))
                 }
-                SigKeys::EcdsaSecp256k1(key_pair) => {
-                    Some(ecdsa_secp256k1::api::public_key_to_der(&key_pair.pk).unwrap())
-                }
+                SigKeys::EcdsaSecp256k1(key_pair) => Some(key_pair.pk.serialize_der()),
             },
             Self::ExternalHsm { pub_key, .. } => Some(pub_key.clone()),
             Self::Anonymous => None,

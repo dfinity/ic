@@ -4453,7 +4453,7 @@ dependencies = [
  "ic-canister-client-sender",
  "ic-certification",
  "ic-certification-test-utils",
- "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
+ "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-test-utils",
  "ic-crypto-tree-hash",
  "ic-crypto-utils-threshold-sig-der",
@@ -4463,7 +4463,6 @@ dependencies = [
  "ic-types",
  "ic-validator",
  "itertools",
- "libsecp256k1 0.7.1",
  "native-tls",
  "openssl",
  "prost",
@@ -4484,8 +4483,7 @@ version = "0.8.0"
 dependencies = [
  "ed25519-consensus",
  "ic-base-types",
- "ic-crypto-internal-basic-sig-der-utils",
- "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
+ "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-internal-types",
  "ic-crypto-secrets-containers",
  "ic-crypto-sha",
@@ -5031,6 +5029,20 @@ dependencies = [
  "tokio",
  "tokio-openssl",
  "tokio-rustls 0.22.0",
+ "zeroize",
+]
+
+[[package]]
+name = "ic-crypto-ecdsa-secp256k1"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "k256",
+ "lazy_static",
+ "pem 1.1.0",
+ "rand 0.8.5",
+ "simple_asn1 0.6.2",
+ "wycheproof",
  "zeroize",
 ]
 
@@ -6988,7 +7000,7 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "icp-ledger",
  "lazy_static",
- "libsecp256k1 0.5.0",
+ "libsecp256k1",
  "prost",
  "rand 0.8.5",
  "serde",
@@ -7152,7 +7164,7 @@ dependencies = [
  "ic-types-test-utils",
  "icp-ledger",
  "lazy_static",
- "libsecp256k1 0.5.0",
+ "libsecp256k1",
  "lifeline",
  "maplit",
  "on_wire",
@@ -10147,29 +10159,10 @@ dependencies = [
  "base64 0.12.3",
  "digest 0.9.0",
  "hmac-drbg",
- "libsecp256k1-core 0.2.2",
- "libsecp256k1-gen-ecmult 0.2.1",
- "libsecp256k1-gen-genmult 0.2.1",
+ "libsecp256k1-core",
+ "libsecp256k1-gen-ecmult",
+ "libsecp256k1-gen-genmult",
  "rand 0.7.3",
- "serde",
- "sha2 0.9.9",
- "typenum",
-]
-
-[[package]]
-name = "libsecp256k1"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95b09eff1b35ed3b33b877ced3a691fc7a481919c7e29c53c906226fcf55e2a1"
-dependencies = [
- "arrayref",
- "base64 0.13.1",
- "digest 0.9.0",
- "hmac-drbg",
- "libsecp256k1-core 0.3.0",
- "libsecp256k1-gen-ecmult 0.3.0",
- "libsecp256k1-gen-genmult 0.3.0",
- "rand 0.8.5",
  "serde",
  "sha2 0.9.9",
  "typenum",
@@ -10187,32 +10180,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "libsecp256k1-core"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5be9b9bb642d8522a44d533eab56c16c738301965504753b03ad1de3425d5451"
-dependencies = [
- "crunchy",
- "digest 0.9.0",
- "subtle",
-]
-
-[[package]]
 name = "libsecp256k1-gen-ecmult"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccab96b584d38fac86a83f07e659f0deafd0253dc096dab5a36d53efe653c5c3"
 dependencies = [
- "libsecp256k1-core 0.2.2",
-]
-
-[[package]]
-name = "libsecp256k1-gen-ecmult"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3038c808c55c87e8a172643a7d87187fc6c4174468159cb3090659d55bcb4809"
-dependencies = [
- "libsecp256k1-core 0.3.0",
+ "libsecp256k1-core",
 ]
 
 [[package]]
@@ -10221,16 +10194,7 @@ version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67abfe149395e3aa1c48a2beb32b068e2334402df8181f818d3aee2b304c4f5d"
 dependencies = [
- "libsecp256k1-core 0.2.2",
-]
-
-[[package]]
-name = "libsecp256k1-gen-genmult"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3db8d6ba2cec9eacc40e6e8ccc98931840301f1006e95647ceb2dd5c3aa06f7c"
-dependencies = [
- "libsecp256k1-core 0.3.0",
+ "libsecp256k1-core",
 ]
 
 [[package]]
