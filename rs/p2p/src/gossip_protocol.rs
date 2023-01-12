@@ -234,7 +234,7 @@ impl GossipImpl {
             registry_refresh_instant: Mutex::new(Instant::now()),
             retransmission_request_instant: Mutex::new(Instant::now()),
         };
-        gossip.refresh_registry();
+        gossip.refresh_topology();
         gossip
     }
 }

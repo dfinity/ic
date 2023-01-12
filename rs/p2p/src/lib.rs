@@ -110,6 +110,7 @@ use std::{
 use tower::util::BoxCloneService;
 
 mod artifact_download_list;
+mod discovery;
 mod download_management;
 mod download_prioritization;
 mod event_handler;
