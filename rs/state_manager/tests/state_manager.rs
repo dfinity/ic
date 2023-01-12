@@ -3069,15 +3069,23 @@ fn report_diverged_state() {
 #[test]
 fn remove_too_many_diverged_checkpoints() {
     fn diverge_at(state_manager: StateManagerImpl, divergence: u64) {
-        for i in 1..divergence {
-            let (_, state) = state_manager.take_tip();
-            state_manager.commit_and_certify(state, height(i), CertificationScope::Full);
-            wait_for_checkpoint(&state_manager, height(i));
+        let last_correct_checkpoint = state_manager
+            .state_layout()
+            .checkpoint_heights()
+            .unwrap()
+            .last()
+            .unwrap_or(&height(0))
+            .get();
+        for i in last_correct_checkpoint..(divergence - 1) {
+            let (j, state) = state_manager.take_tip();
+            debug_assert_eq!(height(i), j);
+            state_manager.commit_and_certify(state, height(i + 1), CertificationScope::Full);
+            wait_for_checkpoint(&state_manager, height(i + 1));
         }
 
         let (_, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(divergence), CertificationScope::Full);
-        state_manager.report_diverged_checkpoint(height(divergence))
+        state_manager.report_diverged_checkpoint(height(divergence));
     }
     state_manager_crash_test(
         vec![
