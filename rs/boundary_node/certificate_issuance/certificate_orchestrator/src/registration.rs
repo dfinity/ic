@@ -173,16 +173,19 @@ pub trait Update {
 pub struct Updater {
     registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
     expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+    retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
 }
 
 impl Updater {
     pub fn new(
         registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
         expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+        retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     ) -> Self {
         Self {
             registrations,
             expirations,
+            retries,
         }
     }
 }
@@ -208,9 +211,10 @@ impl Update for Updater {
                 .map_err(|err| UpdateError::from(anyhow!(format!("failed to insert: {err}"))))
         })?;
 
-        // Successful registrations should not be expired
+        // Successful registrations should not be expired or retried
         if state == State::Available {
             self.expirations.with(|exps| exps.borrow_mut().remove(&id));
+            self.retries.with(|rets| rets.borrow_mut().remove(&id));
         }
 
         Ok(())

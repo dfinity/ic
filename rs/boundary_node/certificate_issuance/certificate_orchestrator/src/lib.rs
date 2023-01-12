@@ -28,7 +28,7 @@ use crate::{
         Create, CreateError, Creator, Expire, Expirer, Get, GetError, Getter, Update, UpdateError,
         Updater,
     },
-    work::{Dispense, DispenseError, Dispenser, Queue, QueueError, Queuer},
+    work::{Dispense, DispenseError, Dispenser, Queue, QueueError, Queuer, Retrier, Retry},
 };
 
 mod acl;
@@ -59,6 +59,7 @@ const ENCRYPED_CERTIFICATE_LEN: u32 = 8 * KB;
 const ENCRYPTED_PAIR_LEN: u32 = ENCRYPED_PRIVATE_KEY_LEN + ENCRYPED_CERTIFICATE_LEN;
 
 const REGISTRATION_EXPIRATION_TTL: Duration = Duration::from_secs(6 * 3600); // 6 Hours
+const IN_PROGRESS_TTL: Duration = Duration::from_secs(10 * 60); // 10 Minutes
 
 // Memory
 thread_local! {
@@ -75,6 +76,7 @@ const MEMORY_ID_NAMES: u8 = 5;
 const MEMORY_ID_ENCRPYTED_CERTIFICATES: u8 = 6;
 const MEMORY_ID_TASKS: u8 = 7;
 const MEMORY_ID_EXPIRATIONS: u8 = 8;
+const MEMORY_ID_RETRIES: u8 = 9;
 
 // ACLs
 thread_local! {
@@ -151,6 +153,8 @@ thread_local! {
 
     static EXPIRATIONS: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
 
+    static RETRIES: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
+
     static CREATOR: RefCell<Box<dyn Create>> = RefCell::new({
         let c = Creator::new(&ID_GENERATOR, &REGISTRATIONS, &NAMES, &EXPIRATIONS);
         let c = WithAuthorize(c, &MAIN_AUTHORIZER);
@@ -164,7 +168,7 @@ thread_local! {
     });
 
     static UPDATER: RefCell<Box<dyn Update>> = RefCell::new({
-        let u = Updater::new(&REGISTRATIONS, &EXPIRATIONS);
+        let u = Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES);
         let u = WithAuthorize(u, &MAIN_AUTHORIZER);
         Box::new(u)
     });
@@ -196,7 +200,7 @@ thread_local! {
 // Tasks
 
 thread_local! {
-    static TASKS: RefCell<PriorityQueue<String, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
+    static TASKS: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
 
     static QUEUER: RefCell<Box<dyn Queue>> = RefCell::new({
         let q = Queuer::new(&TASKS, &REGISTRATIONS);
@@ -205,18 +209,23 @@ thread_local! {
     });
 
     static DISPENSER: RefCell<Box<dyn Dispense>> = RefCell::new({
-        let d = Dispenser::new(&TASKS);
+        let d = Dispenser::new(&TASKS, &RETRIES);
         let d = WithAuthorize(d, &MAIN_AUTHORIZER);
         Box::new(d)
     });
 }
 
-// Registration expirations
+// Expirations and retries
 
 thread_local! {
     static EXPIRER: RefCell<Box<dyn Expire>> = RefCell::new({
         let e = Expirer::new(&REGISTRATIONS, &NAMES, &TASKS, &EXPIRATIONS);
         Box::new(e)
+    });
+
+    static RETRIER: RefCell<Box<dyn Retry>> = RefCell::new({
+        let r = Retrier::new(&TASKS, &RETRIES);
+        Box::new(r)
     });
 }
 
@@ -228,6 +237,15 @@ fn init_timers_fn() {
         || {
             if let Err(err) = EXPIRER.with(|e| e.borrow().expire(time())) {
                 trap(&format!("failed to run expire: {err}"));
+            }
+        },
+    );
+
+    set_timer_interval(
+        Duration::from_secs(60), // 1 Minute
+        || {
+            if let Err(err) = RETRIER.with(|r| r.borrow().retry(time())) {
+                trap(&format!("failed to run retry: {err}"));
             }
         },
     );
@@ -284,6 +302,12 @@ fn pre_upgrade_fn() {
                 trap(&format!("failed to persist expirations: {err}"));
             }
         });
+
+        RETRIES.with(|retries| {
+            if let Err(err) = persistence::store(m.get(MemoryId::new(MEMORY_ID_RETRIES)), retries) {
+                trap(&format!("failed to persist retries: {err}"));
+            }
+        });
     });
 }
 
@@ -303,6 +327,13 @@ fn post_upgrade_fn() {
             match persistence::load(m.get(MemoryId::new(MEMORY_ID_EXPIRATIONS))) {
                 Ok(v) => *exps.borrow_mut() = v,
                 Err(err) => trap(&format!("failed to load expirations: {err}")),
+            };
+        });
+
+        RETRIES.with(|retries| {
+            match persistence::load(m.get(MemoryId::new(MEMORY_ID_RETRIES))) {
+                Ok(v) => *retries.borrow_mut() = v,
+                Err(err) => trap(&format!("failed to load retries: {err}")),
             };
         });
     });

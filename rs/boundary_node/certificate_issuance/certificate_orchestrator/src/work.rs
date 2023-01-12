@@ -7,7 +7,7 @@ use priority_queue::PriorityQueue;
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
-    LocalRef, Memory,
+    LocalRef, Memory, IN_PROGRESS_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -86,12 +86,16 @@ pub trait Dispense {
 }
 
 pub struct Dispenser {
-    tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+    tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+    retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
 }
 
 impl Dispenser {
-    pub fn new(tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>) -> Self {
-        Self { tasks }
+    pub fn new(
+        tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+        retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+    ) -> Self {
+        Self { tasks, retries }
     }
 }
 
@@ -114,7 +118,13 @@ impl Dispense for Dispenser {
                 Some((id, _)) => id,
             };
 
-            // TODO(or.ricon): Mark task as being in-progress
+            // Schedule a retry in case the task failed and was not re-queued
+            self.retries.with(|retries| {
+                retries.borrow_mut().push(
+                    id.to_owned(),
+                    Reverse(time() + IN_PROGRESS_TTL.as_nanos() as u64),
+                )
+            });
 
             Ok(id)
         })
@@ -157,5 +167,63 @@ impl<T: Dispense, A: Authorize> Dispense for WithAuthorize<T, A> {
         };
 
         self.0.peek()
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum RetryError {
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+pub trait Retry {
+    fn retry(&self, t: u64) -> Result<(), RetryError>;
+}
+
+pub struct Retrier {
+    tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+    retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+}
+
+impl Retrier {
+    pub fn new(
+        tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+        retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+    ) -> Self {
+        Self { tasks, retries }
+    }
+}
+
+impl Retry for Retrier {
+    fn retry(&self, t: u64) -> Result<(), RetryError> {
+        self.retries.with(|retries| {
+            let mut retries = retries.borrow_mut();
+
+            #[allow(clippy::while_let_loop)]
+            loop {
+                // Check for next retry
+                let p = match retries.peek() {
+                    Some((_, p)) => p.0,
+                    None => break,
+                };
+
+                if p > t {
+                    break;
+                }
+
+                let id = match retries.pop() {
+                    Some((id, _)) => id,
+                    None => break,
+                };
+
+                // Schedule a task for the ID
+                self.tasks.with(|tasks| {
+                    let mut tasks = tasks.borrow_mut();
+                    tasks.push(id, Reverse(t));
+                });
+            }
+
+            Ok(())
+        })
     }
 }
