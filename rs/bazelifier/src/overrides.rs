@@ -17,10 +17,6 @@ lazy_static! {
         "rand_chacha" => vec![Version::new(0, 3, 1)],
     };
     static ref PKG_OVERRIDES: HashMap<&'static str, NameOverride<'static>> = hashmap! {
-        "wabt" => NameOverride {
-            name: "wabt".into(),
-            repo: Some("wabt_rs"),
-        },
         "lmdb-rkv" => NameOverride {
             name: "lmdb_rkv".into(),
             repo: Some("lmdb_rkv"),

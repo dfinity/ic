@@ -675,7 +675,7 @@ pub fn test(env: TestEnv) {
          * upgrade to the same version of the canister. */
         info!(logger, "upgrading cycles minting canister to empty module");
 
-        let wasm = wabt::wat2wasm("(module)").unwrap();
+        let wasm = wat::parse_str("(module)").unwrap();
 
         upgrade_nns_canister_by_proposal(
             &Canister::new(&nns, CYCLES_MINTING_CANISTER_ID),

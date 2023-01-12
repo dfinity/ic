@@ -284,7 +284,7 @@ fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usiz
     env.install_wasm_in_mode(
         canister_id,
         CanisterInstallMode::Install,
-        wabt::wat2wasm(TEST_CANISTER).expect("invalid WAT"),
+        wat::parse_str(TEST_CANISTER).expect("invalid WAT"),
         vec![],
     )
     .unwrap();
@@ -312,7 +312,7 @@ fn simulate_execute_ingress_cost(
     let canister_id = create_canister_with_cycles_install_wasm(
         &env,
         DEFAULT_CYCLES_PER_NODE * subnet_size,
-        wabt::wat2wasm(TEST_CANISTER).expect("invalid WAT"),
+        wat::parse_str(TEST_CANISTER).expect("invalid WAT"),
     );
 
     let balance_before = env.cycle_balance(canister_id);
@@ -341,7 +341,7 @@ fn simulate_execute_canister_heartbeat_cost(subnet_type: SubnetType, subnet_size
     let canister_id = create_canister_with_cycles_install_wasm(
         &env,
         DEFAULT_CYCLES_PER_NODE * subnet_size,
-        wabt::wat2wasm(TEST_HEARTBEAT_CANISTER).expect("invalid WAT"),
+        wat::parse_str(TEST_HEARTBEAT_CANISTER).expect("invalid WAT"),
     );
 
     let balance_before = env.cycle_balance(canister_id);

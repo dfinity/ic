@@ -26,7 +26,7 @@ DEPENDENCIES = [
     "@crate_index//:tower",
     "@crate_index//:tracing",
     "@crate_index//:tracing-subscriber",
-    "@wabt_rs//:wabt",
+    "@crate_index//:wat",
     "//rs/types/error_types",
 ]
 

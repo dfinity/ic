@@ -55,7 +55,7 @@ const MINUTE: Duration = Duration::from_secs(60);
 
 const BILLION: u128 = 1_000_000_000;
 
-const CANISTER_WAT: &[u8] = include_bytes!("canister.wat");
+const CANISTER_WAT: &str = include_str!("canister.wat");
 
 #[derive(Parser)]
 #[clap(name = SERVICE_NAME)]
@@ -120,7 +120,7 @@ async fn main() -> Result<(), Error> {
     );
     let creator = WithRetry::new(creator, 1);
 
-    let wasm_module = wabt::wat2wasm(CANISTER_WAT).context("failed convert wat to wasm")?;
+    let wasm_module = wat::parse_str(CANISTER_WAT).context("failed convert wat to wasm")?;
 
     let installer = Installer::new(wasm_module);
     let installer = WithMetrics(

@@ -894,7 +894,7 @@ impl StateMachine {
         self.install_wasm_in_mode(
             canister_id,
             mode,
-            wabt::wat2wasm(wat).expect("invalid WAT"),
+            wat::parse_str(wat).expect("invalid WAT"),
             payload,
         )
         .expect("failed to install canister");

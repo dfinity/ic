@@ -81,7 +81,7 @@ impl WasmtimeInstanceBuilder {
 
     pub fn build(self) -> WasmtimeInstance<SystemApiImpl> {
         let log = no_op_logger();
-        let wasm = wabt::wat2wasm(self.wat).expect("Failed to convert wat to wasm");
+        let wasm = wat::parse_str(self.wat).expect("Failed to convert wat to wasm");
 
         let config = ic_config::embedders::Config::default();
         let embedder = WasmtimeEmbedder::new(config, log.clone());

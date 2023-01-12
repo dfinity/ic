@@ -77,7 +77,7 @@ impl BenchReplica {
                 ic00::InstallCodeArgs::new(
                     CanisterInstallMode::Install,
                     CanisterId::from(42),
-                    wabt::wat2wasm(HELLO_WORLD).unwrap(),
+                    wat::parse_str(HELLO_WORLD).unwrap(),
                     vec![],
                     None,
                     None,

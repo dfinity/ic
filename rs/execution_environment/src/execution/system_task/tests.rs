@@ -66,7 +66,7 @@ fn ic0_global_timer_set_is_supported_in_pre_upgrade() {
         )"#;
     let canister_id = env.install_canister_wat(wat, vec![], None);
 
-    let empty_binary = wabt::wat2wasm("(module)").unwrap();
+    let empty_binary = wat::parse_str("(module)").unwrap();
     let result = env.upgrade_canister(canister_id, empty_binary, vec![]);
     assert_eq!(result, Ok(()));
 }
@@ -537,7 +537,7 @@ fn global_timer_refunds_cycles_for_request_in_prep() {
     let env = StateMachineBuilder::new()
         .with_subnet_type(SubnetType::Application)
         .build();
-    let binary = wabt::wat2wasm(
+    let binary = wat::parse_str(
         r#"
         (module
             (import "ic0" "call_new"
@@ -606,7 +606,7 @@ fn global_timer_set_returns_zero_in_canister_global_timer_method() {
     let env = StateMachineBuilder::new()
         .with_subnet_type(SubnetType::Application)
         .build();
-    let binary = wabt::wat2wasm(
+    let binary = wat::parse_str(
         r#"
         (module
             (import "ic0" "global_timer_set"

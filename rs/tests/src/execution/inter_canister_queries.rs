@@ -252,7 +252,7 @@ pub fn inter_canister_query_first_canister_multiple_request(env: TestEnv) {
     let agent = node.build_default_agent();
     block_on({
         async move {
-            let canister_b_wasm = wabt::wat2wasm(
+            let canister_b_wasm = wat::parse_str(
                 r#"(module
               (import "ic0" "msg_arg_data_copy" (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
               (import "ic0" "msg_reply" (func $msg_reply))
@@ -270,7 +270,7 @@ pub fn inter_canister_query_first_canister_multiple_request(env: TestEnv) {
             let canister_b =
                 create_and_install(&agent, node.effective_canister_id(), &canister_b_wasm).await;
 
-            let canister_a_wasm = wabt::wat2wasm(format!(
+            let canister_a_wasm = wat::parse_str(format!(
                 r#"(module
                     (import "ic0" "msg_arg_data_copy" (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
                     (import "ic0" "msg_reply" (func $msg_reply))

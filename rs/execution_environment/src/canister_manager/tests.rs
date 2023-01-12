@@ -160,7 +160,7 @@ impl Default for InstallCodeContextBuilder {
             ctx: InstallCodeContext {
                 sender: PrincipalId::new_user_test_id(0),
                 canister_id: canister_test_id(0),
-                wasm_module: CanisterModule::new(wabt::wat2wasm(EMPTY_WAT).unwrap()),
+                wasm_module: CanisterModule::new(wat::parse_str(EMPTY_WAT).unwrap()),
                 arg: vec![],
                 compute_allocation: None,
                 memory_allocation: None,
@@ -752,7 +752,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
         .with_subnet_total_memory(memory_capacity as i64)
         .build();
 
-    let wasm = wabt::wat2wasm(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
 
     let canister1 = test.create_canister(initial_cycles);
     let canister2 = test.create_canister(initial_cycles);
@@ -1346,7 +1346,7 @@ fn reinstall_calls_canister_start_and_canister_init() {
         .canister_from_cycles_and_wat(*INITIAL_CYCLES, EMPTY_WAT)
         .unwrap();
 
-    let wasm = wabt::wat2wasm(COUNTER_WAT).unwrap();
+    let wasm = wat::parse_str(COUNTER_WAT).unwrap();
     test.reinstall_canister(id, wasm).unwrap();
     // If canister_start and canister_init were called, then the counter
     // should be initialized to 42.
@@ -1378,7 +1378,7 @@ fn install_puts_canister_back_after_invalid_wasm() {
         };
         // Use an invalid wasm code (import memory from an invalid module).
         let wasm =
-            wabt::wat2wasm(r#"(module (import "foo" "memory" (memory (;0;) 529)))"#).unwrap();
+            wat::parse_str(r#"(module (import "foo" "memory" (memory (;0;) 529)))"#).unwrap();
         let wasm_len = wasm.len();
 
         let sender = canister_test_id(1).get();
@@ -2616,7 +2616,7 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
         .with_subnet_total_memory(memory_capacity as i64)
         .build();
 
-    let wasm = wabt::wat2wasm(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
 
     let canister1 = test.create_canister(initial_cycles);
     let canister2 = test.create_canister(initial_cycles);
@@ -2854,19 +2854,19 @@ fn failed_upgrade_hooks_consume_instructions() {
         (memory $memory 1)
         (export "canister_pre_upgrade" (func $canister_pre_upgrade))
     )"#;
-    let initial_wasm = wabt::wat2wasm(initial_wasm).unwrap();
+    let initial_wasm = wat::parse_str(initial_wasm).unwrap();
     let upgrade_wasm = r#"
     (module
         (memory $memory 1)
     )"#;
-    let upgrade_wasm = wabt::wat2wasm(upgrade_wasm).unwrap();
+    let upgrade_wasm = wat::parse_str(upgrade_wasm).unwrap();
     run(initial_wasm, upgrade_wasm, true);
 
     let initial_wasm = r#"
     (module
         (memory $memory 1)
     )"#;
-    let initial_wasm = wabt::wat2wasm(initial_wasm).unwrap();
+    let initial_wasm = wat::parse_str(initial_wasm).unwrap();
     let upgrade_wasm = r#"
     (module
         (func $canister_post_upgrade
@@ -2875,14 +2875,14 @@ fn failed_upgrade_hooks_consume_instructions() {
         (memory $memory 1)
         (export "canister_post_upgrade" (func $canister_post_upgrade))
     )"#;
-    let upgrade_wasm = wabt::wat2wasm(upgrade_wasm).unwrap();
+    let upgrade_wasm = wat::parse_str(upgrade_wasm).unwrap();
     run(initial_wasm, upgrade_wasm, false);
 
     let initial_wasm = r#"
     (module
         (memory $memory 1)
     )"#;
-    let initial_wasm = wabt::wat2wasm(initial_wasm).unwrap();
+    let initial_wasm = wat::parse_str(initial_wasm).unwrap();
     let upgrade_wasm = r#"
     (module
         (func $start
@@ -2891,7 +2891,7 @@ fn failed_upgrade_hooks_consume_instructions() {
         (memory $memory 1)
         (start $start)
     )"#;
-    let upgrade_wasm = wabt::wat2wasm(upgrade_wasm).unwrap();
+    let upgrade_wasm = wat::parse_str(upgrade_wasm).unwrap();
     run(initial_wasm, upgrade_wasm, false);
 }
 
@@ -2966,7 +2966,7 @@ fn failed_install_hooks_consume_instructions() {
         (memory $memory 1)
         (start $start)
     )"#;
-    let wasm = wabt::wat2wasm(wasm).unwrap();
+    let wasm = wat::parse_str(wasm).unwrap();
     run(wasm);
     let wasm = r#"
     (module
@@ -2976,7 +2976,7 @@ fn failed_install_hooks_consume_instructions() {
         (memory $memory 1)
         (export "canister_init" (func $canister_init))
     )"#;
-    let wasm = wabt::wat2wasm(wasm).unwrap();
+    let wasm = wat::parse_str(wasm).unwrap();
     run(wasm);
 }
 
@@ -3039,7 +3039,7 @@ fn install_code_respects_instruction_limit() {
         (export "canister_post_upgrade" (func $canister_post_upgrade))
     )"#;
     let compilation_cost = wat_compilation_cost(wasm);
-    let wasm = wabt::wat2wasm(wasm).unwrap();
+    let wasm = wat::parse_str(wasm).unwrap();
 
     // Too few instructions result in failed installation.
     let mut round_limits = RoundLimits {
@@ -3341,7 +3341,7 @@ fn lower_memory_allocation_than_usage_fails() {
         (module
             (memory $memory 1)
         )"#;
-        let wasm = wabt::wat2wasm(wasm).unwrap();
+        let wasm = wat::parse_str(wasm).unwrap();
 
         let sender = canister_test_id(100).get();
         let canister_id = canister_manager
@@ -3505,7 +3505,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
         (module
             (memory $memory 1)
         )"#;
-        let wasm = wabt::wat2wasm(wat).unwrap();
+        let wasm = wat::parse_str(wat).unwrap();
         let canister_id = canister_manager
             .create_canister(
                 sender,
@@ -3544,7 +3544,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
         (module
             (memory $memory 2)
         )"#;
-        let wasm = wabt::wat2wasm(wat).unwrap();
+        let wasm = wat::parse_str(wat).unwrap();
 
         let res = install_code(
             &canister_manager,
@@ -4538,7 +4538,7 @@ fn cycles_correct_if_upgrade_succeeds() {
             (start $start)
             (memory 0)
         )"#;
-    let wasm = wabt::wat2wasm(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
 
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test.create_canister(initial_cycles);
@@ -4592,7 +4592,7 @@ fn cycles_correct_if_upgrade_fails_at_validation() {
             )
             (memory 0)
         )"#;
-    let wasm = wabt::wat2wasm(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
 
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test.create_canister(initial_cycles);
@@ -4651,8 +4651,8 @@ fn cycles_correct_if_upgrade_fails_at_start() {
             (start $start)
             (memory 0)
         )"#;
-    let wasm1 = wabt::wat2wasm(wat1).unwrap();
-    let wasm2 = wabt::wat2wasm(wat2).unwrap();
+    let wasm1 = wat::parse_str(wat1).unwrap();
+    let wasm2 = wat::parse_str(wat2).unwrap();
 
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test.create_canister(initial_cycles);
@@ -4700,7 +4700,7 @@ fn cycles_correct_if_upgrade_fails_at_pre_upgrade() {
             )
             (memory 0)
         )"#;
-    let wasm = wabt::wat2wasm(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
 
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test.create_canister(initial_cycles);
@@ -4754,8 +4754,8 @@ fn cycles_correct_if_upgrade_fails_at_post_upgrade() {
             (start $start)
             (memory 0)
         )"#;
-    let wasm1 = wabt::wat2wasm(wat1).unwrap();
-    let wasm2 = wabt::wat2wasm(wat2).unwrap();
+    let wasm1 = wat::parse_str(wat1).unwrap();
+    let wasm2 = wat::parse_str(wat2).unwrap();
 
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test.create_canister(initial_cycles);
@@ -4803,7 +4803,7 @@ fn cycles_correct_if_install_succeeds() {
             (start $start)
             (memory 0)
         )"#;
-    let wasm = wabt::wat2wasm(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
 
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test.create_canister(initial_cycles);
@@ -4842,7 +4842,7 @@ fn cycles_correct_if_install_fails_at_validation() {
             (start $start)
             (memory 0)
         )"#;
-    let wasm = wabt::wat2wasm(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
 
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test.create_canister(initial_cycles);
@@ -4881,7 +4881,7 @@ fn cycles_correct_if_install_fails_at_start() {
             (start $start)
             (memory 0)
         )"#;
-    let wasm = wabt::wat2wasm(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
 
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test.create_canister(initial_cycles);
@@ -4917,7 +4917,7 @@ fn cycles_correct_if_install_fails_at_init() {
             (start $start)
             (memory 0)
         )"#;
-    let wasm = wabt::wat2wasm(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
 
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test.create_canister(initial_cycles);
@@ -4947,7 +4947,7 @@ fn install_code_can_increase_and_use_memory_allocation() {
             )
             (memory 0)
         )"#;
-    let wasm = wabt::wat2wasm(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
 
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test
@@ -4983,7 +4983,7 @@ fn install_code_cannot_switch_from_reserved_to_best_effort_memory_allocation() {
             )
             (memory 0)
         )"#;
-    let wasm = wabt::wat2wasm(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
 
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let id = test

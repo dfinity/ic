@@ -34,7 +34,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/test_utilities",
     "@crate_index//:mockall_0_7_2",
-    "@wabt_rs//:wabt",
+    "@crate_index//:wat",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

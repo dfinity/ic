@@ -10,7 +10,7 @@ use std::{fs::File, io::Read, path::Path, time::Duration};
 use url::Url;
 
 const REQUESTED_MEMORY_ALLOCATION: Option<u64> = None; // Best effort memory allocation
-const COUNTER_CANISTER_WAT: &[u8] = include_bytes!("counter.wat");
+const COUNTER_CANISTER_WAT: &str = include_str!("counter.wat");
 /// Creates/installs the canister across the given replicas
 pub(crate) async fn setup_canister(
     http_client: HttpClient,
@@ -129,12 +129,12 @@ pub(crate) async fn install_canister(
         })?;
 
         if wasm_file_path.extension() == Some(std::ffi::OsStr::new("wat")) {
-            wabt::wat2wasm(bytes_buffer).unwrap()
+            wat::parse_bytes(&bytes_buffer).unwrap().to_vec()
         } else {
             bytes_buffer
         }
     } else {
-        wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap()
+        wat::parse_str(COUNTER_CANISTER_WAT).unwrap()
     };
 
     let install_args = InstallCodeArgs::new(

@@ -170,17 +170,17 @@ fn binary(functions: &[(Function, Execution)]) -> Vec<u8> {
             .collect::<Vec<_>>()
             .join("\n            "),
     );
-    wabt::wat2wasm(wat).unwrap()
+    wat::parse_str(wat).unwrap()
 }
 
 /// Returns an old empty WASM binary.
 fn old_empty_binary() -> Vec<u8> {
-    wabt::wat2wasm(module("")).unwrap()
+    wat::parse_str(module("")).unwrap()
 }
 
 /// Returns a new empty WASM binary.
 fn new_empty_binary() -> Vec<u8> {
-    wabt::wat2wasm(module(r#"(func (export "new"))"#)).unwrap()
+    wat::parse_str(module(r#"(func (export "new"))"#)).unwrap()
 }
 
 ////////////////////////////////////////////////////////////////////////

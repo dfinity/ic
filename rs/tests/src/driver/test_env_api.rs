@@ -939,7 +939,9 @@ impl<T: HasDependencies> HasWasm for T {
             .unwrap_or_else(|_| panic!("Could not read WASM from {:?}", p.as_ref()));
 
         if p.as_ref().extension().unwrap() == "wat" {
-            wasm_bytes = wabt::wat2wasm(wasm_bytes).expect("Could not compile wat to wasm");
+            wasm_bytes = wat::parse_bytes(&wasm_bytes)
+                .expect("Could not compile wat to wasm")
+                .to_vec();
         }
 
         if !wasm_bytes.starts_with(WASM_MAGIC_BYTES) {

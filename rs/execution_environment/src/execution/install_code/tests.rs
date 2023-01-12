@@ -8,7 +8,6 @@ use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::MessageId;
 use ic_types_test_utils::ids::user_test_id;
-use wabt::{wat2wasm, wat2wasm_with_features};
 
 const DTS_INSTALL_WAT: &str = r#"
     (module
@@ -47,7 +46,7 @@ const DTS_INSTALL_WAT: &str = r#"
 #[test]
 fn install_code_fails_on_invalid_compute_allocation() {
     let mut test = ExecutionTestBuilder::new().build();
-    let binary = wabt::wat2wasm("(module)").unwrap();
+    let binary = wat::parse_str("(module)").unwrap();
     let canister = test.create_canister(Cycles::new(1_000_000_000_000));
     let err = test
         .install_canister_with_allocation(canister, binary, Some(1_000), None)
@@ -62,7 +61,7 @@ fn install_code_fails_on_invalid_compute_allocation() {
 #[test]
 fn install_code_fails_on_invalid_memory_allocation() {
     let mut test = ExecutionTestBuilder::new().build();
-    let binary = wabt::wat2wasm("(module)").unwrap();
+    let binary = wat::parse_str("(module)").unwrap();
     let canister = test.create_canister(Cycles::new(1_000_000_000_000));
     let err = test
         .install_canister_with_allocation(canister, binary, None, Some(u64::MAX))
@@ -82,13 +81,11 @@ fn dts_resume_works_in_install_code() {
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
-    let mut features = wabt::Features::new();
-    features.enable_bulk_memory();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
     let payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
-        wasm_module: wat2wasm_with_features(DTS_INSTALL_WAT, features).unwrap(),
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
         compute_allocation: None,
         memory_allocation: None,
@@ -133,13 +130,11 @@ fn dts_abort_works_in_install_code() {
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
-    let mut features = wabt::Features::new();
-    features.enable_bulk_memory();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000_000));
     let payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
-        wasm_module: wat2wasm_with_features(DTS_INSTALL_WAT, features).unwrap(),
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
         compute_allocation: None,
         memory_allocation: None,
@@ -213,12 +208,10 @@ fn install_code_validate_input_compute_allocation() {
     let canister_id = test
         .create_canister_with_allocation(Cycles::new(2_000_000_000_000_000), Some(40), None)
         .unwrap();
-    let mut features = wabt::Features::new();
-    features.enable_bulk_memory();
     let payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
-        wasm_module: wat2wasm_with_features(DTS_INSTALL_WAT, features).unwrap(),
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
         compute_allocation: Some(candid::Nat::from(90u64)),
         memory_allocation: None,
@@ -303,12 +296,10 @@ fn install_code_validate_input_controller() {
 
     let sender = user_test_id(2);
     test.set_user_id(sender);
-    let mut features = wabt::Features::new();
-    features.enable_bulk_memory();
     let payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
-        wasm_module: wat2wasm_with_features(DTS_INSTALL_WAT, features).unwrap(),
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
         compute_allocation: None,
         memory_allocation: None,
@@ -347,7 +338,7 @@ fn install_code_validates_execution_state() {
     let mut payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
-        wasm_module: wat2wasm(r#"(module (memory 0 20))"#).unwrap(),
+        wasm_module: wat::parse_str(r#"(module (memory 0 20))"#).unwrap(),
         arg: vec![],
         compute_allocation: None,
         memory_allocation: None,
@@ -363,9 +354,7 @@ fn install_code_validates_execution_state() {
         NextExecution::None,
     );
 
-    let mut features = wabt::Features::new();
-    features.enable_bulk_memory();
-    payload.wasm_module = wat2wasm_with_features(DTS_INSTALL_WAT, features).unwrap();
+    payload.wasm_module = wat::parse_str(DTS_INSTALL_WAT).unwrap();
 
     // Install code on non-empty canister fails.
     let message_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
@@ -383,12 +372,10 @@ fn execute_install_code_message_dts_helper(
     canister_id: CanisterId,
     wasm: &str,
 ) -> MessageId {
-    let mut features = wabt::Features::new();
-    features.enable_bulk_memory();
     let payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
-        wasm_module: wat2wasm_with_features(wasm, features).unwrap(),
+        wasm_module: wat::parse_str(wasm).unwrap(),
         arg: vec![],
         compute_allocation: None,
         memory_allocation: None,
@@ -500,12 +487,10 @@ fn start_install_code_dts(
     canister_id: CanisterId,
     wasm: &str,
 ) -> MessageId {
-    let mut features = wabt::Features::new();
-    features.enable_bulk_memory();
     let payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
-        wasm_module: wat2wasm_with_features(wasm, features).unwrap(),
+        wasm_module: wat::parse_str(wasm).unwrap(),
         arg: vec![],
         compute_allocation: None,
         memory_allocation: None,
@@ -618,13 +603,11 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
-    let mut features = wabt::Features::new();
-    features.enable_bulk_memory();
     let canister_id = test.create_canister(Cycles::new(900_000));
     let payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
-        wasm_module: wat2wasm_with_features(DTS_INSTALL_WAT, features).unwrap(),
+        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
         compute_allocation: None,
         memory_allocation: None,
@@ -655,8 +638,6 @@ fn install_code_running_out_of_instructions() {
         .with_manual_execution()
         .with_cost_to_compile_wasm_instruction(0)
         .build();
-    let mut features = wabt::Features::new();
-    features.enable_bulk_memory();
     let wasm: &str = r#"
     (module
          (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
@@ -674,7 +655,7 @@ fn install_code_running_out_of_instructions() {
     let payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
-        wasm_module: wat2wasm_with_features(wasm, features).unwrap(),
+        wasm_module: wat::parse_str(wasm).unwrap(),
         arg: vec![],
         compute_allocation: None,
         memory_allocation: None,

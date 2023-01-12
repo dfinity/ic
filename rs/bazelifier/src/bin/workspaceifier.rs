@@ -247,17 +247,3 @@ fn find_ref(g: &GitDep) -> Result<String> {
         Ok(r)
     }
 }
-
-#[test]
-fn test_find_ref() {
-    assert_eq!(
-        find_ref(&GitDep {
-            git: "https://github.com/dfinity-lab/wabt-rs".into(),
-            rev: "".into(),
-            tag: "0.10.0-dfinity".into(),
-            branch: "".into(),
-        })
-        .unwrap(),
-        "7ab9062ddc63067843b62af8ae2cb83bf4bf601e"
-    )
-}

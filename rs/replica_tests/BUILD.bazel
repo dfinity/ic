@@ -46,7 +46,7 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tonic",
     "@crate_index//:tower",
-    "@wabt_rs//:wabt",
+    "@crate_index//:wat",
 ]
 
 MACRO_DEPENDENCIES = []

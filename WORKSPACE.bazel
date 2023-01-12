@@ -5,7 +5,6 @@ workspace(
 
 load("//third_party/lmdb-0.9.70:repository.bzl", "lmdb_repository")
 load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
-load("//third_party/wabt-rs-0.10.0:repository.bzl", "wabt_rs_repository")
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
@@ -226,8 +225,6 @@ container_pull(
 )
 
 # Third party dependencies that require special treatment
-
-wabt_rs_repository(name = "wabt_rs")
 
 lmdb_repository(name = "lmdb")
 

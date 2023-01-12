@@ -136,7 +136,7 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:url",
     "@crate_index//:walkdir",
-    "@wabt_rs//:wabt",
+    "@crate_index//:wat",
 ]
 
 MACRO_DEPENDENCIES = [

@@ -251,7 +251,7 @@ pub async fn install_counter_canister(
     agent: &Agent,
     effective_canister_id: PrincipalId,
 ) -> Principal {
-    const COUNTER_CANISTER_WAT: &[u8] = include_bytes!("./counter.wat");
+    const COUNTER_CANISTER_WAT: &str = include_str!("./counter.wat");
     let mgr = ManagementCanister::create(agent);
 
     let canister_id = mgr
@@ -265,7 +265,7 @@ pub async fn install_counter_canister(
 
     mgr.install_code(
         &canister_id,
-        wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+        wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
     )
     .call_and_wait(delay())
     .await

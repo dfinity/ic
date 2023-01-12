@@ -168,7 +168,6 @@ mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::convert::TryFrom;
     use std::sync::{Arc, Condvar, Mutex};
-    use wabt::wat2wasm;
 
     const INSTRUCTION_LIMIT: u64 = 100_000;
 
@@ -362,7 +361,7 @@ mod tests {
             )
             "#;
 
-        wat2wasm(wat_data).unwrap().as_slice().to_vec()
+        wat::parse_str(wat_data).unwrap().as_slice().to_vec()
     }
 
     fn make_memory_canister_wasm() -> Vec<u8> {
@@ -452,7 +451,7 @@ mod tests {
             )
             "#;
 
-        wat2wasm(wat_data).unwrap().as_slice().to_vec()
+        wat::parse_str(wat_data).unwrap().as_slice().to_vec()
     }
 
     fn make_long_running_canister_wasm() -> Vec<u8> {
@@ -497,7 +496,7 @@ mod tests {
             )
             "#;
 
-        wat2wasm(wat_data).unwrap().as_slice().to_vec()
+        wat::parse_str(wat_data).unwrap().as_slice().to_vec()
     }
 
     /// Create a "mock" controller service that handles the IPC requests

@@ -206,7 +206,7 @@ fn ingress_can_reject() {
 
 #[test]
 fn output_requests_on_system_subnet_ignore_memory_limits() {
-    let min_canister_memory = 65793;
+    let min_canister_memory = 65895;
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_subnet_total_memory(min_canister_memory + 13 + 13)
@@ -217,7 +217,7 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
     let canister_id = test.create_canister(Cycles::new(1_000_000_000));
     test.install_canister_with_allocation(
         canister_id,
-        wabt::wat2wasm(CALL_SIMPLE_WAT).unwrap(),
+        wat::parse_str(CALL_SIMPLE_WAT).unwrap(),
         None,
         Some(min_canister_memory as u64 + 13),
     )
@@ -235,10 +235,10 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
 fn output_requests_on_application_subnets_respect_canister_memory_allocation() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
-    let min_canister_memory = 65793;
+    let min_canister_memory = 65895;
     test.install_canister_with_allocation(
         canister_id,
-        wabt::wat2wasm(CALL_SIMPLE_WAT).unwrap(),
+        wat::parse_str(CALL_SIMPLE_WAT).unwrap(),
         None,
         Some(min_canister_memory + 13),
     )
@@ -260,7 +260,7 @@ fn output_requests_on_application_subnets_respect_canister_memory_allocation() {
 
 #[test]
 fn output_requests_on_application_subnets_respect_subnet_total_memory() {
-    let min_canister_memory = 65793;
+    let min_canister_memory = 65895;
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_total_memory(min_canister_memory + 13)
         .with_subnet_message_memory(ONE_GIB)
@@ -696,7 +696,7 @@ fn get_running_canister_status_from_another_canister() {
 fn get_canister_status_from_another_canister_when_memory_low() {
     let mut test = ExecutionTestBuilder::new().build();
     let controller = test.universal_canister().unwrap();
-    let binary = wabt::wat2wasm("(module)").unwrap();
+    let binary = wat::parse_str("(module)").unwrap();
     let canister = test.create_canister(Cycles::new(1_000_000_000_000));
     let memory_allocation = NumBytes::from(150);
     test.install_canister_with_allocation(canister, binary, None, Some(memory_allocation.get()))

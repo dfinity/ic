@@ -33,7 +33,7 @@ pub fn canister_accepts_ingress_by_default(env: TestEnv) {
             // Create a canister that does not expose the
             // `canister_inspect_message` method. It should accept ingress
             // messages sent to it.
-            let wasm_module = wabt::wat2wasm(
+            let wasm_module = wat::parse_str(
                 r#"
                  (module
                  (import "ic0" "msg_reply" (func $msg_reply))
@@ -122,7 +122,7 @@ pub fn canister_only_accepts_ingress_with_payload(env: TestEnv) {
         async move {
             // Create a canister that exposes the `canister_inspect_message`
             // method which rejects all ingress messages.
-            let wasm_module = wabt::wat2wasm(
+            let wasm_module = wat::parse_str(
                 r#"
                  (module
                  (import "ic0" "msg_reply" (func $msg_reply))

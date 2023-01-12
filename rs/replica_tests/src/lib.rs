@@ -482,7 +482,7 @@ impl LocalTestRuntime {
         self.install_canister_helper(InstallCodeArgs::new(
             CanisterInstallMode::Upgrade,
             *canister_id,
-            wabt::wat2wasm(wat).expect("couldn't convert wat -> wasm"),
+            wat::parse_str(wat).expect("couldn't convert wat -> wasm"),
             payload,
             None,
             None,
@@ -541,7 +541,7 @@ impl LocalTestRuntime {
     ) -> Result<WasmResult, UserError> {
         self.install_canister_wasm(
             canister_id,
-            wabt::wat2wasm(wat).expect("couldn't convert wat -> wasm"),
+            wat::parse_str(wat).expect("couldn't convert wat -> wasm"),
             payload,
             None,
             None,

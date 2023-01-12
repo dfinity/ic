@@ -22,7 +22,6 @@ use ic_types::{
 };
 use setup::setup;
 use std::{collections::BTreeMap, convert::TryFrom, sync::Arc, thread::sleep, time::Duration};
-use wabt::wat2wasm;
 
 fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -> Batch {
     Batch {
@@ -169,7 +168,7 @@ fn install_canister(
         Err(err) => panic!("{}", err),
     };
 
-    let wasm = wat2wasm(wasm).unwrap();
+    let wasm = wat::parse_str(wasm).unwrap();
     let signed_ingress = SignedIngressBuilder::new()
         .canister_id(IC_00)
         .expiry_time(UNIX_EPOCH + Duration::from_secs(60))

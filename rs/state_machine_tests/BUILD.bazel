@@ -42,7 +42,7 @@ DEPENDENCIES = [
     "@crate_index//:slog-term",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
-    "@wabt_rs//:wabt",
+    "@crate_index//:wat",
 ]
 
 rust_library(

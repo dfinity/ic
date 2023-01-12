@@ -9,6 +9,6 @@ mod test {
     use super::*;
     #[test]
     fn check_that_lifeline_wasm_is_legal() {
-        wabt::wasm2wat(LIFELINE_CANISTER_WASM).unwrap();
+        wasmprinter::print_bytes(LIFELINE_CANISTER_WASM).unwrap();
     }
 }

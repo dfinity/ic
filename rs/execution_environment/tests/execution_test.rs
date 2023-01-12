@@ -523,7 +523,7 @@ fn compressed_canisters_support() {
     let env = StateMachine::new();
     env.set_checkpoints_enabled(true);
 
-    let test_canister_wasm = wabt::wat2wasm(TEST_CANISTER).expect("invalid WAT");
+    let test_canister_wasm = wat::parse_str(TEST_CANISTER).expect("invalid WAT");
     let compressed_wasm = {
         let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
         std::io::copy(&mut &test_canister_wasm[..], &mut encoder).unwrap();

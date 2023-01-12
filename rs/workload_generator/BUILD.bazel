@@ -36,7 +36,7 @@ DEPENDENCIES = [
     "@crate_index//:slog-term",
     "@crate_index//:tokio",
     "@crate_index//:url",
-    "@wabt_rs//:wabt",
+    "@crate_index//:wat",
 ]
 
 MACRO_DEPENDENCIES = []
