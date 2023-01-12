@@ -22,7 +22,6 @@ use candid::Principal;
 use chacha20poly1305::{KeyInit, XChaCha20Poly1305};
 use clap::Parser;
 use futures::future::TryFutureExt;
-use hyper_rustls::HttpsConnectorBuilder;
 use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, identity::Secp256k1Identity, Agent,
 };
@@ -54,7 +53,6 @@ use crate::{
     cloudflare::Cloudflare,
     dns::Resolver,
     encode::{Decoder, Encoder},
-    http::HyperClient,
     metrics::{MetricParams, WithMetrics},
     registration::{Create, Get, State, Update},
     work::{Dispense, DispenseError, Process, Queue},
@@ -67,7 +65,6 @@ mod check;
 mod cloudflare;
 mod dns;
 mod encode;
-mod http;
 mod metrics;
 mod registration;
 mod work;
@@ -189,21 +186,8 @@ async fn main() -> Result<(), Error> {
         ResolverConfig::default(),
         ResolverOpts::default(),
     )?);
-    let resolver = WithMetrics(resolver, MetricParams::new(&meter, SERVICE_NAME, "resolve"));
 
-    // HTTP
-    let client = hyper::Client::builder().build(
-        HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .https_or_http()
-            .enable_http1()
-            .build(),
-    );
-    let client = HyperClient::new(client);
-    let client = WithMetrics(
-        client,
-        MetricParams::new(&meter, SERVICE_NAME, "http_request"),
-    );
+    let resolver = WithMetrics(resolver, MetricParams::new(&meter, SERVICE_NAME, "resolve"));
 
     // Encryption
     let cipher = Arc::new({
@@ -223,9 +207,8 @@ async fn main() -> Result<(), Error> {
     // Registration
     let registration_checker = Checker::new(
         cli.delegation_domain.clone(),
-        cli.application_domain,
         Box::new(resolver.clone()),
-        Box::new(client),
+        agent.clone(),
     );
     let registration_checker = WithMetrics(
         registration_checker,

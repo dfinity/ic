@@ -1440,6 +1440,7 @@ dependencies = [
  "hyper",
  "hyper-rustls",
  "ic-agent",
+ "ic-utils 0.22.0",
  "instant-acme",
  "opentelemetry 0.18.0",
  "opentelemetry-prometheus 0.11.0",
