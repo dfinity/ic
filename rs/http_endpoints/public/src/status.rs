@@ -1,5 +1,5 @@
 //! Module that deals with requests to /api/v2/status
-use crate::{common, EndpointService};
+use crate::{common, state_reader_executor::StateReaderExecutor, EndpointService};
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::{Body, Response};
@@ -31,6 +31,7 @@ pub(crate) struct StatusService {
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
     replica_health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
+    state_read_executor: StateReaderExecutor,
 }
 
 impl StatusService {
@@ -39,12 +40,14 @@ impl StatusService {
         nns_subnet_id: SubnetId,
         registry_client: Arc<dyn RegistryClient>,
         replica_health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
+        state_read_executor: StateReaderExecutor,
     ) -> EndpointService {
         let base_service = Self {
             log,
             nns_subnet_id,
             registry_client,
             replica_health_status,
+            state_read_executor,
         };
         BoxCloneService::new(
             ServiceBuilder::new()
@@ -96,6 +99,7 @@ impl Service<Request<Body>> for StatusService {
             impl_version: Some(ReplicaVersion::default().to_string()),
             impl_hash: REPLICA_BINARY_HASH.get().map(|s| s.to_string()),
             replica_health_status: Some(replica_health_status.load()),
+            certified_height: Some(self.state_read_executor.latest_certified_height()),
         };
         Box::pin(async move { Ok(common::cbor_response(&response)) })
     }
