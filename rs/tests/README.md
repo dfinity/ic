@@ -298,26 +298,3 @@ docker run "registry.gitlab.com/dfinity-lab/open/public-docker-registry/$image"
 ```
 
 ### Known Issues
-
-#### Darwin Support is 'Best Effort'
-
-It might happen that tests break on Darwin because, on CI, they are not tested
-on Darwin.
-
-This is a compromise. As many developers use Darwin, we can save overhead by
-running the tests directly on Darwin for local testing. Hence, they _should_
-run on Darwin. On the other hand, supporting both Linux _and_ Darwin on CI is
-costly.
-
-#### NNS Canister Installation Timeouts when testing locally
-
-Using the `NNSInstaller`-trait, it is possible to install all NNS-canisters on
-the root subnet using functionality by the `nns/test_utils`-crate. The NNS
-canisters are compiled before installation. If your local cargo cache is
-outdated ( e.g., after an explicit cache invalidation or pulling updates),
-canister compilation can take on the order of 10 minutes. As a result, a test
-might hit a global timeout configured in the test runner
-(`rs/tests/src/main.rs`). *It is suggested to adjust such timeouts to mitigate
-this issue.*
-
-On CI, the issue is mitigated as the canisters are built in a separate stage.
