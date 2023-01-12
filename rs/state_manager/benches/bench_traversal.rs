@@ -19,7 +19,7 @@ use ic_replicated_state::{
 use ic_state_manager::{stream_encoding::encode_stream_slice, tree_hash::hash_state};
 use ic_test_utilities::{
     mock_time,
-    state::get_initial_state,
+    state::{get_initial_state, get_running_canister},
     types::{
         ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
         messages::{RequestBuilder, ResponseBuilder},
@@ -35,6 +35,7 @@ use std::convert::TryFrom;
 
 fn bench_traversal(c: &mut Criterion<ProcessTime>) {
     const NUM_STREAM_MESSAGES: u64 = 1_000;
+    const NUM_CANISTERS: u64 = 10_000;
     const NUM_STATUSES: u64 = 30_000;
 
     let subnet_type = SubnetType::Application;
@@ -72,6 +73,13 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
             streams.insert(subnet_test_id(remote_subnet), stream);
         }
     });
+
+    for i in 0..NUM_CANISTERS {
+        state.canister_states.insert(
+            canister_test_id(i),
+            get_running_canister(canister_test_id(i)),
+        );
+    }
 
     let user_id = user_test_id(1);
     let time = mock_time();
