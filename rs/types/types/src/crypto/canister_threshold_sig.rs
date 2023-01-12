@@ -65,8 +65,17 @@ impl fmt::Debug for ThresholdEcdsaCombinedSignature {
     }
 }
 
-/// Quadruple of signature-specific IDKG transcripts required to generate a
-/// canister threshold signature (not including the secret key transcript).
+/// Quadruple of IDKG transcripts consumed by a canister-requested threshold signature.
+/// Each quadruple MUST be used *at most once* for a signature. Otherwise, the private key may be
+/// leaked!
+///
+/// Each signature, in addition to the transcript for the sharing of the private key, requires the
+/// following 4 transcripts that may be pre-computed (they are independent of the message to be
+/// signed):
+/// * an unmasked transcript for sharing of a random value `kappa`
+/// * a masked transcript for sharing of another random value `lambda`
+/// * a masked transcript for sharing the value `kappa * lambda`
+/// * a masked transcript for sharing the value `private_key * lambda`
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PreSignatureQuadruple {
     kappa_unmasked: IDkgTranscript,
