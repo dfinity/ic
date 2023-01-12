@@ -1,4 +1,6 @@
 use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
+use super::farm::id_of_file;
+use super::farm::ClaimResult;
 use super::farm::Farm;
 use super::farm::HostFeature;
 use super::ic::VmAllocationStrategy;
@@ -14,6 +16,8 @@ use super::test_env_api::{
 };
 use crate::driver::test_setup::GroupSetup;
 use anyhow::{bail, Result};
+use chrono::Duration;
+use chrono::Utc;
 use slog::info;
 use ssh2::Session;
 use std::fs::{self, File};
@@ -33,7 +37,13 @@ pub struct UniversalVm {
     pub required_host_features: Vec<HostFeature>,
     pub has_ipv4: bool,
     pub primary_image: Option<DiskImage>,
-    pub config_dir: Option<PathBuf>,
+    pub config: Option<UniversalVmConfig>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum UniversalVmConfig {
+    Dir(PathBuf),
+    Img(PathBuf),
 }
 
 const UNIVERSAL_VMS_DIR: &str = "universal_vms";
@@ -51,7 +61,7 @@ impl UniversalVm {
             required_host_features: Default::default(),
             has_ipv4: true,
             primary_image: Default::default(),
-            config_dir: Default::default(),
+            config: Default::default(),
         }
     }
 
@@ -81,7 +91,12 @@ impl UniversalVm {
     }
 
     pub fn with_config_dir(mut self, config_dir: PathBuf) -> Self {
-        self.config_dir = Some(config_dir);
+        self.config = Some(UniversalVmConfig::Dir(config_dir));
+        self
+    }
+
+    pub fn with_config_img(mut self, config_img: PathBuf) -> Self {
+        self.config = Some(UniversalVmConfig::Img(config_img));
         self
     }
 
@@ -101,45 +116,76 @@ impl UniversalVm {
         let univm_path: PathBuf = [UNIVERSAL_VMS_DIR, &self.name].iter().collect();
         env.write_json_object(univm_path.join("vm.json"), vm)?;
 
-        if let Some(config_dir) = self.config_dir.clone() {
-            let universal_vm_dir = env.get_path(univm_path);
-            let config_img = universal_vm_dir.join(CONF_IMG_FNAME);
-            std::fs::create_dir_all(universal_vm_dir)?;
+        if let Some(config) = &self.config {
+            let config_img = match config {
+                UniversalVmConfig::Dir(config_dir) => {
+                    let universal_vm_dir = env.get_path(univm_path);
+                    let config_img = universal_vm_dir.join(CONF_IMG_FNAME);
+                    std::fs::create_dir_all(universal_vm_dir)?;
 
-            let script_path =
-                env.get_dependency_path("rs/tests/create-universal-vm-config-image.sh");
-            let mut cmd = Command::new(script_path);
+                    let script_path =
+                        env.get_dependency_path("rs/tests/create-universal-vm-config-image.sh");
+                    let mut cmd = Command::new(script_path);
 
-            // Add /usr/sbin to the PATH env var to give access to required tools like mkfs.vfat.
-            let path_env_var = "PATH";
-            let path_prefix = match std::env::var(path_env_var) {
-                Ok(old_path) => {
-                    format!("{old_path}:")
+                    // Add /usr/sbin to the PATH env var to give access to required tools like mkfs.vfat.
+                    let path_env_var = "PATH";
+                    let path_prefix = match std::env::var(path_env_var) {
+                        Ok(old_path) => {
+                            format!("{old_path}:")
+                        }
+                        Err(_) => String::from(""),
+                    };
+                    cmd.env(path_env_var, format!("{path_prefix}{}", "/usr/sbin"));
+
+                    cmd.arg("--input")
+                        .arg(config_dir)
+                        .arg("--output")
+                        .arg(config_img.clone());
+
+                    let output = cmd.output()?;
+                    std::io::stdout().write_all(&output.stdout)?;
+                    std::io::stderr().write_all(&output.stderr)?;
+                    if !output.status.success() {
+                        bail!("could not spawn config image creation process");
+                    }
+                    config_img
                 }
-                Err(_) => String::from(""),
+                UniversalVmConfig::Img(config_img) => config_img.to_path_buf(),
             };
-            cmd.env(path_env_var, format!("{path_prefix}{}", "/usr/sbin"));
+            let file_id = id_of_file(config_img.clone())?;
 
-            cmd.arg("--input")
-                .arg(config_dir)
-                .arg("--output")
-                .arg(config_img.clone());
+            let upload = match farm.claim_file(&file_id)? {
+                ClaimResult::FileClaimed(file_expiration) => {
+                    if let Some(expiration) = file_expiration.expiration {
+                        let now = Utc::now();
+                        let ttl = expiration - now;
+                        // If the file expires within a day we upload it again
+                        // to ensure it exists for at least a month.
+                        ttl < Duration::days(1)
+                    } else {
+                        // If there's no expiration time we assume the file never expires
+                        // so we don't need to upload it again.
+                        false
+                    }
+                }
+                ClaimResult::FileNotFound => true,
+            };
 
-            let output = cmd.output()?;
-            std::io::stdout().write_all(&output.stdout)?;
-            std::io::stderr().write_all(&output.stderr)?;
-            if !output.status.success() {
-                bail!("could not spawn config image creation process");
+            if upload {
+                let file_id = farm.upload_file(config_img, CONF_IMG_FNAME)?;
+                info!(logger, "Uploaded image: {}", file_id);
+            } else {
+                info!(
+                    logger,
+                    "Image: {} was already uploaded, no need to upload it again", file_id,
+                );
             }
-
-            let image_id = farm.upload_file(config_img, CONF_IMG_FNAME)?;
-            info!(logger, "Uploaded image: {}", image_id);
 
             farm.attach_disk_image(
                 &pot_setup.farm_group_name,
                 &self.name,
                 "usb-storage",
-                image_id,
+                file_id,
             )?;
         }
 

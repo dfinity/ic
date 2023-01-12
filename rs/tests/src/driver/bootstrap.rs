@@ -29,6 +29,8 @@ use crate::driver::{
     node_software_version::NodeSoftwareVersion, port_allocator::AddrType, resource::AllocatedVm,
 };
 
+use super::farm::FileId;
+
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
 
@@ -228,7 +230,7 @@ pub fn setup_and_start_vms(
     result
 }
 
-pub fn upload_config_disk_image(node: &InitializedNode, farm: &Farm) -> FarmResult<String> {
+pub fn upload_config_disk_image(node: &InitializedNode, farm: &Farm) -> FarmResult<FileId> {
     let compressed_img_path = mk_compressed_img_path();
     let target_file = PathBuf::from(&node.node_path).join(compressed_img_path.clone());
     let image_id = farm.upload_file(target_file, &compressed_img_path)?;

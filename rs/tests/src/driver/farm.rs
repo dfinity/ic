@@ -1,16 +1,19 @@
 use std::{
     collections::HashMap,
     net::Ipv6Addr,
-    path::Path,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
 use crate::driver::ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy};
 use anyhow::Result;
+use chrono::{DateTime, Utc};
+use ic_crypto_sha::Sha256;
 use reqwest::blocking::{multipart, Client, RequestBuilder};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use slog::{error, info, warn, Logger};
+use std::fmt;
 use std::io::Write;
 use thiserror::Error;
 use url::Url;
@@ -81,8 +84,21 @@ impl Farm {
         Ok(created_vm)
     }
 
+    pub fn claim_file(&self, file_id: &FileId) -> FarmResult<ClaimResult> {
+        let path = format!("file/{}", file_id);
+        let rb = self.put(&path);
+        match self.retry_until_success(rb) {
+            Ok(resp) => {
+                let expiration = resp.json::<FileExpiration>()?;
+                Ok(ClaimResult::FileClaimed(expiration))
+            }
+            Err(FarmError::NotFound { message: _ }) => Ok(ClaimResult::FileNotFound),
+            Err(e) => Err(e),
+        }
+    }
+
     /// uploads an image an returns the image id
-    pub fn upload_file<P: AsRef<Path>>(&self, path: P, filename: &str) -> FarmResult<String> {
+    pub fn upload_file<P: AsRef<Path>>(&self, path: P, filename: &str) -> FarmResult<FileId> {
         let form = multipart::Form::new()
             .file(filename.to_string(), path)
             .expect("could not create multipart for image");
@@ -97,7 +113,7 @@ impl Farm {
                 ),
             });
         }
-        Ok(file_ids.remove(filename).unwrap())
+        Ok(FileId(file_ids.remove(filename).unwrap()))
     }
 
     pub fn attach_disk_image(
@@ -105,7 +121,7 @@ impl Farm {
         group_name: &str,
         vm_name: &str,
         template_name: &str,
-        image_id: String,
+        image_id: FileId,
     ) -> FarmResult<()> {
         let path = format!(
             "group/{}/vm/{}/drive-templates/{}",
@@ -225,6 +241,10 @@ impl Farm {
                     if r.status().is_success() {
                         return Ok(r);
                     };
+                    if r.status().as_u16() == 404 {
+                        let body = r.text().unwrap_or_default();
+                        return Err(FarmError::NotFound { message: body });
+                    }
                     if r.status().is_server_error() {
                         error!(self.logger, "unexpected response from Farm: {:?}", r.text());
                     } else {
@@ -240,6 +260,33 @@ impl Farm {
             ),
         })
     }
+}
+
+pub enum ClaimResult {
+    FileNotFound,
+    FileClaimed(FileExpiration),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FileExpiration {
+    pub expiration: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct FileId(String);
+
+impl fmt::Display for FileId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+pub fn id_of_file(file: PathBuf) -> Result<FileId> {
+    let mut reader = std::fs::File::open(file)?;
+    let mut sha256_hasher = Sha256::new();
+    std::io::copy(&mut reader, &mut sha256_hasher).unwrap();
+    let digest = sha256_hasher.finish();
+    Ok(FileId(hex::encode(digest)))
 }
 
 struct TimeoutSettings {
@@ -383,14 +430,17 @@ pub enum VmType {
 #[serde(tag = "_tag")]
 #[serde(rename_all = "camelCase")]
 pub enum ImageLocation {
-    ImageViaId { id: String },
+    ImageViaId { id: FileId },
     ImageViaUrl { url: Url, sha256: String },
-    IcOsImageViaId { id: String },
+    IcOsImageViaId { id: FileId },
     IcOsImageViaUrl { url: Url, sha256: String },
 }
 
 #[derive(Error, Debug)]
 pub enum FarmError {
+    #[error("Not found: {message}")]
+    NotFound { message: String },
+
     #[error(transparent)]
     ApiError(#[from] reqwest::Error),
 
@@ -430,11 +480,11 @@ struct AttachDrivesRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct AttachImageSpec {
     pub _tag: String,
-    pub id: String,
+    pub id: FileId,
 }
 
 impl AttachImageSpec {
-    pub fn new(id: String) -> Self {
+    pub fn new(id: FileId) -> Self {
         Self {
             _tag: "imageViaId".to_string(),
             id,
