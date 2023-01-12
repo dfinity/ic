@@ -15,7 +15,7 @@ use ic_execution_environment::{
 use ic_interfaces::execution_environment::{
     ExecutionMode, IngressHistoryWriter, SubnetAvailableMemory,
 };
-use ic_interfaces::messages::CanisterInputMessage;
+use ic_interfaces::messages::CanisterMessage;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
@@ -55,7 +55,7 @@ lazy_static! {
 #[derive(Clone)]
 pub struct BenchmarkArgs {
     pub canister_state: CanisterState,
-    pub ingress: CanisterInputMessage,
+    pub ingress: CanisterMessage,
     pub reject: Payload,
     pub time: Time,
     pub network_topology: Arc<NetworkTopology>,
@@ -122,7 +122,7 @@ where
     );
 
     // Create an Ingress message
-    let ingress = CanisterInputMessage::Ingress(
+    let ingress = CanisterMessage::Ingress(
         IngressBuilder::new()
             .method_name("test")
             .method_payload(vec![0; 8192])

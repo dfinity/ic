@@ -20,7 +20,7 @@ use ic_ic00_types::{
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
 };
-use ic_interfaces::messages::RequestOrIngress;
+use ic_interfaces::messages::CanisterCall;
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
@@ -65,7 +65,7 @@ pub(crate) struct InstallCodeResult {
 pub(crate) enum DtsInstallCodeResult {
     Finished {
         canister: CanisterState,
-        message: RequestOrIngress,
+        message: CanisterCall,
         instructions_used: NumInstructions,
         result: Result<InstallCodeResult, CanisterManagerError>,
     },
@@ -598,7 +598,7 @@ impl CanisterManager {
     pub(crate) fn install_code(
         &self,
         context: InstallCodeContext,
-        message: RequestOrIngress,
+        message: CanisterCall,
         state: &mut ReplicatedState,
         mut execution_parameters: ExecutionParameters,
         round_limits: &mut RoundLimits,
@@ -685,7 +685,7 @@ impl CanisterManager {
     pub(crate) fn install_code_dts(
         &self,
         context: InstallCodeContext,
-        message: RequestOrIngress,
+        message: CanisterCall,
         prepaid_execution_cycles: Option<Cycles>,
         mut canister: CanisterState,
         time: Time,
@@ -1623,7 +1623,7 @@ pub(crate) trait PausedInstallCodeExecution: Send + std::fmt::Debug {
 
     /// Aborts the paused execution.
     /// Returns the original message and the cycles prepaid for execution.
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (RequestOrIngress, Cycles);
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, Cycles);
 }
 
 #[cfg(test)]

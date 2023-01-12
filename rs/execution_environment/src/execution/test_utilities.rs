@@ -26,8 +26,8 @@ use ic_interfaces::{
         ExecutionMode, IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
         SubnetAvailableMemory,
     },
-    messages::CanisterInputMessage,
-    messages::RequestOrIngress,
+    messages::CanisterCall,
+    messages::CanisterMessage,
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -1787,11 +1787,11 @@ fn get_output_messages(state: &mut ReplicatedState) -> Vec<(CanisterId, RequestO
     output
 }
 
-fn get_canister_id_if_install_code(message: CanisterInputMessage) -> Option<CanisterId> {
+fn get_canister_id_if_install_code(message: CanisterMessage) -> Option<CanisterId> {
     let message = match message {
-        CanisterInputMessage::Response(_) => return None,
-        CanisterInputMessage::Request(request) => RequestOrIngress::Request(request),
-        CanisterInputMessage::Ingress(ingress) => RequestOrIngress::Ingress(ingress),
+        CanisterMessage::Response(_) => return None,
+        CanisterMessage::Request(request) => CanisterCall::Request(request),
+        CanisterMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
     };
     if message.method_name() != "install_code" {
         return None;

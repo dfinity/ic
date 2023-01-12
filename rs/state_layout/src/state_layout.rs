@@ -1989,7 +1989,7 @@ mod test {
     use super::*;
 
     use ic_ic00_types::IC_00;
-    use ic_interfaces::messages::{CanisterInputMessage, RequestOrIngress};
+    use ic_interfaces::messages::{CanisterCall, CanisterMessage};
     use ic_test_utilities::{
         mock_time,
         types::{
@@ -2099,23 +2099,23 @@ mod test {
         );
         let task_queue = vec![
             ExecutionTask::AbortedInstallCode {
-                message: RequestOrIngress::Ingress(Arc::clone(&ingress)),
+                message: CanisterCall::Ingress(Arc::clone(&ingress)),
                 prepaid_execution_cycles: Cycles::new(1),
             },
             ExecutionTask::AbortedExecution {
-                message: CanisterInputMessage::Request(Arc::clone(&request)),
+                message: CanisterMessage::Request(Arc::clone(&request)),
                 prepaid_execution_cycles: Cycles::new(2),
             },
             ExecutionTask::AbortedInstallCode {
-                message: RequestOrIngress::Request(Arc::clone(&request)),
+                message: CanisterCall::Request(Arc::clone(&request)),
                 prepaid_execution_cycles: Cycles::new(3),
             },
             ExecutionTask::AbortedExecution {
-                message: CanisterInputMessage::Response(Arc::clone(&response)),
+                message: CanisterMessage::Response(Arc::clone(&response)),
                 prepaid_execution_cycles: Cycles::new(4),
             },
             ExecutionTask::AbortedExecution {
-                message: CanisterInputMessage::Ingress(Arc::clone(&ingress)),
+                message: CanisterMessage::Ingress(Arc::clone(&ingress)),
                 prepaid_execution_cycles: Cycles::new(5),
             },
         ];

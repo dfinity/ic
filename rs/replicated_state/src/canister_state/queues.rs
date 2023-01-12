@@ -7,7 +7,7 @@ use crate::{CanisterState, InputQueueType, NextInputQueue, StateError};
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
 use ic_ic00_types::IC_00;
-use ic_interfaces::messages::CanisterInputMessage;
+use ic_interfaces::messages::CanisterMessage;
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::queues::{v1 as pb_queues, v1::canister_queues::NextInputQueue as ProtoNextInputQueue},
@@ -378,7 +378,7 @@ impl CanisterQueues {
     /// Note: We pop senders from the head of `input_schedule` and insert them
     /// to the back, which allows us to handle messages from different
     /// originators in a round-robin fashion.
-    fn pop_canister_input(&mut self, input_queue: InputQueueType) -> Option<CanisterInputMessage> {
+    fn pop_canister_input(&mut self, input_queue: InputQueueType) -> Option<CanisterMessage> {
         let input_schedule = match input_queue {
             InputQueueType::LocalSubnet => &mut self.local_subnet_input_schedule,
             InputQueueType::RemoteSubnet => &mut self.remote_subnet_input_schedule,
@@ -398,8 +398,8 @@ impl CanisterQueues {
             debug_assert!(self.stats_ok());
 
             let msg = match msg {
-                RequestOrResponse::Request(msg) => CanisterInputMessage::Request(msg),
-                RequestOrResponse::Response(msg) => CanisterInputMessage::Response(msg),
+                RequestOrResponse::Request(msg) => CanisterMessage::Request(msg),
+                RequestOrResponse::Response(msg) => CanisterMessage::Response(msg),
             };
 
             return Some(msg);
@@ -409,7 +409,7 @@ impl CanisterQueues {
     }
 
     /// Peeks the next canister-to-canister message from `input_queues`.
-    fn peek_canister_input(&self, input_queue: InputQueueType) -> Option<CanisterInputMessage> {
+    fn peek_canister_input(&self, input_queue: InputQueueType) -> Option<CanisterMessage> {
         let input_schedule = match input_queue {
             InputQueueType::LocalSubnet => &self.local_subnet_input_schedule,
             InputQueueType::RemoteSubnet => &self.remote_subnet_input_schedule,
@@ -418,8 +418,8 @@ impl CanisterQueues {
             // Get the message queue of this canister.
             let input_queue = &self.canister_queues.get(sender).unwrap().0;
             let msg = match input_queue.peek().unwrap() {
-                RequestOrResponse::Request(msg) => CanisterInputMessage::Request(Arc::clone(msg)),
-                RequestOrResponse::Response(msg) => CanisterInputMessage::Response(Arc::clone(msg)),
+                RequestOrResponse::Request(msg) => CanisterMessage::Request(Arc::clone(msg)),
+                RequestOrResponse::Response(msg) => CanisterMessage::Response(Arc::clone(msg)),
             };
             return Some(msg);
         }
@@ -455,13 +455,13 @@ impl CanisterQueues {
 
     /// Peeks the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
-    pub(crate) fn peek_input(&mut self) -> Option<CanisterInputMessage> {
+    pub(crate) fn peek_input(&mut self) -> Option<CanisterMessage> {
         // Try all 3 inputs: Ingress, Local, and Remote subnets
         for _ in 0..3 {
             let next_input = match self.next_input_queue {
                 NextInputQueue::Ingress => self
                     .peek_ingress()
-                    .map(|ingress| CanisterInputMessage::Ingress(Arc::clone(ingress))),
+                    .map(|ingress| CanisterMessage::Ingress(Arc::clone(ingress))),
 
                 NextInputQueue::RemoteSubnet => {
                     self.peek_canister_input(InputQueueType::RemoteSubnet)
@@ -519,7 +519,7 @@ impl CanisterQueues {
     /// Each time this function is called, we round robin between these three
     /// buckets. We also round robin between the queues in the local subnet and
     /// remote subnet buckets when we pop messages from those buckets.
-    pub(crate) fn pop_input(&mut self) -> Option<CanisterInputMessage> {
+    pub(crate) fn pop_input(&mut self) -> Option<CanisterMessage> {
         // Try all 3 inputs: Ingress, Local, and Remote subnets
         for _ in 0..3 {
             let cur_input_queue = self.next_input_queue;
@@ -531,7 +531,7 @@ impl CanisterQueues {
             };
 
             let next_input = match cur_input_queue {
-                NextInputQueue::Ingress => self.pop_ingress().map(CanisterInputMessage::Ingress),
+                NextInputQueue::Ingress => self.pop_ingress().map(CanisterMessage::Ingress),
 
                 NextInputQueue::RemoteSubnet => {
                     self.pop_canister_input(InputQueueType::RemoteSubnet)
@@ -1449,7 +1449,7 @@ pub mod testing {
     use super::{CanisterQueues, MemoryUsageStats, QueueOp};
     use crate::canister_state::queues::OutputQueuesStats;
     use crate::{InputQueueType, StateError};
-    use ic_interfaces::messages::CanisterInputMessage;
+    use ic_interfaces::messages::CanisterMessage;
     use ic_types::{
         messages::{Request, RequestOrResponse},
         CanisterId, Time,
@@ -1480,7 +1480,7 @@ pub mod testing {
         ) -> Result<(), (StateError, RequestOrResponse)>;
 
         /// Publicly exposes `CanisterQueues::pop_input()`.
-        fn pop_input(&mut self) -> Option<CanisterInputMessage>;
+        fn pop_input(&mut self) -> Option<CanisterMessage>;
 
         /// Publicly exposes the local subnet input_schedule.
         fn get_local_subnet_input_schedule(&self) -> &VecDeque<CanisterId>;
@@ -1527,7 +1527,7 @@ pub mod testing {
             self.push_input(msg, input_queue_type)
         }
 
-        fn pop_input(&mut self) -> Option<CanisterInputMessage> {
+        fn pop_input(&mut self) -> Option<CanisterMessage> {
             self.pop_input()
         }
 

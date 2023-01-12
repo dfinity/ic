@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{CanisterState, SchedulerState, SystemState};
 use ic_base_types::NumSeconds;
-use ic_interfaces::messages::CanisterInputMessage;
+use ic_interfaces::messages::CanisterMessage;
 use ic_test_utilities::{
     mock_time,
     state::arb_num_receivers,
@@ -57,7 +57,7 @@ impl CanisterQueuesFixture {
         )
     }
 
-    fn pop_input(&mut self) -> Option<CanisterInputMessage> {
+    fn pop_input(&mut self) -> Option<CanisterMessage> {
         self.queues.pop_input()
     }
 
@@ -284,7 +284,7 @@ fn test_message_picking_round_robin_on_one_queue() {
 
     for _ in 0..3 {
         match queues.pop_input().expect("could not pop a message") {
-            CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, queues.other),
+            CanisterMessage::Request(msg) => assert_eq!(msg.sender, queues.other),
             msg => panic!("unexpected message popped: {:?}", msg),
         }
     }
@@ -316,7 +316,7 @@ fn test_message_picking_ingress_only() {
     let mut expected_byte = 0;
     while queues.has_input() {
         match queues.pop_input().expect("could not pop a message") {
-            CanisterInputMessage::Ingress(msg) => {
+            CanisterMessage::Ingress(msg) => {
                 assert_eq!(msg.method_payload, vec![expected_byte])
             }
             msg => panic!("unexpected message popped: {:?}", msg),
@@ -414,37 +414,37 @@ fn test_message_picking_round_robin() {
 
     // Pop response from other_2
     match queues.pop_input().expect("could not pop a message") {
-        CanisterInputMessage::Response(msg) => assert_eq!(msg.respondent, other_2),
+        CanisterMessage::Response(msg) => assert_eq!(msg.respondent, other_2),
         msg => panic!("unexpected message popped: {:?}", msg),
     }
 
     // Pop ingress
     match queues.pop_input().expect("could not pop a message") {
-        CanisterInputMessage::Ingress(msg) => assert_eq!(msg.source, user_test_id(77)),
+        CanisterMessage::Ingress(msg) => assert_eq!(msg.source, user_test_id(77)),
         msg => panic!("unexpected message popped: {:?}", msg),
     }
 
     // Pop request from other_1
     match queues.pop_input().expect("could not pop a message") {
-        CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, other_1),
+        CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_1),
         msg => panic!("unexpected message popped: {:?}", msg),
     }
 
     // Pop request from other_1
     match queues.pop_input().expect("could not pop a message") {
-        CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, other_2),
+        CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_2),
         msg => panic!("unexpected message popped: {:?}", msg),
     }
 
     // Pop request from other_3
     match queues.pop_input().expect("could not pop a message") {
-        CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, other_3),
+        CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_3),
         msg => panic!("unexpected message popped: {:?}", msg),
     }
 
     // Pop request from other_1
     match queues.pop_input().expect("could not pop a message") {
-        CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, other_1),
+        CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_1),
         msg => panic!("unexpected message popped: {:?}", msg),
     }
 
@@ -482,8 +482,8 @@ fn test_input_scheduling() {
         assert_eq!(expected_schedule, schedule.as_slice());
     };
 
-    let assert_sender = |sender: &CanisterId, message: CanisterInputMessage| match message {
-        CanisterInputMessage::Request(req) => assert_eq!(*sender, req.sender),
+    let assert_sender = |sender: &CanisterId, message: CanisterMessage| match message {
+        CanisterMessage::Request(req) => assert_eq!(*sender, req.sender),
         _ => unreachable!(),
     };
 
@@ -558,45 +558,39 @@ fn test_peek_round_robin() {
     // Due to the round-robin across Local, Ingress, and Remote Subnet messages,
     // the peek order should be:
     // 1. Local Subnet request (index 0)
-    let peeked_input =
-        CanisterInputMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()));
+    let peeked_input = CanisterMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     // Peeking again the queues would return the same result.
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
 
     // 2. Ingress message
-    let peeked_input = CanisterInputMessage::Ingress(Arc::new(ingress));
+    let peeked_input = CanisterMessage::Ingress(Arc::new(ingress));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
 
     // 3. Remote Subnet request (index 0)
-    let peeked_input =
-        CanisterInputMessage::Request(Arc::new(remote_requests.get(0).unwrap().clone()));
+    let peeked_input = CanisterMessage::Request(Arc::new(remote_requests.get(0).unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
 
     // 4. Local Subnet request (index 1)
-    let peeked_input =
-        CanisterInputMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()));
+    let peeked_input = CanisterMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
 
     // 5. Remote Subnet request (index 2)
-    let peeked_input =
-        CanisterInputMessage::Request(Arc::new(remote_requests.get(2).unwrap().clone()));
+    let peeked_input = CanisterMessage::Request(Arc::new(remote_requests.get(2).unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
 
     // 6. Local Subnet request (index 2)
-    let peeked_input =
-        CanisterInputMessage::Request(Arc::new(local_requests.get(2).unwrap().clone()));
+    let peeked_input = CanisterMessage::Request(Arc::new(local_requests.get(2).unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
 
     // 7. Remote Subnet request (index 1)
-    let peeked_input =
-        CanisterInputMessage::Request(Arc::new(remote_requests.get(1).unwrap().clone()));
+    let peeked_input = CanisterMessage::Request(Arc::new(remote_requests.get(1).unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
     assert!(!queues.has_input());
@@ -628,7 +622,7 @@ fn test_skip_round_robin() {
         expiry_time: current_time_and_expiry_time().1,
     };
     queues.push_ingress(ingress.clone());
-    let ingress_input = CanisterInputMessage::Ingress(Arc::new(ingress));
+    let ingress_input = CanisterMessage::Ingress(Arc::new(ingress));
     assert!(queues.has_input());
 
     // 1. Pop local subnet request (index 0)
@@ -641,8 +635,7 @@ fn test_skip_round_robin() {
     let mut loop_detector = CanisterQueuesLoopDetector::default();
 
     // Pop local queue.
-    let peeked_input =
-        CanisterInputMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()));
+    let peeked_input = CanisterMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
 
@@ -652,8 +645,7 @@ fn test_skip_round_robin() {
     assert!(loop_detector.skipped_ingress_queue);
     assert!(!loop_detector.detected_loop(&queues));
 
-    let peeked_input =
-        CanisterInputMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()));
+    let peeked_input = CanisterMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     assert_eq!(queues.pop_input().unwrap(), peeked_input);
 
@@ -663,8 +655,7 @@ fn test_skip_round_robin() {
     assert!(!loop_detector.detected_loop(&queues));
 
     // Skip local.
-    let peeked_input =
-        CanisterInputMessage::Request(Arc::new(local_requests.get(2).unwrap().clone()));
+    let peeked_input = CanisterMessage::Request(Arc::new(local_requests.get(2).unwrap().clone()));
     assert_eq!(queues.peek_input().unwrap(), peeked_input);
     queues.skip_input(&mut loop_detector);
     assert!(loop_detector.skipped_ingress_queue);
@@ -804,13 +795,13 @@ fn test_peek_canister_input_does_not_affect_schedule() {
         queues
             .peek_canister_input(InputQueueType::RemoteSubnet)
             .unwrap(),
-        CanisterInputMessage::Request(Arc::new(remote_requests.get(0).unwrap().clone()))
+        CanisterMessage::Request(Arc::new(remote_requests.get(0).unwrap().clone()))
     );
     assert_eq!(
         queues
             .peek_canister_input(InputQueueType::LocalSubnet)
             .unwrap(),
-        CanisterInputMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()))
+        CanisterMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()))
     );
 
     // Schedules are not changed.
@@ -854,13 +845,13 @@ fn test_skip_canister_input() {
         queues
             .peek_canister_input(InputQueueType::RemoteSubnet)
             .unwrap(),
-        CanisterInputMessage::Request(Arc::new(remote_requests.get(0).unwrap().clone()))
+        CanisterMessage::Request(Arc::new(remote_requests.get(0).unwrap().clone()))
     );
     assert_eq!(
         queues
             .peek_canister_input(InputQueueType::LocalSubnet)
             .unwrap(),
-        CanisterInputMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()))
+        CanisterMessage::Request(Arc::new(local_requests.get(0).unwrap().clone()))
     );
 
     queues.skip_canister_input(InputQueueType::RemoteSubnet);
@@ -871,14 +862,14 @@ fn test_skip_canister_input() {
         queues
             .peek_canister_input(InputQueueType::RemoteSubnet)
             .unwrap(),
-        CanisterInputMessage::Request(Arc::new(remote_requests.get(1).unwrap().clone()))
+        CanisterMessage::Request(Arc::new(remote_requests.get(1).unwrap().clone()))
     );
     assert_eq!(queues.remote_subnet_input_schedule.len(), 2);
     assert_eq!(
         queues
             .peek_canister_input(InputQueueType::LocalSubnet)
             .unwrap(),
-        CanisterInputMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()))
+        CanisterMessage::Request(Arc::new(local_requests.get(1).unwrap().clone()))
     );
     assert_eq!(queues.local_subnet_input_schedule.len(), 2);
     assert_eq!(
@@ -943,7 +934,7 @@ fn test_stats() {
 
     // Pop the first request we just pushed (as if it has started execution).
     match queues.pop_input().expect("could not pop a message") {
-        CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, other_1),
+        CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_1),
         msg => panic!("unexpected message popped: {:?}", msg),
     }
     // We've now removed all messages in the input queue from `other_1`, but the
@@ -1098,7 +1089,7 @@ fn test_stats() {
 
     // Pop request from other_2
     match queues.pop_input().expect("could not pop a message") {
-        CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, other_2),
+        CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_2),
         msg => panic!("unexpected message popped: {:?}", msg),
     }
     // Removed message.
@@ -1116,7 +1107,7 @@ fn test_stats() {
 
     // Pop request from other_3
     match queues.pop_input().expect("could not pop a message") {
-        CanisterInputMessage::Request(msg) => assert_eq!(msg.sender, other_3),
+        CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_3),
         msg => panic!("unexpected message popped: {:?}", msg),
     }
     // Removed message.
@@ -1134,7 +1125,7 @@ fn test_stats() {
 
     // Pop response from other_1
     match queues.pop_input().expect("could not pop a message") {
-        CanisterInputMessage::Response(msg) => assert_eq!(msg.respondent, other_1),
+        CanisterMessage::Response(msg) => assert_eq!(msg.respondent, other_1),
         msg => panic!("unexpected message popped: {:?}", msg),
     }
     // Removed message.
@@ -1383,7 +1374,7 @@ fn test_reject_subnet_output_request() {
 
     // There is now a reject response.
     assert_eq!(
-        CanisterInputMessage::Response(Arc::new(
+        CanisterMessage::Response(Arc::new(
             ResponseBuilder::default()
                 .respondent(IC_00)
                 .originator(this)

@@ -12,9 +12,7 @@ use crate::{
 use ic_base_types::PrincipalId;
 use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponse};
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::{
-    execution_environment::CanisterOutOfCyclesError, messages::CanisterInputMessage,
-};
+use ic_interfaces::{execution_environment::CanisterOutOfCyclesError, messages::CanisterMessage};
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_registry_subnet_type::SubnetType;
@@ -645,13 +643,13 @@ impl ReplicatedState {
 
     /// Extracts the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
-    pub fn pop_subnet_input(&mut self) -> Option<CanisterInputMessage> {
+    pub fn pop_subnet_input(&mut self) -> Option<CanisterMessage> {
         self.subnet_queues.pop_input()
     }
 
     /// Peeks the next inter-canister or ingress message (round-robin) from
     /// `self.subnet_queues`.
-    pub fn peek_subnet_input(&mut self) -> Option<CanisterInputMessage> {
+    pub fn peek_subnet_input(&mut self) -> Option<CanisterMessage> {
         self.subnet_queues.peek_input()
     }
 

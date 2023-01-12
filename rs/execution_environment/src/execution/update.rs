@@ -14,8 +14,8 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_interfaces::messages::CanisterInputMessage;
-use ic_interfaces::messages::RequestOrIngress;
+use ic_interfaces::messages::CanisterCall;
+use ic_interfaces::messages::CanisterMessage;
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_types::messages::CallContextId;
@@ -32,7 +32,7 @@ mod tests;
 #[allow(clippy::too_many_arguments)]
 pub fn execute_update(
     clean_canister: CanisterState,
-    message: RequestOrIngress,
+    message: CanisterCall,
     method: WasmMethod,
     prepaid_execution_cycles: Option<Cycles>,
     execution_parameters: ExecutionParameters,
@@ -207,7 +207,7 @@ fn finish_err(
 #[derive(Debug)]
 struct OriginalContext {
     call_origin: CallOrigin,
-    message: RequestOrIngress,
+    message: CanisterCall,
     prepaid_execution_cycles: Cycles,
     method: WasmMethod,
     execution_parameters: ExecutionParameters,
@@ -497,7 +497,7 @@ impl PausedExecution for PausedCallExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterInputMessage, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessage, Cycles) {
         info!(
             log,
             "[DTS] Aborting {:?} execution of canister {}",
@@ -506,8 +506,8 @@ impl PausedExecution for PausedCallExecution {
         );
         self.paused_wasm_execution.abort();
         let message = match self.original.message {
-            RequestOrIngress::Request(r) => CanisterInputMessage::Request(r),
-            RequestOrIngress::Ingress(i) => CanisterInputMessage::Ingress(i),
+            CanisterCall::Request(r) => CanisterMessage::Request(r),
+            CanisterCall::Ingress(i) => CanisterMessage::Ingress(i),
         };
         (message, self.original.prepaid_execution_cycles)
     }

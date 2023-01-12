@@ -12,7 +12,7 @@ use ic_interfaces::{
         HypervisorError, HypervisorResult, SubnetAvailableMemory, SubnetAvailableMemoryError,
         WasmExecutionOutput,
     },
-    messages::RequestOrIngress,
+    messages::CanisterCall,
 };
 use ic_logger::{error, fatal, info, warn};
 use ic_replicated_state::{CanisterState, ExecutionState};
@@ -555,7 +555,7 @@ pub(crate) struct OriginalContext {
     pub mode: CanisterInstallMode,
     pub canister_layout_path: PathBuf,
     pub config: CanisterMgrConfig,
-    pub message: RequestOrIngress,
+    pub message: CanisterCall,
     pub prepaid_execution_cycles: Cycles,
     pub time: Time,
     pub compilation_cost_handling: CompilationCostHandling,

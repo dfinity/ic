@@ -1,5 +1,5 @@
 use ic_base_types::{NumBytes, NumSeconds};
-use ic_interfaces::messages::CanisterInputMessage;
+use ic_interfaces::messages::CanisterMessage;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::DEFAULT_QUEUE_CAPACITY,
@@ -266,11 +266,11 @@ fn induct_messages_to_self_memory_limit_test_impl(
 
     // Expect the response and first request to have been inducted.
     assert_eq!(
-        Some(CanisterInputMessage::Response(response)),
+        Some(CanisterMessage::Response(response)),
         system_state.queues_mut().pop_input()
     );
     assert_eq!(
-        Some(CanisterInputMessage::Request(request.clone())),
+        Some(CanisterMessage::Request(request.clone())),
         system_state.queues_mut().pop_input()
     );
 
@@ -284,7 +284,7 @@ fn induct_messages_to_self_memory_limit_test_impl(
         );
     } else {
         assert_eq!(
-            Some(CanisterInputMessage::Request(request)),
+            Some(CanisterMessage::Request(request)),
             system_state.queues_mut().pop_input()
         );
         assert_eq!(None, system_state.queues_mut().pop_input());
@@ -328,7 +328,7 @@ fn induct_messages_to_self_full_queue() {
     // Expect all requests to have been inducted.
     for _ in 0..DEFAULT_QUEUE_CAPACITY {
         assert_eq!(
-            Some(CanisterInputMessage::Request(request.clone())),
+            Some(CanisterMessage::Request(request.clone())),
             system_state.pop_input()
         );
     }

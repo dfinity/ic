@@ -38,7 +38,7 @@ use ic_interfaces::{
     execution_environment::{
         ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
     },
-    messages::{CanisterInputMessage, RequestOrIngress},
+    messages::{CanisterCall, CanisterMessage},
 };
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
@@ -231,7 +231,7 @@ pub trait PausedExecution: std::fmt::Debug + Send {
 
     /// Aborts the paused execution.
     /// Returns the original message and the cycles prepaid for execution.
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterInputMessage, Cycles);
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessage, Cycles);
 }
 
 /// Stores all paused executions keyed by their ids.
@@ -357,7 +357,7 @@ impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
     pub fn execute_subnet_message(
         &self,
-        msg: CanisterInputMessage,
+        msg: CanisterMessage,
         mut state: ReplicatedState,
         instruction_limits: InstructionLimits,
         rng: &mut dyn RngCore,
@@ -368,7 +368,7 @@ impl ExecutionEnvironment {
         let timer = Timer::start(); // Start logging execution time.
 
         let mut msg = match msg {
-            CanisterInputMessage::Response(response) => {
+            CanisterMessage::Response(response) => {
                 let context = state
                     .metadata
                     .subnet_call_context_manager
@@ -404,8 +404,8 @@ impl ExecutionEnvironment {
                 };
             }
 
-            CanisterInputMessage::Ingress(msg) => RequestOrIngress::Ingress(msg),
-            CanisterInputMessage::Request(msg) => RequestOrIngress::Request(msg),
+            CanisterMessage::Ingress(msg) => CanisterCall::Ingress(msg),
+            CanisterMessage::Request(msg) => CanisterCall::Request(msg),
         };
 
         let method = Ic00Method::from_str(msg.method_name());
@@ -426,7 +426,7 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::SignWithECDSA) => match &msg {
-                RequestOrIngress::Request(request) => {
+                CanisterCall::Request(request) => {
                     let reject_message = if payload.is_empty() {
                         "An empty message cannot be signed".to_string()
                     } else {
@@ -481,20 +481,20 @@ impl ExecutionEnvironment {
                         }
                     }
                 }
-                RequestOrIngress::Ingress(_) => {
+                CanisterCall::Ingress(_) => {
                     self.reject_unexpected_ingress(Ic00Method::SignWithECDSA)
                 }
             },
 
             Ok(Ic00Method::CreateCanister) => {
                 match &mut msg {
-                    RequestOrIngress::Ingress(_) =>
+                    CanisterCall::Ingress(_) =>
                         Some((Err(UserError::new(
                             ErrorCode::CanisterMethodNotFound,
                             "create_canister can only be called by other canisters, not via ingress messages.")),
                             Cycles::zero(),
                         )),
-                    RequestOrIngress::Request(req) => {
+                    CanisterCall::Request(req) => {
                         match Self::verify_sender_id(req, &state) {
                             Err(err) => Some((Err(err), msg.take_cycles())),
                             Ok(_) => {
@@ -564,7 +564,7 @@ impl ExecutionEnvironment {
                         // after applying the new settings to allow users to
                         // decrease the freezing threshold if it was set too
                         // high that topping up the canister is not feasible.
-                        if let RequestOrIngress::Ingress(ingress) = &msg {
+                        if let CanisterCall::Ingress(ingress) = &msg {
                             if let Ok(canister) = get_canister_mut(canister_id, &mut state) {
                                 let bytes_to_charge =
                                     ingress.method_payload.len() + ingress.method_name.len();
@@ -673,14 +673,14 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::RawRand) => match &msg {
-                RequestOrIngress::Ingress(_) => Some((
+                CanisterCall::Ingress(_) => Some((
                     Err(UserError::new(
                         ErrorCode::CanisterMethodNotFound,
                         "raw_rand can only be called by other canisters, not via ingress messages.",
                     )),
                     Cycles::zero(),
                 )),
-                RequestOrIngress::Request(req) => match Self::verify_sender_id(req, &state) {
+                CanisterCall::Request(req) => match Self::verify_sender_id(req, &state) {
                     Err(err) => Some((Err(err), msg.take_cycles())),
                     Ok(_) => {
                         let res = match EmptyBlob::decode(payload) {
@@ -702,7 +702,7 @@ impl ExecutionEnvironment {
             },
             Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
                 true => match &msg {
-                    RequestOrIngress::Request(request) => {
+                    CanisterCall::Request(request) => {
                         match Self::verify_sender_id(request, &state) {
                             Err(err) => Some((Err(err), msg.take_cycles())),
                             Ok(_) => match CanisterHttpRequestArgs::decode(payload) {
@@ -751,7 +751,7 @@ impl ExecutionEnvironment {
                             },
                         }
                     }
-                    RequestOrIngress::Ingress(_) => {
+                    CanisterCall::Ingress(_) => {
                         self.reject_unexpected_ingress(Ic00Method::HttpRequest)
                     }
                 },
@@ -764,13 +764,13 @@ impl ExecutionEnvironment {
                 }
             },
             Ok(Ic00Method::SetupInitialDKG) => match &msg {
-                RequestOrIngress::Request(request) => match SetupInitialDKGArgs::decode(payload) {
+                CanisterCall::Request(request) => match SetupInitialDKGArgs::decode(payload) {
                     Err(err) => Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
                     Ok(args) => self
                         .setup_initial_dkg(*msg.sender(), &args, request, &mut state, rng)
                         .map_or_else(|err| Some((Err(err), msg.take_cycles())), |()| None),
                 },
-                RequestOrIngress::Ingress(_) => {
+                CanisterCall::Ingress(_) => {
                     self.reject_unexpected_ingress(Ic00Method::SetupInitialDKG)
                 }
             },
@@ -778,7 +778,7 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::ECDSAPublicKey) => {
                 let cycles = msg.take_cycles();
                 match &msg {
-                    RequestOrIngress::Request(request) => {
+                    CanisterCall::Request(request) => {
                         let res = match ECDSAPublicKeyArgs::decode(request.method_payload()) {
                             Err(err) => Some(Err(candid_error_to_user_error(err))),
                             Ok(args) => match get_master_ecdsa_public_key(
@@ -806,7 +806,7 @@ impl ExecutionEnvironment {
                         };
                         res.map(|res| (res, cycles))
                     }
-                    RequestOrIngress::Ingress(_) => {
+                    CanisterCall::Ingress(_) => {
                         self.reject_unexpected_ingress(Ic00Method::ECDSAPublicKey)
                     }
                 }
@@ -815,7 +815,7 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::ComputeInitialEcdsaDealings) => {
                 let cycles = msg.take_cycles();
                 match &msg {
-                    RequestOrIngress::Request(request) => {
+                    CanisterCall::Request(request) => {
                         let res =
                             match ComputeInitialEcdsaDealingsArgs::decode(request.method_payload())
                             {
@@ -838,7 +838,7 @@ impl ExecutionEnvironment {
                             };
                         res.map(|err| (Err(err), cycles))
                     }
-                    RequestOrIngress::Ingress(_) => {
+                    CanisterCall::Ingress(_) => {
                         self.reject_unexpected_ingress(Ic00Method::ComputeInitialEcdsaDealings)
                     }
                 }
@@ -916,7 +916,7 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::BitcoinSendTransactionInternal) => match &msg {
-                RequestOrIngress::Request(request) => {
+                CanisterCall::Request(request) => {
                     match crate::bitcoin::send_transaction_internal(
                         &self.config.bitcoin.privileged_access,
                         request,
@@ -927,14 +927,14 @@ impl ExecutionEnvironment {
                         Err(err) => Some(Err(err)),
                     }
                 }
-                RequestOrIngress::Ingress(_) => self
+                CanisterCall::Ingress(_) => self
                     .reject_unexpected_ingress(Ic00Method::BitcoinGetSuccessors)
                     .map(|(payload, _)| payload),
             }
             .map(|payload| (payload, msg.take_cycles())),
 
             Ok(Ic00Method::BitcoinGetSuccessors) => match &msg {
-                RequestOrIngress::Request(request) => {
+                CanisterCall::Request(request) => {
                     match crate::bitcoin::get_successors(
                         &self.config.bitcoin.privileged_access,
                         request,
@@ -945,7 +945,7 @@ impl ExecutionEnvironment {
                         Err(err) => Some(Err(err)),
                     }
                 }
-                RequestOrIngress::Ingress(_) => self
+                CanisterCall::Ingress(_) => self
                     .reject_unexpected_ingress(Ic00Method::BitcoinGetSuccessors)
                     .map(|(payload, _)| payload),
             }
@@ -990,7 +990,7 @@ impl ExecutionEnvironment {
     fn finish_subnet_message_execution(
         &self,
         state: ReplicatedState,
-        message: RequestOrIngress,
+        message: CanisterCall,
         response: Result<Vec<u8>, UserError>,
         refund: Cycles,
         timer: Timer,
@@ -1012,7 +1012,7 @@ impl ExecutionEnvironment {
         canister: CanisterState,
         instruction_limits: InstructionLimits,
         max_instructions_per_message_without_dts: NumInstructions,
-        msg: CanisterInputMessage,
+        msg: CanisterMessage,
         prepaid_execution_cycles: Option<Cycles>,
         time: Time,
         network_topology: Arc<NetworkTopology>,
@@ -1032,7 +1032,7 @@ impl ExecutionEnvironment {
         }
 
         let req = match msg {
-            CanisterInputMessage::Response(response) => {
+            CanisterMessage::Response(response) => {
                 return self.execute_canister_response(
                     canister,
                     response,
@@ -1044,8 +1044,8 @@ impl ExecutionEnvironment {
                 )
             }
 
-            CanisterInputMessage::Request(request) => RequestOrIngress::Request(request),
-            CanisterInputMessage::Ingress(ingress) => RequestOrIngress::Ingress(ingress),
+            CanisterMessage::Request(request) => CanisterCall::Request(request),
+            CanisterMessage::Ingress(ingress) => CanisterCall::Ingress(ingress),
         };
 
         let round = RoundContext {
@@ -1276,7 +1276,7 @@ impl ExecutionEnvironment {
     fn deposit_cycles(
         &self,
         canister_id: CanisterId,
-        msg: &mut RequestOrIngress,
+        msg: &mut CanisterCall,
         state: &mut ReplicatedState,
     ) -> (Result<Vec<u8>, UserError>, Cycles) {
         match state.canister_state_mut(&canister_id) {
@@ -1323,7 +1323,7 @@ impl ExecutionEnvironment {
     fn stop_canister(
         &self,
         canister_id: CanisterId,
-        msg: &RequestOrIngress,
+        msg: &CanisterCall,
         state: &mut ReplicatedState,
     ) -> Option<(Result<Vec<u8>, UserError>, Cycles)> {
         match self.canister_manager.stop_canister(
@@ -1549,13 +1549,13 @@ impl ExecutionEnvironment {
     // history.
     fn output_subnet_response(
         &self,
-        msg: RequestOrIngress,
+        msg: CanisterCall,
         mut state: ReplicatedState,
         result: Result<Vec<u8>, UserError>,
         refund: Cycles,
     ) -> ReplicatedState {
         match msg {
-            RequestOrIngress::Request(req) => {
+            CanisterCall::Request(req) => {
                 let payload = match result {
                     Ok(payload) => Payload::Data(payload),
                     Err(err) => Payload::Reject(err.into()),
@@ -1573,7 +1573,7 @@ impl ExecutionEnvironment {
                 state.push_subnet_output_response(response.into());
                 state
             }
-            RequestOrIngress::Ingress(ingress) => {
+            CanisterCall::Ingress(ingress) => {
                 if !refund.is_zero() {
                     warn!(
                         self.log,
@@ -1840,7 +1840,7 @@ impl ExecutionEnvironment {
     ///   added to the task queue of the canister.
     pub fn execute_install_code(
         &self,
-        mut msg: RequestOrIngress,
+        mut msg: CanisterCall,
         prepaid_execution_cycles: Option<Cycles>,
         dts_status: DtsInstallCodeStatus,
         mut state: ReplicatedState,
@@ -1850,7 +1850,7 @@ impl ExecutionEnvironment {
     ) -> (ReplicatedState, Option<NumInstructions>) {
         // A helper function to make error handling more compact using `?`.
         fn decode_input_and_take_canister(
-            msg: &RequestOrIngress,
+            msg: &CanisterCall,
             state: &mut ReplicatedState,
         ) -> Result<(InstallCodeContext, CanisterState), UserError> {
             let payload = msg.method_payload();
@@ -2311,7 +2311,7 @@ pub struct ExecuteCanisterResult {
 /// Executes the given input message.
 /// This is a helper for `execute_canister()`.
 fn execute_message(
-    message: CanisterInputMessage,
+    message: CanisterMessage,
     prepaid_execution_cycles: Option<Cycles>,
     exec_env: &ExecutionEnvironment,
     canister: CanisterState,

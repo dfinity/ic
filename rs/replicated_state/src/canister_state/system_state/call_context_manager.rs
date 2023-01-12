@@ -2,7 +2,7 @@
 mod tests;
 
 use crate::StateError;
-use ic_interfaces::{execution_environment::HypervisorError, messages::RequestOrIngress};
+use ic_interfaces::{execution_environment::HypervisorError, messages::CanisterCall};
 use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
@@ -572,13 +572,13 @@ impl CallContextManager {
     }
 }
 
-impl From<&RequestOrIngress> for CallOrigin {
-    fn from(msg: &RequestOrIngress) -> Self {
+impl From<&CanisterCall> for CallOrigin {
+    fn from(msg: &CanisterCall) -> Self {
         match msg {
-            RequestOrIngress::Request(request) => {
+            CanisterCall::Request(request) => {
                 CallOrigin::CanisterUpdate(request.sender, request.sender_reply_callback)
             }
-            RequestOrIngress::Ingress(ingress) => {
+            CanisterCall::Ingress(ingress) => {
                 CallOrigin::Ingress(ingress.source, ingress.message_id.clone())
             }
         }

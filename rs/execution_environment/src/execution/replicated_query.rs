@@ -9,7 +9,7 @@ use crate::execution::common::{
 };
 use crate::execution_environment::{ExecuteMessageResult, RoundContext, RoundLimits};
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::{execution_environment::HypervisorError, messages::RequestOrIngress};
+use ic_interfaces::{execution_environment::HypervisorError, messages::CanisterCall};
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_types::{CanisterId, NumBytes, NumInstructions, Time};
@@ -21,7 +21,7 @@ use ic_types::methods::{FuncRef, WasmMethod};
 #[allow(clippy::too_many_arguments)]
 pub fn execute_replicated_query(
     mut canister: CanisterState,
-    req: RequestOrIngress,
+    req: CanisterCall,
     method: WasmMethod,
     execution_parameters: ExecutionParameters,
     time: Time,
