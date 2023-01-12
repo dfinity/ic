@@ -11,7 +11,7 @@ use ic_tests::{
         config::{self, *},
         driver_setup::{create_driver_context_from_cli, mk_stdout_logger},
         evaluation::{evaluate, generate_suite_execution_contract},
-        ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
+        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
         pot_dsl::*,
         test_env::TestEnv,
     },
@@ -707,22 +707,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
-    m.add_suite(suite(
-        "nightly_default_subnet_query_workload_long_duration_test",
-        vec![pot_with_setup(
-            "nightly_default_subnet_query_workload_long_duration_test",
-            networking::subnet_update_workload::default_config,
-            par(vec![sys_t(
-                "default_subnet_query_workload_long_duration_test",
-                networking::subnet_query_workload::long_duration_test,
-            )]),
-        )
-        .with_default_vm_resources(Some(VmResources {
-            vcpus: None,
-            memory_kibibytes: None,
-            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-        }))],
-    ));
     m.add_suite(suite(
         "nightly_default_subnet_update_workload_long_duration_test",
         vec![pot_with_setup(
