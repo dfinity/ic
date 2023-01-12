@@ -14,7 +14,9 @@
 //! * Floating point makes code easier since the reward pool is specified as a
 //!   fraction of the total Token supply.
 
+use crate::logs::ERROR;
 use crate::{governance::log_prefix, pb::v1::VotingRewardsParameters, types::ONE_DAY_SECONDS};
+use ic_canister_log::log;
 use ic_nervous_system_common::i2d;
 use lazy_static::lazy_static;
 use rust_decimal::Decimal;
@@ -236,7 +238,8 @@ impl VotingRewardsParameters {
         sns_genesis_timestamp_seconds: u64,
     ) -> u64 {
         if timestamp_seconds < sns_genesis_timestamp_seconds {
-            println!(
+            log!(
+                ERROR,
                 "{}ERROR: timestamp_seconds ({}) less that sns_genesis ({})",
                 log_prefix(),
                 timestamp_seconds,

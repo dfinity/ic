@@ -8224,6 +8224,8 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-canister-client-sender",
+ "ic-canister-log",
+ "ic-canisters-http-types",
  "ic-config",
  "ic-crypto-sha",
  "ic-ic00-types",

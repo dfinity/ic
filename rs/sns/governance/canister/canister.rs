@@ -26,7 +26,11 @@ use dfn_core::{
     over, over_async, over_init, println,
 };
 
+use dfn_core::api::time_nanos;
 use ic_base_types::CanisterId;
+use ic_canister_log::log;
+use ic_canister_log::{export, GlobalBuffer};
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ic00_types::CanisterStatusResultV2;
 use ic_nervous_system_common::ledger::IcpLedgerCanister;
 use ic_nervous_system_common::{
@@ -34,6 +38,7 @@ use ic_nervous_system_common::{
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+use ic_sns_governance::logs::{ERROR, INFO};
 use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
     ledger::LedgerCanister,
@@ -191,9 +196,9 @@ fn canister_init_(init_payload: GovernanceProto) {
          GovernanceProto is invalid in some way",
     );
 
-    println!(
-        "{}canister_init_: Initializing with: {}",
-        log_prefix(),
+    log!(
+        INFO,
+        "canister_init_: Initializing with: {}",
         init_payload.summary(),
     );
 
@@ -220,7 +225,7 @@ fn canister_init_(init_payload: GovernanceProto) {
 /// saving the state and restoring it after the upgrade.
 #[export_name = "canister_pre_upgrade"]
 fn canister_pre_upgrade() {
-    println!("{}Executing pre upgrade", log_prefix());
+    log!(INFO, "Executing pre upgrade");
 
     let mut writer = BufferedStableMemWriter::new(STABLE_MEM_BUFFER_SIZE);
 
@@ -230,7 +235,7 @@ fn canister_pre_upgrade() {
         .expect("Error. Couldn't serialize canister pre-upgrade.");
 
     writer.flush(); // or `drop(writer)`
-    println!("{}Completed pre upgrade", log_prefix());
+    log!(INFO, "Completed pre upgrade");
 }
 
 /// Executes some logic after executing an upgrade, including deserializing what has been written
@@ -238,13 +243,14 @@ fn canister_pre_upgrade() {
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
-    println!("{}Executing post upgrade", log_prefix());
+    log!(INFO, "Executing post upgrade");
 
     let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
 
     match GovernanceProto::decode(reader) {
         Err(err) => {
-            println!(
+            log!(
+                ERROR,
                 "Error deserializing canister state post-upgrade. \
              CANISTER MIGHT HAVE BROKEN STATE!!!!. Error: {:?}",
                 err
@@ -258,7 +264,7 @@ fn canister_post_upgrade() {
         }
     }
     .expect("Couldn't upgrade canister.");
-    println!("{}Completed post upgrade", log_prefix());
+    log!(INFO, "Completed post upgrade");
 }
 
 /// Sets the GovernanceProto's mode to Normal if it is Unspecified.
@@ -559,17 +565,73 @@ fn canister_heartbeat() {
     dfn_core::api::futures::spawn(future);
 }
 
-/// Encode the metrics in a format that can be understood by Prometheus.
-fn encode_metrics(_w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
-    Ok(())
-}
-
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
 
 /// Resources to serve for a given http_request
 #[export_name = "canister_query http_request"]
 fn http_request() {
-    dfn_http_metrics::serve_metrics(encode_metrics);
+    over(candid_one, serve_http)
+}
+
+/// Serve an HttpRequest made to this canister
+pub fn serve_http(req: HttpRequest) -> HttpResponse {
+    if req.path() == "/metrics" {
+        serve_metrics()
+    } else if req.path() == "/log/info" {
+        serve_logs(&INFO)
+    } else if req.path() == "/log/error" {
+        serve_logs(&ERROR)
+    } else {
+        HttpResponseBuilder::not_found().build()
+    }
+}
+
+// Return an HttpResponse that lists this canister's metrics
+fn serve_metrics() -> HttpResponse {
+    let mut writer =
+        ic_metrics_encoder::MetricsEncoder::new(vec![], time_nanos() as i64 / 1_000_000);
+
+    match encode_metrics(&mut writer) {
+        Ok(()) => HttpResponseBuilder::ok()
+            .header("Content-Type", "text/plain; version=0.0.4")
+            .with_body_and_content_length(writer.into_inner())
+            .build(),
+        Err(err) => {
+            HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err)).build()
+        }
+    }
+}
+
+/// Encode the metrics in a format that can be understood by Prometheus.
+fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    let governance = governance();
+
+    w.encode_gauge(
+        "sns_governance_neurons_total",
+        governance.proto.neurons.len() as f64,
+        "Total number of neurons.",
+    )?;
+
+    Ok(())
+}
+
+// Return an HttpResponse that lists the given logs
+fn serve_logs(logs: &'static GlobalBuffer) -> HttpResponse {
+    use std::io::Write;
+    let mut buf = vec![];
+    for entry in export(logs) {
+        writeln!(
+            &mut buf,
+            "{} {}:{} {}",
+            entry.timestamp, entry.file, entry.line, entry.message
+        )
+        .unwrap();
+    }
+
+    HttpResponseBuilder::ok()
+        .header("Content-Type", "text/plain; charset=utf-8")
+        .with_body_and_content_length(buf)
+        .build()
 }
 
 /// This makes this Candid service self-describing, so that for example Candid

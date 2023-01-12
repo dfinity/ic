@@ -1,5 +1,6 @@
 use crate::canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call;
 use crate::governance::{bytes_to_subaccount, log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER};
+use crate::logs::INFO;
 use crate::pb::v1::governance::{SnsMetadata, Version};
 use crate::pb::v1::nervous_system_function::{FunctionType, GenericNervousSystemFunction};
 use crate::pb::v1::proposal::Action;
@@ -15,6 +16,7 @@ use crate::types::{Environment, DEFAULT_TRANSFER_FEE};
 use crate::{validate_chars_count, validate_len, validate_required_field};
 use dfn_core::api::CanisterId;
 use ic_base_types::PrincipalId;
+use ic_canister_log::log;
 use ic_crypto_sha::Sha256;
 use ic_icrc1::Account;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
@@ -865,7 +867,8 @@ impl ProposalData {
         );
 
         if new_deadline != current_deadline {
-            println!(
+            log!(
+                INFO,
                 "{}Updating WFQ deadline for proposal: {:?}. Old: {}, New: {}, Ext: {}",
                 log_prefix(),
                 self.id.as_ref().unwrap(),
@@ -956,7 +959,8 @@ impl ProposalData {
                 (false, false) => None,
             };
             if let Some(reason) = decision_reason {
-                println!(
+                log!(
+                    INFO,
                     "{}Proposal {} decided, thanks to {}. Tally at decision time: {:?}",
                     log_prefix(),
                     self.id

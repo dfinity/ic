@@ -5,8 +5,8 @@ use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};
 
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
+use crate::logs::{ERROR, INFO};
+use ic_canister_log::log;
 
 use crate::{
     governance::log_prefix,
@@ -42,11 +42,17 @@ pub async fn upgrade_canister_directly(
     canister_id: CanisterId,
     wasm: Vec<u8>,
 ) -> Result<(), GovernanceError> {
-    println!("{}Begin: Stop canister {}.", log_prefix(), canister_id);
+    log!(
+        INFO,
+        "{}Begin: Stop canister {}.",
+        log_prefix(),
+        canister_id
+    );
     stop_canister(env, canister_id).await?;
-    println!("{}End: Stop canister {}.", log_prefix(), canister_id);
+    log!(INFO, "{}End: Stop canister {}.", log_prefix(), canister_id);
 
-    println!(
+    log!(
+        INFO,
         "{}Begin: Install code into canister {}",
         log_prefix(),
         canister_id
@@ -56,15 +62,26 @@ pub async fn upgrade_canister_directly(
         // the canister after attempting install_code, even if install_code
         // fails.
         .await;
-    println!(
+    log!(
+        INFO,
         "{}End: Install code into canister {}",
         log_prefix(),
         canister_id
     );
 
-    println!("{}Begin: Re-start canister {}", log_prefix(), canister_id);
+    log!(
+        INFO,
+        "{}Begin: Re-start canister {}",
+        log_prefix(),
+        canister_id
+    );
     start_canister(env, canister_id).await?;
-    println!("{}End: Re-start canister {}", log_prefix(), canister_id);
+    log!(
+        INFO,
+        "{}End: Re-start canister {}",
+        log_prefix(),
+        canister_id
+    );
 
     install_result
 }
@@ -99,7 +116,7 @@ pub async fn install_code(
             ErrorType::External,
             format!("Failed to install code into the target canister: {:?}", err),
         );
-        println!("{}{:?}", log_prefix(), err);
+        log!(ERROR, "{}{:?}", log_prefix(), err);
         err
     })
 }
@@ -122,7 +139,7 @@ pub async fn start_canister(
             ErrorType::External,
             format!("Failed to restart the target canister: {:?}", err),
         );
-        println!("{}{:?}", log_prefix(), err);
+        log!(ERROR, "{}{:?}", log_prefix(), err);
         err
     })
 }
@@ -146,7 +163,7 @@ pub async fn stop_canister(
             ErrorType::External,
             format!("Unable to stop the target canister: {:?}", err),
         );
-        println!("{}{:?}", log_prefix(), err);
+        log!(ERROR, "{}{:?}", log_prefix(), err);
         err
     })?;
 
@@ -172,7 +189,7 @@ pub async fn stop_canister(
                         err
                     ),
                 );
-                println!("{}{:?}", log_prefix(), err);
+                log!(ERROR, "{}{:?}", log_prefix(), err);
                 return Err(err);
             }
         };
@@ -181,7 +198,8 @@ pub async fn stop_canister(
             return Ok(());
         }
 
-        println!(
+        log!(
+            INFO,
             "{}Still waiting for canister {} to stop. status: {:?}",
             log_prefix(),
             canister_id,

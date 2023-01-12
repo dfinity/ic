@@ -32,9 +32,13 @@ macro_rules! declare_log_buffer {
 macro_rules! log {
     ($sink:expr, $message:expr $(,$args:expr)* $(,)*) => {{
         use $crate::Sink;
+        let message = std::format!($message $(,$args)*);
+        // Print the message for convenience for local development (e.g. integration tests)
+        println!("{}", &message);
+
         (&$sink).append($crate::LogEntry {
             timestamp: $crate::now(),
-            message: std::format!($message $(,$args)*),
+            message,
             file: std::file!(),
             line: std::line!(),
         });
@@ -152,7 +156,6 @@ pub fn now() -> u64 {
 /// assert_eq!(entries.len(), 1);
 /// assert_eq!(entries[0].message, "Hello, world!");
 /// ```
-
 pub fn export(buf: &'static GlobalBuffer) -> Vec<LogEntry> {
     buf.with(|cell| cell.borrow().iter().cloned().collect())
 }
