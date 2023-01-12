@@ -564,6 +564,7 @@ mod ni_dkg {
 
 mod idkg {
     use super::*;
+    use crate::public_key_store::PublicKeyAddError;
     use mockall::Sequence;
 
     #[test]
@@ -585,14 +586,9 @@ mod idkg {
                 .returning(|_key, _key_id, _scope| Ok(()))
                 .in_sequence(&mut seq);
             let mut pks = MockPublicKeyStore::new();
-            let empty_idkg_public_keys = Vec::new();
-            pks.expect_idkg_dealing_encryption_pubkeys()
+            pks.expect_add_idkg_dealing_encryption_pubkey()
                 .times(1)
-                .return_const(empty_idkg_public_keys)
-                .in_sequence(&mut seq);
-            pks.expect_set_idkg_dealing_encryption_pubkeys()
-                .times(1)
-                .returning(|_keys| Ok(()))
+                .return_once(|_key| Ok(()))
                 .in_sequence(&mut seq);
             LocalCspVault::builder()
                 .with_node_secret_key_store(sks)
@@ -610,16 +606,11 @@ mod idkg {
     #[test]
     fn should_fail_with_transient_internal_error_if_storing_idkg_public_key_fails() {
         let local_vault = {
-            let mut pks_returning_io_error = MockPublicKeyStore::new();
-            let empty_idkg_public_keys = Vec::new();
-            pks_returning_io_error
-                .expect_idkg_dealing_encryption_pubkeys()
-                .times(1)
-                .return_const(empty_idkg_public_keys);
             let io_error = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
+            let mut pks_returning_io_error = MockPublicKeyStore::new();
             pks_returning_io_error
-                .expect_set_idkg_dealing_encryption_pubkeys()
-                .return_once(|_keys| Err(io_error));
+                .expect_add_idkg_dealing_encryption_pubkey()
+                .return_once(|_| Err(PublicKeyAddError::Io(io_error)));
             LocalCspVault::builder()
                 .with_public_key_store(pks_returning_io_error)
                 .build_into_arc()

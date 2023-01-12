@@ -49,6 +49,11 @@ pub enum PublicKeySetOnceError {
     Io(std::io::Error),
 }
 
+#[derive(Debug)]
+pub enum PublicKeyAddError {
+    Io(std::io::Error),
+}
+
 /// A store for public key material persisted on disk.
 ///
 /// If errors occur regarding reading from or writing to disk,
@@ -104,6 +109,13 @@ pub trait PublicKeyStore: Send + Sync {
     /// Gets the TLS certificate.
     fn tls_certificate(&self) -> Option<&X509PublicKeyCert>;
 
+    /// Adds a new iDKG dealing encryption public key.
+    fn add_idkg_dealing_encryption_pubkey(
+        &mut self,
+        key: PublicKeyProto,
+    ) -> Result<(), PublicKeyAddError>;
+
+    // TODO CRP-1858: remove this method
     /// Sets the iDKG dealing encryption public keys.
     fn set_idkg_dealing_encryption_pubkeys(
         &mut self,
@@ -112,7 +124,8 @@ pub trait PublicKeyStore: Send + Sync {
 
     /// Gets the iDKG dealing encryption public keys.
     ///
-    /// The ordering of the keys is guaranteed to be same as when the keys were set.
+    /// The ordering of the keys is guaranteed to be same as when the keys were added
+    /// with [`Self::add_idkg_dealing_encryption_pubkey`].
     /// Note: any timestamp in [`PublicKeyProto`] will be stripped off.
     fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKeyProto>;
 

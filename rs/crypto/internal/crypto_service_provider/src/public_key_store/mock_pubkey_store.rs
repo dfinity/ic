@@ -1,3 +1,4 @@
+use crate::public_key_store::PublicKeyAddError;
 use crate::public_key_store::PublicKeyGenerationTimestamps;
 use crate::public_key_store::PublicKeySetOnceError;
 use crate::public_key_store::PublicKeyStore;
@@ -38,6 +39,8 @@ mock! {
         ) -> Result<(), PublicKeySetOnceError>;
 
         fn tls_certificate<'a>(&'a self) -> Option<&'a X509PublicKeyCert>;
+
+        fn add_idkg_dealing_encryption_pubkey(&mut self, key: PublicKey) -> Result<(), PublicKeyAddError>;
 
         fn set_idkg_dealing_encryption_pubkeys(
             &mut self,

@@ -1,3 +1,4 @@
+use crate::public_key_store::PublicKeyAddError;
 use crate::public_key_store::{
     PublicKeyGenerationTimestamps, PublicKeySetOnceError, PublicKeyStore,
 };
@@ -133,6 +134,15 @@ impl PublicKeyStore for ProtoPublicKeyStore {
 
     fn tls_certificate(&self) -> Option<&X509PublicKeyCert> {
         self.keys.tls_certificate.as_ref()
+    }
+
+    fn add_idkg_dealing_encryption_pubkey(
+        &mut self,
+        key: PublicKeyProto,
+    ) -> Result<(), PublicKeyAddError> {
+        self.keys.idkg_dealing_encryption_pks.push(key);
+        self.write_node_public_keys_proto_to_disk()
+            .map_err(|io_error| PublicKeyAddError::Io(io_error))
     }
 
     fn set_idkg_dealing_encryption_pubkeys(

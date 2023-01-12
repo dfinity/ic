@@ -30,7 +30,6 @@ use parking_lot::RwLockWriteGuard;
 use rand::{CryptoRng, Rng};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
-use std::io;
 
 #[cfg(test)]
 mod tests;
@@ -436,14 +435,13 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             .insert(key_id, csp_secret_key, Some(IDKG_MEGA_SCOPE))
             .map_err(CspCreateMEGaKeyError::from)
             .and_then(|()| {
-                let mut public_keys = pks_write_lock.idkg_dealing_encryption_pubkeys();
-                public_keys.push(public_key_proto);
                 pks_write_lock
-                    .set_idkg_dealing_encryption_pubkeys(public_keys)
-                    .map_err(|ioe: io::Error| CspCreateMEGaKeyError::TransientInternalError {
-                        internal_error: format!("failed to persist iDKG dealing encryption public keys: IO error: {ioe:?}"),
-                    },
-                    )
+                    .add_idkg_dealing_encryption_pubkey(public_key_proto)
+                    .map_err(|err| CspCreateMEGaKeyError::TransientInternalError {
+                        internal_error: format!(
+                            "failed to add iDKG dealing encryption public key: {err:?}"
+                        ),
+                    })
             })
     }
 

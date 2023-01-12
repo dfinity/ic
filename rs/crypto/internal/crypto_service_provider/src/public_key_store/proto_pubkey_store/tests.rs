@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
-use crate::public_key_store::read_node_public_keys;
+use crate::public_key_store::{read_node_public_keys, PublicKeyAddError};
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
 use crate::PUBLIC_KEY_STORE_DATA_FILENAME;
 use assert_matches::assert_matches;
@@ -110,8 +110,12 @@ fn should_set_pubkeys_if_not_set() {
 
     assert!(store.idkg_dealing_encryption_pubkeys().is_empty());
     assert_matches!(
-        store.set_idkg_dealing_encryption_pubkeys(
-            generated_keys.idkg_dealing_encryption_pks.clone()
+        store.add_idkg_dealing_encryption_pubkey(
+            generated_keys
+                .idkg_dealing_encryption_pks
+                .last()
+                .expect("missing IDKG public key")
+                .clone()
         ),
         Ok(())
     );
@@ -197,8 +201,13 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
         generated_keys.tls_certificate.as_ref()
     );
 
+    let generated_idkg_pk = generated_keys
+        .idkg_dealing_encryption_pks
+        .last()
+        .expect("missing IDKG public key")
+        .clone();
     assert!(store
-        .set_idkg_dealing_encryption_pubkeys(generated_keys.idkg_dealing_encryption_pks.clone())
+        .add_idkg_dealing_encryption_pubkey(generated_idkg_pk)
         .is_ok());
     assert!(equal_ignoring_timestamp(
         &ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
@@ -216,10 +225,12 @@ fn should_preserve_order_of_rotating_pubkeys() {
         public_key_with_key_value(43),
         public_key_with_key_value(44),
     ];
+    for pubkey in &pubkeys {
+        store
+            .add_idkg_dealing_encryption_pubkey(pubkey.clone())
+            .expect("cannot add public key");
+    }
 
-    assert!(store
-        .set_idkg_dealing_encryption_pubkeys(pubkeys.clone())
-        .is_ok());
     assert_eq!(store.idkg_dealing_encryption_pubkeys(), pubkeys);
     assert_eq!(
         ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
@@ -260,10 +271,9 @@ fn should_fail_to_write_without_write_permissions() {
     fs::set_permissions(temp_dir.path(), fs::Permissions::from_mode(0o400))
         .expect("failed to set read-only permissions");
 
-    let result =
-        pubkey_store.set_idkg_dealing_encryption_pubkeys(vec![public_key_with_key_value(123)]);
+    let result = pubkey_store.add_idkg_dealing_encryption_pubkey(public_key_with_key_value(123));
 
-    assert_matches!(result, Err(io_error) if io_error.kind() == std::io::ErrorKind::PermissionDenied);
+    assert_matches!(result, Err(PublicKeyAddError::Io(io_error)) if io_error.kind() == std::io::ErrorKind::PermissionDenied);
 
     fs::set_permissions(temp_dir.path(), fs::Permissions::from_mode(0o700)).expect(
         "failed to change permissions of temp_dir so that writing is possible \
@@ -425,12 +435,16 @@ mod timestamps {
         let temp_dir = temp_dir();
         let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
         store
-            .set_idkg_dealing_encryption_pubkeys(vec![
-                public_key_with_timestamp(GENESIS),
-                public_key_with_key_value(42),
-                public_key_with_timestamp(GENESIS + Duration::from_millis(1)),
-            ])
-            .expect("cannot set public key");
+            .add_idkg_dealing_encryption_pubkey(public_key_with_timestamp(GENESIS))
+            .expect("cannot add public key");
+        store
+            .add_idkg_dealing_encryption_pubkey(public_key_with_key_value(42))
+            .expect("cannot add public key");
+        store
+            .add_idkg_dealing_encryption_pubkey(public_key_with_timestamp(
+                GENESIS + Duration::from_millis(1),
+            ))
+            .expect("cannot add public key");
 
         for public_key in store.idkg_dealing_encryption_pubkeys() {
             assert!(public_key.timestamp.is_none())

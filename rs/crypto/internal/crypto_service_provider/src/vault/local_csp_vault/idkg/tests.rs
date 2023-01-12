@@ -4,8 +4,6 @@ use crate::vault::test_utils;
 use crate::LocalCspVault;
 use crate::PublicKeyStore;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_types::crypto::AlgorithmId;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
@@ -15,6 +13,7 @@ mod idkg_gen_dealing_encryption_key_pair {
     use crate::canister_threshold::IDKG_MEGA_SCOPE;
     use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
     use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
+    use crate::public_key_store::PublicKeyAddError;
     use crate::secret_key_store::test_utils::MockSecretKeyStore;
     use crate::vault::api::PublicKeyStoreCspVault;
     use crate::vault::api::SecretKeyStoreCspVault;
@@ -22,7 +21,6 @@ mod idkg_gen_dealing_encryption_key_pair {
     use hex::FromHex;
     use ic_crypto_internal_seed::Seed;
     use ic_crypto_internal_threshold_sig_ecdsa::EccCurveType;
-    use ic_protobuf::registry::crypto::v1::PublicKey;
     use ic_test_utilities::FastForwardTimeSource;
     use ic_types::time::GENESIS;
     use mockall::Sequence;
@@ -150,14 +148,9 @@ mod idkg_gen_dealing_encryption_key_pair {
             .in_sequence(&mut seq);
 
         let mut pks = MockPublicKeyStore::new();
-        let empty_idkg_public_keys = Vec::new();
-        pks.expect_idkg_dealing_encryption_pubkeys()
+        pks.expect_add_idkg_dealing_encryption_pubkey()
             .times(1)
-            .return_const(empty_idkg_public_keys)
-            .in_sequence(&mut seq);
-        pks.expect_set_idkg_dealing_encryption_pubkeys()
-            .times(1)
-            .returning(|_keys| Ok(()))
+            .return_once(|_key| Ok(()))
             .in_sequence(&mut seq);
 
         let vault = LocalCspVault::builder()
@@ -170,16 +163,11 @@ mod idkg_gen_dealing_encryption_key_pair {
 
     #[test]
     fn should_fail_with_transient_internal_error_if_storing_idkg_public_key_fails() {
-        let mut pks_returning_io_error = MockPublicKeyStore::new();
-        let empty_idkg_public_keys = Vec::new();
-        pks_returning_io_error
-            .expect_idkg_dealing_encryption_pubkeys()
-            .times(1)
-            .return_const(empty_idkg_public_keys);
         let io_error = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
+        let mut pks_returning_io_error = MockPublicKeyStore::new();
         pks_returning_io_error
-            .expect_set_idkg_dealing_encryption_pubkeys()
-            .return_once(|_keys| Err(io_error));
+            .expect_add_idkg_dealing_encryption_pubkey()
+            .return_once(|_| Err(PublicKeyAddError::Io(io_error)));
 
         let vault = LocalCspVault::builder()
             .with_public_key_store(pks_returning_io_error)
@@ -192,25 +180,34 @@ mod idkg_gen_dealing_encryption_key_pair {
 
     #[test]
     fn should_add_new_idkg_dealing_encryption_public_key_last() {
-        let mut pks = MockPublicKeyStore::new();
-        let idkg_public_key_1 = idkg_node_public_key_with_value([1; 32].to_vec());
-        let idkg_public_key_2 = idkg_node_public_key_with_value([0; 32].to_vec());
-        let existing_keys = vec![idkg_public_key_1.clone(), idkg_public_key_2.clone()];
-        pks.expect_idkg_dealing_encryption_pubkeys()
-            .times(1)
-            .return_const(existing_keys);
-        pks.expect_set_idkg_dealing_encryption_pubkeys()
-            .times(1)
-            .withf(move |keys: &Vec<PublicKey>| {
-                keys.len() == 3 && keys[0] == idkg_public_key_1 && keys[1] == idkg_public_key_2
-            })
-            .returning(|_keys| Ok(()));
-
-        let vault = LocalCspVault::builder()
-            .with_public_key_store(pks)
-            .build_into_arc();
+        let vault = LocalCspVault::builder().build();
+        assert!(vault
+            .public_key_store_read_lock()
+            .idkg_dealing_encryption_pubkeys()
+            .is_empty());
 
         assert!(vault.idkg_gen_dealing_encryption_key_pair().is_ok());
+        let generated_keys = vault
+            .public_key_store_read_lock()
+            .idkg_dealing_encryption_pubkeys();
+        assert_eq!(generated_keys.len(), 1);
+        let first_public_key = &generated_keys[0];
+
+        assert!(vault.idkg_gen_dealing_encryption_key_pair().is_ok());
+        let generated_keys = vault
+            .public_key_store_read_lock()
+            .idkg_dealing_encryption_pubkeys();
+        assert_eq!(generated_keys.len(), 2);
+        assert_eq!(&generated_keys[0], first_public_key);
+        let second_public_key = &generated_keys[1];
+
+        assert!(vault.idkg_gen_dealing_encryption_key_pair().is_ok());
+        let generated_keys = vault
+            .public_key_store_read_lock()
+            .idkg_dealing_encryption_pubkeys();
+        assert_eq!(generated_keys.len(), 3);
+        assert_eq!(&generated_keys[0], first_public_key);
+        assert_eq!(&generated_keys[1], second_public_key);
     }
 
     #[test]
@@ -437,15 +434,5 @@ mod idkg_retain_active_keys {
 
     fn an_idkg_public_key() -> MEGaPublicKey {
         MEGaPublicKey::new(EccPoint::generator_g(EccCurveType::K256).expect("generator wrong"))
-    }
-}
-
-fn idkg_node_public_key_with_value(key_value: Vec<u8>) -> PublicKey {
-    PublicKey {
-        version: 0,
-        algorithm: AlgorithmId::MegaSecp256k1 as i32,
-        proof_data: None,
-        key_value,
-        timestamp: None,
     }
 }
