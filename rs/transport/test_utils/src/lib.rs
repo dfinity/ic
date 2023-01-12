@@ -39,6 +39,11 @@ pub fn large_transport_message() -> TransportPayload {
     TransportPayload(vec![0xb; 100_000_000])
 }
 
+pub fn peer_down_message() -> TransportPayload {
+    // For send channels of TransportPayload type, we need some payload representing peer down event
+    TransportPayload(vec![0xc; 1])
+}
+
 pub const REG_V1: RegistryVersion = RegistryVersion::new(1);
 
 // Get a free port on this host to which we can connect transport to.
