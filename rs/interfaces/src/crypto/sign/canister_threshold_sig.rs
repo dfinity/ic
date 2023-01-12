@@ -1,5 +1,15 @@
-//! Traits for canister-requested threshold signatures
-//! (and the associated I-DKG)
+//! Traits for canister-requested threshold ECDSA signatures
+//! and the associated interactive distributed key generation protocol (IDKG).
+//!
+//! Canisters must be able to create ECDSA signatures (e.g., to create bitcoin and thereum
+//! transactions) but they cannot securely store a private key in memory (because the state of a
+//! canister is known to all replicas in the subnet hosting the canister and one or more replicas
+//! may be malicious). The secret key is therefore shared among the replicas of the subnet and they
+//! must be able to collaboratively create ECDSA signatures.
+//!
+//! Since each ECDSA signature requires 4 transcripts, which are created by the distributed key
+//! generation protocol, computing these transcripts must be
+//! efficient and that's the reason why the protocol is interactive.
 
 use ic_base_types::NodeId;
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -19,10 +29,59 @@ use ic_types::crypto::canister_threshold_sig::{
 };
 use std::collections::{BTreeMap, HashSet};
 
-/// A Crypto Component interface to run Interactive-DKG
-/// (for canister threshold signatures).
+/// A Crypto Component interface to run interactive distributed key generation (IDKG)
+/// protocol for canister-requested threshold ECDSA signatures.
+///
+/// The IDKG protocol produces a *transcript* that gives all replicas inside a subnet shares of an
+/// ECDSA secret key. Each canister-requested threshold signature requires 4 pre-computed
+/// transcripts (they are independent of the message to be signed),
+/// see [`PreSignatureQuadruple`].
+///
+/// # Use-Cases
+///
+/// ## Initial Key Generation
+///
+/// Dealers and receivers are all members of the same subnet.
+/// When consensus realizes a key needs to be generated:
+/// 1. Run IDKG protocol with [`Random`] operation to generate transcript `alpha`.
+/// 1. Run IDKG protocol with [`ReshareOfUnmasked`] with transcript `alpha` to open public key.
+///
+/// ## Key Resharing
+///
+/// When the topology of a subnet changes or a key rotation of the nodes is triggered, the key
+/// transcript `alpha` is reshared to the new subnet.
+/// * Dealers: receivers of the previous transcript `alpha`
+/// * Receivers: all nodes in the subnet with the new topology (which may include new nodes but
+/// does not contain nodes that were removed).
+///
+/// Consensus orchestrates resharing by:
+/// 1. Run IDKG protocol with [`ReshareOfUnmasked`] with transcript `alpha` to reshare.
+///
+/// ## Key Resharing Accross Subnets
+///
+/// Triggered by the governance canister to backup the key in another subnet. Half of the protocol
+/// runs in a source subnet, while the other half runs in a target subnet. Note that the target
+/// subnet may yet to be created.
+/// * Dealers: all nodes in the source subnet
+/// * Receivers: all nodes in the target subnet
+///
+/// 1. Run IDKG with [`ReshareOfUnmasked`] with transcript `alpha`.
+///     * Source subnet calls [Self::create_dealing()] and [Self::verify_dealing_public()].
+///     * Source subnet collects a set of [`InitialIDkgDealings`], which are included in the registry.
+///     * Target subnet fetches the [`InitialIDkgDealings`] from the registry, terminates the protocol
+///     by calling all other IDKG APIs [Self::verify_dealing_private()], [Self::create_transcript()], ...
+///
+/// No back communication from target to source: this is possible by including enough (>=2f+1, only
+/// f+1 are needed) honest dealings in the InitialDealings (assuming at most f corruptions in the
+/// sources subnet)
+///
+/// [`InitialIDkgDealings`]: ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings
+/// [`PreSignatureQuadruple`]: ic_types::crypto::canister_threshold_sig::PreSignatureQuadruple
+/// [`Random`]: ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation::Random
+/// [`ReshareOfUnmasked`]: ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation::ReshareOfUnmasked
 ///
 /// # Preconditions
+///
 /// * For a fixed `IDkgTranscriptId`, the `IDkgTranscriptParams` must never
 ///   change throughout a round of execution. That is, if two calls to methods
 ///   of `IDkgProtocol` are made with `IDkgTranscriptParams` values `params1`

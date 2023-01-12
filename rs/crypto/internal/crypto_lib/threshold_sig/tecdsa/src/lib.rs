@@ -69,7 +69,7 @@
 //! * Generation and verification of signature shares
 //! * Generation and verification of combined signatures
 //!
-//! ## Protocol: MEGa Encryption
+//! ## Protocol: Multi-encryption gadget (MEGa)
 //!
 //! File: `mega.rs`
 //!
