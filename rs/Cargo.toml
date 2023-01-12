@@ -43,6 +43,7 @@ members = [
   "constants",
   "criterion_time",
   "crypto",
+  "crypto/ecdsa_secp256k1",
   "crypto/extended_bip32",
   "crypto/for_verification_only",
   "crypto/iccsa",
