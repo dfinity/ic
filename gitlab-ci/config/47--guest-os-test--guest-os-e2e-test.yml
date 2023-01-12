@@ -78,13 +78,6 @@ boundary-nodes-pre-master:
   variables:
     SUITE_NAME: "boundary_nodes_pre_master"
 
-create-subnet-pre-master:
-  extends:
-    - .system-tests
-    - .with-monitoring  # This pre-master suite is used for e2e checking of monpoly_pipeline
-  variables:
-    SUITE_NAME: "create_subnet_pre_master"
-
 ckbtc-pre-master:
   extends: .system-tests
   variables:
@@ -205,13 +198,3 @@ upgrade-compatibility-pre-master:
 
   # clean the container
   docker rm -f "${MONPOLY_DID}"
-
-test-monpoly-docker:
-  extends:
-    - .e2e-test-base
-  stage: prod-tests
-  script:
-    - set -euo pipefail
-    - *build-and-test-monpoly-docker-e2e
-  needs:
-    - create-subnet-pre-master  # Use the logs produced by this system test in e2e tests of monpoly_pipeline

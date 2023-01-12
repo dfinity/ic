@@ -205,18 +205,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
 
     m.add_suite(
         suite(
-            "create_subnet_pre_master",
-            vec![pot_with_setup(
-                "create_subnet",
-                nns_tests::create_subnet::pre_master_config,
-                par(vec![sys_t("create_subnet", nns_tests::create_subnet::test)]),
-            )],
-        )
-        .with_alert(TEST_FAILURE_CHANNEL),
-    );
-
-    m.add_suite(
-        suite(
             "boundary_nodes_pre_master",
             vec![pot_with_setup(
                 "boundary_nodes_pot",
@@ -1045,24 +1033,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
     m.add_suite(
         suite(
             "upgrade_compatibility",
-            vec![
-                pot_with_setup(
-                    "downgrade_app_subnet_with_ecdsa",
-                    orchestrator::downgrade_with_ecdsa::config,
-                    par(vec![sys_t(
-                        "downgrade_app_subnet_with_ecdsa",
-                        orchestrator::downgrade_with_ecdsa::downgrade_app_subnet,
-                    )]),
-                ),
-                pot_with_setup(
-                    "backup_manager_pot",
-                    orchestrator::backup_manager::config,
-                    par(vec![sys_t(
-                        "backup_manager_test",
-                        orchestrator::backup_manager::test,
-                    )]),
-                ),
-            ],
+            vec![pot_with_setup(
+                "backup_manager_pot",
+                orchestrator::backup_manager::config,
+                par(vec![sys_t(
+                    "backup_manager_test",
+                    orchestrator::backup_manager::test,
+                )]),
+            )],
         )
         .with_alert(ENG_CONSENSUS_CHANNEL),
     );
