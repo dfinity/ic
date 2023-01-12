@@ -19,7 +19,6 @@ use std::env;
 use std::fmt;
 use std::time::Duration;
 use std::{convert::AsRef, fs::File, io::Read, path::Path};
-use wabt::wasm2wat;
 
 const MIN_BACKOFF_INTERVAL: Duration = Duration::from_millis(250);
 // The value must be smaller than `ic_http_handler::MAX_TCP_PEEK_TIMEOUT_SECS`.
@@ -116,7 +115,7 @@ impl Wasm {
     }
 
     pub fn from_wat(content: &str) -> Wasm {
-        let wasm = wabt::wat2wasm(content).expect("couldn't convert wat to wasm");
+        let wasm = wat::parse_str(content).expect("couldn't convert wat to wasm");
         Wasm(wasm)
     }
 
@@ -128,8 +127,8 @@ impl Wasm {
     pub fn strip_debug_info(self) -> Self {
         // The WAT format does not have any support for custom sections. So they are
         // removed (including any debug info) when converting a WASM to a WAT.
-        let bytes =
-            wabt::wat2wasm(wasm2wat(self.0).expect("wasm2wat failed")).expect("wat2wasm failed.");
+        let bytes = wat::parse_str(wasmprinter::print_bytes(self.0).expect("wasm2wat failed"))
+            .expect("wat2wasm failed.");
         println!("Compiled canister size: {:?}", bytes.len());
         Self::from_bytes(bytes)
     }

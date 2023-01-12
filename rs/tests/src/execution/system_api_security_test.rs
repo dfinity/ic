@@ -33,7 +33,7 @@ const ENABLE_DEBUG_LOG: bool = false;
 
 pub fn malicious_inputs(env: TestEnv) {
     let logger = &env.logger();
-    let wasm = wabt::wat2wasm(
+    let wasm = wat::parse_str(
         r#"(module
               (import "ic0" "msg_reply" (func $msg_reply))
               (import "ic0" "msg_reply_data_append"
@@ -382,7 +382,7 @@ async fn tests_for_illegal_wasm_memory_access(
 */
 pub fn malicious_intercanister_calls(env: TestEnv) {
     let logger = &env.logger();
-    let canister_b_wasm = wabt::wat2wasm(
+    let canister_b_wasm = wat::parse_str(
         r#"(module
             (import "ic0" "msg_arg_data_copy" (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
             (import "ic0" "msg_reply" (func $msg_reply))
@@ -416,7 +416,7 @@ pub fn malicious_intercanister_calls(env: TestEnv) {
         let canister_b =
             create_and_install(&agent, node.effective_canister_id(), &canister_b_wasm).await;
 
-        let canister_a_wasm = wabt::wat2wasm(format!(
+        let canister_a_wasm = wat::parse_str(format!(
             r#"(module
             (import "ic0" "msg_arg_data_copy" (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
             (import "ic0" "msg_reply" (func $msg_reply))

@@ -87,9 +87,7 @@ where
     };
     let execution_state = hypervisor
         .create_execution_state(
-            CanisterModule::new(
-                wabt::wat2wasm_with_features(wat.as_ref(), wabt::Features::new()).unwrap(),
-            ),
+            CanisterModule::new(wat::parse_str(wat.as_ref()).unwrap()),
             canister_root,
             canister_id,
             &mut round_limits,

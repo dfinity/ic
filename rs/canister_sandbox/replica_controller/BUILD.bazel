@@ -33,7 +33,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:slog-async",
     "@crate_index//:slog-term",
     "@crate_index//:tempfile",
-    "@wabt_rs//:wabt",
+    "@crate_index//:wat",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

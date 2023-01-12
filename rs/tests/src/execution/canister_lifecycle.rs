@@ -662,7 +662,7 @@ pub fn canister_large_wasm_small_memory_allocation(env: TestEnv) {
 /// small memory allocation. It should be rejected.
 pub fn canister_large_initial_memory_small_memory_allocation(env: TestEnv) {
     // A wasm module that asks for 2GiB of initial memory.
-    let wasm = wabt::wat2wasm(
+    let wasm = wat::parse_str(
         r#"(module
               (func $hi)
               (memory $memory 32768)

@@ -135,7 +135,7 @@ pub fn can_access_big_heap_and_big_stable_memory(env: TestEnv) {
                 .unwrap()
                 .0;
 
-            let wasm = wabt::wat2wasm(
+            let wasm = wat::parse_str(
                 r#"
                 (module
                     (import "ic0" "stable64_size" (func $stable64_size (result i64)))

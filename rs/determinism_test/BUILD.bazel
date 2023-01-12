@@ -27,7 +27,7 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:slog",
     "@crate_index//:tokio",
-    "@wabt_rs//:wabt",
+    "@crate_index//:wat",
 ]
 
 rust_library(

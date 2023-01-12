@@ -51,7 +51,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
           (export "canister_post_upgrade" (func $remember))
           (export "canister_query read_back" (func $read_back)))"#;
 
-        let wasm_module = wabt::wat2wasm(wat).expect("couldn't convert wat -> wasm");
+        let wasm_module = wat::parse_str(wat).expect("couldn't convert wat -> wasm");
 
         // check root status with focus on the checksum
         let root_status: CanisterStatusResult = nns_canisters

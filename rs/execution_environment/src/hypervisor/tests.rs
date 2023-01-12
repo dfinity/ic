@@ -2072,7 +2072,7 @@ fn subnet_available_memory_is_updated_by_canister_start() {
         test.subnet_available_memory().get_message_memory()
     );
     let mem_before_upgrade = test.subnet_available_memory().get_total_memory();
-    let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
+    let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
         mem_before_upgrade,
@@ -2104,7 +2104,7 @@ fn subnet_available_memory_is_updated_by_canister_pre_upgrade() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let initial_subnet_available_memory = test.subnet_available_memory();
-    let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
+    let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
         initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
@@ -2128,7 +2128,7 @@ fn subnet_available_memory_is_not_updated_by_canister_pre_upgrade_wasm_memory() 
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let initial_subnet_available_memory = test.subnet_available_memory();
-    let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
+    let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
         initial_subnet_available_memory.get_total_memory(),
@@ -2152,7 +2152,7 @@ fn subnet_available_memory_is_updated_by_canister_post_upgrade() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let initial_subnet_available_memory = test.subnet_available_memory();
-    let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
+    let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
         initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
@@ -2199,7 +2199,7 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
             )
             (memory 1 20)
         )"#;
-    let binary = wabt::wat2wasm(wat).unwrap();
+    let binary = wat::parse_str(wat).unwrap();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     let memory_allocation = NumBytes::from(1024 * 1024 * 1024);
 
@@ -2399,7 +2399,7 @@ fn upgrade_calls_pre_and_post_upgrade() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "read", vec![]);
     assert_eq!(result, Ok(WasmResult::Reply(vec![0, 0, 0, 0, 0, 0, 0, 0])));
-    let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
+    let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     let result = test.ingress(canister_id, "read", vec![]);
     // The Wasm memory changes of `pre_upgrade` must be cleared.
@@ -2412,7 +2412,7 @@ fn upgrade_without_pre_and_post_upgrade_succeeds() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = "(module)";
     let canister_id = test.canister_from_wat(wat).unwrap();
-    let result = test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap());
+    let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     // Compilation occurs once for original installation and again for upgrade.
     assert_eq!(test.executed_instructions(), wat_compilation_cost(wat) * 2);
@@ -2589,7 +2589,7 @@ fn changes_to_stable_memory_in_canister_init_are_rolled_back_on_failure() {
     );
     let canister_id = test.create_canister(Cycles::new(1_000_000_000_000));
     let err = test
-        .install_canister(canister_id, wabt::wat2wasm(wat).unwrap())
+        .install_canister(canister_id, wat::parse_str(wat).unwrap())
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     assert_eq!(None, test.canister_state(canister_id).execution_state);
@@ -2618,7 +2618,7 @@ fn changes_to_stable_memory_in_canister_pre_upgrade_are_rolled_back_on_failure()
     let result = test.ingress(canister_id, "read", vec![]);
     assert_eq!(result, Ok(WasmResult::Reply(vec![0, 0, 0, 0])));
     let err = test
-        .upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap())
+        .upgrade_canister(canister_id, wat::parse_str(wat).unwrap())
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     let result = test.ingress(canister_id, "read", vec![]);
@@ -2648,7 +2648,7 @@ fn changes_to_stable_memory_in_canister_post_upgrade_are_rolled_back_on_failure(
     let result = test.ingress(canister_id, "read", vec![]);
     assert_eq!(result, Ok(WasmResult::Reply(vec![0, 0, 0, 0])));
     let err = test
-        .upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap())
+        .upgrade_canister(canister_id, wat::parse_str(wat).unwrap())
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     let result = test.ingress(canister_id, "read", vec![]);
@@ -2674,7 +2674,7 @@ fn upgrade_preserves_stable_memory() {
     assert_empty_reply(result);
     let result = test.ingress(canister_id, "read", vec![]);
     assert_eq!(result, Ok(WasmResult::Reply("abcd".as_bytes().to_vec())));
-    test.upgrade_canister(canister_id, wabt::wat2wasm(wat).unwrap())
+    test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap())
         .unwrap();
     let result = test.ingress(canister_id, "read", vec![]);
     assert_eq!(result, Ok(WasmResult::Reply("abcd".as_bytes().to_vec())));
@@ -2699,7 +2699,7 @@ fn reinstall_clears_stable_memory() {
     assert_empty_reply(result);
     let result = test.ingress(canister_id, "read", vec![]);
     assert_eq!(result, Ok(WasmResult::Reply("abcd".as_bytes().to_vec())));
-    test.reinstall_canister(canister_id, wabt::wat2wasm(wat).unwrap())
+    test.reinstall_canister(canister_id, wat::parse_str(wat).unwrap())
         .unwrap();
     let result = test.ingress(canister_id, "read", vec![]);
     assert_eq!(result, Ok(WasmResult::Reply(vec![0, 0, 0, 0])));
@@ -3398,7 +3398,7 @@ fn install_gzip_compressed_module() {
         )"#;
 
     let binary = {
-        let wasm = wabt::wat2wasm(wat).unwrap();
+        let wasm = wat::parse_str(wat).unwrap();
         let mut encoder = libflate::gzip::Encoder::new(Vec::new()).unwrap();
         std::io::copy(&mut &wasm[..], &mut encoder).unwrap();
         encoder.finish().into_result().unwrap()

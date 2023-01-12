@@ -79,9 +79,7 @@ const DTS_WAT: &str = r#"
         )"#;
 
 fn wat2wasm(wat: &str) -> Vec<u8> {
-    let mut features = wabt::Features::new();
-    features.enable_bulk_memory();
-    wabt::wat2wasm_with_features(wat, features).unwrap()
+    wat::parse_str(wat).unwrap()
 }
 
 /// This is a tentative workaround for the issue that `StateMachine` disables DTS
@@ -235,9 +233,6 @@ fn setup_dts_install_code(
         )),
     );
 
-    let mut features = wabt::Features::new();
-    features.enable_bulk_memory();
-
     let install_code_ingress_id = env.send_ingress(
         PrincipalId::new_anonymous(),
         IC_00,
@@ -245,7 +240,7 @@ fn setup_dts_install_code(
         InstallCodeArgs::new(
             CanisterInstallMode::Install,
             canister_id,
-            wabt::wat2wasm_with_features(DTS_INSTALL_WAT, features).unwrap(),
+            wat::parse_str(DTS_INSTALL_WAT).unwrap(),
             vec![],
             None,
             None,
@@ -269,7 +264,7 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
     }
     // These numbers were obtained by running the test and printing the costs.
     // They need to be adjusted if we change fees or the Wasm source code.
-    let install_code_ingress_cost = Cycles::new(1846000);
+    let install_code_ingress_cost = Cycles::new(1948000);
     let normal_ingress_cost = Cycles::new(1224000);
     let max_execution_cost = Cycles::new(990000);
     let actual_execution_cost = Cycles::new(818012);
@@ -308,7 +303,7 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
     }
     // These numbers were obtained by running the test and printing the costs.
     // They need to be adjusted if we change fees or the Wasm source code.
-    let install_code_ingress_cost = Cycles::new(1846000);
+    let install_code_ingress_cost = Cycles::new(1948000);
     let normal_ingress_cost = Cycles::new(1224000);
     let max_execution_cost = Cycles::new(990000);
     let actual_execution_cost = Cycles::new(818012);
@@ -359,7 +354,7 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
     }
     // These numbers were obtained by running the test and printing the costs.
     // They need to be adjusted if we change fees or the Wasm source code.
-    let install_code_ingress_cost = Cycles::new(1846000);
+    let install_code_ingress_cost = Cycles::new(1948000);
     let normal_ingress_cost = Cycles::new(1224000);
     let max_execution_cost = Cycles::new(990000);
     let actual_execution_cost = Cycles::new(818012);

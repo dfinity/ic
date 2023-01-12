@@ -77,7 +77,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_cmd",
     "@crate_index//:criterion",
     "@crate_index//:predicates",
-    "@wabt_rs//:wabt",
+    "@crate_index//:wat",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

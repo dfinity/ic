@@ -50,7 +50,7 @@ pub fn mint_cycles_not_supported_on_system_subnet(env: TestEnv) {
     let nns_node = env.get_first_healthy_nns_node_snapshot();
     let nns_agent = nns_node.build_default_agent();
     block_on(async move {
-        let wasm = wabt::wat2wasm(MINT_CYCLES).unwrap();
+        let wasm = wat::parse_str(MINT_CYCLES).unwrap();
         let nns_canister_id: Principal = create_and_install_with_cycles(
             &nns_agent,
             nns_node.effective_canister_id(),
@@ -92,7 +92,7 @@ pub fn mint_cycles_not_supported_on_application_subnet(env: TestEnv) {
     let app_node = env.get_first_healthy_application_node_snapshot();
     let agent = app_node.build_default_agent();
     block_on(async move {
-        let wasm = wabt::wat2wasm(MINT_CYCLES).unwrap();
+        let wasm = wat::parse_str(MINT_CYCLES).unwrap();
         let canister_id: Principal = create_and_install_with_cycles(
             &agent,
             app_node.effective_canister_id(),

@@ -643,11 +643,9 @@ impl ExecutionTest {
         initial_cycles: Cycles,
         wat: S,
     ) -> Result<CanisterId, UserError> {
-        let mut features = wabt::Features::new();
-        features.enable_bulk_memory();
         self.canister_from_cycles_and_binary(
             initial_cycles,
-            wabt::wat2wasm_with_features(wat.to_string(), features).unwrap(),
+            wat::parse_str(wat.to_string()).unwrap(),
         )
     }
 
@@ -1803,7 +1801,7 @@ fn get_canister_id_if_install_code(message: CanisterMessage) -> Option<CanisterI
 }
 
 pub fn wat_compilation_cost(wat: &str) -> NumInstructions {
-    let wasm = BinaryEncodedWasm::new(wabt::wat2wasm(wat).unwrap());
+    let wasm = BinaryEncodedWasm::new(wat::parse_str(wat).unwrap());
     let config = EmbeddersConfig::default();
     let (_, serialized_module) = compile(&WasmtimeEmbedder::new(config, no_op_logger()), &wasm)
         .1

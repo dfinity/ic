@@ -11,7 +11,7 @@ use ic_utils::interfaces::ManagementCanister;
 /// Tests that query replies can be larger than update replies.
 pub fn query_reply_sizes(env: TestEnv) {
     // A wasm that exports a query function that has a 3MiB reply.
-    let wasm = wabt::wat2wasm(
+    let wasm = wat::parse_str(
         r#"(module
               (import "ic0" "msg_reply" (func $msg_reply))
               (import "ic0" "msg_reply_data_append"

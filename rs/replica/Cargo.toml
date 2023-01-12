@@ -76,7 +76,7 @@ ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces-registry-mocks = { path = "../interfaces/registry/mocks" }
 ic-test-utilities = { path = "../test_utilities" }
 predicates = "1.0.1"
-wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
+wat = "1.0.52"
 
 [[bench]]
 name = "calls"

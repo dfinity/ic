@@ -45,7 +45,7 @@ rust_test(
     compile_data = [":lifeline.wasm"],
     crate = ":lifeline",
     deps = [
-        "@wabt_rs//:wabt",
+        "@crate_index//:wasmprinter",
     ],
 )
 

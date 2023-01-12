@@ -154,7 +154,6 @@ class FakeCargo(inventory.Cargo):
 def test_cargo_duplicate_line():
     """Verify duplicate lines are detected correctly in cargo tree output."""
     assert inventory.Cargo.is_duplicate_line("1url v2.2.0 (*)")
-    assert inventory.Cargo.is_duplicate_line("1wabt v0.10.0 (https://github.com/dfinity-lab/wabt-rs) (*)")
     assert not inventory.Cargo.is_duplicate_line("2delay v0.3.1")
 
 

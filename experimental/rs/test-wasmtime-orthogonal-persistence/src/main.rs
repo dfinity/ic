@@ -29,7 +29,7 @@ impl<'a> Wasmtime<'a> {
         let engine = HostRef::new(Engine::new(&config));
         let store = HostRef::new(Store::new(&engine));
         let mut module_registry = HashMap::new();
-        let wasm_binary = wabt::wat2wasm(module_wat)?;
+        let wasm_binary = wat::parse_str(module_wat)?;
         let instance = instantiate_module(&store, &module_registry, &wasm_binary).unwrap();
         Ok(Self {
             engine,

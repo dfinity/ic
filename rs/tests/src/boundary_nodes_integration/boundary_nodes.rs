@@ -49,7 +49,7 @@ use slog::{error, info, Logger};
 use tokio::runtime::Runtime;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
-const COUNTER_CANISTER_WAT: &[u8] = include_bytes!("../counter.wat");
+const COUNTER_CANISTER_WAT: &str = include_str!("../counter.wat");
 
 struct PanicHandler {
     env: TestEnv,
@@ -313,7 +313,7 @@ pub fn canister_test(env: TestEnv) {
         let canister_id = create_canister(
             &agent,
             install_node.unwrap().1,
-            wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+            wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
             None,
         )
         .await
@@ -1528,7 +1528,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
             let cid = create_canister(
                 &agent,
                 effective_canister_id,
-                wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+                wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
                 None,
             )
             .await
@@ -1572,7 +1572,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
             let cid = create_canister(
                 &agent,
                 effective_canister_id,
-                wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+                wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
                 None,
             )
             .await
@@ -1670,7 +1670,7 @@ pub fn direct_to_replica_options_test(env: TestEnv) {
             let cid = create_canister(
                 &agent,
                 effective_canister_id,
-                wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+                wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
                 None,
             )
             .await
@@ -1865,7 +1865,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             let cid = create_canister(
                 &agent,
                 effective_canister_id,
-                wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+                wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
                 None,
             )
             .await
@@ -1912,7 +1912,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             let cid = create_canister(
                 &agent,
                 effective_canister_id,
-                wabt::wat2wasm(COUNTER_CANISTER_WAT).unwrap().as_slice(),
+                wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
                 None,
             )
             .await

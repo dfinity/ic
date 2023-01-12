@@ -1,5 +1,4 @@
 use lazy_static::lazy_static;
-use wabt::wat2wasm;
 
 /// This is the code of a canister that can do exactly one thing:
 /// read the first 10 bytes stable memory.
@@ -31,7 +30,8 @@ pub const STABLE_MEMORY_READER_WAT: &str = r#"
         )"#;
 
 lazy_static! {
-    pub static ref STABLE_MEMORY_READER_WASM: Vec<u8> = wat2wasm(STABLE_MEMORY_READER_WAT).unwrap();
+    pub static ref STABLE_MEMORY_READER_WASM: Vec<u8> =
+        wat::parse_str(STABLE_MEMORY_READER_WAT).unwrap();
     pub static ref STABLE_MEMORY_READER_SHA256: [u8; 32] =
         ic_crypto_sha::Sha256::hash(&STABLE_MEMORY_READER_WASM);
 }

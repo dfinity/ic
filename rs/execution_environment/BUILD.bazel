@@ -77,7 +77,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:mockall_0_7_2",
     "@crate_index//:proptest",
     "@crate_index//:tempfile",
-    "@wabt_rs//:wabt",
+    "@crate_index//:wat",
 ]
 
 MACRO_DEV_DEPENDENCIES = [
@@ -154,7 +154,7 @@ BENCH_DEPENDENCIES = [
     "@crate_index//:criterion",
     "@crate_index//:lazy_static",
     "@crate_index//:tempfile",
-    "@wabt_rs//:wabt",
+    "@crate_index//:wat",
 ]
 
 rust_library(

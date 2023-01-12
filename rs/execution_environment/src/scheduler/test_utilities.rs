@@ -314,7 +314,7 @@ impl SchedulerTest {
         target: CanisterId,
         install_code: TestInstallCode,
     ) {
-        let wasm_module = wabt::wat2wasm("(module)").unwrap();
+        let wasm_module = wat::parse_str("(module)").unwrap();
 
         let (mode, test_message) = match install_code {
             TestInstallCode::Install { init } => (CanisterInstallMode::Install, init),

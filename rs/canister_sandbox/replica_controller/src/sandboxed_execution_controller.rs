@@ -1638,7 +1638,7 @@ mod tests {
         .unwrap();
 
         let wat = "(module)";
-        let canister_module = CanisterModule::new(wabt::wat2wasm(wat).unwrap());
+        let canister_module = CanisterModule::new(wat::parse_str(wat).unwrap());
         let canister_id = canister_test_id(0);
         controller
             .create_execution_state(

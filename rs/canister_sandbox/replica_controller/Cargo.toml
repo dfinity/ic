@@ -32,7 +32,7 @@ ic-test-utilities = { path = "../../test_utilities" }
 slog-async = { version = "2.5", features = ["nested-values"] }
 slog-term = "2.6.0"
 tempfile = "3.1.0"
-wabt = { git = "https://github.com/dfinity-lab/wabt-rs", tag = "0.10.0-dfinity" }
+wat = "1.0.52"
 
 [features]
 sigsegv_handler_checksum = []

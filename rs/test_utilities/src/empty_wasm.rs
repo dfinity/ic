@@ -14,7 +14,7 @@ mod test {
 
     #[test]
     fn test_wasm_is_legal() {
-        wabt::wasm2wat(EMPTY_WASM).unwrap();
+        wasmprinter::print_bytes(EMPTY_WASM).unwrap();
     }
 
     #[test]
