@@ -33,10 +33,10 @@ use std::env;
 use std::time::Duration;
 
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::pb::v1::manage_neuron::configure::Operation;
-use ic_nns_governance::pb::v1::manage_neuron::{AddHotKey, Configure, RemoveHotKey};
 use ic_nns_governance::pb::v1::{
-    manage_neuron::{self},
+    manage_neuron::{
+        self, configure::Operation, AddHotKey, Configure, RemoveHotKey, StakeMaturity,
+    },
     ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Proposal,
 };
 use ic_sns_governance::{
@@ -551,6 +551,19 @@ pub fn nns_remove_hot_key(
         operation: Some(Operation::RemoveHotKey(RemoveHotKey {
             hot_key_to_remove: Some(hot_key_to_remove),
         })),
+    });
+
+    manage_neuron(state_machine, sender, neuron_id, command)
+}
+
+pub fn nns_stake_maturity(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+    percentage_to_stake: Option<u32>,
+) -> ManageNeuronResponse {
+    let command = manage_neuron::Command::StakeMaturity(StakeMaturity {
+        percentage_to_stake,
     });
 
     manage_neuron(state_machine, sender, neuron_id, command)
