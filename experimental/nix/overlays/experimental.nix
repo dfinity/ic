@@ -1,7 +1,7 @@
 self: super: {
   experimental = rec {
     wasm-c-api-src = builtins.fetchGit {
-      url = "ssh://git@github.com/WebAssembly/wasm-c-api";
+      url = "https://github.com/WebAssembly/wasm-c-api.git";
       ref = "host-mem";
       rev = "4eba1955fa063676fcd3413c3dbafbfb5bc6bd23";
     };
