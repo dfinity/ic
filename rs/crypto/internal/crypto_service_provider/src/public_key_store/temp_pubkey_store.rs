@@ -1,4 +1,5 @@
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
+use crate::public_key_store::PublicKeyAddError;
 use crate::public_key_store::{
     PublicKeyGenerationTimestamps, PublicKeySetOnceError, PublicKeyStore,
 };
@@ -83,6 +84,13 @@ impl PublicKeyStore for TempPublicKeyStore {
 
     fn tls_certificate(&self) -> Option<&X509PublicKeyCert> {
         self.store.tls_certificate()
+    }
+
+    fn add_idkg_dealing_encryption_pubkey(
+        &mut self,
+        key: PublicKey,
+    ) -> Result<(), PublicKeyAddError> {
+        self.store.add_idkg_dealing_encryption_pubkey(key)
     }
 
     fn set_idkg_dealing_encryption_pubkeys(&mut self, keys: Vec<PublicKey>) -> Result<(), Error> {

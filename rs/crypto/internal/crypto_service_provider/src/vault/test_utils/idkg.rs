@@ -23,7 +23,6 @@ pub fn should_generate_and_store_dealing_encryption_key_pair_multiple_times(
                 .expect("missing IDKG public key"),
             idkg_dealing_encryption_pk_to_proto(public_key.clone())
         );
-
         let key_id = KeyId::try_from(&public_key).expect("invalid key ID");
         assert!(csp_vault.sks_contains(&key_id).expect("error reading SKS"));
 
@@ -44,6 +43,6 @@ pub fn should_fail_with_transient_internal_error_if_storing_idkg_public_key_fail
 
     assert_matches!(result,
         Err(CspCreateMEGaKeyError::TransientInternalError { internal_error })
-        if internal_error.contains("IO error")
+        if internal_error.contains("failed to add iDKG")
     );
 }
