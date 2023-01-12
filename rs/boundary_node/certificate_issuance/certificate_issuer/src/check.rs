@@ -1,12 +1,16 @@
-use std::io::{BufRead, Cursor};
-
-use anyhow::{anyhow, Context};
+use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::Principal;
-use hyper::{Body, Request, StatusCode};
+use ic_agent::Agent;
+use std::sync::Arc;
 use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
 
-use crate::{dns::Resolve, http::HttpClient};
+use ic_utils::{
+    call::SyncCall,
+    interfaces::http_request::{HttpRequestCanister, HttpResponse},
+};
+
+use crate::dns::Resolve;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CheckError {
@@ -40,27 +44,46 @@ pub trait Check: Send + Sync {
 pub struct Checker {
     // configuration
     delegation_domain: String,
-    application_domain: String,
 
     // dependencies
     resolver: Box<dyn Resolve>,
-    http_client: Box<dyn HttpClient>,
+
+    // agent
+    agent: Arc<Agent>,
 }
 
 impl Checker {
-    pub fn new(
-        delegation_domain: String,
-        application_domain: String,
-        resolver: Box<dyn Resolve>,
-        http_client: Box<dyn HttpClient>,
-    ) -> Self {
+    pub fn new(delegation_domain: String, resolver: Box<dyn Resolve>, agent: Arc<Agent>) -> Self {
         Self {
             delegation_domain,
-            application_domain,
             resolver,
-            http_client,
+            agent,
         }
     }
+}
+
+fn has_well_known_file(response: &HttpResponse) -> bool {
+    if response.body.is_empty() {
+        return false;
+    }
+
+    let response_body = String::from_utf8(response.body.clone()).unwrap();
+
+    let first_line = response_body.lines().next().unwrap();
+
+    let first_char = first_line.chars().next().unwrap();
+
+    !matches!(first_char, '<' | '{')
+}
+
+fn file_contents(response: &HttpResponse) -> Vec<String> {
+    let mut file_contents = Vec::new();
+
+    for line in String::from_utf8(response.body.clone()).unwrap().lines() {
+        file_contents.push(line.to_string());
+    }
+
+    file_contents
 }
 
 #[async_trait]
@@ -130,25 +153,16 @@ impl Check for Checker {
                 Ok(id)
             })?;
 
-        // Phase 3 - Query the canister to ensure it allows being accessed via the requested domain
-        let req = Request::builder()
-            .method("GET")
-            .uri(format!(
-                "https://{}.{}/.well-known/custom-domains",
-                canister_id, self.application_domain,
-            ))
-            .body(Body::empty())
-            .context("failed to create http reqest")?;
-
-        let mut response = self
-            .http_client
-            .request(req)
+        let canister = HttpRequestCanister::create(self.agent.as_ref(), canister_id);
+        let (response,) = canister
+            .http_request("GET", "/.well-known/custom-domains", vec![], vec![])
+            .call()
             .await
-            .context("failed to make http request")?;
+            .unwrap();
 
-        match response.status() {
-            StatusCode::OK => {}
-            StatusCode::NOT_FOUND => {
+        match response.status_code {
+            200 => {}
+            404 => {
                 return Err(CheckError::MissingKnownDomains {
                     id: canister_id.to_string(),
                 });
@@ -160,16 +174,13 @@ impl Check for Checker {
             }
         }
 
-        let bs = hyper::body::to_bytes(response.body_mut())
-            .await
-            .context("failed to consume response")?
-            .to_vec();
+        if !has_well_known_file(&response) {
+            return Err(CheckError::MissingKnownDomains {
+                id: canister_id.to_string(),
+            });
+        }
 
-        let lns: Vec<String> = Cursor::new(bs)
-            .lines()
-            .into_iter()
-            .filter_map(Result::ok)
-            .collect();
+        let lns = file_contents(&response).to_vec();
 
         if !lns.iter().any(|ln| ln.as_str().eq(name)) {
             return Err(CheckError::MissingKnownDomains {

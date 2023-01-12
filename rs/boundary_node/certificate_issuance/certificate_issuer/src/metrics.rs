@@ -3,7 +3,6 @@ use std::time::Instant;
 use anyhow::Error;
 use async_trait::async_trait;
 use candid::Principal;
-use hyper::{Body, Request, Response};
 use opentelemetry::{
     metrics::{Counter, Histogram, Meter},
     Context, KeyValue,
@@ -16,7 +15,6 @@ use crate::{
     certificate::{self, ExportError, UploadError},
     check::{Check, CheckError},
     dns::{self, Record, Resolve},
-    http::HttpClient,
     registration::{
         Create, CreateError, Get, GetError, Id, Registration, State, Update, UpdateError,
     },
@@ -282,40 +280,6 @@ impl<T: Resolve> Resolve for WithMetrics<T> {
         recorder.record(&cx, duration, labels);
 
         info!(action = action.as_str(), name, record_type = record_type.to_string(), status, duration, error = ?out.as_ref().err());
-
-        out
-    }
-}
-
-#[async_trait]
-impl<T: HttpClient> HttpClient for WithMetrics<T> {
-    async fn request(&self, req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-        let start_time = Instant::now();
-
-        let (uri, method) = (req.uri().to_string(), req.method().to_string());
-
-        let out = self.0.request(req).await;
-
-        let status = if out.is_ok() { "ok" } else { "fail" };
-        let duration = start_time.elapsed().as_secs_f64();
-
-        let labels = &[
-            KeyValue::new("status", status),
-            KeyValue::new("method", method.to_string()),
-        ];
-
-        let MetricParams {
-            action,
-            counter,
-            recorder,
-        } = &self.1;
-
-        let cx = Context::current();
-
-        counter.add(&cx, 1, labels);
-        recorder.record(&cx, duration, labels);
-
-        info!(action = action.as_str(), uri, method, status, duration, error = ?out.as_ref().err());
 
         out
     }
