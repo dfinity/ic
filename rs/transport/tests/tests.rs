@@ -8,10 +8,10 @@ use ic_logger::ReplicaLogger;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_transport_test_utils::{
     basic_transport_message, basic_transport_message_v2, blocking_transport_message,
-    create_mock_event_handler, get_free_localhost_port, large_transport_message, setup_test_peer,
-    start_connection_between_two_peers, temp_crypto_component_with_tls_keys_in_registry,
-    RegistryAndDataProvider, NODE_ID_1, NODE_ID_2, NODE_ID_3, NODE_ID_4, REG_V1,
-    TRANSPORT_CHANNEL_ID,
+    create_mock_event_handler, get_free_localhost_port, large_transport_message, peer_down_message,
+    setup_test_peer, start_connection_between_two_peers,
+    temp_crypto_component_with_tls_keys_in_registry, RegistryAndDataProvider, NODE_ID_1, NODE_ID_2,
+    NODE_ID_3, NODE_ID_4, REG_V1, TRANSPORT_CHANNEL_ID,
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -104,7 +104,7 @@ fn head_of_line_test_legacy() {
         let hol_event_handler =
             setup_blocking_event_handler(rt.handle().clone(), peer_b_sender, listener);
 
-        let (_peer_a, _peer_b, messages_sent) = trigger_and_test_send_queue_full(
+        let (peer_a, _peer_b, messages_sent) = trigger_and_test_send_queue_full(
             rt.handle().clone(),
             logger,
             registry_version,
@@ -124,6 +124,9 @@ fn head_of_line_test_legacy() {
                 Some(basic_transport_message())
             );
         }
+
+        peer_a.stop_connection(&NODE_ID_2);
+        assert_eq!(peer_b_receiver.blocking_recv(), Some(peer_down_message()));
     });
 }
 
@@ -184,6 +187,8 @@ fn test_send_big_message_succeeds(use_h2: bool) {
             peer_a_receiver.blocking_recv(),
             Some(large_transport_message())
         );
+        peer_a.stop_connection(&NODE_ID_2);
+        assert_eq!(peer_b_receiver.blocking_recv(), Some(peer_down_message()));
     });
 }
 
@@ -225,7 +230,7 @@ fn test_idle_connection_active_impl(use_h2: bool) {
             NODE_ID_2,
             use_h2,
         );
-        std::thread::sleep(Duration::from_secs(20));
+        std::thread::sleep(Duration::from_secs(5)); //fix
 
         let msg_1 = TransportPayload(vec![0xa; 1000000]);
         let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
@@ -234,6 +239,9 @@ fn test_idle_connection_active_impl(use_h2: bool) {
         let res = peer_a.send(&NODE_ID_2, channel_id, msg_1.clone());
         assert_eq!(res, Ok(()));
         assert_eq!(peer_b_receiver.blocking_recv(), Some(msg_1));
+
+        peer_a.stop_connection(&NODE_ID_2);
+        assert_eq!(peer_b_receiver.blocking_recv(), Some(peer_down_message()));
     });
 }
 
@@ -364,6 +372,9 @@ fn test_drain_send_queue_impl(use_h2: bool) {
                 Some(basic_transport_message_v2())
             );
         }
+
+        peer_a.stop_connection(&NODE_ID_2);
+        assert_eq!(peer_b_receiver.blocking_recv(), Some(peer_down_message()));
     });
 }
 
@@ -399,8 +410,8 @@ fn test_multiple_connections_to_single_peer_impl(use_h2: bool) {
 
         let mut successful_sends = 0;
         let sends_per_peer = 500;
-        for node_data in remainder {
-            let node_b = node_data.0;
+        for node_data in &remainder {
+            let node_b = &node_data.0;
             let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
             for _ in 1..=sends_per_peer {
                 if node_b
@@ -415,6 +426,13 @@ fn test_multiple_connections_to_single_peer_impl(use_h2: bool) {
 
         for _ in 1..=successful_sends {
             assert_eq!(nodes[0].3.blocking_recv(), Some(basic_transport_message()));
+        }
+
+        // disconnect
+        for (_peer, _addr, peer_id, mut peer_receiver) in remainder {
+            let central_node = &nodes[0].0;
+            central_node.stop_connection(&peer_id);
+            assert_eq!(peer_receiver.blocking_recv(), Some(peer_down_message()));
         }
     });
 }
@@ -489,7 +507,12 @@ fn setup_message_ack_event_handler(
                     connected.send(msg.payload).await.expect("Channel busy");
                 }
                 TransportEvent::PeerUp(_) => {}
-                TransportEvent::PeerDown(_) => {}
+                TransportEvent::PeerDown(_) => {
+                    connected
+                        .send(peer_down_message())
+                        .await
+                        .expect("Channel busy");
+                }
             };
             rsp.send_response(());
         }
@@ -519,7 +542,12 @@ fn setup_blocking_event_handler(
                     }
                 }
                 TransportEvent::PeerUp(_) => {}
-                TransportEvent::PeerDown(_) => {}
+                TransportEvent::PeerDown(_) => {
+                    sender
+                        .send(peer_down_message())
+                        .await
+                        .expect("Channel busy");
+                }
             }
             rsp.send_response(());
         }
