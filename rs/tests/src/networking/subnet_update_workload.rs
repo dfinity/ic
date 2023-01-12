@@ -28,9 +28,9 @@ use crate::{
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
-            NnsInstallationExt, RetrieveIpv4Addr, SshSession, SubnetSnapshot, ADMIN,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            retry_async, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVmName,
+            IcNodeContainer, NnsInstallationExt, RetrieveIpv4Addr, SshSession, SubnetSnapshot,
+            ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
     util::{agent_observes_canister_module, assert_canister_counter_with_retries, block_on},
@@ -51,7 +51,7 @@ use ic_registry_subnet_type::SubnetType;
 use slog::{debug, info, Logger};
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
-const COUNTER_CANISTER_WAT: &str = "rs/workload_generator/src/counter.wat";
+const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 const CANISTER_METHOD: &str = "write";
 // Duration of each request is placed into one of the two categories - below or above this threshold.
 const APP_DURATION_THRESHOLD: Duration = Duration::from_secs(3);
@@ -80,6 +80,7 @@ fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32),
 // Create an IC with two subnets, with variable number of nodes and boundary nodes
 // Install NNS canister on system subnet
 fn config(env: TestEnv, nodes_nns_subnet: usize, nodes_app_subnet: usize, use_boundary_node: bool) {
+    env.ensure_group_setup_created();
     let logger = env.logger();
 
     PrometheusVm::default()
@@ -91,7 +92,7 @@ fn config(env: TestEnv, nodes_nns_subnet: usize, nodes_app_subnet: usize, use_bo
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
     env.sync_prometheus_config_with_topology();
-
+    info!(logger, "Step 1: Intalling NNS canisters ...");
     env.topology_snapshot()
         .root_subnet()
         .nodes()
@@ -267,7 +268,7 @@ pub fn test(
     let log = env.logger();
     info!(
         &log,
-        "Step 1: Checking readiness of all nodes after the IC setup ..."
+        "Checking readiness of all nodes after the IC setup ..."
     );
     let top_snapshot = env.topology_snapshot();
     top_snapshot.subnets().for_each(|subnet| {

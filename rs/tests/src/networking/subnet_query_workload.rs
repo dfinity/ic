@@ -6,6 +6,7 @@ Goal:: Ensure IC responds to queries of a given size in a timely manner.
 
 Runbook::
 0. Instantiate an IC with one System and one Application subnet.
+   - Optionally install one boundary node.
 1. Install NNS canisters on the System subnet.
 2. Build and install one counter canister on the Application subnet.
 3. Instantiate and start a workload against the Application subnet.
@@ -29,7 +30,7 @@ use slog::{debug, info, Logger};
 use std::process::Command;
 use std::time::Duration;
 
-const COUNTER_CANISTER_WAT: &str = "rs/workload_generator/src/counter.wat";
+const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 const CANISTER_METHOD: &str = "read";
 // Size of the payload sent to the counter canister in query("write") call.
 const PAYLOAD_SIZE_BYTES: usize = 1024;
@@ -40,10 +41,11 @@ const MIN_REQUESTS_RATIO_BELOW_THRESHOLD: f64 = 0.9;
 // Parameters related to workload creation.
 const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(30); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
+pub const LONG_DURATION_TEST_RUNTIME: Duration = Duration::from_secs(30 * 60);
 
-// Send workload to one node for 6h with 1000 rps
+// Send workload to one node for 30 mins with 1000 rps
 pub fn long_duration_test(env: TestEnv) {
-    test(env, 1000, Duration::from_secs(6 * 60 * 60), 0.95)
+    test(env, 1000, LONG_DURATION_TEST_RUNTIME, 0.95)
 }
 
 // Send workload to one node for 2h with 1000 rps
@@ -68,7 +70,7 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration, min_success_ratio: f64)
     log_max_open_files(&log);
     info!(
         &log,
-        "Step 1: Checking readiness of all nodes after the IC setup ..."
+        "Checking readiness of all nodes after the IC setup ..."
     );
     let topology_snapshot = env.topology_snapshot();
     topology_snapshot.subnets().for_each(|subnet| {

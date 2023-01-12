@@ -61,7 +61,7 @@ use std::io::{self, LineWriter, Read, Write};
 use std::thread;
 use std::time::Duration;
 
-const COUNTER_CANISTER_WAT: &str = "rs/workload_generator/src/counter.wat";
+const COUNTER_CANISTER_WAT: &str = "rs/tests/src/counter.wat";
 const CANISTER_METHOD: &str = "write";
 // Size of the payload sent to the counter canister in update("write") call.
 const PAYLOAD_SIZE_BYTES: usize = 1024;
