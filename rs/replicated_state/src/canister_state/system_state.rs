@@ -6,7 +6,7 @@ pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::{CanisterQueues, CanisterState, InputQueueType, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
-use ic_interfaces::messages::{CanisterInputMessage, RequestOrIngress};
+use ic_interfaces::messages::{CanisterCall, CanisterMessage};
 use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -226,7 +226,7 @@ pub enum ExecutionTask {
     // A paused execution can also be aborted to keep the memory usage low if
     // there are too many long-running executions.
     AbortedExecution {
-        message: CanisterInputMessage,
+        message: CanisterMessage,
         // The execution cost that has already been charged from the canister.
         // Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
@@ -237,7 +237,7 @@ pub enum ExecutionTask {
     // checkpoint. A paused execution can also be aborted to keep the memory
     // usage low if there are too many long-running executions.
     AbortedInstallCode {
-        message: RequestOrIngress,
+        message: CanisterCall,
         // The execution cost that has already been charged from the canister.
         // Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
@@ -259,9 +259,9 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
             } => {
                 use pb::execution_task::aborted_execution::Message;
                 let message = match message {
-                    CanisterInputMessage::Response(v) => Message::Response(v.as_ref().into()),
-                    CanisterInputMessage::Request(v) => Message::Request(v.as_ref().into()),
-                    CanisterInputMessage::Ingress(v) => Message::Ingress(v.as_ref().into()),
+                    CanisterMessage::Response(v) => Message::Response(v.as_ref().into()),
+                    CanisterMessage::Request(v) => Message::Request(v.as_ref().into()),
+                    CanisterMessage::Ingress(v) => Message::Ingress(v.as_ref().into()),
                 };
                 Self {
                     task: Some(pb::execution_task::Task::AbortedExecution(
@@ -278,8 +278,8 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
             } => {
                 use pb::execution_task::aborted_install_code::Message;
                 let message = match message {
-                    RequestOrIngress::Request(v) => Message::Request(v.as_ref().into()),
-                    RequestOrIngress::Ingress(v) => Message::Ingress(v.as_ref().into()),
+                    CanisterCall::Request(v) => Message::Request(v.as_ref().into()),
+                    CanisterCall::Ingress(v) => Message::Ingress(v.as_ref().into()),
                 };
                 Self {
                     task: Some(pb::execution_task::Task::AbortedInstallCode(
@@ -308,9 +308,9 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     .message
                     .ok_or(ProxyDecodeError::MissingField("AbortedExecution::message"))?;
                 let message = match message {
-                    Message::Request(v) => CanisterInputMessage::Request(Arc::new(v.try_into()?)),
-                    Message::Response(v) => CanisterInputMessage::Response(Arc::new(v.try_into()?)),
-                    Message::Ingress(v) => CanisterInputMessage::Ingress(Arc::new(v.try_into()?)),
+                    Message::Request(v) => CanisterMessage::Request(Arc::new(v.try_into()?)),
+                    Message::Response(v) => CanisterMessage::Response(Arc::new(v.try_into()?)),
+                    Message::Ingress(v) => CanisterMessage::Ingress(Arc::new(v.try_into()?)),
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
@@ -328,8 +328,8 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     "AbortedInstallCode::message",
                 ))?;
                 let message = match message {
-                    Message::Request(v) => RequestOrIngress::Request(Arc::new(v.try_into()?)),
-                    Message::Ingress(v) => RequestOrIngress::Ingress(Arc::new(v.try_into()?)),
+                    Message::Request(v) => CanisterCall::Request(Arc::new(v.try_into()?)),
+                    Message::Ingress(v) => CanisterCall::Ingress(Arc::new(v.try_into()?)),
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
@@ -643,7 +643,7 @@ impl SystemState {
     }
 
     /// Extracts the next inter-canister or ingress message (round-robin).
-    pub(crate) fn pop_input(&mut self) -> Option<CanisterInputMessage> {
+    pub(crate) fn pop_input(&mut self) -> Option<CanisterMessage> {
         self.queues.pop_input()
     }
 
@@ -949,7 +949,7 @@ pub(crate) fn push_input(
 pub mod testing {
     use super::SystemState;
     use crate::CanisterQueues;
-    use ic_interfaces::messages::CanisterInputMessage;
+    use ic_interfaces::messages::CanisterMessage;
     use ic_types::CanisterId;
 
     /// Exposes `SystemState` internals for use in other crates' unit tests.
@@ -964,7 +964,7 @@ pub mod testing {
         fn put_queues(&mut self, queues: CanisterQueues);
 
         /// Testing only: pops next input message
-        fn pop_input(&mut self) -> Option<CanisterInputMessage>;
+        fn pop_input(&mut self) -> Option<CanisterMessage>;
     }
 
     impl SystemStateTesting for SystemState {
@@ -980,7 +980,7 @@ pub mod testing {
             self.queues = queues;
         }
 
-        fn pop_input(&mut self) -> Option<CanisterInputMessage> {
+        fn pop_input(&mut self) -> Option<CanisterMessage> {
             self.pop_input()
         }
     }

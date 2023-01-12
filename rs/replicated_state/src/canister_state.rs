@@ -9,7 +9,7 @@ use crate::canister_state::system_state::{CanisterStatus, ExecutionTask, SystemS
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions, Global};
 use ic_ic00_types::CanisterStatusType;
-use ic_interfaces::messages::CanisterInputMessage;
+use ic_interfaces::messages::CanisterMessage;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
@@ -214,7 +214,7 @@ impl CanisterState {
     ///
     /// The function is public as we pop directly from the Canister state in
     /// `SchedulerImpl::execute_canisters_on_thread()`
-    pub fn pop_input(&mut self) -> Option<CanisterInputMessage> {
+    pub fn pop_input(&mut self) -> Option<CanisterMessage> {
         self.system_state.pop_input()
     }
 

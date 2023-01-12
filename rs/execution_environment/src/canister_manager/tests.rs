@@ -29,7 +29,7 @@ use ic_ic00_types::{
 };
 use ic_interfaces::{
     execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory},
-    messages::RequestOrIngress,
+    messages::CanisterCall,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
@@ -310,7 +310,7 @@ fn install_code(
     let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
     let (result, instructions_used, canister) = canister_manager.install_code(
         context,
-        RequestOrIngress::Ingress(Arc::new(ingress)),
+        CanisterCall::Ingress(Arc::new(ingress)),
         state,
         execution_parameters,
         round_limits,

@@ -13,7 +13,7 @@ use crate::execution_environment::{RoundContext, RoundLimits};
 use ic_base_types::PrincipalId;
 use ic_embedders::wasm_executor::{CanisterStateChanges, PausedWasmExecution, WasmExecutionResult};
 use ic_interfaces::execution_environment::WasmExecutionOutput;
-use ic_interfaces::messages::RequestOrIngress;
+use ic_interfaces::messages::CanisterCall;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_replicated_state::{CanisterState, SystemState};
 use ic_system_api::ApiType;
@@ -385,7 +385,7 @@ impl PausedInstallCodeExecution for PausedInitExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (RequestOrIngress, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, Cycles) {
         info!(
             log,
             "[DTS] Aborting (canister_init) execution of canister {}.", self.original.canister_id
@@ -481,7 +481,7 @@ impl PausedInstallCodeExecution for PausedStartExecutionDuringInstall {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (RequestOrIngress, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterCall, Cycles) {
         info!(
             log,
             "[DTS] Aborting (start) execution of canister {}.", self.original.canister_id,

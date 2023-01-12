@@ -9,93 +9,93 @@ use std::fmt::{self, Debug, Display, Formatter};
 
 /// A wrapper around ingress messages and canister requests/responses.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum CanisterInputMessage {
+pub enum CanisterMessage {
     Response(Arc<Response>),
     Request(Arc<Request>),
     Ingress(Arc<Ingress>),
 }
 
-impl CanisterInputMessage {
+impl CanisterMessage {
     /// Helper function to extract the effective canister id.
     pub fn effective_canister_id(&self) -> Option<CanisterId> {
         match &self {
-            CanisterInputMessage::Ingress(ingress) => ingress.effective_canister_id,
-            CanisterInputMessage::Request(request) => request.extract_effective_canister_id(),
-            CanisterInputMessage::Response(_) => None,
+            CanisterMessage::Ingress(ingress) => ingress.effective_canister_id,
+            CanisterMessage::Request(request) => request.extract_effective_canister_id(),
+            CanisterMessage::Response(_) => None,
         }
     }
 }
 
-impl Display for CanisterInputMessage {
+impl Display for CanisterMessage {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            CanisterInputMessage::Ingress(ingress) => {
+            CanisterMessage::Ingress(ingress) => {
                 write!(f, "Ingress, method name {},", ingress.method_name)
             }
-            CanisterInputMessage::Request(request) => {
+            CanisterMessage::Request(request) => {
                 write!(f, "Request, method name {},", request.method_name)
             }
-            CanisterInputMessage::Response(_) => write!(f, "Response"),
+            CanisterMessage::Response(_) => write!(f, "Response"),
         }
     }
 }
 
 /// A wrapper around a canister request and an ingress message.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum RequestOrIngress {
+pub enum CanisterCall {
     Request(Arc<Request>),
     Ingress(Arc<Ingress>),
 }
 
-impl RequestOrIngress {
+impl CanisterCall {
     pub fn sender(&self) -> &PrincipalId {
         match self {
-            RequestOrIngress::Request(msg) => msg.sender.as_ref(),
-            RequestOrIngress::Ingress(msg) => msg.source.as_ref(),
+            CanisterCall::Request(msg) => msg.sender.as_ref(),
+            CanisterCall::Ingress(msg) => msg.source.as_ref(),
         }
     }
 
     pub fn method_payload(&self) -> &[u8] {
         match self {
-            RequestOrIngress::Request(msg) => msg.method_payload.as_slice(),
-            RequestOrIngress::Ingress(msg) => msg.method_payload.as_slice(),
+            CanisterCall::Request(msg) => msg.method_payload.as_slice(),
+            CanisterCall::Ingress(msg) => msg.method_payload.as_slice(),
         }
     }
 
     pub fn method_name(&self) -> &str {
         match self {
-            RequestOrIngress::Request(request) => request.method_name.as_str(),
-            RequestOrIngress::Ingress(ingress) => ingress.method_name.as_str(),
+            CanisterCall::Request(request) => request.method_name.as_str(),
+            CanisterCall::Ingress(ingress) => ingress.method_name.as_str(),
         }
     }
 
     /// Returns the cycles received with this message.
     pub fn cycles(&self) -> Cycles {
         match self {
-            RequestOrIngress::Request(request) => request.payment,
-            RequestOrIngress::Ingress(_) => Cycles::zero(),
+            CanisterCall::Request(request) => request.payment,
+            CanisterCall::Ingress(_) => Cycles::zero(),
         }
     }
 
     /// Extracts the cycles received with this message.
     pub fn take_cycles(&mut self) -> Cycles {
         match self {
-            RequestOrIngress::Request(request) => Arc::make_mut(request).payment.take(),
-            RequestOrIngress::Ingress(_) => Cycles::zero(),
+            CanisterCall::Request(request) => Arc::make_mut(request).payment.take(),
+            CanisterCall::Ingress(_) => Cycles::zero(),
         }
     }
 }
 
-impl From<RequestOrIngress> for StopCanisterContext {
-    fn from(msg: RequestOrIngress) -> Self {
+impl From<CanisterCall> for StopCanisterContext {
+    fn from(msg: CanisterCall) -> Self {
         assert_eq!(msg.method_name(), "stop_canister", "Converting a RequestOrIngress into StopCanisterContext should only happen with stop_canister requests.");
         match msg {
-            RequestOrIngress::Request(mut req) => StopCanisterContext::Canister {
+            CanisterCall::Request(mut req) => StopCanisterContext::Canister {
                 sender: req.sender,
                 reply_callback: req.sender_reply_callback,
                 cycles: Arc::make_mut(&mut req).payment.take(),
             },
-            RequestOrIngress::Ingress(ingress) => StopCanisterContext::Ingress {
+            CanisterCall::Ingress(ingress) => StopCanisterContext::Ingress {
                 sender: ingress.source,
                 message_id: ingress.message_id.clone(),
             },
@@ -103,14 +103,14 @@ impl From<RequestOrIngress> for StopCanisterContext {
     }
 }
 
-impl TryFrom<CanisterInputMessage> for RequestOrIngress {
+impl TryFrom<CanisterMessage> for CanisterCall {
     type Error = ();
 
-    fn try_from(msg: CanisterInputMessage) -> Result<Self, Self::Error> {
+    fn try_from(msg: CanisterMessage) -> Result<Self, Self::Error> {
         match msg {
-            CanisterInputMessage::Request(msg) => Ok(RequestOrIngress::Request(msg)),
-            CanisterInputMessage::Ingress(msg) => Ok(RequestOrIngress::Ingress(msg)),
-            CanisterInputMessage::Response(_) => Err(()),
+            CanisterMessage::Request(msg) => Ok(CanisterCall::Request(msg)),
+            CanisterMessage::Ingress(msg) => Ok(CanisterCall::Ingress(msg)),
+            CanisterMessage::Response(_) => Err(()),
         }
     }
 }

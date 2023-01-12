@@ -8,7 +8,7 @@ use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
-use ic_interfaces::messages::RequestOrIngress;
+use ic_interfaces::messages::CanisterCall;
 use ic_logger::{error, fatal, warn, ReplicaLogger};
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
@@ -196,11 +196,11 @@ pub(crate) fn action_to_ingress_response(
 /// original message was an ingress message.
 /// Otherwise, returns `None`.
 pub(crate) fn ingress_status_with_processing_state(
-    message: &RequestOrIngress,
+    message: &CanisterCall,
     time: Time,
 ) -> Option<(MessageId, IngressStatus)> {
     match message {
-        RequestOrIngress::Ingress(ingress) => Some((
+        CanisterCall::Ingress(ingress) => Some((
             ingress.message_id.clone(),
             IngressStatus::Known {
                 receiver: ingress.receiver.get(),
@@ -209,7 +209,7 @@ pub(crate) fn ingress_status_with_processing_state(
                 state: IngressState::Processing,
             },
         )),
-        RequestOrIngress::Request(_) => None,
+        CanisterCall::Request(_) => None,
     }
 }
 
@@ -480,12 +480,12 @@ pub fn apply_canister_state_changes(
 pub(crate) fn finish_call_with_error(
     user_error: UserError,
     canister: CanisterState,
-    req: RequestOrIngress,
+    req: CanisterCall,
     instructions_used: NumInstructions,
     time: Time,
 ) -> ExecuteMessageResult {
     let result = match req {
-        RequestOrIngress::Request(request) => {
+        CanisterCall::Request(request) => {
             let response = Response {
                 originator: request.sender,
                 respondent: canister.canister_id(),
@@ -495,7 +495,7 @@ pub(crate) fn finish_call_with_error(
             };
             ExecutionResponse::Request(response)
         }
-        RequestOrIngress::Ingress(ingress) => {
+        CanisterCall::Ingress(ingress) => {
             let status = IngressStatus::Known {
                 receiver: canister.canister_id().get(),
                 user_id: ingress.source,

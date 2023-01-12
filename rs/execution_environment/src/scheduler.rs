@@ -17,7 +17,7 @@ use ic_ic00_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
 use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, Scheduler},
-    messages::CanisterInputMessage,
+    messages::CanisterMessage,
 };
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -1394,7 +1394,7 @@ impl Scheduler for SchedulerImpl {
                 );
                 let instructions_before = round_limits.instructions;
                 let (new_state, message_instructions) = self.exec_env.execute_subnet_message(
-                    CanisterInputMessage::Response(response.into()),
+                    CanisterMessage::Response(response.into()),
                     state,
                     instruction_limits,
                     &mut csprng,
@@ -1997,7 +1997,7 @@ fn observe_replicated_state_metrics(
 ///     with another long-running execution in progress.
 ///     2. Install code messages can only be executed sequentially.
 fn can_execute_msg(
-    msg: &CanisterInputMessage,
+    msg: &CanisterMessage,
     ongoing_long_install_code: bool,
     long_running_canister_ids: &BTreeSet<CanisterId>,
 ) -> bool {
@@ -2009,13 +2009,13 @@ fn can_execute_msg(
 
     if ongoing_long_install_code {
         let maybe_instal_code_method = match msg {
-            CanisterInputMessage::Ingress(ingress) => {
+            CanisterMessage::Ingress(ingress) => {
                 Ic00Method::from_str(ingress.method_name.as_str()).ok()
             }
-            CanisterInputMessage::Request(request) => {
+            CanisterMessage::Request(request) => {
                 Ic00Method::from_str(request.method_name.as_str()).ok()
             }
-            CanisterInputMessage::Response(_) => None,
+            CanisterMessage::Response(_) => None,
         };
 
         // Only one install code message allowed at a time.
@@ -2035,7 +2035,7 @@ fn can_execute_msg(
 fn get_instructions_limits_for_subnet_message(
     dts: FlagStatus,
     config: &SchedulerConfig,
-    msg: &CanisterInputMessage,
+    msg: &CanisterMessage,
 ) -> InstructionLimits {
     let default_limits = InstructionLimits::new(
         FlagStatus::Disabled,
@@ -2043,11 +2043,11 @@ fn get_instructions_limits_for_subnet_message(
         config.max_instructions_per_message_without_dts,
     );
     let method_name = match &msg {
-        CanisterInputMessage::Response(_) => {
+        CanisterMessage::Response(_) => {
             return default_limits;
         }
-        CanisterInputMessage::Ingress(ingress) => &ingress.method_name,
-        CanisterInputMessage::Request(request) => &request.method_name,
+        CanisterMessage::Ingress(ingress) => &ingress.method_name,
+        CanisterMessage::Request(request) => &request.method_name,
     };
 
     use Ic00Method::*;
@@ -2086,12 +2086,12 @@ fn get_instructions_limits_for_subnet_message(
     }
 }
 
-fn is_bitcoin_request(msg: &CanisterInputMessage) -> bool {
+fn is_bitcoin_request(msg: &CanisterMessage) -> bool {
     use Ic00Method::*;
 
     match msg {
-        CanisterInputMessage::Ingress(_) => false,
-        CanisterInputMessage::Request(req) => match Ic00Method::from_str(&req.method_name) {
+        CanisterMessage::Ingress(_) => false,
+        CanisterMessage::Request(req) => match Ic00Method::from_str(&req.method_name) {
             Ok(method) => match method {
                 BitcoinGetBalance
                 | BitcoinGetUtxos
@@ -2120,6 +2120,6 @@ fn is_bitcoin_request(msg: &CanisterInputMessage) -> bool {
             },
             Err(_) => false,
         },
-        CanisterInputMessage::Response(_) => false,
+        CanisterMessage::Response(_) => false,
     }
 }

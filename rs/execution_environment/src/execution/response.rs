@@ -13,7 +13,7 @@ use ic_embedders::wasm_executor::{
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_interfaces::messages::CanisterInputMessage;
+use ic_interfaces::messages::CanisterMessage;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_replicated_state::{CallContext, CallOrigin, CanisterState};
 use ic_sys::PAGE_SIZE;
@@ -605,7 +605,7 @@ impl PausedExecution for PausedResponseExecution {
         )
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterInputMessage, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessage, Cycles) {
         info!(
             log,
             "[DTS] Aborting paused response callback {:?} of canister {}.",
@@ -613,7 +613,7 @@ impl PausedExecution for PausedResponseExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        let message = CanisterInputMessage::Response(self.original.message);
+        let message = CanisterMessage::Response(self.original.message);
         // No cycles were prepaid for execution during this DTS execution.
         (message, Cycles::zero())
     }
@@ -692,7 +692,7 @@ impl PausedExecution for PausedCleanupExecution {
         )
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterInputMessage, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessage, Cycles) {
         info!(
             log,
             "[DTS] Aborting paused cleanup callback {:?} of canister {}.",
@@ -700,7 +700,7 @@ impl PausedExecution for PausedCleanupExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        let message = CanisterInputMessage::Response(self.original.message);
+        let message = CanisterMessage::Response(self.original.message);
         // No cycles were prepaid for execution during this DTS execution.
         (message, Cycles::zero())
     }
