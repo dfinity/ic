@@ -5,7 +5,7 @@ set -o pipefail
 
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
-CONFIG="${CONFIG:=/config/tmp/config.ini}"
+CONFIG="${CONFIG:=/var/ic/config/config.ini}"
 
 GENERATION=
 
