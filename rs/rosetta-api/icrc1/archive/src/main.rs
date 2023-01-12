@@ -1,4 +1,5 @@
 use candid::{candid_method, Principal};
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_icrc1::{
     endpoints::{GetTransactionsRequest, Transaction, TransactionRange},
@@ -208,7 +209,7 @@ fn remaining_capacity() -> usize {
 #[candid_method(query)]
 fn get_transaction(index: BlockIndex) -> Option<Transaction> {
     let idx_offset = with_archive_opts(|opts| opts.block_index_offset);
-    let relative_idx = (idx_offset < index).then_some((index - idx_offset) as usize)?;
+    let relative_idx = (idx_offset <= index).then_some((index - idx_offset) as usize)?;
 
     let block = with_blocks(|blocks| blocks.get(relative_idx))?;
     Some(decode_transaction(index, block))
@@ -244,6 +245,53 @@ fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
 #[query]
 fn __get_candid_interface_tmp_hack() -> &'static str {
     include_str!(env!("ARCHIVE_DID_PATH"))
+}
+
+fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    w.encode_gauge(
+        "archive_stable_memory_pages",
+        ic_cdk::api::stable::stable_size() as f64,
+        "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
+    )?;
+    w.encode_gauge(
+        "archive_stable_memory_bytes",
+        ic_cdk::api::stable::stable_size() as f64 * 65536f64,
+        "Size of the stable memory allocated by this canister.",
+    )?;
+    w.encode_gauge(
+        "archive_cycle_balance",
+        ic_cdk::api::canister_balance128() as f64,
+        "Cycle balance on this canister.",
+    )?;
+    w.encode_gauge(
+        "archive_stored_blocks",
+        with_blocks(|blocks| blocks.len()) as f64,
+        "Total number of blocks stored in the main memory.",
+    )?;
+
+    Ok(())
+}
+
+#[candid_method(query)]
+#[query]
+fn http_request(req: HttpRequest) -> HttpResponse {
+    if req.path() == "/metrics" {
+        let mut writer =
+            ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
+
+        match encode_metrics(&mut writer) {
+            Ok(()) => HttpResponseBuilder::ok()
+                .header("Content-Type", "text/plain; version=0.0.4")
+                .with_body_and_content_length(writer.into_inner())
+                .build(),
+            Err(err) => {
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                    .build()
+            }
+        }
+    } else {
+        HttpResponseBuilder::not_found().build()
+    }
 }
 
 fn main() {}

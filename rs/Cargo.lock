@@ -6257,10 +6257,12 @@ dependencies = [
  "candid",
  "ciborium",
  "ic-base-types",
+ "ic-canisters-http-types",
  "ic-cdk",
  "ic-cdk-macros",
  "ic-icrc1",
  "ic-ledger-core",
+ "ic-metrics-encoder",
  "ic-stable-structures 0.1.2",
  "serde",
 ]
