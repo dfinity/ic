@@ -21,12 +21,14 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::{tokens::Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
 use ic_nervous_system_common::{validate_proposal_url, NervousSystemError};
 
+use crate::logs::{ERROR, INFO};
 use crate::pb::v1::governance::neuron_in_flight_command::SyncCommand;
 use crate::pb::v1::manage_neuron_response::StakeMaturityResponse;
 use crate::pb::v1::{
     NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId, RewardEvent, Vote,
     VotingRewardsParameters,
 };
+use ic_canister_log::log;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryFrom,
@@ -884,7 +886,8 @@ impl From<i32> for Vote {
         match Vote::from_i32(vote_integer) {
             Some(v) => v,
             None => {
-                println!(
+                log!(
+                    ERROR,
                     "{}Vote::from invoked with unexpected value {}.",
                     log_prefix(),
                     vote_integer
@@ -1792,7 +1795,7 @@ pub mod test_helpers {
             let entry = compute_call_canister_key(canister_id, method_name, &arg);
             match self.canister_calls_map.get(&entry) {
                 None => {
-                    println!(
+                    log!(INFO,
                         "No call_canister entry found for: {:?} {} {:?}.  Using default response: {:?}",
                         canister_id, method_name, arg, &self.default_canister_call_response
                     );

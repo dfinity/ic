@@ -46,9 +46,6 @@ use std::str::FromStr;
 use std::string::ToString;
 use strum::IntoEnumIterator;
 
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
-
 use crate::ledger::ICRC1Ledger;
 use crate::neuron::{
     NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
@@ -67,6 +64,7 @@ use crate::proposal::{
     MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
 };
 
+use crate::logs::{ERROR, INFO};
 use crate::pb::v1::governance::{
     neuron_in_flight_command, SnsMetadata, UpgradeInProgress, Version,
 };
@@ -78,6 +76,7 @@ use crate::sns_upgrade::{
 use crate::types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock};
 use candid::Encode;
 use dfn_core::api::{spawn, CanisterId};
+use ic_canister_log::log;
 use ic_nervous_system_common::{
     ledger::{self, compute_distribution_subaccount_bytes},
     NervousSystemError,
@@ -839,7 +838,7 @@ impl Governance {
     pub(crate) fn unlock_neuron(&mut self, id: &str) {
         match self.proto.in_flight_commands.remove(id) {
             None => {
-                println!(
+                log!(ERROR,
                     "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
                     id
                 );
@@ -1292,10 +1291,12 @@ impl Governance {
             // some reason. The only state to cleanup is to delete the child
             // neuron, since we haven't mutated the parent yet.
             self.remove_neuron(&child_nid, child_neuron)?;
-            println!(
+            log!(
+                ERROR,
                 "Neuron stake transfer of split_neuron: {:?} \
                      failed with error: {:?}. Neuron can't be staked.",
-                child_nid, error
+                child_nid,
+                error
             );
             return Err(error);
         }
@@ -1574,7 +1575,7 @@ impl Governance {
                 assert_eq!(proposal.status(), ProposalDecisionStatus::Adopted);
                 match result {
                     Ok(_) => {
-                        println!("Execution of proposal: {} succeeded.", pid);
+                        log!(INFO, "Execution of proposal: {} succeeded.", pid);
                         // The proposal was executed 'now'.
                         proposal.executed_timestamp_seconds = self.env.now();
                         // If the proposal was executed it has not failed,
@@ -1584,7 +1585,12 @@ impl Governance {
                         proposal.failure_reason = None;
                     }
                     Err(error) => {
-                        println!("Execution of proposal: {} failed. Reason: {:?}", pid, error);
+                        log!(
+                            ERROR,
+                            "Execution of proposal: {} failed. Reason: {:?}",
+                            pid,
+                            error
+                        );
                         // To ensure that we don't update the failure timestamp
                         // if there has been success, check if executed_timestamp_seconds
                         // is set to a non-zero value (this should not happen).
@@ -1600,9 +1606,9 @@ impl Governance {
             None => {
                 // The proposal ID was not found. Something is wrong:
                 // just log this information to aid debugging.
-                println!(
-                    "{}Proposal {:?} not found when attempt to set execution result to {:?}",
-                    log_prefix(),
+                log!(
+                    ERROR,
+                    "Proposal {:?} not found when attempt to set execution result to {:?}",
                     pid,
                     result
                 );
@@ -1930,7 +1936,7 @@ impl Governance {
                     .await
             }
             Action::UpgradeSnsToNextVersion(_) => {
-                println!("{}Executing UpgradeSnsToNextVersion action", log_prefix(),);
+                log!(INFO, "Executing UpgradeSnsToNextVersion action",);
                 let upgrade_sns_result =
                     self.perform_upgrade_to_next_sns_version(proposal_id).await;
 
@@ -2097,7 +2103,7 @@ impl Governance {
             );
             sns_metadata.description = Some(new_description);
         }
-        println!("{}", log);
+        log!(INFO, "{}", log);
         self.proto.sns_metadata = Some(sns_metadata);
         Ok(())
     }
@@ -2140,9 +2146,9 @@ impl Governance {
         // current params results in valid params
         let new_params = proposed_params.inherit_from(self.nervous_system_parameters());
 
-        println!(
-            "{}Setting Governance nervous system params to: {:?}",
-            log_prefix(),
+        log!(
+            INFO,
+            "Setting Governance nervous system params to: {:?}",
             &new_params
         );
 
@@ -2314,9 +2320,9 @@ impl Governance {
             proposal_id,
         });
 
-        println!(
-            "{}Successfully kicked off upgrade for SNS canister {:?}",
-            log_prefix(),
+        log!(
+            INFO,
+            "Successfully kicked off upgrade for SNS canister {:?}",
             canister_type_to_upgrade,
         );
 
@@ -3117,11 +3123,11 @@ impl Governance {
         let neuron = self.get_neuron_result_mut(nid)?;
         match neuron.cached_neuron_stake_e8s.cmp(&balance.get_e8s()) {
             Ordering::Greater => {
-                println!(
-                    "{}ERROR. Neuron cached stake was inconsistent.\
+                log!(
+                    ERROR,
+                    "ERROR. Neuron cached stake was inconsistent.\
                      Neuron account: {} has less e8s: {} than the cached neuron stake: {}.\
                      Stake adjusted.",
-                    log_prefix(),
                     account,
                     balance.get_e8s(),
                     neuron.cached_neuron_stake_e8s
@@ -3291,9 +3297,9 @@ impl Governance {
             match neuron_parameter.validate(neuron_minimum_stake_e8s) {
                 Ok(_) => (),
                 Err(err) => {
-                    println!(
-                        "{}ERROR claim_swap_neurons. Failed to claim Neuron due to {}",
-                        log_prefix(),
+                    log!(
+                        ERROR,
+                        "ERROR claim_swap_neurons. Failed to claim Neuron due to {}",
                         err
                     );
                     response.failed_claims += 1;
@@ -3340,9 +3346,9 @@ impl Governance {
             match self.add_neuron(neuron) {
                 Ok(_) => response.successful_claims += 1,
                 Err(err) => {
-                    println!(
-                        "{}ERROR claim_swap_neurons. Failed to claim Neuron due to {:?}",
-                        log_prefix(),
+                    log!(
+                        ERROR,
+                        "ERROR claim_swap_neurons. Failed to claim Neuron due to {:?}",
                         err
                     );
                     response.failed_claims += 1;
@@ -3763,9 +3769,10 @@ impl Governance {
                     let account_proto = match d.account_to_disburse_to {
                         Some(ref proto) => proto.clone(),
                         None => {
-                            println!(
-                                "{}WARNING: invalid DisburseMaturityInProgress-entry {:?} for neuron {}, skipping.",
-                                log_prefix(), d, neuron_id
+                            log!(
+                                ERROR,
+                                "Invalid DisburseMaturityInProgress-entry {:?} for neuron {}, skipping.",
+                                d, neuron_id
                             );
                             continue;
                         }
@@ -3773,9 +3780,10 @@ impl Governance {
                     let to_account = match account_from_proto(account_proto) {
                         Ok(account) => account,
                         Err(e) => {
-                            println!(
-                                "{}WARNING: failure parsing account of DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
-                                log_prefix(), d, neuron_id, e
+                            log!(
+                                ERROR,
+                                "Failure parsing account of DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
+                                d, neuron_id, e
                             );
                             continue;
                         }
@@ -3792,16 +3800,18 @@ impl Governance {
                         .await;
                     match transfer_result {
                         Ok(block_index) => {
-                            println!(
-                                "{}INFO: transferring DisburseMaturityInProgress-entry {:?} for neuron {} at block {}.",
-                                log_prefix(), d, neuron_id, block_index
+                            log!(
+                                INFO,
+                                "Transferring DisburseMaturityInProgress-entry {:?} for neuron {} at block {}.",
+                                d, neuron_id, block_index
                             );
                             let neuron = match self.get_neuron_result_mut(neuron_id) {
                                 Ok(neuron) => neuron,
                                 Err(e) => {
-                                    println!(
-                                        "{}WARNING: failed updating DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
-                                        log_prefix(), d, neuron_id, e
+                                    log!(
+                                        ERROR,
+                                        "Failed updating DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
+                                        d, neuron_id, e
                                     );
                                     continue;
                                 }
@@ -3809,9 +3819,10 @@ impl Governance {
                             neuron.disburse_maturity_in_progress.remove(0);
                         }
                         Err(e) => {
-                            println!(
-                                "{}WARNING: failed transferring funds for DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
-                                log_prefix(), d, neuron_id, e
+                            log!(
+                                ERROR,
+                                "Failed transferring funds for DisburseMaturityInProgress-entry {:?} for neuron {}: {}.",
+                                d, neuron_id, e
                             );
                         }
                     }
@@ -3854,9 +3865,9 @@ impl Governance {
             return false;
         }
         self.latest_gc_timestamp_seconds = self.env.now();
-        println!(
-            "{}Running GC now at timestamp {} seconds",
-            log_prefix(),
+        log!(
+            INFO,
+            "Running GC now at timestamp {} seconds",
             self.latest_gc_timestamp_seconds
         );
         let max_proposals_to_keep_per_action = self
@@ -3885,9 +3896,9 @@ impl Governance {
         // at the head of the list are examined.
         // TODO NNS1-1259: Improve "best-effort" garbage collection of proposals
         for (proposal_action, proposals_of_action) in action_to_proposals {
-            println!(
-                "{}GC - proposal_type {:#?} max {} current {}",
-                log_prefix(),
+            log!(
+                INFO,
+                "GC - proposal_type {:#?} max {} current {}",
                 proposal_action,
                 max_proposals_to_keep_per_action,
                 proposals_of_action.len()
@@ -3924,9 +3935,9 @@ impl Governance {
                     // Distribute rewards
                     self.distribute_rewards(supply);
                 }
-                Err(e) => println!(
-                    "{}Error when getting total governance token supply: {}",
-                    log_prefix(),
+                Err(e) => log!(
+                    ERROR,
+                    "Error when getting total governance token supply: {}",
                     GovernanceError::from(e)
                 ),
             }
@@ -3968,7 +3979,7 @@ impl Governance {
     /// not yet been considered in a reward event
     /// * associates those proposals to the new reward event and cleans their ballots
     fn distribute_rewards(&mut self, supply: Tokens) {
-        println!("{}distribute_rewards. Supply: {:?}", log_prefix(), supply);
+        log!(INFO, "distribute_rewards. Supply: {:?}", supply);
 
         // VotingRewardsParameters should always be set,
         // but we check and return early just in case.
@@ -3976,20 +3987,20 @@ impl Governance {
             match &self.nervous_system_parameters().voting_rewards_parameters {
                 Some(voting_rewards_parameters) => voting_rewards_parameters,
                 None => {
-                    println!(
-                        "{}WARNING: distribute_rewards called even though \
+                    log!(
+                        ERROR,
+                        "distribute_rewards called even though \
                      voting_rewards_parameters not set.",
-                        log_prefix(),
                     );
                     return;
                 }
             };
 
         if !voting_rewards_parameters.rewards_enabled() {
-            println!(
-                "{}WARNING: distribute_rewards called even though \
+            log!(
+                ERROR,
+                "distribute_rewards called even though \
                  rewards are not enabled for voting_rewards_parameters.",
-                log_prefix(),
             );
             return;
         }
@@ -4006,11 +4017,11 @@ impl Governance {
 
         // Log if we are about to "back fill".
         if most_recent_round > 1 + self.latest_reward_event().round {
-            println!(
-                "{}Some reward distribution should have happened, but were missed. \
+            log!(
+                ERROR,
+                "Some reward distribution should have happened, but were missed. \
                  It is now {} periods since rewards start time, and the last distribution \
                  nominally happened at {} periods since rewards start time.",
-                log_prefix(),
                 most_recent_round,
                 self.latest_reward_event().round
             );
@@ -4075,10 +4086,10 @@ impl Governance {
                                 .or_insert_with(|| dec!(0)) += reward_shares;
                         }
                         Err(e) => {
-                            println!(
-                                "{} Could not use voter {} to calculate total_voting_rights \
+                            log!(
+                                ERROR,
+                                "Could not use voter {} to calculate total_voting_rights \
                                  since it's NeuronId was invalid. Underlying error: {:?}.",
-                                log_prefix(),
                                 voter,
                                 e
                             );
@@ -4105,10 +4116,10 @@ impl Governance {
         // much of it each neuron is supposed to get (*_reward_shares), we now
         // proceed to actually handing out those rewards.
         if total_reward_shares == dec!(0) {
-            println!(
-                "{}Warning: total_reward_shares is 0. Therefore, we skip increasing \
+            log!(
+                ERROR,
+                "Warning: total_reward_shares is 0. Therefore, we skip increasing \
                  neuron maturity. neuron_id_to_reward_shares: {:#?}",
-                log_prefix(),
                 neuron_id_to_reward_shares,
             );
         } else {
@@ -4116,13 +4127,13 @@ impl Governance {
                 let neuron: &mut Neuron = match self.get_neuron_result_mut(&neuron_id) {
                     Ok(neuron) => neuron,
                     Err(err) => {
-                        println!(
-                            "{}Cannot find neuron {}, despite having voted with power {} \
+                        log!(
+                            ERROR,
+                            "Cannot find neuron {}, despite having voted with power {} \
                              in the considered reward period. The reward that should have been \
                              distributed to this neuron is simply skipped, so the total amount \
                              of distributed reward for this period will be lower than the maximum \
                              allowed. Underlying error: {:?}.",
-                            log_prefix(),
                             neuron_id,
                             neuron_reward_shares,
                             err
@@ -4185,9 +4196,9 @@ impl Governance {
             let p = match self.get_proposal_data_mut(*pid) {
                 Some(p) => p,
                 None => {
-                    println!(
-                        "{}Cannot find proposal {}, despite it being considered for rewards distribution.",
-                        log_prefix(), pid.id
+                    log!(ERROR,
+                        "Cannot find proposal {}, despite it being considered for rewards distribution.",
+                        pid.id
                     );
                     debug_assert!(
                         false,
@@ -4202,10 +4213,10 @@ impl Governance {
             };
 
             if p.status() == ProposalDecisionStatus::Open {
-                println!(
-                    "{}Proposal {} was considered for reward distribution despite \
+                log!(
+                    ERROR,
+                    "Proposal {} was considered for reward distribution despite \
                      being open. We will now force the proposal's status to be Rejected.",
-                    log_prefix(),
                     pid.id
                 );
                 debug_assert!(
@@ -4277,9 +4288,8 @@ impl Governance {
         if upgrade_in_progress.target_version.is_none() {
             // If we have an upgrade_in_progress with no target_version, we are in an unexpected
             // situation. We recover to workable state by marking upgrade as failed.
-            println!(
-                "{}No target_version set for upgrade_in_progress. Clearing upgrade_in_progress state...",
-                log_prefix()
+            log!(INFO,
+                "No target_version set for upgrade_in_progress. Clearing upgrade_in_progress state...",
             );
             self.proto.pending_version = None;
             return;
@@ -4308,7 +4318,7 @@ impl Governance {
             let error =
                 "Too many attempts to check upgrade without success.  Marking upgrade failed.";
 
-            println!("{} {}", log_prefix(), error);
+            log!(ERROR, "{}", error);
 
             let result = Err(GovernanceError::new_with_message(
                 ErrorType::External,
@@ -4337,11 +4347,7 @@ impl Governance {
         let mut running_version = match running_version {
             Ok(r) => r,
             Err(message) => {
-                println!(
-                    "{}Could not get running version of SNS: {}",
-                    log_prefix(),
-                    message
-                );
+                log!(ERROR, "Could not get running version of SNS: {}", message);
                 return;
             }
         };
@@ -4361,7 +4367,7 @@ impl Governance {
                     self.env.now(),
                 );
 
-                println!("{}{}", log_prefix(), &error);
+                log!(ERROR, "{}", &error,);
                 let result = Err(GovernanceError::new_with_message(
                     ErrorType::PreconditionFailed,
                     error,
@@ -4378,9 +4384,9 @@ impl Governance {
 
         match running_version.version_has_expected_hashes(&expected_changes) {
             Ok(_) => {
-                println!(
-                    "{}Upgrade marked successful at {} from genesis.  New Version: {:?}",
-                    log_prefix(),
+                log!(
+                    INFO,
+                    "Upgrade marked successful at {} from genesis.  New Version: {:?}",
                     self.env.now(),
                     target_version
                 );
@@ -4398,7 +4404,7 @@ impl Governance {
                         errors
                     );
 
-                    println!("{}{}", log_prefix(), &error);
+                    log!(ERROR, "{}", &error);
                     let result = Err(GovernanceError::new_with_message(
                         ErrorType::External,
                         error,

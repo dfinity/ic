@@ -2,6 +2,7 @@ pub mod canister_control;
 pub mod governance;
 pub mod init;
 pub mod ledger;
+pub mod logs;
 pub mod neuron;
 pub mod pb;
 pub mod proposal;
