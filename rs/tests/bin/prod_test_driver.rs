@@ -1,9 +1,9 @@
 use clap::Parser;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    btc_integration, canister_http, ckbtc, consensus, driver::driver_setup::initialize_env,
-    execution, icrc1_agent_test, ledger_tests, message_routing, networking, nns_tests,
-    orchestrator, rosetta_test, tecdsa, wasm_generator_test, workload_counter_canister_test,
+    canister_http, ckbtc, consensus, driver::driver_setup::initialize_env, execution,
+    icrc1_agent_test, ledger_tests, message_routing, networking, nns_tests, orchestrator,
+    rosetta_test, tecdsa, wasm_generator_test, workload_counter_canister_test,
 };
 use ic_tests::{
     driver::{
@@ -305,14 +305,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
             "tecdsa_pre_master",
             vec![
                 pot_with_setup(
-                    "tecdsa_add_nodes_pot",
-                    tecdsa::tecdsa_add_nodes_test::config,
-                    par(vec![sys_t(
-                        "test_tecdsa_add_nodes",
-                        tecdsa::tecdsa_add_nodes_test::test,
-                    )]),
-                ),
-                pot_with_setup(
                     "tecdsa_remove_nodes_pot",
                     tecdsa::tecdsa_remove_nodes_test::config,
                     par(vec![sys_t(
@@ -415,13 +407,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "install_counter_canister",
                         api_test::install_counter_canister,
                     ),
-                ]),
-            ),
-            pot_with_setup(
-                "btc_pot",
-                btc_integration::btc::config,
-                par(vec![
-                    sys_t("btc_get_balance", btc_integration::btc::get_balance),
                 ]),
             ),
             /*
@@ -556,14 +541,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     execution::registry_authentication_test::test,
                 )]),
             ),
-            pot_with_setup(
-                "rotate_ecdsa_idkg_key_pot",
-                orchestrator::rotate_ecdsa_idkg_key::setup,
-                par(vec![sys_t(
-                    "rotate_ecdsa_idkg_key_test",
-                    orchestrator::rotate_ecdsa_idkg_key::test,
-                )]),
-            ).with_alert(ENG_CONSENSUS_CHANNEL),
             pot_with_setup(
                 "transaction_ledger_correctness_pot",
                 ledger_tests::transaction_ledger_correctness::config,
