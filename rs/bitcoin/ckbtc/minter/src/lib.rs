@@ -34,10 +34,11 @@ const MIN_NANOS: u64 = 60 * SEC_NANOS;
 pub const MIN_PENDING_REQUESTS: usize = 20;
 pub const MAX_REQUESTS_PER_BATCH: usize = 100;
 
-// Source: ckBTC design doc (go/ckbtc-design).
-const P2WPKH_DUST_THRESHOLD: Satoshi = 294;
-/// The minimum amount of a change output.
-const MIN_CHANGE: u64 = P2WPKH_DUST_THRESHOLD + 1;
+/// The constants used to compute the minter's fee to cover its own cycle consumption.
+/// The values are set to cover the cycle cost on a 28-node subnet.
+pub const MINTER_FEE_PER_INPUT: u64 = 246;
+pub const MINTER_FEE_PER_OUTPUT: u64 = 7;
+pub const MINTER_FEE_CONSTANT: u64 = 52;
 
 #[derive(CandidType, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ECDSAPublicKey {
@@ -50,7 +51,7 @@ struct SignTxRequest {
     network: Network,
     ecdsa_public_key: ECDSAPublicKey,
     unsigned_tx: tx::UnsignedTransaction,
-    change_output: Option<state::ChangeOutput>,
+    change_output: state::ChangeOutput,
     outpoint_account: BTreeMap<OutPoint, Account>,
     /// The original requests that we keep around to place back to the queue
     /// if the signature fails.
@@ -327,7 +328,7 @@ async fn submit_pending_requests() {
                                     requests,
                                     txid,
                                     used_utxos,
-                                    change_output: req.change_output,
+                                    change_output: Some(req.change_output),
                                     submitted_at: ic_cdk::api::time(),
                                 },
                             );
@@ -629,6 +630,11 @@ pub enum BuildTxError {
 /// sum([value(in) | in ∈ tx.inputs]) = amount ⇒ tx.outputs == { value = amount - fee(tx); pubkey = dst_pubkey }
 /// ```
 ///
+///  * The last output of the transaction is the minter's fee + the minter's change.
+/// ```text
+/// value(last_out) == minter_fee + minter_change
+/// ```
+///
 /// # Error case properties
 ///
 /// * In case of errors, the function does not modify the inputs.
@@ -641,14 +647,7 @@ pub fn build_unsigned_transaction(
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
-) -> Result<
-    (
-        tx::UnsignedTransaction,
-        Option<state::ChangeOutput>,
-        Vec<Utxo>,
-    ),
-    BuildTxError,
-> {
+) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, Vec<Utxo>), BuildTxError> {
     assert!(!outputs.is_empty());
 
     /// Having a sequence number lower than (0xffffffff - 1) signals the use of replacement by fee.
@@ -677,19 +676,14 @@ pub fn build_unsigned_transaction(
 
     debug_assert!(inputs_value >= amount);
 
-    let change = inputs_value - amount;
-    let change_output = (change > 0).then(|| state::ChangeOutput {
-        vout: outputs.len() as u64,
-        value: change.max(MIN_CHANGE),
-    });
+    let minter_fee = MINTER_FEE_PER_INPUT * utxos_guard.len() as u64
+        + MINTER_FEE_PER_OUTPUT * (outputs.len() + 1) as u64
+        + MINTER_FEE_CONSTANT;
 
-    // If the change is positive but less than MIN_CHANGE, we round it up to
-    // MIN_CHANGE. However, we must remember the extra amount to subtract it
-    // from the outputs together with the fees.
-    let overdraft = if change == 0 {
-        0
-    } else {
-        MIN_CHANGE.saturating_sub(change)
+    let change = inputs_value - amount;
+    let change_output = state::ChangeOutput {
+        vout: outputs.len() as u64,
+        value: change + minter_fee,
     };
 
     let tx_outputs: Vec<tx::TxOut> = outputs
@@ -698,15 +692,15 @@ pub fn build_unsigned_transaction(
             address: address.clone(),
             value: *value,
         })
-        .chain(change_output.iter().map(|out| tx::TxOut {
-            value: out.value,
+        .chain(vec![tx::TxOut {
             address: main_address.clone(),
-        }))
+            value: change_output.value,
+        }])
         .collect();
 
     debug_assert_eq!(
-        tx_outputs.iter().map(|out| out.value).sum::<u64>(),
-        inputs_value + overdraft
+        tx_outputs.iter().map(|out| out.value).sum::<u64>() - minter_fee,
+        inputs_value
     );
 
     let mut unsigned_tx = tx::UnsignedTransaction {
@@ -725,11 +719,11 @@ pub fn build_unsigned_transaction(
     let tx_vsize = fake_sign(&unsigned_tx).vsize();
     let fee = (tx_vsize as u64 * fee_per_vbyte) / 1000;
 
-    if fee > amount {
+    if fee + minter_fee > amount {
         return Err(BuildTxError::AmountTooLow);
     }
 
-    let fee_shares = distribute(fee + overdraft, outputs.len() as u64);
+    let fee_shares = distribute(fee + minter_fee, outputs.len() as u64);
 
     for (output, fee_share) in unsigned_tx.outputs.iter_mut().zip(fee_shares.iter()) {
         if output.address != main_address {
