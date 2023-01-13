@@ -5,7 +5,7 @@ use crate::{
 };
 use crate::{
     lifecycle::init::InitArgs,
-    state::{ChangeOutput, CkBtcMinterState, RetrieveBtcRequest, RetrieveBtcStatus},
+    state::{ChangeOutput, CkBtcMinterState, Mode, RetrieveBtcRequest, RetrieveBtcStatus},
 };
 use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
@@ -656,7 +656,7 @@ proptest! {
             ledger_id: CanisterId::from_u64(42),
             max_time_in_queue_nanos: 0,
             min_confirmations: None,
-            is_read_only: false,
+            mode: Mode::GeneralAvailability,
         });
         for (utxo, acc_idx) in utxos_acc_idx {
             state.add_utxos(accounts[acc_idx].clone(), vec![utxo]);
@@ -678,7 +678,7 @@ proptest! {
             ledger_id: CanisterId::from_u64(42),
             max_time_in_queue_nanos: 0,
             min_confirmations: None,
-            is_read_only: false,
+            mode: Mode::GeneralAvailability,
         });
 
         let mut available_amount = 0;

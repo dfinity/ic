@@ -1,7 +1,7 @@
 use crate::ckbtc::minter::utils::{
     assert_account_balance, assert_burn_transaction, assert_mint_transaction, ensure_wallet,
-    generate_blocks, get_btc_address, get_btc_client, update_balance, wait_for_bitcoin_balance,
-    BTC_BLOCK_SIZE,
+    generate_blocks, get_btc_address, get_btc_client, update_balance, upgrade_canister_with_args,
+    wait_for_bitcoin_balance, BTC_BLOCK_SIZE,
 };
 use crate::{
     ckbtc::lib::{
@@ -18,7 +18,8 @@ use bitcoincore_rpc::RpcApi;
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
-use ic_ckbtc_minter::state::{eventlog::Event, RetrieveBtcRequest};
+use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
+use ic_ckbtc_minter::state::{eventlog::Event, Mode, RetrieveBtcRequest};
 use ic_ckbtc_minter::updates::{
     get_withdrawal_account::compute_subaccount,
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
@@ -206,5 +207,25 @@ pub fn test_retrieve_btc(env: TestEnv) {
 
         // Verify that a burn transaction occurred.
         assert_burn_transaction(&ledger_agent, &logger, 2, &withdrawal_account, 35_000_000).await;
+
+        // Check that we can retrieve btc in the restricted mode.
+        let caller = agent.get_principal().unwrap();
+        upgrade_canister_with_args(
+            &mut minter_canister,
+            &UpgradeArgs {
+                mode: Some(Mode::RestrictedTo(vec![caller])),
+                ..UpgradeArgs::default()
+            },
+        )
+        .await;
+        let retrieve_result = minter_agent
+            .retrieve_btc(RetrieveBtcArgs {
+                amount: 1_000_000,
+                address: btc_address2.to_string(),
+            })
+            .await
+            .expect("Error while calling retrieve_btc")
+            .expect("failed to retrieve btc");
+        assert_eq!(3, retrieve_result.block_index);
     });
 }

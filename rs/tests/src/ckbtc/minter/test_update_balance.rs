@@ -2,7 +2,7 @@ use crate::ckbtc::minter::utils::{
     assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
     assert_temporarily_unavailable, ensure_wallet, generate_blocks, get_btc_address,
     get_btc_client, start_canister, stop_canister, update_balance, upgrade_canister,
-    wait_for_bitcoin_balance, BTC_BLOCK_SIZE,
+    upgrade_canister_with_args, wait_for_bitcoin_balance, BTC_BLOCK_SIZE,
 };
 use crate::{
     ckbtc::lib::{
@@ -19,6 +19,8 @@ use bitcoincore_rpc::RpcApi;
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
+use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
+use ic_ckbtc_minter::state::Mode;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
 use ic_icrc1::Account;
 use ic_icrc1_agent::Icrc1Agent;
@@ -181,6 +183,18 @@ pub fn test_update_balance(env: TestEnv) {
         .await;
         // Calling update_balance again will always trigger a NoNewUtxo error.
         upgrade_canister(&mut minter_canister).await;
+        assert_no_new_utxo(&minter_agent, &subaccount2).await;
+
+        // Check that we can update balance in the restricted mode.
+        let caller = agent.get_principal().unwrap();
+        upgrade_canister_with_args(
+            &mut minter_canister,
+            &UpgradeArgs {
+                mode: Some(Mode::RestrictedTo(vec![caller])),
+                ..UpgradeArgs::default()
+            },
+        )
+        .await;
         assert_no_new_utxo(&minter_agent, &subaccount2).await;
     });
 }

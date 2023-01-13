@@ -125,7 +125,7 @@ mod tests {
             ledger_id: CanisterId::from_u64(42),
             max_time_in_queue_nanos: 0,
             min_confirmations: None,
-            is_read_only: false,
+            mode: crate::state::Mode::GeneralAvailability,
         }
     }
 

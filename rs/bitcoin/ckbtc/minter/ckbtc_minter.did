@@ -65,6 +65,15 @@ type BtcNetwork = variant {
     Regtest;
 };
 
+type Mode = variant {
+    // The minter does not allow any state modifications.
+    ReadOnly;
+    // Only specified principals can modify minter's state.
+    RestrictedTo : vec principal;
+    // Anyone can interact with the minter.
+    GeneralAvailability;
+};
+
 // The initialization parameters of the minter canister.
 type InitArgs = record {
     // The minter will interact with this Bitcoin network to wrap/unwrap BTC.
@@ -90,8 +99,8 @@ type InitArgs = record {
     /// accept a Bitcoin transaction.
     min_confirmations : opt nat32;
 
-    /// Flag that indicates if the minter is in read-only mode.
-    is_read_only : bool;
+    /// The minter's operation mode.
+    mode : Mode;
 };
 
 // The upgrade parameters of the minter canister.
@@ -107,8 +116,8 @@ type UpgradeArgs = record {
     /// accept a Bitcoin transaction.
     min_confirmations : opt nat32;
 
-    /// Flag that indicates if the minter is in read-only mode.
-    is_read_only : opt bool;
+    /// If set, overrides the current minter's operation mode.
+    mode : opt Mode;
 };
 
 type RetrieveBtcStatus = variant {

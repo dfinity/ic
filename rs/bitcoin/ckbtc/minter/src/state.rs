@@ -118,6 +118,35 @@ pub enum RetrieveBtcStatus {
     Confirmed { txid: [u8; 32] },
 }
 
+#[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+pub enum Mode {
+    ReadOnly,
+    RestrictedTo(Vec<Principal>),
+    GeneralAvailability,
+}
+
+impl Mode {
+    /// Returns Ok if the specified principal can modify minter's state.
+    pub fn is_available_for(&self, p: &Principal) -> Result<(), String> {
+        match self {
+            Self::GeneralAvailability => Ok(()),
+            Self::ReadOnly => Err("the minter is in read-only mode".to_string()),
+            Self::RestrictedTo(allow_list) => {
+                if !allow_list.contains(p) {
+                    return Err("access to the minter is temporarily restricted".to_string());
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+impl Default for Mode {
+    fn default() -> Self {
+        Self::GeneralAvailability
+    }
+}
+
 /// The state of the ckBTC Minter.
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
@@ -183,8 +212,8 @@ pub struct CkBtcMinterState {
     #[serde(skip)]
     pub is_heartbeat_running: bool,
 
-    /// Flag that indicates if the read-only mode is activated.
-    pub is_read_only: bool,
+    /// The mode in which the minter runs.
+    pub mode: Mode,
 }
 
 impl CkBtcMinterState {
@@ -197,7 +226,7 @@ impl CkBtcMinterState {
             ledger_id,
             max_time_in_queue_nanos,
             min_confirmations,
-            is_read_only,
+            mode,
         }: InitArgs,
     ) {
         self.btc_network = btc_network;
@@ -205,7 +234,7 @@ impl CkBtcMinterState {
         self.retrieve_btc_min_amount = retrieve_btc_min_amount;
         self.ledger_id = ledger_id;
         self.max_time_in_queue_nanos = max_time_in_queue_nanos;
-        self.is_read_only = is_read_only;
+        self.mode = mode;
         if let Some(min_confirmations) = min_confirmations {
             self.min_confirmations = min_confirmations;
         }
@@ -217,7 +246,7 @@ impl CkBtcMinterState {
             retrieve_btc_min_amount,
             max_time_in_queue_nanos,
             min_confirmations,
-            is_read_only,
+            mode,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -229,8 +258,8 @@ impl CkBtcMinterState {
         if let Some(min_conf) = min_confirmations {
             self.min_confirmations = min_conf;
         }
-        if let Some(is_read_only) = is_read_only {
-            self.is_read_only = is_read_only;
+        if let Some(mode) = mode {
+            self.mode = mode;
         }
     }
 
@@ -602,7 +631,7 @@ impl From<InitArgs> for CkBtcMinterState {
             outpoint_account: Default::default(),
             utxos_state_addresses: Default::default(),
             is_heartbeat_running: false,
-            is_read_only: args.is_read_only,
+            mode: args.mode,
         }
     }
 }
