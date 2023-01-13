@@ -1,8 +1,11 @@
 use crate::convert::{from_hex, make_read_state_from_update};
 use crate::errors::ApiError;
+use crate::models::RosettaSupportedKeyPair;
 use crate::models::{ConstructionCombineResponse, EnvelopePair, SignatureType, SignedTransaction};
 use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
 use crate::{convert, models};
+use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
+use ic_canister_client_sender::Secp256k1KeyPair;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpReadStateContent, HttpRequestEnvelope, MessageId,
 };
@@ -54,32 +57,56 @@ impl RosettaRequestHandler {
                             "Could not find signature for read-state".to_string(),
                         )
                     })?;
-
-                assert_eq!(transaction_signature.signature_type, SignatureType::Ed25519);
-                assert_eq!(read_state_signature.signature_type, SignatureType::Ed25519);
-
-                let envelope = HttpRequestEnvelope::<HttpCallContent> {
-                    content: HttpCallContent::Call { update },
-                    sender_pubkey: Some(Blob(
-                        ic_canister_client_sender::ed25519_public_key_to_der(
-                            convert::from_public_key(&transaction_signature.public_key)?,
-                        ),
+                let envelope = match transaction_signature.signature_type {
+                    SignatureType::Ed25519 => Ok(HttpRequestEnvelope::<HttpCallContent> {
+                        content: HttpCallContent::Call { update },
+                        sender_pubkey: Some(Blob(EdKeypair::der_encode_pk(
+                            EdKeypair::hex_decode_pk(&transaction_signature.public_key.hex_bytes)?,
+                        )?)),
+                        sender_sig: Some(Blob(from_hex(&transaction_signature.hex_bytes)?)),
+                        sender_delegation: None,
+                    }),
+                    SignatureType::Ecdsa => Ok(HttpRequestEnvelope::<HttpCallContent> {
+                        content: HttpCallContent::Call { update },
+                        sender_pubkey: Some(Blob(Secp256k1KeyPair::der_encode_pk(
+                            Secp256k1KeyPair::hex_decode_pk(
+                                &transaction_signature.public_key.hex_bytes,
+                            )?,
+                        )?)),
+                        sender_sig: Some(Blob(from_hex(&transaction_signature.hex_bytes)?)),
+                        sender_delegation: None,
+                    }),
+                    sig_type => Err(ApiError::InvalidRequest(
+                        false,
+                        format!("Sginature Type {} not supported byt rosetta", sig_type).into(),
                     )),
-                    sender_sig: Some(Blob(from_hex(&transaction_signature.hex_bytes)?)),
-                    sender_delegation: None,
-                };
+                }?;
 
-                let read_state_envelope = HttpRequestEnvelope::<HttpReadStateContent> {
-                    content: HttpReadStateContent::ReadState { read_state },
-                    sender_pubkey: Some(Blob(
-                        ic_canister_client_sender::ed25519_public_key_to_der(
-                            convert::from_public_key(&read_state_signature.public_key)?,
-                        ),
+                let read_state_envelope = match read_state_signature.signature_type {
+                    SignatureType::Ed25519 => Ok(HttpRequestEnvelope::<HttpReadStateContent> {
+                        content: HttpReadStateContent::ReadState { read_state },
+                        sender_pubkey: Some(Blob(EdKeypair::der_encode_pk(
+                            EdKeypair::hex_decode_pk(&read_state_signature.public_key.hex_bytes)?,
+                        )?)),
+                        sender_sig: Some(Blob(from_hex(&read_state_signature.hex_bytes)?)),
+                        sender_delegation: None,
+                    }),
+                    SignatureType::Ecdsa => Ok(HttpRequestEnvelope::<HttpReadStateContent> {
+                        content: HttpReadStateContent::ReadState { read_state },
+                        sender_pubkey: Some(Blob(Secp256k1KeyPair::der_encode_pk(
+                            Secp256k1KeyPair::hex_decode_pk(
+                                &transaction_signature.public_key.hex_bytes,
+                            )?,
+                        )?)),
+
+                        sender_sig: Some(Blob(from_hex(&read_state_signature.hex_bytes)?)),
+                        sender_delegation: None,
+                    }),
+                    sig_type => Err(ApiError::InvalidRequest(
+                        false,
+                        format!("Sginature Type {} not supported byt rosetta", sig_type).into(),
                     )),
-                    sender_sig: Some(Blob(from_hex(&read_state_signature.hex_bytes)?)),
-                    sender_delegation: None,
-                };
-
+                }?;
                 request_envelopes.push(EnvelopePair {
                     update: envelope,
                     read_state: read_state_envelope,

@@ -42,7 +42,7 @@ use ic_nns_test_utils::{
     ids::TEST_NEURON_1_ID,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_rosetta_test_utils::make_user;
+use ic_rosetta_test_utils::make_user_ed25519;
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use icp_ledger::protobuf::TipOfChainRequest;
 use icp_ledger::{
@@ -130,7 +130,7 @@ pub fn test(env: TestEnv) {
             CYCLES_MINTING_CANISTER_ID,
         );
 
-        let (_acc, controller_user_keypair, _pk, controller_pid) = make_user(7);
+        let (_acc, controller_user_keypair, _pk, controller_pid) = make_user_ed25519(7);
 
         let xdr_permyriad_per_icp = 5_000; // = 0.5 XDR/ICP
         let icpts_to_cycles = TokensToCycles {
@@ -817,7 +817,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
             CYCLES_MINTING_CANISTER_ID,
         );
 
-        let (_acc, controller_user_keypair, _pk, controller_pid) = make_user(7);
+        let (_acc, controller_user_keypair, _pk, controller_pid) = make_user_ed25519(7);
 
         let xdr_permyriad_per_icp = 5_000; // = 0.5 XDR/ICP
 

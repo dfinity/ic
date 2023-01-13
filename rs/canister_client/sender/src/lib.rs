@@ -3,6 +3,7 @@ mod secp256k1_conversions;
 mod tests;
 
 use ic_base_types::PrincipalId;
+use ic_crypto_ecdsa_secp256k1::PrivateKey;
 use ic_crypto_internal_types::sign::eddsa::ed25519::SecretKey as Ed25519SecretKey;
 use ic_crypto_utils_basic_sig::conversions::Ed25519PemParseError;
 use ic_crypto_utils_basic_sig::conversions::Ed25519SecretKeyConversions;
@@ -23,7 +24,7 @@ pub struct Secp256k1KeyPair {
     pk: ic_crypto_ecdsa_secp256k1::PublicKey,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Ed25519KeyPair {
     pub secret_key: [u8; 32],
     pub public_key: [u8; 32],
@@ -51,6 +52,21 @@ impl Ed25519KeyPair {
     pub fn sign(&self, msg: &[u8]) -> [u8; 64] {
         let signing_key = ed25519_consensus::SigningKey::from(self.secret_key);
         signing_key.sign(msg).to_bytes()
+    }
+}
+
+impl Secp256k1KeyPair {
+    pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
+        self.sk.sign_message(msg)
+    }
+    pub fn generate<R: Rng + CryptoRng>(rng: &mut R) -> Self {
+        let mut rng = ChaCha20Rng::from_seed(rng.gen());
+        let sk = PrivateKey::generate_using_rng(&mut rng);
+        let pk = sk.public_key();
+        Self { sk, pk }
+    }
+    pub fn get_public_key(&self) -> ic_crypto_ecdsa_secp256k1::PublicKey {
+        self.pk.clone()
     }
 }
 
@@ -211,4 +227,10 @@ pub fn ed25519_public_key_to_der(mut key: Vec<u8>) -> Vec<u8> {
     ];
     encoded.append(&mut key);
     encoded
+}
+
+pub fn ed25519_public_key_from_der(mut key_der: Vec<u8>) -> Vec<u8> {
+    assert!(key_der.len() > 12);
+    key_der.drain(0..12);
+    key_der
 }
