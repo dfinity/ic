@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load(":system_tests.bzl", "symlink_dir", "system_test")
+load(":system_tests.bzl", "create_test_driver_image_base", "symlink_dir", "system_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -752,5 +752,25 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
+# Replicable tests
+
+create_test_driver_image_base()
+
+# The target below enables the following scenario:
+# Scenario A: running the test directly
+#    bazel test //rs/tests:replicable_mock_test --test_tag_filters="system_test"
+# Scanario B: Runs the test via Docker
+# 1. bazel build //rs/tests:replicable_mock_test_image.tar # Dockerizes the test
+# 2. docker load -i bazel-out/.../bin/rs/tests/replicable_mock_test_image.tar # Loads the Docker image
+# 3. docker run -it bazel/rs/tests:replicable_mock_test_image /home/root/replicable_mock_test_bin --working-dir . run
+system_test(
+    name = "replicable_mock_test",
+    flaky = False,  # remove after when PFOPS-3148 is resolved
+    is_dockerized = True,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES + [":tests"],
 )

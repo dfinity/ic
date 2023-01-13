@@ -303,5 +303,9 @@ name = "ic-systest-backup-manager"
 path = "bin/backup_manager_test.rs"
 
 [[bin]]
+name = "ic-systest-replicable-mock-test"
+path = "bin/replicable_mock_test.rs"
+
+[[bin]]
 name = "ic-systest-mainnet"
 path = "bin/mainnet_test.rs"
