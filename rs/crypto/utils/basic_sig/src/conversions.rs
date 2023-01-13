@@ -144,11 +144,12 @@ impl Ed25519SecretKeyConversions for internal_types::SecretKey {
         let key_data = der_utils::oid_and_key_pair_bytes_from_der(sk_der)
             .map_err(|e| Ed25519DerParseError::OidExtractionError(e.internal_error))?;
         if ed25519_oid() != key_data.oid {
-            return Err(Ed25519DerParseError::OidValueError(key_data.oid));
+            return Err(Ed25519DerParseError::OidValueError(key_data.oid.clone()));
         }
 
         let pk_bytes = key_data
             .pk_bytes
+            .clone()
             .ok_or_else(Ed25519DerParseError::MissingPublicKey)?;
 
         let sk = internal_types::SecretKey::try_from(&*key_data.sk_bytes)

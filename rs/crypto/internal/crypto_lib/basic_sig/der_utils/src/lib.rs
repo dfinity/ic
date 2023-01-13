@@ -4,6 +4,7 @@
 
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use simple_asn1::{ASN1Block, ASN1Class, BigInt, BigUint, OID};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[cfg(test)]
 mod tests;
@@ -126,9 +127,13 @@ pub fn algo_id_and_public_key_bytes_from_der(
 }
 
 /// The secret and public keys as bytes, as well as the OID.
+
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SecretKeyData {
+    #[zeroize(skip)]
     pub oid: OID,
     pub sk_bytes: Vec<u8>,
+    #[zeroize(skip)]
     pub pk_bytes: Option<Vec<u8>>,
 }
 

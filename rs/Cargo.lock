@@ -5107,6 +5107,7 @@ dependencies = [
  "ic-crypto-internal-test-vectors",
  "ic-types",
  "simple_asn1 0.6.2",
+ "zeroize",
 ]
 
 [[package]]
