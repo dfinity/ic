@@ -1,6 +1,8 @@
+pub mod logs;
 pub mod pb;
 pub mod types;
 
+use crate::logs::{ERROR, INFO};
 use crate::pb::v1::{
     set_dapp_controllers_response, CanisterCallError, ListSnsCanistersResponse,
     RegisterDappCanisterRequest, RegisterDappCanisterResponse, SetDappControllersRequest,
@@ -10,8 +12,8 @@ use async_trait::async_trait;
 use candid::{CandidType, Decode, Deserialize, Encode};
 use dfn_core::CanisterId;
 use ic_base_types::{NumBytes, PrincipalId};
+use ic_canister_log::log;
 use ic_icrc1::endpoints::ArchiveInfo;
-use ic_nervous_system_root::LOG_PREFIX;
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
 use num_traits::cast::ToPrimitive;
 use std::{cell::RefCell, collections::BTreeSet, thread::LocalKey};
@@ -405,7 +407,7 @@ impl SnsRootCanister {
         let root_status = match get_root_status(env, governance_canister_id).await {
             Ok(status) => Some(status),
             Err(err) => {
-                println!("{}Getting root status failed: {}", LOG_PREFIX, err);
+                log!(ERROR, "Getting root status failed: {}", err);
                 None
             }
         };
@@ -649,7 +651,10 @@ impl SnsRootCanister {
             match update_result {
                 Ok(_) => (),
                 Err(err) => {
-                    println!("{LOG_PREFIX}ERROR: Unable to set controller of {dapp_canister_id}: {err:#?}");
+                    log!(
+                        ERROR,
+                        "Unable to set controller of {dapp_canister_id}: {err:#?}"
+                    );
                     let err = err.into();
                     failed_updates.push(set_dapp_controllers_response::FailedUpdate {
                         dapp_canister_id: Some(*dapp_canister_id),
@@ -703,7 +708,7 @@ impl SnsRootCanister {
         ledger_client: &mut impl LedgerCanisterClient,
         current_timestamp_seconds: u64,
     ) {
-        println!("{}Polling for new archive canisters", LOG_PREFIX);
+        log!(INFO, "Polling for new archive canisters");
 
         // Set the latest_ledger_archive_poll_timestamp_seconds so that if the call fails,
         // we won't retry on every heartbeat
@@ -720,9 +725,10 @@ impl SnsRootCanister {
             Err(canister_call_error) => {
                 // TODO NNS1-1595 - Export metrics if this call fails
                 // Log the error and do nothing (return).
-                println!(
-                    "{}ERROR: Unable to get the Ledger Archives: {:?}",
-                    LOG_PREFIX, canister_call_error
+                log!(
+                    ERROR,
+                    "Unable to get the Ledger Archives: {:?}",
+                    canister_call_error
                 );
                 return;
             }
@@ -742,9 +748,10 @@ impl SnsRootCanister {
             if !defects.is_empty() {
                 // TODO NNS1-1595 - Export metrics if defects are detected
                 // Log the error and do nothing (return)
-                println!(
-                    "{}ERROR: Defects detected between polls of archive canisters: {}",
-                    LOG_PREFIX, defects
+                log!(
+                    ERROR,
+                    "Defects detected between polls of archive canisters: {}",
+                    defects
                 );
                 return;
             }
@@ -836,10 +843,12 @@ async fn get_swap_status(
     match response {
         Ok(canister_status) => Some(canister_status),
         Err(err) => {
-            println!(
+            log!(
+                ERROR,
                 "Couldn't get the CanisterStatus of the SNS Swap Canister({}). This may be \
                 due to the Swap concluding and the canister stopping. Err: {:?}",
-                swap_id, err
+                swap_id,
+                err
             );
 
             None
@@ -855,9 +864,11 @@ async fn get_owned_canister_summary(
         Ok(canister_id_record) => canister_id_record,
         Err(err_msg) => {
             // Log an error and return a CanisterSummary with no status.
-            println!(
-                "{}ERROR: Could not convert canister_id {} into a CanisterIdRecord. Reason: {}",
-                LOG_PREFIX, canister_id, err_msg
+            log!(
+                ERROR,
+                "Could not convert canister_id {} into a CanisterIdRecord. Reason: {}",
+                canister_id,
+                err_msg
             );
             return CanisterSummary::new_with_no_status(canister_id);
         }
@@ -870,9 +881,11 @@ async fn get_owned_canister_summary(
         Ok(canister_status_result_v2) => canister_status_result_v2,
         Err(err) => {
             // Log an error and return a CanisterSummary with no status
-            println!(
-                "{}ERROR: Unable to get the status of canister_id {}. Reason: {:?}",
-                LOG_PREFIX, canister_id, err
+            log!(
+                ERROR,
+                "Unable to get the status of canister_id {}. Reason: {:?}",
+                canister_id,
+                err
             );
             return CanisterSummary::new_with_no_status(canister_id);
         }

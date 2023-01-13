@@ -1,5 +1,5 @@
 use candid::{CandidType, Deserialize};
-use dfn_core::api::{call, CanisterId};
+use dfn_core::api::{call, time_nanos, CanisterId};
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 use rust_decimal::Decimal;
@@ -10,6 +10,8 @@ use std::convert::TryInto;
 use std::fmt::{self, Display, Formatter};
 
 use ic_base_types::PrincipalId;
+use ic_canister_log::{export, GlobalBuffer};
+use ic_canisters_http_types::{HttpResponse, HttpResponseBuilder};
 use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, IC_00};
 use ic_ledger_core::Tokens;
 
@@ -294,6 +296,43 @@ impl AddAssign for ExplosiveTokens {
 }
 
 // TODO: Implement other (Sub|Mul|Div)Assign traits. Also, std::iter::Sum.
+
+// Return an HttpResponse that lists the given logs
+pub fn serve_logs(logs: &'static GlobalBuffer) -> HttpResponse {
+    use std::io::Write;
+    let mut buf = vec![];
+    for entry in export(logs) {
+        writeln!(
+            &mut buf,
+            "{} {}:{} {}",
+            entry.timestamp, entry.file, entry.line, entry.message
+        )
+        .unwrap();
+    }
+
+    HttpResponseBuilder::ok()
+        .header("Content-Type", "text/plain; charset=utf-8")
+        .with_body_and_content_length(buf)
+        .build()
+}
+
+// Return an HttpResponse that lists this canister's metrics
+pub fn serve_metrics(
+    encode_metrics: impl FnOnce(&mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()>,
+) -> HttpResponse {
+    let mut writer =
+        ic_metrics_encoder::MetricsEncoder::new(vec![], time_nanos() as i64 / 1_000_000);
+
+    match encode_metrics(&mut writer) {
+        Ok(()) => HttpResponseBuilder::ok()
+            .header("Content-Type", "text/plain; version=0.0.4")
+            .with_body_and_content_length(writer.into_inner())
+            .build(),
+        Err(err) => {
+            HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err)).build()
+        }
+    }
+}
 
 #[cfg(test)]
 mod test {

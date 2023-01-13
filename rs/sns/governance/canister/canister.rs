@@ -25,16 +25,13 @@ use dfn_core::{
     api::{caller, id, now},
     over, over_async, over_init, println,
 };
-
-use dfn_core::api::time_nanos;
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
-use ic_canister_log::{export, GlobalBuffer};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ic00_types::CanisterStatusResultV2;
 use ic_nervous_system_common::ledger::IcpLedgerCanister;
 use ic_nervous_system_common::{
-    get_canister_status,
+    get_canister_status, serve_logs, serve_metrics,
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
@@ -576,29 +573,13 @@ fn http_request() {
 /// Serve an HttpRequest made to this canister
 pub fn serve_http(req: HttpRequest) -> HttpResponse {
     if req.path() == "/metrics" {
-        serve_metrics()
+        serve_metrics(encode_metrics)
     } else if req.path() == "/log/info" {
         serve_logs(&INFO)
     } else if req.path() == "/log/error" {
         serve_logs(&ERROR)
     } else {
         HttpResponseBuilder::not_found().build()
-    }
-}
-
-// Return an HttpResponse that lists this canister's metrics
-fn serve_metrics() -> HttpResponse {
-    let mut writer =
-        ic_metrics_encoder::MetricsEncoder::new(vec![], time_nanos() as i64 / 1_000_000);
-
-    match encode_metrics(&mut writer) {
-        Ok(()) => HttpResponseBuilder::ok()
-            .header("Content-Type", "text/plain; version=0.0.4")
-            .with_body_and_content_length(writer.into_inner())
-            .build(),
-        Err(err) => {
-            HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err)).build()
-        }
     }
 }
 
@@ -613,25 +594,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
 
     Ok(())
-}
-
-// Return an HttpResponse that lists the given logs
-fn serve_logs(logs: &'static GlobalBuffer) -> HttpResponse {
-    use std::io::Write;
-    let mut buf = vec![];
-    for entry in export(logs) {
-        writeln!(
-            &mut buf,
-            "{} {}:{} {}",
-            entry.timestamp, entry.file, entry.line, entry.message
-        )
-        .unwrap();
-    }
-
-    HttpResponseBuilder::ok()
-        .header("Content-Type", "text/plain; charset=utf-8")
-        .with_body_and_content_length(buf)
-        .build()
 }
 
 /// This makes this Candid service self-describing, so that for example Candid
