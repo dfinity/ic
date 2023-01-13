@@ -4672,6 +4672,34 @@ mod tests {
         }
     }
 
+    struct AlwaysSucceedingLedger {}
+
+    #[async_trait]
+    impl ICRC1Ledger for AlwaysSucceedingLedger {
+        async fn transfer_funds(
+            &self,
+            _amount_e8s: u64,
+            _fee_e8s: u64,
+            _from_subaccount: Option<Subaccount>,
+            _to: Account,
+            _memo: u64,
+        ) -> Result<u64, NervousSystemError> {
+            Ok(0)
+        }
+
+        async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+            Ok(Tokens::default())
+        }
+
+        async fn account_balance(&self, _account: Account) -> Result<Tokens, NervousSystemError> {
+            Ok(Tokens::default())
+        }
+
+        fn canister_id(&self) -> CanisterId {
+            CanisterId::from_u64(42)
+        }
+    }
+
     fn basic_governance_proto() -> GovernanceProto {
         GovernanceProto {
             root_canister_id: Some(PrincipalId::new_user_test_id(53)),
@@ -7688,6 +7716,253 @@ mod tests {
             "Didn't reject invalid percentage_to_disburse value {}", percentage
             );
         }
+    }
+
+    struct SplitNeuronTestSetup {
+        pub governance: Governance,
+        pub neuron_id: NeuronId,
+        pub controller: PrincipalId,
+    }
+
+    // Sets up an environment for a split-neuron test. The returned
+    // setup consists of:
+    // - an initialized governance, whose API can be called
+    // - an id of a neuron (with the specified stake and maturity) contained in the initialized governace
+    // - an id of a principal that controls the neuron
+    fn prepare_setup_for_split_neuron_tests(
+        stake_e8s: u64,
+        maturity_e8s: u64,
+    ) -> SplitNeuronTestSetup {
+        let controller = *TEST_NEURON_1_OWNER_PRINCIPAL;
+        let neuron_id = test_neuron_id(controller);
+        let permission = NeuronPermission {
+            principal: Some(controller),
+            permission_type: vec![NeuronPermissionType::Split as i32],
+        };
+        let neuron = Neuron {
+            id: Some(neuron_id.clone()),
+            permissions: vec![permission],
+            cached_neuron_stake_e8s: stake_e8s,
+            maturity_e8s_equivalent: maturity_e8s,
+            ..Default::default()
+        };
+        let mut governance_proto = basic_governance_proto();
+        governance_proto
+            .neurons
+            .insert(neuron_id.to_string(), neuron);
+        let canister_id = CanisterId::from_u64(123456);
+        let governance = Governance::new(
+            governance_proto
+                .try_into()
+                .expect("Failed validating governance proto"),
+            Box::new(NativeEnvironment::new(Some(canister_id))),
+            Box::new(AlwaysSucceedingLedger {}),
+            Box::new(DoNothingLedger {}),
+        );
+        SplitNeuronTestSetup {
+            controller,
+            neuron_id,
+            governance,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_split_neuron_succeeds() {
+        // Step 1: Prepare the world and parameters.
+        let stake_e8s = 1_000_000_000_000;
+        let split_amount_e8s = stake_e8s / 3;
+        let maturity_e8s = 123_456_789;
+        let mut setup = prepare_setup_for_split_neuron_tests(stake_e8s, maturity_e8s);
+        let orig_neuron = setup
+            .governance
+            .proto
+            .neurons
+            .get(&setup.neuron_id.to_string())
+            .expect("Missing orig neuron!")
+            .clone();
+        let split = manage_neuron::Split {
+            amount_e8s: split_amount_e8s,
+            memo: 42,
+        };
+
+        // Step 2: Run code under test.
+        let result = setup
+            .governance
+            .split_neuron(&setup.neuron_id, &setup.controller, &split)
+            .await;
+
+        // Step 3: Inspect result(s).
+        let child_neuron_id = result.expect("Operation failed unexpectedly.");
+        let parent_neuron = setup
+            .governance
+            .proto
+            .neurons
+            .get(&setup.neuron_id.to_string())
+            .expect("Missing old neuron!");
+        assert_eq!(
+            parent_neuron.cached_neuron_stake_e8s,
+            stake_e8s - split_amount_e8s
+        );
+        assert_eq!(parent_neuron.maturity_e8s_equivalent, maturity_e8s);
+        assert_eq!(parent_neuron.neuron_fees_e8s, orig_neuron.neuron_fees_e8s);
+        let child_neuron = setup
+            .governance
+            .proto
+            .neurons
+            .get(&child_neuron_id.to_string())
+            .expect("Missing new neuron!");
+        assert_eq!(
+            child_neuron.cached_neuron_stake_e8s,
+            split_amount_e8s - setup.governance.transaction_fee_e8s()
+        );
+        assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
+        assert!(child_neuron.disburse_maturity_in_progress.is_empty());
+        assert_eq!(child_neuron.neuron_fees_e8s, 0);
+
+        let p = parent_neuron;
+        let c = child_neuron;
+        assert_eq!(p.permissions, c.permissions);
+        assert_eq!(p.followees, c.followees);
+        assert_eq!(p.dissolve_state, c.dissolve_state);
+        assert_eq!(p.source_nns_neuron_id, c.source_nns_neuron_id);
+        assert_eq!(p.auto_stake_maturity, c.auto_stake_maturity);
+        assert_eq!(
+            p.aging_since_timestamp_seconds,
+            c.aging_since_timestamp_seconds
+        );
+        assert_eq!(
+            p.voting_power_percentage_multiplier,
+            c.voting_power_percentage_multiplier
+        );
+    }
+
+    #[tokio::test]
+    async fn test_split_neuron_fails_if_not_authorized() {
+        // Step 1: Prepare the world and parameters.
+        let mut setup = prepare_setup_for_split_neuron_tests(1_000_000_000, 100);
+        let not_authorized_controller = *TEST_NEURON_2_OWNER_PRINCIPAL;
+        let split = manage_neuron::Split {
+            amount_e8s: 10_000_000,
+            memo: 42,
+        };
+
+        // Step 2: Run code under test.
+        let result = setup
+            .governance
+            .split_neuron(&setup.neuron_id, &not_authorized_controller, &split)
+            .await;
+
+        // Step 3: Inspect result(s).
+        assert_matches!(
+        result,
+        Err(GovernanceError{error_type: code, error_message: _msg})
+            if code == ErrorType::NotAuthorized as i32);
+    }
+
+    #[tokio::test]
+    async fn test_split_neuron_fails_on_non_existing_neuron() {
+        // Step 1: Prepare the world and parameters.
+        let mut setup = prepare_setup_for_split_neuron_tests(1_000_000_000, 100);
+        let wrong_neuron_id = test_neuron_id(*TEST_NEURON_2_OWNER_PRINCIPAL);
+        let split = manage_neuron::Split {
+            amount_e8s: 10_000_000,
+            memo: 42,
+        };
+
+        // Step 2: Run code under test.
+        let result = setup
+            .governance
+            .split_neuron(&wrong_neuron_id, &setup.controller, &split)
+            .await;
+
+        // Step 3: Inspect result(s).
+        assert_matches!(
+        result,
+        Err(GovernanceError{error_type: code, error_message: msg})
+            if code == ErrorType::NotFound as i32 && msg.to_lowercase().contains("neuron not found")
+        );
+    }
+
+    #[tokio::test]
+    async fn test_split_neuron_fails_if_split_amount_too_low() {
+        // Step 1: Prepare the world and parameters.
+        let mut setup = prepare_setup_for_split_neuron_tests(1_000_000_000, 100);
+        let params = setup.governance.nervous_system_parameters();
+        // The requested amount does not account for transaction fee, so the split should fail.
+        let split = manage_neuron::Split {
+            amount_e8s: params
+                .neuron_minimum_stake_e8s
+                .expect("Missing min stake param."),
+            memo: 42,
+        };
+        // Step 2: Run code under test.
+        let result = setup
+            .governance
+            .split_neuron(&setup.neuron_id, &setup.controller, &split)
+            .await;
+
+        // Step 3: Inspect result(s).
+        assert_matches!(
+        result,
+        Err(GovernanceError{error_type: code, error_message: msg})
+            if code == ErrorType::InsufficientFunds as i32&& msg.to_lowercase().contains("minimum split amount"));
+    }
+
+    #[tokio::test]
+    async fn test_split_neuron_fails_if_remaining_stake_too_low() {
+        // Step 1: Prepare the world and parameters.
+        let stake_e8s = 10_000_000_000;
+        let mut setup = prepare_setup_for_split_neuron_tests(stake_e8s, 100);
+        let params = setup.governance.nervous_system_parameters();
+        // The remaining amount would be below min stake, so the split should fail.
+        let split = manage_neuron::Split {
+            amount_e8s: stake_e8s + 1
+                - params
+                    .neuron_minimum_stake_e8s
+                    .expect("Missing min stake param."),
+            memo: 42,
+        };
+        // Step 2: Run code under test.
+        let result = setup
+            .governance
+            .split_neuron(&setup.neuron_id, &setup.controller, &split)
+            .await;
+
+        // Step 3: Inspect result(s).
+        assert_matches!(
+        result,
+        Err(GovernanceError{error_type: code, error_message: msg})
+            if code == ErrorType::InsufficientFunds as i32&& msg.to_lowercase().contains("minimum allowed stake"));
+    }
+
+    #[tokio::test]
+    async fn test_split_neuron_fails_with_repeated_memo() {
+        // Step 1: Prepare the world and parameters.
+        let mut setup = prepare_setup_for_split_neuron_tests(10_000_000_000, 100);
+        let split = manage_neuron::Split {
+            amount_e8s: 1_000_000_000,
+            memo: 42,
+        };
+
+        // Step 2: Run code under test.
+        // The first split should succeed.
+        let result = setup
+            .governance
+            .split_neuron(&setup.neuron_id, &setup.controller, &split)
+            .await;
+        assert!(result.is_ok(), "Error: {}", result.err().unwrap());
+        // The second, repeated split should fail.
+        let result = setup
+            .governance
+            .split_neuron(&setup.neuron_id, &setup.controller, &split)
+            .await;
+
+        // Step 3: Inspect result(s).
+        assert_matches!(
+        result,
+        Err(GovernanceError{error_type: code, error_message: msg})
+            if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("neuron already exists")
+        );
     }
 
     #[test]
