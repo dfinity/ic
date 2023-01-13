@@ -9,12 +9,15 @@ use crate::pb::v1::{
     SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
 };
 // TODO(NNS1-1589): Get these from authoritative source.
+
+use crate::logs::{ERROR, INFO};
 use crate::pb::v1::GovernanceError;
 use async_trait::async_trait;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
+use ic_canister_log::log;
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
@@ -488,13 +491,15 @@ impl Swap {
             }
         }
         assert!(total_sns_tokens_sold <= params.sns_token_e8s);
-        println!("{}INFO: token swap committed; {} direct investors and {} community fund investors receive a total of {} out of {} (change {});",
-		 LOG_PREFIX,
-		 self.buyers.len(),
-		 self.cf_participants.len(),
-		 total_sns_tokens_sold,
-		 params.sns_token_e8s,
-		 params.sns_token_e8s - total_sns_tokens_sold);
+        log!(
+            INFO,
+            "Token swap committed; {} direct investors and {} community fund investors receive a total of {} out of {} (change {});",
+		    self.buyers.len(),
+		    self.cf_participants.len(),
+		    total_sns_tokens_sold,
+		    params.sns_token_e8s,
+		    params.sns_token_e8s - total_sns_tokens_sold
+        );
         self.neuron_recipes = neurons;
         self.set_lifecycle(Lifecycle::Committed);
     }
@@ -601,9 +606,11 @@ impl Swap {
         let max_icp_e8s = params.max_icp_e8s;
         if participant_total_icp_e8s >= max_icp_e8s {
             if participant_total_icp_e8s > max_icp_e8s {
-                println!(
-                    "{}WARNING: total amount of ICP bought {} already exceeds the target {}!",
-                    LOG_PREFIX, participant_total_icp_e8s, max_icp_e8s
+                log!(
+                    ERROR,
+                    "Total amount of ICP bought {} already exceeds the target {}!",
+                    participant_total_icp_e8s,
+                    max_icp_e8s
                 );
             }
             // Nothing we can do for this buyer.
@@ -646,24 +653,24 @@ impl Swap {
             .amount_icp_e8s()
             .saturating_add(actual_increment_e8s);
         if new_balance_e8s > max_participant_icp_e8s {
-            println!(
-                "{}INFO: participant {} contributed {} e8s - the limit per participant is {}",
-                LOG_PREFIX, buyer, new_balance_e8s, max_participant_icp_e8s
+            log!(
+                INFO,
+                "Participant {} contributed {} e8s - the limit per participant is {}",
+                buyer,
+                new_balance_e8s,
+                max_participant_icp_e8s
             );
         }
         buyer_state.set_amount_icp_e8s(std::cmp::min(new_balance_e8s, max_participant_icp_e8s));
-        println!(
-            "{}INFO: refresh_buyer_tokens for buyer {}; old e8s {}; new e8s {}",
-            LOG_PREFIX,
+        log!(
+            INFO,
+            "Refresh_buyer_tokens for buyer {}; old e8s {}; new e8s {}",
             buyer,
             old_amount_icp_e8s,
             buyer_state.amount_icp_e8s()
         );
         if requested_increment_e8s >= max_increment_e8s {
-            println!(
-                "{}LOG: swap has reached ICP target of {}",
-                LOG_PREFIX, max_icp_e8s
-            );
+            log!(INFO, "Swap has reached ICP target of {}", max_icp_e8s);
         }
         Ok(RefreshBuyerTokensResponse {
             icp_accepted_participation_e8s: buyer_state.amount_icp_e8s(),
@@ -772,10 +779,11 @@ impl Swap {
         match self.is_finalize_swap_locked() {
             true => self.finalize_swap_in_progress = Some(false),
             false => {
-                println!(
-                    "{}ERROR: Unexpected condition when unlocking finalize_swap_in_progress. \
+                log!(
+                    ERROR,
+                    "Unexpected condition when unlocking finalize_swap_in_progress. \
                     The lock was not held: {:?}.",
-                    LOG_PREFIX, self.finalize_swap_in_progress
+                    self.finalize_swap_in_progress
                 );
             }
         }
@@ -1011,9 +1019,10 @@ impl Swap {
                     )
                 }
                 None => {
-                    println!(
-                        "{}ERROR: missing investor information for neuron recipe {:?}",
-                        LOG_PREFIX, recipe,
+                    log!(
+                        ERROR,
+                        "Missing investor information for neuron recipe {:?}",
+                        recipe,
                     );
                     result.failure += 1;
                     continue;
@@ -1026,9 +1035,10 @@ impl Swap {
                     neuron_attribute.memo,
                 ),
                 None => {
-                    println!(
-                        "{}ERROR: missing neuron_attributes information for neuron recipe {:?}",
-                        LOG_PREFIX, recipe,
+                    log!(
+                        ERROR,
+                        "Missing neuron_attributes information for neuron recipe {:?}",
+                        recipe,
                     );
                     result.failure += 1;
                     continue;
@@ -1060,15 +1070,13 @@ impl Swap {
             result.failure += claim_swap_neurons_response.failed_claims;
             result.skipped += claim_swap_neurons_response.skipped_claims;
             result.success += claim_swap_neurons_response.successful_claims;
-            println!(
-                "{}INFO: Successfully claimed swap neurons {:#?}",
-                LOG_PREFIX, claim_swap_neurons_response,
+            log!(
+                INFO,
+                "Successfully claimed swap neurons {:#?}",
+                claim_swap_neurons_response,
             );
         } else {
-            println!(
-                "{}ERROR: Failed to call claim_swap_neurons: {:#?}",
-                LOG_PREFIX, response,
-            );
+            log!(ERROR, "Failed to call claim_swap_neurons: {:#?}", response,);
             result.failure += sns_neuron_recipes.len() as u32;
         }
 
@@ -1205,16 +1213,23 @@ impl Swap {
         // Translate transfer result into return value.
         match transfer_result {
             Ok(block_height) => {
-                println!(
-                    "{}INFO: error refund - transferred {} ICP from subaccount {:#?} to {} at height {}",
-                    LOG_PREFIX, amount_e8s, source_subaccount, dst, block_height,
+                log!(
+                    INFO,
+                    "Error refund - transferred {} ICP from subaccount {:#?} to {} at height {}",
+                    amount_e8s,
+                    source_subaccount,
+                    dst,
+                    block_height,
                 );
                 ErrorRefundIcpResponse::new_ok(block_height)
             }
             Err(err) => {
-                println!(
-                    "{}ERROR: error refund - failed to transfer {} from subaccount {:#?}: {}",
-                    LOG_PREFIX, amount_e8s, source_subaccount, err,
+                log!(
+                    ERROR,
+                    "Error refund - failed to transfer {} from subaccount {:#?}: {}",
+                    amount_e8s,
+                    source_subaccount,
+                    err,
                 );
                 ErrorRefundIcpResponse::new_external_error(format!(
                     "Transfer request failed: {}",
@@ -1272,9 +1287,11 @@ impl Swap {
             let icp_transferable_amount = match buyer_state.icp.as_mut() {
                 Some(transferable_amount) => transferable_amount,
                 None => {
-                    println!(
-                        "{}ERROR: PrincipalId {} has corrupted BuyerState: {:?}",
-                        LOG_PREFIX, principal, buyer_state
+                    log!(
+                        ERROR,
+                        "PrincipalId {} has corrupted BuyerState: {:?}",
+                        principal,
+                        buyer_state
                     );
                     failure += 1;
                     continue;
@@ -1344,9 +1361,10 @@ impl Swap {
         for recipe in self.neuron_recipes.iter_mut() {
             let neuron_memo = match recipe.neuron_attributes.as_ref() {
                 None => {
-                    println!(
-                        "{}ERROR: missing neuron attributes information for neuron recipe {:?}",
-                        LOG_PREFIX, recipe
+                    log!(
+                        ERROR,
+                        "Missing neuron attributes information for neuron recipe {:?}",
+                        recipe
                     );
                     failure += 1;
                     continue;
@@ -1369,9 +1387,10 @@ impl Swap {
                     nns_neuron_id: _,
                 })) => compute_neuron_staking_subaccount_bytes(nns_governance.into(), neuron_memo),
                 None => {
-                    println!(
-                        "{}ERROR: missing investor information for neuron recipe {:?}",
-                        LOG_PREFIX, recipe,
+                    log!(
+                        ERROR,
+                        "Missing investor information for neuron recipe {:?}",
+                        recipe,
                     );
                     failure += 1;
                     continue;
@@ -1385,9 +1404,10 @@ impl Swap {
             let sns_transferable_amount = match recipe.sns.as_mut() {
                 Some(transferable_amount) => transferable_amount,
                 None => {
-                    println!(
-                        "{}ERROR: missing transfer information for neuron recipe {:?}",
-                        LOG_PREFIX, recipe,
+                    log!(
+                        ERROR,
+                        "Missing transfer information for neuron recipe {:?}",
+                        recipe,
                     );
                     failure += 1;
                     continue;
@@ -1447,7 +1467,7 @@ impl Swap {
                     continue;
                 }
             } else {
-                println!("{}WARNING: missing field 'sns'", LOG_PREFIX);
+                log!(ERROR, "Missing field 'sns'");
             }
             skipped += 1;
         }
@@ -1582,7 +1602,7 @@ impl Swap {
         let tokens_available_for_sale = match self.sns_token_e8s() {
             Ok(tokens) => tokens,
             Err(err) => {
-                println!("{}ERROR: {}", LOG_PREFIX, err);
+                log!(ERROR, "{}", err);
                 0
             }
         };
@@ -1986,26 +2006,34 @@ impl TransferableAmount {
             )
             .await;
         if self.transfer_start_timestamp_seconds == 0 {
-            println!(
-                "{}ERROR: token disburse logic error: expected transfer start time",
-                LOG_PREFIX
+            log!(
+                ERROR,
+                "Token disburse logic error: expected transfer start time",
             );
         }
         match result {
             Ok(h) => {
                 self.transfer_success_timestamp_seconds = now_fn(true);
-                println!(
-                    "{}INFO: transferred {} from subaccount {:?} to {} at height {} in Ledger Canister {}",
-                    LOG_PREFIX, amount, subaccount, dst, h, ledger.canister_id()
+                log!(
+                    INFO,
+                    "Transferred {} from subaccount {:?} to {} at height {} in Ledger Canister {}",
+                    amount,
+                    subaccount,
+                    dst,
+                    h,
+                    ledger.canister_id()
                 );
                 TransferResult::Success(h)
             }
             Err(e) => {
                 self.transfer_start_timestamp_seconds = 0;
                 self.transfer_success_timestamp_seconds = 0;
-                println!(
-                    "{}ERROR: failed to transfer {} from subaccount {:#?}: {}",
-                    LOG_PREFIX, amount, subaccount, e
+                log!(
+                    ERROR,
+                    "Failed to transfer {} from subaccount {:#?}: {}",
+                    amount,
+                    subaccount,
+                    e
                 );
                 TransferResult::Failure(e.to_string())
             }
@@ -2145,9 +2173,11 @@ fn string_to_principal(maybe_principal_id: &String) -> Option<PrincipalId> {
     match PrincipalId::from_str(maybe_principal_id) {
         Ok(principal_id) => Some(principal_id),
         Err(error_message) => {
-            println!(
-                "{}ERROR: cannot parse principal {} for use in Sale Canister: {}",
-                LOG_PREFIX, maybe_principal_id, error_message
+            log!(
+                ERROR,
+                "Cannot parse principal {} for use in Sale Canister: {}",
+                maybe_principal_id,
+                error_message
             );
             None
         }
@@ -2161,10 +2191,7 @@ impl Lifecycle {
 
             Self::Pending | Self::Open => false,
             Self::Unspecified => {
-                println!(
-                    "{}ERROR: A wild Lifecycle::Unspecified appeared.",
-                    LOG_PREFIX
-                );
+                log!(ERROR, "A wild Lifecycle::Unspecified appeared.",);
                 false
             }
         }

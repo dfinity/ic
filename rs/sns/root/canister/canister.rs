@@ -6,11 +6,15 @@ use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::{api::now, call, over, over_async, over_init};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::stable_mem_utils::{
-    BufferedStableMemReader, BufferedStableMemWriter,
+use ic_canister_log::log;
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_nervous_system_common::{
+    serve_logs, serve_metrics,
+    stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
 use ic_nervous_system_root::{ChangeCanisterProposal, LOG_PREFIX};
 use ic_sns_root::{
+    logs::{ERROR, INFO},
     pb::v1::{
         CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse,
         RegisterDappCanisterRequest, RegisterDappCanisterResponse, SetDappControllersRequest,
@@ -131,7 +135,7 @@ fn canister_init() {
 #[candid_method(init)]
 fn canister_init_(init_payload: SnsRootCanister) {
     dfn_core::printer::hook();
-    println!("{}canister_init: Begin...", LOG_PREFIX);
+    log!(INFO, "canister_init: Begin...");
 
     assert_state_is_valid(&init_payload);
 
@@ -140,13 +144,13 @@ fn canister_init_(init_payload: SnsRootCanister) {
         *state = init_payload;
     });
 
-    println!("{}canister_init: Done!", LOG_PREFIX);
+    log!(INFO, "canister_init: Done!");
 }
 
 #[export_name = "canister_pre_upgrade"]
 fn canister_pre_upgrade() {
     dfn_core::printer::hook();
-    println!("{}canister_pre_upgrade: Begin...", LOG_PREFIX);
+    log!(INFO, "canister_pre_upgrade: Begin...");
 
     STATE.with(move |state| {
         let mut writer = BufferedStableMemWriter::new(STABLE_MEM_BUFFER_SIZE);
@@ -157,13 +161,13 @@ fn canister_pre_upgrade() {
         writer.flush();
     });
 
-    println!("{}canister_pre_upgrade: Done!", LOG_PREFIX);
+    log!(INFO, "canister_pre_upgrade: Done!");
 }
 
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
-    println!("{}canister_POST_upgrade: Begin...", LOG_PREFIX);
+    log!(INFO, "canister_POST_upgrade: Begin...");
 
     let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
 
@@ -173,7 +177,7 @@ fn canister_post_upgrade() {
     );
     canister_init_(state);
 
-    println!("{}canister_post_upgrade: Done!", LOG_PREFIX);
+    log!(INFO, "canister_post_upgrade: Done!");
 }
 
 ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method! {}
@@ -241,7 +245,7 @@ fn list_sns_canisters_(_request: ListSnsCanistersRequest) -> ListSnsCanistersRes
 
 #[export_name = "canister_update change_canister"]
 fn change_canister() {
-    println!("{}change_canister", LOG_PREFIX);
+    log!(INFO, "change_canister");
     assert_eq_governance_canister_id(dfn_core::api::caller());
 
     // We do not want the reply to the Candid change_canister method call to be
@@ -276,7 +280,7 @@ fn change_canister() {
 ///   2. set_dapp_controllers (currently in review).
 #[export_name = "canister_update register_dapp_canister"]
 fn register_dapp_canister() {
-    println!("{}register_dapp_canister", LOG_PREFIX);
+    log!(INFO, "register_dapp_canister");
     over_async(candid_one, register_dapp_canister_);
 }
 
@@ -305,7 +309,7 @@ async fn register_dapp_canister_(
 /// to avoid a partially completed operation, but this cannot be guaranteed.
 #[export_name = "canister_update set_dapp_controllers"]
 fn set_dapp_controllers() {
-    println!("{}set_dapp_controllers", LOG_PREFIX);
+    log!(INFO, "set_dapp_controllers");
     over_async(candid_one, set_dapp_controllers_);
 }
 
@@ -362,6 +366,30 @@ async fn canister_heartbeat_() {
     let mut ledger_client = create_ledger_client();
 
     SnsRootCanister::run_periodic_tasks(&STATE, &mut ledger_client, now).await
+}
+
+/// Resources to serve for a given http_request
+#[export_name = "canister_query http_request"]
+fn http_request() {
+    over(candid_one, serve_http)
+}
+
+/// Serve an HttpRequest made to this canister
+pub fn serve_http(req: HttpRequest) -> HttpResponse {
+    if req.path() == "/metrics" {
+        serve_metrics(encode_metrics)
+    } else if req.path() == "/log/info" {
+        serve_logs(&INFO)
+    } else if req.path() == "/log/error" {
+        serve_logs(&ERROR)
+    } else {
+        HttpResponseBuilder::not_found().build()
+    }
+}
+
+/// Encode the metrics in a format that can be understood by Prometheus.
+fn encode_metrics(_w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    Ok(())
 }
 
 /// This makes this Candid service self-describing, so that for example Candid

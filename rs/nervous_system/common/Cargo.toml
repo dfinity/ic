@@ -19,10 +19,13 @@ dfn_core = { path = "../../rust_canisters/dfn_core" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
 dfn_protobuf = { path = "../../rust_canisters/dfn_protobuf" }
 ic-base-types = { path = "../../types/base_types" }
+ic-canister-log = { path = "../../rust_canisters/canister_log" }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
+ic-metrics-encoder = "1"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 rand = "0.8.4"
 rand_chacha = "0.3.1"

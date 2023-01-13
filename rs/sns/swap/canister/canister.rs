@@ -6,9 +6,12 @@ use dfn_core::{
     over, over_async, over_init, println, CanisterId,
 };
 use ic_base_types::PrincipalId;
+use ic_canister_log::log;
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ic00_types::CanisterStatusResultV2;
-use ic_nervous_system_common::stable_mem_utils::{
-    BufferedStableMemReader, BufferedStableMemWriter,
+use ic_nervous_system_common::{
+    serve_logs, serve_metrics,
+    stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
 use ic_sns_governance::{
     ledger::LedgerCanister,
@@ -18,6 +21,7 @@ use ic_sns_governance::{
     },
 };
 use ic_sns_swap::{
+    logs::{ERROR, INFO},
     pb::v1::{
         CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
         FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest,
@@ -111,7 +115,7 @@ fn open() {
 /// See `open`.
 #[candid_method(update, rename = "open")]
 async fn open_(req: OpenRequest) -> OpenResponse {
-    println!("{}open", LOG_PREFIX);
+    log!(INFO, "open");
     // Require authorization.
     let allowed_canister = swap().init_or_panic().nns_governance_or_panic();
     if caller() != PrincipalId::from(allowed_canister) {
@@ -274,7 +278,7 @@ fn finalize_swap() {
 /// See Swap.finalize.
 #[candid_method(update, rename = "finalize_swap")]
 async fn finalize_swap_(_arg: FinalizeSwapRequest) -> FinalizeSwapResponse {
-    println!("{}finalize_swap", LOG_PREFIX);
+    log!(INFO, "finalize_swap");
     let mut sns_root_client = RealSnsRootClient::new(swap().init_or_panic().sns_root_or_panic());
     let mut sns_governance_client =
         RealSnsGovernanceClient::new(swap().init_or_panic().sns_governance_or_panic());
@@ -380,7 +384,7 @@ fn restore_dapp_controllers() {
 async fn restore_dapp_controllers_(
     _request: RestoreDappControllersRequest,
 ) -> RestoreDappControllersResponse {
-    println!("{}restore_dapp_controllers", LOG_PREFIX);
+    log!(INFO, "restore_dapp_controllers");
     let mut sns_root_client = RealSnsRootClient::new(swap().init_or_panic().sns_root_or_panic());
     swap_mut()
         .restore_dapp_controllers(&mut sns_root_client, caller())
@@ -396,7 +400,7 @@ async fn restore_dapp_controllers_(
 fn canister_heartbeat() {
     let now = now_seconds();
     if swap_mut().try_commit_or_abort(now) {
-        println!("{}Swap committed/aborted at timestamp {}", LOG_PREFIX, now);
+        log!(INFO, "Swap committed/aborted at timestamp {}", now);
     }
 }
 
@@ -439,7 +443,7 @@ fn canister_init_(init_payload: Init) {
         );
         SWAP = Some(swap);
     }
-    println!("{}Initialized", LOG_PREFIX);
+    log!(INFO, "Initialized");
 }
 
 /// Serialize and write the state to stable memory so that it is
@@ -447,7 +451,7 @@ fn canister_init_(init_payload: Init) {
 /// `canister_post_upgrade`.
 #[export_name = "canister_pre_upgrade"]
 fn canister_pre_upgrade() {
-    println!("{}Executing pre upgrade", LOG_PREFIX);
+    log!(INFO, "Executing pre upgrade");
     let mut writer = BufferedStableMemWriter::new(STABLE_MEM_BUFFER_SIZE);
     swap()
         .encode(&mut writer)
@@ -460,7 +464,7 @@ fn canister_pre_upgrade() {
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
-    println!("{}Executing post upgrade", LOG_PREFIX);
+    log!(INFO, "Executing post upgrade");
     let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
     match Swap::decode(reader) {
         Err(err) => {
@@ -479,6 +483,30 @@ fn canister_post_upgrade() {
             SWAP = Some(proto);
         },
     }
+}
+
+/// Resources to serve for a given http_request
+#[export_name = "canister_query http_request"]
+fn http_request() {
+    over(candid_one, serve_http)
+}
+
+/// Serve an HttpRequest made to this canister
+pub fn serve_http(req: HttpRequest) -> HttpResponse {
+    if req.path() == "/metrics" {
+        serve_metrics(encode_metrics)
+    } else if req.path() == "/log/info" {
+        serve_logs(&INFO)
+    } else if req.path() == "/log/error" {
+        serve_logs(&ERROR)
+    } else {
+        HttpResponseBuilder::not_found().build()
+    }
+}
+
+/// Encode the metrics in a format that can be understood by Prometheus.
+fn encode_metrics(_w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    Ok(())
 }
 
 /// When run on native, this prints the candid service definition of this
