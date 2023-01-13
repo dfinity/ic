@@ -267,10 +267,18 @@ pub fn test_batching(env: TestEnv) {
             .map(|entry| entry.amount.as_sat())
             .sum::<u64>();
 
+        // We have 1 input and 21 outputs (20 requests and the minter's address)
+        // Hence, we can compute the minter's fee
+        let minters_fee: u64 = ic_ckbtc_minter::MINTER_FEE_PER_INPUT
+            + ic_ckbtc_minter::MINTER_FEE_PER_OUTPUT * 21
+            + ic_ckbtc_minter::MINTER_FEE_CONSTANT;
+
         // We can check that the destination address has received all the bitcoin
         assert_eq!(
             destination_balance,
-            (RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64) * retrieve_amount - EXPECTED_FEE
+            (RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64) * retrieve_amount
+                - EXPECTED_FEE
+                - minters_fee
         );
 
         // We also check that the destination address have received 20 utxos
