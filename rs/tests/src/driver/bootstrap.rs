@@ -253,7 +253,7 @@ pub fn create_config_disk_image(
     let mut cmd = Command::new(script_path);
     let local_store_path = test_env
         .prep_dir(ic_name)
-        .expect("no no name IC")
+        .expect("no no-name IC")
         .registry_local_store_path();
     cmd.arg(img_path.clone())
         .arg("--hostname")

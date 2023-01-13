@@ -14373,6 +14373,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-local-registry",
  "ic-registry-local-store",
+ "ic-registry-local-store-artifacts",
  "ic-registry-nns-data-provider",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",

@@ -151,16 +151,16 @@ impl InternetComputer {
         let tempdir = tempfile::tempdir()?;
         self.create_secret_key_stores(tempdir.path())?;
         let logger = env.logger();
-        let pot_setup = GroupSetup::read_attribute(env);
+        let group_setup = GroupSetup::read_attribute(env);
         let farm_base_url = env.get_farm_url()?;
         let farm = Farm::new(farm_base_url, logger.clone());
-        let group_name: String = pot_setup.farm_group_name;
+        let group_name: String = group_setup.farm_group_name;
         let res_request = get_resource_request(self, env, &group_name)?;
         let res_group = allocate_resources(&farm, &res_request)?;
         self.propagate_ip_addrs(&res_group);
         let init_ic = init_ic(self, env, &logger)?;
 
-        // save initial registry snapshot for this pot
+        // save initial registry snapshot for this group
         let local_store_path = env
             .registry_local_store_path(&self.name)
             .expect("corrupted ic-prep directory structure");

@@ -178,6 +178,7 @@ use std::future::Future;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use std::{convert::TryFrom, net::IpAddr, str::FromStr, sync::Arc};
 use tokio::runtime::Runtime as Rt;
@@ -338,6 +339,59 @@ impl TopologySnapshot {
         }
         Ok(Self {
             registry_version: latest_version,
+            local_registry: self.local_registry.clone(),
+            ic_name: self.ic_name.clone(),
+            env: self.env.clone(),
+        })
+    }
+
+    /// This method blocks and repeatedly fetches updates from the registry
+    /// canister until the latest (locally) available registry version
+    /// matches the (globally) latest registry version from the NNS.
+    ///
+    /// This globally newest registry version is the registry version of the
+    /// returned snapshot.
+    ///
+    /// # Known Limitations
+    ///
+    /// As the test driver does not implement timeouts on the test level, this
+    /// method blocks for a duration of 720 seconds at maximum.
+    pub async fn block_for_newest_mainnet_registry_version(&self) -> Result<TopologySnapshot> {
+        let duration = Duration::from_secs(720);
+        let backoff = Duration::from_secs(2);
+        let prev_version: Arc<Mutex<RegistryVersion>> =
+            Arc::new(Mutex::new(self.local_registry.get_latest_version()));
+        let version = retry_async(&self.env.logger(), duration, backoff, || {
+            let prev_version = prev_version.clone();
+            async move {
+                let mut prev_version = prev_version.lock().unwrap();
+                self.local_registry.sync_with_nns().await?;
+                let version = self.local_registry.get_latest_version();
+                info!(
+                    &self.env.logger(),
+                    "previous registry version: {}; obtained from NNS: {}",
+                    prev_version,
+                    version.clone()
+                );
+                if version == *prev_version {
+                    info!(
+                        &self.env.logger(),
+                        "registry version obtained from NNS saturated at {}",
+                        version.clone()
+                    );
+                    Ok(version)
+                } else {
+                    *prev_version = version;
+                    bail!(
+                        "latest registry version obtained from NNS: {}; saturating ...",
+                        version
+                    )
+                }
+            }
+        })
+        .await?;
+        Ok(Self {
+            registry_version: version,
             local_registry: self.local_registry.clone(),
             ic_name: self.ic_name.clone(),
             env: self.env.clone(),
@@ -550,7 +604,7 @@ impl HasTopologySnapshot for TestEnv {
     fn topology_snapshot(&self) -> TopologySnapshot {
         let local_store_path = self
             .prep_dir("")
-            .expect("No no name Internet Computer")
+            .expect("No no-name Internet Computer")
             .registry_local_store_path();
         Self::create_topology_snapshot("", local_store_path, self.clone())
     }

@@ -10,6 +10,7 @@ pub mod driver;
 pub mod execution;
 pub mod icrc1_agent_test;
 pub mod ledger_tests;
+pub mod mainnet_tests;
 pub mod message_routing;
 pub mod networking;
 pub mod nns;

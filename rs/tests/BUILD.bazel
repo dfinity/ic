@@ -47,6 +47,7 @@ DEPENDENCIES = [
     "//rs/registry/keys",
     "//rs/registry/local_registry",
     "//rs/registry/local_store",
+    "//rs/registry/local_store/artifacts",
     "//rs/registry/nns_data_provider",
     "//rs/registry/provisional_whitelist",
     "//rs/registry/routing_table",
@@ -740,5 +741,16 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
+    name = "mainnet_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
