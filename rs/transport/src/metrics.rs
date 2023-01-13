@@ -102,15 +102,12 @@ pub(crate) struct DataPlaneMetrics {
 impl DataPlaneMetrics {
     pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
-            event_handler_message_duration: HistogramVec::new(
-                HistogramOpts::new(
-                    "transport_event_handler_message_duration_seconds",
-                    "Time spent by the client callback processing a message event.",
-                )
-                .buckets(decimal_buckets(-3, 1)),
+            event_handler_message_duration: metrics_registry.histogram_vec(
+                "transport_event_handler_message_duration_seconds",
+                "Time spent by the client callback processing a message event.",
+                decimal_buckets(-3, 1),
                 &[LABEL_CHANNEL_ID, TRANSPORT_API],
-            )
-            .unwrap(),
+            ),
             read_message_duration: metrics_registry.histogram_vec(
                 "transport_read_message_duration_seconds",
                 "Time spent to parse a full message.",
