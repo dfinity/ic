@@ -2,7 +2,7 @@ use crate::api::CspCreateMEGaKeyError;
 use crate::canister_threshold::{IDKG_MEGA_SCOPE, IDKG_THRESHOLD_KEYS_SCOPE};
 use crate::key_id::KeyId;
 use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
-use crate::public_key_store::PublicKeyStore;
+use crate::public_key_store::{PublicKeyAddError, PublicKeyStore};
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStorePersistenceError};
 use crate::types::CspSecretKey;
 use crate::vault::api::IDkgProtocolCspVault;
@@ -437,10 +437,12 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             .and_then(|()| {
                 pks_write_lock
                     .add_idkg_dealing_encryption_pubkey(public_key_proto)
-                    .map_err(|err| CspCreateMEGaKeyError::TransientInternalError {
-                        internal_error: format!(
-                            "failed to add iDKG dealing encryption public key: {err:?}"
-                        ),
+                    .map_err(|err| match err {
+                        PublicKeyAddError::Io(_) => CspCreateMEGaKeyError::TransientInternalError {
+                            internal_error: format!(
+                                "failed to add iDKG dealing encryption public key: {err:?}"
+                            ),
+                        },
                     })
             })
     }
