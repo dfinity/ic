@@ -68,7 +68,7 @@ function extractCanisterIdFromHost(host) {
   if (!m) {
     return "";
   }
-  const canisterId = m[1];
+  let canisterId = m[1];
 
   // Check if ID is an alias
   if (!!CANISTER_ID_ALIASES[canisterId]) {
