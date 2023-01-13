@@ -2616,15 +2616,6 @@ fn parse_rewardable_nodes(json: &str) -> BTreeMap<String, u32> {
     let map: BTreeMap<String, u32> = serde_json::from_str(json)
         .unwrap_or_else(|e| panic!("Unable to parse rewardable_nodes: {}", e));
 
-    for node_type in map.keys() {
-        if !ic_nns_constants::NODE_TYPES.contains(&node_type.as_str()) {
-            panic!(
-                "Supplied node type \"{}\" is not a whitelisted node type",
-                node_type
-            )
-        }
-    }
-
     map
 }
 
@@ -2770,17 +2761,6 @@ impl ProposalTitleAndPayload<UpdateNodeRewardsTableProposalPayload>
         let map: BTreeMap<String, BTreeMap<String, u64>> =
             serde_json::from_str(&self.updated_node_rewards)
                 .unwrap_or_else(|e| panic!("Unable to parse updated_node_rewards: {}", e));
-
-        for node_type_to_rewards_map in map.values() {
-            for node_type in node_type_to_rewards_map.keys() {
-                if !ic_nns_constants::NODE_TYPES.contains(&node_type.as_str()) {
-                    panic!(
-                        "Supplied node type \"{}\" is not a whitelisted node type",
-                        node_type
-                    )
-                }
-            }
-        }
 
         UpdateNodeRewardsTableProposalPayload::from(map)
     }
