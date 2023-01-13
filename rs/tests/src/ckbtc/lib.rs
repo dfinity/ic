@@ -20,7 +20,7 @@ use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_types::Network;
 use ic_canister_client::Sender;
-use ic_ckbtc_minter::lifecycle::init::InitArgs as CkbtcMinterInitArgs;
+use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, Mode};
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_icrc1::Account;
 use ic_icrc1_ledger::InitArgs;
@@ -267,7 +267,7 @@ pub(crate) async fn install_minter(
         ledger_id,
         max_time_in_queue_nanos,
         min_confirmations: Some(BTC_MIN_CONFIRMATIONS),
-        is_read_only: false,
+        mode: Mode::GeneralAvailability,
     };
     install_rust_canister_from_path(
         canister,

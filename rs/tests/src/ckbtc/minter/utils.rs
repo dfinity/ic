@@ -401,6 +401,16 @@ pub async fn upgrade_canister(canister: &mut Canister<'_>) {
         .expect("failed to upgrade the canister");
 }
 
+pub async fn upgrade_canister_with_args<T: candid::CandidType>(
+    canister: &mut Canister<'_>,
+    args: &T,
+) {
+    canister
+        .upgrade_to_self_binary(Encode!(args).unwrap())
+        .await
+        .expect("failed to upgrade the canister");
+}
+
 /// Verify the account balance on the ledger.
 pub async fn assert_account_balance(agent: &Icrc1Agent, account: &Account, expected_balance: u64) {
     assert_eq!(

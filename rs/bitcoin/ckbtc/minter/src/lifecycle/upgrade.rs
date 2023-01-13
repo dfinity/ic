@@ -1,12 +1,12 @@
 use crate::logs::P0;
 use crate::state::eventlog::{replay, Event};
-use crate::state::replace_state;
+use crate::state::{replace_state, Mode};
 use crate::storage::{count_events, events, record_event};
 use candid::{CandidType, Deserialize};
 use ic_canister_log::log;
 use serde::Serialize;
 
-#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
 pub struct UpgradeArgs {
     /// Minimum amount of bitcoin that can be retrieved.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -22,9 +22,9 @@ pub struct UpgradeArgs {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_time_in_queue_nanos: Option<u64>,
 
-    /// Flag that indicates if the minter is in read-only mode.
+    /// The mode in which the minter is running.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub is_read_only: Option<bool>,
+    pub mode: Option<Mode>,
 }
 
 pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {

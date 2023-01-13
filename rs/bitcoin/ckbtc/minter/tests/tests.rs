@@ -1,8 +1,9 @@
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Principal};
 use ic_base_types::CanisterId;
 use ic_btc_types::Network;
 use ic_ckbtc_minter::lifecycle::init::InitArgs as CkbtcMinterInitArgs;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
+use ic_ckbtc_minter::state::Mode;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
 use ic_ckbtc_minter::updates::update_balance::{
     UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult,
@@ -71,7 +72,7 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
         ledger_id,
         max_time_in_queue_nanos: 0,
         min_confirmations: Some(1),
-        is_read_only: false,
+        mode: Mode::GeneralAvailability,
     };
     env.install_canister(minter_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
@@ -85,7 +86,7 @@ fn test_install_ckbtc_minter_canister() {
 }
 
 #[test]
-fn test_upgrade() {
+fn test_upgrade_read_only() {
     let env = StateMachine::new();
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
@@ -95,12 +96,12 @@ fn test_upgrade() {
         retrieve_btc_min_amount: Some(100),
         min_confirmations: None,
         max_time_in_queue_nanos: Some(100),
-        is_read_only: Some(true),
+        mode: Some(Mode::ReadOnly),
     };
     env.upgrade_canister(minter_id, minter_wasm(), Encode!(&upgrade_args).unwrap())
         .expect("Failed to upgrade the minter canister");
 
-    // when is_read_only is true then no upgrade method should run
+    // when the mode is ReadOnly then the minter should reject all update calls.
 
     // 1. update_balance
     let update_balance_args = UpdateBalanceArgs {
@@ -115,7 +116,11 @@ fn test_upgrade() {
         )
         .expect("Failed to call update_balance");
     let res = Decode!(&res.bytes(), Result<UpdateBalanceResult, UpdateBalanceError>).unwrap();
-    assert!(res.is_err());
+    assert!(
+        matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
+        "unexpected result: {:?}",
+        res
+    );
 
     // 2. retrieve_btc
     let retrieve_btc_args = RetrieveBtcArgs {
@@ -130,5 +135,78 @@ fn test_upgrade() {
         )
         .expect("Failed to call retrieve_btc");
     let res = Decode!(&res.bytes(), Result<RetrieveBtcOk, RetrieveBtcError>).unwrap();
-    assert!(res.is_err());
+    assert!(
+        matches!(res, Err(RetrieveBtcError::TemporarilyUnavailable(_))),
+        "unexpected result: {:?}",
+        res
+    );
+}
+
+#[test]
+fn test_upgrade_restricted() {
+    use std::str::FromStr;
+
+    let env = StateMachine::new();
+    let ledger_id = install_ledger(&env);
+    let minter_id = install_minter(&env, ledger_id);
+
+    let authorized_principal =
+        Principal::from_str("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
+            .unwrap();
+
+    let unauthorized_principal =
+        Principal::from_str("gjfkw-yiolw-ncij7-yzhg2-gq6ec-xi6jy-feyni-g26f4-x7afk-thx6z-6ae")
+            .unwrap();
+
+    // upgrade
+    let upgrade_args = UpgradeArgs {
+        retrieve_btc_min_amount: Some(100),
+        min_confirmations: None,
+        max_time_in_queue_nanos: Some(100),
+        mode: Some(Mode::RestrictedTo(vec![authorized_principal])),
+    };
+    env.upgrade_canister(minter_id, minter_wasm(), Encode!(&upgrade_args).unwrap())
+        .expect("Failed to upgrade the minter canister");
+
+    // Check that the unauthorized user cannot modify the state.
+
+    // 1. update_balance
+    let update_balance_args = UpdateBalanceArgs {
+        owner: None,
+        subaccount: None,
+    };
+    let res = env
+        .execute_ingress_as(
+            unauthorized_principal.into(),
+            minter_id,
+            "update_balance",
+            Encode!(&update_balance_args).unwrap(),
+        )
+        .expect("Failed to call update_balance");
+    let res = Decode!(&res.bytes(), Result<UpdateBalanceResult, UpdateBalanceError>).unwrap();
+    assert!(
+        matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
+        "unexpected result: {:?}",
+        res
+    );
+
+    // 2. retrieve_btc
+    let retrieve_btc_args = RetrieveBtcArgs {
+        amount: 10,
+        address: "".into(),
+    };
+    let res = env
+        .execute_ingress_as(
+            unauthorized_principal.into(),
+            minter_id,
+            "retrieve_btc",
+            Encode!(&retrieve_btc_args).unwrap(),
+        )
+        .expect("Failed to call retrieve_btc");
+    let res = Decode!(&res.bytes(), Result<RetrieveBtcOk, RetrieveBtcError>).unwrap();
+    assert!(
+        matches!(res, Err(RetrieveBtcError::TemporarilyUnavailable(_))),
+        "unexpected result: {:?}",
+        res
+    );
 }

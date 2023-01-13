@@ -1,3 +1,4 @@
+pub use crate::state::Mode;
 use crate::state::{replace_state, CkBtcMinterState};
 use candid::{CandidType, Deserialize};
 use ic_base_types::CanisterId;
@@ -32,7 +33,7 @@ pub struct InitArgs {
 
     /// Flag that indicates if the minter is in read-only mode.
     #[serde(default)]
-    pub is_read_only: bool,
+    pub mode: Mode,
 }
 
 pub fn init(args: InitArgs) {
