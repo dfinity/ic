@@ -595,15 +595,36 @@ pub struct CertificateDelegation {
     pub certificate: Blob,
 }
 
-/// Different stages required for the full initialization of the HttpHandler.
-/// The fields are listed in order of execution.
+/// Different stages required for the full initialization of the HTTPS endpoint.
+/// The fields are listed in order of execution/transition.
 #[derive(Debug, Display, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ReplicaHealthStatus {
+    /// Marks the start state of the HTTPS endpoint. Some requests will fail
+    /// while initialization is on-going.
     Starting,
+    /// Waiting for the first non-empty certifited state available on
+    /// the node.
     WaitingForCertifiedState,
+    /// Waiting for the root delegation in case of non-NNS subnet.
     WaitingForRootDelegation,
+    /// Happens when the replica's finalized height is significantly greater
+    /// than the certified height.
+    /// If the finalized height is significantly greater than the
+    /// certified height, this is a signal that execution is lagging
+    /// consensus, and that consensus needs to be throttled.
+    /// More information can be found in the whitepaper
+    /// https://internetcomputer.org/whitepaper.pdf
+    /// under "Per-round certified state" section(s).
+    ///
+    /// If execution (or certification) is lagging significantly on this replica,
+    /// then we better not serve queries because we risk returning stale data.
+    /// According to the IC's spec - https://internetcomputer.org/docs/current/references/ic-interface-spec#query_call,
+    /// we should execute queries on "recent enough" state tree.
     CertifiedStateBehind,
+    /// Signals that the replica can serve all types of API requests.
+    /// When users programatically access this information they should
+    /// check only if 'ReplicaHealthStatus' is equal to 'Healthy' or not.
     Healthy,
 }
 
