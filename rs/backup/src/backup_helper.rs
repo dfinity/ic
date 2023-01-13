@@ -609,7 +609,14 @@ impl BackupHelper {
             let (top_height, replica_version_path) = fetch_top_height(replica_version_dir);
             dir_heights.insert(top_height, replica_version_path);
         });
-        assert!(spool_dirs.len() == dir_heights.len());
+        if spool_dirs.len() != dir_heights.len() {
+            error!(
+                self.log,
+                "Nonequal size of collections - spool: {} heights: {}",
+                spool_dirs.len(),
+                dir_heights.len()
+            )
+        }
         let mut max_height: u64 = 0;
         let to_clean = dir_heights.len() - self.versions_hot;
         let work_dir = self.work_dir();
@@ -711,6 +718,10 @@ impl BackupHelper {
 
         remove_dir_all(trash_dir).map_err(|err| format!("Error deleting trashdir: {:?}", err))?;
 
+        self.notification_client.message_slack(format!(
+            "✅ Moved to cold storage artifacts of subnet {:?} and states up to {}",
+            self.subnet_id, max_height
+        ));
         info!(
             self.log,
             "Finished moving old artifacts and states of subnet {:?} to the cold storage",
