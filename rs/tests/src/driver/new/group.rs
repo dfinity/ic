@@ -218,7 +218,7 @@ fn get_setup_env(gctx: GroupContext) -> TestEnv {
 }
 
 fn create_env(gctx: GroupContext, task_id: TaskId) -> Result<TestEnv> {
-    trace!(gctx.log(), "get_env(task_id={})", &task_id);
+    trace!(gctx.log(), "create_env(task_id={})", &task_id);
     let process_ctx = ProcessContext::new(gctx, task_id.name()).unwrap();
     process_ctx.group_context.create_test_env(&task_id.name())
 }
@@ -315,6 +315,7 @@ pub struct SystemTestGroup {
     tests: Vec<SystemTestSubGroup>,
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
+    with_farm: bool,
     default_vm_resources: Option<VmResources>,
 }
 
@@ -340,8 +341,14 @@ impl SystemTestGroup {
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
+            with_farm: true,
             default_vm_resources: None,
         }
+    }
+
+    pub fn without_farm(mut self) -> Self {
+        self.with_farm = false;
+        self
     }
 
     pub fn with_overall_timeout(mut self, overall_timeout: Duration) -> Self {
@@ -415,49 +422,53 @@ impl SystemTestGroup {
 
         // The ID of the root task is needed outside this function for awaiting when the plan execution finishes.
         let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
-        let keepalive_task = Box::from(subproc(
-            keepalive_task_id.clone(),
-            {
-                let logger = group_ctx.logger().clone();
-                let group_ctx = group_ctx.clone();
-                move || {
+        let keepalive_task = if self.with_farm {
+            Box::from(subproc(
+                keepalive_task_id.clone(),
+                {
+                    let logger = group_ctx.logger().clone();
                     let group_ctx = group_ctx.clone();
-                    debug!(logger, ">>> keepalive");
-                    loop {
+                    move || {
                         let group_ctx = group_ctx.clone();
-                        if let Ok((group_setup, env)) =
-                            create_env(group_ctx, keepalive_task_id.clone()).and_then(|env| {
-                                GroupSetup::try_read_attribute(&env).map(|x| (x, env))
-                            })
-                        {
-                            let farm_url = env.get_farm_url().unwrap();
-                            let farm = Farm::new(farm_url.clone(), env.logger());
-                            let group_name = group_setup.farm_group_name;
-                            if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
-                                panic!(
-                                    "{}",
-                                    format!(
-                                        "Failed to keep group {} alive via endpoint {:?}: {:?}",
-                                        group_name, farm_url, e
+                        debug!(logger, ">>> keepalive");
+                        loop {
+                            let group_ctx = group_ctx.clone();
+                            if let Ok((group_setup, env)) =
+                                create_env(group_ctx, keepalive_task_id.clone()).and_then(|env| {
+                                    GroupSetup::try_read_attribute(&env).map(|x| (x, env))
+                                })
+                            {
+                                let farm_url = env.get_farm_url().unwrap();
+                                let farm = Farm::new(farm_url.clone(), env.logger());
+                                let group_name = group_setup.farm_group_name;
+                                if let Err(e) = farm.set_group_ttl(&group_name, GROUP_TTL) {
+                                    panic!(
+                                        "{}",
+                                        format!(
+                                            "Failed to keep group {} alive via endpoint {:?}: {:?}",
+                                            group_name, farm_url, e
+                                        )
                                     )
-                                )
-                            };
-                            info!(
-                                logger,
-                                "Group {} TTL set to +{:?} from now (Farm endpoint: {:?})",
-                                group_name,
-                                GROUP_TTL,
-                                farm_url
-                            );
-                        } else {
-                            info!(logger, "Farm group not created (did you forget to call env.ensure_group_setup_created()?)");
+                                };
+                                info!(
+                                    logger,
+                                    "Group {} TTL set to +{:?} from now (Farm endpoint: {:?})",
+                                    group_name,
+                                    GROUP_TTL,
+                                    farm_url
+                                );
+                            } else {
+                                info!(logger, "Farm group not created (did you forget to call env.ensure_group_setup_created()?)");
+                            }
+                            std::thread::sleep(KEEPALIVE_INTERVAL);
                         }
-                        std::thread::sleep(KEEPALIVE_INTERVAL);
                     }
-                }
-            },
-            &mut compose_ctx,
-        )) as Box<dyn Task>;
+                },
+                &mut compose_ctx,
+            )) as Box<dyn Task>
+        } else {
+            Box::from(EmptyTask::new(subs.clone(), keepalive_task_id)) as Box<dyn Task>
+        };
 
         let setup_plan = {
             let logger = group_ctx.logger().clone();
@@ -785,6 +796,7 @@ impl SystemTestGroup {
                 Ok(())
             }
             Err(failure_mode) => {
+                // TODO: also print Kibana link in case of failure. This requires that the dyncamic group name (e.g., distributed_mainnet_test_bin--1673213252002) is made available to all SystemTestGroup instances, not only those used with Farm.
                 warn!(logger, "{failure_mode}");
                 bail!("Tests failed.")
             }
