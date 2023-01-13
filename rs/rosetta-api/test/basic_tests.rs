@@ -182,7 +182,7 @@ async fn smoke_test() {
         ))
     );
 
-    let (acc_id, _ed_kp, pk, _pid) = ic_rosetta_test_utils::make_user(4);
+    let (acc_id, _ed_kp, pk, _pid) = ic_rosetta_test_utils::make_user_ed25519(4);
     let msg = ConstructionDeriveRequest::new(req_handler.network_id(), pk);
     let res = req_handler.construction_derive(msg);
     assert_eq!(
@@ -194,7 +194,7 @@ async fn smoke_test() {
         })
     );
 
-    let (_acc_id, _ed_kp, mut pk, _pid) = ic_rosetta_test_utils::make_user(4);
+    let (_acc_id, _ed_kp, mut pk, _pid) = ic_rosetta_test_utils::make_user_ed25519(4);
     pk.curve_type = CurveType::Secp256K1;
     let msg = ConstructionDeriveRequest::new(req_handler.network_id(), pk);
     let res = req_handler.construction_derive(msg);

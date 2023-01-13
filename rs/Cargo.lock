@@ -8058,6 +8058,8 @@ dependencies = [
  "ic-canister-client-sender",
  "ic-cdk",
  "ic-constants",
+ "ic-crypto-ecdsa-secp256k1",
+ "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-sha",
  "ic-crypto-tree-hash",

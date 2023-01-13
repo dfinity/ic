@@ -31,7 +31,8 @@ DEV_DEPENDENCIES = []
 
 MACRO_DEV_DEPENDENCIES = []
 
-ALIASES = {}
+ALIASES = {
+}
 
 rust_library(
     name = "test_utils",

@@ -17,17 +17,18 @@ DEPENDENCIES = [
     "//rs/crypto/tree_hash",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/interfaces",
+    "//rs/types/types",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer:ledger_canister_blocks_synchronizer_lib",
     "//rs/rosetta-api/ledger_canister_core",
+    "//rs/crypto/ecdsa_secp256k1",
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_protobuf",
     "//rs/rust_canisters/on_wire",
-    "//rs/types/types",
     "@crate_index//:actix-rt",
     "@crate_index//:actix-web",
     "@crate_index//:base64",
@@ -69,7 +70,8 @@ DEV_DEPENDENCIES = [
 
 MACRO_DEV_DEPENDENCIES = []
 
-ALIASES = {}
+ALIASES = {
+}
 
 ROSETTA_VERSION = "1.7.2"
 

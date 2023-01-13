@@ -4,6 +4,7 @@ use crate::convert::state::State;
 use crate::errors::ApiError;
 use crate::models::amount::{from_amount, ledgeramount_from_amount};
 use crate::models::operation::OperationType;
+use crate::models::RosettaSupportedKeyPair;
 use crate::models::{self, operation::Operation, AccountIdentifier, BlockIdentifier};
 use crate::request::request_result::RequestResult;
 use crate::request::transaction_operation_results::TransactionOperationResults;
@@ -17,6 +18,8 @@ use crate::request_types::{
 use crate::transaction_id::TransactionIdentifier;
 use crate::{convert, errors};
 use dfn_protobuf::ProtoBuf;
+use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
+use ic_canister_client_sender::Secp256k1KeyPair;
 use ic_crypto_tree_hash::Path;
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::{BlockType, HashOf};
@@ -353,16 +356,14 @@ pub fn principal_id_from_public_key_or_principal(
 }
 
 pub fn principal_id_from_public_key(pk: &models::PublicKey) -> Result<PrincipalId, ApiError> {
-    if pk.curve_type != models::CurveType::Edwards25519 {
-        return Err(ApiError::InvalidPublicKey(
+    match pk.curve_type {
+        models::CurveType::Edwards25519 => EdKeypair::get_principal_id(&pk.hex_bytes),
+        models::CurveType::Secp256K1 => Secp256k1KeyPair::get_principal_id(&pk.hex_bytes),
+        _ => Err(ApiError::InvalidPublicKey(
             false,
-            "Only EDWARDS25519 curve type is supported".into(),
-        ));
+            format!("Curve Type {} is not supported", pk.curve_type).into(),
+        )),
     }
-    let pid = PrincipalId::new_self_authenticating(
-        &ic_canister_client_sender::ed25519_public_key_to_der(from_hex(&pk.hex_bytes)?),
-    );
-    Ok(pid)
 }
 
 // This is so I can keep track of where this conversion is done

@@ -1,11 +1,12 @@
+use ic_canister_client_sender::Secp256k1KeyPair;
 use ic_rosetta_api::convert::{
-    from_hex, from_model_account_identifier, from_public_key, operations_to_requests,
-    principal_id_from_public_key, to_hex, to_model_account_identifier,
+    from_hex, from_model_account_identifier, operations_to_requests, principal_id_from_public_key,
+    to_hex, to_model_account_identifier,
 };
-
 use ic_rosetta_api::models::{
     ConstructionCombineResponse, ConstructionParseResponse, ConstructionPayloadsRequestMetadata,
-    ConstructionPayloadsResponse, CurveType, PublicKey, Signature, SignatureType,
+    ConstructionPayloadsResponse, CurveType, PublicKey, RosettaSupportedKeyPair, Signature,
+    SignatureType,
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
 use ic_rosetta_api::request_types::{
@@ -20,7 +21,7 @@ use icp_ledger::{AccountIdentifier, BlockIndex, Operation, Tokens};
 
 pub use ic_canister_client_sender::Ed25519KeyPair as EdKeypair;
 use log::debug;
-use rand::{rngs::StdRng, seq::SliceRandom, thread_rng, SeedableRng};
+use rand::{seq::SliceRandom, thread_rng};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -35,44 +36,48 @@ use ic_rosetta_api::request::Request;
 use rosetta_api_serv::RosettaApiHandle;
 use std::path::Path;
 
-pub fn to_public_key(keypair: &EdKeypair) -> PublicKey {
+pub fn to_public_key<T: RosettaSupportedKeyPair>(keypair: &T) -> PublicKey {
     PublicKey {
-        hex_bytes: to_hex(&keypair.public_key),
-        curve_type: CurveType::Edwards25519,
+        hex_bytes: keypair.hex_encode_pk(),
+        curve_type: keypair.get_curve_type(),
     }
 }
 
-pub fn make_user(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
-    let mut rng = StdRng::seed_from_u64(seed);
-    let keypair = EdKeypair::generate(&mut rng);
-
-    let public_key = to_public_key(&keypair);
-
-    let public_key_der =
-        ic_canister_client_sender::ed25519_public_key_to_der(keypair.public_key.to_vec());
-
-    assert_eq!(from_public_key(&public_key).unwrap(), keypair.public_key);
-
-    let pid = PrincipalId::new_self_authenticating(&public_key_der);
-    let user_id: AccountIdentifier = pid.into();
-
-    debug!("[test] created user {}", user_id);
-
-    (user_id, keypair, public_key, pid)
+pub fn make_user_ed25519(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
+    let kp = EdKeypair::generate_from_u64(seed);
+    let pid = kp.generate_principal_id().unwrap();
+    let aid: AccountIdentifier = pid.into();
+    let pb = to_public_key(&kp);
+    debug!("[test] created user {}", aid);
+    (aid, kp, pb, pid)
 }
 
-pub struct RequestInfo {
+pub fn make_user_ecdsa_secp256k1(
+    seed: u64,
+) -> (AccountIdentifier, Secp256k1KeyPair, PublicKey, PrincipalId) {
+    let kp = Secp256k1KeyPair::generate_from_u64(seed);
+    let pid = kp.generate_principal_id().unwrap();
+    let aid: AccountIdentifier = pid.into();
+    let pb = to_public_key(&kp);
+    debug!("[test] created user {}", aid);
+    (aid, kp, pb, pid)
+}
+
+pub struct RequestInfo<T: RosettaSupportedKeyPair> {
     pub request: Request,
-    pub sender_keypair: Arc<EdKeypair>,
+    pub sender_keypair: Arc<T>,
 }
 
-pub async fn prepare_multiple_txn(
+pub async fn prepare_multiple_txn<T: RosettaSupportedKeyPair>(
     ros: &RosettaApiHandle,
-    requests: &[RequestInfo],
+    requests: &[RequestInfo<T>],
     accept_suggested_fee: bool,
     ingress_end: Option<u64>,
     created_at_time: Option<u64>,
-) -> Result<(ConstructionPayloadsResponse, Tokens), RosettaError> {
+) -> Result<(ConstructionPayloadsResponse, Tokens), RosettaError>
+where
+    Arc<T>: RosettaSupportedKeyPair,
+{
     let mut all_ops = Vec::new();
     let mut dry_run_ops = Vec::new();
     let mut all_sender_account_ids = Vec::new();
@@ -207,14 +212,17 @@ pub async fn prepare_multiple_txn(
     .map(|resp| (resp, fee_icpts))
 }
 
-pub async fn prepare_txn(
+pub async fn prepare_txn<T: RosettaSupportedKeyPair>(
     ros: &RosettaApiHandle,
     operation: Operation,
-    sender_keypair: Arc<EdKeypair>,
+    sender_keypair: Arc<T>,
     accept_suggested_fee: bool,
     ingress_end: Option<u64>,
     created_at_time: Option<u64>,
-) -> Result<(ConstructionPayloadsResponse, Tokens), RosettaError> {
+) -> Result<(ConstructionPayloadsResponse, Tokens), RosettaError>
+where
+    Arc<T>: RosettaSupportedKeyPair,
+{
     prepare_multiple_txn(
         ros,
         &[RequestInfo {
@@ -228,11 +236,14 @@ pub async fn prepare_txn(
     .await
 }
 
-pub async fn sign_txn(
+pub async fn sign_txn<T>(
     ros: &RosettaApiHandle,
-    keypairs: &[Arc<EdKeypair>],
+    keypairs: &[Arc<T>],
     payloads: ConstructionPayloadsResponse,
-) -> Result<ConstructionCombineResponse, RosettaError> {
+) -> Result<ConstructionCombineResponse, RosettaError>
+where
+    Arc<T>: RosettaSupportedKeyPair,
+{
     let mut keypairs_map = HashMap::new();
     for kp in keypairs {
         let pid = principal_id_from_public_key(&to_public_key(kp)).unwrap();
@@ -258,7 +269,15 @@ pub async fn sign_txn(
             Signature {
                 signing_payload: p,
                 public_key: to_public_key(&keypair),
-                signature_type: SignatureType::Ed25519,
+                signature_type: match keypair.get_curve_type() {
+                    CurveType::Edwards25519 => Ok(SignatureType::Ed25519),
+                    CurveType::Secp256K1 => Ok(SignatureType::Ecdsa),
+                    sig_type => Err(ApiError::InvalidRequest(
+                        false,
+                        format!("Sginature Type {} not supported byt rosetta", sig_type).into(),
+                    )),
+                }
+                .unwrap(),
                 hex_bytes,
             }
         })
@@ -277,9 +296,9 @@ pub async fn sign_txn(
 // fee. Otherwise the fee value will be ignored and set to whatever ledger
 // canister wants. In such case we don't do checks if the transaction
 // created matches the one requested.
-pub async fn do_txn(
+pub async fn do_txn<T: RosettaSupportedKeyPair>(
     ros: &RosettaApiHandle,
-    sender_keypair: Arc<EdKeypair>,
+    sender_keypair: Arc<T>,
     operation: Operation,
     accept_suggested_fee: bool,
     ingress_end: Option<u64>,
@@ -291,7 +310,10 @@ pub async fn do_txn(
         Tokens, // charged fee
     ),
     RosettaError,
-> {
+>
+where
+    Arc<T>: RosettaSupportedKeyPair,
+{
     do_multiple_txn(
         ros,
         &[RequestInfo {
@@ -306,9 +328,9 @@ pub async fn do_txn(
 }
 
 // the 'internal' version returning TransactionResults.
-pub async fn do_multiple_txn(
+pub async fn do_multiple_txn<T: RosettaSupportedKeyPair>(
     ros: &RosettaApiHandle,
-    requests: &[RequestInfo],
+    requests: &[RequestInfo<T>],
     accept_suggested_fee: bool,
     ingress_end: Option<u64>,
     created_at_time: Option<u64>,
@@ -319,7 +341,10 @@ pub async fn do_multiple_txn(
         Tokens, // charged fee
     ),
     RosettaError,
-> {
+>
+where
+    Arc<T>: RosettaSupportedKeyPair,
+{
     match do_multiple_txn_submit(
         ros,
         requests,
@@ -353,9 +378,9 @@ pub async fn do_multiple_txn(
 }
 
 // the 'external' version returning TransactionOperationResults.
-pub async fn do_multiple_txn_external(
+pub async fn do_multiple_txn_external<T: RosettaSupportedKeyPair>(
     ros: &RosettaApiHandle,
-    requests: &[RequestInfo],
+    requests: &[RequestInfo<T>],
     accept_suggested_fee: bool,
     ingress_end: Option<u64>,
     created_at_time: Option<u64>,
@@ -366,7 +391,10 @@ pub async fn do_multiple_txn_external(
         Tokens, // charged fee
     ),
     RosettaError,
-> {
+>
+where
+    Arc<T>: RosettaSupportedKeyPair,
+{
     match do_multiple_txn_submit(
         ros,
         requests,
@@ -385,9 +413,9 @@ pub async fn do_multiple_txn_external(
     }
 }
 
-async fn do_multiple_txn_submit(
+async fn do_multiple_txn_submit<T: RosettaSupportedKeyPair>(
     ros: &RosettaApiHandle,
-    requests: &[RequestInfo],
+    requests: &[RequestInfo<T>],
     accept_suggested_fee: bool,
     ingress_end: Option<u64>,
     created_at_time: Option<u64>,
@@ -397,7 +425,10 @@ async fn do_multiple_txn_submit(
         Tokens, // charged fee
     ),
     RosettaError,
-> {
+>
+where
+    Arc<T>: RosettaSupportedKeyPair,
+{
     let (payloads, charged_fee) = prepare_multiple_txn(
         ros,
         requests,
@@ -413,7 +444,10 @@ async fn do_multiple_txn_submit(
         .unwrap()?;
 
     // Verify consistency between requests and construction parse response.
-    fn verify_operations(requests: &[RequestInfo], parse_response: ConstructionParseResponse) {
+    fn verify_operations<T: RosettaSupportedKeyPair>(
+        requests: &[RequestInfo<T>],
+        parse_response: ConstructionParseResponse,
+    ) {
         let rs1: Vec<_> = requests.iter().map(|r| r.request.clone()).collect();
         let rs2 = operations_to_requests(&parse_response.operations, false, DEFAULT_TOKEN_SYMBOL)
             .unwrap();
@@ -482,9 +516,9 @@ async fn do_multiple_txn_submit(
     Ok((submit_res, charged_fee))
 }
 
-pub async fn send_icpts(
+pub async fn send_icpts<T: RosettaSupportedKeyPair>(
     ros: &RosettaApiHandle,
-    keypair: Arc<EdKeypair>,
+    keypair: Arc<T>,
     dst: AccountIdentifier,
     amount: Tokens,
 ) -> Result<
@@ -494,13 +528,16 @@ pub async fn send_icpts(
         Tokens, // charged fee
     ),
     RosettaError,
-> {
+>
+where
+    Arc<T>: RosettaSupportedKeyPair,
+{
     send_icpts_with_window(ros, keypair, dst, amount, None, None).await
 }
 
-pub async fn send_icpts_with_window(
+pub async fn send_icpts_with_window<T: RosettaSupportedKeyPair>(
     ros: &RosettaApiHandle,
-    keypair: Arc<EdKeypair>,
+    keypair: Arc<T>,
     dst: AccountIdentifier,
     amount: Tokens,
     ingress_end: Option<u64>,
@@ -512,9 +549,11 @@ pub async fn send_icpts_with_window(
         Tokens, // charged fee
     ),
     RosettaError,
-> {
-    let public_key_der =
-        ic_canister_client_sender::ed25519_public_key_to_der(keypair.public_key.to_vec());
+>
+where
+    Arc<T>: RosettaSupportedKeyPair,
+{
+    let public_key_der = ic_canister_client_sender::ed25519_public_key_to_der(keypair.get_pb_key());
 
     let from: AccountIdentifier = PrincipalId::new_self_authenticating(&public_key_der).into();
 
@@ -627,4 +666,65 @@ fn compare_accounts(
     let xx = (&x.address, x.sub_account.as_ref().map(|s| &s.address));
     let yy = (&y.address, y.sub_account.as_ref().map(|s| &s.address));
     xx.cmp(&yy)
+}
+
+#[test]
+fn test_keypair_encoding() {
+    //Create keypairs of each type
+    let kp_ed_keypair = EdKeypair::generate_from_u64(100);
+    let kp_secp256k1_key_pair = Secp256k1KeyPair::generate_from_u64(200);
+
+    //Testing the functions of RosettaSupportedKeypair for EdKeyPair
+    assert_eq!(
+        kp_ed_keypair.public_key,
+        kp_ed_keypair.get_pb_key().as_slice()
+    );
+    assert_eq!(kp_ed_keypair.get_curve_type(), CurveType::Edwards25519);
+    let pid = kp_ed_keypair.generate_principal_id().unwrap();
+    //RosettaSupportedKeyPairs supports two encoding types: HEX and DER.
+    let pk_hex_encoded = kp_ed_keypair.hex_encode_pk();
+    let pk_decoded = EdKeypair::hex_decode_pk(&pk_hex_encoded).unwrap();
+    assert_eq!(pk_decoded, kp_ed_keypair.public_key.to_vec());
+    let pk_der_encoded = EdKeypair::der_encode_pk(kp_ed_keypair.get_pb_key()).unwrap();
+    let pk_decoded = EdKeypair::der_decode_pk(pk_der_encoded).unwrap();
+    assert_eq!(pk_decoded, kp_ed_keypair.public_key.to_vec());
+    //See if the principal id is recoverable from the hex encoded public key
+    assert_eq!(EdKeypair::get_principal_id(&pk_hex_encoded).unwrap(), pid);
+
+    //Test the function to make new users of specific key type. Given the same seed the results should be the same
+    let (aid_b, _kp_b, pb_b, pid_b) = make_user_ed25519(100);
+    assert_eq!(aid_b, pid.into());
+    assert_eq!(pb_b, to_public_key(&kp_ed_keypair));
+    assert_eq!(
+        kp_ed_keypair.public_key.to_vec(),
+        from_hex(&pb_b.hex_bytes).unwrap()
+    );
+    assert_eq!(pid_b, pid);
+
+    //Testing the functions of RosettaSupportedKeypair for Secp256k1KeyPair
+    assert_eq!(kp_secp256k1_key_pair.get_curve_type(), CurveType::Secp256K1);
+    let pid = kp_secp256k1_key_pair.generate_principal_id().unwrap();
+    //RosettaSupportedKeyPairs supports two encoding types: HEX and DER.
+    let pk_hex_encoded = kp_secp256k1_key_pair.hex_encode_pk();
+    let pk_decoded = Secp256k1KeyPair::hex_decode_pk(&pk_hex_encoded).unwrap();
+    assert_eq!(pk_decoded, kp_secp256k1_key_pair.get_pb_key());
+    let pk_der_encoded =
+        Secp256k1KeyPair::der_encode_pk(kp_secp256k1_key_pair.get_pb_key()).unwrap();
+    let pk_decoded = Secp256k1KeyPair::der_decode_pk(pk_der_encoded).unwrap();
+    assert_eq!(pk_decoded, kp_secp256k1_key_pair.get_pb_key());
+    //See if the principal id is recoverable from the hex encoded public key
+    assert_eq!(
+        Secp256k1KeyPair::get_principal_id(&pk_hex_encoded).unwrap(),
+        pid
+    );
+
+    //Test the function to make new users of specific key type. Given the same seed the results should be the same
+    let (aid_b, _kp_b, pb_b, pid_b) = make_user_ecdsa_secp256k1(200);
+    assert_eq!(aid_b, pid.into());
+    assert_eq!(pb_b, to_public_key(&kp_secp256k1_key_pair));
+    assert_eq!(
+        kp_secp256k1_key_pair.get_pb_key(),
+        from_hex(&pb_b.hex_bytes).unwrap()
+    );
+    assert_eq!(pid_b, pid);
 }

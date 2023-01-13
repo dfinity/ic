@@ -17,7 +17,10 @@ end::catalog[] */
 use assert_json_diff::{assert_json_eq, assert_json_include};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::neuron::{DissolveState, Followees};
-use ic_rosetta_api::models::{ConstructionPayloadsResponse, NeuronState, Object, PublicKey};
+use ic_rosetta_api::models::{
+    ConstructionPayloadsResponse, NeuronState, Object, PublicKey, RosettaSupportedKeyPair,
+};
+use ic_rosetta_test_utils::make_user_ecdsa_secp256k1;
 use icp_ledger::{
     protobuf::TipOfChainRequest, tokens_from_proto, AccountBalanceArgs, AccountIdentifier,
     ArchiveOptions, BlockIndex, Certification, LedgerCanisterInitPayload, Operation, Subaccount,
@@ -53,7 +56,7 @@ use ic_rosetta_api::request_types::{
 };
 use ic_rosetta_test_utils::{
     assert_canister_error, assert_ic_error, do_multiple_txn, do_multiple_txn_external, do_txn,
-    make_user, prepare_txn, rosetta_api_serv::RosettaApiHandle, send_icpts, sign_txn,
+    make_user_ed25519, prepare_txn, rosetta_api_serv::RosettaApiHandle, send_icpts, sign_txn,
     to_public_key, EdKeypair, RequestInfo,
 };
 use ic_types::{messages::Blob, CanisterId, PrincipalId};
@@ -94,11 +97,13 @@ pub fn test_everything(env: TestEnv) {
     // let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let minting_address = AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), None);
 
-    let (acc_a, kp_a, _pk_a, _pid_a) = make_user(100);
+    let (acc_a, kp_a, _pk_a, _pid_a) = make_user_ed25519(100);
     let kp_a = Arc::new(kp_a);
-    let (acc_b, kp_b, _pk_b, _pid_b) = make_user(101);
+    let (acc_b, kp_b, _pk_b, _pid_b) = make_user_ed25519(101);
     let kp_b = Arc::new(kp_b);
-
+    let (acc_secp256k1, kp_secp256k1, _pk_secp256k1, _pid_secp256k1) =
+        make_user_ecdsa_secp256k1(200);
+    let kp_secp256k1 = Arc::new(kp_secp256k1);
     let mut ledger_balances = HashMap::new();
     let acc1 = hex2addr("35548ec29e9d85305850e87a2d2642fe7214ff4bb36334070deafc3345c3b127");
     let acc2 = hex2addr("42a3eb61d549dc9fe6429ce2361ec60a569b8befe43eb15a3fc5c88516711bc5");
@@ -118,6 +123,7 @@ pub fn test_everything(env: TestEnv) {
 
     ledger_balances.insert(acc_a, Tokens::from_e8s(200_000_000_000));
     ledger_balances.insert(acc_b, Tokens::new(1000, 0).unwrap());
+    ledger_balances.insert(acc_secp256k1, Tokens::from_e8s(200_000_000_000));
 
     let one_year_from_now = 60 * 60 * 24 * 365
         + std::time::SystemTime::now()
@@ -541,6 +547,9 @@ pub fn test_everything(env: TestEnv) {
         let balance = get_balance(&ledger, acc1).await;
         assert_eq!(balance, Tokens::from_e8s(100_000_000_001));
 
+        let balance = get_balance(&ledger, acc_secp256k1).await;
+        assert_eq!(balance, Tokens::from_e8s(200_000_000_000));
+
         let (_cert, tip_idx) = get_tip(&ledger).await;
 
         info!(log, "Starting rosetta-api");
@@ -591,6 +600,15 @@ pub fn test_everything(env: TestEnv) {
         test_derive(&rosetta_api_serv).await;
         info!(log, "Test make transaction");
         test_make_transaction(&rosetta_api_serv, &ledger, acc_a, Arc::clone(&kp_a)).await;
+        //Test make transaction with secp256k1 keypair
+        info!(log, "Test make transaction (secp256k1)");
+        test_make_transaction(
+            &rosetta_api_serv,
+            &ledger,
+            acc_secp256k1,
+            Arc::clone(&kp_secp256k1),
+        )
+        .await;
         info!(log, "Test wrong key");
         test_wrong_key(&rosetta_api_serv, acc_a, Arc::clone(&kp_a)).await;
         info!(log, "Test no funds");
@@ -719,7 +737,7 @@ pub fn test_everything(env: TestEnv) {
             neuron,
             ..
         } = neuron_tests.get_neuron_for_test("Test disburse to custom recipient");
-        let (recipient, _, _, _) = make_user(102);
+        let (recipient, _, _, _) = make_user_ed25519(102);
         test_disburse(
             &rosetta_api_serv,
             &ledger_for_governance,
@@ -1125,7 +1143,7 @@ async fn test_derive(ros: &RosettaApiHandle) {
 }
 
 async fn test_derive_ledger_address(ros: &RosettaApiHandle) {
-    let (acc, _kp, pk, _pid) = make_user(5);
+    let (acc, _kp, pk, _pid) = make_user_ed25519(5);
     let derived = ros.construction_derive(pk).await.unwrap().unwrap();
     assert_eq!(
         acc.to_hex(),
@@ -1135,7 +1153,7 @@ async fn test_derive_ledger_address(ros: &RosettaApiHandle) {
 }
 
 async fn test_derive_neuron_address(ros: &RosettaApiHandle) {
-    let (_acc, _kp, pk, pid) = make_user(6);
+    let (_acc, _kp, pk, pid) = make_user_ed25519(6);
     let derived = ros.neuron_derive(pk).await.unwrap().unwrap();
 
     let account_id = derived.account_identifier.unwrap();
@@ -1162,14 +1180,16 @@ async fn test_derive_neuron_address(ros: &RosettaApiHandle) {
 
 // Make a transaction through rosetta-api and verify that it landed on the
 // blockchain
-async fn test_make_transaction(
+async fn test_make_transaction<T: RosettaSupportedKeyPair>(
     ros: &RosettaApiHandle,
     ledger: &Canister<'_>,
     acc: AccountIdentifier,
-    key_pair: Arc<EdKeypair>,
-) {
+    key_pair: Arc<T>,
+) where
+    Arc<T>: RosettaSupportedKeyPair,
+{
     let src_balance_before = get_balance(ledger, acc).await;
-    let (dst_acc, _kp, _pk, _pid) = make_user(1050);
+    let (dst_acc, _kp, _pk, _pid) = make_user_ecdsa_secp256k1(1050);
     let dst_balance_before = Tokens::from_e8s(
         ros.balance(dst_acc).await.unwrap().unwrap().balances[0]
             .value
@@ -1250,7 +1270,7 @@ async fn check_balance(
 
 // Sign a transaction with wrong key and check if it gets rejected
 async fn test_wrong_key(ros: &RosettaApiHandle, acc: AccountIdentifier, key_pair: Arc<EdKeypair>) {
-    let (_acc, wrong_kp, _wrong_pk, _pid) = make_user(1052);
+    let (_acc, wrong_kp, _wrong_pk, _pid) = make_user_ed25519(1052);
     let t = Operation::Transfer {
         from: acc,
         to: acc_id(1051),
@@ -1272,7 +1292,7 @@ async fn test_wrong_key(ros: &RosettaApiHandle, acc: AccountIdentifier, key_pair
 }
 
 async fn test_no_funds(ros: &RosettaApiHandle, funding_key_pair: Arc<EdKeypair>) {
-    let (acc1, keypair1, _, _) = make_user(9275456);
+    let (acc1, keypair1, _, _) = make_user_ed25519(9275456);
     let keypair1 = Arc::new(keypair1);
     let acc2 = acc_id(598620493);
 
@@ -1300,7 +1320,7 @@ async fn test_no_funds(ros: &RosettaApiHandle, funding_key_pair: Arc<EdKeypair>)
     assert_canister_error(&err, 750, "account doesn't have enough funds");
 
     // and now try to make a transfer from an empty account
-    let (_, empty_acc_kp, _, _) = make_user(434561);
+    let (_, empty_acc_kp, _, _) = make_user_ed25519(434561);
     let err = send_icpts(ros, Arc::new(empty_acc_kp), acc2, Tokens::from_e8s(100))
         .await
         .unwrap_err();
@@ -1308,7 +1328,7 @@ async fn test_no_funds(ros: &RosettaApiHandle, funding_key_pair: Arc<EdKeypair>)
 }
 
 async fn test_ingress_window(ros: &RosettaApiHandle, funding_key_pair: Arc<EdKeypair>) {
-    let (acc1, _keypair1, _, _) = make_user(42);
+    let (acc1, _keypair1, _, _) = make_user_ed25519(42);
 
     let now = ic_types::time::current_time();
     let expiry = now + Duration::from_secs(24 * 60 * 60);
@@ -1343,7 +1363,7 @@ async fn test_ingress_window(ros: &RosettaApiHandle, funding_key_pair: Arc<EdKey
 }
 
 async fn test_wrong_canister_id(env: &TestEnv, node_url: Url, root_key_blob: Option<&Blob>) {
-    let (_acc1, kp, _pk, pid) = make_user(1);
+    let (_acc1, kp, _pk, pid) = make_user_ed25519(1);
 
     let some_can_id = CanisterId::new(pid).unwrap();
     let rosetta_api_bin_path = rosetta_api_bin_path(env);
@@ -1378,9 +1398,9 @@ async fn test_multiple_transfers(
     acc: AccountIdentifier,
     key_pair: Arc<EdKeypair>,
 ) {
-    let (dst_acc1, dst_acc1_kp, _pk, _pid) = make_user(1100);
-    let (dst_acc2, dst_acc2_kp, _pk, _pid) = make_user(1101);
-    let (dst_acc3, _kp, _pk, _pid) = make_user(1102);
+    let (dst_acc1, dst_acc1_kp, _pk, _pid) = make_user_ed25519(1100);
+    let (dst_acc2, dst_acc2_kp, _pk, _pid) = make_user_ed25519(1101);
+    let (dst_acc3, _kp, _pk, _pid) = make_user_ed25519(1102);
 
     let amount1 = Tokens::new(3, 0).unwrap();
     let amount2 = Tokens::new(2, 0).unwrap();
@@ -1466,9 +1486,9 @@ async fn test_multiple_transfers_fail(
     acc: AccountIdentifier,
     key_pair: Arc<EdKeypair>,
 ) {
-    let (dst_acc1, dst_acc1_kp, _pk, _pid) = make_user(1200);
-    let (dst_acc2, dst_acc2_kp, _pk, _pid) = make_user(1201);
-    let (dst_acc3, _kp, _pk, _pid) = make_user(1202);
+    let (dst_acc1, dst_acc1_kp, _pk, _pid) = make_user_ed25519(1200);
+    let (dst_acc2, dst_acc2_kp, _pk, _pid) = make_user_ed25519(1201);
+    let (dst_acc3, _kp, _pk, _pid) = make_user_ed25519(1202);
 
     let amount1 = Tokens::new(3, 0).unwrap();
     let amount2 = Tokens::new(2, 0).unwrap();
@@ -1535,7 +1555,7 @@ async fn test_staking(
     acc: AccountIdentifier,
     key_pair: Arc<EdKeypair>,
 ) -> (AccountIdentifier, Arc<EdKeypair>) {
-    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1300);
+    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user_ed25519(1300);
     let dst_acc_kp = Arc::new(dst_acc_kp);
     let neuron_index = 2;
 
@@ -1633,7 +1653,7 @@ async fn test_staking_raw(
     acc: AccountIdentifier,
     key_pair: Arc<EdKeypair>,
 ) -> (AccountIdentifier, Arc<EdKeypair>) {
-    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1300);
+    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user_ed25519(1300);
     let dst_acc_kp = Arc::new(dst_acc_kp);
     let neuron_index = 2;
 
@@ -1978,7 +1998,7 @@ async fn raw_construction(ros: &RosettaApiHandle, operation: &str, req: Value) -
     output
 }
 
-fn sign(payload: &Value, keypair: &Arc<EdKeypair>) -> Value {
+fn sign<T: RosettaSupportedKeyPair>(payload: &Value, keypair: &Arc<T>) -> Value {
     let hex_bytes: &str = payload.get("hex_bytes").unwrap().as_str().unwrap();
     let bytes = from_hex(hex_bytes).unwrap();
     let signature_bytes = keypair.sign(&bytes);
@@ -1991,7 +2011,7 @@ async fn test_staking_failure(
     acc: AccountIdentifier,
     key_pair: Arc<EdKeypair>,
 ) {
-    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1301);
+    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user_ed25519(1301);
     let dst_acc_kp = Arc::new(dst_acc_kp);
     let neuron_index = 2;
 
@@ -2184,7 +2204,7 @@ async fn test_add_hot_key(
     key_pair: Arc<EdKeypair>,
     neuron_index: u64,
 ) -> Result<(), ic_rosetta_api::models::Error> {
-    let (_, _, pk, pid) = make_user(1400);
+    let (_, _, pk, pid) = make_user_ed25519(1400);
 
     let r = do_multiple_txn(
         ros,
@@ -2258,7 +2278,7 @@ async fn test_remove_hotkey(
     let _neuron_controller = neuron_info.principal_id;
 
     // Add hot key.
-    let (_hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user(6000);
+    let (_hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user_ed25519(6000);
     do_multiple_txn(
         ros,
         &[RequestInfo {
@@ -2524,7 +2544,7 @@ async fn test_staking_flow(
 ) {
     let (_, tip_idx) = get_tip(ledger).await;
     let balance_before = get_balance(ledger, test_account).await;
-    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1400);
+    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user_ed25519(1400);
     let dst_acc_kp = Arc::new(dst_acc_kp);
 
     let staked_amount = Tokens::new(1, 0).unwrap();
@@ -2621,7 +2641,7 @@ async fn test_staking_flow_two_txns(
     let (_, tip_idx) = get_tip(ledger).await;
     let balance_before = get_balance(ledger, test_account).await;
 
-    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1401);
+    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user_ed25519(1401);
     let dst_acc_kp = Arc::new(dst_acc_kp);
 
     let staked_amount = Tokens::new(1, 0).unwrap();
@@ -3172,7 +3192,7 @@ async fn test_neuron_info_with_hotkey(
     let neuron_controller = neuron_info.principal_id;
 
     // Add hotkey.
-    let (hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user(5000);
+    let (hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user_ed25519(5000);
     do_multiple_txn(
         ros,
         &[RequestInfo {
@@ -3281,7 +3301,7 @@ async fn test_neuron_info_with_hotkey_raw(
     let neuron_controller = neuron_info.principal_id;
 
     // Add hotkey.
-    let (hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user(5000);
+    let (hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user_ed25519(5000);
     do_multiple_txn(
         ros,
         &[RequestInfo {
@@ -3608,7 +3628,7 @@ async fn test_follow_with_hotkey(
     let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
 
     // Add hotkey.
-    let (hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user(5010);
+    let (hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user_ed25519(5010);
     do_multiple_txn(
         ros,
         &[RequestInfo {
@@ -3700,7 +3720,7 @@ async fn test_follow_with_hotkey_raw(
     let key_pair: Arc<EdKeypair> = neuron_info.key_pair.into();
 
     // Add hotkey.
-    let (hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user(5010);
+    let (hotkey_acc, hotkey_keypair, hotkey_pk, _) = make_user_ed25519(5010);
     do_multiple_txn(
         ros,
         &[RequestInfo {
@@ -3983,7 +4003,7 @@ async fn test_follow_too_many(
 
 // Create neurons to follow.
 fn create_neuron(id: u64) -> Neuron {
-    let (_, _, pk, pid) = make_user(10_000 + id);
+    let (_, _, pk, pid) = make_user_ed25519(10_000 + id);
     let created_timestamp_seconds = (SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
         - Duration::from_secs(60 * 60 * 24 * 365))
     .as_secs();
@@ -4142,7 +4162,7 @@ impl NeuronTestsSetup {
         neuron_subaccount_identifier: u64,
         setup: impl FnOnce(&mut Neuron),
     ) {
-        let (account_id, key_pair, public_key, principal_id) = make_user(self.seed);
+        let (account_id, key_pair, public_key, principal_id) = make_user_ed25519(self.seed);
 
         let created_timestamp_seconds = (SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
             - Duration::from_secs(60 * 60 * 24 * 365))
