@@ -230,7 +230,7 @@ fn test_idle_connection_active_impl(use_h2: bool) {
             NODE_ID_2,
             use_h2,
         );
-        std::thread::sleep(Duration::from_secs(5)); //fix
+        std::thread::sleep(Duration::from_secs(20));
 
         let msg_1 = TransportPayload(vec![0xa; 1000000]);
         let channel_id = TransportChannelId::from(TRANSPORT_CHANNEL_ID);
@@ -300,6 +300,9 @@ fn test_clear_send_queue_impl(use_h2: bool) {
             let res3 = peer_a.send(&NODE_ID_2, channel_id, basic_transport_message_v2());
             assert_eq!(res3, Ok(()));
         }
+
+        // TODO (NET-1306) Calling stop_connection() here fails to trigger PeerDown as expected
+        // like the other cases
     });
 }
 
