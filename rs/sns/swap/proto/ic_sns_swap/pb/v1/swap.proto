@@ -731,3 +731,11 @@ message ErrorRefundIcpResponse {
     Err err = 2;
   }
 }
+
+// Request struct for the method `get_lifecycle`
+message GetLifecycleRequest {}
+
+// Response struct for the method `get_lifecycle`
+message GetLifecycleResponse {
+  optional Lifecycle lifecycle = 1;
+}

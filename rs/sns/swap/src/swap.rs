@@ -3,10 +3,11 @@ use crate::pb::v1::{
     set_mode_call_result, settle_community_fund_participation_result, sns_neuron_recipe::Investor,
     BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState,
     DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
-    GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalResponse, Init, Lifecycle,
-    OpenRequest, OpenResponse, Params, RefreshBuyerTokensResponse, RestoreDappControllersResponse,
-    SetDappControllersCallResult, SetModeCallResult, SettleCommunityFundParticipationResult,
-    SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
+    GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalResponse, GetLifecycleRequest,
+    GetLifecycleResponse, Init, Lifecycle, OpenRequest, OpenResponse, Params,
+    RefreshBuyerTokensResponse, RestoreDappControllersResponse, SetDappControllersCallResult,
+    SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult,
+    TransferableAmount,
 };
 // TODO(NNS1-1589): Get these from authoritative source.
 
@@ -1630,6 +1631,13 @@ impl Swap {
             buyers_total: self.participant_total_icp_e8s(),
         }
     }
+
+    /// Return the current lifecycle stage (e.g. Open, Committed, etc)
+    pub fn get_lifecycle(&self, _request: &GetLifecycleRequest) -> GetLifecycleResponse {
+        GetLifecycleResponse {
+            lifecycle: Some(self.lifecycle),
+        }
+    }
 }
 
 pub fn is_valid_principal(p: &str) -> bool {
@@ -2409,6 +2417,36 @@ mod tests {
             "Looks like we can support at least {} Community Fund neurons (among {} principals).",
             safe_len * neurons_per_principal,
             safe_len,
+        );
+    }
+
+    #[test]
+    fn test_get_lifecycle() {
+        let mut swap = Swap::default();
+        let request = GetLifecycleRequest {};
+
+        swap.lifecycle = Lifecycle::Pending as i32;
+        assert_eq!(
+            swap.get_lifecycle(&request).lifecycle,
+            Some(Lifecycle::Pending as i32)
+        );
+
+        swap.lifecycle = Lifecycle::Open as i32;
+        assert_eq!(
+            swap.get_lifecycle(&request).lifecycle,
+            Some(Lifecycle::Open as i32)
+        );
+
+        swap.lifecycle = Lifecycle::Committed as i32;
+        assert_eq!(
+            swap.get_lifecycle(&request).lifecycle,
+            Some(Lifecycle::Committed as i32)
+        );
+
+        swap.lifecycle = Lifecycle::Aborted as i32;
+        assert_eq!(
+            swap.get_lifecycle(&request).lifecycle,
+            Some(Lifecycle::Aborted as i32)
         );
     }
 }

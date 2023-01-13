@@ -1341,6 +1341,31 @@ pub mod error_refund_icp_response {
         Err(Err),
     }
 }
+/// Request struct for the method `get_lifecycle`
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetLifecycleRequest {}
+/// Response struct for the method `get_lifecycle`
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetLifecycleResponse {
+    #[prost(enumeration = "Lifecycle", optional, tag = "1")]
+    pub lifecycle: ::core::option::Option<i32>,
+}
 /// Lifecycle states of the swap canister. The details of their meanings
 /// are provided in the documentation of the `Swap` message.
 #[derive(
