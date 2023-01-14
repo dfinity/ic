@@ -28,6 +28,8 @@ use ic_sns_governance::pb::v1::{
     NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalId,
 };
 use ic_sns_governance::types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
+use std::collections::HashSet;
+use strum::IntoEnumIterator;
 
 pub mod fixtures;
 
@@ -1306,5 +1308,33 @@ fn test_adding_invalid_permissions_fails() {
         &neuron,
         target,
         NeuronPermissionList::empty(),
+    );
+}
+
+/// Test that the list_nervous_system_functions API always contains entries for
+/// native nervous system functions (i.e. functions that correspond to Proposal::Action(_))
+#[test]
+fn test_list_nervous_system_function_contain_all_proposal_actions() {
+    let canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    let nervous_system_functions = canister_fixture
+        .governance
+        .list_nervous_system_functions()
+        .functions;
+
+    let function_ids = nervous_system_functions
+        .iter()
+        .map(|function| function.id)
+        .collect::<HashSet<u64>>();
+
+    let missing_actions: Vec<Action> = Action::iter()
+        .filter(|action| !function_ids.contains(&(u64::from(action))))
+        .collect();
+
+    assert!(
+        missing_actions.is_empty(),
+        "Governance::list_nervous_system_functions is missing \
+         native proposal actions in response {:?}",
+        missing_actions
     );
 }

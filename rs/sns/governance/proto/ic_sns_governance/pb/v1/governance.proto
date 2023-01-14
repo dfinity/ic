@@ -429,7 +429,7 @@ message Proposal {
     // Id = 7.
     UpgradeSnsToNextVersion upgrade_sns_to_next_version = 11;
 
-    // Modify values of SnsMetada.
+    // Modify values of SnsMetadata.
     //
     // Id = 8
     ManageSnsMetadata manage_sns_metadata = 12;

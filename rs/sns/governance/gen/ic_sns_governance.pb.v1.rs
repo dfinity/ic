@@ -485,7 +485,9 @@ pub mod proposal {
     ///
     /// See `impl From<&Action> for u64` in src/types.rs for the implementation
     /// of this mapping.
-    #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
+    #[derive(
+        candid::CandidType, candid::Deserialize, comparable::Comparable, strum_macros::EnumIter,
+    )]
     #[allow(clippy::large_enum_variant)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum Action {
@@ -539,7 +541,7 @@ pub mod proposal {
         /// Id = 7.
         #[prost(message, tag = "11")]
         UpgradeSnsToNextVersion(super::UpgradeSnsToNextVersion),
-        /// Modify values of SnsMetada.
+        /// Modify values of SnsMetadata.
         ///
         /// Id = 8
         #[prost(message, tag = "12")]

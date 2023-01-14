@@ -164,7 +164,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.type_attribute(
         "ic_sns_governance.pb.v1.Proposal.action",
         [
-            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]",
+            "#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, strum_macros::EnumIter)]",
             "#[allow(clippy::large_enum_variant)]",
         ]
         .join(" "),
