@@ -2446,7 +2446,7 @@ impl Governance {
     }
 
     /// Validates and renders a proposal.
-    /// If a proposal is valid it returns the rendering for the Proposals's payload.
+    /// If a proposal is valid it returns the rendering for the Proposal's payload.
     /// If the proposal is invalid it returns a descriptive error.
     async fn validate_and_render_proposal(
         &mut self,

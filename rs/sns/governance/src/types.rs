@@ -1,39 +1,36 @@
 use crate::{
     governance::{log_prefix, Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
+    logs::{ERROR, INFO},
     pb::v1::{
         claim_swap_neurons_request::NeuronParameters,
         get_neuron_response,
-        governance::{self, neuron_in_flight_command, SnsMetadata},
+        governance::{
+            self, neuron_in_flight_command, neuron_in_flight_command::SyncCommand, SnsMetadata,
+        },
         governance_error::ErrorType,
         manage_neuron, manage_neuron_response,
+        manage_neuron_response::StakeMaturityResponse,
         manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse},
         nervous_system_function::FunctionType,
         proposal::Action,
         DefaultFollowees, Empty, ExecuteGenericNervousSystemFunction, GovernanceError,
         ManageNeuronResponse, NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId,
+        NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId, RewardEvent,
+        Vote, VotingRewardsParameters,
     },
     proposal::ValidGenericNervousSystemFunction,
 };
-
 use async_trait::async_trait;
-
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_canister_log::log;
 use ic_ledger_core::{tokens::Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
 use ic_nervous_system_common::{validate_proposal_url, NervousSystemError};
-
-use crate::logs::{ERROR, INFO};
-use crate::pb::v1::governance::neuron_in_flight_command::SyncCommand;
-use crate::pb::v1::manage_neuron_response::StakeMaturityResponse;
-use crate::pb::v1::{
-    NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId, RewardEvent, Vote,
-    VotingRewardsParameters,
-};
-use ic_canister_log::log;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryFrom,
     fmt,
 };
+use strum::IntoEnumIterator;
 
 pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
 
@@ -918,6 +915,102 @@ impl NervousSystemFunction {
     }
 }
 
+impl From<Action> for NervousSystemFunction {
+    fn from(action: Action) -> Self {
+        match action {
+            Action::Unspecified(_) => NervousSystemFunction {
+                id: native_action_ids::UNSPECIFIED,
+                name: "Unspecified".to_string(),
+                description: Some(
+                    "Catch-all w.r.t to following for all types of proposals.".to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            Action::Motion(_) => NervousSystemFunction {
+                id: native_action_ids::MOTION,
+                name: "Motion".to_string(),
+                description: Some(
+                    "Side-effect-less proposals to set general governance direction.".to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            Action::ManageNervousSystemParameters(_) => NervousSystemFunction {
+                id: native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS,
+                name: "Manage nervous system parameters".to_string(),
+                description: Some(
+                    "Proposal to change the core parameters of SNS governance.".to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            Action::UpgradeSnsControlledCanister(_) => NervousSystemFunction {
+                id: native_action_ids::UPGRADE_SNS_CONTROLLER_CANISTER,
+                name: "Upgrade SNS controlled canister".to_string(),
+                description: Some(
+                    "Proposal to upgrade the wasm of an SNS controlled canister.".to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            Action::AddGenericNervousSystemFunction(_) => NervousSystemFunction {
+                id: native_action_ids::ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+                name: "Add nervous system function".to_string(),
+                description: Some(
+                    "Proposal to add a new, user-defined, nervous system function:\
+                     a canister call which can then be executed by proposal."
+                        .to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            Action::RemoveGenericNervousSystemFunction(_) => NervousSystemFunction {
+                id: native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+                name: "Remove nervous system function".to_string(),
+                description: Some(
+                    "Proposal to remove a user-defined nervous system function,\
+                     which will be no longer executable by proposal."
+                        .to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            Action::ExecuteGenericNervousSystemFunction(_) => NervousSystemFunction {
+                id: native_action_ids::EXECUTE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
+                name: "Execute nervous system function".to_string(),
+                description: Some(
+                    "Proposal to execute a user-defined nervous system function,\
+                     previously added by an AddNervousSystemFunction proposal. A canister \
+                     call will be made when executed."
+                        .to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            Action::UpgradeSnsToNextVersion(_) => NervousSystemFunction {
+                id: native_action_ids::UPGRADE_SNS_TO_NEXT_VERSION,
+                name: "Upgrade SNS to next version".to_string(),
+                description: Some(
+                    "Proposal to upgrade the WASM of a core SNS canister.".to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            Action::ManageSnsMetadata(_) => NervousSystemFunction {
+                id: native_action_ids::MANAGE_SNS_METADATA,
+                name: "Manage SNS metadata".to_string(),
+                description: Some(
+                    "Proposal to change the metadata associated with an SNS.".to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            Action::TransferSnsTreasuryFunds(_) => NervousSystemFunction {
+                id: native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,
+                name: "Transfer SNS treasury funds".to_string(),
+                description: Some(
+                    "Proposal to transfer funds from an SNS Governance controlled treasury \
+                     account"
+                        .to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+        }
+    }
+}
+
 impl manage_neuron::Command {
     pub fn increase_dissolve_delay(additional_dissolve_delay_seconds: u32) -> Self {
         manage_neuron::Command::Configure(manage_neuron::Configure {
@@ -1221,70 +1314,22 @@ impl Action {
     /// be submitted when the heap growth potential is low.
     pub(crate) fn allowed_when_resources_are_low(&self) -> bool {
         match self {
+            // Due to possible need of an emergency upgrade of the dapp
             Action::UpgradeSnsControlledCanister(_) => true,
-            // TODO This line is just to avoid triggering clippy::match-like-matches-macro.
-            // Once we have more cases, it can be deleted (along with this comment).
-            Action::Motion(_) => false,
+            // Due to possible need of an emergency upgrade of the SNS
+            Action::UpgradeSnsToNextVersion(_) => true,
+            // Due to possible need of emergency functions defined as
+            // GenericNervousSystemFunctions
+            Action::ExecuteGenericNervousSystemFunction(_) => true,
             _ => false,
         }
     }
 
-    // Returns the native functions, i.e. the ones that are supported directly by the governance canister.
+    /// Returns the native functions, i.e. the ones that are supported directly by the governance canister.
     pub fn native_functions() -> Vec<NervousSystemFunction> {
-        vec![
-            NervousSystemFunction {
-                id: native_action_ids::UNSPECIFIED,
-                name: "Unspecified".to_string(),
-                description: Some(
-                    "Catch-all w.r.t to following for all types of proposals.".to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            NervousSystemFunction {
-                id: native_action_ids::MOTION,
-                name: "Motion".to_string(),
-                description: Some(
-                    "Side-effect-less proposals to set general governance direction.".to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            NervousSystemFunction {
-                id: native_action_ids::MANAGE_NERVOUS_SYSTEM_PARAMETERS,
-                name: "Manage nervous system parameters".to_string(),
-                description: Some(
-                    "Proposal to change the core parameters of SNS governance.".to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            NervousSystemFunction {
-                id: native_action_ids::UPGRADE_SNS_CONTROLLER_CANISTER,
-                name: "Upgrade SNS controlled canister".to_string(),
-                description: Some(
-                    "Proposal to upgrade the wasm of an SNS controlled canister.".to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            NervousSystemFunction {
-                id: native_action_ids::ADD_GENERIC_NERVOUS_SYSTEM_FUNCTION,
-                name: "Add nervous system function".to_string(),
-                description: Some(
-                    "Proposal to add a new, user-defined, nervous system function:\
-                     a canister call which can then be executed by proposal."
-                        .to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-            NervousSystemFunction {
-                id: native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION,
-                name: "Remove nervous system function".to_string(),
-                description: Some(
-                    "Proposal to remove a user-defined nervous system function,\
-                     which will be no longer executable by proposal."
-                        .to_string(),
-                ),
-                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
-            },
-        ]
+        Self::iter()
+            .map(|action| NervousSystemFunction::from(action))
+            .collect()
     }
 
     // The current set of valid native function ids, for the purposes of following.

@@ -67,8 +67,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
 
         let list_nervous_system_functions_response =
             sns_canisters.list_nervous_system_functions().await;
-        // Initially we should have the 6 native functions
-        assert_eq!(list_nervous_system_functions_response.functions.len(), 6);
+        let functions_length_pre_addition = list_nervous_system_functions_response.functions.len();
 
         let neuron_id = sns_canisters
             .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
@@ -78,8 +77,9 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             .subaccount()
             .expect("Error creating the subaccount");
 
+        let function_id = 1000;
         let nervous_system_function = NervousSystemFunction {
-            id: 1000,
+            id: function_id,
             name: "Call test dapp method".to_string(),
             description: None,
             function_type: Some(FunctionType::GenericNervousSystemFunction(
@@ -110,14 +110,18 @@ fn test_add_remove_and_execute_nervous_system_functions() {
         let list_nervous_system_functions_response =
             sns_canisters.list_nervous_system_functions().await;
         // We should now have an extra function, which we just added.
-        assert_eq!(list_nervous_system_functions_response.functions.len(), 7);
-        assert!(
+        assert_eq!(
+            list_nervous_system_functions_response.functions.len(),
+            functions_length_pre_addition + 1
+        );
+        assert_eq!(
             list_nervous_system_functions_response
                 .functions
-                .get(6)
+                .iter()
+                .find(|function| function.id == function_id)
                 .as_ref()
-                .unwrap()
-                == &&nervous_system_function
+                .unwrap(),
+            &&nervous_system_function
         );
 
         let invalid_value = 5i64;
@@ -125,7 +129,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             title: "An invalid ExecuteNervousSystemFunction call".into(),
             action: Some(Action::ExecuteGenericNervousSystemFunction(
                 ExecuteGenericNervousSystemFunction {
-                    function_id: 1000,
+                    function_id,
                     payload: Encode!(&invalid_value).unwrap(),
                 },
             )),
@@ -149,7 +153,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             title: "A valid ExecuteNervousSystemFunction call".into(),
             action: Some(Action::ExecuteGenericNervousSystemFunction(
                 ExecuteGenericNervousSystemFunction {
-                    function_id: 1000,
+                    function_id,
                     payload: Encode!(&valid_value).unwrap(),
                 },
             )),
@@ -188,7 +192,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             title: "An invalid ExecuteNervousSystemFunction call".into(),
             action: Some(Action::ExecuteGenericNervousSystemFunction(
                 ExecuteGenericNervousSystemFunction {
-                    function_id: 1000,
+                    function_id,
                     payload: Encode!(&valid_value).unwrap(),
                 },
             )),
@@ -209,7 +213,10 @@ fn test_add_remove_and_execute_nervous_system_functions() {
             sns_canisters.list_nervous_system_functions().await;
         // Since we removed the function we should go back to only having the native
         // functions listed, and the removed function should appear in the reserved ids.
-        assert_eq!(list_nervous_system_functions_response.functions.len(), 6);
+        assert_eq!(
+            list_nervous_system_functions_response.functions.len(),
+            functions_length_pre_addition
+        );
         assert_eq!(
             list_nervous_system_functions_response
                 .reserved_ids
