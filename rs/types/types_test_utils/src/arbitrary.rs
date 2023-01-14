@@ -2,6 +2,7 @@ use crate::ids::{canister_test_id, node_test_id, subnet_test_id, user_test_id};
 use ic_types::{
     crypto::{AlgorithmId, KeyPurpose, UserPublicKey},
     messages::{CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response},
+    state_sync::{ChunkInfo, FileInfo},
     time::UNIX_EPOCH,
     xnet::StreamIndex,
     CanisterId, Cycles, Height, IDkgId, NodeId, RegistryVersion, SubnetId, Time, UserId,
@@ -174,5 +175,37 @@ prop_compose! {
       index in 0..max,
     ) -> StreamIndex {
         StreamIndex::from(index)
+    }
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`ChunkInfo`].
+    pub fn chunk_info() (
+        file_index in any::<u32>(),
+        size_bytes in any::<u32>(),
+        offset in any::<u64>(),
+        hash in any::<[u8; 32]>(),
+    ) -> ChunkInfo {
+        ChunkInfo {
+            file_index,
+            size_bytes,
+            offset,
+            hash,
+        }
+    }
+}
+
+prop_compose! {
+    /// Returns an arbitrary [`ChunkInfo`].
+    pub fn file_info() (
+        relative_path in any::<String>(),
+        size_bytes in any::<u64>(),
+        hash in any::<[u8; 32]>(),
+    ) -> FileInfo {
+        FileInfo {
+            relative_path: std::path::PathBuf::from(relative_path),
+            size_bytes,
+            hash,
+        }
     }
 }

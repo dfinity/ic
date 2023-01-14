@@ -9,8 +9,11 @@ pub mod tip;
 pub mod tree_diff;
 pub mod tree_hash;
 
-use crate::state_sync::chunkable::cache::StateSyncCache;
-use crate::tip::{spawn_tip_thread, TipRequest};
+use crate::{
+    manifest::{build_meta_manifest, compute_bundled_manifest, MAX_SUPPORTED_STATE_SYNC_VERSION},
+    state_sync::chunkable::cache::StateSyncCache,
+    tip::{spawn_tip_thread, TipRequest},
+};
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::CanisterId;
 use ic_canonical_state::{
@@ -44,7 +47,7 @@ use ic_types::{
     consensus::certification::Certification,
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
-    state_sync::{FileGroupChunks, Manifest},
+    state_sync::{FileGroupChunks, Manifest, MetaManifest},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
@@ -411,23 +414,52 @@ type StatesMetadata = BTreeMap<Height, StateMetadata>;
 
 type CertificationsMetadata = BTreeMap<Height, CertificationMetadata>;
 
+/// This struct bundles the root hash, manifest and meta-manifest.
+#[derive(Debug, Clone)]
+pub(crate) struct BundledManifest {
+    root_hash: CryptoHashOfState,
+    manifest: Manifest,
+    // `meta_manifest` will be used during state sync in future replica versions.
+    #[allow(dead_code)]
+    meta_manifest: Arc<MetaManifest>,
+}
+
 #[derive(Debug, Default, Clone)]
 struct StateMetadata {
-    // We don't persist the checkpoint layout because we re-create it every
-    // time we discover a checkpoint on disk.
+    /// We don't persist the checkpoint layout because we re-create it every
+    /// time we discover a checkpoint on disk.
     checkpoint_layout: Option<CheckpointLayout<ReadOnly>>,
-    // Manifest and root hash are computed asynchronously, so they are set to
-    // None before the values are computed.
-    root_hash: Option<CryptoHashOfState>,
-    manifest: Option<Manifest>,
-    // The field is set as `None` until we serve a state sync for the first time.
+    /// Manifest and root hash are computed asynchronously, so the bundle is set to
+    /// None before the values are computed.
+    bundled_manifest: Option<BundledManifest>,
+    /// The field is set as `None` until we serve a state sync for the first time.
     state_sync_file_group: Option<Arc<FileGroupChunks>>,
+}
+
+impl StateMetadata {
+    pub fn root_hash(&self) -> Option<&CryptoHashOfState> {
+        self.bundled_manifest
+            .as_ref()
+            .map(|bundled_manifest| &bundled_manifest.root_hash)
+    }
+    pub fn manifest(&self) -> Option<&Manifest> {
+        self.bundled_manifest
+            .as_ref()
+            .map(|bundled_manifest| &bundled_manifest.manifest)
+    }
+    // `meta_manifest` will be used during state sync in future replica versions.
+    #[allow(dead_code)]
+    pub fn meta_manifest(&self) -> Option<Arc<MetaManifest>> {
+        self.bundled_manifest
+            .as_ref()
+            .map(|bundled_manifest| bundled_manifest.meta_manifest.clone())
+    }
 }
 
 impl From<&StateMetadata> for pb::StateMetadata {
     fn from(metadata: &StateMetadata) -> Self {
         Self {
-            manifest: metadata.manifest.as_ref().map(|m| m.clone().into()),
+            manifest: metadata.manifest().map(|m| m.clone().into()),
         }
     }
 }
@@ -440,13 +472,11 @@ impl TryFrom<pb::StateMetadata> for StateMetadata {
             None => Ok(Default::default()),
             Some(manifest) => {
                 let manifest = Manifest::try_from(manifest)?;
-                let root_hash = CryptoHashOfState::from(CryptoHash(
-                    crate::manifest::manifest_hash(&manifest).to_vec(),
-                ));
+                let bundled_manifest = compute_bundled_manifest(manifest);
+
                 Ok(Self {
                     checkpoint_layout: None,
-                    manifest: Some(manifest),
-                    root_hash: Some(root_hash),
+                    bundled_manifest: Some(bundled_manifest),
                     state_sync_file_group: None,
                 })
             }
@@ -1502,6 +1532,9 @@ impl StateManagerImpl {
                 for (h, pb) in pb_meta.by_height {
                     match StateMetadata::try_from(pb) {
                         Ok(meta) => {
+                            if let Some(root_hash) = meta.root_hash() {
+                                info!(log, "Recomputed root hash {:?} when loading state metadata at height {}", root_hash, h);
+                            }
                             map.insert(Height::new(h), meta);
                         }
                         Err(e) => {
@@ -1567,12 +1600,21 @@ impl StateManagerImpl {
                         )
                     });
 
+                let state_sync_version = system_metadata.state_sync_version;
+
+                assert!(
+                    state_sync_version <= MAX_SUPPORTED_STATE_SYNC_VERSION,
+                    "Unable to compute a manifest with version {:?}. Maximum supported StateSync version is {:?}",
+                    state_sync_version,
+                    MAX_SUPPORTED_STATE_SYNC_VERSION
+                );
+
                 let start = Instant::now();
                 let manifest = crate::manifest::compute_manifest(
                     thread_pool,
                     &metrics.manifest_metrics,
                     log,
-                    system_metadata.state_sync_version,
+                    state_sync_version,
                     checkpoint_layout.raw_path(),
                     crate::manifest::DEFAULT_CHUNK_SIZE,
                     manifest_delta,
@@ -1611,26 +1653,35 @@ impl StateManagerImpl {
                     .last_computed_manifest_height
                     .set(checkpoint_layout.height().get() as i64);
 
-                #[cfg(not(feature = "malicious_code"))]
-                let root_hash = CryptoHashOfState::from(CryptoHash(
-                    crate::manifest::manifest_hash(&manifest).to_vec(),
-                ));
-
                 // This is where we maliciously alter the root_hash!
                 #[cfg(feature = "malicious_code")]
-                let root_hash = maliciously_return_wrong_hash(
+                let malicious_root_hash = maliciously_return_wrong_hash(
                     &manifest,
                     log,
                     malicious_flags,
                     checkpoint_layout.height(),
                 );
 
+                let bundled_manifest = compute_bundled_manifest(manifest);
+
+                #[cfg(feature = "malicious_code")]
+                let bundled_manifest = BundledManifest {
+                    root_hash: malicious_root_hash,
+                    ..bundled_manifest
+                };
+
+                info!(
+                    log,
+                    "Computed root hash {:?} of state @{}",
+                    bundled_manifest.root_hash,
+                    checkpoint_layout.height()
+                );
+
                 let mut states = states.write();
 
                 if let Some(metadata) = states.states_metadata.get_mut(&checkpoint_layout.height())
                 {
-                    metadata.root_hash = Some(root_hash);
-                    metadata.manifest = Some(manifest);
+                    metadata.bundled_manifest = Some(bundled_manifest);
                 }
 
                 release_lock_and_persist_metadata(
@@ -1689,7 +1740,7 @@ impl StateManagerImpl {
             .find_map(|checkpointed_height| {
                 let states = self.states.read();
                 let metadata = states.states_metadata.get(checkpointed_height)?;
-                let manifest = metadata.manifest.clone()?;
+                let manifest = metadata.manifest()?.clone();
                 let checkpoint_layout = metadata.checkpoint_layout.clone()?;
                 Some((manifest, checkpoint_layout))
             })
@@ -1721,7 +1772,7 @@ impl StateManagerImpl {
 
     /// Populates appropriate CertificationsMetadata and StatesMetadata for a StateManager
     /// that contains the heights from `states`. A StateMetadata for that state can also
-    /// be provided for a subnet of the heights if available..
+    /// be provided for a subnet of the heights if available.
     fn populate_metadata(
         log: &ReplicaLogger,
         metrics: &StateManagerMetrics,
@@ -1745,24 +1796,20 @@ impl StateManagerImpl {
 
             let metadata = metadatas.remove(&height);
 
-            let root_hash = metadata
-                .as_ref()
-                .and_then(|metadata| metadata.root_hash.clone());
-            let manifest = metadata.and_then(|metadata| metadata.manifest);
+            let bundled_manifest = metadata.and_then(|metadata| metadata.bundled_manifest);
 
-            // Root hash and manifest should either be both None or both Some, but we
-            // make no assumptions and need to recompute if either is missing.
-            if root_hash.is_some() && manifest.is_some() {
+            if bundled_manifest.is_some() {
                 states_metadata.insert(
                     height,
                     StateMetadata {
                         checkpoint_layout: Some(checkpoint_layout.clone()),
-                        manifest,
-                        root_hash,
+                        bundled_manifest,
                         state_sync_file_group: None,
                     },
                 );
             } else {
+                // It is possible that the replica did not finish manifest computation before restarting.
+                // In this case, we need to send a request of manifest computation for this checkpoint.
                 compute_manifest_requests.push(ComputeManifestRequest::Compute {
                     checkpoint_layout: checkpoint_layout.clone(),
                     manifest_delta: None,
@@ -1772,8 +1819,7 @@ impl StateManagerImpl {
                     height,
                     StateMetadata {
                         checkpoint_layout: Some(checkpoint_layout.clone()),
-                        manifest: None,
-                        root_hash: None,
+                        bundled_manifest: None,
                         state_sync_file_group: None,
                     },
                 );
@@ -1874,14 +1920,14 @@ impl StateManagerImpl {
             .read()
             .states_metadata
             .iter()
-            .find_map(|(h, metadata)| {
-                match (metadata.root_hash.as_ref(), metadata.manifest.as_ref()) {
+            .find_map(
+                |(h, metadata)| match (metadata.root_hash(), metadata.manifest()) {
                     (Some(hash), Some(manifest)) if hash == root_hash => {
                         Some((*h, manifest.clone()))
                     }
                     _ => None,
-                }
-            })
+                },
+            )
     }
 
     fn on_synced_checkpoint(
@@ -1949,12 +1995,20 @@ impl StateManagerImpl {
 
         self.metrics.state_size.set(state_size_bytes);
 
+        // The computation of meta_manifest is temporary in this replica version.
+        // In future versions, meta_manifest will also be part of StateSyncMessage
+        // and can be directly populated here without extra computation.
+        let meta_manifest = build_meta_manifest(&manifest);
+
         states.states_metadata.insert(
             height,
             StateMetadata {
-                manifest: Some(manifest),
                 checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
-                root_hash: Some(root_hash),
+                bundled_manifest: Some(BundledManifest {
+                    root_hash,
+                    manifest,
+                    meta_manifest: Arc::new(meta_manifest),
+                }),
                 state_sync_file_group: None,
             },
         );
@@ -2224,7 +2278,7 @@ impl StateManager for StateManagerImpl {
                     None => StateHashError::Transient(StateNotCommittedYet(height)),
                 },
             )
-            .map(|metadata| metadata.root_hash.clone())
+            .map(|metadata| metadata.root_hash().cloned())
             .transpose()
             .unwrap_or(Err(StateHashError::Transient(HashNotComputedYet(height))))
     }
@@ -2707,7 +2761,7 @@ impl StateManager for StateManagerImpl {
                         .iter()
                         .rev()
                         .find_map(|(base_height, state_metadata)| {
-                            let base_manifest = state_metadata.manifest.clone()?;
+                            let base_manifest = state_metadata.manifest()?.clone();
                             Some((base_manifest, *base_height))
                         })
                         .map(|(base_manifest, base_height)| {
@@ -2865,8 +2919,7 @@ impl StateManager for StateManagerImpl {
                         height,
                         StateMetadata {
                             checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
-                            manifest: None,
-                            root_hash: None,
+                            bundled_manifest: None,
                             state_sync_file_group: None,
                         },
                     );

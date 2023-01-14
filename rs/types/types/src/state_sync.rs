@@ -44,7 +44,8 @@
 //!                  · chunk_hash
 //! ```
 //!
-//! * The hash of the whole manifest is computed by hashing the file table:
+//! * When the manifest version is less than or equal to `STATE_SYNC_V1`,
+//!   the hash of the whole manifest is computed by hashing the file table:
 //! ```text
 //!   manifest_hash := hash(dsep("ic-state-manifest")
 //!                    · version as u32
@@ -61,7 +62,9 @@
 //! where
 //! ```text
 //! dsep(seq) = byte(len(seq)) · seq
-//! ``
+//! ```
+//! * When the manifest version is greater than or equal to `STATE_SYNC_V2`,
+//!   the hash of the meta-manifest functions as the manifest hash.
 pub mod proto;
 
 use crate::chunkable::ChunkId;
@@ -173,6 +176,30 @@ pub struct ManifestData {
     pub version: u32,
     pub file_table: Vec<FileInfo>,
     pub chunk_table: Vec<ChunkInfo>,
+}
+
+/// MetaManifest describes how the manifest is encoded, split and hashed.
+///
+/// The meta-manifest is built in the following way:
+///     1. Use protobuf to encode the manifest into raw bytes
+///     2. Split the encoded manifest into chunks of `DEFAULT_CHUNK_SIZE` bytes, called sub-manifests.
+///     3. Hash each sub-manifest and collect their hashes
+///
+/// The hash of meta-manifest is computed by hashing the version, the length and `sub_manifest_hashes`:
+/// ```text
+///   meta_manifest_hash := hash(dsep("ic-state-meta-manifest")
+///                         · version as u32
+///                         · len(sub_manifest_hashes) as u32
+///                         · sub_manifest_hashes
+///                         )
+///   sub_manifest_hash  := hash(dsep("ic-state-sub-manifest") · encoded_manifest[offset:offset + size_bytes])
+/// ```
+///
+/// The `meta_manifest_hash` is used as the manifest hash when the manifest version is greater than or equal to `STATE_SYNC_V2`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct MetaManifest {
+    pub version: u32,
+    pub sub_manifest_hashes: Vec<[u8; 32]>,
 }
 
 impl fmt::Display for Manifest {
