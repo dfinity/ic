@@ -73,8 +73,8 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
                 .states_metadata
                 .iter()
                 .find_map(|(height, metadata)| {
-                    if metadata.root_hash.as_ref() == Some(&msg_id.hash) {
-                        let manifest = metadata.manifest.as_ref()?;
+                    if metadata.root_hash() == Some(&msg_id.hash) {
+                        let manifest = metadata.manifest()?;
                         let checkpoint_root = self.state_layout.checkpoint(*height).ok()?;
                         let state_sync_file_group = match &metadata.state_sync_file_group {
                             Some(value) => value.clone(),
@@ -113,7 +113,7 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
             .states_metadata
             .iter()
             .any(|(height, metadata)| {
-                *height == msg_id.height && metadata.root_hash.as_ref() == Some(&msg_id.hash)
+                *height == msg_id.height && metadata.root_hash() == Some(&msg_id.hash)
             })
     }
 
@@ -140,11 +140,11 @@ impl ArtifactClient<StateSyncArtifact> for StateManagerImpl {
             .filter_map(|h| {
                 if h > filter.height {
                     let metadata = states.states_metadata.get(&h)?;
-                    let manifest = metadata.manifest.as_ref()?;
+                    let manifest = metadata.manifest()?;
                     let checkpoint_root = self.state_layout.checkpoint(h).ok()?;
                     let msg = StateSyncMessage {
                         height: h,
-                        root_hash: metadata.root_hash.as_ref()?.clone(),
+                        root_hash: metadata.root_hash()?.clone(),
                         checkpoint_root: checkpoint_root.raw_path().to_path_buf(),
                         manifest: manifest.clone(),
                         state_sync_file_group: Default::default(),

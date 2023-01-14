@@ -1,10 +1,11 @@
-use super::{
-    build_file_group_chunks, compute_manifest, diff_manifest, file_chunk_range,
-    filter_out_zero_chunks, hash::ManifestHash, manifest_hash, validate_chunk, validate_manifest,
-    ChunkValidationError, DiffScript, ManifestValidationError, CURRENT_STATE_SYNC_VERSION,
-    DEFAULT_CHUNK_SIZE, MAX_FILE_SIZE_TO_GROUP, STATE_SYNC_V1,
+use crate::manifest::{
+    build_file_group_chunks, build_meta_manifest, compute_manifest, diff_manifest,
+    file_chunk_range, filter_out_zero_chunks, hash::ManifestHash, manifest_hash, manifest_hash_v1,
+    manifest_hash_v2, meta_manifest_hash, validate_chunk, validate_manifest,
+    validate_meta_manifest, validate_sub_manifest, ChunkValidationError, DiffScript,
+    ManifestMetrics, ManifestValidationError, CURRENT_STATE_SYNC_VERSION, DEFAULT_CHUNK_SIZE,
+    MAX_FILE_SIZE_TO_GROUP, MAX_SUPPORTED_STATE_SYNC_VERSION, STATE_SYNC_V1, STATE_SYNC_V2,
 };
-use crate::ManifestMetrics;
 
 use ic_crypto_sha::Sha256;
 use ic_metrics::MetricsRegistry;
@@ -18,6 +19,7 @@ use ic_types::{
 };
 
 use ic_logger::replica_logger::no_op_logger;
+use ic_types::state_sync::MetaManifest;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 
@@ -33,7 +35,7 @@ macro_rules! hash_concat {
     }
 }
 
-fn simple_manifest() -> ([u8; 32], Manifest) {
+fn simple_file_table_and_chunk_table() -> (Vec<FileInfo>, Vec<ChunkInfo>) {
     let chunk_0_hash = hash_concat!(14u8, b"ic-state-chunk", vec![0u8; 1000].as_slice());
     let chunk_1_hash = hash_concat!(14u8, b"ic-state-chunk", vec![1u8; 1024].as_slice());
     let chunk_2_hash = hash_concat!(14u8, b"ic-state-chunk", vec![1u8; 1024].as_slice());
@@ -77,64 +79,96 @@ fn simple_manifest() -> ([u8; 32], Manifest) {
     );
     let file_3_hash = hash_concat!(13u8, b"ic-state-file", 0u32);
 
-    let manifest = Manifest::new(
-        STATE_SYNC_V1,
-        vec![
-            FileInfo {
-                relative_path: "root.bin".into(),
-                size_bytes: 1000,
-                hash: file_0_hash,
-            },
-            FileInfo {
-                relative_path: "subdir/memory".into(),
-                size_bytes: 2048,
-                hash: file_1_hash,
-            },
-            FileInfo {
-                relative_path: "subdir/metadata".into(),
-                size_bytes: 1050,
-                hash: file_2_hash,
-            },
-            FileInfo {
-                relative_path: "subdir/queue".into(),
-                size_bytes: 0,
-                hash: file_3_hash,
-            },
-        ],
-        vec![
-            ChunkInfo {
-                file_index: 0,
-                size_bytes: 1000,
-                offset: 0,
-                hash: chunk_0_hash,
-            },
-            ChunkInfo {
-                file_index: 1,
-                size_bytes: 1024,
-                offset: 0,
-                hash: chunk_1_hash,
-            },
-            ChunkInfo {
-                file_index: 1,
-                size_bytes: 1024,
-                offset: 1024,
-                hash: chunk_2_hash,
-            },
-            ChunkInfo {
-                file_index: 2,
-                size_bytes: 1024,
-                offset: 0,
-                hash: chunk_3_hash,
-            },
-            ChunkInfo {
-                file_index: 2,
-                size_bytes: 26,
-                offset: 1024,
-                hash: chunk_4_hash,
-            },
-        ],
-    );
+    let file_table = vec![
+        FileInfo {
+            relative_path: "root.bin".into(),
+            size_bytes: 1000,
+            hash: file_0_hash,
+        },
+        FileInfo {
+            relative_path: "subdir/memory".into(),
+            size_bytes: 2048,
+            hash: file_1_hash,
+        },
+        FileInfo {
+            relative_path: "subdir/metadata".into(),
+            size_bytes: 1050,
+            hash: file_2_hash,
+        },
+        FileInfo {
+            relative_path: "subdir/queue".into(),
+            size_bytes: 0,
+            hash: file_3_hash,
+        },
+    ];
 
+    let chunk_table = vec![
+        ChunkInfo {
+            file_index: 0,
+            size_bytes: 1000,
+            offset: 0,
+            hash: chunk_0_hash,
+        },
+        ChunkInfo {
+            file_index: 1,
+            size_bytes: 1024,
+            offset: 0,
+            hash: chunk_1_hash,
+        },
+        ChunkInfo {
+            file_index: 1,
+            size_bytes: 1024,
+            offset: 1024,
+            hash: chunk_2_hash,
+        },
+        ChunkInfo {
+            file_index: 2,
+            size_bytes: 1024,
+            offset: 0,
+            hash: chunk_3_hash,
+        },
+        ChunkInfo {
+            file_index: 2,
+            size_bytes: 26,
+            offset: 1024,
+            hash: chunk_4_hash,
+        },
+    ];
+
+    (file_table, chunk_table)
+}
+
+// The file table and chunk table is used to create a manifest which is larger than 1 MiB after encoding.
+pub(crate) fn dummy_file_table_and_chunk_table() -> (Vec<FileInfo>, Vec<ChunkInfo>) {
+    let chunk_hash = hash_concat!(14u8, b"ic-state-chunk", vec![0u8; 1000].as_slice());
+    let file_hash = hash_concat!(
+        13u8,
+        b"ic-state-file",
+        1u32,
+        0u32,
+        1000u32,
+        0u64,
+        &chunk_hash[..]
+    );
+    let chunk_info = ChunkInfo {
+        file_index: 0,
+        size_bytes: 1000,
+        offset: 0,
+        hash: chunk_hash,
+    };
+
+    let file_info = FileInfo {
+        relative_path: "root.bin".into(),
+        size_bytes: 1000,
+        hash: file_hash,
+    };
+
+    (vec![file_info; 100_000], vec![chunk_info; 100_000])
+}
+
+fn simple_manifest() -> ([u8; 32], Manifest) {
+    let (file_table, chunk_table) = simple_file_table_and_chunk_table();
+    let manifest = Manifest::new(STATE_SYNC_V1, file_table.clone(), chunk_table.clone());
     let expected_hash = hash_concat!(
         17u8,
         b"ic-state-manifest",
@@ -143,46 +177,71 @@ fn simple_manifest() -> ([u8; 32], Manifest) {
         4u32,
         "root.bin",
         1000u64,
-        &file_0_hash[..],
+        &file_table[0].hash[..],
         "subdir/memory",
         2048u64,
-        &file_1_hash[..],
+        &file_table[1].hash[..],
         "subdir/metadata",
         1050u64,
-        &file_2_hash[..],
+        &file_table[2].hash[..],
         "subdir/queue",
         0u64,
-        &file_3_hash[..],
+        &file_table[3].hash[..],
         // chunks
         5u32,
         // chunk 0
         0u32,
         1000u32,
         0u64,
-        &chunk_0_hash[..],
+        &chunk_table[0].hash[..],
         // chunk 1
         1u32,
         1024u32,
         0u64,
-        &chunk_1_hash[..],
+        &chunk_table[1].hash[..],
         // chunk 2
         1u32,
         1024u32,
         1024u64,
-        &chunk_2_hash[..],
+        &chunk_table[2].hash[..],
         // chunk 3
         2u32,
         1024u32,
         0u64,
-        &chunk_3_hash[..],
+        &chunk_table[3].hash[..],
         // chunk 4
         2u32,
         26u32,
         1024u64,
-        &chunk_4_hash[..]
+        &chunk_table[4].hash[..]
     );
 
     (expected_hash, manifest)
+}
+
+fn simple_manifest_v2() -> ([u8; 32], Manifest) {
+    let (file_table, chunk_table) = simple_file_table_and_chunk_table();
+    let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let encoded_manifest = encode_manifest(&manifest);
+    // The encoded bytes of the simple manifest is no greater than 1 MiB.
+    // If it is not the case due to future changes, the `sub_manifest_hash` below should also be updated.
+    assert!(encoded_manifest.len() <= DEFAULT_CHUNK_SIZE as usize);
+
+    let sub_manifest_hash = hash_concat!(21u8, b"ic-state-sub-manifest", &encoded_manifest[..]);
+    let expected_hash = hash_concat!(
+        22u8,
+        b"ic-state-meta-manifest",
+        STATE_SYNC_V2,
+        1u32,
+        &sub_manifest_hash[..]
+    );
+    (expected_hash, manifest)
+}
+
+// A list of manifests with hashes of all supported versions
+// that will be used in tests related to the manifest hash.
+fn simple_manifest_all_supported_versions() -> Vec<([u8; 32], Manifest)> {
+    vec![simple_manifest(), simple_manifest_v2()]
 }
 
 #[test]
@@ -202,7 +261,7 @@ fn test_simple_manifest_computation() {
 
     let test_computation_with_num_threads = |num_threads: u32| {
         let mut thread_pool = scoped_threadpool::Pool::new(num_threads);
-        let manifest = compute_manifest(
+        let manifest_v1 = compute_manifest(
             &mut thread_pool,
             &manifest_metrics,
             &no_op_logger(),
@@ -214,9 +273,25 @@ fn test_simple_manifest_computation() {
         .expect("failed to compute manifest");
 
         let (expected_hash, expected_manifest) = simple_manifest();
+        assert_eq!(manifest_v1, expected_manifest);
+        assert_eq!(expected_hash, manifest_hash_v1(&manifest_v1));
+        assert_eq!(expected_hash, manifest_hash(&manifest_v1));
 
-        assert_eq!(manifest, expected_manifest);
-        assert_eq!(expected_hash, manifest_hash(&manifest));
+        let manifest_v2 = compute_manifest(
+            &mut thread_pool,
+            &manifest_metrics,
+            &no_op_logger(),
+            STATE_SYNC_V2,
+            root,
+            1024,
+            None,
+        )
+        .expect("failed to compute manifest");
+
+        let (expected_hash, expected_manifest) = simple_manifest_v2();
+        assert_eq!(manifest_v2, expected_manifest);
+        assert_eq!(expected_hash, manifest_hash_v2(&manifest_v2));
+        assert_eq!(expected_hash, manifest_hash(&manifest_v2));
     };
 
     for num_threads in 1..32u32 {
@@ -225,112 +300,232 @@ fn test_simple_manifest_computation() {
 }
 
 #[test]
+fn test_meta_manifest_computation() {
+    let (file_table, chunk_table) = simple_file_table_and_chunk_table();
+    let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let meta_manifest = build_meta_manifest(&manifest);
+    let encoded_manifest = encode_manifest(&manifest);
+    assert!(encoded_manifest.len() <= DEFAULT_CHUNK_SIZE as usize);
+
+    let sub_manifest_hash = hash_concat!(21u8, b"ic-state-sub-manifest", &encoded_manifest[..]);
+    let expected_meta_manifest = MetaManifest {
+        version: STATE_SYNC_V2,
+        sub_manifest_hashes: vec![sub_manifest_hash],
+    };
+
+    assert_eq!(expected_meta_manifest, meta_manifest)
+}
+
+#[test]
+fn test_validate_sub_manifest() {
+    let (file_table, chunk_table) = dummy_file_table_and_chunk_table();
+    let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let meta_manifest = build_meta_manifest(&manifest);
+
+    let encoded_manifest = encode_manifest(&manifest);
+    let num =
+        (encoded_manifest.len() + DEFAULT_CHUNK_SIZE as usize - 1) / DEFAULT_CHUNK_SIZE as usize;
+    assert!(
+        num > 1,
+        "This test does not cover the case where the encoded manifest is divided into multiple pieces."
+    );
+    let mut validated_bytes = 0;
+    for ix in 0..num {
+        let start = ix * DEFAULT_CHUNK_SIZE as usize;
+        let end = std::cmp::min(start + DEFAULT_CHUNK_SIZE as usize, encoded_manifest.len());
+        validated_bytes += end - start;
+        assert_eq!(
+            Ok(()),
+            validate_sub_manifest(ix, &encoded_manifest[start..end], &meta_manifest)
+        );
+    }
+    assert_eq!(
+        validated_bytes,
+        encoded_manifest.len(),
+        "Not all bytes of the encoded manifest have been validated."
+    );
+
+    // Test that the provided chunk is out of the range of sub-manifests.
+    assert_eq!(
+        Err(ChunkValidationError::InvalidChunkIndex {
+            chunk_ix: 9,
+            actual_length: 9
+        }),
+        validate_sub_manifest(num, &[], &meta_manifest)
+    );
+}
+
+#[test]
 fn simple_manifest_passes_validation() {
-    let (expected_hash, manifest) = simple_manifest();
+    for (expected_hash, manifest) in simple_manifest_all_supported_versions() {
+        assert_eq!(
+            Ok(()),
+            validate_manifest(
+                &manifest,
+                &CryptoHashOfState::from(CryptoHash(expected_hash.to_vec()))
+            )
+        );
+    }
+}
+
+#[test]
+fn meta_manifest_passes_validation() {
+    let (file_table, chunk_table) = simple_file_table_and_chunk_table();
+    let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let meta_manifest = build_meta_manifest(&manifest);
     assert_eq!(
         Ok(()),
-        validate_manifest(
-            &manifest,
-            &CryptoHashOfState::from(CryptoHash(expected_hash.to_vec()))
+        validate_meta_manifest(
+            &meta_manifest,
+            &CryptoHashOfState::from(CryptoHash(meta_manifest_hash(&meta_manifest).to_vec()))
         )
     );
 }
 
 #[test]
-fn bad_root_hash_detected() {
-    let (manifest_hash, manifest) = simple_manifest();
-    let bogus_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
+fn unsupported_manifest_version_detected() {
+    let (file_table, chunk_table) = simple_file_table_and_chunk_table();
+    let manifest = Manifest::new(
+        MAX_SUPPORTED_STATE_SYNC_VERSION + 1,
+        file_table,
+        chunk_table,
+    );
+    let meta_manifest = build_meta_manifest(&manifest);
+    let root_hash =
+        CryptoHashOfState::from(CryptoHash(meta_manifest_hash(&meta_manifest).to_vec()));
+
     assert_eq!(
-        validate_manifest(&manifest, &bogus_hash),
-        Err(ManifestValidationError::InvalidRootHash {
-            expected_hash: bogus_hash.get_ref().0.clone(),
-            actual_hash: manifest_hash.to_vec(),
+        validate_manifest(&manifest, &root_hash),
+        Err(ManifestValidationError::UnsupportedManifestVersion {
+            manifest_version: manifest.version,
+            max_supported_version: MAX_SUPPORTED_STATE_SYNC_VERSION,
         })
     );
+
+    assert_eq!(
+        validate_meta_manifest(&meta_manifest, &root_hash),
+        Err(ManifestValidationError::UnsupportedManifestVersion {
+            manifest_version: meta_manifest.version,
+            max_supported_version: MAX_SUPPORTED_STATE_SYNC_VERSION,
+        })
+    );
+}
+
+#[test]
+fn bad_root_hash_detected_for_meta_manifest() {
+    let bogus_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
+    let (file_table, chunk_table) = simple_file_table_and_chunk_table();
+    let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let meta_manifest = build_meta_manifest(&manifest);
+    assert_eq!(
+        validate_meta_manifest(&meta_manifest, &bogus_hash),
+        Err(ManifestValidationError::InvalidRootHash {
+            expected_hash: bogus_hash.get_ref().0.clone(),
+            actual_hash: meta_manifest_hash(&meta_manifest).to_vec(),
+        })
+    );
+}
+
+#[test]
+fn bad_root_hash_detected() {
+    let bogus_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
+    for (manifest_hash, manifest) in simple_manifest_all_supported_versions() {
+        assert_eq!(
+            validate_manifest(&manifest, &bogus_hash),
+            Err(ManifestValidationError::InvalidRootHash {
+                expected_hash: bogus_hash.get_ref().0.clone(),
+                actual_hash: manifest_hash.to_vec(),
+            })
+        );
+    }
 }
 
 #[test]
 fn bad_file_hash_detected() {
-    let (manifest_hash, manifest) = simple_manifest();
-    let actual_hash = manifest.file_table[0].hash.to_vec();
-    let mut file_table = manifest.file_table.to_owned();
-    file_table[0].hash = [1u8; 32];
-    let manifest = Manifest::new(
-        manifest.version,
-        file_table,
-        manifest.chunk_table.to_owned(),
-    );
-    let root_hash = CryptoHashOfState::from(CryptoHash(manifest_hash.to_vec()));
-    assert_eq!(
-        validate_manifest(&manifest, &root_hash),
-        Err(ManifestValidationError::InvalidFileHash {
-            relative_path: manifest.file_table[0].relative_path.clone(),
-            expected_hash: vec![1u8; 32],
-            actual_hash,
-        })
-    );
+    for (manifest_hash, manifest) in simple_manifest_all_supported_versions() {
+        let actual_hash = manifest.file_table[0].hash.to_vec();
+        let mut file_table = manifest.file_table.to_owned();
+        file_table[0].hash = [1u8; 32];
+        let manifest = Manifest::new(
+            manifest.version,
+            file_table,
+            manifest.chunk_table.to_owned(),
+        );
+        let root_hash = CryptoHashOfState::from(CryptoHash(manifest_hash.to_vec()));
+        assert_eq!(
+            validate_manifest(&manifest, &root_hash),
+            Err(ManifestValidationError::InvalidFileHash {
+                relative_path: manifest.file_table[0].relative_path.clone(),
+                expected_hash: vec![1u8; 32],
+                actual_hash,
+            })
+        );
+    }
 }
 
 #[test]
 fn bad_chunk_size_detected() {
-    let (_, manifest) = simple_manifest();
-    let chunk_0_size = manifest.chunk_table[0].size_bytes;
-    let bad_chunk_size = chunk_0_size + 1;
-    let bad_chunk = vec![0; bad_chunk_size as usize];
-    assert_eq!(
-        validate_chunk(0, &bad_chunk, &manifest),
-        Err(ChunkValidationError::InvalidChunkSize {
-            chunk_ix: 0,
-            expected_size: chunk_0_size as usize,
-            actual_size: bad_chunk_size as usize,
-        })
-    );
+    for (_, manifest) in simple_manifest_all_supported_versions() {
+        let chunk_0_size = manifest.chunk_table[0].size_bytes;
+        let bad_chunk_size = chunk_0_size + 1;
+        let bad_chunk = vec![0; bad_chunk_size as usize];
+        assert_eq!(
+            validate_chunk(0, &bad_chunk, &manifest),
+            Err(ChunkValidationError::InvalidChunkSize {
+                chunk_ix: 0,
+                expected_size: chunk_0_size as usize,
+                actual_size: bad_chunk_size as usize,
+            })
+        );
+    }
 }
 
 #[test]
 fn bad_chunk_hash_detected() {
-    let (_, manifest) = simple_manifest();
-    let valid_chunk_0 = vec![0u8; 1000];
-    assert_eq!(
-        hash_concat!(14u8, b"ic-state-chunk", &valid_chunk_0[..]),
-        manifest.chunk_table[0].hash
-    );
+    for (_, manifest) in simple_manifest_all_supported_versions() {
+        let valid_chunk_0 = vec![0u8; 1000];
+        assert_eq!(
+            hash_concat!(14u8, b"ic-state-chunk", &valid_chunk_0[..]),
+            manifest.chunk_table[0].hash
+        );
 
-    let mut bad_chunk = valid_chunk_0;
-    bad_chunk[0] = 1;
-    let actual_hash = hash_concat!(14u8, b"ic-state-chunk", &bad_chunk[..]);
-    assert_eq!(
-        validate_chunk(0, &bad_chunk, &manifest),
-        Err(ChunkValidationError::InvalidChunkHash {
-            chunk_ix: 0,
-            expected_hash: manifest.chunk_table[0].hash.to_vec(),
-            actual_hash: actual_hash.to_vec()
-        })
-    );
+        let mut bad_chunk = valid_chunk_0;
+        bad_chunk[0] = 1;
+        let actual_hash = hash_concat!(14u8, b"ic-state-chunk", &bad_chunk[..]);
+        assert_eq!(
+            validate_chunk(0, &bad_chunk, &manifest),
+            Err(ChunkValidationError::InvalidChunkHash {
+                chunk_ix: 0,
+                expected_hash: manifest.chunk_table[0].hash.to_vec(),
+                actual_hash: actual_hash.to_vec()
+            })
+        );
+    }
 }
 
 #[test]
 fn orphan_chunk_detected() {
-    let (manifest_hash, manifest) = simple_manifest();
-    let mut chunk_table = manifest.chunk_table.to_owned();
-    chunk_table.push(ChunkInfo {
-        file_index: 100,
-        size_bytes: 100,
-        offset: 0,
-        hash: [0; 32],
-    });
-    let manifest = Manifest::new(
-        manifest.version,
-        manifest.file_table.to_owned(),
-        chunk_table,
-    );
-    let root_hash = CryptoHashOfState::from(CryptoHash(manifest_hash.to_vec()));
-    match validate_manifest(&manifest, &root_hash) {
-        Err(ManifestValidationError::InvalidRootHash { .. }) => (),
-        other => panic!(
-            "Expected an orphan chunk to change the root hash, got: {:?}",
-            other
-        ),
+    for (manifest_hash, manifest) in simple_manifest_all_supported_versions() {
+        let mut chunk_table = manifest.chunk_table.to_owned();
+        chunk_table.push(ChunkInfo {
+            file_index: 100,
+            size_bytes: 100,
+            offset: 0,
+            hash: [0; 32],
+        });
+        let manifest = Manifest::new(
+            manifest.version,
+            manifest.file_table.to_owned(),
+            chunk_table,
+        );
+        let root_hash = CryptoHashOfState::from(CryptoHash(manifest_hash.to_vec()));
+        match validate_manifest(&manifest, &root_hash) {
+            Err(ManifestValidationError::InvalidRootHash { .. }) => (),
+            other => panic!(
+                "Expected an orphan chunk to change the root hash, got: {:?}",
+                other
+            ),
+        }
     }
 }
 
@@ -435,7 +630,7 @@ fn test_diff_manifest() {
         &mut thread_pool,
         &manifest_metrics,
         &no_op_logger(),
-        STATE_SYNC_V1,
+        CURRENT_STATE_SYNC_VERSION,
         root,
         1024 * 1024,
         None,
@@ -451,7 +646,7 @@ fn test_diff_manifest() {
         &mut thread_pool,
         &manifest_metrics,
         &no_op_logger(),
-        STATE_SYNC_V1,
+        CURRENT_STATE_SYNC_VERSION,
         root,
         1024 * 1024,
         None,
@@ -503,7 +698,7 @@ fn test_filter_all_zero_chunks() {
         &mut thread_pool,
         &manifest_metrics,
         &no_op_logger(),
-        STATE_SYNC_V1,
+        CURRENT_STATE_SYNC_VERSION,
         root,
         1024 * 1024,
         None,
@@ -616,7 +811,7 @@ fn test_hash_plan() {
         &mut thread_pool,
         &manifest_metrics,
         &no_op_logger(),
-        STATE_SYNC_V1,
+        CURRENT_STATE_SYNC_VERSION,
         root,
         max_chunk_size,
         None,
