@@ -39,7 +39,7 @@ configure_make(
             "no-asm",
             "no-afalgeng",
             "no-shared",
-            "ARFLAGS=rD",
+            "ARFLAGS=r",
         ] + CONFIGURE_OPTIONS,
         "//conditions:default": ["no-shared", "ARFLAGS=Drcs"] + CONFIGURE_OPTIONS,
     }),
