@@ -64,9 +64,6 @@ function read_variables() {
     sysctl -w net.ipv6.conf.enp1s0.accept_ra=0
     sysctl -w net.ipv6.conf.enp2s0.accept_ra=0
 
-    # Disable ipv6 entirely on the ipv4 only secondary interface to prevent any possiblity of asymmetric routing
-    sysctl -w net.ipv6.conf.enp2s0.disable_ipv6=1
-
     if [[ -n "${ipv4_address:-}" ]]; then
         if [[ -n "${ipv4_gateway:-}" ]]; then
             HAS_IPV4=true
@@ -130,6 +127,8 @@ Name=enp2s0
 [Network]
 $(generate_ipv4_block)
 $(generate_name_server_list)
+LinkLocalAddressing=ipv4
+IPv6AcceptRA=no
 EOF
 }
 
