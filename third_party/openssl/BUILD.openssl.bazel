@@ -5,7 +5,7 @@ Note that the $(PERL) "make variable" (https://docs.bazel.build/versions/main/be
 is populated by the perl toolchain provided by rules_perl.
 """
 
-load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make", "configure_make_variant", "runnable_binary")
 
 # Read https://wiki.openssl.org/index.php/Compilation_and_Installation
 
@@ -43,15 +43,15 @@ configure_make(
         ] + CONFIGURE_OPTIONS,
         "//conditions:default": ["no-shared"] + CONFIGURE_OPTIONS,
     }),
-    env = select({
-        "@platforms//os:macos": {
-            "AR": "",
-            "PERL": "$$EXT_BUILD_ROOT$$/$(PERL)",
-        },
-        "//conditions:default": {
-            "PERL": "$$EXT_BUILD_ROOT$$/$(PERL)",
-        },
-    }),
+    # env = select({
+    #     "@platforms//os:macos": {
+    #         "AR": "",
+    #         "PERL": "$$EXT_BUILD_ROOT$$/$(PERL)",
+    #     },
+    #     "//conditions:default": {
+    #         "PERL": "$$EXT_BUILD_ROOT$$/$(PERL)",
+    #     },
+    # }),
     lib_name = LIB_NAME,
     lib_source = ":all_srcs",
     out_binaries = ["openssl"],
