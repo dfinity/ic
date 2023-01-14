@@ -43,15 +43,17 @@ configure_make(
         ] + CONFIGURE_OPTIONS,
         "//conditions:default": ["no-shared"] + CONFIGURE_OPTIONS,
     }),
-    # env = select({
-    #     "@platforms//os:macos": {
-    #         "AR": "",
-    #         "PERL": "$$EXT_BUILD_ROOT$$/$(PERL)",
-    #     },
-    #     "//conditions:default": {
-    #         "PERL": "$$EXT_BUILD_ROOT$$/$(PERL)",
-    #     },
-    # }),
+    env = select({
+        "@platforms//os:macos": {
+            "AR": "",
+            "PERL": "$$EXT_BUILD_ROOT$$/$(PERL)",
+            "SOURCE_DATE_EPOCH": "0",
+        },
+        "//conditions:default": {
+            "PERL": "$$EXT_BUILD_ROOT$$/$(PERL)",
+            "SOURCE_DATE_EPOCH": "0",
+        },
+    }),
     lib_name = LIB_NAME,
     lib_source = ":all_srcs",
     out_binaries = ["openssl"],
