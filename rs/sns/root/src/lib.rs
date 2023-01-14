@@ -5,7 +5,7 @@ pub mod types;
 use crate::logs::{ERROR, INFO};
 use crate::pb::v1::{
     set_dapp_controllers_response, CanisterCallError, ListSnsCanistersResponse,
-    RegisterDappCanisterRequest, RegisterDappCanisterResponse, SetDappControllersRequest,
+    RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
     SetDappControllersResponse, SnsRootCanister,
 };
 use async_trait::async_trait;
@@ -479,94 +479,110 @@ impl SnsRootCanister {
         }
     }
 
-    /// Tells this canister (SNS root) about a dapp canister that it controls.
+    /// Tells this canister (SNS root) about a list of dapp canisters that it controls.
     ///
-    /// The canister must not be one of the distinguished SNS canisters
-    /// (i.e. root, governance, ledger). Furthermore, the canister must be
+    /// The canisters must not be one of the distinguished SNS canisters
+    /// (i.e. root, governance, ledger). Furthermore, the canisters must be
     /// exclusively be controlled by this canister (i.e. SNS root). Otherwise,
     /// the request will be rejected.
     ///
     /// Registered dapp canisters are used by at least two methods:
     ///   1. get_sns_canisters_summary
     ///   2. set_dapp_controllers (currently in review).
-    pub async fn register_dapp_canister(
+    pub async fn register_dapp_canisters(
         self_ref: &'static LocalKey<RefCell<Self>>,
         management_canister_client: &mut impl ManagementCanisterClient,
-        own_canister_id: CanisterId,
-        request: RegisterDappCanisterRequest,
-    ) -> RegisterDappCanisterResponse {
+        root_canister_id: CanisterId,
+        request: RegisterDappCanistersRequest,
+    ) -> RegisterDappCanistersResponse {
         // Validate/unpack request.
-        let query_canister_id = request
-            .canister_id
-            .expect("Invalid RegisterDappCanisterRequest: canister_id field must be populated.");
-        // Reject if canister_id is one of the distinguished canisters in the SNS.
+        if request.canister_ids.is_empty() {
+            panic!("Invalid RegisterDappCanistersRequest: canister_ids field must not be empty.");
+        }
         let sns_canister_ids: Vec<PrincipalId> = self_ref.with(|s| {
             let s = s.borrow();
+            let ListSnsCanistersResponse {
+                root,
+                governance,
+                ledger,
+                swap,
+                dapps: _, // we deliberately ignore dapps here.
+                archives,
+                index,
+            } = s.list_sns_canisters(root_canister_id);
+
             vec![
-                s.governance_canister_id.unwrap(),
-                s.ledger_canister_id.unwrap(),
-                s.index_canister_id.unwrap(),
-                s.swap_canister_id.unwrap(),
-                own_canister_id.into(),
+                root.unwrap(),
+                governance.unwrap(),
+                ledger.unwrap(),
+                index.unwrap(),
+                // Swap is controlled by the NNS, so this is just a precaution
+                swap.unwrap(),
             ]
             .into_iter()
-            .chain(s.archive_canister_ids.clone())
+            .chain(archives.into_iter())
             .collect()
         });
-        if sns_canister_ids.contains(&query_canister_id) {
-            panic!(
-                "Invalid RegisterDappCanisterRequest: \
-                 The requested canister is an SNS canister."
-            );
-        }
-        let query_canister_id = CanisterId::new(query_canister_id)
-            .expect("Invalid RegisterDappCanisterRequest: contained an invalid canister ID.");
-
-        // Make sure we are a controller by querying the management canister.
-        //
-        // TODO: Add support for notifying that we have lost control of a
-        // canister. Currently, only adding is supported, because that's the
-        // only thing we need right now.
-        let canister_status = management_canister_client
-            .canister_status(&query_canister_id.into())
-            .await
-            .unwrap_or_else(|err| {
+        for query_canister_id in request.canister_ids {
+            // Reject if canister_id is one of the distinguished canisters in the SNS.
+            if sns_canister_ids.contains(&query_canister_id) {
                 panic!(
-                    "Unable to get the status of the canister referenced in the request: {err:#?}"
-                )
-            });
-        // Reject if we do not have exclusive control.
-        assert_eq!(
-            canister_status.controllers(),
-            vec![own_canister_id.into()],
-            "The canister referenced by the request ({query_canister_id}) is not \
-             exclusively controlled by this SNS root canister.",
-        );
-
-        // Add query_canister_id to self.dapp_canister_ids (if it isn't already there).
-        self_ref.with(|s| {
-            let query_canister_id = PrincipalId::from(query_canister_id);
-            let mut s = s.borrow_mut();
-            if s.dapp_canister_ids.contains(&query_canister_id) {
-                return;
+                    "Invalid RegisterDappCanistersRequest: \
+                 The requested canister is an SNS canister."
+                );
             }
-            s.dapp_canister_ids.push(query_canister_id);
-        });
+            let query_canister_id = CanisterId::new(query_canister_id)
+                .expect("Invalid RegisterDappCanistersRequest: contained an invalid canister ID.");
 
+            // Make sure we are a controller by querying the management canister.
+            //
+            // TODO: Add support for notifying that we have lost control of a
+            // canister. Currently, only adding is supported, because that's the
+            // only thing we need right now.
+            let canister_status = management_canister_client
+                .canister_status(&query_canister_id.into())
+                .await
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "Unable to get the status of the canister referenced in the request: {err:#?}"
+                    )
+                });
+            // Reject if we do not have exclusive control.
+            assert_eq!(
+                canister_status.controllers(),
+                vec![root_canister_id.into()],
+                "The canister referenced by the request ({query_canister_id}) is not \
+             exclusively controlled by this SNS root canister.",
+            );
+
+            // Add query_canister_id to self.dapp_canister_ids (if it isn't already there).
+            self_ref.with(|s| {
+                let query_canister_id = PrincipalId::from(query_canister_id);
+                let mut s = s.borrow_mut();
+                if s.dapp_canister_ids.contains(&query_canister_id) {
+                    return;
+                }
+                s.dapp_canister_ids.push(query_canister_id);
+            });
+        }
         // Report success.
-        RegisterDappCanisterResponse {}
+        RegisterDappCanistersResponse {}
     }
 
     /// Sets the controllers of registered dapp canisters.
     ///
-    /// Dapp canisters can be registered via the register_dapp_canister method.
+    /// Dapp canisters can be registered via the register_dapp_canisters method.
     ///
-    /// Caller must be the swap canister. Otherwise, the request will be
-    /// rejected.
+    /// Caller must be the swap canister or the governance canister.
+    /// Otherwise, the request will be rejected.
     ///
     /// Registered dapp canisters must not have disappeared prior to this being
     /// called. Otherwise, request will be rejected. Some precautions are taken
     /// to avoid a partially completed operation, but this cannot be guaranteed.
+    ///
+    /// If `request.canister_ids` is `None`, all registered dapps will be set!
+    /// This functionality may be removed in the future: see NNS1-1989.
+    /// Only the swap canister can use this functionality.
     pub async fn set_dapp_controllers<'a>(
         self_ref: &'static LocalKey<RefCell<Self>>,
         management_canister_client: &'a mut impl ManagementCanisterClient,
@@ -574,13 +590,28 @@ impl SnsRootCanister {
         caller: PrincipalId,
         request: &'a SetDappControllersRequest,
     ) -> SetDappControllersResponse {
-        let is_authorized =
-            self_ref.with(|self_ref| caller == self_ref.borrow().swap_canister_id());
+        let is_authorized = self_ref.with(|self_ref| {
+            caller == self_ref.borrow().swap_canister_id()
+                || caller == self_ref.borrow().governance_canister_id()
+        });
+        // TODO(NNS1-1993): Remove this assertion and return an error type instead.
         assert!(is_authorized, "Caller ({caller}) is not authorized.");
 
         // Grab a snapshot of canisters to operate on.
-        let dapp_canister_ids =
-            self_ref.with(|self_ref| self_ref.borrow().dapp_canister_ids.clone());
+        let dapp_canister_ids = match &request.canister_ids {
+            Some(canister_ids) => canister_ids.canister_ids.clone(),
+            // If no canister list is specified, we take all the canisters controlled by root.
+            None => {
+                let is_authorized_to_set_all_controllers =
+                    self_ref.with(|self_ref| caller == self_ref.borrow().swap_canister_id());
+                if is_authorized_to_set_all_controllers {
+                    self_ref.with(|self_ref| self_ref.borrow().dapp_canister_ids.clone())
+                } else {
+                    // TODO(NNS1-1993): Remove this panic and return an error type instead.
+                    panic!("Only the swap canister is authorized to set all dapp controllers")
+                }
+            }
+        };
 
         // A pre-flight check: Assert that we still control all canisters
         // referenced in dapp_canister_ids. This way, we minimize that chance of
@@ -598,6 +629,7 @@ impl SnsRootCanister {
                 .await
             {
                 Err(_) => {
+                    // TODO(NNS1-1993): Remove this panic and return an error type instead.
                     panic!(
                         "Could not get the status of canister: {}.  Root may not be a controller.",
                         dapp_canister_id
@@ -609,6 +641,7 @@ impl SnsRootCanister {
                 .controllers()
                 .contains(&own_canister_id.into());
 
+            // TODO(NNS1-1993): Remove this assertion and return an error type instead.
             assert!(
                 is_controllee,
                 "Operation aborted due to an error; no changes have been made: \
@@ -900,7 +933,7 @@ async fn get_owned_canister_summary(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb::v1::ListSnsCanistersResponse;
+    use crate::pb::v1::{set_dapp_controllers_request::CanisterIds, ListSnsCanistersResponse};
     use dfn_core::api::now;
     use std::collections::VecDeque;
     use std::sync::{Arc, Mutex};
@@ -929,7 +962,11 @@ mod tests {
             &mut self,
             observed_canister_id_record: &CanisterIdRecord,
         ) -> Result<CanisterStatusResultV2, CanisterCallError> {
-            let (expected_canister_id, result) = match self.calls.pop_front().unwrap() {
+            let (expected_canister_id, result) = match self
+                .calls
+                .pop_front()
+                .expect("MockManagementCanisterClient calls stack is exhausted.")
+            {
                 ManagementCanisterClientCall::CanisterStatus {
                     expected_canister_id,
                     result,
@@ -1115,29 +1152,36 @@ mod tests {
         }
         let original_sns_root_canister = SNS_ROOT_CANISTER.with(|r| r.borrow().clone());
         let sns_root_canister_id = PrincipalId::new_user_test_id(4);
-        let dapp_canister_id = PrincipalId::new_user_test_id(5);
+        let dapp_canister_id_1 = PrincipalId::new_user_test_id(5);
+        let dapp_canister_id_2 = PrincipalId::new_user_test_id(6);
 
         let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![ManagementCanisterClientCall::CanisterStatus {
-                expected_canister_id: dapp_canister_id,
-                result: Ok(canister_status_result_v2_for_test(sns_root_canister_id)),
-            }]
+            calls: vec![
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: dapp_canister_id_1,
+                    result: Ok(canister_status_result_v2_for_test(sns_root_canister_id)),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: dapp_canister_id_2,
+                    result: Ok(canister_status_result_v2_for_test(sns_root_canister_id)),
+                },
+            ]
             .into(),
         };
 
         // Step 2: Call the code under test.
-        let result = SnsRootCanister::register_dapp_canister(
+        let result = SnsRootCanister::register_dapp_canisters(
             &SNS_ROOT_CANISTER,
             &mut management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
-            RegisterDappCanisterRequest {
-                canister_id: Some(dapp_canister_id),
+            RegisterDappCanistersRequest {
+                canister_ids: vec![dapp_canister_id_1, dapp_canister_id_2],
             },
         )
         .await;
 
         // Step 3: Inspect results.
-        assert_eq!(result, RegisterDappCanisterResponse {}, "{result:#?}");
+        assert_eq!(result, RegisterDappCanistersResponse {}, "{result:#?}");
         assert_eq!(
             management_canister_client.calls.len(),
             0,
@@ -1150,7 +1194,58 @@ mod tests {
                     // Most importantly, root became aware that it controls the
                     // dapp, since that is the whole point of calling notify_*,
                     // the code under test.
-                    dapp_canister_ids: vec![dapp_canister_id],
+                    dapp_canister_ids: vec![dapp_canister_id_1, dapp_canister_id_2],
+                    ..original_sns_root_canister
+                }
+            );
+        });
+    }
+
+    #[tokio::test]
+    async fn register_dapp_canister_idempotent() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+        }
+        let original_sns_root_canister = SNS_ROOT_CANISTER.with(|r| r.borrow().clone());
+        let sns_root_canister_id = PrincipalId::new_user_test_id(4);
+        let dapp_canister_id_1 = PrincipalId::new_user_test_id(5);
+
+        let mut management_canister_client = MockManagementCanisterClient {
+            calls: vec![
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: dapp_canister_id_1,
+                    result: Ok(canister_status_result_v2_for_test(sns_root_canister_id)),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: dapp_canister_id_1,
+                    result: Ok(canister_status_result_v2_for_test(sns_root_canister_id)),
+                },
+            ]
+            .into(),
+        };
+
+        // Step 2: Attempt to add the same canister twice.
+        for _ in 0..2 {
+            SnsRootCanister::register_dapp_canisters(
+                &SNS_ROOT_CANISTER,
+                &mut management_canister_client,
+                sns_root_canister_id.try_into().unwrap(),
+                RegisterDappCanistersRequest {
+                    canister_ids: vec![dapp_canister_id_1],
+                },
+            )
+            .await;
+        }
+
+        SNS_ROOT_CANISTER.with(|r| {
+            assert_eq!(
+                *r.borrow(),
+                SnsRootCanister {
+                    // Most importantly, root became aware that it controls the
+                    // dapp, since that is the whole point of calling notify_*,
+                    // the code under test.
+                    dapp_canister_ids: vec![dapp_canister_id_1],
                     ..original_sns_root_canister
                 }
             );
@@ -1198,12 +1293,12 @@ mod tests {
                         calls: vec![].into(),
                     };
 
-                    SnsRootCanister::register_dapp_canister(
+                    SnsRootCanister::register_dapp_canisters(
                         &SNS_ROOT_CANISTER,
                         &mut management_canister_client,
                         sns_root_canister_id.try_into().unwrap(),
-                        RegisterDappCanisterRequest {
-                            canister_id: Some(canister_id),
+                        RegisterDappCanistersRequest {
+                            canister_ids: vec![canister_id],
                         },
                     )
                     .await
@@ -1237,12 +1332,12 @@ mod tests {
         };
 
         // Step 2: Call the code under test.
-        let result = SnsRootCanister::register_dapp_canister(
+        let result = SnsRootCanister::register_dapp_canisters(
             &SNS_ROOT_CANISTER,
             &mut management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
-            RegisterDappCanisterRequest {
-                canister_id: Some(dapp_canister_id),
+            RegisterDappCanistersRequest {
+                canister_ids: vec![dapp_canister_id],
             },
         )
         .await;
@@ -1281,18 +1376,18 @@ mod tests {
         };
 
         // Step 2: Call the code under test.
-        let result = SnsRootCanister::register_dapp_canister(
+        let result = SnsRootCanister::register_dapp_canisters(
             &SNS_ROOT_CANISTER,
             &mut management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
-            RegisterDappCanisterRequest {
-                canister_id: Some(DAPP_CANISTER_ID.with(|i| *i)),
+            RegisterDappCanistersRequest {
+                canister_ids: vec![DAPP_CANISTER_ID.with(|i| *i)],
             },
         )
         .await;
 
         // Step 3: Inspect results.
-        assert_eq!(result, RegisterDappCanisterResponse {}, "{result:#?}");
+        assert_eq!(result, RegisterDappCanistersResponse {}, "{result:#?}");
         assert_eq!(
             management_canister_client.calls.len(),
             0,
@@ -1343,12 +1438,12 @@ mod tests {
         };
 
         // Step 2: Call the code under test.
-        let result = SnsRootCanister::register_dapp_canister(
+        let result = SnsRootCanister::register_dapp_canisters(
             &SNS_ROOT_CANISTER,
             &mut management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
-            RegisterDappCanisterRequest {
-                canister_id: Some(DAPP_CANISTER_ID.with(|i| *i)),
+            RegisterDappCanistersRequest {
+                canister_ids: vec![DAPP_CANISTER_ID.with(|i| *i)],
             },
         )
         .await;
@@ -1366,7 +1461,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_set_dapp_controllers() {
+    async fn test_set_dapp_controllers_set_all() {
         // Step 1: Prepare the world.
         thread_local! {
             static STATE: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
@@ -1415,6 +1510,8 @@ mod tests {
             sns_root_canister_id,
             STATE.with(|state| state.borrow().swap_canister_id.unwrap()),
             &SetDappControllersRequest {
+                // Change controller to all dapps controlled by the root canister.
+                canister_ids: None,
                 controller_principal_ids: vec![new_controller_principal_id],
             },
         )
@@ -1435,9 +1532,9 @@ mod tests {
         assert!(state.dapp_canister_ids.is_empty(), "{state:#?}",);
     }
 
-    #[should_panic(expected = "authorize")]
     #[tokio::test]
-    async fn test_set_dapp_controllers_rejects_non_swap_caller() {
+    #[should_panic]
+    async fn test_set_dapp_controllers_set_all_not_usable_by_governance() {
         // Step 1: Prepare the world.
         thread_local! {
             static STATE: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
@@ -1452,8 +1549,256 @@ mod tests {
         }
         let sns_root_canister_id = CanisterId::try_from(PrincipalId::new_user_test_id(4)).unwrap();
         let new_controller_principal_id = PrincipalId::new_user_test_id(5);
-        let not_swap = PrincipalId::new_user_test_id(9001);
-        assert!(not_swap != STATE.with(|state| state.borrow().swap_canister_id.unwrap()));
+
+        // Step 1.1: Prepare helpers.
+        let mut management_canister_client = MockManagementCanisterClient {
+            calls: vec![
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: PrincipalId::new_user_test_id(3),
+                    result: Ok(canister_status_result_v2_for_test(
+                        sns_root_canister_id.get(),
+                    )),
+                },
+                ManagementCanisterClientCall::UpdateSettings {
+                    update_settings_args: UpdateSettingsArgs {
+                        canister_id: PrincipalId::new_user_test_id(3),
+                        settings: CanisterSettingsArgs {
+                            controllers: Some(vec![new_controller_principal_id]),
+                            controller: None,
+                            compute_allocation: None,
+                            memory_allocation: None,
+                            freezing_threshold: None,
+                        },
+                    },
+                    result: Ok(EmptyBlob {}),
+                },
+            ]
+            .into(),
+        };
+
+        // Step 2: Run code under test.
+        // We except to panic here, because we're passing the governance canister
+        // as the caller while attempting to deregister all canisters. That functionality
+        // can only be used by the swap canister – see NNS1-1989.
+        let _response = SnsRootCanister::set_dapp_controllers(
+            &STATE,
+            &mut management_canister_client,
+            sns_root_canister_id,
+            STATE.with(|state| state.borrow().governance_canister_id.unwrap()),
+            &SetDappControllersRequest {
+                // Change controller to all dapps controlled by the root canister.
+                canister_ids: None,
+                controller_principal_ids: vec![new_controller_principal_id],
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    #[should_panic]
+    async fn test_set_dapp_controllers_set_some_usable_by_governance() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static STATE: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
+                governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
+                ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
+                swap_canister_id: Some(PrincipalId::new_user_test_id(99)),
+                dapp_canister_ids: vec![PrincipalId::new_user_test_id(3)],
+                archive_canister_ids: vec![],
+                index_canister_id: Some(PrincipalId::new_user_test_id(4)),
+                ..Default::default()
+            });
+        }
+        let sns_root_canister_id = CanisterId::try_from(PrincipalId::new_user_test_id(4)).unwrap();
+        let new_controller_principal_id = PrincipalId::new_user_test_id(5);
+
+        // Step 1.1: Prepare helpers.
+        let mut management_canister_client = MockManagementCanisterClient {
+            calls: vec![
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: PrincipalId::new_user_test_id(3),
+                    result: Ok(canister_status_result_v2_for_test(
+                        sns_root_canister_id.get(),
+                    )),
+                },
+                ManagementCanisterClientCall::UpdateSettings {
+                    update_settings_args: UpdateSettingsArgs {
+                        canister_id: PrincipalId::new_user_test_id(3),
+                        settings: CanisterSettingsArgs {
+                            controllers: Some(vec![new_controller_principal_id]),
+                            controller: None,
+                            compute_allocation: None,
+                            memory_allocation: None,
+                            freezing_threshold: None,
+                        },
+                    },
+                    result: Ok(EmptyBlob {}),
+                },
+            ]
+            .into(),
+        };
+
+        // Step 2: Run code under test.
+        // We except to panic here, because we're passing the governance canister
+        // as the caller while attempting to deregister all canisters. That functionality
+        // can only be used by the swap canister – see NNS1-1989.
+        let _response = SnsRootCanister::set_dapp_controllers(
+            &STATE,
+            &mut management_canister_client,
+            sns_root_canister_id,
+            STATE.with(|state| state.borrow().governance_canister_id.unwrap()),
+            &SetDappControllersRequest {
+                // Change controller to all dapps controlled by the root canister.
+                canister_ids: Some(CanisterIds {
+                    canister_ids: vec![CanisterId::from_u64(10000).get()],
+                }),
+                controller_principal_ids: vec![new_controller_principal_id],
+            },
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_set_dapp_controllers_some_canisters() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static STATE: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
+                governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
+                ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
+                swap_canister_id: Some(PrincipalId::new_user_test_id(99)),
+                dapp_canister_ids: vec![PrincipalId::new_user_test_id(3), PrincipalId::new_user_test_id(4), PrincipalId::new_user_test_id(5), PrincipalId::new_user_test_id(6)],
+                archive_canister_ids: vec![],
+                ..Default::default()
+            });
+        }
+        let sns_root_canister_id = CanisterId::try_from(PrincipalId::new_user_test_id(4)).unwrap();
+        let new_controller_principal_id = PrincipalId::new_user_test_id(5);
+
+        // Step 1.1: Prepare helpers.
+        let mut management_canister_client = MockManagementCanisterClient {
+            calls: vec![
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: PrincipalId::new_user_test_id(4),
+                    result: Ok(canister_status_result_v2_for_test(
+                        sns_root_canister_id.get(),
+                    )),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: PrincipalId::new_user_test_id(5),
+                    result: Ok(canister_status_result_v2_for_test(
+                        sns_root_canister_id.get(),
+                    )),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: PrincipalId::new_user_test_id(6),
+                    result: Ok(canister_status_result_v2_for_test(
+                        sns_root_canister_id.get(),
+                    )),
+                },
+                ManagementCanisterClientCall::UpdateSettings {
+                    update_settings_args: UpdateSettingsArgs {
+                        canister_id: PrincipalId::new_user_test_id(4),
+                        settings: CanisterSettingsArgs {
+                            controllers: Some(vec![new_controller_principal_id]),
+                            controller: None,
+                            compute_allocation: None,
+                            memory_allocation: None,
+                            freezing_threshold: None,
+                        },
+                    },
+                    result: Ok(EmptyBlob {}),
+                },
+                ManagementCanisterClientCall::UpdateSettings {
+                    update_settings_args: UpdateSettingsArgs {
+                        canister_id: PrincipalId::new_user_test_id(5),
+                        settings: CanisterSettingsArgs {
+                            controllers: Some(vec![new_controller_principal_id]),
+                            controller: None,
+                            compute_allocation: None,
+                            memory_allocation: None,
+                            freezing_threshold: None,
+                        },
+                    },
+                    result: Ok(EmptyBlob {}),
+                },
+                ManagementCanisterClientCall::UpdateSettings {
+                    update_settings_args: UpdateSettingsArgs {
+                        canister_id: PrincipalId::new_user_test_id(6),
+                        settings: CanisterSettingsArgs {
+                            controllers: Some(vec![new_controller_principal_id]),
+                            controller: None,
+                            compute_allocation: None,
+                            memory_allocation: None,
+                            freezing_threshold: None,
+                        },
+                    },
+                    result: Ok(EmptyBlob {}),
+                },
+            ]
+            .into(),
+        };
+
+        // Step 2: Run code under test.
+        let response = SnsRootCanister::set_dapp_controllers(
+            &STATE,
+            &mut management_canister_client,
+            sns_root_canister_id,
+            STATE.with(|state| state.borrow().swap_canister_id.unwrap()),
+            &SetDappControllersRequest {
+                // Change controller to all dapps controlled by the root canister.
+                canister_ids: Some(CanisterIds {
+                    canister_ids: vec![
+                        PrincipalId::new_user_test_id(4),
+                        PrincipalId::new_user_test_id(5),
+                        PrincipalId::new_user_test_id(6),
+                    ],
+                }),
+                controller_principal_ids: vec![new_controller_principal_id],
+            },
+        )
+        .await;
+
+        // Step 3: Inspect results.
+        assert_eq!(
+            response,
+            SetDappControllersResponse {
+                failed_updates: vec![]
+            }
+        );
+        assert!(
+            management_canister_client.calls.is_empty(),
+            "{management_canister_client:#?}",
+        );
+        let state = &STATE.with(|state| state.borrow().clone());
+        assert!(
+            state.dapp_canister_ids == vec![PrincipalId::new_user_test_id(3)],
+            "{state:#?}",
+        );
+    }
+
+    // Only governance and swap canisters can call set dapp controllers.
+    #[should_panic(expected = "authorize")]
+    #[tokio::test]
+    async fn test_set_dapp_controllers_rejects_non_authorized_caller() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static STATE: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
+                governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
+                ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
+                swap_canister_id: Some(PrincipalId::new_user_test_id(99)),
+                dapp_canister_ids: vec![PrincipalId::new_user_test_id(3)],
+                archive_canister_ids: vec![],
+                index_canister_id: Some(PrincipalId::new_user_test_id(4)),
+                ..Default::default()
+            });
+        }
+        let sns_root_canister_id = CanisterId::try_from(PrincipalId::new_user_test_id(4)).unwrap();
+        let new_controller_principal_id = PrincipalId::new_user_test_id(5);
+        let not_authorized = PrincipalId::new_user_test_id(9001);
+        assert!(not_authorized != STATE.with(|state| state.borrow().swap_canister_id.unwrap()));
+        assert!(
+            not_authorized != STATE.with(|state| state.borrow().governance_canister_id.unwrap())
+        );
 
         // Step 1.1: Prepare helpers.
         let mut management_canister_client = MockManagementCanisterClient {
@@ -1465,8 +1810,10 @@ mod tests {
             &STATE,
             &mut management_canister_client,
             sns_root_canister_id,
-            not_swap,
+            not_authorized,
             &SetDappControllersRequest {
+                // Change controller to all dapps controlled by the root canister.
+                canister_ids: None,
                 controller_principal_ids: vec![new_controller_principal_id],
             },
         )
@@ -1529,6 +1876,8 @@ mod tests {
             sns_root_canister_id,
             STATE.with(|state| state.borrow().swap_canister_id.unwrap()),
             &SetDappControllersRequest {
+                // Change controller to all dapps controlled by the root canister.
+                canister_ids: None,
                 controller_principal_ids: vec![
                     new_controller_principal_id,
                     sns_root_canister_id.into(),

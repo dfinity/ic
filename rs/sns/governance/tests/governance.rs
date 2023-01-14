@@ -1,6 +1,6 @@
 use crate::fixtures::{
-    neuron_id, GovernanceCanisterFixture, GovernanceCanisterFixtureBuilder, NeuronBuilder,
-    TargetLedger,
+    environment_fixture::CanisterCallRequest, neuron_id, GovernanceCanisterFixture,
+    GovernanceCanisterFixtureBuilder, NeuronBuilder, TargetLedger,
 };
 use assert_matches::assert_matches;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -8,26 +8,36 @@ use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_sns_governance::account_to_proto;
-use ic_sns_governance::neuron::NeuronState;
-use ic_sns_governance::pb::v1::{
-    governance_error::ErrorType,
-    manage_neuron,
-    manage_neuron::claim_or_refresh,
-    manage_neuron::{
-        configure::Operation, AddNeuronPermissions, ClaimOrRefresh, Configure, Disburse,
-        DisburseMaturity, Follow, IncreaseDissolveDelay, MergeMaturity, RegisterVote,
-        RemoveNeuronPermissions, Split, StakeMaturity,
+use ic_sns_governance::{
+    account_to_proto,
+    neuron::NeuronState,
+    pb::{
+        sns_root_types::{
+            set_dapp_controllers_response::FailedUpdate, RegisterDappCanistersResponse,
+            SetDappControllersResponse,
+        },
+        v1::{
+            governance_error::ErrorType,
+            manage_neuron,
+            manage_neuron::claim_or_refresh,
+            manage_neuron::{
+                configure::Operation, AddNeuronPermissions, ClaimOrRefresh, Configure, Disburse,
+                DisburseMaturity, Follow, IncreaseDissolveDelay, MergeMaturity, RegisterVote,
+                RemoveNeuronPermissions, Split, StakeMaturity,
+            },
+            manage_neuron_response::{
+                Command as CommandResponse, DisburseMaturityResponse, MergeMaturityResponse,
+                StakeMaturityResponse,
+            },
+            proposal::Action,
+            Account as AccountProto, DeregisterDappCanisters, Empty, GovernanceError,
+            ManageNeuronResponse, Motion, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+            NeuronPermissionType, Proposal, ProposalId, RegisterDappCanisters,
+        },
     },
-    manage_neuron_response::{
-        Command as CommandResponse, DisburseMaturityResponse, MergeMaturityResponse,
-        StakeMaturityResponse,
-    },
-    proposal::Action,
-    Account as AccountProto, Empty, GovernanceError, ManageNeuronResponse, Motion, Neuron,
-    NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalId,
+    types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
 };
-use ic_sns_governance::types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
+
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
 
@@ -1337,4 +1347,273 @@ fn test_list_nervous_system_function_contain_all_proposal_actions() {
          native proposal actions in response {:?}",
         missing_actions
     );
+}
+
+#[test]
+fn test_validate_and_execute_register_dapp_proposal() {
+    // Set up the test environment with a single neuron
+    let (mut canister_fixture, user_principal, neuron_id) =
+        GovernanceCanisterFixtureBuilder::new().create_with_test_neuron();
+
+    let proposal = RegisterDappCanisters {
+        canister_ids: vec![CanisterId::from_u64(10000).get()],
+    };
+
+    // There will be only one call to SNS root. Mock a successful response
+    canister_fixture
+        .environment_fixture
+        .push_mocked_canister_reply(RegisterDappCanistersResponse {});
+
+    // Make the proposal. Since there is only one neuron, it expected to immediately pass and
+    // execute.
+    let (_proposal_id, proposal_data) = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, &user_principal)
+        .unwrap();
+
+    // Proposal should not have failed execution
+    assert_eq!(proposal_data.failed_timestamp_seconds, 0);
+    assert!(proposal_data.executed_timestamp_seconds > 0);
+
+    let observed_register_canister_request = match canister_fixture
+        .environment_fixture
+        .pop_observed_canister_call()
+    {
+        CanisterCallRequest::RegisterDappCanisters(request) => request,
+        unexpected_observed_canister_call => {
+            panic!("Unexpected observed_canister_call: {unexpected_observed_canister_call:?}")
+        }
+    };
+
+    // Assert that the observed request includes the canister_ids passed in the proposal
+    assert_eq!(
+        observed_register_canister_request.canister_ids,
+        vec![CanisterId::from_u64(10000).get()]
+    );
+}
+
+#[test]
+fn test_register_dapp_canister_proposal_root_failure() {
+    // Set up the test environment with a single neuron
+    let (mut canister_fixture, user_principal, neuron_id) =
+        GovernanceCanisterFixtureBuilder::new().create_with_test_neuron();
+
+    let proposal = RegisterDappCanisters {
+        canister_ids: vec![CanisterId::from_u64(10000).get()],
+    };
+
+    // There will be only one call to SNS root. Mock a failed response from root (currently this
+    // is a panic)
+    canister_fixture
+        .environment_fixture
+        .push_mocked_canister_panic("SNS ROOT PANICKED");
+
+    // Make the proposal. Since there is only one neuron, it expected to immediately pass and
+    // execute. The execution will fail, but that is observed in the ProposalData.
+    let (_proposal_id, proposal_data) = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, &user_principal)
+        .unwrap();
+
+    // Proposal should have failed execution
+    assert!(proposal_data.failed_timestamp_seconds > 0);
+    assert_eq!(proposal_data.executed_timestamp_seconds, 0);
+    assert!(proposal_data
+        .failure_reason
+        .unwrap()
+        .error_message
+        .contains("Canister method call failed"));
+
+    let observed_register_canister_request = match canister_fixture
+        .environment_fixture
+        .pop_observed_canister_call()
+    {
+        CanisterCallRequest::RegisterDappCanisters(request) => request,
+        unexpected_observed_canister_call => {
+            panic!("Unexpected observed_canister_call: {unexpected_observed_canister_call:?}")
+        }
+    };
+
+    // Assert that the observed request includes the canister_ids passed in the proposal
+    assert_eq!(
+        observed_register_canister_request.canister_ids,
+        vec![CanisterId::from_u64(10000).get()]
+    );
+}
+
+#[test]
+fn test_validate_and_execute_deregister_dapp_proposal() {
+    // Set up the test environment with a single neuron
+    let (mut canister_fixture, user_principal, neuron_id) =
+        GovernanceCanisterFixtureBuilder::new().create_with_test_neuron();
+
+    let test_canister_id = CanisterId::from_u64(10000).get();
+
+    let proposal = DeregisterDappCanisters {
+        canister_ids: vec![test_canister_id],
+        new_controllers: vec![user_principal],
+    };
+
+    // There will be only one call to SNS root. Mock a successful response
+    canister_fixture
+        .environment_fixture
+        .push_mocked_canister_reply(SetDappControllersResponse {
+            failed_updates: vec![],
+        });
+
+    // Make the proposal. Since there is only one neuron, it expected to immediately pass and
+    // execute.
+    let (_proposal_id, proposal_data) = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, &user_principal)
+        .unwrap();
+
+    // Proposal should not have failed execution
+    assert_eq!(proposal_data.failed_timestamp_seconds, 0);
+    assert!(proposal_data.executed_timestamp_seconds > 0);
+
+    let observed_register_canister_request = match canister_fixture
+        .environment_fixture
+        .pop_observed_canister_call()
+    {
+        CanisterCallRequest::SetDappControllers(request) => request,
+        unexpected_observed_canister_call => {
+            panic!("Unexpected observed_canister_call: {unexpected_observed_canister_call:?}")
+        }
+    };
+
+    // Assert that the observed request includes the canister_ids passed in the proposal
+    assert_eq!(
+        observed_register_canister_request
+            .canister_ids
+            .unwrap()
+            .canister_ids,
+        vec![CanisterId::from_u64(10000).get()]
+    );
+}
+
+#[test]
+fn test_validate_and_execute_deregister_dapp_proposal_failure() {
+    // Set up the test environment with a single neuron
+    let (mut canister_fixture, user_principal, neuron_id) =
+        GovernanceCanisterFixtureBuilder::new().create_with_test_neuron();
+
+    let test_canister_id = CanisterId::from_u64(10000).get();
+
+    let proposal = DeregisterDappCanisters {
+        canister_ids: vec![test_canister_id],
+        new_controllers: vec![user_principal],
+    };
+
+    // There will be only one call to SNS root. Mock a panic response
+    canister_fixture
+        .environment_fixture
+        .push_mocked_canister_panic("SNS ROOT PANICKED");
+
+    // Make the proposal. Since there is only one neuron, it expected to immediately pass and
+    // execute.
+    let (_proposal_id, proposal_data) = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, &user_principal)
+        .unwrap();
+
+    // Proposal should have failed execution
+    assert!(proposal_data.failed_timestamp_seconds > 0);
+    assert_eq!(proposal_data.executed_timestamp_seconds, 0);
+
+    let observed_register_canister_request = match canister_fixture
+        .environment_fixture
+        .pop_observed_canister_call()
+    {
+        CanisterCallRequest::SetDappControllers(request) => request,
+        unexpected_observed_canister_call => {
+            panic!("Unexpected observed_canister_call: {unexpected_observed_canister_call:?}")
+        }
+    };
+
+    // Assert that the observed request includes the canister_ids passed in the proposal
+    assert_eq!(
+        observed_register_canister_request
+            .canister_ids
+            .unwrap()
+            .canister_ids,
+        vec![CanisterId::from_u64(10000).get()]
+    );
+}
+
+#[test]
+fn test_validate_and_execute_deregister_dapp_proposal_fails_when_cant_set_all_controllers() {
+    // Set up the test environment with a single neuron
+    let (mut canister_fixture, user_principal, neuron_id) =
+        GovernanceCanisterFixtureBuilder::new().create_with_test_neuron();
+
+    let test_canister_id = CanisterId::from_u64(10000).get();
+
+    let proposal = DeregisterDappCanisters {
+        canister_ids: vec![test_canister_id],
+        new_controllers: vec![user_principal],
+    };
+
+    // There will be only one call to SNS root. Mock a panic response
+    canister_fixture
+        .environment_fixture
+        .push_mocked_canister_reply(SetDappControllersResponse {
+            failed_updates: vec![FailedUpdate {
+                dapp_canister_id: Some(test_canister_id),
+                err: None,
+            }],
+        });
+
+    // Make the proposal. Since there is only one neuron, it expected to immediately pass and
+    // execute.
+    let (_proposal_id, proposal_data) = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, &user_principal)
+        .unwrap();
+
+    // Proposal should have failed execution
+    assert!(proposal_data.failed_timestamp_seconds > 0);
+    assert_eq!(proposal_data.executed_timestamp_seconds, 0);
+
+    let observed_register_canister_request = match canister_fixture
+        .environment_fixture
+        .pop_observed_canister_call()
+    {
+        CanisterCallRequest::SetDappControllers(request) => request,
+        unexpected_observed_canister_call => {
+            panic!("Unexpected observed_canister_call: {unexpected_observed_canister_call:?}")
+        }
+    };
+
+    // Assert that the observed request includes the canister_ids passed in the proposal
+    assert_eq!(
+        observed_register_canister_request
+            .canister_ids
+            .unwrap()
+            .canister_ids,
+        vec![CanisterId::from_u64(10000).get()]
+    );
+}
+
+#[test]
+fn test_validate_and_execute_register_dapp_proposal_fails_when_no_canisters_passed() {
+    // Set up the test environment with a single neuron
+    let (mut canister_fixture, user_principal, neuron_id) =
+        GovernanceCanisterFixtureBuilder::new().create_with_test_neuron();
+
+    let proposal = RegisterDappCanisters {
+        canister_ids: vec![],
+    };
+
+    // There will be only one call to SNS root. Mock a successful response
+    canister_fixture
+        .environment_fixture
+        .push_mocked_canister_reply(RegisterDappCanistersResponse {});
+
+    // Make the proposal. Since there is only one neuron, it expected to immediately pass and
+    // execute.
+    let GovernanceError {
+        error_type: _,
+        error_message,
+    } = canister_fixture
+        .make_default_proposal(&neuron_id, proposal, &user_principal)
+        .unwrap_err();
+
+    // Proposal should not have failed execution
+    assert!(error_message.contains("must specify at least one canister id"));
 }

@@ -40,15 +40,14 @@ use ic_sns_init::pb::v1::{
     FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
     TreasuryDistribution,
 };
-use ic_sns_root::{pb::v1::RegisterDappCanisterRequest, CanisterIdRecord, CanisterStatusResultV2};
 use ic_sns_swap::pb::v1::{
     self as swap_pb, error_refund_icp_response, params::NeuronBasketConstructionParameters,
     set_dapp_controllers_call_result, ErrorRefundIcpRequest, ErrorRefundIcpResponse,
     SetDappControllersCallResult, SetDappControllersResponse,
 };
 use ic_sns_test_utils::state_test_helpers::{
-    participate_in_swap, send_participation_funds, sns_governance_list_neurons,
-    sns_root_register_dapp_canister, swap_get_state,
+    canister_status, participate_in_swap, send_participation_funds, sns_governance_list_neurons,
+    sns_root_register_dapp_canisters, swap_get_state,
 };
 use ic_sns_wasm::pb::v1::SnsCanisterIds;
 use ic_state_machine_tests::StateMachine;
@@ -89,25 +88,6 @@ struct SwapPerformanceResults {
     instructions_consumed_swapping: f64,
     instructions_consumed_finalization: f64,
     time_to_finalize_swap: Duration,
-}
-
-// TODO: Move this to one of the state_test_helpers.rs files.
-fn canister_status(
-    state_machine: &mut StateMachine,
-    sender: PrincipalId,
-    request: &CanisterIdRecord,
-) -> CanisterStatusResultV2 {
-    let request = Encode!(&request).unwrap();
-    let result = state_machine
-        .execute_ingress_as(sender, CanisterId::ic_00(), "canister_status", request)
-        .unwrap();
-    let result = match result {
-        WasmResult::Reply(reply) => reply,
-        WasmResult::Reject(reject) => {
-            panic!("get_state was rejected by the swap canister: {:#?}", reject)
-        }
-    };
-    Decode!(&result, CanisterStatusResultV2).unwrap()
 }
 
 /// Returns a list of randomly generated principal IDs.
@@ -317,12 +297,11 @@ fn begin_swap(
         dapp_canister_id,
         vec![canister_ids.root.unwrap()],
     );
-    sns_root_register_dapp_canister(
+    sns_root_register_dapp_canisters(
         state_machine,
         canister_ids.root.unwrap().try_into().unwrap(),
-        &RegisterDappCanisterRequest {
-            canister_id: Some(dapp_canister_id.into()),
-        },
+        canister_ids.governance.unwrap().try_into().unwrap(),
+        vec![dapp_canister_id],
     );
 
     // Make OpenSnsTokenSwap proposal.
@@ -1666,7 +1645,7 @@ fn swap_lifecycle_sad() {
     // Step 3.4: Dapp should once again return to the (exclusive) control of TEST_USER1.
     {
         let dapp_canister_status = canister_status(
-            &mut state_machine,
+            &state_machine,
             *TEST_USER1_PRINCIPAL,
             &dapp_canister_id.into(),
         );

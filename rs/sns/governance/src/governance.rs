@@ -15,16 +15,16 @@ use crate::pb::v1::{
     },
     neuron::{DissolveState, Followees},
     proposal, Account as AccountProto, Ballot, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-    DefaultFollowees, DisburseMaturityInProgress, Empty, GetMetadataRequest, GetMetadataResponse,
-    GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-    GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-    Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-    ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-    ManageNeuronResponse, ManageSnsMetadata, NervousSystemParameters, Neuron, NeuronId,
-    NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-    ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RewardEvent, Tally,
-    TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
-    VotingRewardsParameters,
+    DefaultFollowees, DeregisterDappCanisters, DisburseMaturityInProgress, Empty,
+    GetMetadataRequest, GetMetadataResponse, GetNeuron, GetNeuronResponse, GetProposal,
+    GetProposalResponse, GetSnsInitializationParametersRequest,
+    GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
+    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
+    NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+    NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
+    ProposalRewardStatus, RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
+    UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
 };
 use crate::{account_from_proto, account_to_proto};
 use ic_base_types::PrincipalId;
@@ -65,6 +65,10 @@ use crate::proposal::{
 };
 
 use crate::logs::{ERROR, INFO};
+use crate::pb::sns_root_types::{
+    RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
+    SetDappControllersResponse,
+};
 use crate::pb::v1::governance::{
     neuron_in_flight_command, SnsMetadata, UpgradeInProgress, Version,
 };
@@ -74,7 +78,7 @@ use crate::sns_upgrade::{
     get_all_sns_canisters, get_running_version, get_upgrade_params, get_wasm, UpgradeSnsParams,
 };
 use crate::types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock};
-use candid::Encode;
+use candid::{Decode, Encode};
 use dfn_core::api::{spawn, CanisterId};
 use ic_canister_log::log;
 use ic_nervous_system_common::{
@@ -453,6 +457,8 @@ impl ValidGovernanceProto {
     }
 
     fn validate_canister_id_field(name: &str, principal_id: PrincipalId) -> Result<(), String> {
+        // TODO(NNS1-1992) – CanisterId::try_from always returns `Ok(_)` so this
+        // check does nothing.
         match CanisterId::try_from(principal_id) {
             Ok(_) => Ok(()),
             Err(err) => Err(format!(
@@ -1964,6 +1970,14 @@ impl Governance {
             proposal::Action::RemoveGenericNervousSystemFunction(id) => {
                 self.perform_remove_generic_nervous_system_function(id)
             }
+            proposal::Action::RegisterDappCanisters(register_dapp_canisters) => {
+                self.perform_register_dapp_canisters(register_dapp_canisters)
+                    .await
+            }
+            proposal::Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
+                self.perform_deregister_dapp_canisters(deregister_dapp_canisters)
+                    .await
+            }
             proposal::Action::ManageSnsMetadata(manage_sns_metadata) => {
                 self.perform_manage_sns_metadata(manage_sns_metadata)
             }
@@ -2061,6 +2075,113 @@ impl Governance {
         }
     }
 
+    /// Registers a list of Dapp canister ids in the root canister.
+    async fn perform_register_dapp_canisters(
+        &self,
+        register_dapp_canisters: RegisterDappCanisters,
+    ) -> Result<(), GovernanceError> {
+        let payload = candid::Encode!(&RegisterDappCanistersRequest::from(
+            register_dapp_canisters.clone()
+        ))
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Could not encode RegisterDappCanistersRequest: {err:?}"),
+            )
+        })?;
+        self.env
+            .call_canister(
+                self.proto.root_canister_id_or_panic(),
+                "register_dapp_canisters",
+                payload,
+            )
+            .await
+            // Convert to return type.
+            .map(|reply| {
+                // This line is to ensure we handle the reply properly if it's ever
+                // changed to not be empty.
+                match candid::Decode!(&reply, RegisterDappCanistersResponse) {
+                    Ok(RegisterDappCanistersResponse {}) => {}
+                    Err(_) => log!(ERROR, "Could not decode RegisterDappCanistersResponse!"),
+                };
+
+                log!(
+                    INFO,
+                    "Performed register_dapp_canisters, registering the following canisters: {:?}",
+                    &register_dapp_canisters.canister_ids
+                );
+            })
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Canister method call failed: {err:?}"),
+                )
+            })
+    }
+
+    /// Sets the controllers of registered dapp canisters in root.
+    /// Dapp canisters can be registered via the register_dapp_canisters proposal.
+    async fn perform_deregister_dapp_canisters(
+        &self,
+        deregister_dapp_canisters: DeregisterDappCanisters,
+    ) -> Result<(), GovernanceError> {
+        let payload = candid::Encode!(&SetDappControllersRequest::from(
+            deregister_dapp_canisters.clone()
+        ))
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Could not encode SetDappControllersRequest: {err:?}"),
+            )
+        })?;
+        self.env
+            .call_canister(
+                self.proto.root_canister_id_or_panic(),
+                "set_dapp_controllers",
+                payload,
+            )
+            .await
+            // Convert to return type.
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Canister method call failed: {err:?}"),
+                )
+            })
+            // Make sure no canisters' controllers failed to be set.
+            .and_then(|reply| {
+                // This line is to ensure we handle the reply properly if it's ever
+                // changed to not be empty.
+                match candid::Decode!(&reply, SetDappControllersResponse) {
+                    Ok(SetDappControllersResponse { failed_updates }) => {
+                        if failed_updates.is_empty() {
+                            log!(
+                                INFO,
+                                "Deregistered the following dapp canisters: {:?}.",
+                                deregister_dapp_canisters.canister_ids
+                            );
+                            Ok(())
+                        } else {
+                            let message = format!(
+                                "When trying to deregister the following dapp canisters: {:?} \n\
+                                The following canisters failed to deregister: {:?}",
+                                deregister_dapp_canisters.canister_ids, failed_updates
+                            );
+                            Err(GovernanceError::new_with_message(
+                                ErrorType::External,
+                                message,
+                            ))
+                        }
+                    }
+                    Err(_) => Err(GovernanceError::new_with_message(
+                        ErrorType::External,
+                        "Could not decode SetDappControllersResponse".to_string(),
+                    )),
+                }
+            })
+    }
+
+    // Make a change to the values of Sns Metadata
     fn perform_manage_sns_metadata(
         &mut self,
         manage_sns_metadata: ManageSnsMetadata,
@@ -2202,6 +2323,8 @@ impl Governance {
             .iter()
             .map(|x| {
                 CanisterId::new(*x).unwrap_or_else(|_| {
+                    // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
+                    // check does nothing.
                     panic!("Could not decode principalId into CanisterId: {}", x)
                 })
             })
@@ -5341,12 +5464,18 @@ mod tests {
     #[tokio::test]
     async fn test_disallow_enabling_voting_rewards_while_in_pre_initialization_swap() {
         // Step 1: Prepare the world, i.e. Governance.
+
+        let governance_canister_id = canister_test_id(501);
+
+        let mut env = NativeEnvironment::default();
+        env.local_canister_id = Some(governance_canister_id);
         let mut governance = Governance::new(
             GovernanceProto {
                 neurons: btreemap! {
                     A_NEURON_ID.to_string() => A_NEURON.clone(),
                 },
                 mode: governance::Mode::PreInitializationSwap as i32,
+
                 ..basic_governance_proto()
             }
             .try_into()
@@ -6857,7 +6986,7 @@ mod tests {
         assert_proposal_failed(execute_proposal(&mut governance, 6), "Archive upgrade");
         assert_proposal_failed(
             execute_proposal(&mut governance, 7),
-            "Unregistered canister upgrade",
+            "Unknown canister upgrade",
         );
     }
 

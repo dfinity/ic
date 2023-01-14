@@ -17,8 +17,9 @@ use ic_sns_root::{
     logs::{ERROR, INFO},
     pb::v1::{
         CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse,
-        RegisterDappCanisterRequest, RegisterDappCanisterResponse, SetDappControllersRequest,
-        SetDappControllersResponse, SnsRootCanister,
+        RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
+        RegisterDappCanistersResponse, SetDappControllersRequest, SetDappControllersResponse,
+        SnsRootCanister,
     },
     CanisterIdRecord, CanisterStatusResultV2, EmptyBlob, GetSnsCanistersSummaryRequest,
     GetSnsCanistersSummaryResponse, LedgerCanisterClient, ManagementCanisterClient,
@@ -268,19 +269,23 @@ fn change_canister() {
     });
 }
 
-/// Tells this canister (SNS root) about a dapp canister that it controls.
+/// This function is deprecated, and `register_dapp_canisters` should be used
+/// instead. (NNS1-1991)
 ///
-/// The canister must not be one of the distinguished SNS canisters
-/// (i.e. root, governance, ledger). Furthermore, the canister must be
+/// Tells this canister (SNS root) about a list of dapp canister that it controls.
+///
+/// The canisters must not be one of the distinguished SNS canisters
+/// (i.e. root, governance, ledger). Furthermore, the canisters must be
 /// exclusively be controlled by this canister (i.e. SNS root). Otherwise,
 /// the request will be rejected.
 ///
 /// Registered dapp canisters are used by at least two methods:
 ///   1. get_sns_canisters_summary
-///   2. set_dapp_controllers (currently in review).
+///   2. set_dapp_controllers.
 #[export_name = "canister_update register_dapp_canister"]
 fn register_dapp_canister() {
     log!(INFO, "register_dapp_canister");
+    assert_eq_governance_canister_id(dfn_core::api::caller());
     over_async(candid_one, register_dapp_canister_);
 }
 
@@ -288,7 +293,41 @@ fn register_dapp_canister() {
 async fn register_dapp_canister_(
     request: RegisterDappCanisterRequest,
 ) -> RegisterDappCanisterResponse {
-    SnsRootCanister::register_dapp_canister(
+    let request = RegisterDappCanistersRequest {
+        canister_ids: request.canister_id.into_iter().collect(),
+    };
+    let RegisterDappCanistersResponse {} = SnsRootCanister::register_dapp_canisters(
+        &STATE,
+        &mut RealManagementCanisterClient::new(),
+        dfn_core::api::id(),
+        request,
+    )
+    .await;
+    RegisterDappCanisterResponse {}
+}
+
+/// Tells this canister (SNS root) about a list of dapp canister that it controls.
+///
+/// The canisters must not be one of the distinguished SNS canisters
+/// (i.e. root, governance, ledger). Furthermore, the canisters must be
+/// exclusively be controlled by this canister (i.e. SNS root). Otherwise,
+/// the request will be rejected.
+///
+/// Registered dapp canisters are used by at least two methods:
+///   1. get_sns_canisters_summary
+///   2. set_dapp_controllers.
+#[export_name = "canister_update register_dapp_canisters"]
+fn register_dapp_canisters() {
+    log!(INFO, "register_dapp_canisters");
+    assert_eq_governance_canister_id(dfn_core::api::caller());
+    over_async(candid_one, register_dapp_canisters_);
+}
+
+#[candid_method(update, rename = "register_dapp_canisters")]
+async fn register_dapp_canisters_(
+    request: RegisterDappCanistersRequest,
+) -> RegisterDappCanistersResponse {
+    SnsRootCanister::register_dapp_canisters(
         &STATE,
         &mut RealManagementCanisterClient::new(),
         dfn_core::api::id(),
@@ -299,14 +338,20 @@ async fn register_dapp_canister_(
 
 /// Sets the controllers of registered dapp canisters.
 ///
-/// Dapp canisters can be registered via the register_dapp_canister method.
+/// Dapp canisters can be registered via the register_dapp_canisters method.
 ///
-/// Caller must be the swap canister. Otherwise, the request will be
-/// rejected.
+/// Caller must be the Governance or Sale canister. Otherwise, the request will
+/// be rejected.
 ///
 /// Registered dapp canisters must not have disappeared prior to this being
 /// called. Otherwise, request will be rejected. Some precautions are taken
 /// to avoid a partially completed operation, but this cannot be guaranteed.
+///
+/// If `request.canister_ids` is `None`, controllers of all registered dapps
+/// will be set. This may lead to confusing behavior if a new controller is
+/// added after the message is sent but before it is processed. This
+/// functionality may be removed in the future: see NNS1-1989. Only the Sale
+/// canister can use this functionality.
 #[export_name = "canister_update set_dapp_controllers"]
 fn set_dapp_controllers() {
     log!(INFO, "set_dapp_controllers");

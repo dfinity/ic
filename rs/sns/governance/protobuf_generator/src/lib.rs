@@ -138,6 +138,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         .join(" "),
     );
     config.type_attribute(
+        "ic_sns_governance.pb.v1.RegisterDappCanisters",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.DeregisterDappCanisters",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
         "ic_sns_governance.pb.v1.UpgradeSnsControlledCanister",
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );

@@ -563,10 +563,17 @@ message SettleCommunityFundParticipationResult {
 
 // BEGIN NNS1-1589 HACKS
 
-// Copied from sns root.proto
+// Change control of the listed canisters to the listed principal id.
+// Copy of the type in root.proto. TODO(NNS1-1589)
 message SetDappControllersRequest {
-  repeated ic_base_types.pb.v1.PrincipalId controller_principal_ids = 1;
+  message CanisterIds {
+    repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
+  }
+  optional CanisterIds canister_ids = 1;
+
+  repeated ic_base_types.pb.v1.PrincipalId controller_principal_ids = 2;
 }
+
 message SetDappControllersResponse {
   message FailedUpdate {
     ic_base_types.pb.v1.PrincipalId dapp_canister_id = 1;

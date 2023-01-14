@@ -54,7 +54,9 @@ type ListSnsCanistersResponse = record {
   archives : vec principal;
 };
 type RegisterDappCanisterRequest = record { canister_id : opt principal };
+type RegisterDappCanistersRequest = record { canister_ids : vec principal };
 type SetDappControllersRequest = record {
+  canister_ids : opt RegisterDappCanistersRequest;
   controller_principal_ids : vec principal;
 };
 type SetDappControllersResponse = record { failed_updates : vec FailedUpdate };
@@ -75,6 +77,7 @@ service : (SnsRootCanister) -> {
     );
   list_sns_canisters : (record {}) -> (ListSnsCanistersResponse) query;
   register_dapp_canister : (RegisterDappCanisterRequest) -> (record {});
+  register_dapp_canisters : (RegisterDappCanistersRequest) -> (record {});
   set_dapp_controllers : (SetDappControllersRequest) -> (
       SetDappControllersResponse,
     );

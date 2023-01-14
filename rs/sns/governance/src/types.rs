@@ -1,6 +1,10 @@
 use crate::{
     governance::{log_prefix, Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
     logs::{ERROR, INFO},
+    pb::sns_root_types::{
+        set_dapp_controllers_request::CanisterIds, RegisterDappCanistersRequest,
+        SetDappControllersRequest,
+    },
     pb::v1::{
         claim_swap_neurons_request::NeuronParameters,
         get_neuron_response,
@@ -13,10 +17,11 @@ use crate::{
         manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse},
         nervous_system_function::FunctionType,
         proposal::Action,
-        DefaultFollowees, Empty, ExecuteGenericNervousSystemFunction, GovernanceError,
-        ManageNeuronResponse, NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId,
-        NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId, RewardEvent,
-        Vote, VotingRewardsParameters,
+        DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
+        GovernanceError, ManageNeuronResponse, Motion, NervousSystemFunction,
+        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+        NeuronPermissionType, ProposalId, RegisterDappCanisters, RewardEvent,
+        TransferSnsTreasuryFunds, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
     },
     proposal::ValidGenericNervousSystemFunction,
 };
@@ -78,6 +83,12 @@ pub mod native_action_ids {
 
     /// TransferSnsTreasuryFunds
     pub const TRANSFER_SNS_TREASURY_FUNDS: u64 = 9;
+
+    /// RegisterDappCanisters Action.
+    pub const REGISTER_DAPP_CANISTERS: u64 = 10;
+
+    /// DeregisterDappCanisters Action.
+    pub const DEREGISTER_DAPP_CANISTERS: u64 = 11;
 }
 
 impl governance::Mode {
@@ -1007,6 +1018,21 @@ impl From<Action> for NervousSystemFunction {
                 ),
                 function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
             },
+            Action::RegisterDappCanisters(_) => NervousSystemFunction {
+                id: native_action_ids::DEREGISTER_DAPP_CANISTERS,
+                name: "Register dapp canisters".to_string(),
+                description: Some("Proposal to register a dapp canister with the SNS.".to_string()),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
+            Action::DeregisterDappCanisters(_) => NervousSystemFunction {
+                id: native_action_ids::REGISTER_DAPP_CANISTERS,
+                name: "Deegister Dapp Canisters".to_string(),
+                description: Some(
+                    "Proposal to deregister a previously-registered dapp canister from the SNS."
+                        .to_string(),
+                ),
+                function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
+            },
         }
     }
 }
@@ -1366,6 +1392,8 @@ impl From<&Action> for u64 {
                 native_action_ids::REMOVE_GENERIC_NERVOUS_SYSTEM_FUNCTION
             }
             Action::ExecuteGenericNervousSystemFunction(proposal) => proposal.function_id,
+            Action::RegisterDappCanisters(_) => native_action_ids::REGISTER_DAPP_CANISTERS,
+            Action::DeregisterDappCanisters(_) => native_action_ids::DEREGISTER_DAPP_CANISTERS,
             Action::ManageSnsMetadata(_) => native_action_ids::MANAGE_SNS_METADATA,
             Action::TransferSnsTreasuryFunds(_) => native_action_ids::TRANSFER_SNS_TREASURY_FUNDS,
         }
@@ -1643,6 +1671,77 @@ impl get_neuron_response::Result {
             get_neuron_response::Result::Neuron(n) => Ok(n),
         }
         .unwrap()
+    }
+}
+
+impl From<RegisterDappCanisters> for RegisterDappCanistersRequest {
+    fn from(register_dapp_canisters: RegisterDappCanisters) -> RegisterDappCanistersRequest {
+        RegisterDappCanistersRequest {
+            canister_ids: register_dapp_canisters.canister_ids,
+        }
+    }
+}
+
+impl From<DeregisterDappCanisters> for SetDappControllersRequest {
+    fn from(deregister_dapp_canisters: DeregisterDappCanisters) -> SetDappControllersRequest {
+        SetDappControllersRequest {
+            canister_ids: Some(CanisterIds {
+                canister_ids: deregister_dapp_canisters.canister_ids,
+            }),
+            controller_principal_ids: deregister_dapp_canisters.new_controllers,
+        }
+    }
+}
+
+impl From<Motion> for Action {
+    fn from(motion: Motion) -> Action {
+        Action::Motion(motion)
+    }
+}
+
+impl From<NervousSystemParameters> for Action {
+    fn from(nervous_system_parameters: NervousSystemParameters) -> Action {
+        Action::ManageNervousSystemParameters(nervous_system_parameters)
+    }
+}
+
+impl From<NervousSystemFunction> for Action {
+    fn from(nervous_system_function: NervousSystemFunction) -> Action {
+        Action::AddGenericNervousSystemFunction(nervous_system_function)
+    }
+}
+
+// RemoveGenericNervousSystemFunction not implemented because it takes a u64
+
+impl From<ExecuteGenericNervousSystemFunction> for Action {
+    fn from(
+        execute_generic_nervous_system_function: ExecuteGenericNervousSystemFunction,
+    ) -> Action {
+        Action::ExecuteGenericNervousSystemFunction(execute_generic_nervous_system_function)
+    }
+}
+
+impl From<UpgradeSnsToNextVersion> for Action {
+    fn from(upgrade_sns_to_next_version: UpgradeSnsToNextVersion) -> Action {
+        Action::UpgradeSnsToNextVersion(upgrade_sns_to_next_version)
+    }
+}
+
+impl From<TransferSnsTreasuryFunds> for Action {
+    fn from(transfer_sns_treasury_funds: TransferSnsTreasuryFunds) -> Action {
+        Action::TransferSnsTreasuryFunds(transfer_sns_treasury_funds)
+    }
+}
+
+impl From<RegisterDappCanisters> for Action {
+    fn from(register_dapp_canisters: RegisterDappCanisters) -> Action {
+        Action::RegisterDappCanisters(register_dapp_canisters)
+    }
+}
+
+impl From<DeregisterDappCanisters> for Action {
+    fn from(deregister_dapp_canisters: DeregisterDappCanisters) -> Action {
+        Action::DeregisterDappCanisters(deregister_dapp_canisters)
     }
 }
 

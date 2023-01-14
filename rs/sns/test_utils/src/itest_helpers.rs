@@ -16,6 +16,7 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
 };
+use ic_sns_governance::pb::v1::RegisterDappCanisters;
 use ic_sns_governance::{
     governance::TimeWarp,
     init::GovernanceCanisterInitPayloadBuilder,
@@ -44,8 +45,7 @@ use ic_sns_governance::{
 };
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_root::{
-    pb::v1::{RegisterDappCanisterRequest, RegisterDappCanisterResponse, SnsRootCanister},
-    GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    pb::v1::SnsRootCanister, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
 };
 use ic_sns_swap::pb::v1::Init as SwapInit;
 use ic_types::{CanisterId, PrincipalId};
@@ -337,7 +337,7 @@ impl SnsCanisters<'_> {
         let mut swap = runtime
             .create_canister_max_cycles_with_retries()
             .await
-            .expect("Couldn't create Ledger canister");
+            .expect("Couldn't create Swap canister");
 
         let mut index = runtime
             .create_canister_max_cycles_with_retries()
@@ -1179,18 +1179,24 @@ impl SnsCanisters<'_> {
 
     pub async fn register_dapp_canister(
         &self,
+        neuron_holder: &Sender,
+        neuron_id: &NeuronId,
         canister_id: CanisterId,
-    ) -> RegisterDappCanisterResponse {
-        self.root
-            .update_(
-                "register_dapp_canister",
-                candid_one,
-                RegisterDappCanisterRequest {
-                    canister_id: Some(canister_id.get()),
-                },
-            )
+    ) {
+        let proposal = Proposal {
+            title: "Register Dapp Canisters".to_string(),
+            summary: "Registering some Dapp Canisters".to_string(),
+            url: "".to_string(),
+            action: Some(Action::RegisterDappCanisters(RegisterDappCanisters {
+                canister_ids: vec![canister_id.get()],
+            })),
+        };
+        let proposal_id = self
+            .make_proposal(neuron_holder, &neuron_id.subaccount().unwrap(), proposal)
             .await
-            .expect("Call to register_dapp_canister failed")
+            .unwrap();
+
+        self.await_proposal_execution_or_failure(&proposal_id).await;
     }
 }
 

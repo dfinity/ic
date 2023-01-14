@@ -29,6 +29,8 @@ pub fn get_canister_id(canister_id: &Option<PrincipalId>) -> Result<CanisterId, 
     })?;
 
     CanisterId::new(canister_id).map_err(|err| {
+        // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
+        // code will never be executed.
         GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
             format!("Specified canister ID was invalid: {:?}", err,),

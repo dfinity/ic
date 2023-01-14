@@ -1,3 +1,4 @@
+use crate::fixtures::environment_fixture::{EnvironmentFixture, EnvironmentFixtureState};
 use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -8,7 +9,7 @@ use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
     ledger::ICRC1Ledger,
     pb::v1::{
-        get_neuron_response,
+        get_neuron_response, get_proposal_response,
         governance::{Mode, SnsMetadata},
         manage_neuron,
         manage_neuron::{AddNeuronPermissions, MergeMaturity, RemoveNeuronPermissions},
@@ -17,19 +18,22 @@ use ic_sns_governance::{
             AddNeuronPermissionsResponse, MergeMaturityResponse, RemoveNeuronPermissionsResponse,
         },
         neuron::{DissolveState, Followees},
-        GetNeuron, Governance as GovernanceProto, GovernanceError, ManageNeuron,
+        proposal::Action,
+        GetNeuron, GetProposal, Governance as GovernanceProto, GovernanceError, ManageNeuron,
         ManageNeuronResponse, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-        NeuronPermissionList, NeuronPermissionType,
+        NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
     },
-    types::{Environment, HeapGrowthPotential},
+    types::Environment,
 };
 use maplit::btreemap;
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use rand::{rngs::StdRng, SeedableRng};
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
     sync::{Arc, Mutex},
 };
+
+pub mod environment_fixture;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
@@ -371,73 +375,6 @@ impl NeuronBuilder {
     }
 }
 
-/// The EnvironmentFixture allows for independent testing of Environment functionality.
-#[derive(Clone)]
-pub struct EnvironmentFixture {
-    environment_fixture_state: Arc<Mutex<EnvironmentFixtureState>>,
-}
-
-impl EnvironmentFixture {
-    pub fn new(state: EnvironmentFixtureState) -> Self {
-        EnvironmentFixture {
-            environment_fixture_state: Arc::new(Mutex::new(state)),
-        }
-    }
-}
-
-#[async_trait]
-impl Environment for EnvironmentFixture {
-    fn now(&self) -> u64 {
-        self.environment_fixture_state.try_lock().unwrap().now
-    }
-
-    fn random_u64(&mut self) -> u64 {
-        self.environment_fixture_state
-            .try_lock()
-            .unwrap()
-            .rng
-            .next_u64()
-    }
-
-    fn random_byte_array(&mut self) -> [u8; 32] {
-        let mut bytes = [0u8; 32];
-        self.environment_fixture_state
-            .try_lock()
-            .unwrap()
-            .rng
-            .fill_bytes(&mut bytes);
-        bytes
-    }
-
-    async fn call_canister(
-        &self,
-        _canister_id: CanisterId,
-        _method_name: &str,
-        _arg: Vec<u8>,
-    ) -> Result<Vec<u8>, (Option<i32>, String)> {
-        unimplemented!("call_canister is unimplemented")
-    }
-
-    fn heap_growth_potential(&self) -> HeapGrowthPotential {
-        HeapGrowthPotential::NoIssue
-    }
-
-    fn canister_id(&self) -> CanisterId {
-        self.environment_fixture_state
-            .try_lock()
-            .unwrap()
-            .canister_id
-    }
-}
-
-/// The EnvironmentFixtureState captures the state of a given EnvironmentFixture instance.
-/// This state is used to respond to environment calls from Governance in a deterministic way.
-pub struct EnvironmentFixtureState {
-    now: u64,
-    rng: StdRng,
-    canister_id: CanisterId,
-}
-
 /// The GovernanceState is used to capture all of the salient details of the Governance
 /// canister, so that we can compute the "delta", or what changed between
 /// actions.
@@ -714,6 +651,59 @@ impl GovernanceCanisterFixture {
             _ => panic!("Unexpected command response when configuring the neuron"),
         }
     }
+
+    pub fn make_proposal(
+        &mut self,
+        target_neuron: &NeuronId,
+        proposal: Proposal,
+        caller: &PrincipalId,
+    ) -> Result<(ProposalId, ProposalData), GovernanceError> {
+        let manage_neuron_command = manage_neuron::Command::MakeProposal(proposal);
+        let manage_neuron_response =
+            self.manage_neuron(target_neuron, manage_neuron_command, caller);
+
+        match manage_neuron_response.command.unwrap() {
+            manage_neuron_response::Command::MakeProposal(make_proposal_response) => {
+                let proposal_id = make_proposal_response.proposal_id.unwrap();
+                let proposal = self.get_proposal_or_panic(&proposal_id);
+                Ok((proposal_id, proposal))
+            }
+            manage_neuron_response::Command::Error(governance_error) => Err(governance_error),
+            _ => panic!("Unexpected command response when making a proposal"),
+        }
+    }
+
+    pub fn make_default_proposal(
+        &mut self,
+        target_neuron: &NeuronId,
+        proposal: impl Into<Action>,
+        caller: &PrincipalId,
+    ) -> Result<(ProposalId, ProposalData), GovernanceError> {
+        self.make_proposal(
+            target_neuron,
+            Proposal {
+                action: Some(proposal.into()),
+                ..Default::default()
+            },
+            caller,
+        )
+    }
+
+    pub fn get_proposal_or_panic(&mut self, proposal_id: &ProposalId) -> ProposalData {
+        match self
+            .governance
+            .get_proposal(&GetProposal {
+                proposal_id: Some(*proposal_id),
+            })
+            .result
+            .unwrap()
+        {
+            get_proposal_response::Result::Error(e) => {
+                panic!("Proposal retrieval failed. Panicking 😬: {:?}", e)
+            }
+            get_proposal_response::Result::Proposal(proposal_data) => proposal_data,
+        }
+    }
 }
 
 pub type LedgerTransform = Box<dyn FnOnce(Box<dyn ICRC1Ledger>) -> Box<dyn ICRC1Ledger>>;
@@ -799,6 +789,8 @@ impl GovernanceCanisterFixtureBuilder {
             now: self.start_time,
             rng: StdRng::seed_from_u64(9539),
             canister_id: self.governance_canister_id,
+            observed_canister_calls: vec![],
+            mocked_canister_replies: vec![],
         });
 
         let sns_ledger_fixture = self.sns_ledger_builder.create();
@@ -828,6 +820,24 @@ impl GovernanceCanisterFixtureBuilder {
         };
         governance.capture_state();
         governance
+    }
+
+    /// Creates the fixture, and also initializes a neuron with 1e8 staked and
+    /// a dissolve delay of 6 months.
+    pub fn create_with_test_neuron(self) -> (GovernanceCanisterFixture, PrincipalId, NeuronId) {
+        let user_principal = PrincipalId::new_user_test_id(1000);
+        let neuron_id = neuron_id(user_principal, /*memo*/ 0);
+        let fixture = self
+            .add_neuron(
+                NeuronBuilder::new(
+                    neuron_id.clone(),
+                    E8,
+                    NeuronPermission::all(&user_principal),
+                )
+                .set_dissolve_delay(15778801),
+            )
+            .create();
+        (fixture, user_principal, neuron_id)
     }
 
     pub fn set_start_time(mut self, seconds: u64) -> Self {

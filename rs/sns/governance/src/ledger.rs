@@ -26,6 +26,8 @@ impl Runtime for DfnRuntime {
         Out: for<'a> ArgumentDecoder<'a>,
     {
         let principal_id = CanisterId::new(PrincipalId::from(id)).map_err(|e| {
+            // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
+            // check does nothing.
             (
                 0, /* TODO */
                 format!("Invalid canisterId {}: {}", id, e),
@@ -113,6 +115,8 @@ impl ICRC1Ledger for LedgerCanister {
 
     fn canister_id(&self) -> CanisterId {
         let principal_id = PrincipalId::from(self.client.ledger_canister_id);
+        // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
+        // check does nothing.
         CanisterId::new(principal_id).expect("Expected the Ledger's target to be a Canister")
     }
 }

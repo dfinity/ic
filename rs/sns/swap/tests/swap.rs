@@ -1343,6 +1343,8 @@ async fn test_finalize_swap_abort() {
         sns_root_client.observed_calls,
         vec![SnsRootClientCall::SetDappControllers(
             SetDappControllersRequest {
+                // Change controller of all dapps controlled by the root canister.
+                canister_ids: None,
                 controller_principal_ids
             }
         )],
