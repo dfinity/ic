@@ -937,7 +937,8 @@ pub mod settle_community_fund_participation_result {
 
 // BEGIN NNS1-1589 HACKS
 
-/// Copied from sns root.proto
+/// Change control of the listed canisters to the listed principal id.
+/// Copy of the type in root.proto. TODO(NNS1-1589)
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -948,8 +949,26 @@ pub mod settle_community_fund_participation_result {
     ::prost::Message,
 )]
 pub struct SetDappControllersRequest {
-    #[prost(message, repeated, tag = "1")]
+    #[prost(message, optional, tag = "1")]
+    pub canister_ids: ::core::option::Option<set_dapp_controllers_request::CanisterIds>,
+    #[prost(message, repeated, tag = "2")]
     pub controller_principal_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
+/// Nested message and enum types in `SetDappControllersRequest`.
+pub mod set_dapp_controllers_request {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct CanisterIds {
+        #[prost(message, repeated, tag = "1")]
+        pub canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    }
 }
 #[derive(
     candid::CandidType,

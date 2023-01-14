@@ -70,10 +70,6 @@ fn test_upgrade_canister_proposal_is_successful() {
             .await
             .expect("Could not set root as controller of dapp");
 
-        sns_canisters
-            .register_dapp_canister(dapp_canister.canister_id())
-            .await;
-
         // Step 1.b: Create a neuron.
         let neuron_id = sns_canisters
             .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
@@ -81,6 +77,10 @@ fn test_upgrade_canister_proposal_is_successful() {
         let subaccount = neuron_id
             .subaccount()
             .expect("Error creating the subaccount");
+
+        sns_canisters
+            .register_dapp_canister(&user, &neuron_id, dapp_canister.canister_id())
+            .await;
 
         // Step 2: Execute code under test: Propose that we upgrade dapp.
 
@@ -210,10 +210,6 @@ fn test_upgrade_canister_proposal_execution_fail() {
             .await
             .expect("Could not set root as controller of dapp");
 
-        sns_canisters
-            .register_dapp_canister(dapp_canister.canister_id())
-            .await;
-
         // Step 1.c: Create a neuron.
         let neuron_id = sns_canisters
             .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
@@ -221,6 +217,10 @@ fn test_upgrade_canister_proposal_execution_fail() {
         let subaccount = neuron_id
             .subaccount()
             .expect("Error creating the subaccount");
+
+        sns_canisters
+            .register_dapp_canister(&user, &neuron_id, dapp_canister.canister_id())
+            .await;
 
         // Step 2: Execute code under test: Propose that we upgrade dapp.
 

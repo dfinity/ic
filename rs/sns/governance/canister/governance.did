@@ -4,8 +4,10 @@ type Action = variant {
   AddGenericNervousSystemFunction : NervousSystemFunction;
   RemoveGenericNervousSystemFunction : nat64;
   UpgradeSnsToNextVersion : record {};
+  RegisterDappCanisters : RegisterDappCanisters;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
+  DeregisterDappCanisters : DeregisterDappCanisters;
   Unspecified : record {};
   ManageSnsMetadata : ManageSnsMetadata;
   ExecuteGenericNervousSystemFunction : ExecuteGenericNervousSystemFunction;
@@ -102,6 +104,10 @@ type DefiniteCanisterSettingsArgs = record {
   controllers : vec principal;
   memory_allocation : nat;
   compute_allocation : nat;
+};
+type DeregisterDappCanisters = record {
+  canister_ids : vec principal;
+  new_controllers : vec principal;
 };
 type Disburse = record { to_account : opt Account; amount : opt Amount };
 type DisburseMaturity = record {
@@ -325,6 +331,7 @@ type ProposalData = record {
   executed_timestamp_seconds : nat64;
 };
 type ProposalId = record { id : nat64 };
+type RegisterDappCanisters = record { canister_ids : vec principal };
 type RegisterVote = record { vote : int32; proposal : opt ProposalId };
 type RemoveNeuronPermissions = record {
   permissions_to_remove : opt NeuronPermissionList;

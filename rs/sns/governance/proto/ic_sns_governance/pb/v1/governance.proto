@@ -355,6 +355,24 @@ message ManageSnsMetadata {
 // This returns an error if the canister cannot be upgraded or no upgrades are available.
 message UpgradeSnsToNextVersion {}
 
+// A proposal to register a list of dapps in the root canister.
+message RegisterDappCanisters {
+  // The canister IDs to be registered (i.e. under the management of the SNS).
+  // The canisters must be already exclusively controlled by the SNS root 
+  // canister before making this proposal.
+  // At least one canister ID is required.
+  repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
+}
+
+// A proposal to remove a list of dapps from the SNS and assign them to new controllers
+message DeregisterDappCanisters {
+  // The canister IDs to be deregistered (i.e. removed from the management of the SNS).
+  repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
+
+  // The new controllers for the deregistered canisters.
+  repeated ic_base_types.pb.v1.PrincipalId new_controllers = 2;
+}
+
 // A proposal is the immutable input of a proposal submission.
 message Proposal {
   // The proposal's title as a text, which can be at most 256 bytes.
@@ -437,6 +455,16 @@ message Proposal {
     // Transfer SNS treasury funds (ICP or SNS token) to an account.
     // Id = 9.
     TransferSnsTreasuryFunds transfer_sns_treasury_funds = 13;
+
+    // Register one or more dapp canister(s) in the SNS root canister.
+    //
+    // Id = 10.
+    RegisterDappCanisters register_dapp_canisters = 14;
+
+    // Deregister one or more dapp canister(s) in the SNS root canister.
+    //
+    // Id = 11.
+    DeregisterDappCanisters deregister_dapp_canisters = 15;
   }
 }
 

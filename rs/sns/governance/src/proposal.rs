@@ -6,11 +6,12 @@ use crate::pb::v1::nervous_system_function::{FunctionType, GenericNervousSystemF
 use crate::pb::v1::proposal::Action;
 use crate::pb::v1::transfer_sns_treasury_funds::TransferFrom;
 use crate::pb::v1::{
-    proposal, ExecuteGenericNervousSystemFunction, Governance, ManageSnsMetadata, Motion,
-    NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData, ProposalDecisionStatus,
-    ProposalRewardStatus, Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
-    UpgradeSnsToNextVersion, Vote,
+    proposal, DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance,
+    ManageSnsMetadata, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
+    ProposalData, ProposalDecisionStatus, ProposalRewardStatus, RegisterDappCanisters, Tally,
+    TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
 };
+
 use crate::sns_upgrade::{get_upgrade_params, UpgradeSnsParams};
 use crate::types::{Environment, DEFAULT_TRANSFER_FEE};
 use crate::{validate_chars_count, validate_len, validate_required_field};
@@ -155,6 +156,9 @@ pub async fn validate_and_render_action(
         Some(action) => action,
     };
 
+    let disallowed_target_canister_ids: HashSet<CanisterId> =
+        reserved_canister_targets.clone().drain(..).collect();
+
     match action {
         proposal::Action::Unspecified(_unspecified) => {
             Err("`unspecified` was used, but is not a valid Proposal action.".into())
@@ -178,9 +182,6 @@ pub async fn validate_and_render_action(
             .await
         }
         proposal::Action::AddGenericNervousSystemFunction(function_to_add) => {
-            let disallowed_target_canister_ids: HashSet<CanisterId> =
-                reserved_canister_targets.clone().drain(..).collect();
-
             validate_and_render_add_generic_nervous_system_function(
                 &disallowed_target_canister_ids,
                 function_to_add,
@@ -196,6 +197,18 @@ pub async fn validate_and_render_action(
         proposal::Action::ExecuteGenericNervousSystemFunction(execute) => {
             validate_and_render_execute_nervous_system_function(env, execute, existing_functions)
                 .await
+        }
+        proposal::Action::RegisterDappCanisters(register_dapp_canisters) => {
+            validate_and_render_register_dapp_canisters(
+                register_dapp_canisters,
+                &disallowed_target_canister_ids,
+            )
+        }
+        proposal::Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
+            validate_and_render_deregister_dapp_canisters(
+                deregister_dapp_canisters,
+                &disallowed_target_canister_ids,
+            )
         }
         proposal::Action::ManageSnsMetadata(manage_sns_metadata) => {
             validate_and_render_manage_sns_metadata(manage_sns_metadata)
@@ -345,6 +358,8 @@ fn validate_and_render_upgrade_sns_controlled_canister(
             defects.push(err);
         }
         Ok(id) => {
+            // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
+            // check does nothing.
             if let Err(err) = CanisterId::new(*id) {
                 defects.push(format!("Specified canister ID was invalid: {}", err));
             } else {
@@ -474,6 +489,8 @@ fn validate_canister_id(
             defects.push(format!("{} field was not populated.", field_name));
             None
         }
+        // TODO(NNS1-1992) – CanisterId::new always returns `Ok(_)` so this
+        // check does nothing.
         Some(canister_id) => match CanisterId::new(*canister_id) {
             Err(err) => {
                 defects.push(format!("{} was invalid: {}", field_name, err));
@@ -674,6 +691,112 @@ pub async fn validate_and_render_execute_nervous_system_function(
                 ))
             }
         }
+    }
+}
+
+fn validate_and_render_register_dapp_canisters(
+    register_dapp_canisters: &RegisterDappCanisters,
+    disallowed_canister_ids: &HashSet<CanisterId>,
+) -> Result<String, String> {
+    if register_dapp_canisters.canister_ids.is_empty() {
+        return Err("RegisterDappCanisters must specify at least one canister id".to_string());
+    }
+
+    let canisters_to_register = register_dapp_canisters
+        .canister_ids
+        .iter()
+        .map(|id| CanisterId::new(*id))
+        .collect::<Result<HashSet<CanisterId>, _>>()
+        .map_err(|err| err.to_string())?;
+
+    let error_canister_ids: HashSet<&CanisterId> = disallowed_canister_ids
+        .intersection(&canisters_to_register)
+        .collect();
+
+    if error_canister_ids.is_empty() {
+        let canister_list = register_dapp_canisters
+            .canister_ids
+            .iter()
+            .map(|canister_id| format!("\n- {}", canister_id))
+            .collect::<String>();
+
+        let render = format!(
+            "# Proposal to register dapp canister: \n\
+             ## Canister ids: {canister_list}"
+        );
+        Ok(render)
+    } else {
+        let error_canister_list = error_canister_ids
+            .iter()
+            .map(|canister_id| format!("\n- {}", canister_id))
+            .collect::<String>();
+
+        let err_msg: String = format!(
+            "Invalid RegisterDappCanisters Proposal: \n\
+             The requested canister is an SNS canister. {error_canister_list}"
+        );
+        Err(err_msg)
+    }
+}
+
+fn validate_and_render_deregister_dapp_canisters(
+    deregister_dapp_canisters: &DeregisterDappCanisters,
+    disallowed_canister_ids: &HashSet<CanisterId>,
+) -> Result<String, String> {
+    if deregister_dapp_canisters.canister_ids.is_empty() {
+        return Err("DeregisterDappCanisters must specify at least one canister id".to_string());
+    }
+
+    if deregister_dapp_canisters.new_controllers.is_empty() {
+        return Err("DeregisterDappControllers must specify the new controllers".to_string());
+    }
+
+    let canisters_to_deregister = deregister_dapp_canisters
+        .canister_ids
+        .iter()
+        .map(|id| CanisterId::new(*id))
+        .collect::<Result<HashSet<CanisterId>, _>>()
+        .map_err(|err| err.to_string())?;
+
+    let error_canister_ids: HashSet<&CanisterId> = disallowed_canister_ids
+        .intersection(&canisters_to_deregister)
+        .collect();
+
+    if error_canister_ids.is_empty() {
+        let rendered = format!(
+            r"# Proposal to set the listed principals as controllers of the listed canisters:
+
+## Principals:
+- {}
+
+## Canisters:
+- {}",
+            deregister_dapp_canisters
+                .new_controllers
+                .iter()
+                .map(|c| format!("{}", c))
+                .collect::<Vec<_>>()
+                .join("\n- "),
+            deregister_dapp_canisters
+                .canister_ids
+                .iter()
+                .map(|c| format!("{}", c))
+                .collect::<Vec<_>>()
+                .join("\n- ")
+        );
+
+        Ok(rendered)
+    } else {
+        let error_canister_list = error_canister_ids
+            .iter()
+            .map(|canister_id| format!("\n- {}", canister_id))
+            .collect::<String>();
+
+        let err_msg: String = format!(
+            "Invalid DeregisterDappCanisters Proposal: \n\
+             The requested canister is an SNS canister. {error_canister_list}"
+        );
+        Err(err_msg)
     }
 }
 
@@ -1024,6 +1147,7 @@ mod tests {
     use ic_crypto_sha::Sha256;
     use ic_ic00_types::CanisterStatusResultV2;
     use ic_ic00_types::CanisterStatusType;
+    use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
     use ic_test_utilities::types::ids::canister_test_id;
     use lazy_static::lazy_static;
@@ -1033,11 +1157,14 @@ mod tests {
     pub const FORBIDDEN_CANISTER: CanisterId = CanisterId::ic_00();
 
     lazy_static! {
-        static ref FAKE_ENV: Box<dyn Environment> = Box::new(NativeEnvironment::default());
         static ref DEFAULT_PARAMS: NervousSystemParameters =
             NervousSystemParameters::with_default_values();
         static ref EMPTY_FUNCTIONS: BTreeMap<u64, NervousSystemFunction> = BTreeMap::new();
         static ref SNS_ROOT_CANISTER_ID: CanisterId = canister_test_id(500);
+        static ref SNS_GOVERNANCE_CANISTER_ID: CanisterId = canister_test_id(501);
+        static ref SNS_LEDGER_CANISTER_ID: CanisterId = canister_test_id(502);
+        static ref FAKE_ENV: Box<dyn Environment> =
+            Box::new(NativeEnvironment::new(Some(*SNS_GOVERNANCE_CANISTER_ID)));
     }
 
     fn governance_proto_for_proposal_tests(deployed_version: Option<Version>) -> GovernanceProto {
@@ -1049,7 +1176,7 @@ mod tests {
             in_flight_commands: Default::default(),
             genesis_timestamp_seconds: 0,
             metrics: None,
-            ledger_canister_id: None,
+            ledger_canister_id: Some(SNS_LEDGER_CANISTER_ID.get()),
             root_canister_id: Some(canister_test_id(10000).get()),
             id_to_nervous_system_functions: EMPTY_FUNCTIONS.clone(),
             mode: governance::Mode::Normal.into(),
@@ -1597,8 +1724,8 @@ mod tests {
         let expected_wasm_hash_requested = Sha256::hash(&[6]).to_vec();
         let root_canister_id = *SNS_ROOT_CANISTER_ID;
 
-        let governance_canister_id = canister_test_id(501);
-        let ledger_canister_id = canister_test_id(502);
+        let governance_canister_id = *SNS_GOVERNANCE_CANISTER_ID;
+        let ledger_canister_id = *SNS_LEDGER_CANISTER_ID;
         let swap_canister_id = canister_test_id(503);
         let ledger_archive_ids = vec![canister_test_id(504)];
         let index_canister_id = canister_test_id(505);
@@ -1935,6 +2062,7 @@ Version {
 
         assert!(err.contains("SnsMetadata.url must be less than"));
     }
+
     #[test]
     fn add_nervous_system_function_cant_target_disallowed_canisters() {
         // Ensure that no other reason for failure exists before testing error cases
@@ -2138,5 +2266,180 @@ Version {
             .unwrap_err(),
             "TransferSnsTreasuryFunds proposal was invalid for the following reason(s):\nFor transactions from SNS Token Treasury (SNS Ledger), the fee and minimum transaction is 1000 e8s"
         );
+    }
+
+    #[test]
+    fn validate_and_render_register_dapp_canisters_lists_canisters() {
+        let canister_ids = (0..10_u8)
+            .map(|i| PrincipalId::try_from(vec![i]))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let disallowed_canister_ids: HashSet<CanisterId> = HashSet::new();
+
+        let register_dapp_canisters = RegisterDappCanisters { canister_ids };
+        let rendered_proposal = validate_and_render_register_dapp_canisters(
+            &register_dapp_canisters,
+            &disallowed_canister_ids,
+        )
+        .unwrap();
+
+        for canister_id in register_dapp_canisters.canister_ids {
+            assert!(rendered_proposal.contains(&format!("\n- {canister_id}")), "rendered proposal \"{rendered_proposal}\" does not contain canister id \"- {canister_id}\"");
+        }
+
+        for line in rendered_proposal.lines() {
+            assert!(!line.starts_with(char::is_whitespace), "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace");
+        }
+    }
+
+    #[test]
+    fn validate_and_render_register_dapp_canisters_doesnt_allow_invalid_canisters() {
+        let canister_ids = (0..10_u8)
+            .map(|i| PrincipalId::try_from(vec![i]))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let disallowed_canister_ids = canister_ids
+            .iter()
+            // pick an arbitrary principalID
+            .skip(4)
+            .take(1)
+            // convert to CanisterId
+            .cloned()
+            .map(|p| CanisterId::new(p))
+            .collect::<Result<HashSet<_>, _>>()
+            .unwrap();
+
+        let register_dapp_canisters = RegisterDappCanisters { canister_ids };
+        let rendered_err = validate_and_render_register_dapp_canisters(
+            &register_dapp_canisters,
+            &disallowed_canister_ids,
+        )
+        .unwrap_err();
+
+        for canister_id in disallowed_canister_ids {
+            assert!(
+                rendered_err.contains(&format!("\n- {canister_id}")),
+                "error message \"{rendered_err}\" does not contain canister id \"- {canister_id}\""
+            );
+        }
+
+        for line in rendered_err.lines() {
+            assert!(
+                !line.starts_with(char::is_whitespace),
+                "error message \"{rendered_err}\" contains a line that starts with whitespace"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_and_render_register_dapp_canisters_doesnt_allow_empty_id_list() {
+        let canister_ids = vec![];
+        let disallowed_canister_ids: HashSet<CanisterId> = HashSet::new();
+
+        let register_dapp_canisters = RegisterDappCanisters { canister_ids };
+        let rendered_err = validate_and_render_register_dapp_canisters(
+            &register_dapp_canisters,
+            &disallowed_canister_ids,
+        )
+        .unwrap_err();
+
+        for line in rendered_err.lines() {
+            assert!(
+                !line.starts_with(char::is_whitespace),
+                "error message \"{rendered_err}\" contains a line that starts with whitespace"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_and_render_deregister_dapp_canisters_lists_canisters() {
+        let canister_ids = (0..10_u8)
+            .map(|i| PrincipalId::try_from(vec![i]))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let disallowed_canister_ids: HashSet<CanisterId> = HashSet::new();
+
+        let deregister_dapp_canisters = DeregisterDappCanisters {
+            canister_ids,
+            new_controllers: vec![*TEST_USER1_PRINCIPAL],
+        };
+        let rendered_proposal = validate_and_render_deregister_dapp_canisters(
+            &deregister_dapp_canisters,
+            &disallowed_canister_ids,
+        )
+        .unwrap();
+
+        for canister_id in deregister_dapp_canisters.canister_ids {
+            assert!(rendered_proposal.contains(&format!("\n- {canister_id}")), "rendered proposal \"{rendered_proposal}\" does not contain canister id {canister_id}");
+        }
+
+        for line in rendered_proposal.lines() {
+            assert!(!line.starts_with(char::is_whitespace), "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace");
+        }
+    }
+
+    #[test]
+    fn validate_and_render_deregister_dapp_canisters_doesnt_allow_invalid_canisters() {
+        let canister_ids = (0..10_u8)
+            .map(|i| PrincipalId::try_from(vec![i]))
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let disallowed_canister_ids = canister_ids
+            .iter()
+            // pick an arbitrary principalID
+            .skip(4)
+            .take(1)
+            // convert to CanisterId
+            .cloned()
+            .map(|p| CanisterId::new(p))
+            .collect::<Result<HashSet<_>, _>>()
+            .unwrap();
+
+        let deregister_dapp_canisters = DeregisterDappCanisters {
+            canister_ids,
+            new_controllers: vec![*TEST_USER1_PRINCIPAL],
+        };
+        let rendered_err = validate_and_render_deregister_dapp_canisters(
+            &deregister_dapp_canisters,
+            &disallowed_canister_ids,
+        )
+        .unwrap_err();
+
+        for canister_id in disallowed_canister_ids {
+            assert!(
+                rendered_err.contains(&format!("\n- {canister_id}")),
+                "error message \"{rendered_err}\" does not contain canister id {canister_id}"
+            );
+        }
+
+        for line in rendered_err.lines() {
+            assert!(
+                !line.starts_with(char::is_whitespace),
+                "error message \"{rendered_err}\" contains a line that starts with whitespace"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_and_render_deregister_dapp_canisters_doesnt_allow_empty_id_list() {
+        let canister_ids = vec![];
+        let disallowed_canister_ids: HashSet<CanisterId> = HashSet::new();
+
+        let register_dapp_canisters = DeregisterDappCanisters {
+            canister_ids,
+            new_controllers: vec![*TEST_USER1_PRINCIPAL],
+        };
+        let rendered_err = validate_and_render_deregister_dapp_canisters(
+            &register_dapp_canisters,
+            &disallowed_canister_ids,
+        )
+        .unwrap_err();
+
+        for line in rendered_err.lines() {
+            assert!(
+                !line.starts_with(char::is_whitespace),
+                "error message \"{rendered_err}\" contains a line that starts with whitespace"
+            );
+        }
     }
 }

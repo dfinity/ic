@@ -445,6 +445,40 @@ pub struct ManageSnsMetadata {
     ::prost::Message,
 )]
 pub struct UpgradeSnsToNextVersion {}
+/// A proposal to register a list of dapps in the root canister.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct RegisterDappCanisters {
+    /// The canister IDs to be registered (i.e. under the management of the SNS).
+    /// The canisters must be already exclusively controlled by the SNS root
+    /// canister before making this proposal.
+    /// At least one canister ID is required.
+    #[prost(message, repeated, tag = "1")]
+    pub canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
+/// A proposal to remove a list of dapps from the SNS and assign them to new controllers
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct DeregisterDappCanisters {
+    /// The canister IDs to be deregistered (i.e. removed from the management of the SNS).
+    #[prost(message, repeated, tag = "1")]
+    pub canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    /// The new controllers for the deregistered canisters.
+    #[prost(message, repeated, tag = "2")]
+    pub new_controllers: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+}
 /// A proposal is the immutable input of a proposal submission.
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
 #[compare_default]
@@ -471,7 +505,10 @@ pub struct Proposal {
     ///
     /// See `impl From<&Action> for u64` in src/types.rs for the implementation
     /// of this mapping.
-    #[prost(oneof = "proposal::Action", tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13")]
+    #[prost(
+        oneof = "proposal::Action",
+        tags = "4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15"
+    )]
     pub action: ::core::option::Option<proposal::Action>,
 }
 /// Nested message and enum types in `Proposal`.
@@ -550,6 +587,16 @@ pub mod proposal {
         /// Id = 9.
         #[prost(message, tag = "13")]
         TransferSnsTreasuryFunds(super::TransferSnsTreasuryFunds),
+        /// Register one or more dapp canister(s) in the SNS root canister.
+        ///
+        /// Id = 10.
+        #[prost(message, tag = "14")]
+        RegisterDappCanisters(super::RegisterDappCanisters),
+        /// Deregister one or more dapp canister(s) in the SNS root canister.
+        ///
+        /// Id = 11.
+        #[prost(message, tag = "15")]
+        DeregisterDappCanisters(super::DeregisterDappCanisters),
     }
 }
 #[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]

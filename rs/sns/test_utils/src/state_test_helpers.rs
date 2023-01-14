@@ -1,8 +1,12 @@
-use crate::itest_helpers::populate_canister_ids;
-use candid::{Decode, Encode};
+use crate::itest_helpers::{populate_canister_ids, SnsTestsInitPayloadBuilder};
+use candid::{CandidType, Decode, Encode};
+use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::CanisterInstallMode;
+use ic_icrc1::Account;
+use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ExplosiveTokens;
+use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID,
 };
@@ -13,7 +17,11 @@ use ic_nns_test_utils::sns_wasm::{
 use ic_nns_test_utils::state_test_helpers::set_controllers;
 use ic_sns_governance::pb::v1::{ListNeurons, ListNeuronsResponse};
 use ic_sns_init::SnsCanisterInitPayloads;
-use ic_sns_root::pb::v1::{RegisterDappCanisterRequest, RegisterDappCanisterResponse};
+use ic_sns_root::pb::v1::{
+    RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
+    RegisterDappCanistersResponse,
+};
+use ic_sns_root::{CanisterIdRecord, CanisterStatusResultV2};
 use ic_sns_swap::pb::v1::{self as swap_pb, RefreshBuyerTokensRequest};
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
@@ -175,6 +183,48 @@ pub fn participate_in_swap(
         )
         .unwrap();
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SnsCanisterType {
+    Ledger,
+    Root,
+    Governance,
+    Swap,
+}
+
+impl SnsCanisterType {
+    fn get_wasm(self) -> Vec<u8> {
+        let features = [];
+        Project::cargo_bin_maybe_from_env(self.bin_name(), &features).bytes()
+    }
+
+    fn bin_name(self) -> &'static str {
+        use SnsCanisterType::*;
+        match self {
+            Ledger => "ic-icrc1-ledger",
+
+            Root => "sns-root-canister",
+            Governance => "sns-governance-canister",
+            Swap => "sns-swap-canister",
+        }
+    }
+}
+
+pub fn init_canister(
+    state_machine: &StateMachine,
+    canister_id: CanisterId,
+    sns_canister_type: SnsCanisterType,
+    init_argument: &impl CandidType,
+) {
+    let init_argument = Encode!(init_argument).unwrap();
+    state_machine
+        .install_wasm_in_mode(
+            canister_id,
+            CanisterInstallMode::Install,
+            sns_canister_type.get_wasm(),
+            init_argument,
+        )
+        .unwrap();
+}
 
 pub fn send_participation_funds(
     state_machine: &mut StateMachine,
@@ -221,14 +271,37 @@ pub fn swap_get_state(
     Decode!(&result, swap_pb::GetStateResponse).unwrap()
 }
 
-pub fn sns_root_register_dapp_canister(
-    state_machine: &mut StateMachine,
-    target_canister_id: CanisterId,
-    request: &RegisterDappCanisterRequest,
-) -> RegisterDappCanisterResponse {
+pub fn canister_status(
+    state_machine: &StateMachine,
+    sender: PrincipalId,
+    request: &CanisterIdRecord,
+) -> CanisterStatusResultV2 {
+    let request = Encode!(&request).unwrap();
     let result = state_machine
-        .execute_ingress(
-            target_canister_id,
+        .execute_ingress_as(sender, CanisterId::ic_00(), "canister_status", request)
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!("get_state was rejected by the swap canister: {:#?}", reject)
+        }
+    };
+    Decode!(&result, CanisterStatusResultV2).unwrap()
+}
+
+pub fn sns_root_register_dapp_canister(
+    state_machine: &StateMachine,
+    sns_root_canister_id: CanisterId,
+    sns_governance_canister_id: CanisterId,
+    dapp_canister_id: CanisterId,
+) -> RegisterDappCanisterResponse {
+    let request = RegisterDappCanisterRequest {
+        canister_id: Some(dapp_canister_id.into()),
+    };
+    let result = state_machine
+        .execute_ingress_as(
+            sns_governance_canister_id.into(),
+            sns_root_canister_id,
             "register_dapp_canister",
             Encode!(&request).unwrap(),
         )
@@ -237,10 +310,170 @@ pub fn sns_root_register_dapp_canister(
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
             panic!(
-                "register_dapp_canister was rejected by the swap canister: {:#?}",
+                "register_dapp_canisters was rejected by the swap canister: {:#?}",
                 reject
             )
         }
     };
     Decode!(&result, RegisterDappCanisterResponse).unwrap()
+}
+
+pub fn sns_root_register_dapp_canisters(
+    state_machine: &StateMachine,
+    sns_root_canister_id: CanisterId,
+    sns_governance_canister_id: CanisterId,
+    dapp_canister_ids: Vec<CanisterId>,
+) -> RegisterDappCanistersResponse {
+    let request = RegisterDappCanistersRequest {
+        canister_ids: dapp_canister_ids.into_iter().map(|id| id.into()).collect(),
+    };
+    let result = state_machine
+        .execute_ingress_as(
+            sns_governance_canister_id.into(),
+            sns_root_canister_id,
+            "register_dapp_canisters",
+            Encode!(&request).unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "register_dapp_canisters was rejected by the swap canister: {:#?}",
+                reject
+            )
+        }
+    };
+    Decode!(&result, RegisterDappCanistersResponse).unwrap()
+}
+
+pub struct Scenario {
+    pub configuration: SnsCanisterInitPayloads,
+    pub root_canister_id: CanisterId,
+    pub governance_canister_id: CanisterId,
+    pub ledger_canister_id: CanisterId,
+    pub swap_canister_id: CanisterId,
+    pub dapp_canister_ids: Vec<CanisterId>,
+}
+impl Scenario {
+    /// Step 1: Creates canisters, but does not install code into them.
+    ///
+    /// Installation is performed separately using the init_all_canisters method.
+    ///
+    /// These two operations are performed separately in order to allow the user
+    /// to customize the canisters. This can be done by modifying
+    /// self.configuration before calling init_all_canisters.
+    ///
+    /// self.configuration is initialized with "bare-bones" values. More
+    /// precisely, it builds upon SnsTestsInitPayloadBuilder::new().build(), but
+    /// this makes two enhancements:
+    ///
+    ///   1. The swap canister is funded (with 100 SNS tokens).
+    ///   2. The canister_id fields are populated.
+    ///
+    /// The dapp canister is owned by TEST_USER1.
+    pub fn new(state_machine: &StateMachine, sns_tokens: Tokens) -> Self {
+        let create_canister = || state_machine.create_canister(/* settings= */ None);
+
+        let root_canister_id = create_canister();
+        let governance_canister_id = create_canister();
+        let ledger_canister_id = create_canister();
+        let swap_canister_id = create_canister();
+        let dapp_canister_id = create_canister();
+        let index_canister_id = create_canister();
+
+        set_controllers(
+            state_machine,
+            PrincipalId::new_anonymous(),
+            root_canister_id,
+            vec![governance_canister_id.into()],
+        );
+        set_controllers(
+            state_machine,
+            PrincipalId::new_anonymous(),
+            governance_canister_id,
+            vec![root_canister_id.into()],
+        );
+        set_controllers(
+            state_machine,
+            PrincipalId::new_anonymous(),
+            ledger_canister_id,
+            vec![root_canister_id.into()],
+        );
+        set_controllers(
+            state_machine,
+            PrincipalId::new_anonymous(),
+            swap_canister_id,
+            vec![NNS_ROOT_CANISTER_ID.into(), swap_canister_id.into()],
+        );
+        set_controllers(
+            state_machine,
+            PrincipalId::new_anonymous(),
+            dapp_canister_id,
+            vec![*TEST_USER1_PRINCIPAL],
+        );
+        set_controllers(
+            state_machine,
+            PrincipalId::new_anonymous(),
+            index_canister_id,
+            vec![root_canister_id.into()],
+        );
+
+        // Construct base configuration.
+        let account_identifiers = vec![Account {
+            owner: swap_canister_id.into(),
+            subaccount: None,
+        }];
+        let mut configuration = SnsTestsInitPayloadBuilder::new()
+            .with_ledger_accounts(account_identifiers, sns_tokens)
+            .build();
+        populate_canister_ids(
+            root_canister_id,
+            governance_canister_id,
+            ledger_canister_id,
+            swap_canister_id,
+            index_canister_id,
+            &mut configuration,
+        );
+
+        Self {
+            root_canister_id,
+            governance_canister_id,
+            ledger_canister_id,
+            swap_canister_id,
+            dapp_canister_ids: vec![dapp_canister_id],
+            configuration,
+        }
+    }
+
+    /// Installs respective wasms into respective canisters, using the
+    /// corresponding init payload, of course.
+    ///
+    /// (The dapp canister is not touched).
+    pub fn init_all_canisters(&self, state_machine: &StateMachine) {
+        init_canister(
+            state_machine,
+            self.root_canister_id,
+            SnsCanisterType::Root,
+            &self.configuration.root,
+        );
+        init_canister(
+            state_machine,
+            self.governance_canister_id,
+            SnsCanisterType::Governance,
+            &self.configuration.governance,
+        );
+        init_canister(
+            state_machine,
+            self.ledger_canister_id,
+            SnsCanisterType::Ledger,
+            &self.configuration.ledger,
+        );
+        init_canister(
+            state_machine,
+            self.swap_canister_id,
+            SnsCanisterType::Swap,
+            &self.configuration.swap,
+        );
+    }
 }

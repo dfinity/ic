@@ -758,6 +758,7 @@ impl Swap {
 
         Ok(sns_root_client
             .set_dapp_controllers(SetDappControllersRequest {
+                canister_ids: None,
                 controller_principal_ids,
             })
             .await)

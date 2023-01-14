@@ -43,6 +43,7 @@ repos:
         (?x)^(
             # Is this just test data?
             | rs/nns/empty\.did
+            | rs/sns/governance/canister/governance.did
         )$
     language: system
     always_run: true
