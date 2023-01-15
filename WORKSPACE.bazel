@@ -114,6 +114,7 @@ external_crates_repository(
                 "@openssl//:openssl",
             ],
             # https://github.com/sfackler/rust-openssl/tree/master/openssl-sys/build
+            build_script_data_glob = ["build/**/*.c"],
             build_script_env = {
                 "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
                 "OPENSSL_STATIC": "true",
@@ -212,12 +213,12 @@ load(
     "@io_bazel_rules_docker//repositories:repositories.bzl",
     container_repositories = "repositories",
 )
-load("//third_party/openssl:openssl_repositories.bzl", "openssl_repositories")
 
+
+load("//third_party/openssl:openssl_repositories.bzl", "openssl_repositories")
 openssl_repositories()
 
 load("//third_party/openssl:openssl_setup.bzl", "openssl_setup")
-
 openssl_setup()
 
 container_repositories()

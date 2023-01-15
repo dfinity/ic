@@ -2406,6 +2406,7 @@ dependencies = [
  "once_cell",
  "openssh-keys",
  "openssl",
+ "openssl-sys",
  "opentelemetry 0.17.0",
  "opentelemetry 0.18.0",
  "opentelemetry-prometheus 0.10.0",
