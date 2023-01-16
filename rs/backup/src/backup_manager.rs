@@ -409,11 +409,15 @@ impl BackupManager {
             }
         }
 
+        for i in 0..size {
+            // should we sync the subnet
+            if self.subnet_backups[i].replay_period >= Duration::from_secs(1) {
+                let m = self.clone();
+                thread::spawn(move || replay_subnets(m, i));
+            }
+        }
         let m = self.clone();
-        thread::spawn(move || replay_subnets(m));
-
-        let m2 = self.clone();
-        thread::spawn(move || cold_store(m2));
+        thread::spawn(move || cold_store(m));
 
         let config_file = self.root_dir.join(STATE_FILE_NAME);
         loop {
@@ -455,7 +459,7 @@ impl BackupManager {
 fn sync_subnet(m: Arc<BackupManager>, i: usize) {
     let b = &m.subnet_backups[i];
     let subnet_id = &b.backup_helper.subnet_id;
-    info!(m.log, "Spawned sync subnet {:?} thread...", subnet_id);
+    info!(m.log, "Spawned sync for subnet {:?} thread...", subnet_id);
     loop {
         let sync_last_time = m.get_value(subnet_id, |s| s.sync_last_time);
         if sync_last_time.elapsed() > b.sync_period {
@@ -472,23 +476,17 @@ fn sync_subnet(m: Arc<BackupManager>, i: usize) {
     }
 }
 
-fn replay_subnets(m: Arc<BackupManager>) {
-    info!(m.log, "Spawned replay thread...");
-    let size = m.subnet_backups.len();
+fn replay_subnets(m: Arc<BackupManager>, i: usize) {
+    let b = &m.subnet_backups[i];
+    let subnet_id = &b.backup_helper.subnet_id;
+    info!(m.log, "Spawned replay for subnet {:?} thread...", subnet_id);
     loop {
-        for i in 0..size {
-            let b = &m.subnet_backups[i];
-            if b.replay_period >= Duration::from_secs(1) {
-                let subnet_id = &b.backup_helper.subnet_id;
-                let replay_last_time = m.get_value(subnet_id, |s| s.replay_last_time);
-                if replay_last_time.elapsed() > b.replay_period {
-                    m.set_value(subnet_id, |s, v| s.replay_last_time = v, Instant::now());
-                    let current_replica_version =
-                        m.get_value(subnet_id, |s| s.replica_version.clone());
-                    let new_replica_version = b.backup_helper.replay(current_replica_version);
-                    m.set_value(subnet_id, |s, v| s.replica_version = v, new_replica_version);
-                }
-            }
+        let replay_last_time = m.get_value(subnet_id, |s| s.replay_last_time);
+        if replay_last_time.elapsed() > b.replay_period {
+            m.set_value(subnet_id, |s, v| s.replay_last_time = v, Instant::now());
+            let current_replica_version = m.get_value(subnet_id, |s| s.replica_version.clone());
+            let new_replica_version = b.backup_helper.replay(current_replica_version);
+            m.set_value(subnet_id, |s, v| s.replica_version = v, new_replica_version);
         }
         // Have a small break before the next check for replays
         sleep_secs(30);
