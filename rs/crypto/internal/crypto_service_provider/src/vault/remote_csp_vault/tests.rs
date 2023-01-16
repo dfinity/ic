@@ -5,7 +5,7 @@
 
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
-use crate::secret_key_store::test_utils::MockSecretKeyStore;
+use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::vault::api::BasicSignatureCspVault;
 use crate::vault::api::CspVault;
 use crate::vault::remote_csp_vault::TarpcCspVaultServerImpl;
@@ -215,7 +215,7 @@ mod multi_sig {
     use super::*;
     use crate::{
         public_key_store::{mock_pubkey_store::MockPublicKeyStore, PublicKeySetOnceError},
-        secret_key_store::test_utils::MockSecretKeyStore,
+        secret_key_store::mock_secret_key_store::MockSecretKeyStore,
     };
     use mockall::Sequence;
     use std::io;
@@ -398,7 +398,7 @@ mod ni_dkg {
     use super::*;
     use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::public_key_store::PublicKeySetOnceError;
-    use crate::secret_key_store::test_utils::MockSecretKeyStore;
+    use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::vault::local_csp_vault::LocalCspVault;
     use crate::vault::test_utils;
     use crate::vault::test_utils::ni_dkg::fixtures::MockNetwork;

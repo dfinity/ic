@@ -11,6 +11,8 @@ pub mod proto_store;
 pub mod temp_secret_key_store;
 
 #[cfg(test)]
+pub mod mock_secret_key_store;
+#[cfg(test)]
 pub mod test_utils;
 
 /// A store for secret key material

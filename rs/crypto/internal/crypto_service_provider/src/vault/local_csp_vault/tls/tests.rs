@@ -12,7 +12,7 @@ mod keygen {
     use crate::key_id::KeyId;
     use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::public_key_store::PublicKeySetOnceError;
-    use crate::secret_key_store::test_utils::MockSecretKeyStore;
+    use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::vault::api::CspTlsKeygenError;
     use crate::vault::api::TlsHandshakeCspVault;
     use crate::vault::local_csp_vault::LocalCspVault;
