@@ -1,9 +1,8 @@
 use ic_crypto_sha::Sha256;
 use ic_state_manager::manifest::{
-    hash::{file_hasher, manifest_hasher},
-    STATE_SYNC_V1,
+    hash::file_hasher, manifest_hash, MAX_SUPPORTED_STATE_SYNC_VERSION,
 };
-use ic_types::state_sync::{ChunkInfo, FileInfo};
+use ic_types::state_sync::{ChunkInfo, FileInfo, Manifest};
 use std::{
     collections::BTreeMap,
     convert::TryInto,
@@ -12,7 +11,6 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-
 fn write_chunk_hash(chunk: &ChunkInfo, hasher: &mut Sha256) {
     hasher.write(&chunk.file_index.to_be_bytes());
     hasher.write(&chunk.size_bytes.to_be_bytes());
@@ -47,23 +45,12 @@ fn compute_root_hash(
     chunk_table: Vec<ChunkInfo>,
     state_sync_version: u32,
 ) -> [u8; 32] {
-    let mut hasher = manifest_hasher();
-
-    if state_sync_version >= STATE_SYNC_V1 {
-        hasher.write(&state_sync_version.to_be_bytes());
-    }
-
-    hasher.write(&(file_table.len() as u32).to_be_bytes());
-
-    for (idx, f) in file_table {
-        let path = f.relative_path.to_str().unwrap();
-        hasher.write(&(path.len() as u32).to_be_bytes());
-        hasher.write(path.as_bytes());
-        hasher.write(&f.size_bytes.to_be_bytes());
+    // verify the file hash in file info
+    for (idx, f) in &file_table {
         let hash_recomputed = f.compute_file_hash(
             chunk_table
                 .iter()
-                .filter(|chunk| chunk.file_index == idx)
+                .filter(|chunk| chunk.file_index == *idx)
                 .collect(),
         );
         assert_eq!(
@@ -71,18 +58,14 @@ fn compute_root_hash(
             "File hash mismatch in file with index {}",
             idx
         );
-        hasher.write(&hash_recomputed);
     }
 
-    if state_sync_version >= STATE_SYNC_V1 {
-        hasher.write(&(chunk_table.len() as u32).to_be_bytes());
-
-        for chunk in chunk_table {
-            write_chunk_hash(&chunk, &mut hasher);
-        }
-    }
-
-    hasher.finish()
+    let manifest = Manifest::new(
+        state_sync_version,
+        file_table.values().cloned().collect(),
+        chunk_table,
+    );
+    manifest_hash(&manifest)
 }
 
 /// A canister hash enables comparing canisters across states.
@@ -274,10 +257,10 @@ fn parse_manifest(file: File) -> (BTreeMap<u32, FileInfo>, Vec<ChunkInfo>, [u8; 
 }
 
 fn verify_manifest(file: File, version: u32) -> Result<(), String> {
-    if version > STATE_SYNC_V1 {
+    if version > MAX_SUPPORTED_STATE_SYNC_VERSION {
         panic!(
             "Unsupported state sync version provided {}. Max supported version {}",
-            version, STATE_SYNC_V1
+            version, MAX_SUPPORTED_STATE_SYNC_VERSION
         );
     }
 
