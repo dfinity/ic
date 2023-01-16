@@ -78,10 +78,12 @@ def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", flaky
     container_image(
         name = name + "_image",
         base = "//rs/tests/replicated_tests:test_driver_image_base",
-        directory = "/home/root",
+        directory = "/home/root/root_env/dependencies",
+        data_path = "/",
+        entrypoint = "/home/root/root_env/dependencies/rs/tests/%s --working-dir . run" % bin_name,
         files = [
             ":" + bin_name,
-        ],
+        ] + runtime_deps,
         tags = ["manual"],  # this target will be built if required as a dependency of another target
         user = "root",
         workdir = "/home/root",
