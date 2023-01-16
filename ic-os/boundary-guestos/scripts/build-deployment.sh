@@ -147,9 +147,10 @@ BN_VARS=$(
 VALUES=$(echo ${CONFIG} | jq -r -c '[
     .deployment,
     (.name_servers | join(" ")),
-    (.name_servers_fallback | join(" "))
+    (.name_servers_fallback | join(" ")),
+    (.ipv4_name_servers | join(" "))
 ] | join("\u0001")')
-IFS=$'\1' read -r DEPLOYMENT NAME_SERVERS NAME_SERVERS_FALLBACK < <(echo $VALUES)
+IFS=$'\1' read -r DEPLOYMENT IPV6_NAME_SERVERS IPV6_NAME_SERVERS_FALLBACK IPV4_NAME_SERVERS < <(echo $VALUES)
 
 # Read all the node info out in one swoop
 NODES=0
@@ -172,7 +173,7 @@ while IFS=$'\1' read -r ipv6_address ipv6_gateway ipv4_gateway ipv4_address prob
     eval "declare -A __RAW_NODE_$NODES=(
         ['ipv6_address']=$ipv6_address
         ['ipv6_gateway']=$ipv6_gateway
-	    ['ipv4_gateway']=$ipv4_gateway
+	['ipv4_gateway']=$ipv4_gateway
         ['ipv4_address']=$ipv4_address
         ['prober']=$prober
         ['hostname']=$hostname
@@ -298,8 +299,9 @@ function generate_network_config() {
             echo "hostname=${hostname}" >"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
 
             # Set name servers
-            echo "name_servers=${NAME_SERVERS}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
-            echo "name_servers_fallback=${NAME_SERVERS_FALLBACK}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
+            echo "ipv6_name_servers=${IPV6_NAME_SERVERS}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
+            echo "ipv6_name_servers_fallback=${IPV6_NAME_SERVERS_FALLBACK}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
+            echo "ipv4_name_servers=${IPV4_NAME_SERVERS}" >>"${CONFIG_DIR}/${NODE_PREFIX}/network.conf"
 
             # ipv6
             if [ -z ${ipv6_address:-} ]; then echo "ipv6_address is unset"; else
