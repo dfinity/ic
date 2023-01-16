@@ -437,7 +437,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     sys_t("firewall_priority", networking::firewall_priority::override_firewall_rules_with_priority),
                 ]),
             ),
-            execution::upgraded_pots::general_execution_pot(),
             execution::upgraded_pots::cycles_restrictions_pot(),
             execution::upgraded_pots::inter_canister_queries(),
             execution::upgraded_pots::compute_allocation_pot(),
