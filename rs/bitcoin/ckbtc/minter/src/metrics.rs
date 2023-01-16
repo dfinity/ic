@@ -65,6 +65,18 @@ pub fn encode_metrics(
         "Total number of finalized retrieve_btc requests.",
     )?;
 
+    metrics.encode_counter(
+        "ckbtc_minter_minted_tokens",
+        state::read_state(|s| s.tokens_minted) as f64,
+        "Total number of minted tokens.",
+    )?;
+
+    metrics.encode_counter(
+        "ckbtc_minter_burned_tokens",
+        state::read_state(|s| s.tokens_burned) as f64,
+        "Total number of burned tokens.",
+    )?;
+
     metrics.encode_gauge(
         "ckbtc_minter_min_retrievable_amount",
         state::read_state(|s| s.retrieve_btc_min_amount) as f64,

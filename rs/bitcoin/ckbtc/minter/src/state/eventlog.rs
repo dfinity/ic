@@ -117,7 +117,7 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                 to_account, utxos, ..
             } => state.add_utxos(to_account, utxos),
             Event::AcceptedRetrieveBtcRequest(req) => {
-                state.pending_retrieve_btc_requests.push(req);
+                state.push_back_pending_request(req);
             }
             Event::RemovedRetrieveBtcRequest { block_index } => {
                 let request = state.remove_pending_request(block_index).ok_or_else(|| {

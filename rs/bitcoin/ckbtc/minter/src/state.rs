@@ -195,6 +195,12 @@ pub struct CkBtcMinterState {
     /// The total number of finalized requests.
     pub finalized_requests_count: u64,
 
+    /// The total amount of ckBTC minted.
+    pub tokens_minted: u64,
+
+    /// The total amount of ckBTC burned.
+    pub tokens_burned: u64,
+
     /// The CanisterId of the ckBTC Ledger
     pub ledger_id: CanisterId,
 
@@ -310,6 +316,8 @@ impl CkBtcMinterState {
         if utxos.is_empty() {
             return;
         }
+
+        self.tokens_minted += utxos.iter().map(|u| u.value).sum::<u64>();
 
         let account_bucket = self
             .utxos_state_addresses
@@ -451,6 +459,11 @@ impl CkBtcMinterState {
                     state: FinalizedStatus::Confirmed { txid: *txid },
                 });
             }
+        } else {
+            ic_cdk::trap(&format!(
+                "Attempted to finalized a non-existent transaction {}",
+                crate::tx::DisplayTxid(txid)
+            ));
         }
     }
 
@@ -507,6 +520,7 @@ impl CkBtcMinterState {
         if let Some(last_req) = self.pending_retrieve_btc_requests.last() {
             assert!(last_req.received_at <= request.received_at);
         }
+        self.tokens_burned += request.amount;
         self.pending_retrieve_btc_requests.push(request);
     }
 
@@ -626,6 +640,8 @@ impl From<InitArgs> for CkBtcMinterState {
             submitted_transactions: Default::default(),
             finalized_requests: VecDeque::with_capacity(MAX_FINALIZED_REQUESTS),
             finalized_requests_count: 0,
+            tokens_minted: 0,
+            tokens_burned: 0,
             ledger_id: args.ledger_id,
             available_utxos: Default::default(),
             outpoint_account: Default::default(),
