@@ -8699,6 +8699,7 @@ dependencies = [
  "ic-replicated-state",
  "ic-state-layout",
  "ic-state-manager",
+ "ic-test-state-machine-client",
  "ic-test-utilities-metrics",
  "ic-test-utilities-registry",
  "ic-types",
@@ -8869,6 +8870,19 @@ dependencies = [
  "lazy_static",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+]
+
+[[package]]
+name = "ic-test-state-machine-client"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ae4ddf50287c60610fcdfe5514dba46a9a9ecc165bec07af6ac1c88b8b85b81"
+dependencies = [
+ "candid",
+ "ciborium",
+ "ic-cdk",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]

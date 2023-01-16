@@ -1,5 +1,5 @@
 {
-  "checksum": "5921ad6e02c02edfcccf054d77912e56061783a13a6e8807c6123d533a9454e1",
+  "checksum": "1325ebc17b79c532b91ae2de1ab488f75b783f3fab2e81864a4e61e89b795c94",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7463,13 +7463,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap 4.0.32": {
+    "clap 4.1.0": {
       "name": "clap",
-      "version": "4.0.32",
+      "version": "4.1.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/4.0.32/download",
-          "sha256": "a7db700bc935f9e43e88d00b0850dae18a63773cfbec6d8e070fccf7fef89a39"
+          "url": "https://crates.io/api/v1/crates/clap/4.1.0/download",
+          "sha256": "aa91278560fc226a5d9d736cc21e485ff9aad47d26b8ffe1f54cba868b684b9f"
         }
       },
       "targets": [
@@ -7520,7 +7520,7 @@
               "target": "bitflags"
             },
             {
-              "id": "clap_lex 0.3.0",
+              "id": "clap_lex 0.3.1",
               "target": "clap_lex"
             },
             {
@@ -7546,13 +7546,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "clap_derive 4.0.21",
+              "id": "clap_derive 4.1.0",
               "target": "clap_derive"
             }
           ],
           "selects": {}
         },
-        "version": "4.0.32"
+        "version": "4.1.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -7617,13 +7617,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap_derive 4.0.21": {
+    "clap_derive 4.1.0": {
       "name": "clap_derive",
-      "version": "4.0.21",
+      "version": "4.1.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap_derive/4.0.21/download",
-          "sha256": "0177313f9f02afc995627906bbd8967e2be069f5261954222dac78290c2b9014"
+          "url": "https://crates.io/api/v1/crates/clap_derive/4.1.0/download",
+          "sha256": "684a277d672e91966334af371f1a7b5833f9aa00b07c84e92fbce95e00208ce8"
         }
       },
       "targets": [
@@ -7674,7 +7674,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "4.0.21"
+        "version": "4.1.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -7720,13 +7720,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap_lex 0.3.0": {
+    "clap_lex 0.3.1": {
       "name": "clap_lex",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap_lex/0.3.0/download",
-          "sha256": "0d4198f73e42b4936b35b5bb248d81d2b595ecb170da0bac7655c54eedfa8da8"
+          "url": "https://crates.io/api/v1/crates/clap_lex/0.3.1/download",
+          "sha256": "783fe232adfca04f90f56201b26d79682d4cd2625e0bc7290b95123afe558ade"
         }
       },
       "targets": [
@@ -7758,7 +7758,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -12236,7 +12236,7 @@
               "target": "clap"
             },
             {
-              "id": "clap 4.0.32",
+              "id": "clap 4.1.0",
               "target": "clap",
               "alias": "clap_4_0_0"
             },
@@ -12471,6 +12471,10 @@
             {
               "id": "ic-stable-structures 0.1.2",
               "target": "ic_stable_structures"
+            },
+            {
+              "id": "ic-test-state-machine-client 1.0.0",
+              "target": "ic_test_state_machine_client"
             },
             {
               "id": "ic-utils 0.22.0",
@@ -19606,6 +19610,64 @@
       },
       "license": "Apache-2.0"
     },
+    "ic-test-state-machine-client 1.0.0": {
+      "name": "ic-test-state-machine-client",
+      "version": "1.0.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ic-test-state-machine-client/1.0.0/download",
+          "sha256": "9ae4ddf50287c60610fcdfe5514dba46a9a9ecc165bec07af6ac1c88b8b85b81"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_test_state_machine_client",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_test_state_machine_client",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.8.4",
+              "target": "candid"
+            },
+            {
+              "id": "ciborium 0.2.0",
+              "target": "ciborium"
+            },
+            {
+              "id": "ic-cdk 0.6.8",
+              "target": "ic_cdk"
+            },
+            {
+              "id": "serde 1.0.152",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.8",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.0.0"
+      },
+      "license": "Apache-2.0"
+    },
     "ic-types 0.4.2": {
       "name": "ic-types",
       "version": "0.4.2",
@@ -21118,13 +21180,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
     },
-    "io-lifetimes 1.0.3": {
+    "io-lifetimes 1.0.4": {
       "name": "io-lifetimes",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/io-lifetimes/1.0.3/download",
-          "sha256": "46112a93252b123d31a119a8d1a1ac19deac4fac6e0e8b0df58f0d4e5870e63c"
+          "url": "https://crates.io/api/v1/crates/io-lifetimes/1.0.4/download",
+          "sha256": "e7d6c6f8c91b4b9ed43484ad1a938e393caf35960fce7f82a040497207bd8e9e"
         }
       },
       "targets": [
@@ -21167,7 +21229,7 @@
         "deps": {
           "common": [
             {
-              "id": "io-lifetimes 1.0.3",
+              "id": "io-lifetimes 1.0.4",
               "target": "build_script_build"
             }
           ],
@@ -21187,7 +21249,7 @@
           }
         },
         "edition": "2018",
-        "version": "1.0.3"
+        "version": "1.0.4"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -21390,7 +21452,7 @@
         "deps": {
           "common": [
             {
-              "id": "io-lifetimes 1.0.3",
+              "id": "io-lifetimes 1.0.4",
               "target": "io_lifetimes"
             }
           ],
@@ -37555,7 +37617,7 @@
               "target": "bitflags"
             },
             {
-              "id": "io-lifetimes 1.0.3",
+              "id": "io-lifetimes 1.0.4",
               "target": "io_lifetimes"
             },
             {
@@ -48143,6 +48205,18 @@
         },
         {
           "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -48157,18 +48231,6 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -52799,7 +52861,7 @@
     "cc 1.0.78",
     "cddl 0.9.1",
     "clap 3.2.23",
-    "clap 4.0.32",
+    "clap 4.1.0",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",
