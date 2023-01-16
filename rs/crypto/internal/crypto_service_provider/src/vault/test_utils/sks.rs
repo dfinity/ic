@@ -1,5 +1,5 @@
+use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::test_utils::MockSecretKeyStore;
-use crate::secret_key_store::test_utils::TempSecretKeyStore;
 use crate::secret_key_store::{SecretKeyStoreError, SecretKeyStorePersistenceError};
 use crate::types::CspSecretKey;
 use crate::vault::api::CspVault;

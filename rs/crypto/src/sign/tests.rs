@@ -6,12 +6,11 @@ use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use ic_crypto_internal_csp::public_key_store::PublicKeyStore;
+use ic_crypto_internal_csp::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use ic_crypto_internal_csp::secret_key_store::SecretKeyStore;
 use ic_crypto_internal_csp::types::CspSecretKey;
 use ic_crypto_internal_csp_test_utils::public_key_store::MockPublicKeyStore;
-use ic_crypto_internal_csp_test_utils::secret_key_store_test_utils::{
-    MockSecretKeyStore, TempSecretKeyStore,
-};
+use ic_crypto_internal_csp_test_utils::secret_key_store_test_utils::MockSecretKeyStore;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;

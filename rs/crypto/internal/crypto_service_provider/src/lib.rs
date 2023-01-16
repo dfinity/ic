@@ -32,7 +32,7 @@ use crate::api::{DkgDealingEncryptionKeyIdRetrievalError, NodePublicKeyDataError
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
-use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
+use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::CspPublicKey;
 use crate::vault::api::{CspPublicKeyStoreError, CspVault};
@@ -315,12 +315,7 @@ impl Csp {
         }
     }
 
-    // TODO CRP-1760: document + try with TempSecretKeyStore instead of VolatileSecretKeyStore
     pub fn with_rng<R: Rng + CryptoRng + Send + Sync + 'static>(rng: R) -> Self {
-        Csp::of(
-            rng,
-            VolatileSecretKeyStore::new(),
-            TempPublicKeyStore::new(),
-        )
+        Csp::of(rng, TempSecretKeyStore::new(), TempPublicKeyStore::new())
     }
 }
