@@ -1,7 +1,7 @@
 use crate::api::CspSigner;
 use crate::keygen::utils::committee_signing_pk_to_proto;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-use crate::secret_key_store::test_utils::TempSecretKeyStore;
+use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::types::CspPublicKey;
 use crate::vault::api::{CspMultiSignatureError, CspMultiSignatureKeygenError, CspVault};
 use crate::Csp;

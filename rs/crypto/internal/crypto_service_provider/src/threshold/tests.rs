@@ -3,7 +3,7 @@
 
 use crate::api::ThresholdSignatureCspClient;
 use crate::key_id::KeyId;
-use crate::secret_key_store::test_utils::TempSecretKeyStore;
+use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
 use crate::Csp;
 use ic_crypto_internal_seed::Seed;

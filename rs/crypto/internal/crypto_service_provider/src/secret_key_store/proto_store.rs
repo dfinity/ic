@@ -301,10 +301,10 @@ where
 
 #[cfg(test)]
 pub mod tests {
-    use super::super::test_utils;
     use super::*;
     use crate::canister_threshold::IDKG_MEGA_SCOPE;
-    use crate::secret_key_store::test_utils::{make_key_id, make_secret_key, TempSecretKeyStore};
+    use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
+    use crate::secret_key_store::test_utils::{make_key_id, make_secret_key};
     use crate::secret_key_store::{
         scope::ConstScope, Scope, SecretKeyStore, SecretKeyStoreError,
         SecretKeyStorePersistenceError,
@@ -348,47 +348,146 @@ pub mod tests {
     proptest! {
         #[test]
         fn should_retrieve_inserted_key(seed1: u64, seed2: u64) {
-            test_utils::should_retrieve_inserted_key(seed1, seed2, proto_key_store());
+            let mut key_store = proto_key_store();
+            let key_id: KeyId = make_key_id(seed1);
+            let key = make_secret_key(seed2);
+
+            assert!(key_store.insert(key_id, key.clone(), None).is_ok());
+
+            let retrieved_key = key_store.get(&key_id).unwrap();
+            assert_eq!(key, retrieved_key);
         }
 
         #[test]
         fn should_contain_existing_key(seed1: u64, seed2: u64) {
-            test_utils::should_contain_existing_key(seed1, seed2, proto_key_store());
+            let mut key_store = proto_key_store();
+            let key_id: KeyId = make_key_id(seed1);
+
+            assert!(key_store
+                .insert(key_id, make_secret_key(seed2), None)
+                .is_ok());
+            assert!(key_store.contains(&key_id));
         }
 
         #[test]
         fn should_not_contain_nonexisting_key(seed1: u64) {
-            test_utils::should_not_contain_nonexisting_key(seed1, proto_key_store());
+            let key_store = proto_key_store();
+            let non_existing_key_id: KeyId = make_key_id(seed1);
+
+            assert!(!key_store.contains(&non_existing_key_id));
         }
 
         #[test]
         fn should_remove_existing_key(seed1: u64, seed2: u64) {
-            test_utils::should_remove_existing_key(seed1, seed2, proto_key_store());
+            let mut key_store = proto_key_store();
+            let key_id: KeyId = make_key_id(seed1);
+
+            assert!(key_store
+                .insert(key_id, make_secret_key(seed2), None)
+                .is_ok());
+
+            assert!(key_store.get(&key_id).is_some());
+            assert!(key_store.remove(&key_id).unwrap());
+            assert!(key_store.get(&key_id).is_none());
         }
 
         #[test]
         fn should_not_remove_nonexisting_key(seed1: u64) {
-            test_utils::should_not_remove_nonexisting_key(seed1, proto_key_store());
+            let mut key_store = proto_key_store();
+            let non_existing_key_id: KeyId = make_key_id(seed1);
+
+            assert!(!key_store.remove(&non_existing_key_id).unwrap());
         }
 
         #[test]
         fn deleting_twice_should_return_false(seed1: u64, seed2: u64) {
-            test_utils::deleting_twice_should_return_false(seed1, seed2, proto_key_store());
+            let mut key_store = proto_key_store();
+            let key_id_1: KeyId = make_key_id(seed1);
+            let key_1 = make_secret_key(seed2);
+
+            assert!(key_store.insert(key_id_1, key_1, None).is_ok());
+
+            assert!(key_store.remove(&key_id_1).unwrap());
+            assert!(!key_store.contains(&key_id_1));
+            assert!(!key_store.remove(&key_id_1).unwrap());
         }
 
         #[test]
         fn no_overwrites(seed1: u64, seed2: u64, seed3: u64) {
-            test_utils::no_overwrites(seed1, seed2, seed3, proto_key_store());
-        }
+            let mut key_store = proto_key_store();
+            let key_id_1: KeyId = make_key_id(seed1);
+            let key_1 = make_secret_key(seed2);
+            let key_2 = make_secret_key(seed3);
+            assert_ne!(key_1, key_2);
 
-        ////////////////////////////////////////////////////////////////////////////////////////
-        // If you add tests here, remember to also add them for the VolatileSecretKeyStore
-        ////////////////////////////////////////////////////////////////////////////////////////
+            key_store.insert(key_id_1, key_1.clone(), None).unwrap();
+
+            assert!(key_store.insert(key_id_1, key_2, None).is_err());
+            assert_eq!(key_1, key_store.get(&key_id_1).unwrap());
+        }
     }
 
+    /// Verifies that `retain(..)` removes precisely the expected keys, no more, no
+    /// less.
     #[test]
     fn should_retain_expected_keys() {
-        test_utils::should_retain_expected_keys(proto_key_store());
+        let mut key_store = proto_key_store();
+        let mut seeds = 0..;
+        let mut next_key = || {
+            (
+                make_key_id(seeds.next().unwrap()),
+                make_secret_key(seeds.next().unwrap()),
+            )
+        };
+        let key_with_id_to_retain = next_key();
+        let key_with_value_to_retain = next_key();
+        let key_to_remove = next_key();
+        let key_with_different_scope = next_key();
+        let key_with_no_scope = next_key();
+
+        let selected_scope = Scope::Const(ConstScope::Test0);
+        let different_scope = Scope::Const(ConstScope::Test1);
+
+        let mut insert_key_with_scope = |pair: &(KeyId, CspSecretKey), scope: Option<Scope>| {
+            key_store.insert(pair.0, pair.1.clone(), scope).unwrap();
+            assert!(key_store.contains(&pair.0));
+        };
+
+        insert_key_with_scope(&key_with_id_to_retain, Some(selected_scope));
+        insert_key_with_scope(&key_with_value_to_retain, Some(selected_scope));
+        insert_key_with_scope(&key_to_remove, Some(selected_scope));
+        insert_key_with_scope(&key_with_different_scope, Some(different_scope));
+        insert_key_with_scope(&key_with_no_scope, None);
+
+        let id_to_retain = key_with_id_to_retain.0;
+        let value_to_retain = key_with_value_to_retain.1;
+        assert!(key_store
+            .retain(
+                move |id, value| (id == &id_to_retain) || (value == &value_to_retain),
+                selected_scope,
+            )
+            .is_ok());
+
+        assert!(
+            key_store.contains(&key_with_id_to_retain.0),
+            "Expected to retain key by ID"
+        );
+        assert!(
+            key_store.contains(&key_with_value_to_retain.0),
+            "Expected to retain key by value"
+        );
+        assert!(
+            !key_store.contains(&key_to_remove.0),
+            "Expected to remove unselected key"
+        );
+        assert!(
+            key_store.contains(&key_with_different_scope.0),
+            "Expected to keep key in different scope"
+        );
+        assert!(
+            key_store.contains(&key_with_no_scope.0),
+            "Expected to keep key with no scope"
+        );
     }
 
     #[test]

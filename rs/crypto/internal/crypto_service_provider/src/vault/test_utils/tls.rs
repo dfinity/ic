@@ -1,7 +1,7 @@
 use crate::api::CspSigner;
 use crate::key_id::KeyId;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-use crate::secret_key_store::test_utils::TempSecretKeyStore;
+use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::types::CspPublicKey;
 use crate::vault::api::CspTlsKeygenError;
 use crate::vault::api::{CspTlsSignError, CspVault};

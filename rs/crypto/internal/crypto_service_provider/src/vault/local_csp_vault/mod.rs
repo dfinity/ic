@@ -16,7 +16,7 @@ mod tls;
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::{PublicKeyGenerationTimestamps, PublicKeyStore};
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
-use crate::secret_key_store::volatile_store::VolatileSecretKeyStore;
+use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::CspRwLock;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
@@ -157,7 +157,7 @@ impl<R: Rng + CryptoRng>
 }
 
 impl<R: Rng + CryptoRng, S: SecretKeyStore, P: PublicKeyStore>
-    LocalCspVault<R, S, VolatileSecretKeyStore, P>
+    LocalCspVault<R, S, TempSecretKeyStore, P>
 {
     /// Creates a local CSP vault for testing.
     ///
@@ -168,7 +168,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, P: PublicKeyStore>
         Self::new_internal(
             csprng,
             node_secret_key_store,
-            VolatileSecretKeyStore::new(),
+            TempSecretKeyStore::new(),
             public_key_store,
             Arc::new(CurrentSystemTimeSource::new(no_op_logger())),
             metrics,
@@ -288,7 +288,7 @@ fn ensure_unique_paths(paths: &[&Path]) {
 pub mod builder {
     use super::*;
     use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-    use crate::secret_key_store::test_utils::TempSecretKeyStore;
+    use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_test_utilities::FastForwardTimeSource;
 
