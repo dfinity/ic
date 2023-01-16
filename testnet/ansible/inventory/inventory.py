@@ -532,6 +532,7 @@ class IcDeploymentInventory:
             "deployment": self.deployment_name,
             "name_servers": ["2606:4700:4700::1111", "2606:4700:4700::1001"],
             "name_servers_fallback": ["2001:4860:4860::8888", "2001:4860:4860::8844"],
+            "ipv4_name_servers": ["1.1.1.1", "1.0.0.1"],
             "datacenters": [],
         }
 
