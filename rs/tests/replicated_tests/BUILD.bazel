@@ -40,7 +40,7 @@ container_run_and_commit(
     name = "test_driver_image_base",
     commands = [
         "apt-get update",
-        "apt-get -y install wget",
+        "apt-get -y install wget=1.21.2-2ubuntu1 openssh-client=1:8.9p1-3ubuntu0.1 zstd=1.4.8+dfsg-3build1 mtools=4.0.33-1+really4.0.32-1build1 dosfstools=4.2-1build3",
         "wget http://nz2.archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.16_amd64.deb",
         "dpkg -i libssl1.1_1.1.1f-1ubuntu2.16_amd64.deb",
     ],
