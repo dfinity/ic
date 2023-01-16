@@ -5,7 +5,7 @@ Note that the $(PERL) "make variable" (https://docs.bazel.build/versions/main/be
 is populated by the perl toolchain provided by rules_perl.
 """
 
-load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make", "configure_make_variant", "runnable_binary")
+load("@rules_foreign_cc//foreign_cc:defs.bzl", "configure_make")
 
 # Read https://wiki.openssl.org/index.php/Compilation_and_Installation
 
@@ -41,7 +41,10 @@ configure_make(
             "no-shared",
             "ARFLAGS=r",
         ] + CONFIGURE_OPTIONS,
-        "//conditions:default": ["no-shared", "ARFLAGS=Drcs"] + CONFIGURE_OPTIONS,
+        "//conditions:default": [
+            "no-shared",
+            "ARFLAGS=Drcs",
+        ] + CONFIGURE_OPTIONS,
     }),
     env = select({
         "@platforms//os:macos": {
@@ -71,4 +74,5 @@ filegroup(
     output_group = "gen_dir",
     visibility = ["//visibility:public"],
 )
+
 r"r"
