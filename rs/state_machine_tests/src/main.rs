@@ -3,13 +3,11 @@ use ic_crypto::threshold_sig_public_key_to_der;
 use ic_error_types::UserError;
 use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode, InstallCodeArgs};
 use ic_state_machine_tests::StateMachine;
+use ic_test_state_machine_client::{CanisterCall, RawCanisterId, Request, Request::*};
 use ic_types::ingress::WasmResult;
 use ic_types::{CanisterId, PrincipalId};
-use serde::{Deserialize, Serialize};
-use serde_bytes::ByteBuf;
+use serde::Serialize;
 use std::io::{stdin, stdout, Read, Write};
-use std::time::Duration;
-use Request::*;
 
 macro_rules! debug_print {
     ($opts:expr, $msg:expr $(,$args:expr)* $(,)*) => {
@@ -17,62 +15,6 @@ macro_rules! debug_print {
             eprintln!($msg $(,$args)*);
         }
     }
-}
-
-#[derive(Deserialize)]
-enum Request {
-    RootKey,
-    Time,
-    AdvanceTime(Duration),
-    CanisterUpdateCall(CanisterCall),
-    CanisterQueryCall(CanisterCall),
-    CanisterExists(RawCanisterId),
-    CyclesBalance(RawCanisterId),
-    AddCycles(AddCyclesArg),
-    SetStableMemory(SetStableMemoryArg),
-    ReadStableMemory(RawCanisterId),
-    Tick,
-    RunUntilCompletion(RunUntilCompletionArg),
-}
-
-#[derive(Deserialize)]
-struct RunUntilCompletionArg {
-    // max_ticks until completion must be reached
-    max_ticks: u64,
-}
-
-#[derive(Deserialize)]
-struct AddCyclesArg {
-    // raw bytes of the principal
-    canister_id: Vec<u8>,
-    amount: u128,
-}
-
-#[derive(Deserialize)]
-struct SetStableMemoryArg {
-    // raw bytes of the principal
-    canister_id: Vec<u8>,
-    data: ByteBuf,
-}
-
-#[derive(Deserialize)]
-struct RawCanisterId {
-    // raw bytes of the principal
-    canister_id: Vec<u8>,
-}
-
-impl From<RawCanisterId> for CanisterId {
-    fn from(raw_id: RawCanisterId) -> Self {
-        CanisterId::try_from(raw_id.canister_id).expect("invalid canister id")
-    }
-}
-
-#[derive(Deserialize)]
-struct CanisterCall {
-    sender: Vec<u8>,
-    canister_id: Vec<u8>,
-    method: String,
-    arg: Vec<u8>,
 }
 
 struct ParsedCanisterCall {
@@ -156,7 +98,7 @@ fn main() {
                 send_response(result, &opts);
             }
             CanisterExists(canister_id) => {
-                send_response(env.canister_exists(CanisterId::from(canister_id)), &opts)
+                send_response(env.canister_exists(to_canister_id(canister_id)), &opts)
             }
             SetStableMemory(arg) => {
                 let canister_id =
@@ -165,10 +107,10 @@ fn main() {
                 send_response((), &opts);
             }
             ReadStableMemory(canister_id) => {
-                send_response(env.stable_memory(CanisterId::from(canister_id)), &opts);
+                send_response(env.stable_memory(to_canister_id(canister_id)), &opts);
             }
             CyclesBalance(canister_id) => {
-                send_response(env.cycle_balance(CanisterId::from(canister_id)), &opts)
+                send_response(env.cycle_balance(to_canister_id(canister_id)), &opts)
             }
             AddCycles(arg) => send_response(
                 env.add_cycles(
@@ -235,12 +177,12 @@ fn management_call(env: &StateMachine, call: &ParsedCanisterCall, opts: &Opts) {
         }
         "stop_canister" => {
             let canister_id: CanisterIdRecord = candid::decode_one(&call.arg)
-                .expect("failed to decode candid argument for 'start_canister'");
+                .expect("failed to decode candid argument for 'stop_canister'");
             send_response(env.stop_canister(canister_id.get_canister_id()), opts);
         }
         "delete_canister" => {
             let canister_id: CanisterIdRecord = candid::decode_one(&call.arg)
-                .expect("failed to decode candid argument for 'start_canister'");
+                .expect("failed to decode candid argument for 'delete_canister'");
             send_response(env.delete_canister(canister_id.get_canister_id()), opts);
         }
         other => {
@@ -276,4 +218,8 @@ fn into_cbor<R: Serialize>(value: &R) -> Vec<u8> {
     let mut bytes = vec![];
     ciborium::ser::into_writer(&value, &mut bytes).expect("bug: failed to encode a block");
     bytes
+}
+
+fn to_canister_id(raw_id: RawCanisterId) -> CanisterId {
+    CanisterId::try_from(raw_id.canister_id).expect("invalid canister id")
 }

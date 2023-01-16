@@ -62,6 +62,7 @@ BIN_DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:clap",
+    "@crate_index//:ic-test-state-machine-client",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
     "@crate_index//:hex",
