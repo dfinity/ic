@@ -1,9 +1,9 @@
 use clap::Parser;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    canister_http, ckbtc, consensus, driver::driver_setup::initialize_env, execution,
-    icrc1_agent_test, ledger_tests, message_routing, networking, nns_tests, orchestrator,
-    rosetta_test, tecdsa, wasm_generator_test, workload_counter_canister_test,
+    canister_http, ckbtc, consensus, driver::driver_setup::initialize_env, execution, ledger_tests,
+    message_routing, networking, nns_tests, orchestrator, rosetta_test, tecdsa,
+    wasm_generator_test, workload_counter_canister_test,
 };
 use ic_tests::{
     driver::{
@@ -450,7 +450,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     message_routing::global_reboot_test::test,
                 )]),
             ),
-            icrc1_agent_test::icrc1_agent_test_pot(),
             pot_with_setup(
                 "node_removal_from_registry_pot",
                 nns_tests::node_removal_from_registry::config,
