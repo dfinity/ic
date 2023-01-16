@@ -3,7 +3,7 @@ use mockall::Sequence;
 
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;
-use crate::secret_key_store::test_utils::MockSecretKeyStore;
+use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::vault::api::MultiSignatureCspVault;
 use crate::vault::test_utils;
 use crate::LocalCspVault;
