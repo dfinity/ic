@@ -18,7 +18,7 @@ type UpgradeAgs = record {
     min_confirmations: opt nat32;
 
     // The mode in which the minter operates.
-    mode: opt Mode,
+    mode: opt Mode;
 };
 
 service : (opt UpgradeAgs) -> {
