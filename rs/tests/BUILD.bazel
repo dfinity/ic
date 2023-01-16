@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load(":system_tests.bzl", "create_test_driver_image_base", "symlink_dir", "system_test")
+load(":system_tests.bzl", "symlink_dir", "system_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -751,8 +751,6 @@ system_test(
 
 # Replicable tests
 
-create_test_driver_image_base()
-
 # The target below enables the following scenario:
 # Scenario A: running the test directly
 #    bazel test //rs/tests:replicable_mock_test --test_tag_filters="system_test"
@@ -763,7 +761,6 @@ create_test_driver_image_base()
 system_test(
     name = "replicable_mock_test",
     flaky = False,  # remove after when PFOPS-3148 is resolved
-    is_dockerized = True,
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = DEPENDENCIES + [":tests"],
