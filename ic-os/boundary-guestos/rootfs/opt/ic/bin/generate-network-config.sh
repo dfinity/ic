@@ -35,7 +35,8 @@ function read_variables() {
             "ipv6_gateway") ipv6_gateway="${value}" ;;
             "ipv4_address") ipv4_address="${value}" ;;
             "ipv4_gateway") ipv4_gateway="${value}" ;;
-            "name_servers") name_servers="${value}" ;;
+            "ipv6_name_servers") ipv6_name_servers="${value}" ;;
+            "ipv4_name_servers") ipv4_name_servers="${value}" ;;
         esac
     done <"${NETWORK_CONFIG}"
 
@@ -76,7 +77,8 @@ function read_variables() {
 }
 
 function generate_name_server_list() {
-    for NAME_SERVER in $name_servers; do
+    # takes a space delimited list of ips
+    for NAME_SERVER in $1; do
         echo DNS="${NAME_SERVER}"
     done
 }
@@ -116,7 +118,7 @@ Virtualization=!container
 
 [Network]
 $(generate_ipv6_block)
-$(generate_name_server_list)
+$(generate_name_server_list "${ipv6_name_servers}")
 EOF
 
     # Handle ipv4
@@ -126,7 +128,7 @@ Name=enp2s0
 
 [Network]
 $(generate_ipv4_block)
-$(generate_name_server_list)
+$(generate_name_server_list "${ipv4_name_servers}")
 LinkLocalAddressing=ipv4
 IPv6AcceptRA=no
 EOF
