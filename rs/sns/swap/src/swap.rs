@@ -2250,6 +2250,7 @@ mod tests {
         assert_is_err, assert_is_ok, E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
     };
     use lazy_static::lazy_static;
+    use prost::Message;
 
     const OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID: u64 = 489102;
 
@@ -2364,5 +2365,50 @@ mod tests {
         };
         let total = participant.participant_total_icp_e8s();
         assert_eq!(total, u64::MAX);
+    }
+
+    #[test]
+    fn large_community_fund_does_not_result_in_oversized_open_request() {
+        const MAX_SIZE_BYTES: usize = 1 << 21; // 2 Mi
+
+        let neurons_per_principal = 3;
+
+        let cf_participant = CfParticipant {
+            hotkey_principal: PrincipalId::new_user_test_id(789362).to_string(),
+            cf_neurons: (0..neurons_per_principal)
+                .map(|_| CfNeuron {
+                    nns_neuron_id: 592523,
+                    amount_icp_e8s: 1_000 * E8,
+                })
+                .collect(),
+        };
+
+        let mut open_request = OpenRequest {
+            cf_participants: vec![cf_participant],
+            ..Default::default()
+        };
+
+        // Crescendo
+        loop {
+            let mut buffer: Vec<u8> = vec![];
+            open_request.encode(&mut buffer).unwrap();
+            if buffer.len() > MAX_SIZE_BYTES {
+                break;
+            }
+
+            // Double size of cf_participants.
+            open_request
+                .cf_participants
+                .append(&mut open_request.cf_participants.clone());
+        }
+
+        // TODO: Get more precise using our favorite algo: binary search!
+        let safe_len = open_request.cf_participants.len() / 2;
+        assert!(safe_len > 10_000);
+        println!(
+            "Looks like we can support at least {} Community Fund neurons (among {} principals).",
+            safe_len * neurons_per_principal,
+            safe_len,
+        );
     }
 }
