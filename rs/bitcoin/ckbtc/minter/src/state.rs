@@ -62,7 +62,7 @@ pub struct RetrieveBtcRequest {
 #[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChangeOutput {
     /// The index of the output in the transaction.
-    pub vout: u64,
+    pub vout: u32,
     /// The value of the output.
     pub value: u64,
 }
