@@ -113,24 +113,3 @@ def test_changed_ci_cfg_gitlab_ci_config_yml(tmpdir):
     setup_repo(tmpdir, "ci_cfg_gitlab-ci-config-yml")
 
     assert git_changes.ci_config_changes(tmpdir)
-
-
-def test_change_nix(tmpdir):
-    """Tests that nix config change was detected."""
-    setup_repo(tmpdir, "change_nix")
-
-    assert git_changes.nix_shell_changes(os.path.join(tmpdir, "rs"))
-
-
-def test_change_cargo_nix(tmpdir):
-    """Tests that Cargo.nix change is ignored."""
-    setup_repo(tmpdir, "change_cargo_nix")
-
-    assert not git_changes.nix_shell_changes(os.path.join(tmpdir, "rs"))
-
-
-def test_nochange_cargo_nix(tmpdir):
-    """Tests that shell.nix comment change is ignored."""
-    setup_repo(tmpdir, "nochange_nix")
-
-    assert not git_changes.nix_shell_changes(os.path.join(tmpdir, "rs"))

@@ -1,9 +1,10 @@
 python-tests:
   extends:
-    - .ubuntu-nix-docker-k8s
+    - .ubuntu-docker-k8s
     - .rules-pipeline-no-merge-train
   needs:
-    job: bazel-test-all # Some tests download canisters from the s3 - it has to only run when all canisters were uploaded to not populate proxy cache with partial results.
+    # Some tests download canisters from the s3 - it has to only run when all canisters were uploaded to not populate proxy cache with partial results.
+    job: bazel-test-all
     artifacts: false
   stage: test
   variables: 
@@ -17,19 +18,13 @@ python-tests:
     - |
       set -xeuo pipefail
       cd gitlab-ci/src
-      $SHELL_WRAPPER pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch --ignore=simple_prober
-      $SHELL_WRAPPER python3 gitlab_config/main.py --job-list-validate
-      $SHELL_WRAPPER python3 gitlab_config/main.py --cfg-validate
-    - |
-      echo "Running outsource/remote tests"
-      set -euo pipefail
-      cd "${CI_PROJECT_DIR}"
-      $SHELL_WRAPPER nix-shell ./outsource/shell.nix --run "python3 outsource/test.py"
-      $SHELL_WRAPPER nix-shell ./outsource/shell.nix --run "mypy outsource/*.py"
+      pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch --ignore=simple_prober
+      python3 gitlab_config/main.py --job-list-validate
+      python3 gitlab_config/main.py --cfg-validate
     - |
       echo "Running scalability/common/tests"
       set -euo pipefail
       cd "${CI_PROJECT_DIR}/scalability"
-      $SHELL_WRAPPER pipenv --python 3
-      $SHELL_WRAPPER pipenv install -r requirements.txt
+      pipenv --python 3
+      pipenv install -r requirements.txt
       for test_file in common/tests/*.py; do { $SHELL_WRAPPER pipenv run python3 -m unittest "$test_file"; } done
