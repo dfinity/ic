@@ -607,7 +607,7 @@ const MAX_DIVERGED_CHECKPOINTS_TO_KEEP: usize = 1;
 const MAX_DIVERGED_STATE_MARKERS_TO_KEEP: usize = 100;
 
 /// The number of extra checkpoints to keep for state sync.
-const EXTRA_CHECKPOINTS_TO_KEEP: usize = 1;
+const EXTRA_CHECKPOINTS_TO_KEEP: usize = 0;
 
 pub struct StateManagerImpl {
     log: ReplicaLogger,
@@ -2629,15 +2629,12 @@ impl StateManager for StateManagerImpl {
     ///
     /// We remove all states with heights greater than 0 and smaller than
     /// `min(LSH, H)` while keeping all the checkpoints more recent or equal
-    /// to OCK together with three most recent checkpoints.
+    /// to OCK together with the most recent checkpoint.
     ///
     /// ```text
     ///   removed_states(H) := (0, min(LSH, H))
     ///                        \ { ch | ch ∈ CHS ∧ ch >= OCK }
-    ///                        \ { x, y, z | x = max(CH) ∧
-    ///                                      y = max(CH \ { x }) ∧
-    ///                                      z = max(CH \ { x, y })
-    ///                          }
+    ///                        \ { x | x = max(CH)}
     ///  ```
     ///
     /// # Rationale

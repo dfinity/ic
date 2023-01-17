@@ -119,10 +119,7 @@ fn rejoining_node_doesnt_accumulate_states() {
             }
 
             dst_state_manager.remove_states_below(height(3));
-            assert_eq!(
-                dst_state_manager.checkpoint_heights(),
-                vec![height(2), height(3)]
-            );
+            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
 
             assert_error_counters(src_metrics);
             assert_error_counters(dst_metrics);
@@ -289,13 +286,18 @@ fn starting_height_independent_of_remove_states_below() {
         insert_dummy_canister(&mut state, canister_test_id(300));
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
 
-        state_manager.remove_states_below(height(3));
+        state_manager.remove_states_below(height(2));
 
         let canister_id: Vec<CanisterId> = vec![
             canister_test_id(100),
             canister_test_id(200),
             canister_test_id(300),
         ];
+        let (_height, recovered_tip) = state_manager.take_tip();
+        assert_eq!(canister_ids(&recovered_tip), canister_id);
+
+        let state_manager = restart_fn(state_manager, Some(height(3)));
+
         let (_height, recovered_tip) = state_manager.take_tip();
         assert_eq!(canister_ids(&recovered_tip), canister_id);
 
@@ -1019,7 +1021,7 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
         state_manager.remove_states_below(height(10));
 
-        for h in 1..4 {
+        for h in 1..=7 {
             assert_eq!(
                 state_manager.get_state_at(height(h)),
                 Err(StateManagerError::StateRemoved(height(h)))
@@ -1027,18 +1029,8 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
         }
 
         assert_eq!(
-            state_manager.get_state_at(height(5)),
-            Err(StateManagerError::StateRemoved(height(5)))
-        );
-
-        assert_eq!(
-            state_manager.get_state_at(height(7)),
-            Err(StateManagerError::StateRemoved(height(7)))
-        );
-
-        assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(6), height(8), height(9)],
+            vec![height(0), height(8), height(9)],
         );
 
         assert_eq!(height(9), state_manager.latest_state_height());
@@ -1049,7 +1041,7 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
 
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(6), height(8),],
+            vec![height(0), height(8),],
         );
         assert_eq!(height(8), state_manager.latest_state_height());
         let latest_state = state_manager.get_latest_state();
@@ -1300,8 +1292,8 @@ fn can_purge_intermediate_snapshots() {
             ],
         );
 
-        // Checkpoints @15 and @20 are kept because they are the two most recent
-        // checkpoints.
+        // Checkpoint @20 is kept because it is the most recent
+        // checkpoint. @15 is kept because @19 depends on it.
         // Intermediate states from @16 to @18 are purged.
         state_manager.remove_states_below(height(19));
         assert_eq!(
@@ -1317,11 +1309,12 @@ fn can_purge_intermediate_snapshots() {
         );
 
         // Test calling `remove_states_below` at the latest checkpoint height.
-        // Intermediate states from @16 to @19 are purged.
+        // Intermediate states from @16 to @19 are purged. @15 is purged, as
+        // no inmemory states depend on it anymore.
         state_manager.remove_states_below(height(20));
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(15), height(20), height(21), height(22)],
+            vec![height(0), height(20), height(21), height(22)],
         );
 
         // Test calling `remove_states_below` at the latest state height.
@@ -1329,7 +1322,7 @@ fn can_purge_intermediate_snapshots() {
         state_manager.remove_states_below(height(22));
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(15), height(20), height(22)],
+            vec![height(0), height(20), height(22)],
         );
 
         // Test calling `remove_states_below` at a higher height than the latest state
@@ -1339,7 +1332,7 @@ fn can_purge_intermediate_snapshots() {
         state_manager.remove_states_below(height(25));
         assert_eq!(
             state_manager.list_state_heights(CERT_ANY),
-            vec![height(0), height(15), height(20), height(22)],
+            vec![height(0), height(20), height(22)],
         );
     })
 }
