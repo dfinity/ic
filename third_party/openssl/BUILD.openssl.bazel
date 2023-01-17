@@ -74,5 +74,3 @@ filegroup(
     output_group = "gen_dir",
     visibility = ["//visibility:public"],
 )
-
-r"r"
