@@ -74,7 +74,7 @@ fn undo_sign_request(requests: Vec<state::RetrieveBtcRequest>, utxos: Vec<Utxo>)
 
 /// Updates the UTXOs for the main account of the minter to pick up change from
 /// previous retrieve BTC requests.
-async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress) {
+async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress) -> Vec<Utxo> {
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));
 
@@ -93,19 +93,17 @@ async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress)
                 main_address.display(btc_network),
                 e
             );
-            return;
+            return vec![];
         }
     };
 
-    let new_utxos = state::read_state(|s| match s.utxos_state_addresses.get(main_account) {
+    state::read_state(|s| match s.utxos_state_addresses.get(main_account) {
         Some(known_utxos) => utxos
             .into_iter()
             .filter(|u| !known_utxos.contains(u))
             .collect(),
         None => utxos,
-    });
-
-    state::mutate_state(|s| state::audit::add_utxos(s, None, main_account.clone(), new_utxos));
+    })
 }
 
 /// Returns an estimate for transaction fees in millisatoshi per vbyte.  Returns
@@ -186,8 +184,6 @@ async fn submit_pending_requests() {
         Some(fee) => fee,
         None => return,
     };
-
-    fetch_main_utxos(&main_account, &main_address).await;
 
     let maybe_sign_request = state::mutate_state(|s| {
         let batch = s.build_batch(MAX_REQUESTS_PER_BATCH);
@@ -368,24 +364,18 @@ async fn finalize_requests() {
 
     let now = ic_cdk::api::time();
 
-    let (btc_network, min_confirmations, ecdsa_public_key, requests_to_finalize) =
-        state::read_state(|s| {
-            let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network);
-            let reqs: Vec<_> = s
-                .submitted_transactions
-                .iter()
-                .filter(|req| req.submitted_at + wait_time < now)
-                .cloned()
-                .collect();
-            (
-                s.btc_network,
-                s.min_confirmations,
-                s.ecdsa_public_key.clone(),
-                reqs,
-            )
-        });
+    let has_requests_to_finalize = state::read_state(|s| {
+        let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network);
+        s.submitted_transactions
+            .iter()
+            .any(|req| req.submitted_at + wait_time < now)
+    });
 
-    let ecdsa_public_key = match ecdsa_public_key {
+    if !has_requests_to_finalize {
+        return;
+    }
+
+    let ecdsa_public_key = match state::read_state(|s| s.ecdsa_public_key.clone()) {
         Some(key) => key,
         None => {
             log!(
@@ -396,54 +386,37 @@ async fn finalize_requests() {
         }
     };
 
-    for req in requests_to_finalize {
-        assert!(!req.used_utxos.is_empty());
+    let main_account = Account {
+        owner: ic_cdk::id().into(),
+        subaccount: None,
+    };
 
-        let utxo = &req.used_utxos[0];
-        let account = match state::read_state(|s| s.outpoint_account.get(&utxo.outpoint).cloned()) {
-            Some(account) => account,
-            None => {
-                log!(P0, "[BUG]: forgot the account for UTXO {:?}", utxo);
-                continue;
-            }
-        };
+    let main_address = address::account_to_bitcoin_address(&ecdsa_public_key, &main_account);
+    let new_utxos = fetch_main_utxos(&main_account, &main_address).await;
 
-        // Pick one of the accounts that we used to build the pending
-        // transaction and fetch UTXOs for that account.
-        let addr = address::account_to_p2wpkh_address(btc_network, &ecdsa_public_key, &account);
-        let utxos = match management::get_utxos(btc_network, &addr, min_confirmations).await {
-            Ok(utxos) => utxos,
-            Err(e) => {
-                log!(
-                    P0,
-                    "[heartbeat]: failed to fetch UTXOs for address {}: {}",
-                    addr,
-                    e
-                );
-                continue;
-            }
-        };
+    // Transactions whose change outpoint is present in the newly fetched UTXOs
+    // can be finalized.  Note that all new minter transactions must have a
+    // change output because minter always charges a fee for unwrapping tokens.
+    let confirmed_transactions: Vec<_> = state::read_state(|s| {
+        s.submitted_transactions
+            .iter()
+            .filter_map(|tx| {
+                tx.change_output.as_ref().and_then(|out| {
+                    new_utxos
+                        .iter()
+                        .any(|utxo| utxo.outpoint.vout == out.vout && utxo.outpoint.txid == tx.txid)
+                        .then_some(tx.txid)
+                })
+            })
+            .collect()
+    });
 
-        // Check if the previous output that we used in the transaction appears
-        // in the list of UTXOs this account owns. If the UTXO is still in the
-        // list the transaction is not finalized yet.
-        if utxos.contains(utxo) {
-            continue;
+    state::mutate_state(|s| {
+        for txid in &confirmed_transactions {
+            state::audit::confirm_transaction(s, txid);
         }
-
-        state::mutate_state(|s| state::audit::confirm_transaction(s, &req.txid));
-
-        let now = ic_cdk::api::time();
-
-        log!(
-            P1,
-            "[heartbeat]: finalized transaction {} (retrieved amount = {}) at {} (after {} sec)",
-            tx::DisplayTxid(&req.txid),
-            tx::DisplayAmount(req.requests.iter().map(|r| r.amount).sum::<u64>()),
-            now,
-            (now - req.submitted_at) / 1_000_000_000
-        );
-    }
+        state::audit::add_utxos(s, None, main_account, new_utxos);
+    });
 }
 
 pub async fn heartbeat() {
@@ -682,7 +655,7 @@ pub fn build_unsigned_transaction(
 
     let change = inputs_value - amount;
     let change_output = state::ChangeOutput {
-        vout: outputs.len() as u64,
+        vout: outputs.len() as u32,
         value: change + minter_fee,
     };
 
