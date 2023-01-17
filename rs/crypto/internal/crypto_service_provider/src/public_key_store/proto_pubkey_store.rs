@@ -1,12 +1,12 @@
-use crate::public_key_store::PublicKeyAddError;
+use crate::public_key_store::PublicKeyGenerationTimestamps;
 use crate::public_key_store::{
-    PublicKeyGenerationTimestamps, PublicKeySetOnceError, PublicKeyStore,
+    PublicKeyAddError, PublicKeyRetainError, PublicKeySetOnceError, PublicKeyStore,
 };
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
 use ic_types::Time;
 use prost::Message;
-use std::io::{Error, ErrorKind};
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -145,12 +145,27 @@ impl PublicKeyStore for ProtoPublicKeyStore {
             .map_err(|io_error| PublicKeyAddError::Io(io_error))
     }
 
-    fn set_idkg_dealing_encryption_pubkeys(
+    fn retain_most_recent_idkg_public_keys_up_to_inclusive(
         &mut self,
-        keys: Vec<PublicKeyProto>,
-    ) -> Result<(), Error> {
-        self.keys.idkg_dealing_encryption_pks = keys;
+        oldest_public_key_to_keep: &PublicKeyProto,
+    ) -> Result<(), PublicKeyRetainError> {
+        let mut idkg_public_keys_to_keep = Vec::new();
+        let mut keep = false;
+
+        for public_key_proto in &self.keys.idkg_dealing_encryption_pks {
+            if !keep && public_key_proto.equal_ignoring_timestamp(oldest_public_key_to_keep) {
+                keep = true;
+            }
+            if keep {
+                idkg_public_keys_to_keep.push(public_key_proto.clone());
+            }
+        }
+        if idkg_public_keys_to_keep.is_empty() {
+            return Err(PublicKeyRetainError::OldestPublicKeyNotFound);
+        }
+        self.keys.idkg_dealing_encryption_pks = idkg_public_keys_to_keep;
         self.write_node_public_keys_proto_to_disk()
+            .map_err(|io_error| PublicKeyRetainError::Io(io_error))
     }
 
     fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKeyProto> {

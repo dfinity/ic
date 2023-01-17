@@ -2,7 +2,7 @@ use crate::api::CspCreateMEGaKeyError;
 use crate::canister_threshold::{IDKG_MEGA_SCOPE, IDKG_THRESHOLD_KEYS_SCOPE};
 use crate::key_id::KeyId;
 use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
-use crate::public_key_store::{PublicKeyAddError, PublicKeyStore};
+use crate::public_key_store::{PublicKeyAddError, PublicKeyRetainError, PublicKeyStore};
 use crate::secret_key_store::{SecretKeyStore, SecretKeyStorePersistenceError};
 use crate::types::CspSecretKey;
 use crate::vault::api::IDkgProtocolCspVault;
@@ -485,64 +485,18 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         active_canister_key_ids: BTreeSet<KeyId>,
         oldest_public_key: MEGaPublicKey,
     ) -> Result<(), IDkgRetainKeysError> {
-        let oldest_public_key_proto =
-            idkg_dealing_encryption_pk_to_proto(oldest_public_key.clone());
+        let oldest_public_key_proto = idkg_dealing_encryption_pk_to_proto(oldest_public_key);
         {
-            let (sks_write_lock, pks_write_lock) = self.sks_and_pks_write_locks();
-            let public_keys_to_keep = idkg_most_recent_public_keys_up_to_inclusive(
-                &pks_write_lock,
+            let (sks_write_lock, mut pks_write_lock) = self.sks_and_pks_write_locks();
+            idkg_retain_active_dealing_encryption_public_keys(
+                &mut pks_write_lock,
                 &oldest_public_key_proto,
-                &oldest_public_key,
             )?;
-            let key_ids_to_keep = idkg_public_key_proto_to_key_id(&public_keys_to_keep)?;
-            self.idkg_retain_active_dealing_encryption_secret_keys(sks_write_lock, key_ids_to_keep)
-                .and_then(|()| {
-                    self.idkg_retain_active_dealing_encryption_public_keys(
-                        pks_write_lock,
-                        public_keys_to_keep,
-                    )
-                })?;
+            let key_ids_to_keep =
+                idkg_public_key_proto_to_key_id(&pks_write_lock.idkg_dealing_encryption_pubkeys())?;
+            idkg_retain_active_dealing_encryption_secret_keys(sks_write_lock, key_ids_to_keep)?;
         } //drop locks on sks and pks
         self.idkg_retain_active_canister_secret_shares(active_canister_key_ids)
-    }
-
-    fn idkg_retain_active_dealing_encryption_secret_keys(
-        &self,
-        mut sks_write_lock: RwLockWriteGuard<S>,
-        active_secret_key_ids: BTreeSet<KeyId>,
-    ) -> Result<(), IDkgRetainKeysError> {
-        sks_write_lock
-            .retain(
-                move |key_id, _| active_secret_key_ids.contains(key_id),
-                IDKG_MEGA_SCOPE,
-            )
-            .map_err(|sks_error| match sks_error {
-                SecretKeyStorePersistenceError::SerializationError(e) => {
-                    IDkgRetainKeysError::SerializationError {
-                        internal_error: format!("Serialization error while retaining active IDKG dealing encryption secret keys: {:?}", e),
-                    }
-                }
-                SecretKeyStorePersistenceError::IoError(e) => {
-                    IDkgRetainKeysError::TransientInternalError {
-                        internal_error: format!("IO error while retaining active IDKG dealing encryption secret keys: {:?}", e)
-                    }
-                }
-            })
-    }
-
-    fn idkg_retain_active_dealing_encryption_public_keys(
-        &self,
-        mut pks_write_lock: RwLockWriteGuard<P>,
-        public_keys_to_keep: Vec<PublicKey>,
-    ) -> Result<(), IDkgRetainKeysError> {
-        pks_write_lock
-            .set_idkg_dealing_encryption_pubkeys(public_keys_to_keep)
-            .map_err(|io_error| IDkgRetainKeysError::TransientInternalError {
-                internal_error: format!(
-                    "IO error while retaining active IDKG dealing encryption public keys: {:?}",
-                    io_error
-                ),
-            })
     }
 
     fn idkg_retain_active_canister_secret_shares(
@@ -685,33 +639,6 @@ fn generate_idkg_key_material_from_seed(
     Ok((public_key, csp_secret_key, key_id))
 }
 
-fn idkg_most_recent_public_keys_up_to_inclusive<P: PublicKeyStore>(
-    pks_write_lock: &RwLockWriteGuard<P>,
-    oldest_public_key_proto: &PublicKey,
-    oldest_public_key: &MEGaPublicKey,
-) -> Result<Vec<PublicKey>, IDkgRetainKeysError> {
-    let mut idkg_public_keys_to_keep = Vec::new();
-    let mut keep = false;
-
-    for public_key_proto in pks_write_lock.idkg_dealing_encryption_pubkeys() {
-        if !keep && &public_key_proto == oldest_public_key_proto {
-            keep = true;
-        }
-        if keep {
-            idkg_public_keys_to_keep.push(public_key_proto.clone());
-        }
-    }
-    if idkg_public_keys_to_keep.is_empty() {
-        return Err(IDkgRetainKeysError::InternalError {
-            internal_error: format!(
-                "Could not find oldest IDKG public key {:?} locally",
-                &oldest_public_key
-            ),
-        });
-    }
-    Ok(idkg_public_keys_to_keep)
-}
-
 fn idkg_public_key_proto_to_key_id(
     public_keys: &[PublicKey],
 ) -> Result<BTreeSet<KeyId>, IDkgRetainKeysError> {
@@ -735,4 +662,49 @@ fn idkg_public_key_proto_to_key_id(
             })
         })
         .collect()
+}
+
+fn idkg_retain_active_dealing_encryption_secret_keys<S: SecretKeyStore>(
+    mut sks_write_lock: RwLockWriteGuard<S>,
+    active_secret_key_ids: BTreeSet<KeyId>,
+) -> Result<(), IDkgRetainKeysError> {
+    sks_write_lock
+        .retain(
+            move |key_id, _| active_secret_key_ids.contains(key_id),
+            IDKG_MEGA_SCOPE,
+        )
+        .map_err(|sks_error| match sks_error {
+            SecretKeyStorePersistenceError::SerializationError(e) => {
+                IDkgRetainKeysError::SerializationError {
+                    internal_error: format!("Serialization error while retaining active IDKG dealing encryption secret keys: {:?}", e),
+                }
+            }
+            SecretKeyStorePersistenceError::IoError(e) => {
+                IDkgRetainKeysError::TransientInternalError {
+                    internal_error: format!("IO error while retaining active IDKG dealing encryption secret keys: {:?}", e)
+                }
+            }
+        })
+}
+
+fn idkg_retain_active_dealing_encryption_public_keys<P: PublicKeyStore>(
+    pks_write_lock: &mut RwLockWriteGuard<P>,
+    oldest_public_key: &PublicKey,
+) -> Result<(), IDkgRetainKeysError> {
+    pks_write_lock
+        .retain_most_recent_idkg_public_keys_up_to_inclusive(oldest_public_key)
+        .map_err(|retain_error| match retain_error {
+            PublicKeyRetainError::Io(io_error) => IDkgRetainKeysError::TransientInternalError {
+                internal_error: format!(
+                    "IO error while retaining active IDKG dealing encryption public keys: {:?}",
+                    io_error
+                ),
+            },
+            PublicKeyRetainError::OldestPublicKeyNotFound => IDkgRetainKeysError::InternalError {
+                internal_error: format!(
+                    "Could not find oldest IDKG public key {:?} locally",
+                    &oldest_public_key
+                ),
+            },
+        })
 }

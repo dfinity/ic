@@ -225,11 +225,7 @@ fn should_preserve_order_of_rotating_pubkeys() {
         public_key_with_key_value(43),
         public_key_with_key_value(44),
     ];
-    for pubkey in &pubkeys {
-        store
-            .add_idkg_dealing_encryption_pubkey(pubkey.clone())
-            .expect("cannot add public key");
-    }
+    add_idkg_dealing_encryption_public_keys(&mut store, pubkeys.clone());
 
     assert_eq!(store.idkg_dealing_encryption_pubkeys(), pubkeys);
     assert_eq!(
@@ -434,17 +430,14 @@ mod timestamps {
     fn should_strip_timestamp_when_returning_idkg_dealing_encryption_pubkeys() {
         let temp_dir = temp_dir();
         let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
-        store
-            .add_idkg_dealing_encryption_pubkey(public_key_with_timestamp(GENESIS))
-            .expect("cannot add public key");
-        store
-            .add_idkg_dealing_encryption_pubkey(public_key_with_key_value(42))
-            .expect("cannot add public key");
-        store
-            .add_idkg_dealing_encryption_pubkey(public_key_with_timestamp(
-                GENESIS + Duration::from_millis(1),
-            ))
-            .expect("cannot add public key");
+        add_idkg_dealing_encryption_public_keys(
+            &mut store,
+            vec![
+                public_key_with_timestamp(GENESIS),
+                public_key_with_key_value(42),
+                public_key_with_timestamp(GENESIS + Duration::from_millis(1)),
+            ],
+        );
 
         for public_key in store.idkg_dealing_encryption_pubkeys() {
             assert!(public_key.timestamp.is_none())
@@ -476,9 +469,9 @@ mod timestamps {
             ))
             .expect("error setting public key");
         store
-            .set_idkg_dealing_encryption_pubkeys(vec![public_key_with_timestamp(
+            .add_idkg_dealing_encryption_pubkey(public_key_with_timestamp(
                 last_idkg_dealing_encryption_pk_timestamp,
-            )])
+            ))
             .expect("error setting public key");
 
         let timestamps = store.generation_timestamps();
@@ -500,14 +493,15 @@ mod timestamps {
     fn should_retrieve_timestamp_of_last_idkg_dealing_encryption_public_key() {
         let temp_dir = temp_dir();
         let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
-        store
-            .set_idkg_dealing_encryption_pubkeys(vec![
+        add_idkg_dealing_encryption_public_keys(
+            &mut store,
+            vec![
                 public_key_with_timestamp(GENESIS),
                 public_key_with_key_value(42),
                 public_key_with_timestamp(GENESIS + Duration::from_millis(1)),
                 public_key_with_timestamp(GENESIS + Duration::from_millis(2)),
-            ])
-            .expect("cannot set public key");
+            ],
+        );
 
         let last_idkg_generated_pk_timestamp = store
             .generation_timestamps()
@@ -589,6 +583,207 @@ mod timestamps {
     }
 }
 
+mod retain_most_recent_idkg_public_keys_up_to_inclusive {
+    use super::*;
+    use crate::public_key_store::PublicKeyRetainError;
+
+    #[test]
+    fn should_fail_when_idkg_oldest_public_key_not_found() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        let oldest_public_key = public_key_with_key_value(42);
+
+        let result = store.retain_most_recent_idkg_public_keys_up_to_inclusive(&oldest_public_key);
+
+        assert_matches!(result, Err(PublicKeyRetainError::OldestPublicKeyNotFound));
+    }
+
+    #[test]
+    fn should_not_delete_only_public_key() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        let public_key = public_key_with_key_value(42);
+        assert_matches!(
+            store.add_idkg_dealing_encryption_pubkey(public_key.clone()),
+            Ok(())
+        );
+
+        assert_matches!(
+            store.retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key),
+            Ok(())
+        );
+
+        assert_eq!(store.idkg_dealing_encryption_pubkeys(), vec![public_key]);
+    }
+
+    #[test]
+    fn should_retain_active_public_keys() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        add_idkg_dealing_encryption_public_keys(
+            &mut store,
+            vec![
+                public_key_with_key_value(0),
+                public_key_with_key_value(1),
+                public_key_with_key_value(2),
+                public_key_with_key_value(3),
+                public_key_with_key_value(4),
+            ],
+        );
+
+        assert_matches!(
+            store
+                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
+            Ok(())
+        );
+
+        assert_eq!(
+            store.idkg_dealing_encryption_pubkeys(),
+            vec![
+                public_key_with_key_value(2),
+                public_key_with_key_value(3),
+                public_key_with_key_value(4)
+            ]
+        )
+    }
+
+    #[test]
+    fn should_delete_non_retained_keys_from_disk() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        add_idkg_dealing_encryption_public_keys(
+            &mut store,
+            vec![
+                public_key_with_key_value(0),
+                public_key_with_key_value(1),
+                public_key_with_key_value(2),
+                public_key_with_key_value(3),
+                public_key_with_key_value(4),
+            ],
+        );
+
+        assert_matches!(
+            store
+                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
+            Ok(())
+        );
+
+        assert_eq!(
+            ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME)
+                .idkg_dealing_encryption_pubkeys(),
+            vec![
+                public_key_with_key_value(2),
+                public_key_with_key_value(3),
+                public_key_with_key_value(4)
+            ]
+        )
+    }
+
+    #[test]
+    fn should_be_idempotent() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        add_idkg_dealing_encryption_public_keys(
+            &mut store,
+            vec![
+                public_key_with_key_value(0),
+                public_key_with_key_value(1),
+                public_key_with_key_value(2),
+                public_key_with_key_value(3),
+                public_key_with_key_value(4),
+            ],
+        );
+
+        assert_matches!(
+            store
+                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
+            Ok(())
+        );
+        let keys_after_first_retain = store.idkg_dealing_encryption_pubkeys();
+        assert_matches!(
+            store
+                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
+            Ok(())
+        );
+        let keys_after_second_retain = store.idkg_dealing_encryption_pubkeys();
+
+        assert_eq!(keys_after_first_retain, keys_after_second_retain);
+    }
+
+    #[test]
+    fn should_keep_largest_suffix_even_when_public_keys_not_distinct() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        add_idkg_dealing_encryption_public_keys(
+            &mut store,
+            vec![
+                public_key_with_key_value(0),
+                public_key_with_key_value(1),
+                public_key_with_key_value(1),
+                public_key_with_key_value(2),
+            ],
+        );
+
+        assert_matches!(
+            store
+                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(1)),
+            Ok(())
+        );
+
+        assert_eq!(
+            store.idkg_dealing_encryption_pubkeys(),
+            vec![
+                public_key_with_key_value(1),
+                public_key_with_key_value(1),
+                public_key_with_key_value(2)
+            ]
+        )
+    }
+
+    #[test]
+    fn should_find_oldest_public_key_with_different_timestamp() {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        let generated_public_key_with_timestamp = PublicKey {
+            timestamp: Some(1000),
+            ..public_key_with_key_value(1)
+        };
+        add_idkg_dealing_encryption_public_keys(
+            &mut store,
+            vec![
+                public_key_with_key_value(0),
+                generated_public_key_with_timestamp,
+                public_key_with_key_value(1),
+                public_key_with_key_value(2),
+            ],
+        );
+
+        assert_matches!(
+            store
+                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(1)),
+            Ok(())
+        );
+
+        assert_eq!(
+            store.idkg_dealing_encryption_pubkeys(),
+            vec![
+                public_key_with_key_value(1),
+                public_key_with_key_value(1),
+                public_key_with_key_value(2)
+            ]
+        )
+    }
+}
+
+fn add_idkg_dealing_encryption_public_keys(
+    store: &mut ProtoPublicKeyStore,
+    public_keys: Vec<PublicKey>,
+) {
+    for public_key in public_keys {
+        assert_matches!(store.add_idkg_dealing_encryption_pubkey(public_key), Ok(()))
+    }
+}
+
 mod idkg_dealing_encryption_pubkeys_count {
     use super::*;
 
@@ -616,12 +811,24 @@ mod idkg_dealing_encryption_pubkeys_count {
     #[test]
     fn should_correctly_return_count_of_idkg_dealing_encryption_public_keys_when_all_keys_except_idkg_dealing_encryption_key_present(
     ) {
-        let (_generated_keys, crypto_root) = generate_node_keys_in_temp_dir();
-        let mut store =
-            ProtoPublicKeyStore::open(crypto_root.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
-        store
-            .set_idkg_dealing_encryption_pubkeys(vec![])
-            .expect("Error setting iDKG dealing encryption public keys");
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        assert_matches!(
+            store.set_once_node_signing_pubkey(public_key_with_key_value(1)),
+            Ok(())
+        );
+        assert_matches!(
+            store.set_once_committee_signing_pubkey(public_key_with_key_value(2)),
+            Ok(())
+        );
+        assert_matches!(
+            store.set_once_tls_certificate(public_key_certificate_with_der_value(1)),
+            Ok(())
+        );
+        assert_matches!(
+            store.set_once_ni_dkg_dealing_encryption_pubkey(public_key_with_key_value(4)),
+            Ok(())
+        );
 
         let key_count = store.idkg_dealing_encryption_pubkeys_count();
 
@@ -633,13 +840,14 @@ mod idkg_dealing_encryption_pubkeys_count {
     ) {
         let temp_dir = temp_dir();
         let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
-        store
-            .set_idkg_dealing_encryption_pubkeys(vec![
+        add_idkg_dealing_encryption_public_keys(
+            &mut store,
+            vec![
                 public_key_with_key_value(42),
                 public_key_with_key_value(43),
                 public_key_with_key_value(44),
-            ])
-            .expect("cannot set public key");
+            ],
+        );
 
         let key_count = store.idkg_dealing_encryption_pubkeys_count();
 
@@ -673,6 +881,11 @@ fn public_key_with_key_value(key_value: u8) -> PublicKey {
         key_value: [key_value; 10].to_vec(),
         proof_data: None,
         timestamp: None,
+    }
+}
+fn public_key_certificate_with_der_value(certificate_der: u8) -> X509PublicKeyCert {
+    X509PublicKeyCert {
+        certificate_der: [certificate_der; 10].to_vec(),
     }
 }
 

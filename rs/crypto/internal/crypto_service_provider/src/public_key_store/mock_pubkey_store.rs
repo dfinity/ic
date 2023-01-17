@@ -1,5 +1,6 @@
 use crate::public_key_store::PublicKeyAddError;
 use crate::public_key_store::PublicKeyGenerationTimestamps;
+use crate::public_key_store::PublicKeyRetainError;
 use crate::public_key_store::PublicKeySetOnceError;
 use crate::public_key_store::PublicKeyStore;
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -42,10 +43,7 @@ mock! {
 
         fn add_idkg_dealing_encryption_pubkey(&mut self, key: PublicKey) -> Result<(), PublicKeyAddError>;
 
-        fn set_idkg_dealing_encryption_pubkeys(
-            &mut self,
-            keys: Vec<PublicKey>,
-        ) -> Result<(), std::io::Error>;
+        fn retain_most_recent_idkg_public_keys_up_to_inclusive(&mut self, oldest_public_key_to_keep: &PublicKey) -> Result<(), PublicKeyRetainError>;
 
         fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKey>;
 
