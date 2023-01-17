@@ -977,6 +977,40 @@ mod public_key_store {
         let csp_vault = new_remote_csp_vault(tokio_rt.handle());
         test_utils::public_key_store::should_return_true_for_pks_contains_if_all_keys_match_with_multiple_idkg_keys_and_registry_key_not_first_in_vector(csp_vault);
     }
+
+    #[test]
+    fn should_correctly_return_idkg_key_count_for_no_keys() {
+        let tokio_rt = new_tokio_runtime();
+        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
+        test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_no_keys(csp_vault);
+    }
+
+    #[test]
+    fn should_correctly_return_idkg_key_count_for_single_key() {
+        let tokio_rt = new_tokio_runtime();
+        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
+        test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_single_key(
+            csp_vault,
+        );
+    }
+
+    #[test]
+    fn should_correctly_return_idkg_key_count_for_two_keys() {
+        let tokio_rt = new_tokio_runtime();
+        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
+        test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_two_keys(
+            csp_vault,
+        );
+    }
+
+    #[test]
+    fn should_correctly_return_idkg_key_count_when_all_other_keys_exist_except_idkg_key() {
+        let tokio_rt = new_tokio_runtime();
+        let csp_vault = new_remote_csp_vault(tokio_rt.handle());
+        test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_when_all_other_keys_exist_except_idkg_key(
+            csp_vault,
+        );
+    }
 }
 
 mod public_seed {

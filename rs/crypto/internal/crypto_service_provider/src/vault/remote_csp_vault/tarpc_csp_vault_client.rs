@@ -313,6 +313,18 @@ impl PublicKeyStoreCspVault for RemoteCspVault {
             ))
         })
     }
+
+    fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .idkg_key_count(context_with_timeout(self.rpc_timeout)),
+        )
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(CspPublicKeyStoreError::TransientInternalError(
+                rpc_error.to_string(),
+            ))
+        })
+    }
 }
 
 impl NiDkgCspVault for RemoteCspVault {

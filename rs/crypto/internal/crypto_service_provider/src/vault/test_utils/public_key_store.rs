@@ -187,6 +187,57 @@ pub fn should_return_true_for_pks_contains_if_all_keys_match_with_multiple_idkg_
         .expect("Error calling pks_contains"));
 }
 
+pub fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_no_keys(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    let result = csp_vault
+        .idkg_dealing_encryption_pubkeys_count()
+        .expect("Error calling idkg_key_count");
+    assert_eq!(0, result);
+}
+
+pub fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_single_key(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    let _initial_node_public_keys = generate_all_keys(&csp_vault);
+    let result = csp_vault
+        .idkg_dealing_encryption_pubkeys_count()
+        .expect("Error calling idkg_key_count");
+    assert_eq!(1, result);
+}
+
+pub fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_two_keys(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    let _initial_node_public_keys = generate_all_keys(&csp_vault);
+    let _second_idkg_pk = generate_idkg_dealing_encryption_key_pair(&csp_vault);
+    let result = csp_vault
+        .idkg_dealing_encryption_pubkeys_count()
+        .expect("Error calling idkg_key_count");
+    assert_eq!(2, result);
+}
+
+pub fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_when_all_other_keys_exist_except_idkg_key(
+    csp_vault: Arc<dyn CspVault>,
+) {
+    let _node_signing_pk = csp_vault
+        .gen_node_signing_key_pair()
+        .expect("Failed to generate node signing key pair");
+    let _committee_signing_pk = csp_vault
+        .gen_committee_signing_key_pair()
+        .expect("Failed to generate committee signing key pair");
+    let _dkg_dealing_encryption_pk = csp_vault
+        .gen_dealing_encryption_key_pair(node_test_id(NODE_1))
+        .expect("Failed to generate NI-DKG dealing encryption key pair");
+    let _tls_certificate = csp_vault
+        .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+        .expect("Failed to generate TLS certificate");
+
+    let result = csp_vault
+        .idkg_dealing_encryption_pubkeys_count()
+        .expect("Error calling idkg_key_count");
+    assert_eq!(0, result);
+}
 fn generate_idkg_dealing_encryption_key_pair(csp_vault: &Arc<dyn CspVault>) -> MEGaPublicKey {
     csp_vault
         .idkg_gen_dealing_encryption_key_pair()

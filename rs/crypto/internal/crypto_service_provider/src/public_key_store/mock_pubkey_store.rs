@@ -50,5 +50,7 @@ mock! {
         fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKey>;
 
         fn generation_timestamps(&self) -> PublicKeyGenerationTimestamps;
+
+        fn idkg_dealing_encryption_pubkeys_count(&self) -> usize;
         }
 }

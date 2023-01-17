@@ -589,6 +589,64 @@ mod timestamps {
     }
 }
 
+mod idkg_dealing_encryption_pubkeys_count {
+    use super::*;
+
+    #[test]
+    fn should_correctly_return_count_of_idkg_dealing_encryption_public_keys_when_no_keys_present() {
+        let temp_dir = temp_dir();
+        let store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+
+        let key_count = store.idkg_dealing_encryption_pubkeys_count();
+
+        assert_eq!(key_count, 0);
+    }
+
+    #[test]
+    fn should_correctly_return_count_of_idkg_dealing_encryption_public_keys_when_all_keys_present()
+    {
+        let (_generated_keys, crypto_root) = generate_node_keys_in_temp_dir();
+        let store = ProtoPublicKeyStore::open(crypto_root.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+
+        let key_count = store.idkg_dealing_encryption_pubkeys_count();
+
+        assert_eq!(key_count, 1);
+    }
+
+    #[test]
+    fn should_correctly_return_count_of_idkg_dealing_encryption_public_keys_when_all_keys_except_idkg_dealing_encryption_key_present(
+    ) {
+        let (_generated_keys, crypto_root) = generate_node_keys_in_temp_dir();
+        let mut store =
+            ProtoPublicKeyStore::open(crypto_root.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        store
+            .set_idkg_dealing_encryption_pubkeys(vec![])
+            .expect("Error setting iDKG dealing encryption public keys");
+
+        let key_count = store.idkg_dealing_encryption_pubkeys_count();
+
+        assert_eq!(key_count, 0);
+    }
+
+    #[test]
+    fn should_correctly_return_count_of_idkg_dealing_encryption_public_keys_when_multiple_idkg_keys_present(
+    ) {
+        let temp_dir = temp_dir();
+        let mut store = ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEY_STORE_DATA_FILENAME);
+        store
+            .set_idkg_dealing_encryption_pubkeys(vec![
+                public_key_with_key_value(42),
+                public_key_with_key_value(43),
+                public_key_with_key_value(44),
+            ])
+            .expect("cannot set public key");
+
+        let key_count = store.idkg_dealing_encryption_pubkeys_count();
+
+        assert_eq!(key_count, 3);
+    }
+}
+
 fn hex_decode<T: AsRef<[u8]>>(data: T) -> Vec<u8> {
     hex::decode(data).expect("failed to decode hex")
 }

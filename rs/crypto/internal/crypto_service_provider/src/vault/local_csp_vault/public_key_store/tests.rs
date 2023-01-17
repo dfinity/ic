@@ -60,3 +60,32 @@ fn should_return_true_for_pks_contains_if_all_keys_match_with_multiple_idkg_keys
 ) {
     test_utils::public_key_store::should_return_true_for_pks_contains_if_all_keys_match_with_multiple_idkg_keys_and_registry_key_not_first_in_vector(LocalCspVault::builder().build_into_arc());
 }
+
+#[test]
+fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_no_keys() {
+    test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_no_keys(
+        LocalCspVault::builder().build_into_arc(),
+    );
+}
+
+#[test]
+fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_single_key() {
+    test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_single_key(
+        LocalCspVault::builder().build_into_arc(),
+    );
+}
+
+#[test]
+fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_two_keys() {
+    test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_two_keys(
+        LocalCspVault::builder().build_into_arc(),
+    );
+}
+
+#[test]
+fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_when_all_other_keys_exist_except_idkg_key(
+) {
+    test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_when_all_other_keys_exist_except_idkg_key(
+        LocalCspVault::builder().build_into_arc(),
+    );
+}

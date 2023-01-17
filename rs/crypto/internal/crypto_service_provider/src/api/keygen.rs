@@ -116,4 +116,10 @@ pub trait NodePublicKeyData {
     fn dkg_dealing_encryption_key_id(
         &self,
     ) -> Result<KeyId, DkgDealingEncryptionKeyIdRetrievalError>;
+
+    /// Returns the number of iDKG dealing encryption public keys stored locally.
+    ///
+    /// # Errors
+    /// * if a transient error (e.g., RPC timeout) occurs when accessing the public key store
+    fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, NodePublicKeyDataError>;
 }

@@ -148,6 +148,7 @@ enum CspVaultMethod {
     SksContains,
     PksContains,
     CurrentNodePublicKeys,
+    IdkgKeyCount,
     GenTlsKeyPair,
     TlsSign,
     IdkgCreateDealing,
@@ -198,6 +199,7 @@ impl CspVaultMethod {
             CspVaultMethod::CurrentNodePublicKeys => {
                 (MetricsDomain::KeyManagement, "current_node_public_keys")
             }
+            CspVaultMethod::IdkgKeyCount => (MetricsDomain::KeyManagement, "idkg_key_count"),
             CspVaultMethod::GenTlsKeyPair => (MetricsDomain::TlsHandshake, "gen_tls_key_pair"),
             CspVaultMethod::TlsSign => (MetricsDomain::TlsHandshake, "tls_sign"),
             CspVaultMethod::IdkgCreateDealing => {
@@ -246,6 +248,7 @@ impl From<&TarpcCspVaultRequest> for CspVaultMethod {
             Req::SksContains { .. } => Method::SksContains,
             Req::PksContains { .. } => Method::PksContains,
             Req::CurrentNodePublicKeys { .. } => Method::CurrentNodePublicKeys,
+            Req::IdkgKeyCount { .. } => Method::IdkgKeyCount,
             Req::GenTlsKeyPair { .. } => Method::GenTlsKeyPair,
             Req::TlsSign { .. } => Method::TlsSign,
             Req::IdkgCreateDealing { .. } => Method::IdkgCreateDealing,
@@ -280,6 +283,7 @@ impl From<&TarpcCspVaultResponse> for CspVaultMethod {
             Resp::SksContains { .. } => Method::SksContains,
             Resp::PksContains { .. } => Method::PksContains,
             Resp::CurrentNodePublicKeys { .. } => Method::CurrentNodePublicKeys,
+            Resp::IdkgKeyCount { .. } => Method::IdkgKeyCount,
             Resp::GenTlsKeyPair { .. } => Method::GenTlsKeyPair,
             Resp::TlsSign { .. } => Method::TlsSign,
             Resp::IdkgCreateDealing { .. } => Method::IdkgCreateDealing,

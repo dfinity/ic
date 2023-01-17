@@ -311,6 +311,12 @@ impl<
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 
+    async fn idkg_key_count(self, _: context::Context) -> Result<usize, CspPublicKeyStoreError> {
+        let vault = self.local_csp_vault;
+        let job = move || vault.idkg_dealing_encryption_pubkeys_count();
+        execute_on_thread_pool(self.thread_pool_handle, job).await
+    }
+
     // 'TlsHandshakeCspVault'-methods.
     async fn gen_tls_key_pair(
         self,

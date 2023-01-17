@@ -173,6 +173,10 @@ impl PublicKeyStore for ProtoPublicKeyStore {
             ),
         }
     }
+
+    fn idkg_dealing_encryption_pubkeys_count(&self) -> usize {
+        self.keys.idkg_dealing_encryption_pks.len()
+    }
 }
 
 fn remove_timestamp(public_key: PublicKeyProto) -> PublicKeyProto {

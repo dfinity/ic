@@ -16,7 +16,9 @@ mod csp_tests {
 
     mod node_public_key_data {
         use super::*;
-        use crate::NodePublicKeyData;
+        use crate::vault::api::CspPublicKeyStoreError;
+        use crate::{NodePublicKeyData, NodePublicKeyDataError};
+        use assert_matches::assert_matches;
         use ic_types::crypto::CurrentNodePublicKeys;
 
         #[test]
@@ -37,6 +39,27 @@ mod csp_tests {
                     idkg_dealing_encryption_public_key: None
                 }
             );
+        }
+
+        #[test]
+        fn should_return_zero_key_count_when_no_public_keys() {
+            let csp = Csp::with_rng(csprng());
+
+            let key_count = csp
+                .idkg_dealing_encryption_pubkeys_count()
+                .expect("Failed to retrieve iDKG dealing encryption public keys count");
+
+            assert_eq!(key_count, 0);
+        }
+
+        #[test]
+        fn should_correctly_translate_error() {
+            let csp_error = CspPublicKeyStoreError::TransientInternalError("oh no!".to_string());
+            let node_public_key_data_error = NodePublicKeyDataError::from(csp_error);
+            assert_matches!(
+                node_public_key_data_error,
+                NodePublicKeyDataError::TransientInternalError(internal_error) if internal_error == "oh no!"
+            )
         }
     }
 

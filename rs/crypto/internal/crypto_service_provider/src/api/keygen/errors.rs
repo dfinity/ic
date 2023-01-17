@@ -3,7 +3,7 @@ use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgLoadPrivateKeyError, CspDkgUpdateFsEpochError, KeyNotFoundError, MalformedDataError,
 };
-use ic_interfaces::crypto::CurrentNodePublicKeysError;
+use ic_interfaces::crypto::{CurrentNodePublicKeysError, IdkgDealingEncPubKeysCountError};
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -69,6 +69,16 @@ impl From<NodePublicKeyDataError> for CryptoError {
                 CryptoError::TransientInternalError {
                     internal_error: details,
                 }
+            }
+        }
+    }
+}
+
+impl From<NodePublicKeyDataError> for IdkgDealingEncPubKeysCountError {
+    fn from(e: NodePublicKeyDataError) -> Self {
+        match e {
+            NodePublicKeyDataError::TransientInternalError(internal_error) => {
+                IdkgDealingEncPubKeysCountError::TransientInternalError(internal_error)
             }
         }
     }
