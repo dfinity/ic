@@ -85,7 +85,7 @@ async def initiate_update_calls(config: StressConfiguration):
     call_times = []
     for i in range(config.num_requests):
         try:
-            this_agent = config.agents[i % len(config.agents)]
+            this_agent = config.agents[random.randint(0, len(config.agents) - 1)]
             cid = config.canister_id
             req = {
                 "request_type": "call",
