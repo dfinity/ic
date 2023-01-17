@@ -1,14 +1,12 @@
-use crate::execution::system_task::CanisterSystemTaskError;
 use crate::execution::test_utilities::{wat_compilation_cost, ExecutionTestBuilder};
 use assert_matches::assert_matches;
-use ic_ic00_types::CanisterStatusType;
-use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
+use ic_interfaces::messages::CanisterTask;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::{page_map::PAGE_SIZE, CanisterStatus};
 use ic_state_machine_tests::{Cycles, StateMachine};
 use ic_state_machine_tests::{StateMachineBuilder, WasmResult};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
-use ic_types::methods::SystemMethod;
 use ic_types::NumBytes;
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use maplit::btreemap;
@@ -17,38 +15,34 @@ use std::time::{Duration, UNIX_EPOCH};
 #[test]
 fn heartbeat_is_executed() {
     let mut test = ExecutionTestBuilder::new().build();
-    let wat = r#"
-        (module
-            (func (export "canister_heartbeat") unreachable)
+    let wat = r#"(module
+            (func (export "canister_heartbeat")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    let err = test
-        .system_task(canister_id, SystemMethod::CanisterHeartbeat)
-        .unwrap_err();
+    test.canister_task(canister_id, CanisterTask::Heartbeat);
     assert_eq!(
-        err,
-        CanisterSystemTaskError::CanisterExecutionFailed(HypervisorError::Trapped(
-            TrapCode::Unreachable
-        ))
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(11)
     );
 }
 
 #[test]
 fn global_timer_is_executed() {
     let mut test = ExecutionTestBuilder::new().build();
-    let wat = r#"
-        (module
-            (func (export "canister_global_timer") unreachable)
+    let wat = r#"(module
+            (func (export "canister_global_timer")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    let err = test
-        .system_task(canister_id, SystemMethod::CanisterGlobalTimer)
-        .unwrap_err();
+    test.canister_task(canister_id, CanisterTask::GlobalTimer);
     assert_eq!(
-        err,
-        CanisterSystemTaskError::CanisterExecutionFailed(HypervisorError::Trapped(
-            TrapCode::Unreachable
-        ))
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(11)
     );
 }
 
@@ -83,8 +77,7 @@ fn heartbeat_produces_heap_delta() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
-    test.system_task(canister_id, SystemMethod::CanisterHeartbeat)
-        .unwrap();
+    test.canister_task(canister_id, CanisterTask::Heartbeat);
     assert_eq!(
         NumBytes::from((PAGE_SIZE) as u64),
         test.state().metadata.heap_delta_estimate
@@ -103,8 +96,7 @@ fn global_timer_produces_heap_delta() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
-    test.system_task(canister_id, SystemMethod::CanisterGlobalTimer)
-        .unwrap();
+    test.canister_task(canister_id, CanisterTask::GlobalTimer);
     assert_eq!(
         NumBytes::from((PAGE_SIZE) as u64),
         test.state().metadata.heap_delta_estimate
@@ -116,8 +108,7 @@ fn heartbeat_fails_gracefully_if_not_exported() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = "(module)";
     let canister_id = test.canister_from_wat(wat).unwrap();
-    test.system_task(canister_id, SystemMethod::CanisterHeartbeat)
-        .unwrap();
+    test.canister_task(canister_id, CanisterTask::Heartbeat);
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     assert_eq!(wat_compilation_cost(wat), test.executed_instructions());
 }
@@ -127,8 +118,7 @@ fn global_timer_fails_gracefully_if_not_exported() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = "(module)";
     let canister_id = test.canister_from_wat(wat).unwrap();
-    test.system_task(canister_id, SystemMethod::CanisterGlobalTimer)
-        .unwrap();
+    test.canister_task(canister_id, CanisterTask::GlobalTimer);
     assert_eq!(NumBytes::from(0), test.state().metadata.heap_delta_estimate);
     assert_eq!(wat_compilation_cost(wat), test.executed_instructions());
 }
@@ -136,10 +126,11 @@ fn global_timer_fails_gracefully_if_not_exported() {
 #[test]
 fn heartbeat_doesnt_run_if_canister_is_stopped() {
     let mut test = ExecutionTestBuilder::new().build();
-    let wat = r#"
-        (module
-            (func (export "canister_heartbeat") unreachable)
-            (memory (export "memory") 1)
+    let wat = r#"(module
+            (func (export "canister_heartbeat")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     test.stop_canister(canister_id);
@@ -148,24 +139,21 @@ fn heartbeat_doesnt_run_if_canister_is_stopped() {
         CanisterStatus::Stopped,
         test.canister_state(canister_id).system_state.status
     );
-    let err = test
-        .system_task(canister_id, SystemMethod::CanisterHeartbeat)
-        .unwrap_err();
+    test.canister_task(canister_id, CanisterTask::Heartbeat);
     assert_eq!(
-        err,
-        CanisterSystemTaskError::CanisterNotRunning {
-            status: CanisterStatusType::Stopped,
-        }
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(1)
     );
 }
 
 #[test]
 fn global_timer_doesnt_run_if_canister_is_stopped() {
     let mut test = ExecutionTestBuilder::new().build();
-    let wat = r#"
-        (module
-            (func (export "canister_global_timer") unreachable)
-            (memory (export "memory") 1)
+    let wat = r#"(module
+            (func (export "canister_global_timer")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     test.stop_canister(canister_id);
@@ -174,24 +162,21 @@ fn global_timer_doesnt_run_if_canister_is_stopped() {
         CanisterStatus::Stopped,
         test.canister_state(canister_id).system_state.status
     );
-    let err = test
-        .system_task(canister_id, SystemMethod::CanisterGlobalTimer)
-        .unwrap_err();
+    test.canister_task(canister_id, CanisterTask::GlobalTimer);
     assert_eq!(
-        err,
-        CanisterSystemTaskError::CanisterNotRunning {
-            status: CanisterStatusType::Stopped,
-        }
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(1)
     );
 }
 
 #[test]
 fn heartbeat_doesnt_run_if_canister_is_stopping() {
     let mut test = ExecutionTestBuilder::new().build();
-    let wat = r#"
-        (module
-            (func (export "canister_heartbeat") unreachable)
-            (memory (export "memory") 1)
+    let wat = r#"(module
+            (func (export "canister_heartbeat")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     test.stop_canister(canister_id);
@@ -202,24 +187,21 @@ fn heartbeat_doesnt_run_if_canister_is_stopping() {
             stop_contexts: _
         }
     );
-    let err = test
-        .system_task(canister_id, SystemMethod::CanisterHeartbeat)
-        .unwrap_err();
+    test.canister_task(canister_id, CanisterTask::Heartbeat);
     assert_eq!(
-        err,
-        CanisterSystemTaskError::CanisterNotRunning {
-            status: CanisterStatusType::Stopping,
-        }
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(1)
     );
 }
 
 #[test]
 fn global_timer_doesnt_run_if_canister_is_stopping() {
     let mut test = ExecutionTestBuilder::new().build();
-    let wat = r#"
-        (module
-            (func (export "canister_global_timer") unreachable)
-            (memory (export "memory") 1)
+    let wat = r#"(module
+            (func (export "canister_global_timer")
+                (drop (memory.grow (i32.const 10)))
+            )
+            (memory 1 20)
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     test.stop_canister(canister_id);
@@ -230,14 +212,10 @@ fn global_timer_doesnt_run_if_canister_is_stopping() {
             stop_contexts: _
         }
     );
-    let err = test
-        .system_task(canister_id, SystemMethod::CanisterGlobalTimer)
-        .unwrap_err();
+    test.canister_task(canister_id, CanisterTask::GlobalTimer);
     assert_eq!(
-        err,
-        CanisterSystemTaskError::CanisterNotRunning {
-            status: CanisterStatusType::Stopping,
-        }
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(1)
     );
 }
 

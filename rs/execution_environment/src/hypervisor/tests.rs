@@ -8,21 +8,21 @@ use ic_base_types::NumSeconds;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_ic00_types::CanisterHttpResponsePayload;
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
+use ic_interfaces::messages::CanisterTask;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::CanisterQueuesTesting;
-use ic_replicated_state::CanisterStatus;
 use ic_replicated_state::{
     canister_state::execution_state::CustomSectionType, page_map::MemoryRegion, ExportedFunctions,
     Global, PageIndex,
 };
+use ic_replicated_state::{CanisterStatus, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
 use ic_types::ingress::{IngressState, IngressStatus};
-use ic_types::methods::SystemMethod;
 use ic_types::{
     ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, methods::WasmMethod,
     CanisterId, Cycles, NumBytes, NumInstructions,
@@ -1963,8 +1963,11 @@ fn subnet_available_memory_is_updated_in_heartbeat() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let initial_subnet_available_memory = test.subnet_available_memory();
-    let result = test.system_task(canister_id, SystemMethod::CanisterHeartbeat);
-    assert_eq!(result, Ok(()));
+    test.canister_task(canister_id, CanisterTask::Heartbeat);
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(11)
+    );
     assert_eq!(
         initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
         test.subnet_available_memory().get_total_memory()
@@ -1987,8 +1990,11 @@ fn subnet_available_memory_is_updated_in_global_timer() {
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let initial_subnet_available_memory = test.subnet_available_memory();
-    let result = test.system_task(canister_id, SystemMethod::CanisterGlobalTimer);
-    assert_eq!(result, Ok(()));
+    test.canister_task(canister_id, CanisterTask::GlobalTimer);
+    assert_eq!(
+        test.execution_state(canister_id).wasm_memory.size,
+        NumWasmPages::new(11)
+    );
     assert_eq!(
         initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
         test.subnet_available_memory().get_total_memory()

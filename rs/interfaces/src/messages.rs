@@ -88,7 +88,7 @@ impl CanisterCall {
 
 impl From<CanisterCall> for StopCanisterContext {
     fn from(msg: CanisterCall) -> Self {
-        assert_eq!(msg.method_name(), "stop_canister", "Converting a RequestOrIngress into StopCanisterContext should only happen with stop_canister requests.");
+        assert_eq!(msg.method_name(), "stop_canister", "Converting a CanisterCall into StopCanisterContext should only happen with stop_canister requests.");
         match msg {
             CanisterCall::Request(mut req) => StopCanisterContext::Canister {
                 sender: req.sender,
@@ -111,6 +111,55 @@ impl TryFrom<CanisterMessage> for CanisterCall {
             CanisterMessage::Request(msg) => Ok(CanisterCall::Request(msg)),
             CanisterMessage::Ingress(msg) => Ok(CanisterCall::Ingress(msg)),
             CanisterMessage::Response(_) => Err(()),
+        }
+    }
+}
+
+/// A canister task can be thought of as a special system message that the IC
+/// sends to the canister to execute its heartbeat or the global timer method.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CanisterTask {
+    Heartbeat,
+    GlobalTimer,
+}
+
+impl Display for CanisterTask {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Heartbeat => write!(f, "Heartbeat task"),
+            Self::GlobalTimer => write!(f, "Global timer task"),
+        }
+    }
+}
+
+/// A wrapper around canister messages and tasks.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CanisterMessageOrTask {
+    Message(CanisterMessage),
+    Task(CanisterTask),
+}
+
+impl Display for CanisterMessageOrTask {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Message(msg) => std::fmt::Display::fmt(msg, f),
+            Self::Task(task) => std::fmt::Display::fmt(task, f),
+        }
+    }
+}
+
+/// A wrapper around canister messages and tasks.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CanisterCallOrTask {
+    Call(CanisterCall),
+    Task(CanisterTask),
+}
+
+impl CanisterCallOrTask {
+    pub fn cycles(&self) -> Cycles {
+        match self {
+            CanisterCallOrTask::Call(msg) => msg.cycles(),
+            CanisterCallOrTask::Task(_) => Cycles::zero(),
         }
     }
 }

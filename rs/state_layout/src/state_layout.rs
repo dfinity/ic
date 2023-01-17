@@ -1989,7 +1989,7 @@ mod test {
     use super::*;
 
     use ic_ic00_types::IC_00;
-    use ic_interfaces::messages::{CanisterCall, CanisterMessage};
+    use ic_interfaces::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
     use ic_test_utilities::{
         mock_time,
         types::{
@@ -2103,7 +2103,9 @@ mod test {
                 prepaid_execution_cycles: Cycles::new(1),
             },
             ExecutionTask::AbortedExecution {
-                message: CanisterMessage::Request(Arc::clone(&request)),
+                input: CanisterMessageOrTask::Message(CanisterMessage::Request(Arc::clone(
+                    &request,
+                ))),
                 prepaid_execution_cycles: Cycles::new(2),
             },
             ExecutionTask::AbortedInstallCode {
@@ -2111,11 +2113,15 @@ mod test {
                 prepaid_execution_cycles: Cycles::new(3),
             },
             ExecutionTask::AbortedExecution {
-                message: CanisterMessage::Response(Arc::clone(&response)),
+                input: CanisterMessageOrTask::Message(CanisterMessage::Response(Arc::clone(
+                    &response,
+                ))),
                 prepaid_execution_cycles: Cycles::new(4),
             },
             ExecutionTask::AbortedExecution {
-                message: CanisterMessage::Ingress(Arc::clone(&ingress)),
+                input: CanisterMessageOrTask::Message(CanisterMessage::Ingress(Arc::clone(
+                    &ingress,
+                ))),
                 prepaid_execution_cycles: Cycles::new(5),
             },
         ];
