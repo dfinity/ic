@@ -68,8 +68,7 @@
 //!      PeerFlowQueueMap: A single flow being addressed by 1 thread.
 //! ```
 use crate::{
-    advert_utils::AdvertRequestBuilder,
-    gossip_protocol::{Gossip, GossipAdvertSendRequest},
+    gossip_protocol::{ArtifactDestination, Gossip},
     gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage},
     metrics::FlowWorkerMetrics,
 };
@@ -117,8 +116,6 @@ type GossipArc = Arc<
             GossipChunkRequest = GossipChunkRequest,
             GossipChunk = GossipChunk,
             GossipRetransmissionRequest = ArtifactFilter,
-            GossipAdvertSendRequest = GossipAdvertSendRequest,
-            NodeId = NodeId,
         > + Send
         + Sync,
 >;
@@ -453,7 +450,7 @@ pub struct AdvertBroadcaster {
     /// The shared *Gossip* instance (using automatic reference counting).
     gossip: Arc<RwLock<Option<GossipArc>>>,
     /// For advert send requests from artifact manager.
-    advert_builder: AdvertRequestBuilder,
+    adverts_by_class: IntCounterVec,
     sem: Arc<Semaphore>,
     started: Arc<(Mutex<bool>, Condvar)>,
     dropped_adverts: IntCounterVec,
@@ -478,7 +475,11 @@ impl AdvertBroadcaster {
             threadpool,
             gossip: Arc::new(RwLock::new(None)),
 
-            advert_builder: AdvertRequestBuilder::new(metrics_registry),
+            adverts_by_class: metrics_registry.int_counter_vec(
+                "gossip_adverts_by_class",
+                "Number of adverts from clients, by advert class",
+                &["type"],
+            ),
             sem: Arc::new(Semaphore::new(MAX_ADVERT_BUFFER)),
             started: Arc::new((Mutex::new(false), Condvar::new())),
             dropped_adverts,
@@ -502,16 +503,22 @@ impl AdvertBroadcaster {
 
         let artifact_id_label = ArtifactTag::from(&advert.artifact_id).into();
         // Translate the advert request to internal format
-        let advert_request = match self.advert_builder.build(advert, advert_class) {
-            Some(request) => request,
-            None => return,
+
+        self.adverts_by_class
+            .with_label_values(&[advert_class.as_str()])
+            .inc();
+
+        let dst = match advert_class {
+            AdvertClass::Critical => ArtifactDestination::SendToAllPeers,
+            AdvertClass::None => return,
         };
+
         match self.sem.clone().try_acquire_owned() {
             Ok(permit) => {
                 let c_gossip = self.gossip.read().as_ref().unwrap().clone();
                 self.threadpool.execute(move || {
                     let _permit = permit;
-                    c_gossip.broadcast_advert(advert_request);
+                    c_gossip.broadcast_advert(advert, dst);
                 });
             }
             Err(TryAcquireError::Closed) => {
@@ -530,7 +537,7 @@ impl AdvertBroadcaster {
 pub mod tests {
     use super::*;
     use crate::{
-        download_prioritization::test::make_gossip_advert, gossip_protocol::GossipAdvertSendRequest,
+        download_prioritization::test::make_gossip_advert, gossip_protocol::ArtifactDestination,
     };
     use ic_interfaces::ingress_pool::IngressPoolThrottler;
     use ic_interfaces_transport::TransportPayload;
@@ -601,11 +608,9 @@ pub mod tests {
         type GossipChunkRequest = GossipChunkRequest;
         type GossipChunk = GossipChunk;
         type GossipRetransmissionRequest = ArtifactFilter;
-        type GossipAdvertSendRequest = GossipAdvertSendRequest;
-        type NodeId = NodeId;
 
         /// The method is called when an advert is received.
-        fn on_gossip_advert(&self, _gossip_advert: Self::GossipAdvert, peer_id: Self::NodeId) {
+        fn on_gossip_advert(&self, _gossip_advert: Self::GossipAdvert, peer_id: NodeId) {
             std::thread::sleep(self.advert_processing_delay);
             TestGossip::increment_or_set(&self.num_adverts, peer_id);
         }
@@ -616,12 +621,12 @@ pub mod tests {
         }
 
         /// The method is called when a chunk is received.
-        fn on_gossip_chunk(&self, _gossip_artifact: Self::GossipChunk, peer_id: Self::NodeId) {
+        fn on_gossip_chunk(&self, _gossip_artifact: Self::GossipChunk, peer_id: NodeId) {
             TestGossip::increment_or_set(&self.num_chunks, peer_id);
         }
 
         /// The method broadcasts the given advert.
-        fn broadcast_advert(&self, _advert: GossipAdvertSendRequest) {
+        fn broadcast_advert(&self, _advert: Self::GossipAdvert, _dst: ArtifactDestination) {
             TestGossip::increment_or_set(&self.num_advert_bcasts, self.node_id);
         }
 

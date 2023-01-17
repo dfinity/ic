@@ -84,34 +84,30 @@ pub trait Gossip {
     type GossipChunk;
     /// The *Gossip* retranmision request type.
     type GossipRetransmissionRequest;
-    /// The *Gossip* advert send request type.
-    type GossipAdvertSendRequest;
-    /// The node ID type.
-    type NodeId;
 
     /// The method handles the given advert received from the peer
     /// with the given node ID.
-    fn on_gossip_advert(&self, gossip_advert: Self::GossipAdvert, peer_id: Self::NodeId);
+    fn on_gossip_advert(&self, gossip_advert: Self::GossipAdvert, peer_id: NodeId);
 
     /// The method handles the given chunk request received from the
     /// peer with the given node ID.
-    fn on_chunk_request(&self, gossip_request: Self::GossipChunkRequest, node_id: Self::NodeId);
+    fn on_chunk_request(&self, gossip_request: Self::GossipChunkRequest, node_id: NodeId);
 
     /// The method adds the given chunk to the corresponding artifact
     /// under construction.
     ///
     /// Once the download is complete, the artifact is handed over to
     /// the artifact manager.DownloadPrioritizer
-    fn on_gossip_chunk(&self, gossip_chunk: Self::GossipChunk, peer_id: Self::NodeId);
+    fn on_gossip_chunk(&self, gossip_chunk: Self::GossipChunk, peer_id: NodeId);
 
     /// The method broadcasts the given advert to other peers.
-    fn broadcast_advert(&self, advert_request: Self::GossipAdvertSendRequest);
+    fn broadcast_advert(&self, advert_request: Self::GossipAdvert, dst: ArtifactDestination);
 
     /// The method reacts to a retransmission request from another peer.
     fn on_gossip_retransmission_request(
         &self,
         gossip_request: Self::GossipRetransmissionRequest,
-        node_id: Self::NodeId,
+        node_id: NodeId,
     );
 
     /// The following two methods react to a peer connecting or disconnecting.
@@ -128,20 +124,9 @@ pub trait Gossip {
     fn on_gossip_timer(&self);
 }
 
-/// Request from artifact manager to send adverts for newly added validated
-/// artifacts
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GossipAdvertSendRequest {
-    /// The advert to be sent
-    pub(crate) advert: GossipAdvert,
-
-    /// How to distribute the advert
-    pub(crate) action: GossipAdvertAction,
-}
-
 /// Specifies how to distribute the adverts
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum GossipAdvertAction {
+pub enum ArtifactDestination {
     /// Send to all peers
     SendToAllPeers,
 }
@@ -245,8 +230,6 @@ impl Gossip for GossipImpl {
     type GossipChunkRequest = GossipChunkRequest;
     type GossipChunk = GossipChunk;
     type GossipRetransmissionRequest = ArtifactFilter;
-    type GossipAdvertSendRequest = GossipAdvertSendRequest;
-    type NodeId = NodeId;
 
     /// The method is called when a new advert is received from the
     /// peer with the given node ID.
@@ -321,22 +304,22 @@ impl Gossip for GossipImpl {
     }
 
     /// The method broadcasts the given advert to other peers.
-    fn broadcast_advert(&self, advert_request: GossipAdvertSendRequest) {
+    fn broadcast_advert(&self, advert: GossipAdvert, dst: ArtifactDestination) {
         let _timer = self
             .gossip_metrics
             .op_duration
             .with_label_values(&["out_advert"])
             .start_timer();
 
-        let (peers, label) = match advert_request.action {
-            GossipAdvertAction::SendToAllPeers => (self.get_current_peer_ids(), "all_peers"),
+        let (peers, label) = match dst {
+            ArtifactDestination::SendToAllPeers => (self.get_current_peer_ids(), "all_peers"),
         };
         self.metrics
             .adverts_by_action
             .with_label_values(&[label])
             .inc_by(peers.len() as u64);
 
-        let message = GossipMessage::Advert(advert_request.advert);
+        let message = GossipMessage::Advert(advert);
         for peer_id in peers {
             self.transport_send(message.clone(), peer_id);
         }
