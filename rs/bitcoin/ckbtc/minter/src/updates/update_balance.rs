@@ -89,7 +89,7 @@ pub async fn update_balance(
         .map_err(UpdateBalanceError::TemporarilyUnavailable)?;
 
     init_ecdsa_public_key().await;
-    let _guard = balance_update_guard(caller)?;
+    let _guard = balance_update_guard(args.owner.unwrap_or(caller))?;
 
     let caller_account = Account {
         owner: PrincipalId::from(args.owner.unwrap_or(caller)),
