@@ -60,6 +60,7 @@ use ic_types::{
         extract_effective_canister_id, AnonymousQuery, Payload, RejectContext, Request, Response,
         SignedIngressContent, StopCanisterContext,
     },
+    nominal_cycles::NominalCycles,
     CanisterId, Cycles, LongExecutionMode, NumBytes, NumInstructions, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
@@ -731,6 +732,11 @@ impl ExecutionEnvironment {
                                         } else {
                                             canister_http_request_context.request.payment -=
                                                 http_request_fee;
+                                            state
+                                                .metadata
+                                                .subnet_metrics
+                                                .consumed_cycles_http_outcalls +=
+                                                NominalCycles::from(http_request_fee);
                                             state
                                                 .metadata
                                                 .subnet_call_context_manager
@@ -1777,6 +1783,8 @@ impl ExecutionEnvironment {
                 ));
             } else {
                 request.payment -= signature_fee;
+                state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls +=
+                    NominalCycles::from(signature_fee);
             }
         }
 

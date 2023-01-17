@@ -5,10 +5,14 @@ use super::{
 #[cfg(test)]
 use crate::scheduler::test_utilities::{on_response, other_side};
 use candid::Encode;
+use ic00::{
+    CanisterHttpRequestArgs, HttpMethod, SignWithECDSAArgs, TransformContext, TransformFunc,
+};
 use ic_btc_types::NetworkInRequest;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfigs};
 use ic_ic00_types::{
-    BitcoinGetBalanceArgs, CanisterIdRecord, CanisterStatusType, EmptyBlob, Method, Payload as _,
+    self as ic00, BitcoinGetBalanceArgs, CanisterIdRecord, CanisterStatusType, EcdsaCurve,
+    EmptyBlob, Method, Payload as _,
 };
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
@@ -25,15 +29,14 @@ use ic_test_utilities::{
         messages::RequestBuilder,
     },
 };
-use ic_test_utilities_metrics::{fetch_int_gauge, fetch_int_gauge_vec, metric_vec};
-use ic_types::messages::{Payload, MAX_RESPONSE_COUNT_BYTES};
+use ic_test_utilities_metrics::{fetch_gauge, fetch_int_gauge, fetch_int_gauge_vec, metric_vec};
+use ic_types::messages::{CallbackId, Payload, MAX_RESPONSE_COUNT_BYTES};
 use ic_types::methods::SystemMethod;
 use ic_types::{time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes};
 use proptest::prelude::*;
 use std::collections::HashMap;
 use std::{cmp::min, ops::Range};
 use std::{convert::TryFrom, time::Duration};
-
 const M: usize = 1_000_000;
 const B: usize = 1_000 * M;
 
@@ -2486,6 +2489,174 @@ fn scheduler_maintains_canister_order() {
             canister_indexes[canister_id]
         });
     }
+}
+
+#[test]
+fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
+    let ecdsa_key = EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: String::from("secp256k1"),
+    };
+
+    let mut test = SchedulerTestBuilder::new()
+        .with_ecdsa_key(ecdsa_key.clone())
+        .build();
+
+    let fee = test.ecdsa_signature_fee();
+    let payment = fee;
+
+    let canister_id = test.create_canister();
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        0.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
+
+    let consumed_cycles_since_replica_started_before = NominalCycles::from(
+        fetch_gauge(
+            test.metrics_registry(),
+            "replicated_state_consumed_cycles_since_replica_started",
+        )
+        .unwrap() as u128,
+    );
+
+    test.inject_call_to_ic00(
+        Method::SignWithECDSA,
+        Encode!(&SignWithECDSAArgs {
+            message_hash: [0; 32],
+            derivation_path: Vec::new(),
+            key_id: ecdsa_key
+        })
+        .unwrap(),
+        payment,
+        canister_id,
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager contains the request.
+    let sign_with_ecdsa_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts;
+    assert_eq!(sign_with_ecdsa_contexts.len(), 1);
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        0.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
+    let consumed_cycles_since_replica_started_after = NominalCycles::from(
+        fetch_gauge(
+            test.metrics_registry(),
+            "replicated_state_consumed_cycles_since_replica_started",
+        )
+        .unwrap() as u128,
+    );
+
+    assert_eq!(
+        consumed_cycles_since_replica_started_before + NominalCycles::from(fee),
+        consumed_cycles_since_replica_started_after
+    );
+}
+
+#[test]
+fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let caller_canister = test.create_canister();
+
+    test.state_mut().metadata.own_subnet_features.http_requests = true;
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        0.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
+
+    let consumed_cycles_since_replica_started_before = NominalCycles::from(
+        fetch_gauge(
+            test.metrics_registry(),
+            "replicated_state_consumed_cycles_since_replica_started",
+        )
+        .unwrap() as u128,
+    );
+
+    // Create payload of the request.
+    let url = "https://".to_string();
+    let response_size_limit = 1000u64;
+    let transform_method_name = "transform".to_string();
+    let transform_context = vec![0, 1, 2];
+    let args = CanisterHttpRequestArgs {
+        url,
+        max_response_bytes: Some(response_size_limit),
+        headers: Vec::new(),
+        body: None,
+        method: HttpMethod::GET,
+        transform: Some(TransformContext {
+            function: TransformFunc(candid::Func {
+                principal: caller_canister.get().0,
+                method: transform_method_name,
+            }),
+            context: transform_context,
+        }),
+    };
+
+    // Create request to `HttpRequest` method.
+    let payment = Cycles::new(1_000_000_000);
+    let payload = args.encode();
+    test.inject_call_to_ic00(
+        Method::HttpRequest,
+        payload,
+        payment,
+        caller_canister,
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager contains the request.
+    let canister_http_request_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .canister_http_request_contexts;
+    assert_eq!(canister_http_request_contexts.len(), 1);
+
+    let http_request_context = canister_http_request_contexts
+        .get(&CallbackId::from(0))
+        .unwrap();
+
+    let fee = test.http_request_fee(
+        http_request_context.variable_parts_size(),
+        Some(NumBytes::from(response_size_limit)),
+    );
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        0.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
+    let consumed_cycles_since_replica_started_after = NominalCycles::from(
+        fetch_gauge(
+            test.metrics_registry(),
+            "replicated_state_consumed_cycles_since_replica_started",
+        )
+        .unwrap() as u128,
+    );
+
+    assert_eq!(
+        consumed_cycles_since_replica_started_before + NominalCycles::from(fee),
+        consumed_cycles_since_replica_started_after
+    );
 }
 
 // Returns the sum of messages of the input queues of all canisters.

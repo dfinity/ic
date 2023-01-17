@@ -1945,6 +1945,13 @@ fn observe_replicated_state_metrics(
         .metadata
         .subnet_metrics
         .consumed_cycles_by_deleted_canisters;
+
+    // Add the consumed cycles in ecdsa outcalls.
+    consumed_cycles_total += state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls;
+
+    // Add the consumed cycles in http outcalls.
+    consumed_cycles_total += state.metadata.subnet_metrics.consumed_cycles_http_outcalls;
+
     metrics.observe_consumed_cycles(consumed_cycles_total);
 
     let observe_reading = |status: CanisterStatusType, num: i64| {
