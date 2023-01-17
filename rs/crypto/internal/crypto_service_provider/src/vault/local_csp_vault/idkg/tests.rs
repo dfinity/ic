@@ -244,10 +244,13 @@ mod idkg_gen_dealing_encryption_key_pair {
 
         assert_eq!(
             vault
-                .public_keys_generation_timestamps()
-                .last_idkg_dealing_encryption_public_key
+                .current_node_public_keys_with_timestamps()
+                .expect("Failed to retrieve current public keys")
+                .idkg_dealing_encryption_public_key
+                .expect("missing IDKG public key")
+                .timestamp
                 .expect("missing IDKG key generation timestamp"),
-            GENESIS
+            GENESIS.as_millis_since_unix_epoch()
         );
     }
 }

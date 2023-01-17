@@ -314,6 +314,20 @@ impl PublicKeyStoreCspVault for RemoteCspVault {
         })
     }
 
+    fn current_node_public_keys_with_timestamps(
+        &self,
+    ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .current_node_public_keys_with_timestamps(context_with_timeout(self.rpc_timeout)),
+        )
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(CspPublicKeyStoreError::TransientInternalError(
+                rpc_error.to_string(),
+            ))
+        })
+    }
+
     fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError> {
         self.tokio_block_on(
             self.tarpc_csp_client
