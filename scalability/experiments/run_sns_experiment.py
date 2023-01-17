@@ -325,7 +325,7 @@ class SnsExperiment(base_experiment.BaseExperiment):
     def check_root_canister(self, nns_url):
         canister_id = self.get_canister_ids()["sns_root"]
         print(f"Canister ID of root caniter is: {canister_id}")
-        agent = misc.get_anonymous_agent(self._get_nns_ip())
+        agent = misc.get_agent(self._get_nns_ip())
         params = [
             {"type": Types.Vec(Types.Principal), "value": []},
         ]

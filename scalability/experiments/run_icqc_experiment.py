@@ -93,7 +93,7 @@ class IcqcExperiment(base_experiment.BaseExperiment):
 
     def run_experiment_internal(self, config):
         """Run a single iteration of the Icqc benchmark and return it's metrics."""
-        agent = misc.get_anonymous_agent(self.target)
+        agent = misc.get_agent(self.target)
         graph_as_json = json.dumps(
             {
                 "calltrees": self.graph,

@@ -89,7 +89,7 @@ class XnetExperiment(base_experiment.BaseExperiment):
         for (hostname, canister_id) in zip(hostnames, canister_ids):
             while True:
                 try:
-                    agent = misc.get_anonymous_agent(hostname)
+                    agent = misc.get_agent(hostname)
                     response = agent.update_raw(canister_id, "stop", encode([]), schema)
                     canister_state = response[0]["value"]
                     assert canister_state == "stopped"
@@ -210,7 +210,7 @@ class XnetExperiment(base_experiment.BaseExperiment):
 
         results = {}
         for (hostname, canister_id) in zip(hostnames, canister_ids):
-            agent = misc.get_anonymous_agent(hostname)
+            agent = misc.get_agent(hostname)
             req = agent.query_raw(canister_id, "metrics", encode([]), schema)
             results[canister_id] = req[0]["value"]
         return results
@@ -227,7 +227,7 @@ class XnetExperiment(base_experiment.BaseExperiment):
 
             while True:
                 try:
-                    agent = misc.get_anonymous_agent(hostname)
+                    agent = misc.get_agent(hostname)
                     params = [
                         {"type": Types.Vec(Types.Vec(Types.Vec(Types.Nat8))), "value": topology},
                         {"type": Types.Nat64, "value": subnet_to_subnet_rate},

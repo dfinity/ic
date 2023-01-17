@@ -15,6 +15,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import common.misc as misc  # noqa
 import common.workload_experiment as workload_experiment  # noqa
 import common.workload as workload  # noqa
+from workloads.hooks.workload_hooks import WorkloadHooks  # noqa
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_string("workload", None, "Workload description to execute")
@@ -30,6 +31,18 @@ gflags.DEFINE_float("scale_duration", -1, "Scale all durations by the given fact
 NUM_MACHINES_PER_WORKLOAD = 1  # TODO - make configurable in toml
 
 
+def get_hooks(workload_file: str) -> WorkloadHooks:
+    """
+    Find workload hooks for the given workload file.
+
+    When adding custom experiment hooks to workloads/hooks, the hook needs to be associated with the experiment in this method.
+    """
+    from workloads.hooks.xrc_hooks import XrcHooks  # noqa
+
+    hooks = {"xrc.toml": XrcHooks()}
+    return hooks.get(workload_file, None)
+
+
 class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
     """Logic for mixed workload experiments."""
 
@@ -37,6 +50,8 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
         """Install canisters."""
         super().__init__()
         self.workload_description = None
+        self.hooks = get_hooks(os.path.basename(FLAGS.workload))
+        print(f"Using hooks from: {self.hooks}")
         shutil.copy(FLAGS.workload, self.out_dir)
         with open(FLAGS.workload) as f:
             self.raw_description = toml.loads(f.read())
@@ -45,10 +60,15 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
 
     def install_canister_from_workload_description(self, description):
         """Install all canisters required to run the given workload description."""
+        if "install_canisters" in description:
+            for extra_canister in description["install_canisters"]:
+                print(f"Installing extra canister {extra_canister} from workload description file")
+                self.install_canister(canister=extra_canister)
+
         for wl in description["workload"]:
             canister = wl["canister"]
             if canister not in self.canister_ids:
-                self.install_canister(self.target_nodes[0], canister)
+                self.install_canister(canister=canister)
 
     def run_experiment_internal(self, config):
         """Run workload generator with the load specified in config."""
@@ -96,9 +116,14 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
     def run_iterations(self, iterations=None):
         """Exercise the experiment with specified iterations."""
         for i, d in enumerate(iterations):
+            if self.hooks is not None:
+                self.hooks.iteration_hook(self, i)
             print(f"🚀 Running with total load {d}")
             config = {"load_total": d, "iteration": i}
             self.run_experiment(config)
+
+        if self.hooks is not None:
+            self.hooks.experiment_done_hook(self)
 
         self.write_summary_file(
             "run_mixed_workload_experiment",
@@ -112,7 +137,10 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
                     for d in self.raw_description["workload"]
                 ],
                 "iter_duration": max(
-                    [d.get("duration", workload.WORKLOAD_DEFAULT_DURATION) for d in self.raw_description["workload"]]
+                    [
+                        d.get("duration", workload.get_default_workload_duration())
+                        for d in self.raw_description["workload"]
+                    ]
                 ),
                 "description": self.raw_description["description"],
                 "title": self.raw_description["title"],
