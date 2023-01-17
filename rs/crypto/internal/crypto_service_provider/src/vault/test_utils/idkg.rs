@@ -35,7 +35,7 @@ pub fn should_generate_and_store_dealing_encryption_key_pair_multiple_times(
     }
 }
 
-// The given `csp_vault` is expected to return an IO error on set_idkg_dealing_encryption_pubkeys
+// The given `csp_vault` is expected to return an IO error on add_idkg_dealing_encryption_pubkey
 pub fn should_fail_with_transient_internal_error_if_storing_idkg_public_key_fails(
     csp_vault: Arc<dyn CspVault>,
 ) {

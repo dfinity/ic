@@ -1,12 +1,11 @@
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
-use crate::public_key_store::PublicKeyAddError;
+use crate::public_key_store::PublicKeyGenerationTimestamps;
 use crate::public_key_store::{
-    PublicKeyGenerationTimestamps, PublicKeySetOnceError, PublicKeyStore,
+    PublicKeyAddError, PublicKeyRetainError, PublicKeySetOnceError, PublicKeyStore,
 };
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use std::fs;
 use std::fs::Permissions;
-use std::io::Error;
 use std::os::unix::fs::PermissionsExt;
 use tempfile::TempDir;
 
@@ -93,8 +92,12 @@ impl PublicKeyStore for TempPublicKeyStore {
         self.store.add_idkg_dealing_encryption_pubkey(key)
     }
 
-    fn set_idkg_dealing_encryption_pubkeys(&mut self, keys: Vec<PublicKey>) -> Result<(), Error> {
-        self.store.set_idkg_dealing_encryption_pubkeys(keys)
+    fn retain_most_recent_idkg_public_keys_up_to_inclusive(
+        &mut self,
+        oldest_public_key_to_keep: &PublicKey,
+    ) -> Result<(), PublicKeyRetainError> {
+        self.store
+            .retain_most_recent_idkg_public_keys_up_to_inclusive(oldest_public_key_to_keep)
     }
 
     fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKey> {

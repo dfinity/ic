@@ -54,6 +54,12 @@ pub enum PublicKeyAddError {
     Io(std::io::Error),
 }
 
+#[derive(Debug)]
+pub enum PublicKeyRetainError {
+    Io(std::io::Error),
+    OldestPublicKeyNotFound,
+}
+
 /// A store for public key material persisted on disk.
 ///
 /// If errors occur regarding reading from or writing to disk,
@@ -115,12 +121,21 @@ pub trait PublicKeyStore: Send + Sync {
         key: PublicKeyProto,
     ) -> Result<(), PublicKeyAddError>;
 
-    // TODO CRP-1858: remove this method
-    /// Sets the iDKG dealing encryption public keys.
-    fn set_idkg_dealing_encryption_pubkeys(
+    /// Retain only the most recent iDKG dealing encryption public keys.
+    ///
+    /// The order of public keys is based on their order of insertion ([`Self::add_idkg_dealing_encryption_pubkey`])
+    /// and in particular not on their [`timestamp`](PublicKeyProto::timestamp) field.
+    /// The largest suffix of public keys starting with (and including) the given `oldest_public_key_to_keep` is kept,
+    /// while other keys are deleted. Keys are compared using [`PublicKeyProto::equal_ignoring_timestamp`].
+    ///
+    /// # Errors
+    /// * [`PublicKeyRetainError::OldestPublicKeyNotFound`] if the given `oldest_public_key_to_keep` was not found.
+    /// No keys are deleted in that case.
+    /// * [`PublicKeyRetainError::Io`] if an I/O error occurred while writing the retained keys back to disk.
+    fn retain_most_recent_idkg_public_keys_up_to_inclusive(
         &mut self,
-        keys: Vec<PublicKeyProto>,
-    ) -> Result<(), std::io::Error>;
+        oldest_public_key_to_keep: &PublicKeyProto,
+    ) -> Result<(), PublicKeyRetainError>;
 
     /// Gets the iDKG dealing encryption public keys.
     ///

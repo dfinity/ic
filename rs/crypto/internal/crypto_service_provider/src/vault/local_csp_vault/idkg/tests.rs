@@ -267,6 +267,7 @@ mod idkg_retain_active_keys {
     use ic_crypto_internal_types::scope::{ConstScope, Scope};
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
+    use mockall::predicate::eq;
     use mockall::Sequence;
     use std::collections::BTreeSet;
 
@@ -390,7 +391,7 @@ mod idkg_retain_active_keys {
     }
 
     #[test]
-    fn should_retain_secret_keys_before_public_keys_before_shares() {
+    fn should_retain_public_keys_before_secret_keys_before_shares() {
         let mut pks = MockPublicKeyStore::new();
         let mut node_sks = MockSecretKeyStore::new();
         let mut canister_sks = MockSecretKeyStore::new();
@@ -399,21 +400,21 @@ mod idkg_retain_active_keys {
         let oldest_public_key = an_idkg_public_key();
         let oldest_public_key_proto =
             idkg_dealing_encryption_pk_to_proto(oldest_public_key.clone());
+        pks.expect_retain_most_recent_idkg_public_keys_up_to_inclusive()
+            .times(1)
+            .in_sequence(&mut seq)
+            .with(eq(oldest_public_key_proto.clone()))
+            .return_once(|_| Ok(()));
         pks.expect_idkg_dealing_encryption_pubkeys()
             .times(1)
             .in_sequence(&mut seq)
-            .return_const(vec![oldest_public_key_proto.clone()]);
+            .return_const(vec![oldest_public_key_proto]);
         node_sks
             .expect_retain()
             .times(1)
             .in_sequence(&mut seq)
             .withf(|_filter, scope| *scope == Scope::Const(ConstScope::IDkgMEGaEncryptionKeys))
             .return_const(Ok(()));
-        pks.expect_set_idkg_dealing_encryption_pubkeys()
-            .times(1)
-            .in_sequence(&mut seq)
-            .withf(move |keys| *keys == vec![oldest_public_key_proto.clone()])
-            .return_once(|_| Ok(()));
         canister_sks
             .expect_retain()
             .times(1)
