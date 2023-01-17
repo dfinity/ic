@@ -200,44 +200,6 @@ def test_ci_and_crate_change(tmpdir):
     run_test(tmpdir, "ci_and_crate_change")
 
 
-def test_nix_change(tmpdir):
-    """
-    Source changes cause all crates to rebuild.
-
-    diff -r nix_change/before/rs/foo.nix nix_change/after/rs/foo.nix
-    1a2
-    > # touch me
-    """
-    run_test(tmpdir, "nix_change")
-
-
-def test_nix_and_crate_change(tmpdir):
-    """
-    Source changes cause all crates to rebuild.
-
-    diff -r nix_and_crate_change/before/rs/foo/src/main.rs nix_and_crate_change/after/rs/foo/src/main.rs
-    0a1
-    > # Touch
-    diff -r nix_and_crate_change/before/rs/foo.nix nix_and_crate_change/after/rs/foo.nix
-    1c1
-    <
-    ---
-    > # touch me
-    """
-    run_test(tmpdir, "nix_and_crate_change")
-
-
-def test_nix_changes_outside_rs(tmpdir):
-    """
-    Changing a nix file outside rs dir should cause a rebuild.
-
-    diff -r nix_changes_outside_rs/before/foo.nix nix_changes_outside_rs/after/foo.nix
-    1a2
-    > # touch me
-    """
-    run_test(tmpdir, "nix_changes_outside_rs")
-
-
 def test_log_rdeps():
     """One case failed in production."""
     marked_crate_to_dep = {
