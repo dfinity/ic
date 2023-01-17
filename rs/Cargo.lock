@@ -8385,6 +8385,7 @@ dependencies = [
  "on_wire",
  "pretty-bytes",
  "pretty_assertions 1.3.0",
+ "proptest",
  "prost",
  "rand 0.8.5",
  "rust_decimal",

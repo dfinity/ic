@@ -17,7 +17,11 @@ use ic_nns_constants::{
     LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID,
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
 };
-use ic_nns_governance::pb::v1::{self as nns_governance_pb, Governance, ProposalInfo};
+use ic_nns_governance::pb::v1::{
+    self as nns_governance_pb,
+    manage_neuron::{JoinCommunityFund, LeaveCommunityFund},
+    Governance, ProposalInfo,
+};
 use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::universal_canister::{
@@ -513,6 +517,30 @@ fn manage_neuron(
     };
 
     Decode!(&result, ManageNeuronResponse).unwrap()
+}
+
+pub fn nns_join_community_fund(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+) -> ManageNeuronResponse {
+    let command = manage_neuron::Command::Configure(Configure {
+        operation: Some(Operation::JoinCommunityFund(JoinCommunityFund {})),
+    });
+
+    manage_neuron(state_machine, sender, neuron_id, command)
+}
+
+pub fn nns_leave_community_fund(
+    state_machine: &mut StateMachine,
+    sender: PrincipalId,
+    neuron_id: NeuronId,
+) -> ManageNeuronResponse {
+    let command = manage_neuron::Command::Configure(Configure {
+        operation: Some(Operation::LeaveCommunityFund(LeaveCommunityFund {})),
+    });
+
+    manage_neuron(state_machine, sender, neuron_id, command)
 }
 
 pub fn nns_governance_make_proposal(
