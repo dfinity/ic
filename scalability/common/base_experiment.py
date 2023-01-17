@@ -101,11 +101,7 @@ class BaseExperiment:
                     print(
                         f'♻️  Cache has been found at {FLAGS.cache_path}. Type "y" to use, if you know what you are doing.'
                     )
-                    i = input("Use cache? ")
-                    if i == "y":
-                        self.cache = json.loads(f.read())
-                    else:
-                        self.cache = {}
+                    self.cache = json.loads(f.read())
             except Exception:
                 print(f"♻️  Cache {FLAGS.cache_path} did not exist yet, creating ..")
                 self.cache = {}
@@ -489,12 +485,15 @@ class BaseExperiment:
         cmd = [self.workload_generator_path, f"http://[{target}]:8080", "-n", "1", "-r", "0"]
         if this_canister_name != "counter":
             canister_in_artifacts = os.path.join(self.artifacts_path, f"../canisters/{this_canister_name}.wasm")
-            canister_in_repo = os.path.join(f"canisters/{this_canister_name}.wasm")
+            canister_in_repo = os.path.join("canisters", f"{this_canister_name}.wasm")
+            canister_in_repo_gzip = os.path.join("canisters", f"{this_canister_name}.wasm.gz")
             print(f"Looking for canister at locations: {canister_in_artifacts} and {canister_in_repo}")
             if os.path.exists(canister_in_artifacts):
                 cmd += ["--canister", canister_in_artifacts]
             elif os.path.exists(canister_in_repo):
                 cmd += ["--canister", canister_in_repo]
+            elif os.path.exists(canister_in_repo_gzip):
+                cmd += ["--canister", canister_in_repo_gzip]
             else:
                 cmd += ["--canister", this_canister]
         try:

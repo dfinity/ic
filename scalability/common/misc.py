@@ -165,14 +165,18 @@ def mean_or_minus_one(x):
         return -1
 
 
-def get_anonymous_agent(hostname: str):
+def get_agent_for_url(url: str, anonymous=True):
     from ic.agent import Agent
     from ic.client import Client
     from ic.identity import Identity
 
-    ident = Identity(anonymous=True)
-    client = Client(url="http://[{}]:8080".format(hostname))
+    ident = Identity(anonymous=anonymous)
+    client = Client(url=url)
     return Agent(ident, client)
+
+
+def get_agent(hostname: str, anonymous=True):
+    return get_agent_for_url("http://[{}]:8080".format(hostname), anonymous)
 
 
 def evaluate_stop_conditions(conditions):

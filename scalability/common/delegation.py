@@ -105,7 +105,8 @@ def get_delegation(host_url, ii_canister_id):
         raise Exception(
             (
                 "Failed to get a challenge from II. Check if the II canister has "
-                f"been installed correctly under {ii_canister_id} - also try deleting ii/.dfx"
+                f"been installed correctly under {ii_canister_id} - "
+                "also try deleting ii/.dfx and your network in ~/.local/share/dfx/network"
             )
         )
 

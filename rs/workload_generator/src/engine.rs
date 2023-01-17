@@ -487,6 +487,7 @@ impl Engine {
                                         request_id, result
                                     )
                                     .to_string();
+                                    debug!("Error is: {}", err_msg);
                                     tx.send(CallResult {
                                         fact: Fact::record(
                                             ContentLength::new(body.len() as u64),

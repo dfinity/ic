@@ -4,7 +4,12 @@
 This is an upgraded way of developing a maximum capacity workload benchmark, by declaring the workloads intended through a .toml configuration file. The toml file is then consumed by `run_mixed_workload_experiment.py` to generate iterations plan and workload distribution among the defined workloads for each iteration. 
 
 ## Defining the workload
-The toml way of defining workloads supports multiple workloads, with multiple canisters and varied durations. Please check `workloads/template.toml` for the template of how to define an experiment with multiple workloads, and parameters accepted in current framework. 
+The toml way of defining workloads supports multiple workloads, with multiple canisters and varied durations. Please check `workloads/template.toml` for the template of how to define an experiment with multiple workloads, and parameters accepted in current framework.
+
+## Hooks
+Custom hooks can be added for each .toml experiment as arbitrary Python code.
+For that, a new Python class inheriting from `WorkloadHooks` needs to be created and placed in `workloads/hooks/`.
+That code then needs to be associated with the benchmark by adding it in the dictionary in `run_mixed_workload_experiment.py` in `get_hooks`.
 
 ## How to run the workload
 ```

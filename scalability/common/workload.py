@@ -8,11 +8,15 @@ import uuid
 from typing import List
 from typing import NamedTuple
 
+import gflags
 from common import misc
 from common import ssh
 
+FLAGS = gflags.FLAGS
 
-WORKLOAD_DEFAULT_DURATION = 300
+
+def get_default_workload_duration() -> int:
+    return FLAGS.iter_duration
 
 
 class BytesEncoder(json.JSONEncoder):
@@ -48,7 +52,7 @@ def workload_description_from_dict(values: list, canister_ids: dict):
             method=value.get("method", None),
             call_method=value.get("call_method", None),
             rps=float(value.get("rps", -1)),
-            duration=int(value.get("duration", WORKLOAD_DEFAULT_DURATION)),
+            duration=int(value.get("duration", get_default_workload_duration())),
             raw_payload=value["raw_payload"].encode("utf-8") if "raw_payload" in value else None,
             json_payload=value.get("json_payload", None),
             arguments=value.get("arguments", []),

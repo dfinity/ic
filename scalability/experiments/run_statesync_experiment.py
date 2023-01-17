@@ -57,7 +57,7 @@ gflags.DEFINE_boolean(
 
 def expand_single_state(t):
     (hostname, canister_id, index, seed) = t
-    agent = misc.get_anonymous_agent(hostname)
+    agent = misc.get_agent(hostname)
     response = agent.update_raw(canister_id, "expand_state", json.dumps([index, seed]))
     print("response", response)
 
@@ -76,7 +76,7 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
     def change_state(hostnames: [str], canister_ids: [str], seed):
         """Make an update call to the statesync canister to change the state."""
         for (hostname, canister_id) in zip(hostnames, canister_ids):
-            agent = misc.get_anonymous_agent(hostname)
+            agent = misc.get_agent(hostname)
             response = agent.update_raw(canister_id, "change_state", json.dumps(seed))
             print("response", response)
 
