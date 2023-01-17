@@ -459,6 +459,12 @@ pub trait PublicKeyStoreCspVault {
     /// # Errors
     /// * if a transient error (e.g., RPC timeout) occurs when accessing the public key store
     fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
+
+    /// Returns the number of iDKG dealing encryption public keys stored locally.
+    ///
+    /// # Errors
+    /// * if a transient error (e.g., RPC timeout) occurs when accessing the public key store
+    fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError>;
 }
 
 /// Operations of `CspVault` related to TLS handshakes.

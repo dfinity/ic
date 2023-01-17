@@ -131,6 +131,9 @@ pub trait PublicKeyStore: Send + Sync {
 
     /// Gets the timestamps of when public keys were generated.
     fn generation_timestamps(&self) -> PublicKeyGenerationTimestamps;
+
+    /// Gets the number of iDKG dealing encryption public keys stored locally.
+    fn idkg_dealing_encryption_pubkeys_count(&self) -> usize;
 }
 
 /// Timestamps of when public keys were generated.

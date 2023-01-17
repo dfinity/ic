@@ -138,6 +138,9 @@ pub trait TarpcCspVault {
     // Corresponds to `PublicKeyStoreCspVault.current_node_public_keys()`.
     async fn current_node_public_keys() -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
 
+    // Corresponds to `PublicKeyStoreCspVault.idkg_key_count()`.
+    async fn idkg_key_count() -> Result<usize, CspPublicKeyStoreError>;
+
     // Corresponds to `TlsHandshakeCspVault.gen_tls_key_pair()`.
     async fn gen_tls_key_pair(
         node: NodeId,

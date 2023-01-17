@@ -104,4 +104,8 @@ impl PublicKeyStore for TempPublicKeyStore {
     fn generation_timestamps(&self) -> PublicKeyGenerationTimestamps {
         self.store.generation_timestamps()
     }
+
+    fn idkg_dealing_encryption_pubkeys_count(&self) -> usize {
+        self.store.idkg_dealing_encryption_pubkeys_count()
+    }
 }

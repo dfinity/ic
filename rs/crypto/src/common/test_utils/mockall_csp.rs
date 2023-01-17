@@ -251,6 +251,7 @@ mock! {
         fn pks_contains(&self, public_keys: CurrentNodePublicKeys) -> Result<bool, NodePublicKeyDataError>;
         fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError>;
         fn dkg_dealing_encryption_key_id(&self) -> Result<KeyId, DkgDealingEncryptionKeyIdRetrievalError>;
+        fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, NodePublicKeyDataError>;
     }
 
     pub trait CspTlsHandshakeSignerProvider: Send + Sync {

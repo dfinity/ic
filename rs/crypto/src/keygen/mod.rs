@@ -20,8 +20,8 @@ use ic_crypto_internal_types::encrypt::forward_secure::{
 use ic_crypto_node_key_generation::{mega_public_key_from_proto, MEGaPublicKeyFromProtoError};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_interfaces::crypto::{
-    CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError, KeyManager,
-    PublicKeyRegistrationStatus,
+    CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError,
+    IdkgDealingEncPubKeysCountError, KeyManager, PublicKeyRegistrationStatus,
 };
 use ic_logger::{error, info};
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
@@ -194,6 +194,13 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         self.record_key_rotation_metrics(&key_rotation_result);
         convert_key_rotation_outcome(key_rotation_result)
     }
+
+    fn idkg_dealing_encryption_pubkeys_count(
+        &self,
+    ) -> Result<usize, IdkgDealingEncPubKeysCountError> {
+        let result = self.csp.idkg_dealing_encryption_pubkeys_count()?;
+        Ok(result)
+    }
 }
 
 // Helpers for implementing `KeyManager`-trait.
@@ -234,10 +241,12 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
                 _ => {}
             }
         }
+        let idkg_dealing_encryption_pubkeys_count = self.idkg_dealing_encryption_pubkeys_count()?;
         Ok(KeyCounts::new(
             pub_keys_in_reg,
             pub_keys_local,
             secret_keys_in_sks,
+            idkg_dealing_encryption_pubkeys_count as u8,
         ))
     }
 

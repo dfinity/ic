@@ -5,8 +5,7 @@ mod bls12_381_sig_cache;
 use convert_case::{Case, Casing};
 use core::fmt;
 use ic_metrics::MetricsRegistry;
-use prometheus::{HistogramVec, IntCounterVec, IntGauge};
-use std::collections::BTreeMap;
+use prometheus::{HistogramVec, IntCounterVec, IntGaugeVec};
 use std::fmt::{Display, Formatter};
 use std::time;
 use std::time::Instant;
@@ -93,10 +92,22 @@ impl CryptoMetrics {
     /// in the `key_counts` parameter, see the [`KeyCounts`] documentation.
     pub fn observe_node_key_counts(&self, key_counts: KeyCounts) {
         if let Some(metrics) = &self.metrics {
-            metrics.crypto_key_counts[&KeyType::PublicLocal].set(key_counts.get_pk_local() as i64);
-            metrics.crypto_key_counts[&KeyType::PublicRegistry]
+            metrics
+                .crypto_key_counts
+                .with_label_values(&[&format!("{}", KeyType::PublicLocal)])
+                .set(key_counts.get_pk_local() as i64);
+            metrics
+                .crypto_key_counts
+                .with_label_values(&[&format!("{}", KeyType::PublicRegistry)])
                 .set(key_counts.get_pk_registry() as i64);
-            metrics.crypto_key_counts[&KeyType::SecretSKS].set(key_counts.get_sk_local() as i64);
+            metrics
+                .crypto_key_counts
+                .with_label_values(&[&format!("{}", KeyType::SecretSKS)])
+                .set(key_counts.get_sk_local() as i64);
+            metrics
+                .crypto_key_counts
+                .with_label_values(&[&format!("{}", KeyType::IdkgDealingEncryptionLocal)])
+                .set(key_counts.get_idkg_pks_local() as i64);
         }
     }
 
@@ -192,6 +203,7 @@ pub enum KeyType {
     PublicRegistry,
     PublicLocal,
     SecretSKS,
+    IdkgDealingEncryptionLocal,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
@@ -260,18 +272,22 @@ pub enum MessageType {
 ///  - `pk_local`: The number of node public keys (and TLS x.509 certificates) stored
 ///    in the local public key store
 ///  - `sk_local`: The number of node secret keys stored in the local secret key store
+///  - `idkg_pks_local`: The number of iDKG dealing encryption public keys stored in the local
+///    public key store
 pub struct KeyCounts {
     pk_registry: u8,
     pk_local: u8,
     sk_local: u8,
+    idkg_pks_local: u8,
 }
 
 impl KeyCounts {
-    pub fn new(pk_registry: u8, pk_local: u8, sk_local: u8) -> Self {
+    pub fn new(pk_registry: u8, pk_local: u8, sk_local: u8, idkg_pks_local: u8) -> Self {
         KeyCounts {
             pk_registry,
             pk_local,
             sk_local,
+            idkg_pks_local,
         }
     }
 
@@ -285,6 +301,10 @@ impl KeyCounts {
 
     pub fn get_sk_local(&self) -> u8 {
         self.sk_local
+    }
+
+    pub fn get_idkg_pks_local(&self) -> u8 {
+        self.idkg_pks_local
     }
 }
 
@@ -329,7 +349,7 @@ struct Metrics {
     /// The 'domain' label indicates the domain, e.g., `MetricsDomain::BasicSignature`.
     pub crypto_duration_seconds: HistogramVec,
 
-    /// Counters for the different types of keys and certificates of a node. The keys and
+    /// A gauge vector for the different types of keys and certificates of a node. The keys and
     /// certificates that are kept track of are:
     ///  - Node signing keys
     ///  - Committee signing keys
@@ -341,8 +361,12 @@ struct Metrics {
     ///  - Registry
     ///  - Local public key store
     ///  - Local secret key store (SKS)
-    pub crypto_key_counts: BTreeMap<KeyType, IntGauge>,
+    /// Additionally, the number of iDKG dealing encryption public keys that are stored locally are
+    /// also kept track of in the gauge vector.
+    pub crypto_key_counts: IntGaugeVec,
 
+    /// An counter vector for keeping track of key rotation results. Each time a key rotation is
+    /// performed, the outcome of the operation is tracked in this counter vector.
     pub crypto_key_rotation_results: IntCounterVec,
 
     /// Counter vector for crypto results that can be expressed as booleans. An additional label
@@ -416,16 +440,6 @@ impl Display for MessageType {
     }
 }
 
-impl KeyType {
-    fn key_count_metric_name(&self) -> String {
-        format!("crypto_{}_key_count", self)
-    }
-
-    fn key_count_metric_help(&self) -> String {
-        format!("Number of crypto_{}_key_count", self)
-    }
-}
-
 impl Metrics {
     pub fn new(r: &MetricsRegistry) -> Self {
         let durations = r.histogram_vec(
@@ -434,15 +448,13 @@ impl Metrics {
             ic_metrics::buckets::decimal_buckets(-4, 1),
             &["method_name", "scope", "domain", "result"],
         );
-        let mut key_counts = BTreeMap::new();
+        let key_counts = r.int_gauge_vec(
+            "crypto_key_counts",
+            "Number of crypto keys stored locally and in the registry",
+            &["key_type"],
+        );
         for key_type in KeyType::iter() {
-            key_counts.insert(
-                key_type,
-                r.int_gauge(
-                    key_type.key_count_metric_name(),
-                    key_type.key_count_metric_help(),
-                ),
-            );
+            key_counts.with_label_values(&[&format!("{}", key_type)]);
         }
         let boolean_results = r.int_counter_vec(
             "crypto_boolean_results",

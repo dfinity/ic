@@ -288,6 +288,11 @@ impl NodePublicKeyData for Csp {
         )?;
         Ok(KeyId::from(&pk))
     }
+
+    fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, NodePublicKeyDataError> {
+        let idkg_key_count = self.csp_vault.idkg_dealing_encryption_pubkeys_count()?;
+        Ok(idkg_key_count)
+    }
 }
 
 impl Csp {

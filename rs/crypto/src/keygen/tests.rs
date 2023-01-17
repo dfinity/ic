@@ -1,6 +1,9 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
+use crate::keygen::tests::rotate_idkg_dealing_encryption_keys::{
+    REGISTRY_VERSION_1, REGISTRY_VERSION_2,
+};
 use assert_matches::assert_matches;
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
 use ic_crypto_temp_crypto::TempCryptoBuilder;
@@ -17,20 +20,18 @@ use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 use std::sync::Arc;
 
-const REG_V1: RegistryVersion = RegistryVersion::new(1);
-const REG_V2: RegistryVersion = RegistryVersion::new(2);
-
 #[test]
 fn should_collect_correctly_key_count_metrics_for_all_keys() {
     let crypto_component = TempCryptoComponent::builder()
         .with_keys(NodeKeysToGenerate::all())
         .build();
     let key_counts = crypto_component
-        .collect_key_count_metrics(REG_V1)
+        .collect_key_count_metrics(REGISTRY_VERSION_1)
         .expect("Failed to collect key count metrics");
     assert_eq!(5, key_counts.get_pk_registry());
     assert_eq!(5, key_counts.get_pk_local());
     assert_eq!(5, key_counts.get_sk_local());
+    assert_eq!(1, key_counts.get_idkg_pks_local());
 }
 
 #[test]
@@ -39,11 +40,12 @@ fn should_collect_correctly_key_count_metrics_for_only_node_signing_key() {
         .with_keys(NodeKeysToGenerate::only_node_signing_key())
         .build();
     let key_counts = crypto_component
-        .collect_key_count_metrics(REG_V1)
+        .collect_key_count_metrics(REGISTRY_VERSION_1)
         .expect("Failed to collect key count metrics");
     assert_eq!(1, key_counts.get_pk_registry());
     assert_eq!(1, key_counts.get_pk_local());
     assert_eq!(1, key_counts.get_sk_local());
+    assert_eq!(0, key_counts.get_idkg_pks_local());
 }
 
 #[test]
@@ -73,16 +75,17 @@ fn should_count_correctly_inconsistent_numbers_of_node_signing_keys() {
         crypto_component.get_node_id(),
         KeyPurpose::NodeSigning,
         Arc::clone(&registry_data),
-        REG_V2,
+        REGISTRY_VERSION_2,
     );
     registry_client.reload();
 
     let key_counts = crypto_component
-        .collect_key_count_metrics(REG_V2)
+        .collect_key_count_metrics(REGISTRY_VERSION_2)
         .expect("Failed to collect key count metrics");
     assert_eq!(5, key_counts.get_pk_registry());
     assert_eq!(5, key_counts.get_pk_local());
     assert_eq!(4, key_counts.get_sk_local());
+    assert_eq!(1, key_counts.get_idkg_pks_local());
 }
 
 #[test]
@@ -113,16 +116,17 @@ fn should_count_correctly_inconsistent_numbers_of_tls_certificates() {
         tls_cert_without_corresponding_secret_key,
         crypto_component.get_node_id(),
         Arc::clone(&registry_data),
-        REG_V2,
+        REGISTRY_VERSION_2,
     );
     registry_client.reload();
 
     let key_counts = crypto_component
-        .collect_key_count_metrics(REG_V2)
+        .collect_key_count_metrics(REGISTRY_VERSION_2)
         .expect("Failed to collect key count metrics");
     assert_eq!(5, key_counts.get_pk_registry());
     assert_eq!(5, key_counts.get_pk_local());
     assert_eq!(4, key_counts.get_sk_local());
+    assert_eq!(1, key_counts.get_idkg_pks_local());
 }
 
 mod rotate_idkg_dealing_encryption_keys {
@@ -134,8 +138,8 @@ mod rotate_idkg_dealing_encryption_keys {
     use ic_registry_keys::make_crypto_node_key;
     use ic_test_utilities::FastForwardTimeSource;
 
-    const REGISTRY_VERSION_1: RegistryVersion = RegistryVersion::new(1);
-    const REGISTRY_VERSION_2: RegistryVersion = RegistryVersion::new(2);
+    pub(crate) const REGISTRY_VERSION_1: RegistryVersion = RegistryVersion::new(1);
+    pub(crate) const REGISTRY_VERSION_2: RegistryVersion = RegistryVersion::new(2);
     const NODE_ID: u64 = 42;
     const TWO_WEEKS: Duration = Duration::from_secs(2 * 7 * 24 * 60 * 60);
 
@@ -368,6 +372,59 @@ mod rotate_idkg_dealing_encryption_keys {
     }
 
     #[test]
+    fn should_correctly_count_multiple_idkg_dealing_encryption_keys() {
+        let setup = Setup::new();
+        let idkg_public_key_before_rotation =
+            setup.current_local_idkg_dealing_encryption_public_key();
+        let idkg_public_key_from_registry = PublicKey {
+            timestamp: Some(0),
+            ..idkg_public_key_before_rotation
+        };
+        setup
+            .register_idkg_public_key(idkg_public_key_from_registry, REGISTRY_VERSION_2)
+            .set_time(Time::try_from(TWO_WEEKS + Duration::from_nanos(1)).unwrap());
+
+        let _rotated_idkg_key = setup
+            .crypto
+            .rotate_idkg_dealing_encryption_keys(REGISTRY_VERSION_2)
+            .expect("could not rotate key");
+
+        let key_counts = setup
+            .crypto
+            .collect_key_count_metrics(REGISTRY_VERSION_2)
+            .expect("Failed to collect key count metrics");
+        assert_eq!(1, key_counts.get_pk_registry());
+        assert_eq!(1, key_counts.get_pk_local());
+        assert_eq!(1, key_counts.get_sk_local());
+        assert_eq!(2, key_counts.get_idkg_pks_local());
+    }
+
+    #[test]
+    fn should_correctly_get_idkg_dealing_encryption_pubkeys_count_for_multiple_keys() {
+        let setup = Setup::new();
+        let idkg_public_key_before_rotation =
+            setup.current_local_idkg_dealing_encryption_public_key();
+        let idkg_public_key_from_registry = PublicKey {
+            timestamp: Some(0),
+            ..idkg_public_key_before_rotation
+        };
+        setup
+            .register_idkg_public_key(idkg_public_key_from_registry, REGISTRY_VERSION_2)
+            .set_time(Time::try_from(TWO_WEEKS + Duration::from_nanos(1)).unwrap());
+
+        let _rotated_idkg_key = setup
+            .crypto
+            .rotate_idkg_dealing_encryption_keys(REGISTRY_VERSION_2)
+            .expect("could not rotate key");
+
+        let idkg_dealing_encryption_pubkeys_count = setup
+            .crypto
+            .idkg_dealing_encryption_pubkeys_count()
+            .expect("Failed to get iDKG dealing encryption pubkeys count");
+        assert_eq!(2, idkg_dealing_encryption_pubkeys_count);
+    }
+
+    #[test]
     fn should_return_error_when_registry_error() {
         let mock_registry_client = registry_returning(RegistryClientError::PollLockFailed {
             error: "oh no!".to_string(),
@@ -570,5 +627,65 @@ mod rotate_idkg_dealing_encryption_keys {
             // callers of rotate_idkg_dealing_encryption_keys use a CryptoComponent with a remote vault
             .with_remote_vault()
             .with_node_id(node_id())
+    }
+}
+
+mod idkg_dealing_encryption_pubkeys_count {
+    use super::*;
+    use ic_base_types::{NodeId, PrincipalId};
+
+    #[test]
+    fn should_correctly_count_idkg_dealing_encryption_pubkeys_when_all_keys_present() {
+        let crypto_component = TempCryptoComponent::builder()
+            .with_keys(NodeKeysToGenerate::all())
+            .build();
+        let key_counts = crypto_component
+            .idkg_dealing_encryption_pubkeys_count()
+            .expect("Error calling idkg_dealing_encryption_pubkeys_count");
+        assert_eq!(1, key_counts);
+    }
+
+    #[test]
+    fn should_correctly_count_idkg_dealing_encryption_pubkeys_when_no_keys_present() {
+        let crypto_component = TempCryptoComponent::builder()
+            .with_keys(NodeKeysToGenerate::none())
+            .build();
+        let key_counts = crypto_component
+            .idkg_dealing_encryption_pubkeys_count()
+            .expect("Error calling idkg_dealing_encryption_pubkeys_count");
+        assert_eq!(0, key_counts);
+    }
+
+    #[test]
+    fn should_have_idkg_dealing_encryption_pubkeys_count_returning_transient_error_if_csp_call_fails(
+    ) {
+        use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
+        use ic_crypto_internal_csp::api::NodePublicKeyDataError;
+        use ic_interfaces::crypto::KeyManager;
+        use ic_logger::replica_logger::no_op_logger;
+
+        let mut csp = MockAllCryptoServiceProvider::new();
+        const DETAILS_STR: &str = "test";
+        csp.expect_idkg_dealing_encryption_pubkeys_count()
+            .return_const(Err(NodePublicKeyDataError::TransientInternalError(
+                DETAILS_STR.to_string(),
+            )));
+
+        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+
+        let registry_client =
+            Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+
+        let crypto_component = CryptoComponentFatClient::new_with_csp_and_fake_node_id(
+            csp,
+            no_op_logger(),
+            registry_client.clone(),
+            NodeId::from(PrincipalId::new_node_test_id(42)),
+        );
+        registry_client.reload();
+
+        let result = crypto_component.idkg_dealing_encryption_pubkeys_count();
+
+        assert_matches!(result, Err(IdkgDealingEncPubKeysCountError::TransientInternalError(details)) if details == DETAILS_STR);
     }
 }

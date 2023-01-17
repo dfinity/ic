@@ -94,6 +94,13 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: 
             idkg_dealing_encryption_public_key: last_idkg_dealing_encryption_public_key,
         })
     }
+
+    fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError> {
+        Ok(self
+            .public_key_store_read_lock()
+            .idkg_dealing_encryption_pubkeys()
+            .len())
+    }
 }
 
 impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
