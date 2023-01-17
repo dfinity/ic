@@ -739,3 +739,11 @@ message GetLifecycleRequest {}
 message GetLifecycleResponse {
   optional Lifecycle lifecycle = 1;
 }
+
+// Request struct for the method `get_init`
+message GetInitRequest {}
+
+// Response struct for the method `get_init`
+message GetInitResponse {
+  optional Init init = 1;
+}

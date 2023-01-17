@@ -20,13 +20,13 @@ use ic_sns_governance::{
         SetMode, SetModeResponse,
     },
 };
-use ic_sns_swap::pb::v1::{GetLifecycleRequest, GetLifecycleResponse};
 use ic_sns_swap::{
     logs::{ERROR, INFO},
     pb::v1::{
         CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
         FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest,
-        GetBuyersTotalResponse, GetCanisterStatusRequest, GetStateRequest, GetStateResponse,
+        GetBuyersTotalResponse, GetCanisterStatusRequest, GetInitRequest, GetInitResponse,
+        GetLifecycleRequest, GetLifecycleResponse, GetStateRequest, GetStateResponse,
         GovernanceError, Init, OpenRequest, OpenResponse, RefreshBuyerTokensRequest,
         RefreshBuyerTokensResponse, RestoreDappControllersRequest, RestoreDappControllersResponse,
         SetDappControllersRequest, SetDappControllersResponse, SettleCommunityFundParticipation,
@@ -402,6 +402,21 @@ fn get_lifecycle() {
 fn get_lifecycle_(request: GetLifecycleRequest) -> GetLifecycleResponse {
     println!("{}get_lifecycle", LOG_PREFIX);
     swap().get_lifecycle(&request)
+}
+
+/// Returns the initialization data of the canister
+#[export_name = "canister_query get_init"]
+fn get_init() {
+    over_async(candid_one, get_init_)
+}
+
+/// Returns the initialization data of the canister
+#[candid_method(query, rename = "get_init")]
+async fn get_init_(_request: GetInitRequest) -> GetInitResponse {
+    println!("{}get_init", LOG_PREFIX);
+    GetInitResponse {
+        init: swap().init.clone(),
+    }
 }
 
 // =============================================================================
