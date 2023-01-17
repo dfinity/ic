@@ -20,7 +20,9 @@ use ic_embedders::{
     CompilationCache, CompilationResult, WasmExecutionInput,
 };
 use ic_error_types::UserError;
-use ic_ic00_types::{CanisterInstallMode, CanisterStatusType, InstallCodeArgs, Method, Payload};
+use ic_ic00_types::{
+    CanisterInstallMode, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method, Payload,
+};
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
     RegistryExecutionSettings, Scheduler, WasmExecutionOutput,
@@ -47,6 +49,7 @@ use ic_test_utilities::{
     },
 };
 use ic_types::{
+    crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},
     messages::{CallContextId, Ingress, MessageId, Request, RequestOrResponse, Response},
     methods::{Callback, FuncRef, SystemMethod, WasmClosure, WasmMethod},
@@ -101,6 +104,10 @@ pub(crate) struct SchedulerTest {
     wasm_executor: Arc<TestWasmExecutor>,
     // Registry Execution Settings.
     registry_settings: RegistryExecutionSettings,
+    // Metrics Registry.
+    metrics_registry: MetricsRegistry,
+    // ECDSA subnet public keys.
+    ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
 }
 
 impl std::fmt::Debug for SchedulerTest {
@@ -120,6 +127,10 @@ impl SchedulerTest {
 
     pub fn canister_state(&self, canister_id: CanisterId) -> &CanisterState {
         self.state().canister_state(&canister_id).unwrap()
+    }
+
+    pub fn metrics_registry(&self) -> &MetricsRegistry {
+        &self.metrics_registry
     }
 
     pub fn canister_state_mut(&mut self, canister_id: CanisterId) -> &mut CanisterState {
@@ -412,7 +423,7 @@ impl SchedulerTest {
         let state = self.scheduler.execute_round(
             state,
             Randomness::from([0; 32]),
-            BTreeMap::new(),
+            self.ecdsa_subnet_public_keys.clone(),
             self.round,
             round_type,
             self.registry_settings(),
@@ -499,6 +510,28 @@ impl SchedulerTest {
     pub(crate) fn set_time(&mut self, time: Time) {
         self.state_mut().metadata.batch_time = time;
     }
+
+    pub fn subnet_size(&self) -> usize {
+        self.registry_settings.subnet_size
+    }
+
+    pub fn ecdsa_signature_fee(&self) -> Cycles {
+        self.scheduler
+            .cycles_account_manager
+            .ecdsa_signature_fee(self.registry_settings.subnet_size)
+    }
+
+    pub fn http_request_fee(
+        &self,
+        request_size: NumBytes,
+        response_size_limit: Option<NumBytes>,
+    ) -> Cycles {
+        self.scheduler.cycles_account_manager.http_request_fee(
+            request_size,
+            response_size_limit,
+            self.subnet_size(),
+        )
+    }
 }
 
 /// A builder for `SchedulerTest`.
@@ -517,6 +550,8 @@ pub(crate) struct SchedulerTestBuilder {
     rate_limiting_of_heap_delta: bool,
     deterministic_time_slicing: bool,
     log: ReplicaLogger,
+    ecdsa_key: Option<EcdsaKeyId>,
+    metrics_registry: MetricsRegistry,
 }
 
 impl Default for SchedulerTestBuilder {
@@ -543,6 +578,8 @@ impl Default for SchedulerTestBuilder {
             rate_limiting_of_heap_delta: false,
             deterministic_time_slicing: false,
             log: no_op_logger(),
+            ecdsa_key: None,
+            metrics_registry: MetricsRegistry::new(),
         }
     }
 }
@@ -612,6 +649,13 @@ impl SchedulerTestBuilder {
         }
     }
 
+    pub fn with_ecdsa_key(self, ecdsa_key: EcdsaKeyId) -> Self {
+        Self {
+            ecdsa_key: Some(ecdsa_key),
+            ..self
+        }
+    }
+
     pub fn build(self) -> SchedulerTest {
         let first_xnet_canister = u64::MAX / 2;
         let routing_table = Arc::new(
@@ -631,11 +675,38 @@ impl SchedulerTestBuilder {
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
 
-        let metrics_registry = MetricsRegistry::new();
-
         let config = SubnetConfigs::default()
             .own_subnet_config(self.subnet_type)
             .cycles_account_manager_config;
+        if let Some(ecdsa_key) = &self.ecdsa_key {
+            state
+                .metadata
+                .network_topology
+                .ecdsa_signing_subnets
+                .insert(ecdsa_key.clone(), vec![self.own_subnet_id]);
+            state
+                .metadata
+                .network_topology
+                .subnets
+                .get_mut(&self.own_subnet_id)
+                .unwrap()
+                .ecdsa_keys_held
+                .insert(ecdsa_key.clone());
+        }
+        let ecdsa_subnet_public_keys: BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey> = self
+            .ecdsa_key
+            .into_iter()
+            .map(|key| {
+                (
+                    key,
+                    MasterEcdsaPublicKey {
+                        algorithm_id: AlgorithmId::Secp256k1,
+                        public_key: b"abababab".to_vec(),
+                    },
+                )
+            })
+            .collect();
+
         let cycles_account_manager = CyclesAccountManager::new(
             self.scheduler_config.max_instructions_per_message,
             self.subnet_type,
@@ -673,7 +744,7 @@ impl SchedulerTestBuilder {
             self.registry_settings.subnet_size,
         ));
         let hypervisor = Hypervisor::new_for_testing(
-            &metrics_registry,
+            &self.metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
             self.log.clone(),
@@ -685,21 +756,24 @@ impl SchedulerTestBuilder {
         );
         let hypervisor = Arc::new(hypervisor);
         let ingress_history_writer =
-            IngressHistoryWriterImpl::new(config.clone(), self.log.clone(), &metrics_registry);
+            IngressHistoryWriterImpl::new(config.clone(), self.log.clone(), &self.metrics_registry);
         let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
             Arc::new(ingress_history_writer);
         let exec_env = ExecutionEnvironment::new(
             self.log.clone(),
             hypervisor,
             Arc::clone(&ingress_history_writer),
-            &metrics_registry,
+            &self.metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
             SchedulerImpl::compute_capacity_percent(self.scheduler_config.scheduler_cores),
             config,
             Arc::clone(&cycles_account_manager),
         );
-        let bitcoin_canister = Arc::new(BitcoinCanister::new(&metrics_registry, self.log.clone()));
+        let bitcoin_canister = Arc::new(BitcoinCanister::new(
+            &self.metrics_registry,
+            self.log.clone(),
+        ));
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
             self.own_subnet_id,
@@ -707,7 +781,7 @@ impl SchedulerTestBuilder {
             Arc::new(exec_env),
             Arc::clone(&cycles_account_manager),
             bitcoin_canister,
-            &metrics_registry,
+            &self.metrics_registry,
             self.log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
@@ -723,6 +797,8 @@ impl SchedulerTestBuilder {
             scheduler,
             wasm_executor,
             registry_settings: self.registry_settings,
+            metrics_registry: self.metrics_registry,
+            ecdsa_subnet_public_keys,
         }
     }
 }

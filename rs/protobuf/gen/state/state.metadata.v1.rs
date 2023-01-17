@@ -250,6 +250,12 @@ pub struct SubnetMetrics {
     #[prost(message, optional, tag = "1")]
     pub consumed_cycles_by_deleted_canisters:
         ::core::option::Option<super::super::super::types::v1::NominalCycles>,
+    #[prost(message, optional, tag = "2")]
+    pub consumed_cycles_http_outcalls:
+        ::core::option::Option<super::super::super::types::v1::NominalCycles>,
+    #[prost(message, optional, tag = "3")]
+    pub consumed_cycles_ecdsa_outcalls:
+        ::core::option::Option<super::super::super::types::v1::NominalCycles>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

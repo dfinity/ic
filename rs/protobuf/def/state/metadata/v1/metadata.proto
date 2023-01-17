@@ -166,6 +166,8 @@ message SubnetCallContextManager {
 
 message SubnetMetrics {
   types.v1.NominalCycles consumed_cycles_by_deleted_canisters = 1;
+  types.v1.NominalCycles consumed_cycles_http_outcalls = 2;
+  types.v1.NominalCycles consumed_cycles_ecdsa_outcalls = 3;
 }
 
 message BitcoinGetSuccessorsFollowUpResponses {

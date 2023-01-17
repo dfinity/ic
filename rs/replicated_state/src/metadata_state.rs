@@ -416,6 +416,8 @@ impl TryFrom<pb_metadata::NodeTopology> for NodeTopology {
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct SubnetMetrics {
     pub consumed_cycles_by_deleted_canisters: NominalCycles,
+    pub consumed_cycles_http_outcalls: NominalCycles,
+    pub consumed_cycles_ecdsa_outcalls: NominalCycles,
 }
 
 impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
@@ -424,6 +426,8 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
             consumed_cycles_by_deleted_canisters: Some(
                 (&item.consumed_cycles_by_deleted_canisters).into(),
             ),
+            consumed_cycles_http_outcalls: Some((&item.consumed_cycles_http_outcalls).into()),
+            consumed_cycles_ecdsa_outcalls: Some((&item.consumed_cycles_ecdsa_outcalls).into()),
         }
     }
 }
@@ -436,6 +440,16 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 item.consumed_cycles_by_deleted_canisters,
                 "SubnetMetrics::consumed_cycles_by_deleted_canisters",
             )?,
+            consumed_cycles_http_outcalls: try_from_option_field(
+                item.consumed_cycles_http_outcalls,
+                "SubnetMetrics::consumed_cycles_http_outcalls",
+            )
+            .unwrap_or_else(|_| NominalCycles::from(0_u128)),
+            consumed_cycles_ecdsa_outcalls: try_from_option_field(
+                item.consumed_cycles_ecdsa_outcalls,
+                "SubnetMetrics::consumed_cycles_ecdsa_outcalls",
+            )
+            .unwrap_or_else(|_| NominalCycles::from(0_u128)),
         })
     }
 }

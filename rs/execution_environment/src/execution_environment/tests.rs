@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
+use ic_types::nominal_cycles::NominalCycles;
 
 use crate::execution::test_utilities::{
     assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
@@ -1434,6 +1435,11 @@ fn execute_canister_http_request() {
         .with_caller(own_subnet, caller_canister)
         .build();
     test.state_mut().metadata.own_subnet_features.http_requests = true;
+    let burned_http_cycles_before = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_http_outcalls;
 
     // Create payload of the request.
     let url = "https://".to_string();
@@ -1481,13 +1487,19 @@ fn execute_canister_http_request() {
     );
     assert_eq!(http_request_context.http_method, CanisterHttpMethod::GET);
     assert_eq!(http_request_context.request.sender, caller_canister);
+    let fee = test.http_request_fee(
+        http_request_context.variable_parts_size(),
+        Some(NumBytes::from(response_size_limit)),
+    );
+    assert_eq!(http_request_context.request.payment, payment - fee);
+    let burned_http_cycles_after = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_http_outcalls;
     assert_eq!(
-        http_request_context.request.payment,
-        payment
-            - test.http_request_fee(
-                http_request_context.variable_parts_size(),
-                Some(NumBytes::from(response_size_limit))
-            )
+        burned_http_cycles_before + NominalCycles::from(fee),
+        burned_http_cycles_after
     );
 }
 
@@ -1661,6 +1673,11 @@ fn ecdsa_signature_fee_charged() {
         .with_ecdsa_signature_fee(fee)
         .with_ecdsa_key(ecdsa_key.clone())
         .build();
+    let burned_ecdsa_cycles_before = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_ecdsa_outcalls;
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
         message_hash: [1; 32],
@@ -1697,6 +1714,15 @@ fn ecdsa_signature_fee_charged() {
         .next()
         .unwrap();
     assert_eq!(context.request.payment.get(), payment as u128 - fee);
+    let burned_ecdsa_cycles_after = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_ecdsa_outcalls;
+    assert_eq!(
+        burned_ecdsa_cycles_before + NominalCycles::from(fee),
+        burned_ecdsa_cycles_after
+    );
 }
 
 #[test]
@@ -1819,6 +1845,11 @@ fn ecdsa_signature_fee_ignored_for_nns() {
         .with_ecdsa_signature_fee(1_000_000)
         .with_ecdsa_key(ecdsa_key.clone())
         .build();
+    let burned_ecdsa_cycles_before = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_ecdsa_outcalls;
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
         message_hash: [1; 32],
@@ -1854,6 +1885,12 @@ fn ecdsa_signature_fee_ignored_for_nns() {
         .next()
         .unwrap();
     assert_eq!(context.request.payment, Cycles::zero());
+    let burned_ecdsa_cycles_after = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .consumed_cycles_ecdsa_outcalls;
+    assert_eq!(burned_ecdsa_cycles_before, burned_ecdsa_cycles_after);
 }
 
 #[test]
