@@ -5,7 +5,7 @@ Goal:: Ensure IC routes XNet traffic in a timely manner.
 
 Runbook::
 0. Instantiate an IC with N application subnets containing M nodes each.
-1. Build and install Xnet canisters on each subnet (number of canisters is calculated dynamically).
+1. Install Xnet canisters on each subnet (number of canisters is calculated dynamically).
 2. Start all canisters (via update `start` call).
 3. Wait for RUNTIME_SEC secs for canisters to exchange messages.
 4. Stop sending messages for all canisters (via update `stop` call).
@@ -27,13 +27,14 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    NnsInstallationExt,
 };
 use crate::util::{block_on, runtime_from_url};
-use canister_test::{Canister, Project, Runtime, Wasm};
+use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
 use ic_registry_subnet_type::SubnetType;
-use slog::{info, Logger};
+use slog::info;
 use std::fmt::Display;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -65,7 +66,7 @@ pub struct Config {
 }
 
 impl Config {
-    fn new(subnets: usize, nodes_per_subnet: usize, runtime: Duration, rate: usize) -> Config {
+    pub fn new(subnets: usize, nodes_per_subnet: usize, runtime: Duration, rate: usize) -> Config {
         // Subnet-to-subnet request rate: ceil(rate / subnet_connections).
         let subnet_to_subnet_rate = (rate - 1) / (subnets - 1) + 1;
         // Minimum number of subnet-to-subnet queues needed to stay under
@@ -103,14 +104,6 @@ impl Config {
     }
 }
 
-pub fn config_nightly_3_subnets() -> Config {
-    Config::new(3, 4, Duration::from_secs(600), 10)
-}
-
-pub fn config_nightly_29_subnets() -> Config {
-    Config::new(29, 1, Duration::from_secs(600), 10)
-}
-
 pub fn config_prod_slo_3_subnets() -> Config {
     Config::new(3, 4, Duration::from_secs(1200), 10)
 }
@@ -125,6 +118,7 @@ pub fn config_hotfix_slo_3_subnets() -> Config {
 
 // Generic setup
 fn setup(env: TestEnv, config: Config) {
+    env.ensure_group_setup_created();
     (0..config.subnets)
         .fold(InternetComputer::new(), |ic, _idx| {
             ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_per_subnet))
@@ -166,16 +160,13 @@ pub fn test(env: TestEnv, config: Config) {
         })
         .collect();
     assert_eq!(endpoints_runtime.len(), config.subnets);
-    // Step 1: Build and install Xnet canisters on each subnet.
-    info!(logger, "Building Xnet canister wasm...");
-    let wasm = Project::cargo_bin_maybe_from_env("xnet-test-canister", &[]);
+    // Step 1: Install Xnet canisters on each subnet.
     info!(logger, "Installing Xnet canisters on subnets ...");
     let canisters = install_canisters(
-        logger.clone(),
+        env,
         &endpoints_runtime,
         config.subnets,
         config.canisters_per_subnet,
-        wasm,
     );
     let canisters_count = canisters.iter().map(Vec::len).sum::<usize>();
     assert_eq!(
@@ -432,12 +423,15 @@ pub fn collect_metrics(canisters: &[Vec<Canister>]) -> Vec<Vec<Metrics>> {
 }
 
 pub fn install_canisters(
-    logger: Logger,
+    env: TestEnv,
     endpoints_runtime: &[Runtime],
     subnets: usize,
     canisters_per_subnet: usize,
-    wasm: Wasm,
 ) -> Vec<Vec<Canister>> {
+    let logger = env.logger();
+    let wasm = Wasm::from_file(
+        env.get_dependency_path("rs/rust_canisters/xnet_test/xnet-test-canister.wasm"),
+    );
     let mut canisters: Vec<Vec<Canister>> = Vec::new();
     block_on(async {
         for subnet_idx in 0..subnets {

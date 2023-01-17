@@ -378,6 +378,7 @@ def populate_dependencies_dir(
         "kv_store.wasm": "rs/tests/test_canisters/kv_store/kv_store.wasm",
         "counter.wat": "rs/tests/src/counter.wat",
         "proxy_canister.wasm": "rs/rust_canisters/proxy_canister/proxy_canister.wasm",
+        "xnet-test-canister.wasm": "rs/rust_canisters/xnet_test/xnet-test-canister.wasm",
     }
     for source, dest in links.items():
         dst = os.path.join(dependencies_dir, dest)

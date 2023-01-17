@@ -423,6 +423,30 @@ system_test(
 )
 
 system_test(
+    name = "xnet_slo_3_subnets_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_nightly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "long",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + ["//rs/rust_canisters/xnet_test:xnet-test-canister"],
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
+    name = "xnet_slo_29_subnets_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_nightly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "long",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + ["//rs/rust_canisters/xnet_test:xnet-test-canister"],
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
     name = "rotate_ecdsa_idkg_key_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
