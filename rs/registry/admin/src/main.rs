@@ -4588,7 +4588,7 @@ async fn test_add_firewall_rules(
     };
 
     println!(
-        "{:?}",
+        "{}",
         serde_json::to_string(&result).expect("Failed to serialize rules")
     );
 }
@@ -4623,7 +4623,7 @@ async fn test_remove_firewall_rules(
     };
 
     println!(
-        "{:?}",
+        "{}",
         serde_json::to_string(&result).expect("Failed to serialize rules")
     );
 }
@@ -4670,7 +4670,7 @@ async fn test_update_firewall_rules(
     };
 
     println!(
-        "{:?}",
+        "{}",
         serde_json::to_string(&result).expect("Failed to serialize rules")
     );
 }
@@ -4678,7 +4678,7 @@ async fn test_update_firewall_rules(
 async fn get_firewall_rules(cmd: GetFirewallRulesCmd, registry_canister: &RegistryCanister) {
     let rules = get_firewall_rules_from_registry(registry_canister, &cmd.scope).await;
     println!(
-        "{:?}",
+        "{}",
         serde_json::to_string(&rules).expect("Failed to serialize rules")
     );
 }
@@ -4730,7 +4730,7 @@ async fn get_firewall_rules_for_node(
     );
 
     println!(
-        "{:?}",
+        "{}",
         serde_json::to_string(&rules).expect("Failed to serialize rules")
     );
 }
