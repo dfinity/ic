@@ -189,50 +189,6 @@ pub fn start_p2p(
     P2PThreadJoiner::new(log, gossip)
 }
 
-pub(crate) mod advert_utils {
-    use crate::gossip_protocol::{GossipAdvertAction, GossipAdvertSendRequest};
-    use ic_metrics::MetricsRegistry;
-    use ic_types::artifact::AdvertClass;
-    use ic_types::p2p::GossipAdvert;
-    use prometheus::IntCounterVec;
-
-    /// Maps the P2P client advert send requests to the internal format,
-    /// based on the config
-    #[derive(Clone)]
-    pub(crate) struct AdvertRequestBuilder {
-        adverts_by_class: IntCounterVec,
-    }
-
-    impl AdvertRequestBuilder {
-        pub(crate) fn new(metrics_registry: &MetricsRegistry) -> Self {
-            Self {
-                adverts_by_class: metrics_registry.int_counter_vec(
-                    "gossip_adverts_by_class",
-                    "Number of adverts from clients, by advert class",
-                    &["type"],
-                ),
-            }
-        }
-
-        /// Maps the client advert send request to the internal format
-        pub(crate) fn build(
-            &self,
-            advert: GossipAdvert,
-            advert_class: AdvertClass,
-        ) -> Option<GossipAdvertSendRequest> {
-            self.adverts_by_class
-                .with_label_values(&[advert_class.as_str()])
-                .inc();
-
-            let action = match advert_class {
-                AdvertClass::Critical => Some(GossipAdvertAction::SendToAllPeers),
-                AdvertClass::None => None,
-            };
-            action.map(|action| GossipAdvertSendRequest { advert, action })
-        }
-    }
-}
-
 /// Generic P2P Error codes.
 ///
 /// Some error codes are serialized over the wire to convey
@@ -281,46 +237,5 @@ impl<T> From<P2PErrorCode> for P2PResult<T> {
     /// The function converts a P2P error code to a P2P result.
     fn from(p2p_error_code: P2PErrorCode) -> P2PResult<T> {
         Err(P2PError { p2p_error_code })
-    }
-}
-
-#[cfg(test)]
-pub mod tests {
-    use crate::advert_utils::AdvertRequestBuilder;
-    use crate::download_prioritization::test::make_gossip_advert;
-    use crate::gossip_protocol::{GossipAdvertAction, GossipAdvertSendRequest};
-    use ic_metrics::MetricsRegistry;
-    use ic_types::artifact::AdvertClass;
-
-    #[test]
-    fn test_advert_optimization_disabled() {
-        let builder = AdvertRequestBuilder::new(&MetricsRegistry::new());
-        let result = builder.build(make_gossip_advert(10), AdvertClass::Critical);
-        let expected = GossipAdvertSendRequest {
-            advert: make_gossip_advert(10),
-            action: GossipAdvertAction::SendToAllPeers,
-        };
-        assert_eq!(result.unwrap(), expected);
-    }
-
-    #[test]
-    fn test_advert_optimization_enabled() {
-        let builder = AdvertRequestBuilder::new(&MetricsRegistry::new());
-
-        // AdvertClass::Critical
-        {
-            let result = builder.build(make_gossip_advert(10), AdvertClass::Critical);
-            let expected = GossipAdvertSendRequest {
-                advert: make_gossip_advert(10),
-                action: GossipAdvertAction::SendToAllPeers,
-            };
-            assert_eq!(result.unwrap(), expected);
-        }
-
-        // AdvertClass::None
-        {
-            let result = builder.build(make_gossip_advert(10), AdvertClass::None);
-            assert!(result.is_none());
-        }
     }
 }
