@@ -3,8 +3,8 @@ use crate::pb::v1::{
     set_mode_call_result, settle_community_fund_participation_result, sns_neuron_recipe::Investor,
     BuyerState, CanisterCallError, CfInvestment, CfNeuron, CfParticipant, DerivedState,
     DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
-    GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalResponse, GetLifecycleRequest,
-    GetLifecycleResponse, Init, Lifecycle, OpenRequest, OpenResponse, Params,
+    GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse,
+    GetLifecycleRequest, GetLifecycleResponse, Init, Lifecycle, OpenRequest, OpenResponse, Params,
     RefreshBuyerTokensResponse, RestoreDappControllersResponse, SetDappControllersCallResult,
     SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult,
     TransferableAmount,
@@ -133,6 +133,15 @@ impl From<Result<Result<(), GovernanceError>, CanisterCallError>>
             Err(err) => Self {
                 possibility: Some(Possibility::Err(err)),
             },
+        }
+    }
+}
+
+impl From<DerivedState> for GetDerivedStateResponse {
+    fn from(state: DerivedState) -> GetDerivedStateResponse {
+        GetDerivedStateResponse {
+            buyer_total_icp_e8s: Some(state.buyer_total_icp_e8s),
+            sns_tokens_per_icp: Some(state.sns_tokens_per_icp as f64),
         }
     }
 }
@@ -2258,6 +2267,7 @@ mod tests {
         assert_is_err, assert_is_ok, E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
     };
     use lazy_static::lazy_static;
+    use maplit::btreemap;
     use prost::Message;
 
     const OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID: u64 = 489102;
@@ -2448,5 +2458,77 @@ mod tests {
             swap.get_lifecycle(&request).lifecycle,
             Some(Lifecycle::Aborted as i32)
         );
+    }
+
+    #[test]
+    fn test_derived_state() {
+        let mut swap = Swap::default();
+
+        let expected_derived_state1 = DerivedState {
+            buyer_total_icp_e8s: 0,
+            sns_tokens_per_icp: 0f32,
+        };
+        let actual_derived_state1 = swap.derived_state();
+        assert_eq!(expected_derived_state1, actual_derived_state1);
+
+        let params = Params {
+            sns_token_e8s: 1_000_000_000,
+            ..Default::default()
+        };
+        swap.params = Some(params);
+
+        let expected_derived_state2 = DerivedState {
+            buyer_total_icp_e8s: 0,
+            sns_tokens_per_icp: 0f32,
+        };
+        let actual_derived_state2 = swap.derived_state();
+        assert_eq!(expected_derived_state2, actual_derived_state2);
+
+        let buyer_state: BuyerState = BuyerState {
+            icp: Some(TransferableAmount {
+                amount_e8s: 100_000_000,
+                transfer_start_timestamp_seconds: 10,
+                transfer_success_timestamp_seconds: 12,
+            }),
+        };
+        let buyers = btreemap! {
+            "".to_string() => buyer_state,
+        };
+
+        swap.buyers = buyers;
+
+        let expected_derived_state3 = DerivedState {
+            buyer_total_icp_e8s: 100_000_000,
+            sns_tokens_per_icp: 10f32,
+        };
+        let actual_derived_state3 = swap.derived_state();
+        assert_eq!(expected_derived_state3, actual_derived_state3);
+
+        swap.cf_participants = vec![CfParticipant {
+            hotkey_principal: "".to_string(),
+            cf_neurons: vec![CfNeuron {
+                nns_neuron_id: 0,
+                amount_icp_e8s: 300_000_000,
+            }],
+        }];
+
+        let expected_derived_state4 = DerivedState {
+            buyer_total_icp_e8s: 400_000_000,
+            sns_tokens_per_icp: 2.5f32,
+        };
+        let actual_derived_state4 = swap.derived_state();
+        assert_eq!(expected_derived_state4, actual_derived_state4);
+    }
+
+    #[test]
+    fn test_derived_state_to_get_derived_state_response() {
+        let derived_state = DerivedState {
+            buyer_total_icp_e8s: 400_000_000,
+            sns_tokens_per_icp: 2.5f32,
+        };
+
+        let response: GetDerivedStateResponse = derived_state.into();
+        assert_eq!(response.sns_tokens_per_icp, Some(2.5f64));
+        assert_eq!(response.buyer_total_icp_e8s, Some(400_000_000));
     }
 }

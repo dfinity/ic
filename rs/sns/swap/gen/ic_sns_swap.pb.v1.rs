@@ -1391,6 +1391,33 @@ pub struct GetInitResponse {
     #[prost(message, optional, tag = "1")]
     pub init: ::core::option::Option<Init>,
 }
+/// Request struct for the method `get_derived_state`
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetDerivedStateRequest {}
+/// Response struct for the method `get_derived_state`
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetDerivedStateResponse {
+    #[prost(uint64, optional, tag = "1")]
+    pub buyer_total_icp_e8s: ::core::option::Option<u64>,
+    #[prost(double, optional, tag = "2")]
+    pub sns_tokens_per_icp: ::core::option::Option<f64>,
+}
 /// Lifecycle states of the swap canister. The details of their meanings
 /// are provided in the documentation of the `Swap` message.
 #[derive(
