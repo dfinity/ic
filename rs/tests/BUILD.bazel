@@ -547,6 +547,25 @@ system_test(
 )
 
 system_test(
+    name = "rosetta_split_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "allow_to_fail",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            ":rosetta_workspace",
+            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api:rosetta_image.tar",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
     name = "ckbtc_minter_basics_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

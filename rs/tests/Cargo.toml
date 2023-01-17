@@ -179,6 +179,10 @@ name = "ic-systest-rosetta"
 path = "bin/rosetta_test.rs"
 
 [[bin]]
+name = "ic-systest-rosetta-split"
+path = "bin/rosetta_split_test.rs"
+
+[[bin]]
 name = "ic-systest-ckbtc-minter-basics-test"
 path = "bin/ckbtc_minter_basics_test.rs"
 
