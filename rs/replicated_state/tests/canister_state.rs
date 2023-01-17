@@ -1,158 +1,187 @@
-#[cfg(test)]
-mod canister_state {
-    use ic_base_types::NumBytes;
-    use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{
-        testing::{CanisterQueuesTesting, SystemStateTesting},
-        InputQueueType, StateError,
-    };
-    use ic_test_utilities::mock_time;
-    use ic_test_utilities::state::{
-        get_running_canister, get_stopped_canister, get_stopping_canister,
-    };
-    use ic_test_utilities::types::ids::canister_test_id;
-    use ic_test_utilities::types::messages::{RequestBuilder, ResponseBuilder};
-    use ic_types::messages::RequestOrResponse;
+use ic_base_types::{CanisterId, NumBytes};
+use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::{
+    CallOrigin,
+    //    testing::{CanisterQueuesTesting, SystemStateTesting},
+    CanisterState,
+    InputQueueType,
+    StateError,
+};
+use ic_test_utilities::{
+    mock_time,
+    state::{get_running_canister, get_stopped_canister, get_stopping_canister},
+    types::messages::{RequestBuilder, ResponseBuilder},
+};
+use ic_types::{
+    messages::{CallbackId, Request, RequestOrResponse},
+    methods::{Callback, WasmClosure},
+    xnet::QueueId,
+    Cycles, Time,
+};
 
-    const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(u64::MAX / 2);
-    const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
+const CANISTER_ID: CanisterId = CanisterId::from_u64(0);
+const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
 
-    #[test]
-    fn running_canister_accepts_requests() {
-        let mut canister = get_running_canister(canister_test_id(0));
+fn default_input_request() -> RequestOrResponse {
+    RequestBuilder::new()
+        .receiver(CANISTER_ID)
+        .sender(OTHER_CANISTER_ID)
+        .build()
+        .into()
+}
 
-        assert_eq!(
-            canister.system_state.queues_mut().push_input(
-                RequestBuilder::new().build().into(),
-                InputQueueType::RemoteSubnet,
-            ),
-            Ok(())
-        );
+fn default_input_response(callback_id: CallbackId) -> RequestOrResponse {
+    ResponseBuilder::new()
+        .originator(CANISTER_ID)
+        .respondent(OTHER_CANISTER_ID)
+        .originator_reply_callback(callback_id)
+        .build()
+        .into()
+}
+
+fn default_output_request() -> Request {
+    RequestBuilder::new()
+        .sender(CANISTER_ID)
+        .receiver(OTHER_CANISTER_ID)
+        .build()
+}
+
+/// Fixture for `CanisterState` for use in tests. This always assumes two canisters,
+/// one with a canister id set to `CANISTER_ID` and a remote canister with canister id
+/// set to `OTHER_CANISTER_ID`. The remote canister is always assumed to be located on
+/// a remote subnet.
+struct CanisterFixture {
+    canister_state: CanisterState,
+}
+
+impl CanisterFixture {
+    fn running() -> CanisterFixture {
+        CanisterFixture {
+            canister_state: get_running_canister(CANISTER_ID),
+        }
     }
 
-    #[test]
-    fn running_canister_accepts_responses() {
-        let mut canister = get_running_canister(canister_test_id(0));
-
-        assert_eq!(
-            canister.push_output_request(
-                RequestBuilder::new()
-                    .sender(canister_test_id(0))
-                    .receiver(canister_test_id(1))
-                    .build()
-                    .into(),
-                mock_time(),
-            ),
-            Ok(())
-        );
-
-        assert_eq!(
-            canister.system_state.queues_mut().push_input(
-                ResponseBuilder::new()
-                    .originator(canister_test_id(0))
-                    .respondent(canister_test_id(1))
-                    .build()
-                    .into(),
-                InputQueueType::RemoteSubnet,
-            ),
-            Ok(())
-        );
+    fn stopping() -> CanisterFixture {
+        CanisterFixture {
+            canister_state: get_stopping_canister(CANISTER_ID),
+        }
     }
 
-    #[test]
-    fn stopping_canister_rejects_requests() {
-        let mut canister = get_stopping_canister(canister_test_id(0));
-
-        let request: RequestOrResponse = RequestBuilder::new().build().into();
-        assert_eq!(
-            canister.push_input(
-                request.clone(),
-                MAX_CANISTER_MEMORY_SIZE,
-                &mut SUBNET_AVAILABLE_MEMORY.clone(),
-                SubnetType::Application,
-                InputQueueType::RemoteSubnet,
-            ),
-            Err((StateError::CanisterStopping(canister_test_id(0)), request))
-        );
+    fn stopped() -> CanisterFixture {
+        CanisterFixture {
+            canister_state: get_stopped_canister(CANISTER_ID),
+        }
     }
 
-    #[test]
-    fn stopping_canister_accepts_responses() {
-        let mut canister = get_stopping_canister(canister_test_id(0));
-
-        assert_eq!(
-            canister.push_output_request(
-                RequestBuilder::new()
-                    .sender(canister_test_id(0))
-                    .receiver(canister_test_id(1))
-                    .build()
-                    .into(),
-                mock_time(),
-            ),
-            Ok(())
-        );
-
-        let response: RequestOrResponse = ResponseBuilder::new()
-            .originator(canister_test_id(0))
-            .respondent(canister_test_id(1))
-            .build()
-            .into();
-        assert_eq!(
-            canister
-                .system_state
-                .queues_mut()
-                .push_input(response, InputQueueType::RemoteSubnet,),
-            Ok(())
-        );
+    fn make_callback(&mut self) -> CallbackId {
+        let call_context_id = self
+            .canister_state
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .new_call_context(
+                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
+                Cycles::zero(),
+                Time::from_nanos_since_unix_epoch(0),
+            );
+        self.canister_state
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .register_callback(Callback::new(
+                call_context_id,
+                Some(CANISTER_ID),
+                Some(OTHER_CANISTER_ID),
+                Cycles::zero(),
+                Some(Cycles::new(42)),
+                Some(Cycles::new(84)),
+                WasmClosure::new(0, 2),
+                WasmClosure::new(0, 2),
+                None,
+            ))
     }
 
-    #[test]
-    fn stopped_canister_rejects_requests() {
-        let mut canister = get_stopped_canister(canister_test_id(0));
-
-        let request: RequestOrResponse = RequestBuilder::new().build().into();
-        assert_eq!(
-            canister.push_input(
-                request.clone(),
-                MAX_CANISTER_MEMORY_SIZE,
-                &mut SUBNET_AVAILABLE_MEMORY.clone(),
-                SubnetType::Application,
-                InputQueueType::RemoteSubnet,
-            ),
-            Err((StateError::CanisterStopped(canister_test_id(0)), request))
-        );
+    fn push_input(
+        &mut self,
+        msg: RequestOrResponse,
+    ) -> Result<(), (StateError, RequestOrResponse)> {
+        let mut subnet_available_memory = i64::MAX / 2;
+        self.canister_state.push_input(
+            msg,
+            NumBytes::new(u64::MAX / 2),
+            &mut subnet_available_memory,
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet,
+        )
     }
 
-    #[test]
-    fn stopped_canister_rejects_responses() {
-        let mut canister = get_stopped_canister(canister_test_id(0));
-
-        assert_eq!(
-            canister.push_output_request(
-                RequestBuilder::new()
-                    .sender(canister_test_id(0))
-                    .receiver(canister_test_id(1))
-                    .build()
-                    .into(),
-                mock_time(),
-            ),
-            Ok(())
-        );
-
-        let response: RequestOrResponse = ResponseBuilder::new()
-            .originator(canister_test_id(0))
-            .respondent(canister_test_id(1))
-            .build()
-            .into();
-        assert_eq!(
-            canister.push_input(
-                response.clone(),
-                MAX_CANISTER_MEMORY_SIZE,
-                &mut SUBNET_AVAILABLE_MEMORY.clone(),
-                SubnetType::Application,
-                InputQueueType::RemoteSubnet,
-            ),
-            Err((StateError::CanisterStopped(canister_test_id(0)), response))
-        );
+    fn pop_output(&mut self) -> Option<(QueueId, RequestOrResponse)> {
+        let mut iter = self.canister_state.output_into_iter();
+        iter.pop()
     }
+
+    fn with_input_reservation(&mut self) {
+        self.canister_state
+            .push_output_request(default_output_request().into(), mock_time())
+            .unwrap();
+        self.pop_output().unwrap();
+    }
+}
+
+#[test]
+fn running_canister_accepts_requests() {
+    let mut fixture = CanisterFixture::running();
+    fixture.push_input(default_input_request()).unwrap();
+}
+
+#[test]
+fn running_canister_accepts_responses() {
+    let mut fixture = CanisterFixture::running();
+    fixture.with_input_reservation();
+    let response = default_input_response(fixture.make_callback());
+    fixture.push_input(response).unwrap();
+}
+
+#[test]
+fn stopping_canister_rejects_requests() {
+    let mut fixture = CanisterFixture::stopping();
+    assert_eq!(
+        fixture.push_input(default_input_request()),
+        Err((
+            StateError::CanisterStopping(CANISTER_ID),
+            default_input_request(),
+        )),
+    );
+}
+
+#[test]
+fn stopping_canister_accepts_responses() {
+    let mut fixture = CanisterFixture::stopping();
+    fixture.with_input_reservation();
+    let response = default_input_response(fixture.make_callback());
+    fixture.push_input(response).unwrap();
+}
+
+#[test]
+fn stopped_canister_rejects_requests() {
+    let mut fixture = CanisterFixture::stopped();
+    assert_eq!(
+        fixture.push_input(default_input_request()),
+        Err((
+            StateError::CanisterStopped(CANISTER_ID),
+            default_input_request(),
+        )),
+    );
+}
+
+#[test]
+fn stopped_canister_rejects_responses() {
+    let mut fixture = CanisterFixture::stopped();
+    fixture.with_input_reservation();
+    // A stopped canister can't make a callback id.
+    let response = default_input_response(CallbackId::from(0));
+    assert_eq!(
+        fixture.push_input(response.clone()),
+        Err((StateError::CanisterStopped(CANISTER_ID), response,)),
+    );
 }
