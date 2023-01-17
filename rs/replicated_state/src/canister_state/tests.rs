@@ -14,190 +14,186 @@ use ic_types::{
     methods::{Callback, WasmClosure},
     Time,
 };
-use ic_types::{messages::MAX_RESPONSE_COUNT_BYTES, CountBytes, Cycles};
+use ic_types::{messages::MAX_RESPONSE_COUNT_BYTES, xnet::QueueId, CountBytes, Cycles};
 use ic_wasm_types::CanisterModule;
 
-const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
-const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(u64::MAX / 2);
-const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
+const MAX_CANISTER_MEMORY_SIZE: NumBytes = NumBytes::new(u64::MAX / 2);
+const SUBNET_AVAILABLE_MEMORY: i64 = i64::MAX / 2;
 
-fn canister_state_test<F, R>(f: F) -> R
-where
-    F: FnOnce(CanisterState) -> R,
-{
-    let scheduler_state = SchedulerState::default();
-    let system_state = SystemState::new_running(
-        CANISTER_ID,
-        user_test_id(24).get(),
-        INITIAL_CYCLES,
-        NumSeconds::from(100_000),
-    );
-    let canister_state = CanisterState::new(system_state, None, scheduler_state);
-    f(canister_state)
+fn default_input_request() -> RequestOrResponse {
+    RequestBuilder::default()
+        .receiver(CANISTER_ID)
+        .build()
+        .into()
+}
+
+fn default_input_response(callback_id: CallbackId) -> RequestOrResponse {
+    ResponseBuilder::default()
+        .originator(CANISTER_ID)
+        .respondent(OTHER_CANISTER_ID)
+        .originator_reply_callback(callback_id)
+        .build()
+        .into()
+}
+
+fn default_output_request() -> Arc<Request> {
+    Arc::new(
+        RequestBuilder::default()
+            .sender(CANISTER_ID)
+            .receiver(OTHER_CANISTER_ID)
+            .build(),
+    )
+}
+
+struct CanisterStateFixture {
+    pub canister_state: CanisterState,
+}
+
+impl CanisterStateFixture {
+    fn new() -> CanisterStateFixture {
+        let scheduler_state = SchedulerState::default();
+        let system_state = SystemState::new_running(
+            CANISTER_ID,
+            user_test_id(24).get(),
+            Cycles::new(1 << 36),
+            NumSeconds::from(100_000),
+        );
+
+        CanisterStateFixture {
+            canister_state: CanisterState::new(system_state, None, scheduler_state),
+        }
+    }
+
+    fn make_callback(&mut self) -> CallbackId {
+        let call_context_id = self
+            .canister_state
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .new_call_context(
+                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
+                Cycles::zero(),
+                Time::from_nanos_since_unix_epoch(0),
+            );
+        self.canister_state
+            .system_state
+            .call_context_manager_mut()
+            .unwrap()
+            .register_callback(Callback::new(
+                call_context_id,
+                Some(CANISTER_ID),
+                Some(OTHER_CANISTER_ID),
+                Cycles::zero(),
+                Some(Cycles::new(42)),
+                Some(Cycles::new(84)),
+                WasmClosure::new(0, 2),
+                WasmClosure::new(0, 2),
+                None,
+            ))
+    }
+
+    fn push_input(
+        &mut self,
+        msg: RequestOrResponse,
+        subnet_type: SubnetType,
+        input_queue_type: InputQueueType,
+    ) -> Result<(), (StateError, RequestOrResponse)> {
+        self.canister_state.push_input(
+            msg,
+            MAX_CANISTER_MEMORY_SIZE,
+            &mut SUBNET_AVAILABLE_MEMORY.clone(),
+            subnet_type,
+            input_queue_type,
+        )
+    }
+
+    fn pop_output(&mut self) -> Option<(QueueId, RequestOrResponse)> {
+        let mut iter = self.canister_state.output_into_iter();
+        iter.pop()
+    }
+
+    fn with_input_reservation(&mut self) {
+        self.canister_state
+            .push_output_request(default_output_request(), mock_time())
+            .unwrap();
+        self.pop_output().unwrap();
+    }
 }
 
 #[test]
 fn canister_state_push_input_request_success() {
-    canister_state_test(|mut canister_state| {
-        canister_state
-            .push_input(
-                RequestBuilder::default()
-                    .receiver(CANISTER_ID)
-                    .build()
-                    .into(),
-                MAX_CANISTER_MEMORY_SIZE,
-                &mut SUBNET_AVAILABLE_MEMORY.clone(),
-                SubnetType::Application,
-                InputQueueType::RemoteSubnet,
-            )
-            .unwrap();
-    })
+    let mut fixture = CanisterStateFixture::new();
+    fixture
+        .push_input(
+            default_input_request(),
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
 }
 
 #[test]
 fn canister_state_push_input_response_no_reservation() {
-    canister_state_test(|mut canister_state| {
-        let call_context_id = canister_state
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
-                Cycles::zero(),
-                Time::from_nanos_since_unix_epoch(0),
-            );
-        let callback_id = canister_state
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .register_callback(Callback::new(
-                call_context_id,
-                Some(CANISTER_ID),
-                Some(OTHER_CANISTER_ID),
-                Cycles::zero(),
-                Some(Cycles::new(42)),
-                Some(Cycles::new(84)),
-                WasmClosure::new(0, 2),
-                WasmClosure::new(0, 2),
-                None,
-            ));
-
-        let response: RequestOrResponse = ResponseBuilder::default()
-            .originator(CANISTER_ID)
-            .respondent(OTHER_CANISTER_ID)
-            .originator_reply_callback(callback_id)
-            .build()
-            .into();
-
-        assert_eq!(
-            Err((StateError::QueueFull { capacity: 0 }, response.clone())),
-            canister_state.push_input(
-                response,
-                MAX_CANISTER_MEMORY_SIZE,
-                &mut SUBNET_AVAILABLE_MEMORY.clone(),
-                SubnetType::Application,
-                InputQueueType::RemoteSubnet,
-            )
-        );
-    })
+    let mut fixture = CanisterStateFixture::new();
+    let response = default_input_response(fixture.make_callback());
+    assert_eq!(
+        Err((StateError::QueueFull { capacity: 0 }, response.clone(),)),
+        fixture.push_input(
+            response,
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet
+        ),
+    );
 }
 
 #[test]
 fn canister_state_push_input_response_success() {
-    canister_state_test(|mut canister_state| {
-        // Make an input queue reservation.
-        canister_state
-            .push_output_request(
-                RequestBuilder::default()
-                    .sender(CANISTER_ID)
-                    .receiver(OTHER_CANISTER_ID)
-                    .build()
-                    .into(),
-                mock_time(),
-            )
-            .unwrap();
-        canister_state.output_into_iter().count();
-
-        let call_context_id = canister_state
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
-                Cycles::zero(),
-                Time::from_nanos_since_unix_epoch(0),
-            );
-        let callback_id = canister_state
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .register_callback(Callback::new(
-                call_context_id,
-                Some(CANISTER_ID),
-                Some(OTHER_CANISTER_ID),
-                Cycles::zero(),
-                Some(Cycles::new(42)),
-                Some(Cycles::new(84)),
-                WasmClosure::new(0, 2),
-                WasmClosure::new(0, 2),
-                None,
-            ));
-
-        canister_state
-            .push_input(
-                ResponseBuilder::default()
-                    .respondent(OTHER_CANISTER_ID)
-                    .originator(CANISTER_ID)
-                    .originator_reply_callback(callback_id)
-                    .build()
-                    .into(),
-                MAX_CANISTER_MEMORY_SIZE,
-                &mut SUBNET_AVAILABLE_MEMORY.clone(),
-                SubnetType::Application,
-                InputQueueType::RemoteSubnet,
-            )
-            .unwrap();
-    })
+    let mut fixture = CanisterStateFixture::new();
+    // Make an input queue reservation.
+    fixture.with_input_reservation();
+    // Pushing input response should succeed.
+    let response = default_input_response(fixture.make_callback());
+    fixture
+        .push_input(
+            response,
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
 }
 
 #[test]
 #[should_panic(expected = "Expected `RequestOrResponse` to be targeted to canister ID")]
 fn canister_state_push_input_request_mismatched_receiver() {
-    canister_state_test(|mut canister_state| {
-        canister_state
-            .push_input(
-                RequestBuilder::default()
-                    .receiver(OTHER_CANISTER_ID)
-                    .build()
-                    .into(),
-                MAX_CANISTER_MEMORY_SIZE,
-                &mut SUBNET_AVAILABLE_MEMORY.clone(),
-                SubnetType::Application,
-                InputQueueType::RemoteSubnet,
-            )
-            .unwrap();
-    })
+    let mut fixture = CanisterStateFixture::new();
+    fixture
+        .push_input(
+            RequestBuilder::default()
+                .receiver(OTHER_CANISTER_ID)
+                .build()
+                .into(),
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
 }
 
 #[test]
 #[should_panic(expected = "Expected `RequestOrResponse` to be targeted to canister ID")]
 fn canister_state_push_input_response_mismatched_originator() {
-    canister_state_test(|mut canister_state| {
-        canister_state
-            .push_input(
-                ResponseBuilder::default()
-                    .originator(OTHER_CANISTER_ID)
-                    .build()
-                    .into(),
-                MAX_CANISTER_MEMORY_SIZE,
-                &mut SUBNET_AVAILABLE_MEMORY.clone(),
-                SubnetType::Application,
-                InputQueueType::RemoteSubnet,
-            )
-            .unwrap();
-    })
+    let mut fixture = CanisterStateFixture::new();
+    fixture
+        .push_input(
+            ResponseBuilder::default()
+                .originator(OTHER_CANISTER_ID)
+                .build()
+                .into(),
+            SubnetType::Application,
+            InputQueueType::RemoteSubnet,
+        )
+        .unwrap();
 }
 
 #[test]
@@ -302,96 +298,85 @@ fn canister_state_push_input_request_memory_limit_test_impl(
     input_queue_type: InputQueueType,
     should_enforce_limit: bool,
 ) {
-    canister_state_test(|mut canister_state| {
-        let request: RequestOrResponse = RequestBuilder::default()
-            .sender(OTHER_CANISTER_ID)
-            .receiver(CANISTER_ID)
-            .build()
-            .into();
+    let mut canister_state = CanisterStateFixture::new().canister_state;
 
-        let mut subnet_available_memory_ = subnet_available_memory;
-        let res = canister_state.push_input(
-            request.clone(),
-            max_canister_memory_size,
-            &mut subnet_available_memory_,
-            own_subnet_type,
-            input_queue_type,
+    let request = default_input_request();
+    let mut subnet_available_memory_ = subnet_available_memory;
+
+    let result = canister_state.push_input(
+        request.clone(),
+        max_canister_memory_size,
+        &mut subnet_available_memory_,
+        own_subnet_type,
+        input_queue_type,
+    );
+    if should_enforce_limit {
+        assert_eq!(
+            Err((
+                StateError::OutOfMemory {
+                    requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
+                    available: subnet_available_memory.min(max_canister_memory_size.get() as i64)
+                },
+                request,
+            )),
+            result
         );
-
-        if should_enforce_limit {
-            assert_eq!(
-                Err((
-                    StateError::OutOfMemory {
-                        requested: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
-                        available: subnet_available_memory
-                            .min(max_canister_memory_size.get() as i64)
-                    },
-                    request
-                )),
-                res
-            );
-            assert_eq!(subnet_available_memory, subnet_available_memory_);
-        } else {
-            res.unwrap();
-        }
-    })
+        assert_eq!(subnet_available_memory, subnet_available_memory_);
+    } else {
+        result.unwrap();
+    }
 }
 
 /// On system subnets we disregard memory reservations and execution memory
 /// usage and allow up to `max_canister_memory_size` worth of messages.
 #[test]
 fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execution_memory_usage() {
-    canister_state_test(|mut canister_state| {
-        // Remote message inducted into system subnet.
-        let own_subnet_type = SubnetType::System;
-        let input_queue_type = InputQueueType::RemoteSubnet;
+    let mut canister_state = CanisterStateFixture::new().canister_state;
 
-        // Only enough memory for one request, no space for wasm or globals.
-        let max_canister_memory_size = NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64);
+    // Remote message inducted into system subnet.
+    let own_subnet_type = SubnetType::System;
+    let input_queue_type = InputQueueType::RemoteSubnet;
 
-        // Tiny explicit allocation, not enough for a request.
-        canister_state.system_state.memory_allocation =
-            MemoryAllocation::Reserved(NumBytes::new(13));
-        // And an execution state with non-zero size.
-        canister_state.execution_state = Some(ExecutionState::new(
-            Default::default(),
-            execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
-            ExportedFunctions::new(Default::default()),
-            Default::default(),
-            Default::default(),
-            vec![Global::I64(14)],
-            WasmMetadata::default(),
-        ));
-        assert!(canister_state.memory_usage(own_subnet_type).get() > 0);
-        let initial_memory_usage =
-            canister_state.raw_memory_usage() + canister_state.message_memory_usage();
+    // Only enough memory for one request, no space for wasm or globals.
+    let max_canister_memory_size = NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64);
 
-        let request: RequestOrResponse = RequestBuilder::default()
-            .sender(OTHER_CANISTER_ID)
-            .receiver(CANISTER_ID)
-            .build()
-            .into();
+    // Tiny explicit allocation, not enough for a request.
+    canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::new(13));
+    // And an execution state with non-zero size.
+    canister_state.execution_state = Some(ExecutionState::new(
+        Default::default(),
+        execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
+        ExportedFunctions::new(Default::default()),
+        Default::default(),
+        Default::default(),
+        vec![Global::I64(14)],
+        WasmMetadata::default(),
+    ));
+    assert!(canister_state.memory_usage(own_subnet_type).get() > 0);
+    let initial_memory_usage =
+        canister_state.raw_memory_usage() + canister_state.message_memory_usage();
+    let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
-        let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
-        canister_state
-            .push_input(
-                request,
-                max_canister_memory_size,
-                &mut subnet_available_memory,
-                own_subnet_type,
-                input_queue_type,
-            )
-            .unwrap();
+    let request = default_input_request();
 
-        assert_eq!(
-            initial_memory_usage + NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
-            canister_state.raw_memory_usage() + canister_state.message_memory_usage(),
-        );
-        assert_eq!(
-            SUBNET_AVAILABLE_MEMORY - MAX_RESPONSE_COUNT_BYTES as i64,
-            subnet_available_memory
-        );
-    })
+    canister_state
+        .push_input(
+            request,
+            max_canister_memory_size,
+            &mut subnet_available_memory,
+            own_subnet_type,
+            input_queue_type,
+        )
+        .unwrap();
+
+    assert_eq!(
+        initial_memory_usage + NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64),
+        canister_state.raw_memory_usage() + canister_state.message_memory_usage(),
+    );
+    assert_eq!(
+        SUBNET_AVAILABLE_MEMORY - MAX_RESPONSE_COUNT_BYTES as i64,
+        subnet_available_memory,
+    );
 }
 
 #[test]
@@ -437,97 +422,53 @@ fn canister_state_push_input_response_memory_limit_test_impl(
     own_subnet_type: SubnetType,
     input_queue_type: InputQueueType,
 ) {
-    canister_state_test(|mut canister_state| {
-        // Make an input queue reservation.
-        canister_state
-            .push_output_request(
-                RequestBuilder::default()
-                    .sender(CANISTER_ID)
-                    .receiver(OTHER_CANISTER_ID)
-                    .build()
-                    .into(),
-                mock_time(),
-            )
-            .unwrap();
-        canister_state.output_into_iter().count();
+    let mut fixture = CanisterStateFixture::new();
 
-        let call_context_id = canister_state
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
-                Cycles::zero(),
-                Time::from_nanos_since_unix_epoch(0),
-            );
-        let callback_id = canister_state
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .register_callback(Callback::new(
-                call_context_id,
-                Some(CANISTER_ID),
-                Some(OTHER_CANISTER_ID),
-                Cycles::zero(),
-                Some(Cycles::new(42)),
-                Some(Cycles::new(84)),
-                WasmClosure::new(0, 2),
-                WasmClosure::new(0, 2),
-                None,
-            ));
+    // Make an input queue reservation.
+    fixture.with_input_reservation();
+    let response = default_input_response(fixture.make_callback());
 
-        let response: RequestOrResponse = ResponseBuilder::default()
-            .respondent(OTHER_CANISTER_ID)
-            .originator(CANISTER_ID)
-            .originator_reply_callback(callback_id)
-            .build()
-            .into();
+    let mut subnet_available_memory = -13;
+    fixture
+        .canister_state
+        .push_input(
+            response.clone(),
+            NumBytes::new(14),
+            &mut subnet_available_memory,
+            own_subnet_type,
+            input_queue_type,
+        )
+        .unwrap();
 
-        let mut subnet_available_memory = -13;
-        canister_state
-            .push_input(
-                response.clone(),
-                NumBytes::new(14),
-                &mut subnet_available_memory,
-                own_subnet_type,
-                input_queue_type,
-            )
-            .unwrap();
-
-        assert_eq!(
-            -13 + MAX_RESPONSE_COUNT_BYTES as i64 - response.count_bytes() as i64,
-            subnet_available_memory
-        );
-    })
+    assert_eq!(
+        -13 + MAX_RESPONSE_COUNT_BYTES as i64 - response.count_bytes() as i64,
+        subnet_available_memory
+    );
 }
 
 #[test]
 #[should_panic(expected = "Expected `Request` to have been sent by canister ID")]
 fn canister_state_push_output_request_mismatched_sender() {
-    canister_state_test(|mut canister_state| {
-        canister_state
-            .push_output_request(
-                RequestBuilder::default()
-                    .sender(OTHER_CANISTER_ID)
-                    .build()
-                    .into(),
-                mock_time(),
-            )
-            .unwrap();
-    })
+    let mut fixture = CanisterStateFixture::new();
+    fixture
+        .canister_state
+        .push_output_request(
+            Arc::new(RequestBuilder::default().sender(OTHER_CANISTER_ID).build()),
+            mock_time(),
+        )
+        .unwrap();
 }
 
 #[test]
 #[should_panic(expected = "Expected `Response` to have been sent by canister ID")]
 fn canister_state_push_output_response_mismatched_respondent() {
-    canister_state_test(|mut canister_state| {
-        canister_state.push_output_response(
-            ResponseBuilder::default()
-                .respondent(OTHER_CANISTER_ID)
-                .build()
-                .into(),
-        );
-    })
+    let mut fixture = CanisterStateFixture::new();
+    fixture.canister_state.push_output_response(
+        ResponseBuilder::default()
+            .respondent(OTHER_CANISTER_ID)
+            .build()
+            .into(),
+    );
 }
 
 #[test]
@@ -553,26 +494,24 @@ fn wasm_can_be_loaded_from_a_file() {
 
 #[test]
 fn canister_state_cycles_debit() {
-    canister_state_test(|mut canister_state| {
-        let system_state = &mut canister_state.system_state;
-        let initial_balance = system_state.balance();
+    let system_state = &mut CanisterStateFixture::new().canister_state.system_state;
+    let initial_balance = system_state.balance();
 
-        system_state.add_postponed_charge_to_cycles_debit(Cycles::new(42));
-        assert_eq!(Cycles::new(42), system_state.cycles_debit());
-        assert_eq!(initial_balance, system_state.balance());
-        assert_eq!(
-            initial_balance - Cycles::new(42),
-            system_state.debited_balance()
-        );
+    system_state.add_postponed_charge_to_cycles_debit(Cycles::new(42));
+    assert_eq!(Cycles::new(42), system_state.cycles_debit());
+    assert_eq!(initial_balance, system_state.balance());
+    assert_eq!(
+        initial_balance - Cycles::new(42),
+        system_state.debited_balance()
+    );
 
-        system_state.apply_cycles_debit(system_state.canister_id(), &no_op_logger());
-        assert_eq!(Cycles::zero(), system_state.cycles_debit());
-        assert_eq!(initial_balance - Cycles::new(42), system_state.balance());
-        assert_eq!(
-            initial_balance - Cycles::new(42),
-            system_state.debited_balance()
-        );
-    })
+    system_state.apply_cycles_debit(system_state.canister_id(), &no_op_logger());
+    assert_eq!(Cycles::zero(), system_state.cycles_debit());
+    assert_eq!(initial_balance - Cycles::new(42), system_state.balance());
+    assert_eq!(
+        initial_balance - Cycles::new(42),
+        system_state.debited_balance()
+    );
 }
 
 #[test]
