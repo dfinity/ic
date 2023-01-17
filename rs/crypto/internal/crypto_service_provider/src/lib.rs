@@ -269,6 +269,13 @@ impl NodePublicKeyData for Csp {
         Ok(pks)
     }
 
+    fn current_node_public_keys_with_timestamps(
+        &self,
+    ) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError> {
+        let pks = self.csp_vault.current_node_public_keys_with_timestamps()?;
+        Ok(pks)
+    }
+
     fn dkg_dealing_encryption_key_id(
         &self,
     ) -> Result<KeyId, DkgDealingEncryptionKeyIdRetrievalError> {

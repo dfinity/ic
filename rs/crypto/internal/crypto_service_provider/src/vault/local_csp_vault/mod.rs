@@ -14,7 +14,7 @@ mod threshold_sig;
 mod tls;
 
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
-use crate::public_key_store::{PublicKeyGenerationTimestamps, PublicKeyStore};
+use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
@@ -215,11 +215,6 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 .get_relative_time()
                 .as_millis_since_unix_epoch(),
         );
-    }
-
-    //TODO CRP-1860: modify or remove this method depending on the chosen solution
-    pub fn public_keys_generation_timestamps(&self) -> PublicKeyGenerationTimestamps {
-        self.public_key_store.read().generation_timestamps()
     }
 }
 

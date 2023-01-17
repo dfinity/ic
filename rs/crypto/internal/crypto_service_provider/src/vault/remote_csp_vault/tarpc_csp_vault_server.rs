@@ -311,6 +311,15 @@ impl<
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 
+    async fn current_node_public_keys_with_timestamps(
+        self,
+        _: context::Context,
+    ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
+        let vault = self.local_csp_vault;
+        let job = move || vault.current_node_public_keys_with_timestamps();
+        execute_on_thread_pool(self.thread_pool_handle, job).await
+    }
+
     async fn idkg_key_count(self, _: context::Context) -> Result<usize, CspPublicKeyStoreError> {
         let vault = self.local_csp_vault;
         let job = move || vault.idkg_dealing_encryption_pubkeys_count();

@@ -450,15 +450,26 @@ pub trait PublicKeyStoreCspVault {
         public_keys: CurrentNodePublicKeys,
     ) -> Result<bool, CspPublicKeyStoreError>;
 
-    /// Returns the node's current public keys.
+    /// Returns the node's current public keys where generation timestamps are stripped.
     ///
     /// For keys that are periodically rotated (such as the iDKG dealing encryption key pair) only
-    /// the latest public key locally available will be returned. This public key may in particular
-    /// not yet be in the registry.
+    /// the latest public key locally available will be returned.
     ///
     /// # Errors
     /// * if a transient error (e.g., RPC timeout) occurs when accessing the public key store
     fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
+
+    /// Returns the node's current public keys with its generation timestamps.
+    ///
+    /// If timestamps are not needed, you should use [`Self::current_node_public_keys`].
+    /// For keys that are periodically rotated (such as the iDKG dealing encryption key pair) only
+    /// the latest public key locally available will be returned.
+    ///
+    /// # Errors
+    /// * if a transient error (e.g., RPC timeout) occurs when accessing the public key store
+    fn current_node_public_keys_with_timestamps(
+        &self,
+    ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
 
     /// Returns the number of iDKG dealing encryption public keys stored locally.
     ///

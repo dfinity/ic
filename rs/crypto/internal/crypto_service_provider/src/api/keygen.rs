@@ -98,12 +98,23 @@ pub trait NodePublicKeyData {
         public_keys: CurrentNodePublicKeys,
     ) -> Result<bool, NodePublicKeyDataError>;
 
-    /// Returns the node's current public keys.
+    /// Returns the node's current public keys where generation timestamps are stripped.
     ///
     /// # Errors
     /// * [`NodePublicKeyDataError::TransientInternalError`] if there is a transient internal
     ///   error when calling the CSP vault.
     fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError>;
+
+    /// Returns the node's current public keys with their associated timestamps.
+    ///
+    /// If timestamps are not needed, you should use [`Self::current_node_public_keys`].
+    ///
+    /// # Errors
+    /// * [`NodePublicKeyDataError::TransientInternalError`] if there is a transient internal
+    ///   error when calling the CSP vault.
+    fn current_node_public_keys_with_timestamps(
+        &self,
+    ) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError>;
 
     /// Returns the id of the dkg dealing encryption key.
     ///
