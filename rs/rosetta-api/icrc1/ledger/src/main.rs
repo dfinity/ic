@@ -111,6 +111,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             "Total number of Tokens in the pool.",
         )?;
         w.encode_gauge(
+            "ledger_total_supply",
+            ledger.balances().total_supply().get_e8s() as f64,
+            "Total number of tokens in circulation.",
+        )?;
+        w.encode_gauge(
             "ledger_balance_store_entries",
             ledger.balances().store.len() as f64,
             "Total number of accounts in the balance store.",
