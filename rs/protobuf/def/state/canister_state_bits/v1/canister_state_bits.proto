@@ -155,11 +155,18 @@ message CanisterStatusStopping {
 message CanisterStatusStopped {}
 
 message ExecutionTask {
+  enum CanisterTask {
+    CANISTER_TASK_UNSPECIFIED = 0;
+    CANISTER_TASK_HEARTBEAT = 1;
+    CANISTER_TASK_TIMER = 2;
+  }
+
   message AbortedExecution {
-    oneof message {
+    oneof input {
       state.queues.v1.Request request = 1;
       state.queues.v1.Response response = 2;
       ingress.v1.Ingress ingress = 3;
+      CanisterTask task = 5;
     }
     // The execution cost that has already been charged from the canister.
     // Retried execution does not have to pay for it again.

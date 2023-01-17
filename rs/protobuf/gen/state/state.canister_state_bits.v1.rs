@@ -291,20 +291,22 @@ pub mod execution_task {
         #[prost(message, optional, tag = "4")]
         pub prepaid_execution_cycles:
             ::core::option::Option<super::super::super::queues::v1::Cycles>,
-        #[prost(oneof = "aborted_execution::Message", tags = "1, 2, 3")]
-        pub message: ::core::option::Option<aborted_execution::Message>,
+        #[prost(oneof = "aborted_execution::Input", tags = "1, 2, 3, 5")]
+        pub input: ::core::option::Option<aborted_execution::Input>,
     }
     /// Nested message and enum types in `AbortedExecution`.
     pub mod aborted_execution {
         #[allow(clippy::derive_partial_eq_without_eq)]
         #[derive(Clone, PartialEq, ::prost::Oneof)]
-        pub enum Message {
+        pub enum Input {
             #[prost(message, tag = "1")]
             Request(super::super::super::super::queues::v1::Request),
             #[prost(message, tag = "2")]
             Response(super::super::super::super::queues::v1::Response),
             #[prost(message, tag = "3")]
             Ingress(super::super::super::super::ingress::v1::Ingress),
+            #[prost(enumeration = "super::CanisterTask", tag = "5")]
+            Task(i32),
         }
     }
     #[allow(clippy::derive_partial_eq_without_eq)]
@@ -327,6 +329,27 @@ pub mod execution_task {
             Request(super::super::super::super::queues::v1::Request),
             #[prost(message, tag = "2")]
             Ingress(super::super::super::super::ingress::v1::Ingress),
+        }
+    }
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[repr(i32)]
+    pub enum CanisterTask {
+        Unspecified = 0,
+        Heartbeat = 1,
+        Timer = 2,
+    }
+    impl CanisterTask {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                CanisterTask::Unspecified => "CANISTER_TASK_UNSPECIFIED",
+                CanisterTask::Heartbeat => "CANISTER_TASK_HEARTBEAT",
+                CanisterTask::Timer => "CANISTER_TASK_TIMER",
+            }
         }
     }
     #[allow(clippy::derive_partial_eq_without_eq)]

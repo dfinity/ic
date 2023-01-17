@@ -14,8 +14,8 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_interfaces::messages::CanisterCall;
 use ic_interfaces::messages::CanisterMessage;
+use ic_interfaces::messages::{CanisterCall, CanisterMessageOrTask};
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_types::messages::CallContextId;
@@ -497,7 +497,7 @@ impl PausedExecution for PausedCallExecution {
         }
     }
 
-    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessage, Cycles) {
+    fn abort(self: Box<Self>, log: &ReplicaLogger) -> (CanisterMessageOrTask, Cycles) {
         info!(
             log,
             "[DTS] Aborting {:?} execution of canister {}",
@@ -509,6 +509,9 @@ impl PausedExecution for PausedCallExecution {
             CanisterCall::Request(r) => CanisterMessage::Request(r),
             CanisterCall::Ingress(i) => CanisterMessage::Ingress(i),
         };
-        (message, self.original.prepaid_execution_cycles)
+        (
+            CanisterMessageOrTask::Message(message),
+            self.original.prepaid_execution_cycles,
+        )
     }
 }

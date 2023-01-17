@@ -10,6 +10,7 @@ use ic_execution_environment::{
     as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionEnvironment,
     ExecutionResponse, RoundLimits,
 };
+use ic_interfaces::messages::CanisterMessageOrTask;
 use ic_test_utilities::types::ids::canister_test_id;
 use ic_types::ingress::{IngressState, IngressStatus};
 use lazy_static::lazy_static;
@@ -386,11 +387,11 @@ pub fn bench_execute_update(c: &mut Criterion) {
                 compute_allocation_used: 0,
             };
             let instructions_before = round_limits.instructions;
-            let res = exec_env.execute_canister_message(
+            let res = exec_env.execute_canister_input(
                 canister_state,
                 execution_parameters.instruction_limits.clone(),
                 execution_parameters.instruction_limits.message(),
-                ingress,
+                CanisterMessageOrTask::Message(ingress),
                 None,
                 time,
                 network_topology,

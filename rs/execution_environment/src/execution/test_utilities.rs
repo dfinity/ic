@@ -1,4 +1,3 @@
-use crate::execution::system_task::CanisterSystemTaskError;
 use crate::util::process_stopping_canisters;
 use crate::{
     execute_canister, CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
@@ -21,6 +20,7 @@ use ic_ic00_types::{
     EmptyBlob, InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
     UpdateSettingsArgs,
 };
+use ic_interfaces::messages::CanisterTask;
 use ic_interfaces::{
     execution_environment::{
         ExecutionMode, IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
@@ -37,6 +37,7 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::ExecutionTask;
 use ic_replicated_state::{
     canister_state::NextExecution,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
@@ -50,7 +51,6 @@ use ic_test_utilities::{
     types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
 };
 use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
-use ic_types::methods::SystemMethod;
 use ic_types::{
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -725,15 +725,11 @@ impl ExecutionTest {
         (ingress_id.clone(), self.ingress_status(&ingress_id))
     }
 
-    /// Executes a system task method of the given canister.
-    pub fn system_task(
-        &mut self,
-        canister_id: CanisterId,
-        system_task: SystemMethod,
-    ) -> Result<(), CanisterSystemTaskError> {
+    /// Executes a canister task method of the given canister.
+    pub fn canister_task(&mut self, canister_id: CanisterId, task: CanisterTask) {
         let mut state = self.state.take().unwrap();
         let compute_allocation_used = state.total_compute_allocation();
-        let canister = state.take_canister_state(&canister_id).unwrap();
+        let mut canister = state.take_canister_state(&canister_id).unwrap();
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
@@ -745,29 +741,39 @@ impl ExecutionTest {
             self.instruction_limit_without_dts,
             self.instruction_limit_without_dts,
         );
-        let (canister, instructions_used, result) = self.exec_env.execute_canister_system_task(
+        match task {
+            CanisterTask::Heartbeat => {
+                canister
+                    .system_state
+                    .task_queue
+                    .push_front(ExecutionTask::Heartbeat);
+            }
+            CanisterTask::GlobalTimer => {
+                canister
+                    .system_state
+                    .task_queue
+                    .push_front(ExecutionTask::GlobalTimer);
+            }
+        }
+        let result = execute_canister(
+            &self.exec_env,
             canister,
-            system_task,
             instruction_limits,
-            network_topology,
+            self.instruction_limit_without_dts,
+            Arc::clone(&network_topology),
             self.time,
             &mut round_limits,
             self.subnet_size(),
-            &self.log,
         );
         self.subnet_available_memory = round_limits.subnet_available_memory;
-        state.put_canister_state(canister);
-        if let Ok(heap_delta) = result {
-            state.metadata.heap_delta_estimate += heap_delta;
-        }
+        state.put_canister_state(result.canister);
+        state.metadata.heap_delta_estimate += result.heap_delta;
         self.state = Some(state);
         self.update_execution_stats(
             canister_id,
             self.instruction_limits.message(),
-            instructions_used,
+            result.instructions_used.unwrap(),
         );
-        result?;
-        Ok(())
     }
 
     /// Executes an anonymous query in the given canister.

@@ -6,7 +6,7 @@ pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::{CanisterQueues, CanisterState, InputQueueType, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
-use ic_interfaces::messages::{CanisterCall, CanisterMessage};
+use ic_interfaces::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask};
 use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -226,7 +226,7 @@ pub enum ExecutionTask {
     // A paused execution can also be aborted to keep the memory usage low if
     // there are too many long-running executions.
     AbortedExecution {
-        message: CanisterMessage,
+        input: CanisterMessageOrTask,
         // The execution cost that has already been charged from the canister.
         // Retried execution does not have to pay for it again.
         prepaid_execution_cycles: Cycles,
@@ -254,19 +254,33 @@ impl From<&ExecutionTask> for pb::ExecutionTask {
                 panic!("Attempt to serialize ephemeral task: {:?}.", item);
             }
             ExecutionTask::AbortedExecution {
-                message,
+                input,
                 prepaid_execution_cycles,
             } => {
-                use pb::execution_task::aborted_execution::Message;
-                let message = match message {
-                    CanisterMessage::Response(v) => Message::Response(v.as_ref().into()),
-                    CanisterMessage::Request(v) => Message::Request(v.as_ref().into()),
-                    CanisterMessage::Ingress(v) => Message::Ingress(v.as_ref().into()),
+                use pb::execution_task::{
+                    aborted_execution::Input as PbInput, CanisterTask as PbCanisterTask,
+                };
+                let input = match input {
+                    CanisterMessageOrTask::Message(CanisterMessage::Response(v)) => {
+                        PbInput::Response(v.as_ref().into())
+                    }
+                    CanisterMessageOrTask::Message(CanisterMessage::Request(v)) => {
+                        PbInput::Request(v.as_ref().into())
+                    }
+                    CanisterMessageOrTask::Message(CanisterMessage::Ingress(v)) => {
+                        PbInput::Ingress(v.as_ref().into())
+                    }
+                    CanisterMessageOrTask::Task(CanisterTask::Heartbeat) => {
+                        PbInput::Task(PbCanisterTask::Heartbeat as i32)
+                    }
+                    CanisterMessageOrTask::Task(CanisterTask::GlobalTimer) => {
+                        PbInput::Task(PbCanisterTask::Timer as i32)
+                    }
                 };
                 Self {
                     task: Some(pb::execution_task::Task::AbortedExecution(
                         pb::execution_task::AbortedExecution {
-                            message: Some(message),
+                            input: Some(input),
                             prepaid_execution_cycles: Some((*prepaid_execution_cycles).into()),
                         },
                     )),
@@ -303,14 +317,41 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
             .ok_or(ProxyDecodeError::MissingField("ExecutionTask::task"))?;
         let task = match task {
             pb::execution_task::Task::AbortedExecution(aborted) => {
-                use pb::execution_task::aborted_execution::Message;
-                let message = aborted
-                    .message
-                    .ok_or(ProxyDecodeError::MissingField("AbortedExecution::message"))?;
-                let message = match message {
-                    Message::Request(v) => CanisterMessage::Request(Arc::new(v.try_into()?)),
-                    Message::Response(v) => CanisterMessage::Response(Arc::new(v.try_into()?)),
-                    Message::Ingress(v) => CanisterMessage::Ingress(Arc::new(v.try_into()?)),
+                use pb::execution_task::{
+                    aborted_execution::Input as PbInput, CanisterTask as PbCanisterTask,
+                };
+                let input = aborted
+                    .input
+                    .ok_or(ProxyDecodeError::MissingField("AbortedExecution::input"))?;
+                let input = match input {
+                    PbInput::Request(v) => CanisterMessageOrTask::Message(
+                        CanisterMessage::Request(Arc::new(v.try_into()?)),
+                    ),
+                    PbInput::Response(v) => CanisterMessageOrTask::Message(
+                        CanisterMessage::Response(Arc::new(v.try_into()?)),
+                    ),
+                    PbInput::Ingress(v) => CanisterMessageOrTask::Message(
+                        CanisterMessage::Ingress(Arc::new(v.try_into()?)),
+                    ),
+                    PbInput::Task(val) => {
+                        let task = PbCanisterTask::from_i32(val).ok_or(
+                            ProxyDecodeError::ValueOutOfRange {
+                                typ: "CanisterTask",
+                                err: format!("Unexpected value of canister task: {}", val),
+                            },
+                        )?;
+                        let task = match task {
+                            PbCanisterTask::Unspecified => {
+                                return Err(ProxyDecodeError::ValueOutOfRange {
+                                    typ: "CanisterTask",
+                                    err: "Unexpected value: Unspecified".to_string(),
+                                });
+                            }
+                            PbCanisterTask::Heartbeat => CanisterTask::Heartbeat,
+                            PbCanisterTask::Timer => CanisterTask::GlobalTimer,
+                        };
+                        CanisterMessageOrTask::Task(task)
+                    }
                 };
                 let prepaid_execution_cycles = aborted
                     .prepaid_execution_cycles
@@ -318,7 +359,7 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
                     .transpose()?
                     .unwrap_or_else(Cycles::zero);
                 ExecutionTask::AbortedExecution {
-                    message,
+                    input,
                     prepaid_execution_cycles,
                 }
             }

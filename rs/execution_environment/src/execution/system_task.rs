@@ -5,6 +5,7 @@ use crate::Hypervisor;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, HypervisorError};
+use ic_interfaces::messages::CanisterTask;
 use ic_logger::ReplicaLogger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
@@ -20,22 +21,22 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
-/// Holds the result of a system task execution.
-pub struct SystemTaskResult {
+/// Holds the result of a canister task execution.
+pub struct CanisterTaskResult {
     /// The canister state resulted from the system task execution.
     pub canister_state: CanisterState,
     /// The number of instructions used by the system task execution.
     pub instructions_used: NumInstructions,
     /// The size of the heap delta change, if execution is successful
     /// or the relevant error in case of failure.
-    pub heap_delta_result: Result<NumBytes, CanisterSystemTaskError>,
+    pub heap_delta_result: Result<NumBytes, CanisterTaskError>,
 }
 
-impl SystemTaskResult {
+impl CanisterTaskResult {
     pub fn new(
         canister_state: CanisterState,
         instructions_used: NumInstructions,
-        heap_delta_result: Result<NumBytes, CanisterSystemTaskError>,
+        heap_delta_result: Result<NumBytes, CanisterTaskError>,
     ) -> Self {
         Self {
             canister_state,
@@ -49,7 +50,7 @@ impl SystemTaskResult {
     ) -> (
         CanisterState,
         NumInstructions,
-        Result<NumBytes, CanisterSystemTaskError>,
+        Result<NumBytes, CanisterTaskError>,
     ) {
         (
             self.canister_state,
@@ -66,16 +67,16 @@ impl SystemTaskResult {
 fn validate_canister(
     canister: CanisterState,
     method: WasmMethod,
-) -> Result<(ExecutionState, SystemState, SchedulerState), SystemTaskResult> {
+) -> Result<(ExecutionState, SystemState, SchedulerState), CanisterTaskResult> {
     // Check that the status of the canister is Running.
     let status = canister.status();
     match status {
         CanisterStatusType::Running => {}
         CanisterStatusType::Stopping | CanisterStatusType::Stopped => {
-            return Err(SystemTaskResult::new(
+            return Err(CanisterTaskResult::new(
                 canister,
                 NumInstructions::from(0),
-                Err(CanisterSystemTaskError::CanisterNotRunning { status }),
+                Err(CanisterTaskError::CanisterNotRunning { status }),
             ));
         }
     }
@@ -86,10 +87,10 @@ fn validate_canister(
     let execution_state = match execution_state {
         Some(es) => es,
         None => {
-            return Err(SystemTaskResult::new(
+            return Err(CanisterTaskResult::new(
                 CanisterState::from_parts(None, old_system_state, scheduler_state),
                 NumInstructions::from(0),
-                Err(CanisterSystemTaskError::CanisterExecutionFailed(
+                Err(CanisterTaskError::CanisterExecutionFailed(
                     HypervisorError::WasmModuleNotFound,
                 )),
             ))
@@ -97,7 +98,7 @@ fn validate_canister(
     };
 
     if !execution_state.exports_method(&method) {
-        return Err(SystemTaskResult::new(
+        return Err(CanisterTaskResult::new(
             CanisterState::from_parts(Some(execution_state), old_system_state, scheduler_state),
             NumInstructions::from(0),
             // If the Wasm module does not export the method, then this execution
@@ -109,7 +110,7 @@ fn validate_canister(
     Ok((execution_state, old_system_state, scheduler_state))
 }
 
-/// Executes a system task method of a given canister.
+/// Executes a canister task method of a given canister.
 ///
 /// Before executing, the canister is validated to meet the following conditions:
 ///     - The status of the canister is Running.
@@ -132,9 +133,9 @@ fn validate_canister(
 /// - A result containing the size of the heap delta change if
 /// execution was successful or the relevant `CanisterSystemTaskError` error if execution fails.
 #[allow(clippy::too_many_arguments)]
-pub fn execute_system_task(
+pub fn execute_canister_task(
     canister: CanisterState,
-    system_task: SystemMethod,
+    task: CanisterTask,
     network_topology: Arc<NetworkTopology>,
     execution_parameters: ExecutionParameters,
     own_subnet_type: SubnetType,
@@ -145,7 +146,7 @@ pub fn execute_system_task(
     error_counter: &IntCounter,
     subnet_size: usize,
     log: &ReplicaLogger,
-) -> SystemTaskResult {
+) -> CanisterTaskResult {
     match canister.next_execution() {
         NextExecution::None | NextExecution::StartNew => {}
         NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
@@ -153,27 +154,26 @@ pub fn execute_system_task(
             // there is a pending long execution.
             panic!(
                 "System task {:?} execution with another pending DTS execution: {:?}",
-                system_task,
+                task,
                 canister.next_execution()
             );
         }
     }
-    // Only `canister_heartbeat` and `canister_global_timer` are allowed.
-    assert!(
-        system_task == SystemMethod::CanisterHeartbeat
-            || system_task == SystemMethod::CanisterGlobalTimer
-    );
     // System task methods run without DTS.
     let instruction_limits = &execution_parameters.instruction_limits;
     assert_eq!(instruction_limits.message(), instruction_limits.slice());
-    let method = WasmMethod::System(system_task.clone());
+    let system_method = match task {
+        CanisterTask::Heartbeat => SystemMethod::CanisterHeartbeat,
+        CanisterTask::GlobalTimer => SystemMethod::CanisterGlobalTimer,
+    };
+    let wasm_method = WasmMethod::System(system_method.clone());
     let memory_usage = canister.memory_usage(own_subnet_type);
     let compute_allocation = canister.scheduler_state.compute_allocation;
     let message_instruction_limit = instruction_limits.message();
 
     // Validate and extract execution state.
     let (execution_state, mut system_state, scheduler_state) =
-        match validate_canister(canister, method.clone()) {
+        match validate_canister(canister, wasm_method.clone()) {
             Ok((execution_state, system_state, scheduler_state)) => {
                 (execution_state, system_state, scheduler_state)
             }
@@ -190,16 +190,16 @@ pub fn execute_system_task(
     ) {
         Ok(cycles) => cycles,
         Err(err) => {
-            return SystemTaskResult::new(
+            return CanisterTaskResult::new(
                 CanisterState::from_parts(Some(execution_state), system_state, scheduler_state),
                 NumInstructions::from(0),
-                Err(CanisterSystemTaskError::OutOfCycles(err)),
+                Err(CanisterTaskError::OutOfCycles(err)),
             )
         }
     };
 
     // The global timer is one-off
-    if system_task == SystemMethod::CanisterGlobalTimer {
+    if task == CanisterTask::GlobalTimer {
         system_state.global_timer = CanisterTimer::Inactive;
     }
 
@@ -208,14 +208,14 @@ pub fn execute_system_task(
         .call_context_manager_mut()
         .unwrap()
         .new_call_context(CallOrigin::SystemTask, Cycles::new(0), time);
-    let api_type = ApiType::system_task(system_task, time, call_context_id);
+    let api_type = ApiType::system_task(system_method, time, call_context_id);
     let (output, output_execution_state, output_system_state) = hypervisor.execute(
         api_type,
         time,
         system_state.clone(),
         memory_usage,
         execution_parameters,
-        FuncRef::Method(method),
+        FuncRef::Method(wasm_method),
         execution_state,
         &network_topology,
         round_limits,
@@ -238,7 +238,7 @@ pub fn execute_system_task(
 
     let heap_delta = match heap_delta {
         Ok(heap_delta) => Ok(heap_delta),
-        Err(err) => Err(CanisterSystemTaskError::CanisterExecutionFailed(err)),
+        Err(err) => Err(CanisterTaskError::CanisterExecutionFailed(err)),
     };
 
     // Refund the canister with any cycles left after message execution.
@@ -258,13 +258,13 @@ pub fn execute_system_task(
             .saturating_sub(num_instructions_left.get()),
     );
 
-    SystemTaskResult::new(canister, instructions_used, heap_delta)
+    CanisterTaskResult::new(canister, instructions_used, heap_delta)
 }
 
 /// Errors when executing `canister_heartbeat` or `canister_global_timer`
 /// system tasks.
 #[derive(Debug, Eq, PartialEq)]
-pub enum CanisterSystemTaskError {
+pub enum CanisterTaskError {
     /// The canister isn't running.
     CanisterNotRunning {
         status: CanisterStatusType,
@@ -276,31 +276,31 @@ pub enum CanisterSystemTaskError {
     CanisterExecutionFailed(HypervisorError),
 }
 
-impl std::fmt::Display for CanisterSystemTaskError {
+impl std::fmt::Display for CanisterTaskError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CanisterSystemTaskError::CanisterNotRunning { status } => write!(
+            CanisterTaskError::CanisterNotRunning { status } => write!(
                 f,
                 "Canister in status {} instead of {}",
                 status,
                 CanisterStatusType::Running
             ),
-            CanisterSystemTaskError::OutOfCycles(err) => write!(f, "{}", err),
-            CanisterSystemTaskError::CanisterExecutionFailed(err) => write!(f, "{}", err),
+            CanisterTaskError::OutOfCycles(err) => write!(f, "{}", err),
+            CanisterTaskError::CanisterExecutionFailed(err) => write!(f, "{}", err),
         }
     }
 }
 
-impl CanisterSystemTaskError {
+impl CanisterTaskError {
     /// Does this error come from a problem in the execution environment?
     /// Other errors could be caused by bad canister code.
     pub fn is_system_error(&self) -> bool {
         match self {
-            CanisterSystemTaskError::CanisterExecutionFailed(hypervisor_err) => {
+            CanisterTaskError::CanisterExecutionFailed(hypervisor_err) => {
                 hypervisor_err.is_system_error()
             }
-            CanisterSystemTaskError::CanisterNotRunning { status: _ }
-            | CanisterSystemTaskError::OutOfCycles(_) => false,
+            CanisterTaskError::CanisterNotRunning { status: _ }
+            | CanisterTaskError::OutOfCycles(_) => false,
         }
     }
 }
