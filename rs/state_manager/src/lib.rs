@@ -2664,29 +2664,35 @@ impl StateManager for StateManagerImpl {
 
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();
-        let last_height_to_keep = latest_state_height.min(requested_height);
+        let oldest_height_to_keep = latest_state_height
+            .min(requested_height)
+            .max(Height::new(1));
 
-        // The latest checkpoint below or at the requested height will also be kept
-        // because the state manager needs to load from it when restarting.
-        let oldest_checkpoint_to_keep = checkpoint_heights
-            .iter()
-            .filter(|x| **x <= requested_height)
-            .max()
-            .copied()
-            .unwrap_or(requested_height);
+        let oldest_checkpoint_to_keep = if checkpoint_heights.is_empty() {
+            Self::INITIAL_STATE_HEIGHT
+        } else {
+            // The latest checkpoint below or at the requested height will also be kept
+            // because the state manager needs to load from it when restarting.
+            let oldest_checkpoint_to_keep = checkpoint_heights
+                .iter()
+                .filter(|x| **x <= requested_height)
+                .max()
+                .copied()
+                .unwrap_or(requested_height);
 
-        // Keep extra checkpoints for state sync.
-        let oldest_checkpoint_to_keep = checkpoint_heights
-            .iter()
-            .rev()
-            .take(EXTRA_CHECKPOINTS_TO_KEEP + 1)
-            .copied()
-            .min()
-            .unwrap_or(last_height_to_keep)
-            .min(last_height_to_keep)
-            .min(oldest_checkpoint_to_keep);
+            // Keep extra checkpoints for state sync.
+            checkpoint_heights
+                .iter()
+                .rev()
+                .take(EXTRA_CHECKPOINTS_TO_KEEP + 1)
+                .copied()
+                .min()
+                .unwrap_or(oldest_height_to_keep)
+                .min(oldest_height_to_keep)
+                .min(oldest_checkpoint_to_keep)
+        };
 
-        self.remove_states_below_impl(last_height_to_keep, oldest_checkpoint_to_keep);
+        self.remove_states_below_impl(oldest_height_to_keep, oldest_checkpoint_to_keep);
     }
 
     /// Variant of `remove_states_below()` that only removes states committed with
@@ -2707,9 +2713,11 @@ impl StateManager for StateManagerImpl {
 
         // The latest state must be kept.
         let latest_state_height = self.latest_state_height();
-        let last_height_to_keep = latest_state_height.min(requested_height);
+        let oldest_height_to_keep = latest_state_height
+            .min(requested_height)
+            .max(Height::new(1));
 
-        self.remove_states_below_impl(last_height_to_keep, Self::INITIAL_STATE_HEIGHT);
+        self.remove_states_below_impl(oldest_height_to_keep, Self::INITIAL_STATE_HEIGHT);
     }
 
     fn commit_and_certify(
