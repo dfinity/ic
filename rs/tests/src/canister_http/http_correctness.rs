@@ -407,7 +407,7 @@ pub fn test(env: TestEnv) {
                 &proxy_canister,
                 RemoteHttpRequest {
                     request: CanisterHttpRequestArgs {
-                        url: format!("https://[{webserver_ipv6}]:20443/delay/9"),
+                        url: format!("https://[{webserver_ipv6}]:20443/delay/40"),
                         headers: vec![],
                         method: HttpMethod::GET,
                         body: Some("".as_bytes().to_vec()),

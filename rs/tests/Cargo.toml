@@ -159,6 +159,10 @@ name = "ic-systest-canister-http"
 path = "bin/canister_http_test.rs"
 
 [[bin]]
+name = "ic-systest-canister-http-correctness"
+path = "bin/canister_http_correctness_test.rs"
+
+[[bin]]
 name = "ic-systest-spec-compliance-application"
 path = "bin/spec_compliance_application_test.rs"
 
