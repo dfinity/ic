@@ -24,6 +24,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr};
 use std::os::unix::prelude::PermissionsExt;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -48,8 +49,10 @@ pub enum UniversalVmConfig {
 
 const UNIVERSAL_VMS_DIR: &str = "universal_vms";
 const CONF_IMG_FNAME: &str = "config_disk.img.zst";
+const CONF_SSH_IMG_FNAME: &str = "config_ssh_disk.img.zst";
 
 const CONFIG_DIR_NAME: &str = "config";
+const CONFIG_SSH_DIR_NAME: &str = "config-ssh";
 const CONFIG_DIR_SSH_AUTHORIZED_KEYS_DIR: &str = "ssh-authorized-keys";
 
 impl UniversalVm {
@@ -115,39 +118,24 @@ impl UniversalVm {
 
         let univm_path: PathBuf = [UNIVERSAL_VMS_DIR, &self.name].iter().collect();
         env.write_json_object(univm_path.join("vm.json"), vm)?;
+        let universal_vm_dir = env.get_path(univm_path);
 
+        // Setup SSH image
+        env.ssh_keygen(ADMIN)?;
+        let config_ssh_dir = env.get_universal_vm_config_ssh_dir(&self.name);
+        setup_ssh(env, config_ssh_dir.clone())?;
+        let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
+        create_universal_vm_config_image(env, &config_ssh_dir, &config_ssh_img, "SSH")?;
+        let ssh_config_img_file_id = farm.upload_file(config_ssh_img, CONF_SSH_IMG_FNAME)?;
+        let mut image_ids = vec![ssh_config_img_file_id];
+
+        // Setup config image
         if let Some(config) = &self.config {
             let config_img = match config {
                 UniversalVmConfig::Dir(config_dir) => {
-                    let universal_vm_dir = env.get_path(univm_path);
                     let config_img = universal_vm_dir.join(CONF_IMG_FNAME);
                     std::fs::create_dir_all(universal_vm_dir)?;
-
-                    let script_path =
-                        env.get_dependency_path("rs/tests/create-universal-vm-config-image.sh");
-                    let mut cmd = Command::new(script_path);
-
-                    // Add /usr/sbin to the PATH env var to give access to required tools like mkfs.vfat.
-                    let path_env_var = "PATH";
-                    let path_prefix = match std::env::var(path_env_var) {
-                        Ok(old_path) => {
-                            format!("{old_path}:")
-                        }
-                        Err(_) => String::from(""),
-                    };
-                    cmd.env(path_env_var, format!("{path_prefix}{}", "/usr/sbin"));
-
-                    cmd.arg("--input")
-                        .arg(config_dir)
-                        .arg("--output")
-                        .arg(config_img.clone());
-
-                    let output = cmd.output()?;
-                    std::io::stdout().write_all(&output.stdout)?;
-                    std::io::stderr().write_all(&output.stderr)?;
-                    if !output.status.success() {
-                        bail!("could not spawn config image creation process");
-                    }
+                    create_universal_vm_config_image(env, config_dir, &config_img, "CONFIG")?;
                     config_img
                 }
                 UniversalVmConfig::Img(config_img) => config_img.to_path_buf(),
@@ -180,18 +168,54 @@ impl UniversalVm {
                     "Image: {} was already uploaded, no need to upload it again", file_id,
                 );
             }
-
-            farm.attach_disk_image(
-                &pot_setup.farm_group_name,
-                &self.name,
-                "usb-storage",
-                file_id,
-            )?;
+            image_ids.push(file_id);
         }
+
+        farm.attach_disk_images(
+            &pot_setup.farm_group_name,
+            &self.name,
+            "usb-storage",
+            image_ids,
+        )?;
 
         farm.start_vm(&pot_setup.farm_group_name, &self.name)?;
         Ok(())
     }
+}
+
+fn create_universal_vm_config_image(
+    env: &TestEnv,
+    input_dir: &PathBuf,
+    output_img: &Path,
+    label: &str,
+) -> Result<()> {
+    let script_path = env.get_dependency_path("rs/tests/create-universal-vm-config-image.sh");
+    let mut cmd = Command::new(script_path);
+
+    // Add /usr/sbin to the PATH env var to give access to required tools like mkfs.vfat.
+    let path_env_var = "PATH";
+    let path_prefix = match std::env::var(path_env_var) {
+        Ok(old_path) => {
+            format!("{old_path}:")
+        }
+        Err(_) => String::from(""),
+    };
+    cmd.env(path_env_var, format!("{path_prefix}{}", "/usr/sbin"));
+
+    cmd.arg("--input")
+        .arg(input_dir)
+        .arg("--output")
+        .arg(output_img)
+        .arg("--label")
+        .arg(label);
+
+    let output = cmd.output()?;
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
+    if !output.status.success() {
+        bail!("could not spawn config image creation process");
+    }
+    Ok(())
 }
 
 pub trait UniversalVms {
@@ -200,6 +224,8 @@ pub trait UniversalVms {
     fn get_deployed_universal_vm(&self, name: &str) -> Result<DeployedUniversalVm>;
 
     fn get_universal_vm_config_dir(&self, universal_vm_name: &str) -> PathBuf;
+
+    fn get_universal_vm_config_ssh_dir(&self, universal_vm_name: &str) -> PathBuf;
 
     fn single_activate_script_config_dir(
         &self,
@@ -233,6 +259,13 @@ impl UniversalVms for TestEnv {
         self.get_path(p)
     }
 
+    fn get_universal_vm_config_ssh_dir(&self, universal_vm_name: &str) -> PathBuf {
+        let p: PathBuf = [UNIVERSAL_VMS_DIR, universal_vm_name, CONFIG_SSH_DIR_NAME]
+            .iter()
+            .collect();
+        self.get_path(p)
+    }
+
     fn single_activate_script_config_dir(
         &self,
         universal_vm_name: &str,
@@ -240,11 +273,6 @@ impl UniversalVms for TestEnv {
     ) -> Result<PathBuf> {
         let config_dir = self.get_universal_vm_config_dir(universal_vm_name);
         fs::create_dir_all(config_dir.clone())?;
-
-        self.ssh_keygen(ADMIN)?;
-
-        setup_ssh(self, config_dir.clone())?;
-
         // copy activate script to Universal VM
         let _ = insert_file_to_config(config_dir.clone(), "activate", activate_script.as_bytes());
         Ok(config_dir)

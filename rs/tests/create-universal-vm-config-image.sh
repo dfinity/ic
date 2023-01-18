@@ -4,9 +4,9 @@ set -eEou pipefail
 usage() {
     cat <<EOF
 Usage:
-  $(basename $BASH_SOURCE) [--help] --input INPUT_DIR --output OUTPUT_FILE
+  $(basename $BASH_SOURCE) [--help] --input INPUT_DIR --output OUTPUT_FILE --label LABEL
 
-  Creates a zstd-compressed image OUTPUT_FILE containing a FAT filesystem with the label "CONFIG" containing the contents of INPUT_DIR.
+  Creates a zstd-compressed image OUTPUT_FILE containing a FAT filesystem with the label LABEL containing the contents of INPUT_DIR.
 
   This image can then be uploaded to the Farm service and attached to a universal VM. The universal VM will then mount the filesystem and execute the 'activate' script in the image.
 
@@ -50,15 +50,16 @@ while [[ $# -gt 0 ]]; do
             shift
             shift
             ;;
+        --label | -l)
+            LABEL="$2"
+            shift
+            shift
+            ;;
     esac
 done
 
-if [[ -z "${INPUT_DIR:-}" || -z "${OUTPUT_FILE:-}" ]]; then
+if [[ -z "${INPUT_DIR:-}" || -z "${OUTPUT_FILE:-}" || -z "${LABEL:-}" ]]; then
     usage
-fi
-
-if [[ ! -x "$INPUT_DIR/activate" ]]; then
-    die "No activate executable found in $INPUT_DIR!"
 fi
 
 tmp=$(mktemp)
@@ -73,6 +74,6 @@ size=$(du --bytes -s "$INPUT_DIR" | awk '{print $1}')
 size=$((size + 1048576))
 echo "image size: $size"
 truncate -s $size "$tmp"
-mkfs.vfat -n CONFIG "$tmp"
+mkfs.vfat -n "$LABEL" "$tmp"
 mcopy -i "$tmp" -sQ "$INPUT_DIR"/* ::
 zstd -i "$tmp" -o "$OUTPUT_FILE" --force

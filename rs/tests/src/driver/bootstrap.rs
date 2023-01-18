@@ -207,7 +207,7 @@ pub fn setup_and_start_vms(
             // delete uncompressed file
             let conf_img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
             std::fs::remove_file(conf_img_path)?;
-            t_farm.attach_disk_image(&group_name, &vm_name, "usb-storage", image_id)?;
+            t_farm.attach_disk_images(&group_name, &vm_name, "usb-storage", vec![image_id])?;
             t_farm.start_vm(&group_name, &vm_name)?;
             Ok(())
         }));

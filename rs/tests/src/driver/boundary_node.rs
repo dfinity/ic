@@ -228,11 +228,11 @@ impl BoundaryNode {
         let image_id =
             create_and_upload_config_disk_image(self, env, &pot_setup.farm_group_name, &farm)?;
 
-        farm.attach_disk_image(
+        farm.attach_disk_images(
             &pot_setup.farm_group_name,
             &self.name,
             "usb-storage",
-            image_id,
+            vec![image_id],
         )?;
 
         farm.start_vm(&pot_setup.farm_group_name, &self.name)?;
