@@ -20,6 +20,7 @@ use ic_sns_governance::{
         SetMode, SetModeResponse,
     },
 };
+use ic_sns_swap::pb::v1::{GetLifecycleRequest, GetLifecycleResponse};
 use ic_sns_swap::{
     logs::{ERROR, INFO},
     pb::v1::{
@@ -389,6 +390,18 @@ async fn restore_dapp_controllers_(
     swap_mut()
         .restore_dapp_controllers(&mut sns_root_client, caller())
         .await
+}
+
+/// Return the current lifecycle stage (e.g. Open, Committed, etc)
+#[export_name = "canister_query get_lifecycle"]
+fn get_lifecycle() {
+    over(candid_one, get_lifecycle_)
+}
+
+#[candid_method(query, rename = "get_lifecycle")]
+fn get_lifecycle_(request: GetLifecycleRequest) -> GetLifecycleResponse {
+    println!("{}get_lifecycle", LOG_PREFIX);
+    swap().get_lifecycle(&request)
 }
 
 // =============================================================================
