@@ -670,29 +670,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
-    m.add_suite(suite(
-        "nightly_default_subnet_update_workload_long_duration_test",
-        vec![pot_with_setup(
-            "nightly_default_subnet_update_workload_long_duration_test",
-            networking::subnet_update_workload::default_config,
-            par(vec![sys_t(
-                "default_subnet_update_workload_long_duration_test",
-                networking::subnet_update_workload::long_duration_test,
-            )]),
-        )],
-    ));
-    m.add_suite(suite(
-        "nightly_default_subnet_update_workload_large_payload",
-        vec![pot_with_setup(
-            "nightly_default_subnet_update_workload_large_payload",
-            networking::subnet_update_workload::default_config,
-            par(vec![sys_t(
-                "default_subnet_update_workload_large_payload",
-                networking::subnet_update_workload::large_payload_test,
-            )]),
-        )],
-    ));
-
     let network_reliability = networking::network_reliability::config_sys_4_nodes_app_4_nodes();
     let xnet_nightly_3_subnets = message_routing::xnet_slo_test::config_nightly_3_subnets();
     let xnet_nightly_29_subnets = message_routing::xnet_slo_test::config_nightly_29_subnets();

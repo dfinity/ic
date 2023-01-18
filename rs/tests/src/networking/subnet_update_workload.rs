@@ -79,7 +79,12 @@ fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32),
 
 // Create an IC with two subnets, with variable number of nodes and boundary nodes
 // Install NNS canister on system subnet
-fn config(env: TestEnv, nodes_nns_subnet: usize, nodes_app_subnet: usize, use_boundary_node: bool) {
+pub fn config(
+    env: TestEnv,
+    nodes_nns_subnet: usize,
+    nodes_app_subnet: usize,
+    use_boundary_node: bool,
+) {
     env.ensure_group_setup_created();
     let logger = env.logger();
 
@@ -174,17 +179,6 @@ fn config(env: TestEnv, nodes_nns_subnet: usize, nodes_app_subnet: usize, use_bo
     }
 }
 
-// Create IC with two subnets, a system subnet of the same size as the mainnet NNS
-// and an app subnet of the same size as mainnet app subnets, and one boundary node
-pub fn default_config(env: TestEnv) {
-    config(
-        env,
-        constants::NNS_SUBNET_SIZE,
-        constants::SMALL_APP_SUBNET_MAX_SIZE,
-        true,
-    )
-}
-
 // Create IC with two subnets, a system subnet with 18 more nodes than the mainnet NNS
 // and an app subnet of the same size as mainnet NNS subnet, without a boundary node
 pub fn large_config(env: TestEnv) {
@@ -200,32 +194,6 @@ pub fn large_config(env: TestEnv) {
 // and one boundary node
 pub fn boundary_config(env: TestEnv) {
     config(env, 4, 4, true)
-}
-
-// Run a long test (6h) with the max rps we bring across a boundary node
-// TODO: change test to use boundary node when BOUN-425 has been resolved
-pub fn long_duration_test(env: TestEnv) {
-    test(
-        env,
-        100,  //rps
-        1000, //payload size bytes
-        Duration::from_secs(6 * 60 * 60),
-        false, //do not use boundary nodes
-        0.90,  //min_success_ratio
-    );
-}
-
-// Run test with 5 large (100kb) update requests per second, sent directly
-// to the replicas (to be extended to 6h)
-pub fn large_payload_test(env: TestEnv) {
-    test(
-        env,
-        5,       //rps
-        100_000, //payload size bytes
-        Duration::from_secs(6 * 60 * 60),
-        false, //do not use boundary nodes
-        0.95,  //min_success_ratio
-    );
 }
 
 // Run a test with roughly half the rps supported by subnets, sent directly
