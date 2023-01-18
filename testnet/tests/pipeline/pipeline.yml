@@ -350,30 +350,6 @@ system-tests-short-nightly:
   script:
     - *run-farm-based-test
 
-system-tests-default-subnet-update-workload-long-duration-nightly:
-  extends:
-    - .system-tests
-  variables:
-    SUITE_NAME: "nightly_default_subnet_update_workload_long_duration_test"
-    cd_target_env: "NIGHTLY"
-    SYSTEM_TESTS_TIMEOUT: "30000" # 8h 20min
-  timeout: 580 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
-  script:
-    - echo "ulimit -n = $(ulimit -n)"
-    - *run-farm-based-test
-
-system-tests-default-subnet-update-workload-large-payload-nightly:
-  extends:
-    - .system-tests
-  variables:
-    SUITE_NAME: "nightly_default_subnet_update_workload_large_payload"
-    cd_target_env: "NIGHTLY"
-    SYSTEM_TESTS_TIMEOUT: "30000" # 8h 20min
-  timeout: 580 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
-  script:
-    - echo "ulimit -n = $(ulimit -n)"
-    - *run-farm-based-test
-
 # Stress tests: Run given job sequence every N minutes so we can easily collect failure data
 icos-deploy-stress:
   extends: .prod-stress-test

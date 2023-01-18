@@ -41,12 +41,6 @@ const MIN_REQUESTS_RATIO_BELOW_THRESHOLD: f64 = 0.9;
 // Parameters related to workload creation.
 const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(30); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
-pub const LONG_DURATION_TEST_RUNTIME: Duration = Duration::from_secs(30 * 60);
-
-// Send workload to one node for 30 mins with 1000 rps
-pub fn long_duration_test(env: TestEnv) {
-    test(env, 1000, LONG_DURATION_TEST_RUNTIME, 0.95)
-}
 
 // Send workload to one node for 2h with 1000 rps
 pub fn large_subnet_test(env: TestEnv) {
