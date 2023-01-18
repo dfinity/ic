@@ -390,11 +390,8 @@ where
     P: AsRef<Path>,
 {
     write_using_tmp_file(dest, |writer| {
-        let mut buf = Vec::<u8>::new();
-        message
-            .encode(&mut buf)
-            .expect("Protobuf serialization failed in write_protobuf_using_tmp_file");
-        writer.write_all(&buf)?;
+        let encoded_message = message.encode_to_vec();
+        writer.write_all(&encoded_message)?;
         Ok(())
     })
 }
