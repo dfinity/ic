@@ -4,6 +4,7 @@ Rules for system-tests.
 
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@io_bazel_rules_docker//container:container.bzl", "container_image")
+load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -118,3 +119,53 @@ symlink_dir = rule(
         "targets": attr.label_keyed_string_dict(allow_files = True),
     },
 )
+
+def _uvm_config_img_impl(ctx):
+    out = ctx.actions.declare_file(ctx.label.name + ".zst")
+
+    input_tar = ctx.attr.input_tar[DefaultInfo].files.to_list()[0]
+
+    create_universal_vm_config_image = ctx.executable._create_universal_vm_config_image
+
+    ctx.actions.run(
+        executable = ctx.executable._create_universal_vm_config_image_from_tar,
+        arguments = [create_universal_vm_config_image.path, input_tar.path, out.path],
+        inputs = [input_tar, create_universal_vm_config_image],
+        outputs = [out],
+    )
+    return [
+        DefaultInfo(
+            files = depset([out]),
+        ),
+    ]
+
+uvm_config_img_impl = rule(
+    implementation = _uvm_config_img_impl,
+    attrs = {
+        "input_tar": attr.label(),
+        "_create_universal_vm_config_image_from_tar": attr.label(
+            executable = True,
+            cfg = "exec",
+            default = ":create_universal_vm_config_image_from_tar_sh",
+        ),
+        "_create_universal_vm_config_image": attr.label(
+            executable = True,
+            cfg = "exec",
+            default = ":create_universal_vm_config_image_sh",
+        ),
+    },
+)
+
+def uvm_config_img(name, **kws):
+    tar = name + "_tar"
+
+    pkg_tar(
+        name = tar,
+        **kws
+    )
+
+    uvm_config_img_impl(
+        name = name,
+        input_tar = ":" + tar,
+        target_compatible_with = ["@platforms//os:linux"],  # we expect the coreutils from linux
+    )

@@ -220,6 +220,16 @@ UNIVERSAL_VM_RUNTIME_DEPS = [
     ":create-universal-vm-config-image.sh",
 ]
 
+sh_binary(
+    name = "create_universal_vm_config_image_sh",
+    srcs = ["create-universal-vm-config-image.sh"],
+)
+
+sh_binary(
+    name = "create_universal_vm_config_image_from_tar_sh",
+    srcs = ["create-universal-vm-config-image-from-tar.sh"],
+)
+
 symlink_dir(
     name = "nns-canisters",
     targets = {

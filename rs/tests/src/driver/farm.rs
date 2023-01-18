@@ -116,21 +116,24 @@ impl Farm {
         Ok(FileId(file_ids.remove(filename).unwrap()))
     }
 
-    pub fn attach_disk_image(
+    pub fn attach_disk_images(
         &self,
         group_name: &str,
         vm_name: &str,
         template_name: &str,
-        image_id: FileId,
+        image_ids: Vec<FileId>,
     ) -> FarmResult<()> {
         let path = format!(
             "group/{}/vm/{}/drive-templates/{}",
             group_name, vm_name, template_name
         );
         let req = self.put(&path);
-        let image_spec = AttachImageSpec::new(image_id);
+        let image_specs = image_ids
+            .iter()
+            .map(|image_id| AttachImageSpec::new(image_id.clone()))
+            .collect();
         let attach_drives_req = AttachDrivesRequest {
-            drives: vec![image_spec],
+            drives: image_specs,
         };
         let rb = Self::json(req, &attach_drives_req);
         let _resp = self.retry_until_success(rb)?;
