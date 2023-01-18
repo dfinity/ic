@@ -179,31 +179,6 @@ export class CanisterResolver {
   }
 
   /**
-   * Checks if the given request is a request to the same domain.
-   * @param request The request to check
-   */
-  public async isIcDomain(request: Request): Promise<boolean> {
-    const url = new URL(request.url);
-    const sameDomain =
-      url.hostname.endsWith(self.location.hostname) &&
-      !url.hostname.endsWith(`raw.${self.location.hostname}`);
-    if (sameDomain) {
-      return true;
-    }
-
-    const lookup = await this.lookupFromHttpRequest(request);
-    if (lookup.canister) {
-      const gateway = lookup.canister.gateway;
-      return (
-        url.hostname.endsWith(gateway.hostname) &&
-        !url.hostname.endsWith(`raw.${gateway.hostname}`)
-      );
-    }
-
-    return false;
-  }
-
-  /**
    * Enrich the domain lookup with the current gateway for all canister api calls,
    * this enables the user to have the freedom to choose the gateway he would
    * be communicating with instead of having the domain mandating it.

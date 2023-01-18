@@ -138,7 +138,18 @@ export async function handleRequest(request: Request): Promise<Response> {
    * We try to do an HTTP Request query.
    */
   const canisterResolver = await CanisterResolver.setup();
-  const currentGateway = await canisterResolver.getCurrentGateway();
+  let currentGateway: URL;
+  try {
+    currentGateway = await canisterResolver.getCurrentGateway();
+  } catch (err) {
+    const error = err as Error;
+    console.error(
+      `Fetch failed for ${url.href}, resolving to a status code of 404 (${error.message})`
+    );
+
+    return new Response('Could not find the canister ID.', { status: 404 });
+  }
+
   const lookup = await canisterResolver.lookupFromHttpRequest(request);
 
   /**
@@ -306,19 +317,9 @@ export async function handleRequest(request: Request): Promise<Response> {
     }
   }
 
-  // Last check. IF this is not an ic domain, then we simply let it load as is.
-  // An ic domain will always load using our service worker, and not an ic domain
-  // would load by reference. If you want security for your users at that point you
+  // If you want security for your users at that point you
   // should use SRI to make sure the resource matches.
-  const isIcDomain = await canisterResolver.isIcDomain(request);
-  if (!isIcDomain) {
-    console.log('Direct call ...');
-    // todo: Do we need to check for headers and certify the content here?
-    return await fetch(request);
-  }
-
-  console.error(
-    `URL ${JSON.stringify(url.toString())} did not resolve to a canister ID.`
-  );
-  return new Response('Could not find the canister ID.', { status: 404 });
+  console.log('Direct call ...');
+  // todo: Do we need to check for headers and certify the content here?
+  return await fetch(request);
 }
