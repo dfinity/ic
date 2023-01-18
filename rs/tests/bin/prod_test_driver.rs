@@ -11,7 +11,7 @@ use ic_tests::{
         config::{self, *},
         driver_setup::{create_driver_context_from_cli, mk_stdout_logger},
         evaluation::{evaluate, generate_suite_execution_contract},
-        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
+        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
         pot_dsl::*,
         test_env::TestEnv,
     },
@@ -632,15 +632,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     canister_http::http_time_out::test,
                 )]),
             ),
-            pot_with_setup(
-                "two_third_latency_pot",
-                workload_counter_canister_test::two_third_latency_config,
-                par(vec![sys_t(
-                    "workload_counter_canister_test",
-                    workload_counter_canister_test::two_third_latency_test,
-                )]),
-            )
-            .with_vm_allocation(VmAllocationStrategy::DistributeAcrossDcs),
             pot_with_setup(
                 "network_reliability_pot",
                 network_reliability.build(),
