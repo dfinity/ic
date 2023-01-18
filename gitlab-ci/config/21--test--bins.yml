@@ -1,10 +1,10 @@
 check-bins-linux:
   extends:
-    - .ubuntu-nix-docker-pinned-dc
-    - .rules-parent-pipeline
-  stage: cargo-test
+    - .ubuntu-docker-k8s
+    - .bazel-rules-pipeline-no-merge-train
+  stage: test
   needs:
-    - job: wait-for-bazel-test-all
+    - job: bazel-test-all
       artifacts: false
   image:
     # 21.04
@@ -31,10 +31,10 @@ check-bins-linux:
 
 check-bins-darwin:
   extends:
-    - .rules-parent-pipeline
-  stage: cargo-test
+    - .bazel-rules-pipeline-no-merge-train
+  stage: test
   needs:
-    - job: wait-for-bazel-build-macos
+    - job: bazel-build-macos
       artifacts: false
   tags:
     - dfinity
