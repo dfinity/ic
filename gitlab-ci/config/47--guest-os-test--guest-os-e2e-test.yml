@@ -78,14 +78,6 @@ boundary-nodes-pre-master:
   variables:
     SUITE_NAME: "boundary_nodes_pre_master"
 
-ckbtc-pre-master:
-  extends: .system-tests
-  variables:
-    SUITE_NAME: "ckbtc_pre_master"
-  script:
-    - |
-    - *run-farm-based-test
-
 boundary-nodes-sev-snp-pre-master:
   extends: .system-tests
   variables:

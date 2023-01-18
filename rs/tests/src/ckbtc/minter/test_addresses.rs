@@ -1,8 +1,9 @@
 use crate::{
     ckbtc::lib::{
-        activate_ecdsa_signature, create_canister, install_ledger, install_minter, print_subnets,
-        subnet_app, subnet_sys, TEST_KEY_LOCAL,
+        activate_ecdsa_signature, create_canister, install_ledger, install_minter, subnet_app,
+        subnet_sys, ADDRESS_LENGTH, TEST_KEY_LOCAL,
     },
+    ckbtc::minter::utils::{ensure_wallet, get_btc_client},
     driver::{
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
@@ -15,15 +16,17 @@ use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs, get_withdrawal_account::compute_subaccount,
 };
 use ic_icrc1::Account;
+use slog::info;
 
-pub fn test_get_withdrawal_account(env: TestEnv) {
+pub fn test_ckbtc_addresses(env: TestEnv) {
     let logger = env.logger();
     let subnet_app = subnet_app(&env);
     let subnet_sys = subnet_sys(&env);
     let node = subnet_app.nodes().next().expect("No node in app subnet.");
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
     let app_subnet_id = subnet_app.subnet_id;
-    print_subnets(&env);
+    let btc_rpc = get_btc_client(&env);
+    ensure_wallet(&btc_rpc, &logger);
 
     block_on(async {
         let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
@@ -36,7 +39,29 @@ pub fn test_get_withdrawal_account(env: TestEnv) {
         let agent = assert_create_agent(node.get_public_url().as_str()).await;
         activate_ecdsa_signature(sys_node, app_subnet_id, TEST_KEY_LOCAL, &logger).await;
 
-        // Call endpoint.
+        // Call endpoint get_btc_address
+        info!(logger, "Calling get_btc_address endpoint...");
+        let arg = GetBtcAddressArgs {
+            owner: None,
+            subaccount: None,
+        };
+        let arg = &Encode!(&arg).expect("Error while encoding arg.");
+        let res = agent
+            .update(&minter, "get_btc_address")
+            .with_arg(arg)
+            .call_and_wait(delay())
+            .await
+            .expect("Error while calling endpoint.");
+        let address = Decode!(res.as_slice(), String).expect("Error while decoding response.");
+
+        // Checking only proper format of address since ECDSA signature is non-deterministic.
+        assert_eq!(ADDRESS_LENGTH, address.len());
+        assert!(
+            address.starts_with("bcrt"),
+            "Expected Regtest address format."
+        );
+
+        // Call endpoint get_withdrawal_account
         let arg = GetBtcAddressArgs {
             owner: None,
             subaccount: None,

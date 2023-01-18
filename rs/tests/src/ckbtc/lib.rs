@@ -195,20 +195,6 @@ pub(crate) fn subnet_app(env: &TestEnv) -> SubnetSnapshot {
         .unwrap()
 }
 
-// Print subnets to facilitate debugging.
-pub(crate) fn print_subnets(env: &TestEnv) {
-    let logger = env.logger();
-    let topology = env.topology_snapshot();
-    debug!(
-        logger,
-        "-- List of {} subnets --",
-        topology.subnets().count()
-    );
-    topology
-        .subnets()
-        .for_each(|s| debug!(logger, "Subnet {:?}", s.subnet_id));
-}
-
 /// Create an empty canister.
 pub(crate) async fn create_canister(runtime: &Runtime) -> Canister<'_> {
     runtime

@@ -578,9 +578,6 @@ system_test(
 system_test(
     name = "ckbtc_minter_basics_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -593,9 +590,6 @@ system_test(
 system_test(
     name = "ckbtc_minter_batching",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -608,9 +602,6 @@ system_test(
 system_test(
     name = "ckbtc_minter_heartbeat",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -623,9 +614,6 @@ system_test(
 system_test(
     name = "ckbtc_minter_update_balance",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -638,9 +626,6 @@ system_test(
 system_test(
     name = "ckbtc_minter_retrieve_btc",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
