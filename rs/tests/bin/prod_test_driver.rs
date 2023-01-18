@@ -758,14 +758,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     par(vec![sys_t("create_subnet", nns_tests::create_subnet::test)]),
                 ),
                 pot_with_setup(
-                    "canister_http_correctness",
-                    canister_http::lib::config,
-                    par(vec![sys_t(
-                        "http_correctness",
-                        canister_http::http_correctness::test,
-                    )]),
-                ),
-                pot_with_setup(
                     "rejoin",
                     message_routing::rejoin_test::config,
                     par(vec![sys_t("rejoin", message_routing::rejoin_test::test)]),
@@ -1026,17 +1018,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             ),
         ],
-    ));
-    m.add_suite(suite(
-        "manual",
-        vec![pot_with_setup(
-            "canister_http_correctness",
-            canister_http::lib::config,
-            par(vec![sys_t(
-                "http_correctness",
-                canister_http::http_correctness::test,
-            )]),
-        )],
     ));
     m
 }
