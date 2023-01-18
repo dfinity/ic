@@ -1366,6 +1366,31 @@ pub struct GetLifecycleResponse {
     #[prost(enumeration = "Lifecycle", optional, tag = "1")]
     pub lifecycle: ::core::option::Option<i32>,
 }
+/// Request struct for the method `get_init`
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetInitRequest {}
+/// Response struct for the method `get_init`
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetInitResponse {
+    #[prost(message, optional, tag = "1")]
+    pub init: ::core::option::Option<Init>,
+}
 /// Lifecycle states of the swap canister. The details of their meanings
 /// are provided in the documentation of the `Swap` message.
 #[derive(
