@@ -53,7 +53,7 @@ pub fn get_priority_function(
         &mut block_sets.finalized_unvalidated,
         finalized_height,
         pool.unvalidated().finalization(),
-        &histograms.with_label_values(&["finalized_validated"]),
+        &histograms.with_label_values(&["finalized_unvalidated"]),
     );
     update_block_set(
         &mut block_sets.notarized_unvalidated,
@@ -123,7 +123,7 @@ fn compute_priority(
             // Ignore old beacon or beacon shares
             if height <= beacon_height {
                 Drop
-            } else if height < beacon_height + Height::from(LOOK_AHEAD) {
+            } else if height <= beacon_height + Height::from(LOOK_AHEAD) {
                 FetchNow
             } else {
                 Stash
@@ -133,7 +133,7 @@ fn compute_priority(
             // Ignore old notarization shares
             if height <= notarized_height {
                 Drop
-            } else if height < notarized_height + Height::from(LOOK_AHEAD) {
+            } else if height <= notarized_height + Height::from(LOOK_AHEAD) {
                 FetchNow
             } else {
                 Stash
@@ -148,13 +148,13 @@ fn compute_priority(
                 if block_sets.notarized_validated.contains(block_hash) {
                     Drop
                 }
-                // Postpone notarization we might already have
-                else if block_sets.notarized_unvalidated.contains(block_hash)
-                    || height >= finalized_height + Height::from(LOOK_AHEAD)
+                // Only download notarizations that we don't have yet
+                else if !block_sets.notarized_unvalidated.contains(block_hash)
+                    && height <= notarized_height + Height::from(LOOK_AHEAD)
                 {
-                    Stash
-                } else {
                     FetchNow
+                } else {
+                    Stash
                 }
             }
         }
@@ -164,12 +164,12 @@ fn compute_priority(
                 Drop
             } else {
                 // Postpone finalization we might already have
-                if block_sets.finalized_unvalidated.contains(block_hash)
-                    || height >= finalized_height + Height::from(LOOK_AHEAD)
+                if !block_sets.finalized_unvalidated.contains(block_hash)
+                    && height <= notarized_height + Height::from(LOOK_AHEAD)
                 {
-                    Stash
-                } else {
                     FetchNow
+                } else {
+                    Stash
                 }
             }
         }
@@ -178,7 +178,7 @@ fn compute_priority(
             // Ignore finalized
             if height <= finalized_height {
                 Drop
-            } else if height < finalized_height + Height::from(LOOK_AHEAD) {
+            } else if height <= notarized_height + Height::from(LOOK_AHEAD) {
                 FetchNow
             } else {
                 Stash
@@ -188,7 +188,7 @@ fn compute_priority(
         | ConsensusMessageAttribute::RandomTapeShare(_) => {
             if height < expected_batch_height {
                 Drop
-            } else if height < finalized_height + Height::from(LOOK_AHEAD) {
+            } else if height <= finalized_height + Height::from(LOOK_AHEAD) {
                 FetchNow
             } else {
                 Stash
@@ -198,10 +198,10 @@ fn compute_priority(
         ConsensusMessageAttribute::CatchUpPackageShare(_) => {
             if height <= catch_up_height {
                 Drop
-            } else if height > finalized_height {
-                Stash
-            } else {
+            } else if height <= finalized_height {
                 FetchNow
+            } else {
+                Stash
             }
         }
     }
@@ -327,6 +327,38 @@ mod tests {
                     &ConsensusMessageAttribute::from(&dup_msg)
                 ),
                 Drop
+            );
+
+            // Add notarizations until we reach finalized_height + LOOK_AHEAD.
+            for _ in 0..LOOK_AHEAD {
+                let block = pool.make_next_block();
+                pool.insert_validated(block.clone());
+                let notarization = Notarization::fake(NotarizationContent::new(
+                    block.height(),
+                    block.content.get_hash().clone(),
+                ));
+                pool.insert_validated(notarization.clone());
+            }
+            // Insert one more block
+            let block = pool.make_next_block();
+            pool.insert_validated(block.clone());
+            let notarization = Notarization::fake(NotarizationContent::new(
+                block.height(),
+                block.content.get_hash().clone(),
+            ));
+            assert!(
+                block.height().get()
+                    > PoolReader::new(&pool).get_finalized_height().get() + LOOK_AHEAD
+            );
+            // Recompute priority function since pool content has changed
+            let priority = get_priority_function(&pool, expected_batch_height, &test_metrics());
+            // Still fetch even when notarization is much ahead of finalization
+            assert_eq!(
+                priority(
+                    &notarization.get_id(),
+                    &ConsensusMessageAttribute::from(&notarization.into_message())
+                ),
+                FetchNow
             );
         })
     }
