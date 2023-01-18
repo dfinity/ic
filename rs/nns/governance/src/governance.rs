@@ -515,6 +515,9 @@ impl NnsFunction {
             NnsFunction::UpdateSnsWasmSnsSubnetIds => {
                 (SNS_WASM_CANISTER_ID, "update_sns_subnet_list")
             }
+            NnsFunction::InsertSnsWasmUpgradePathEntries => {
+                (SNS_WASM_CANISTER_ID, "insert_upgrade_path_entries")
+            }
         };
         Ok((canister_id, method))
     }
@@ -1167,7 +1170,9 @@ impl Proposal {
                             NnsFunction::NnsCanisterInstall
                             | NnsFunction::NnsCanisterUpgrade
                             | NnsFunction::NnsRootUpgrade
-                            | NnsFunction::StopOrStartNnsCanister => {
+                            | NnsFunction::StopOrStartNnsCanister
+                            | NnsFunction::AddSnsWasm
+                            | NnsFunction::InsertSnsWasmUpgradePathEntries => {
                                 Topic::NetworkCanisterManagement
                             }
                             NnsFunction::IcpXdrConversionRate => Topic::ExchangeRate,
@@ -1183,7 +1188,6 @@ impl Proposal {
                             NnsFunction::RerouteCanisterRanges => Topic::SubnetManagement,
                             NnsFunction::PrepareCanisterMigration => Topic::SubnetManagement,
                             NnsFunction::CompleteCanisterMigration => Topic::SubnetManagement,
-                            NnsFunction::AddSnsWasm => Topic::NetworkCanisterManagement,
                             NnsFunction::UpdateSubnetType => Topic::SubnetManagement,
                             NnsFunction::ChangeSubnetTypeAssignment => Topic::SubnetManagement,
                             NnsFunction::UpdateAllowedPrincipals => Topic::SnsAndCommunityFund,

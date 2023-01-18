@@ -1,8 +1,9 @@
 use crate::pb::v1::{
     add_wasm_response, update_allowed_principals_response, AddWasmResponse,
-    GetNextSnsVersionRequest, GetNextSnsVersionResponse, SnsCanisterIds, SnsCanisterType,
-    SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
-    UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListResponse, UpgradePath as StableUpgradePath,
+    GetNextSnsVersionResponse, InsertUpgradePathEntriesResponse, ListUpgradeStep, PrettySnsVersion,
+    SnsCanisterIds, SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasm,
+    SnsWasmError, SnsWasmStableIndex, StableCanisterState, UpdateAllowedPrincipalsResponse,
+    UpdateSnsSubnetListResponse, UpgradePath as StableUpgradePath,
 };
 use crate::sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath};
 use crate::stable_memory::SnsWasmStableMemory;
@@ -31,6 +32,14 @@ impl AddWasmResponse {
     pub fn error(message: String) -> Self {
         Self {
             result: Some(add_wasm_response::Result::Error(SnsWasmError { message })),
+        }
+    }
+}
+
+impl InsertUpgradePathEntriesResponse {
+    pub fn error(message: String) -> Self {
+        Self {
+            error: Some(SnsWasmError { message }),
         }
     }
 }
@@ -87,14 +96,6 @@ impl SnsWasm {
                     Ok(canister_type)
                 }
             }
-        }
-    }
-}
-
-impl From<SnsVersion> for GetNextSnsVersionRequest {
-    fn from(version: SnsVersion) -> GetNextSnsVersionRequest {
-        GetNextSnsVersionRequest {
-            current_version: Some(version),
         }
     }
 }
@@ -230,6 +231,23 @@ impl From<UpgradePath> for StableUpgradePath {
                     next_version: Some(next),
                 })
                 .collect(),
+            sns_specific_upgrade_path: path
+                .sns_specific_upgrade_path
+                .into_iter()
+                .map(|(canister_id, upgrade_path)| {
+                    let upgrade_path_list = upgrade_path
+                        .into_iter()
+                        .map(|(current, next)| SnsUpgrade {
+                            current_version: Some(current),
+                            next_version: Some(next),
+                        })
+                        .collect();
+                    SnsSpecificSnsUpgrade {
+                        governance_canister_id: Some(canister_id.into()),
+                        upgrade_path: upgrade_path_list,
+                    }
+                })
+                .collect(),
         }
     }
 }
@@ -247,9 +265,31 @@ impl From<StableUpgradePath> for UpgradePath {
             })
             .collect();
 
+        let emergency_path_hashmap = stable_upgrade_path
+            .sns_specific_upgrade_path
+            .into_iter()
+            .map(|em_upgrade| {
+                let upgrade_path_hashmap = em_upgrade
+                    .upgrade_path
+                    .into_iter()
+                    .map(|upgrade| {
+                        (
+                            upgrade.current_version.unwrap(),
+                            upgrade.next_version.unwrap(),
+                        )
+                    })
+                    .collect();
+                (
+                    CanisterId::try_from(em_upgrade.governance_canister_id.unwrap()).unwrap(),
+                    upgrade_path_hashmap,
+                )
+            })
+            .collect();
+
         UpgradePath {
             latest_version: stable_upgrade_path.latest_version.unwrap_or_default(),
             upgrade_path: upgrade_path_hashmap,
+            sns_specific_upgrade_path: emergency_path_hashmap,
         }
     }
 }
@@ -289,6 +329,95 @@ impl FromStr for SnsCanisterType {
                 "from_str is not yet implemented or that is not a valid type: {}",
                 input
             )),
+        }
+    }
+}
+
+impl SnsVersion {
+    /// Get a set of tuples mapping SnsCanistertype to wasm hashes
+    pub fn into_tuples(self) -> Vec<(SnsCanisterType, Vec<u8> /* wasm hash */)> {
+        vec![
+            (SnsCanisterType::Root, self.root_wasm_hash),
+            (SnsCanisterType::Governance, self.governance_wasm_hash),
+            (SnsCanisterType::Ledger, self.ledger_wasm_hash),
+            (SnsCanisterType::Swap, self.swap_wasm_hash),
+            (SnsCanisterType::Archive, self.archive_wasm_hash),
+            (SnsCanisterType::Index, self.index_wasm_hash),
+        ]
+    }
+
+    /// Get a list of all version hashes without respective canister types
+    pub fn version_hashes(self) -> Vec<Vec<u8> /*wasm hash*/> {
+        self.into_tuples()
+            .into_iter()
+            .map(|(_, hash)| hash)
+            .collect()
+    }
+
+    /// If all hashes are non-empty, return true
+    pub fn is_complete_version(&self) -> bool {
+        let SnsVersion {
+            root_wasm_hash,
+            governance_wasm_hash,
+            ledger_wasm_hash,
+            swap_wasm_hash,
+            archive_wasm_hash,
+            index_wasm_hash,
+        } = self;
+
+        !root_wasm_hash.is_empty()
+            && !governance_wasm_hash.is_empty()
+            && !ledger_wasm_hash.is_empty()
+            && !swap_wasm_hash.is_empty()
+            && !archive_wasm_hash.is_empty()
+            && !index_wasm_hash.is_empty()
+    }
+}
+
+impl From<SnsVersion> for PrettySnsVersion {
+    fn from(version: SnsVersion) -> Self {
+        Self {
+            root_wasm_hash: hex::encode(version.root_wasm_hash),
+            governance_wasm_hash: hex::encode(version.governance_wasm_hash),
+            ledger_wasm_hash: hex::encode(version.ledger_wasm_hash),
+            swap_wasm_hash: hex::encode(version.swap_wasm_hash),
+            archive_wasm_hash: hex::encode(version.archive_wasm_hash),
+            index_wasm_hash: hex::encode(version.index_wasm_hash),
+        }
+    }
+}
+
+impl From<ic_sns_governance::pb::v1::governance::Version> for SnsVersion {
+    fn from(version: ic_sns_governance::pb::v1::governance::Version) -> Self {
+        Self {
+            root_wasm_hash: version.root_wasm_hash,
+            governance_wasm_hash: version.governance_wasm_hash,
+            ledger_wasm_hash: version.ledger_wasm_hash,
+            swap_wasm_hash: version.swap_wasm_hash,
+            archive_wasm_hash: version.archive_wasm_hash,
+            index_wasm_hash: version.index_wasm_hash,
+        }
+    }
+}
+
+impl From<SnsVersion> for ic_sns_governance::pb::v1::governance::Version {
+    fn from(version: SnsVersion) -> Self {
+        Self {
+            root_wasm_hash: version.root_wasm_hash,
+            governance_wasm_hash: version.governance_wasm_hash,
+            ledger_wasm_hash: version.ledger_wasm_hash,
+            swap_wasm_hash: version.swap_wasm_hash,
+            archive_wasm_hash: version.archive_wasm_hash,
+            index_wasm_hash: version.index_wasm_hash,
+        }
+    }
+}
+
+impl ListUpgradeStep {
+    pub fn new(version: SnsVersion) -> Self {
+        Self {
+            version: Some(version.clone()),
+            pretty_version: Some(version.into()),
         }
     }
 }

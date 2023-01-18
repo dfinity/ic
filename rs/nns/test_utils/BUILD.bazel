@@ -48,6 +48,7 @@ DEPENDENCIES = [
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:tokio",
+    "@crate_index//:walrus",
 ]
 
 MACRO_DEPENDENCIES = []

@@ -7236,6 +7236,7 @@ dependencies = [
  "registry-canister",
  "serde",
  "tokio",
+ "walrus",
 ]
 
 [[package]]
@@ -8574,7 +8575,7 @@ dependencies = [
  "ic-sns-init",
  "ic-sns-root",
  "ic-sns-swap",
- "ic-sns-wasm-proto-generator",
+ "ic-sns-wasm-protobuf-generator",
  "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-test-utilities-compare-dirs",
@@ -8589,11 +8590,10 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
- "walrus",
 ]
 
 [[package]]
-name = "ic-sns-wasm-proto-generator"
+name = "ic-sns-wasm-protobuf-generator"
 version = "0.8.0"
 dependencies = [
  "ic-utils-rustfmt",

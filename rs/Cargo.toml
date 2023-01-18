@@ -148,6 +148,7 @@ members = [
   "nns/gtc/protobuf_generator",
   "nns/gtc_accounts",
   "nns/sns-wasm",
+  "nns/sns-wasm/protobuf_generator",
   "determinism_test",
   "observability/log_vector_config_generator",
   "observability/service_discovery",

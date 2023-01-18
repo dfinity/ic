@@ -164,7 +164,9 @@ impl<M: StableMemory + Clone> SnsWasmStableMemory<M> {
 mod test {
     use super::*;
     use crate::canister_stable_memory::TestCanisterStableMemory;
-    use crate::pb::v1::{DeployedSns, SnsUpgrade, SnsVersion, SnsWasmStableIndex, UpgradePath};
+    use crate::pb::v1::{
+        DeployedSns, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasmStableIndex, UpgradePath,
+    };
     use ic_base_types::PrincipalId;
 
     #[test]
@@ -224,8 +226,15 @@ mod test {
         let upgrade_path = Some(UpgradePath {
             latest_version: Some(sns_version2.clone()),
             upgrade_path: vec![SnsUpgrade {
-                current_version: Some(sns_version1),
-                next_version: Some(sns_version2),
+                current_version: Some(sns_version1.clone()),
+                next_version: Some(sns_version2.clone()),
+            }],
+            sns_specific_upgrade_path: vec![SnsSpecificSnsUpgrade {
+                governance_canister_id: None,
+                upgrade_path: vec![SnsUpgrade {
+                    current_version: Some(sns_version1),
+                    next_version: Some(sns_version2),
+                }],
             }],
         });
 

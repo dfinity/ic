@@ -1,4 +1,4 @@
-use ic_sns_wasm_proto_generator::{generate_prost_files, ProtoPaths};
+use ic_sns_wasm_protobuf_generator::{generate_prost_files, ProtoPaths};
 use ic_test_utilities_compare_dirs::{compare, CompareError};
 use std::path::PathBuf;
 

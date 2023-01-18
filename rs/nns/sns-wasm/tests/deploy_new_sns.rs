@@ -365,7 +365,7 @@ fn test_deploy_adds_cycles_to_target_canisters() {
         Some(Cycles::new(EXPECTED_SNS_CREATION_FEE)),
     );
 
-    sns_wasm::add_dummy_wasms_to_sns_wasms(&machine);
+    sns_wasm::add_dummy_wasms_to_sns_wasms(&machine, None);
     // we add a wasm that will fail with the given payload on installation
 
     let response = sns_wasm::deploy_new_sns(

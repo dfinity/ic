@@ -27,7 +27,7 @@ fn list_deployed_snses_lists_created_sns_instances() {
     let wallet_canister =
         set_up_universal_canister(&machine, Some(Cycles::new(EXPECTED_SNS_CREATION_FEE * 2)));
 
-    sns_wasm::add_dummy_wasms_to_sns_wasms(&machine);
+    sns_wasm::add_dummy_wasms_to_sns_wasms(&machine, None);
 
     let sns_1 = sns_wasm::deploy_new_sns(
         &machine,

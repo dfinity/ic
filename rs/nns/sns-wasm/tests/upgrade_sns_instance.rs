@@ -1,5 +1,4 @@
 use candid::{Decode, Encode, Nat};
-use canister_test::Wasm;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -8,8 +7,8 @@ use ic_nns_test_utils::state_test_helpers::{
     query, set_controllers, setup_nns_canisters, update, update_with_sender,
 };
 use ic_nns_test_utils::{sns_wasm, state_test_helpers};
-use maplit::hashmap;
-use std::collections::HashMap;
+use maplit::btreemap;
+use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::time::Duration;
 
@@ -38,10 +37,12 @@ use ic_sns_root::{
     CanisterStatusResultV2, CanisterStatusType, GetSnsCanistersSummaryRequest,
     GetSnsCanistersSummaryResponse,
 };
-use ic_sns_wasm::pb::v1::{SnsCanisterIds, SnsCanisterType, SnsWasm};
+use ic_sns_wasm::pb::v1::{
+    GetNextSnsVersionRequest, InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
+    SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsWasm,
+};
 use ic_state_machine_tests::StateMachine;
 use ic_types::Cycles;
-use walrus::{Module, RawCustomSection};
 
 #[test]
 fn upgrade_root_sns_canister_via_sns_wasms() {
@@ -59,10 +60,8 @@ fn upgrade_governance_sns_canister_via_sns_wasms() {
 }
 
 fn run_upgrade_test(canister_type: SnsCanisterType) {
-    // The canister id the wallet canister will have.
     let wallet_canister_id = CanisterId::from_u64(11);
 
-    // We don't want the underlying warnings of the StateMachine
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachine::new();
 
@@ -140,7 +139,8 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
 
     let original_hash = wasm_map.get(&canister_type).unwrap().sha256_hash();
 
-    let sns_wasm_to_add = create_modified_wasm(wasm_map.get(&canister_type).unwrap());
+    let sns_wasm_to_add =
+        sns_wasm::create_modified_wasm(wasm_map.get(&canister_type).unwrap(), None);
     let new_wasm_hash = sns_wasm_to_add.sha256_hash();
 
     assert_ne!(new_wasm_hash, original_hash);
@@ -255,7 +255,6 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
 #[test]
 fn upgrade_archive_sns_canister_via_sns_wasms() {
     let canister_type = SnsCanisterType::Archive;
-    // We don't want the underlying warnings of the StateMachine
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachine::new();
 
@@ -464,7 +463,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
     let original_hash = current_wasm.sha256_hash();
 
     // We add a new WASM to the SNS-WASMs (for whatever canister we want to test)
-    let sns_wasm_to_add = create_modified_wasm(current_wasm);
+    let sns_wasm_to_add = sns_wasm::create_modified_wasm(current_wasm, None);
     let new_wasm_hash = sns_wasm_to_add.sha256_hash();
 
     assert_ne!(new_wasm_hash, original_hash);
@@ -505,7 +504,6 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
 
 #[test]
 fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
-    // We don't want the underlying warnings of the StateMachine
     state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachine::new();
 
@@ -530,13 +528,13 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
     sns_wasm::add_wasm_via_proposal(&machine, swap_wasm.clone());
 
     // we are intentionally creating the archive to have a different hash than the one deployed by ledger
-    let archive_wasm = create_modified_wasm(&build_archive_sns_wasm());
+    let archive_wasm = sns_wasm::create_modified_wasm(&build_archive_sns_wasm(), None);
     sns_wasm::add_wasm_via_proposal(&machine, archive_wasm.clone());
 
     let index_wasm = build_index_sns_wasm();
     sns_wasm::add_wasm_via_proposal(&machine, index_wasm.clone());
 
-    let wasm_map = hashmap! {
+    let wasm_map = btreemap! {
         SnsCanisterType::Root => root_wasm,
         SnsCanisterType::Governance =>gov_wasm,
         SnsCanisterType::Ledger =>  ledger_wasm,
@@ -740,7 +738,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
 
     // We add a new WASM to the SNS-WASMs (for governance)
     let modified_governance =
-        create_modified_wasm(wasm_map.get(&SnsCanisterType::Governance).unwrap());
+        sns_wasm::create_modified_wasm(wasm_map.get(&SnsCanisterType::Governance).unwrap(), None);
 
     sns_wasm::add_wasm_via_proposal(&machine, modified_governance.clone());
 
@@ -760,8 +758,6 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
         },
     )
     .unwrap();
-
-    println!("Submitted proposal");
 
     sns_wait_for_pending_upgrade(&machine, governance);
 
@@ -815,26 +811,278 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
     state_test_helpers::sns_wait_for_proposal_execution(&machine, governance, proposal_id);
 }
 
-fn create_modified_wasm(original_wasm: &SnsWasm) -> SnsWasm {
-    let original_hash = original_wasm.sha256_hash();
-    let wasm_to_add = &original_wasm.wasm;
-    let mut wasm_to_add = Module::from_buffer(wasm_to_add).unwrap();
-    let custom_section = RawCustomSection {
-        name: "no op".into(),
-        data: vec![1u8, 2u8, 3u8],
-    };
-    wasm_to_add.customs.add(custom_section);
+#[test]
+fn test_custom_upgrade_path_for_sns() {
+    let wallet_canister_id = CanisterId::from_u64(11);
 
-    // We get our new WASM, which is functionally the same.
-    let wasm_to_add = Wasm::from_bytes(wasm_to_add.emit_wasm());
-    let sns_wasm_to_add = SnsWasm {
-        wasm: wasm_to_add.bytes(),
-        canister_type: original_wasm.canister_type,
-    };
-    let new_wasm_hash = sns_wasm_to_add.sha256_hash();
+    state_test_helpers::reduce_state_machine_logging_unless_env_set();
+    let machine = StateMachine::new();
 
-    assert_ne!(new_wasm_hash, original_hash);
-    sns_wasm_to_add
+    let nns_init_payload = NnsInitPayloadsBuilder::new()
+        .with_initial_invariant_compliant_mutations()
+        .with_test_neurons()
+        .with_sns_dedicated_subnets(machine.get_subnet_ids())
+        .with_sns_wasm_allowed_principals(vec![wallet_canister_id.into()])
+        .build();
+
+    setup_nns_canisters(&machine, nns_init_payload);
+
+    // Enough cycles for one SNS deploy.
+    let wallet_canister = state_test_helpers::set_up_universal_canister(
+        &machine,
+        Some(Cycles::new(EXPECTED_SNS_CREATION_FEE)),
+    );
+
+    let wasm_map = sns_wasm::add_real_wasms_to_sns_wasms(&machine);
+
+    // To get an SNS neuron, we airdrop our new tokens to this user.
+    let user = PrincipalId::new_user_test_id(0);
+
+    let payload = SnsInitPayload {
+        transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
+        token_name: Some("An SNS Token".to_string()),
+        token_symbol: Some("AST".to_string()),
+        proposal_reject_cost_e8s: Some(E8S_PER_TOKEN),
+        neuron_minimum_stake_e8s: Some(E8S_PER_TOKEN),
+        fallback_controller_principal_ids: vec![user.to_string()],
+        initial_token_distribution: Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
+            FractionalDeveloperVotingPower {
+                developer_distribution: Some(DeveloperDistribution {
+                    developer_neurons: Default::default(),
+                }),
+                treasury_distribution: Some(TreasuryDistribution {
+                    total_e8s: 500_000_000,
+                }),
+                swap_distribution: Some(SwapDistribution {
+                    total_e8s: 10_000_000_000,
+                    initial_swap_amount_e8s: 10_000_000_000,
+                }),
+                airdrop_distribution: Some(AirdropDistribution {
+                    airdrop_neurons: vec![NeuronDistribution {
+                        controller: Some(user),
+                        stake_e8s: 2_000_000_000_000,
+                        memo: 0,
+                        dissolve_delay_seconds: 15780000, // 6 months
+                        vesting_period_seconds: None,
+                    }],
+                }),
+            },
+        )),
+        ..SnsInitPayload::with_valid_values_for_testing()
+    };
+
+    let response = sns_wasm::deploy_new_sns(
+        &machine,
+        wallet_canister,
+        SNS_WASM_CANISTER_ID,
+        payload,
+        EXPECTED_SNS_CREATION_FEE,
+    );
+
+    let SnsCanisterIds { governance, .. } = response.canisters.unwrap();
+
+    let sns_governance_canister_id = CanisterId::new(governance.unwrap()).unwrap();
+
+    let deployed_version = wasm_map_to_version(&wasm_map);
+    // After our deploy, we need to add a bunch of wasms so there's an upgrade path
+    let modified_map = sns_wasm::add_modified_wasms_to_sns_wasms(&machine, "foo");
+
+    // Normal path: Original -> + root -> + governance -> +ledger
+    // Modified path: Original -> + governance -> + root -> +ledger
+
+    let custom_one = Version {
+        governance_wasm_hash: modified_map
+            .get(&SnsCanisterType::Governance)
+            .unwrap()
+            .sha256_hash()
+            .to_vec(),
+        ..deployed_version.clone()
+    };
+
+    let custom_two = Version {
+        root_wasm_hash: modified_map
+            .get(&SnsCanisterType::Root)
+            .unwrap()
+            .sha256_hash()
+            .to_vec(),
+        ..custom_one.clone()
+    };
+    let normal_three = Version {
+        ledger_wasm_hash: modified_map
+            .get(&SnsCanisterType::Ledger)
+            .unwrap()
+            .sha256_hash()
+            .to_vec(),
+        ..custom_two.clone()
+    };
+    let custom_paths = vec![
+        SnsUpgrade {
+            current_version: Some(deployed_version.clone().into()),
+            next_version: Some(custom_one.clone().into()),
+        },
+        SnsUpgrade {
+            current_version: Some(custom_one.clone().into()),
+            next_version: Some(custom_two.clone().into()),
+        },
+        SnsUpgrade {
+            current_version: Some(custom_two.into()),
+            next_version: Some(normal_three.into()),
+        },
+    ];
+    sns_wasm::insert_upgrade_path_entries_via_proposal(
+        &machine,
+        custom_paths,
+        Some(sns_governance_canister_id),
+    );
+
+    let next_version_standard_response = sns_wasm::get_next_sns_version(
+        &machine,
+        SNS_WASM_CANISTER_ID,
+        GetNextSnsVersionRequest {
+            current_version: Some(deployed_version.clone().into()),
+            governance_canister_id: None,
+        },
+    );
+
+    let next_version_custom_response = sns_wasm::get_next_sns_version(
+        &machine,
+        SNS_WASM_CANISTER_ID,
+        GetNextSnsVersionRequest {
+            current_version: Some(deployed_version.into()),
+            governance_canister_id: Some(sns_governance_canister_id.into()),
+        },
+    );
+
+    assert_ne!(
+        next_version_custom_response.next_version.clone().unwrap(),
+        next_version_standard_response.next_version.unwrap()
+    );
+
+    assert_eq!(
+        custom_one,
+        next_version_custom_response.next_version.unwrap().into()
+    );
+
+    // Make a proposal to upgrade (that is auto-executed) with the neuron for our user.
+    let neuron_id = state_test_helpers::sns_claim_staked_neuron(
+        &machine,
+        sns_governance_canister_id,
+        user,
+        0,
+        Some(1_000_000),
+    );
+    let proposal_id = state_test_helpers::sns_make_proposal(
+        &machine,
+        sns_governance_canister_id,
+        user,
+        neuron_id,
+        Proposal {
+            title: "Upgrade Canister.".into(),
+            action: Some(Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {})),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+
+    // Check that the right canister upgraded, and the other canister did not upgrade
+    sns_wait_for_pending_upgrade(&machine, sns_governance_canister_id);
+
+    // Wait for proposal execution
+    state_test_helpers::sns_wait_for_proposal_execution(
+        &machine,
+        sns_governance_canister_id,
+        proposal_id,
+    );
+
+    // The pending upgrade should be cleared after proposal execution
+    let running_version_response = Decode!(
+        &query(
+            &machine,
+            sns_governance_canister_id,
+            "get_running_sns_version",
+            Encode!(&GetRunningSnsVersionRequest {}).unwrap(),
+        )
+        .unwrap(),
+        GetRunningSnsVersionResponse
+    )
+    .unwrap();
+
+    assert!(running_version_response.pending_version.is_none());
+    assert_eq!(
+        running_version_response.deployed_version.unwrap(),
+        custom_one
+    );
+}
+
+#[test]
+fn insert_upgrade_path_entries_only_callable_by_governance_when_access_controls_enabled() {
+    state_test_helpers::reduce_state_machine_logging_unless_env_set();
+    let machine = StateMachine::new();
+
+    let nns_init_payload = NnsInitPayloadsBuilder::new()
+        .with_sns_wasm_access_controls(true)
+        .with_initial_invariant_compliant_mutations()
+        .with_test_neurons()
+        .with_sns_dedicated_subnets(machine.get_subnet_ids())
+        .build();
+
+    setup_nns_canisters(&machine, nns_init_payload);
+
+    let response: InsertUpgradePathEntriesResponse = update_with_sender(
+        &machine,
+        SNS_WASM_CANISTER_ID,
+        "insert_upgrade_path_entries",
+        candid_one,
+        InsertUpgradePathEntriesRequest {
+            upgrade_path: vec![],
+            sns_governance_canister_id: None,
+        },
+        PrincipalId::new_user_test_id(1),
+    )
+    .unwrap();
+
+    assert_eq!(
+        response,
+        InsertUpgradePathEntriesResponse::error(
+            "insert_upgrade_path_entries can only be called by NNS Governance".to_string()
+        )
+    );
+}
+
+#[test]
+fn insert_upgrade_path_entries_callable_by_anyone_when_access_controls_disabled() {
+    state_test_helpers::reduce_state_machine_logging_unless_env_set();
+    let machine = StateMachine::new();
+
+    let nns_init_payload = NnsInitPayloadsBuilder::new()
+        .with_sns_wasm_access_controls(false)
+        .with_initial_invariant_compliant_mutations()
+        .with_test_neurons()
+        .with_sns_dedicated_subnets(machine.get_subnet_ids())
+        .build();
+
+    setup_nns_canisters(&machine, nns_init_payload);
+
+    let response: InsertUpgradePathEntriesResponse = update_with_sender(
+        &machine,
+        SNS_WASM_CANISTER_ID,
+        "insert_upgrade_path_entries",
+        candid_one,
+        InsertUpgradePathEntriesRequest {
+            upgrade_path: vec![],
+            sns_governance_canister_id: None,
+        },
+        PrincipalId::new_user_test_id(1),
+    )
+    .unwrap();
+
+    // We get an error past the access controls (request was actually processed)
+    assert_eq!(
+        response,
+        InsertUpgradePathEntriesResponse::error(
+            "No Upgrade Paths in request. No action taken.".to_string()
+        )
+    );
 }
 
 /// Wait for an upgrade caused by the UpgradeSnsToNextVersion proposal (core SNS canister)
@@ -932,16 +1180,6 @@ fn sns_wait_for_pending_upgrade(machine: &StateMachine, governance: CanisterId) 
 }
 
 /// Translates a WasmMap to a Version
-fn wasm_map_to_version(wasm_map: &HashMap<SnsCanisterType, SnsWasm>) -> Version {
-    let version_hash_from_map = |canister_type: SnsCanisterType| {
-        wasm_map.get(&canister_type).unwrap().sha256_hash().to_vec()
-    };
-    Version {
-        root_wasm_hash: version_hash_from_map(SnsCanisterType::Root),
-        governance_wasm_hash: version_hash_from_map(SnsCanisterType::Governance),
-        ledger_wasm_hash: version_hash_from_map(SnsCanisterType::Ledger),
-        swap_wasm_hash: version_hash_from_map(SnsCanisterType::Swap),
-        archive_wasm_hash: version_hash_from_map(SnsCanisterType::Archive),
-        index_wasm_hash: version_hash_from_map(SnsCanisterType::Index),
-    }
+fn wasm_map_to_version(wasm_map: &BTreeMap<SnsCanisterType, SnsWasm>) -> Version {
+    sns_wasm::wasm_map_to_sns_version(wasm_map).into()
 }

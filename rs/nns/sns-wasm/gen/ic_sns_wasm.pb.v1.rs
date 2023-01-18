@@ -38,11 +38,16 @@ pub struct UpgradePath {
     /// this version.
     #[prost(message, optional, tag = "1")]
     pub latest_version: ::core::option::Option<SnsVersion>,
-    /// Maps SnsVersions to the SnsVersion that it should be upgraded to.
+    /// A sequence of allowed upgrades.
     #[prost(message, repeated, tag = "2")]
     pub upgrade_path: ::prost::alloc::vec::Vec<SnsUpgrade>,
+    /// A non-standard sequence of allowed upgrades for particular SNS's.
+    /// This provides an escape hatch for if a particular SNS somehow has a bug that prevents upgrading
+    /// on the standard path.
+    #[prost(message, repeated, tag = "3")]
+    pub sns_specific_upgrade_path: ::prost::alloc::vec::Vec<SnsSpecificSnsUpgrade>,
 }
-/// Maps an SnsVersion to the SnsVersion that it should be upgraded to.
+/// An allowed upgrade step, from a current version to a next version.
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
 )]
@@ -51,6 +56,19 @@ pub struct SnsUpgrade {
     pub current_version: ::core::option::Option<SnsVersion>,
     #[prost(message, optional, tag = "2")]
     pub next_version: ::core::option::Option<SnsVersion>,
+}
+/// An allowed upgrade step (like SnsUpgrade) for a particular SNS, identified by its
+/// governance canister id.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct SnsSpecificSnsUpgrade {
+    /// An SNS Governance canister to be targeted.
+    #[prost(message, optional, tag = "1")]
+    pub governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Allowed upgrade steps.
+    #[prost(message, repeated, tag = "2")]
+    pub upgrade_path: ::prost::alloc::vec::Vec<SnsUpgrade>,
 }
 /// The representation of a WASM along with its target canister type.
 #[derive(
@@ -102,6 +120,64 @@ pub mod add_wasm_response {
         #[prost(message, tag = "2")]
         Error(super::SnsWasmError),
     }
+}
+/// The payload for the insert_upgrade_path_entries endpoint
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct InsertUpgradePathEntriesRequest {
+    /// The upgrade paths to add.  All versions hashes in these upgrade paths MUST have a corresponding WASM
+    /// in SNS-W already, or the request will fail.
+    #[prost(message, repeated, tag = "1")]
+    pub upgrade_path: ::prost::alloc::vec::Vec<SnsUpgrade>,
+    /// If provided, the SNS Governance canister to which these paths apply (otherwise they apply
+    /// to the main upgrade path)
+    #[prost(message, optional, tag = "2")]
+    pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+/// The response from insert_upgrade_path_entries requests
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct InsertUpgradePathEntriesResponse {
+    /// Optional error if request does not succeed
+    #[prost(message, optional, tag = "1")]
+    pub error: ::core::option::Option<SnsWasmError>,
+}
+/// A request to list upgrade steps (for list_upgrade_steps_pretty at present)
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct ListUpgradeStepsRequest {
+    /// If provided, limit response to only include entries for this version and later
+    #[prost(message, optional, tag = "1")]
+    pub starting_at: ::core::option::Option<SnsVersion>,
+    /// If provided, give responses that this canister would get back
+    #[prost(message, optional, tag = "2")]
+    pub sns_governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// Limit to number of entries (for paging)
+    #[prost(uint32, tag = "3")]
+    pub limit: u32,
+}
+/// A human readable list of upgrade steps in order.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct ListUpgradeStepsResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub steps: ::prost::alloc::vec::Vec<ListUpgradeStep>,
+}
+/// A step in the upgrade path for human or programmatic consumption
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct ListUpgradeStep {
+    /// A machine-readable version
+    #[prost(message, optional, tag = "1")]
+    pub version: ::core::option::Option<SnsVersion>,
+    /// A human-readable SnsVersion
+    #[prost(message, optional, tag = "2")]
+    pub pretty_version: ::core::option::Option<PrettySnsVersion>,
 }
 /// The argument for get_wasm, which consists of the WASM hash to be retrieved.
 #[derive(
@@ -232,13 +308,36 @@ pub struct SnsVersion {
     #[prost(bytes = "vec", tag = "6")]
     pub index_wasm_hash: ::prost::alloc::vec::Vec<u8>,
 }
+/// A human readable SnsVersion
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct PrettySnsVersion {
+    #[prost(string, tag = "1")]
+    pub root_wasm_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub governance_wasm_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "3")]
+    pub ledger_wasm_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "4")]
+    pub swap_wasm_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "5")]
+    pub archive_wasm_hash: ::prost::alloc::string::String,
+    #[prost(string, tag = "6")]
+    pub index_wasm_hash: ::prost::alloc::string::String,
+}
 /// The request type accepted by the get_next_sns_version canister method.
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
 )]
 pub struct GetNextSnsVersionRequest {
+    /// The current version recorded on the SNS (in Governance, the "deployed_version" field)
     #[prost(message, optional, tag = "1")]
     pub current_version: ::core::option::Option<SnsVersion>,
+    /// If supplied, will replace "caller" to allow verifying the response a particular
+    /// SNS would receive
+    #[prost(message, optional, tag = "2")]
+    pub governance_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 /// The response type returned by the get_next_sns_version canister method.
 #[derive(

@@ -46,14 +46,28 @@ message UpgradePath {
   // this version.
   SnsVersion latest_version = 1;
 
-  // Maps SnsVersions to the SnsVersion that it should be upgraded to.
+  // A sequence of allowed upgrades.
   repeated SnsUpgrade upgrade_path = 2;
+
+  // A non-standard sequence of allowed upgrades for particular SNS's.
+  // This provides an escape hatch for if a particular SNS somehow has a bug that prevents upgrading
+  // on the standard path.
+  repeated SnsSpecificSnsUpgrade sns_specific_upgrade_path = 3;
 }
 
-// Maps an SnsVersion to the SnsVersion that it should be upgraded to.
+// An allowed upgrade step, from a current version to a next version.
 message SnsUpgrade {
   SnsVersion current_version = 1;
   SnsVersion next_version = 2;
+}
+
+// An allowed upgrade step (like SnsUpgrade) for a particular SNS, identified by its
+// governance canister id.
+message SnsSpecificSnsUpgrade {
+  // An SNS Governance canister to be targeted.
+  ic_base_types.pb.v1.PrincipalId governance_canister_id = 1;
+  // Allowed upgrade steps.
+  repeated SnsUpgrade upgrade_path = 2;
 }
 
 // The representation of a WASM along with its target canister type.
@@ -82,6 +96,45 @@ message AddWasmResponse {
     // Error when request fails.
     SnsWasmError error = 2;
   }
+}
+
+// The payload for the insert_upgrade_path_entries endpoint
+message InsertUpgradePathEntriesRequest {
+  // The upgrade paths to add.  All versions hashes in these upgrade paths MUST have a corresponding WASM
+  // in SNS-W already, or the request will fail.
+  repeated SnsUpgrade upgrade_path = 1;
+  // If provided, the SNS Governance canister to which these paths apply (otherwise they apply
+  // to the main upgrade path)
+  ic_base_types.pb.v1.PrincipalId sns_governance_canister_id = 2;
+}
+
+// The response from insert_upgrade_path_entries requests
+message InsertUpgradePathEntriesResponse {
+  // Optional error if request does not succeed
+  SnsWasmError error = 1;
+}
+
+// A request to list upgrade steps (for list_upgrade_steps_pretty at present)
+message ListUpgradeStepsRequest {
+  // If provided, limit response to only include entries for this version and later
+  SnsVersion starting_at = 1;
+  // If provided, give responses that this canister would get back
+  ic_base_types.pb.v1.PrincipalId sns_governance_canister_id = 2;
+  // Limit to number of entries (for paging)
+  uint32 limit = 3;
+}
+
+// A human readable list of upgrade steps in order.
+message ListUpgradeStepsResponse {
+  repeated ListUpgradeStep steps = 1;
+}
+
+// A step in the upgrade path for human or programmatic consumption
+message ListUpgradeStep {
+  // A machine-readable version
+  SnsVersion version = 1;
+  // A human-readable SnsVersion
+  PrettySnsVersion pretty_version = 2;
 }
 
 // The argument for get_wasm, which consists of the WASM hash to be retrieved.
@@ -164,9 +217,24 @@ message SnsVersion {
   bytes index_wasm_hash = 6;
 }
 
+// A human readable SnsVersion
+message PrettySnsVersion {
+  string root_wasm_hash =1;
+  string governance_wasm_hash = 2;
+  string ledger_wasm_hash = 3;
+  string swap_wasm_hash = 4;
+  string archive_wasm_hash = 5;
+  string index_wasm_hash = 6;
+}
+
+
 // The request type accepted by the get_next_sns_version canister method.
 message GetNextSnsVersionRequest {
+  // The current version recorded on the SNS (in Governance, the "deployed_version" field)
   SnsVersion current_version = 1;
+  // If supplied, will replace "caller" to allow verifying the response a particular
+  // SNS would receive
+  ic_base_types.pb.v1.PrincipalId governance_canister_id = 2;
 }
 
 // The response type returned by the get_next_sns_version canister method.

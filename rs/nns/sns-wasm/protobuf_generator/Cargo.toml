@@ -1,5 +1,5 @@
 [package]
-name = "ic-sns-wasm-proto-generator"
+name = "ic-sns-wasm-protobuf-generator"
 version = "0.8.0"
 edition = "2021"
 
