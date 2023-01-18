@@ -26,7 +26,10 @@ type FractionalDeveloperVotingPower = record {
 type GetAllowedPrincipalsResponse = record {
   allowed_principals : vec principal;
 };
-type GetNextSnsVersionRequest = record { current_version : opt SnsVersion };
+type GetNextSnsVersionRequest = record {
+  governance_canister_id : opt principal;
+  current_version : opt SnsVersion;
+};
 type GetNextSnsVersionResponse = record { next_version : opt SnsVersion };
 type GetSnsSubnetIdsResponse = record { sns_subnet_ids : vec principal };
 type GetWasmRequest = record { hash : vec nat8 };
@@ -34,13 +37,36 @@ type GetWasmResponse = record { wasm : opt SnsWasm };
 type InitialTokenDistribution = variant {
   FractionalDeveloperVotingPower : FractionalDeveloperVotingPower;
 };
+type InsertUpgradePathEntriesRequest = record {
+  upgrade_path : vec SnsUpgrade;
+  sns_governance_canister_id : opt principal;
+};
+type InsertUpgradePathEntriesResponse = record { error : opt SnsWasmError };
 type ListDeployedSnsesResponse = record { instances : vec DeployedSns };
+type ListUpgradeStep = record {
+  pretty_version : opt PrettySnsVersion;
+  version : opt SnsVersion;
+};
+type ListUpgradeStepsRequest = record {
+  limit : nat32;
+  starting_at : opt SnsVersion;
+  sns_governance_canister_id : opt principal;
+};
+type ListUpgradeStepsResponse = record { steps : vec ListUpgradeStep };
 type NeuronDistribution = record {
   controller : opt principal;
   dissolve_delay_seconds : nat64;
   memo : nat64;
   stake_e8s : nat64;
   vesting_period_seconds : opt nat64;
+};
+type PrettySnsVersion = record {
+  archive_wasm_hash : text;
+  root_wasm_hash : text;
+  swap_wasm_hash : text;
+  ledger_wasm_hash : text;
+  governance_wasm_hash : text;
+  index_wasm_hash : text;
 };
 type Result = variant { Error : SnsWasmError; Hash : vec nat8 };
 type SnsCanisterIds = record {
@@ -73,6 +99,10 @@ type SnsInitPayload = record {
   reward_rate_transition_duration_seconds : opt nat64;
   token_name : opt text;
   proposal_reject_cost_e8s : opt nat64;
+};
+type SnsUpgrade = record {
+  next_version : opt SnsVersion;
+  current_version : opt SnsVersion;
 };
 type SnsVersion = record {
   archive_wasm_hash : vec nat8;
@@ -120,7 +150,13 @@ service : (SnsWasmCanisterInitPayload) -> {
     ) query;
   get_sns_subnet_ids : (record {}) -> (GetSnsSubnetIdsResponse) query;
   get_wasm : (GetWasmRequest) -> (GetWasmResponse) query;
+  insert_upgrade_path_entries : (InsertUpgradePathEntriesRequest) -> (
+      InsertUpgradePathEntriesResponse,
+    );
   list_deployed_snses : (record {}) -> (ListDeployedSnsesResponse) query;
+  list_upgrade_steps : (ListUpgradeStepsRequest) -> (
+      ListUpgradeStepsResponse,
+    ) query;
   update_allowed_principals : (UpdateAllowedPrincipalsRequest) -> (
       UpdateAllowedPrincipalsResponse,
     );

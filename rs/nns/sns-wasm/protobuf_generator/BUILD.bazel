@@ -11,7 +11,7 @@ filegroup(
 rust_library(
     name = "lib",
     srcs = ["src/lib.rs"],
-    crate_name = "ic_sns_wasm_proto_generator",
+    crate_name = "ic_sns_wasm_protobuf_generator",
     version = "0.8.0",
     deps = [
         "//rs/utils/rustfmt",
@@ -20,8 +20,8 @@ rust_library(
 )
 
 protobuf_generator(
-    name = "proto_generator",
+    name = "protobuf_generator",
     srcs = ["src/main.rs"],
-    manifest_dir = "rs/nns/sns-wasm/proto_generator",
+    manifest_dir = "rs/nns/sns-wasm/protobuf_generator",
     deps = [":lib"],
 )

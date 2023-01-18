@@ -3,7 +3,7 @@ use crate::state_test_helpers::{
     query, try_call_with_cycles_via_universal_canister, update, update_with_sender,
 };
 use candid::{Decode, Encode};
-use canister_test::Project;
+use canister_test::{Project, Wasm};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
@@ -19,35 +19,29 @@ use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
     GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsRequest,
-    GetSnsSubnetIdsResponse, GetWasmRequest, GetWasmResponse, ListDeployedSnsesRequest,
-    ListDeployedSnsesResponse, SnsCanisterType, SnsWasm, UpdateSnsSubnetListRequest,
-    UpdateSnsSubnetListResponse,
+    GetSnsSubnetIdsResponse, GetWasmRequest, GetWasmResponse, InsertUpgradePathEntriesRequest,
+    ListDeployedSnsesRequest, ListDeployedSnsesResponse, SnsCanisterType, SnsUpgrade, SnsVersion,
+    SnsWasm, UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
 };
 use ic_state_machine_tests::StateMachine;
-use maplit::hashmap;
+use maplit::{btreemap, hashmap};
+use std::collections::BTreeMap;
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
 };
+use walrus::{Module, RawCustomSection};
 
-/// Get an SnsWasm with the smallest valid WASM
-pub fn smallest_valid_wasm() -> SnsWasm {
-    test_wasm(SnsCanisterType::Governance)
-}
-
-/// Get an SnsWasm to use in tests
-pub fn test_wasm1() -> SnsWasm {
-    SnsWasm {
-        wasm: vec![0, 0x61, 0x73, 0x6D, 2, 0, 0, 0],
-        canister_type: i32::from(SnsCanisterType::Ledger),
-    }
-}
 /// Get a valid tiny WASM for use in tests of a particular SnsCanisterType
-fn test_wasm(canister_type: SnsCanisterType) -> SnsWasm {
-    SnsWasm {
-        wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
-        canister_type: canister_type.into(),
-    }
+pub fn test_wasm(canister_type: SnsCanisterType, modify_with: Option<u8>) -> SnsWasm {
+    let id_byte = modify_with.unwrap_or(1);
+    create_modified_wasm(
+        &SnsWasm {
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_type: canister_type.into(),
+        },
+        Some(&id_byte.to_string()),
+    )
 }
 
 /// Make get_wasm request to a canister in the StateMachine
@@ -102,6 +96,31 @@ pub fn add_wasm_via_proposal(env: &StateMachine, wasm: SnsWasm) {
     }
 }
 
+/// Insert custom upgrade path entries into SNs-W
+pub fn insert_upgrade_path_entries_via_proposal(
+    env: &StateMachine,
+    upgrade_paths: Vec<SnsUpgrade>,
+    sns_governance_canister_id: Option<CanisterId>,
+) -> ProposalId {
+    let sns_governance_canister_id = sns_governance_canister_id.map(|c| c.into());
+    let payload = InsertUpgradePathEntriesRequest {
+        upgrade_path: upgrade_paths,
+        sns_governance_canister_id,
+    };
+
+    let proposal = Proposal {
+        title: Some("title".into()),
+        summary: "summary".into(),
+        url: "".to_string(),
+        action: Some(proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
+            nns_function: NnsFunction::InsertSnsWasmUpgradePathEntries as i32,
+            payload: Encode!(&payload).expect("Error encoding proposal payload"),
+        })),
+    };
+
+    make_proposal_with_test_neuron_1(env, proposal)
+}
+
 /// Make add_wasm request to a canister in the StateMachine
 pub fn add_wasm_via_proposal_and_return_immediately(
     env: &StateMachine,
@@ -123,6 +142,11 @@ pub fn add_wasm_via_proposal_and_return_immediately(
         })),
     };
 
+    make_proposal_with_test_neuron_1(env, proposal)
+}
+
+/// Make a proposal with test_neuron_1
+fn make_proposal_with_test_neuron_1(env: &StateMachine, proposal: Proposal) -> ProposalId {
     let response: ManageNeuronResponse = update_with_sender(
         env,
         GOVERNANCE_CANISTER_ID,
@@ -178,26 +202,7 @@ pub fn update_sns_subnet_list_via_proposal(
         })),
     };
 
-    let response: ManageNeuronResponse = update_with_sender(
-        env,
-        GOVERNANCE_CANISTER_ID,
-        "manage_neuron",
-        candid_one,
-        ManageNeuron {
-            id: None,
-            command: Some(Command::MakeProposal(Box::new(proposal))),
-            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
-                id: TEST_NEURON_1_ID,
-            })),
-        },
-        *TEST_NEURON_1_OWNER_PRINCIPAL,
-    )
-    .unwrap();
-
-    let pid = match response.command.unwrap() {
-        CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),
-        other => panic!("Unexpected response: {:?}", other),
-    };
+    let pid = make_proposal_with_test_neuron_1(env, proposal);
 
     while get_proposal_info(env, pid).unwrap().status == (ProposalStatus::Open as i32) {
         std::thread::sleep(Duration::from_millis(100));
@@ -291,35 +296,49 @@ pub fn get_next_sns_version(
 }
 
 /// Adds non-functional wasms to the SNS-WASM canister (to avoid expensive init process in certain tests)
-pub fn add_dummy_wasms_to_sns_wasms(machine: &StateMachine) {
-    let root_wasm = test_wasm(SnsCanisterType::Root);
-    add_wasm_via_proposal(machine, root_wasm);
+/// To add additional dummy wasms, set "group_number" to Some(1) or Some(2) to get additional distinct entries.
+pub fn add_dummy_wasms_to_sns_wasms(
+    machine: &StateMachine,
+    group_number: Option<u8>,
+) -> BTreeMap<SnsCanisterType, SnsWasm> {
+    let delta = group_number.unwrap_or(0) * 6;
+    let root_wasm = test_wasm(SnsCanisterType::Root, Some(delta));
+    add_wasm_via_proposal(machine, root_wasm.clone());
 
-    let gov_wasm = test_wasm(SnsCanisterType::Governance);
-    add_wasm_via_proposal(machine, gov_wasm);
+    let gov_wasm = test_wasm(SnsCanisterType::Governance, Some(delta + 1));
+    add_wasm_via_proposal(machine, gov_wasm.clone());
 
-    let ledger_wasm = test_wasm(SnsCanisterType::Ledger);
-    add_wasm_via_proposal(machine, ledger_wasm);
+    let ledger_wasm = test_wasm(SnsCanisterType::Ledger, Some(delta + 2));
+    add_wasm_via_proposal(machine, ledger_wasm.clone());
 
-    let swap_wasm = test_wasm(SnsCanisterType::Swap);
-    add_wasm_via_proposal(machine, swap_wasm);
+    let swap_wasm = test_wasm(SnsCanisterType::Swap, Some(delta + 3));
+    add_wasm_via_proposal(machine, swap_wasm.clone());
 
-    let archive_wasm = test_wasm(SnsCanisterType::Archive);
-    add_wasm_via_proposal(machine, archive_wasm);
+    let archive_wasm = test_wasm(SnsCanisterType::Archive, Some(delta + 4));
+    add_wasm_via_proposal(machine, archive_wasm.clone());
 
-    let index_wasm = test_wasm(SnsCanisterType::Index);
-    add_wasm_via_proposal(machine, index_wasm);
+    let index_wasm = test_wasm(SnsCanisterType::Index, Some(delta + 5));
+    add_wasm_via_proposal(machine, index_wasm.clone());
+
+    btreemap! {
+        SnsCanisterType::Root => root_wasm,
+        SnsCanisterType::Governance =>  gov_wasm,
+        SnsCanisterType::Ledger => ledger_wasm,
+        SnsCanisterType::Swap =>  swap_wasm,
+        SnsCanisterType::Archive =>  archive_wasm,
+        SnsCanisterType::Index =>  index_wasm,
+    }
 }
 
 /// Adds real SNS wasms to the SNS-WASM canister for more robust tests, and returns
 /// a map of those wasms for use in further tests.
-pub fn add_real_wasms_to_sns_wasms(machine: &StateMachine) -> HashMap<SnsCanisterType, SnsWasm> {
+pub fn add_real_wasms_to_sns_wasms(machine: &StateMachine) -> BTreeMap<SnsCanisterType, SnsWasm> {
     fn is_not_open(status: i32) -> bool {
         status != ProposalStatus::Open as i32
     }
     let timeout = Duration::from_secs(120);
 
-    let mut result = hashmap! {};
+    let mut result = btreemap! {};
     for (k, (proposal_id, v)) in
         add_real_wasms_to_sns_wasms_and_return_immediately(machine).into_iter()
     {
@@ -327,6 +346,39 @@ pub fn add_real_wasms_to_sns_wasms(machine: &StateMachine) -> HashMap<SnsCaniste
         result.insert(k, v);
     }
     result
+}
+
+// Add the normal wasms, but with custom metadata to get different sets of hashes.
+pub fn add_modified_wasms_to_sns_wasms(
+    machine: &StateMachine,
+    modifier: &str,
+) -> BTreeMap<SnsCanisterType, SnsWasm> {
+    let root_wasm = create_modified_wasm(&build_root_sns_wasm(), Some(modifier));
+    add_wasm_via_proposal(machine, root_wasm.clone());
+
+    let gov_wasm = create_modified_wasm(&build_governance_sns_wasm(), Some(modifier));
+    add_wasm_via_proposal(machine, gov_wasm.clone());
+
+    let ledger_wasm = create_modified_wasm(&build_ledger_sns_wasm(), Some(modifier));
+    add_wasm_via_proposal(machine, ledger_wasm.clone());
+
+    let swap_wasm = create_modified_wasm(&build_swap_sns_wasm(), Some(modifier));
+    add_wasm_via_proposal(machine, swap_wasm.clone());
+
+    let archive_wasm = create_modified_wasm(&build_archive_sns_wasm(), Some(modifier));
+    add_wasm_via_proposal(machine, archive_wasm.clone());
+
+    let index_wasm = create_modified_wasm(&build_index_sns_wasm(), Some(modifier));
+    add_wasm_via_proposal(machine, index_wasm.clone());
+
+    btreemap! {
+        SnsCanisterType::Root => root_wasm,
+        SnsCanisterType::Governance =>  gov_wasm,
+        SnsCanisterType::Ledger => ledger_wasm,
+        SnsCanisterType::Swap =>  swap_wasm,
+        SnsCanisterType::Archive =>  archive_wasm,
+        SnsCanisterType::Index =>  index_wasm,
+    }
 }
 
 pub fn wait_for_proposal_status(
@@ -432,5 +484,44 @@ pub fn build_index_sns_wasm() -> SnsWasm {
     SnsWasm {
         wasm: index_wasm.bytes(),
         canister_type: SnsCanisterType::Index.into(),
+    }
+}
+
+/// Create an SnsWasm with custom metadata
+pub fn create_modified_wasm(original_wasm: &SnsWasm, modify_with: Option<&str>) -> SnsWasm {
+    let original_hash = original_wasm.sha256_hash();
+    let wasm_to_add = &original_wasm.wasm;
+
+    let mut wasm_to_add = Module::from_buffer(wasm_to_add).unwrap();
+    let custom_section = RawCustomSection {
+        name: modify_with.unwrap_or("no op").into(),
+        data: vec![1u8, 2u8, 3u8],
+    };
+    wasm_to_add.customs.add(custom_section);
+
+    // We get our new WASM, which is functionally the same.
+    let wasm_to_add = Wasm::from_bytes(wasm_to_add.emit_wasm());
+    let sns_wasm_to_add = SnsWasm {
+        wasm: wasm_to_add.bytes(),
+        canister_type: original_wasm.canister_type,
+    };
+    let new_wasm_hash = sns_wasm_to_add.sha256_hash();
+
+    assert_ne!(new_wasm_hash, original_hash);
+    sns_wasm_to_add
+}
+
+/// Translates a WasmMap to a Version
+pub fn wasm_map_to_sns_version(wasm_map: &BTreeMap<SnsCanisterType, SnsWasm>) -> SnsVersion {
+    let version_hash_from_map = |canister_type: SnsCanisterType| {
+        wasm_map.get(&canister_type).unwrap().sha256_hash().to_vec()
+    };
+    SnsVersion {
+        root_wasm_hash: version_hash_from_map(SnsCanisterType::Root),
+        governance_wasm_hash: version_hash_from_map(SnsCanisterType::Governance),
+        ledger_wasm_hash: version_hash_from_map(SnsCanisterType::Ledger),
+        swap_wasm_hash: version_hash_from_map(SnsCanisterType::Swap),
+        archive_wasm_hash: version_hash_from_map(SnsCanisterType::Archive),
+        index_wasm_hash: version_hash_from_map(SnsCanisterType::Index),
     }
 }

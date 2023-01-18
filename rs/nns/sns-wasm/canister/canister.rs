@@ -19,9 +19,10 @@ use ic_sns_wasm::pb::v1::{
     AddWasmRequest, AddWasmResponse, DeployNewSnsRequest, DeployNewSnsResponse,
     GetAllowedPrincipalsRequest, GetAllowedPrincipalsResponse, GetNextSnsVersionRequest,
     GetNextSnsVersionResponse, GetSnsSubnetIdsRequest, GetSnsSubnetIdsResponse, GetWasmRequest,
-    GetWasmResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
-    UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListRequest,
-    UpdateSnsSubnetListResponse,
+    GetWasmResponse, InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
+    ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStepsRequest,
+    ListUpgradeStepsResponse, UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
+    UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
 };
 use ic_sns_wasm::sns_wasm::SnsWasmCanister;
 use ic_types::{CanisterId, Cycles};
@@ -310,6 +311,7 @@ fn canister_post_upgrade() {
 
 #[export_name = "canister_update add_wasm"]
 fn add_wasm() {
+    println!("{}add_wasm", LOG_PREFIX);
     over(candid_one, add_wasm_)
 }
 
@@ -322,6 +324,37 @@ fn add_wasm_(add_wasm_payload: AddWasmRequest) -> AddWasmResponse {
     } else {
         SNS_WASM.with(|sns_wasm| sns_wasm.borrow_mut().add_wasm(add_wasm_payload))
     }
+}
+
+#[export_name = "canister_update insert_upgrade_path_entries"]
+fn insert_upgrade_path_entries() {
+    println!("{}insert_upgrade_path_entries", LOG_PREFIX);
+    over(candid_one, insert_upgrade_path_entries_)
+}
+
+#[candid_method(update, rename = "insert_upgrade_path_entries")]
+fn insert_upgrade_path_entries_(
+    payload: InsertUpgradePathEntriesRequest,
+) -> InsertUpgradePathEntriesResponse {
+    let access_controls_enabled =
+        SNS_WASM.with(|sns_wasm| sns_wasm.borrow().access_controls_enabled);
+    if access_controls_enabled && caller() != GOVERNANCE_CANISTER_ID.into() {
+        InsertUpgradePathEntriesResponse::error(
+            "insert_upgrade_path_entries can only be called by NNS Governance".into(),
+        )
+    } else {
+        SNS_WASM.with(|sns_wasm| sns_wasm.borrow_mut().insert_upgrade_path_entries(payload))
+    }
+}
+
+#[export_name = "canister_query list_upgrade_steps"]
+fn list_upgrade_steps() {
+    over(candid_one, list_upgrade_steps_)
+}
+
+#[candid_method(query, rename = "list_upgrade_steps")]
+fn list_upgrade_steps_(payload: ListUpgradeStepsRequest) -> ListUpgradeStepsResponse {
+    SNS_WASM.with(|sns_wasm| sns_wasm.borrow().list_upgrade_steps(payload))
 }
 
 #[export_name = "canister_query get_wasm"]
@@ -341,7 +374,7 @@ fn get_next_sns_version() {
 
 #[candid_method(query, rename = "get_next_sns_version")]
 fn get_next_sns_version_(request: GetNextSnsVersionRequest) -> GetNextSnsVersionResponse {
-    SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_next_sns_version(request))
+    SNS_WASM.with(|sns_wasm| sns_wasm.borrow().get_next_sns_version(request, caller()))
 }
 
 #[export_name = "canister_query get_latest_sns_version_pretty"]

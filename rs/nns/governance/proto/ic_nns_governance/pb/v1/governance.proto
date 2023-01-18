@@ -522,6 +522,8 @@ enum NnsFunction {
   // The specified versions are removed from the registry and the "blessed versions" record.
   // This ensures that the replica cannot upgrade to these versions anymore.
   NNS_FUNCTION_RETIRE_REPLICA_VERSION = 36;
+  // Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
+  NNS_FUNCTION_INSERT_SNS_WASM_UPGRADE_PATH_ENTRIES = 37;
 }
 
 // Payload of a proposal that calls a function on another NNS

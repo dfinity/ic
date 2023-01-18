@@ -2918,6 +2918,8 @@ pub enum NnsFunction {
     /// The specified versions are removed from the registry and the "blessed versions" record.
     /// This ensures that the replica cannot upgrade to these versions anymore.
     RetireReplicaVersion = 36,
+    /// Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
+    InsertSnsWasmUpgradePathEntries = 37,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -2965,6 +2967,9 @@ impl NnsFunction {
             NnsFunction::UpdateSnsWasmSnsSubnetIds => "NNS_FUNCTION_UPDATE_SNS_WASM_SNS_SUBNET_IDS",
             NnsFunction::UpdateAllowedPrincipals => "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS",
             NnsFunction::RetireReplicaVersion => "NNS_FUNCTION_RETIRE_REPLICA_VERSION",
+            NnsFunction::InsertSnsWasmUpgradePathEntries => {
+                "NNS_FUNCTION_INSERT_SNS_WASM_UPGRADE_PATH_ENTRIES"
+            }
         }
     }
 }

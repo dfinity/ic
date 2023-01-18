@@ -5,10 +5,11 @@ use crate::pb::v1::{
     add_wasm_response, update_allowed_principals_response, AddWasmRequest, AddWasmResponse,
     DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, GetAllowedPrincipalsResponse,
     GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsResponse, GetWasmRequest,
-    GetWasmResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse, SnsCanisterIds,
-    SnsCanisterType, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
-    UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListRequest,
-    UpdateSnsSubnetListResponse,
+    GetWasmResponse, InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
+    ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStep, ListUpgradeStepsRequest,
+    ListUpgradeStepsResponse, SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm,
+    SnsWasmError, SnsWasmStableIndex, StableCanisterState, UpdateAllowedPrincipalsRequest,
+    UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
 };
 use crate::stable_memory::SnsWasmStableMemory;
 use candid::Encode;
@@ -22,6 +23,7 @@ use ic_sns_init::SnsCanisterInitPayloads;
 use ic_types::{Cycles, SubnetId};
 use maplit::hashmap;
 use std::cell::RefCell;
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryInto;
 use std::iter::zip;
@@ -294,6 +296,157 @@ where
         };
 
         AddWasmResponse { result }
+    }
+
+    /// Insert upgrade path entries for the general path or for an SNS-specific path.
+    pub fn insert_upgrade_path_entries(
+        &mut self,
+        request: InsertUpgradePathEntriesRequest,
+    ) -> InsertUpgradePathEntriesResponse {
+        let InsertUpgradePathEntriesRequest {
+            upgrade_path,
+            sns_governance_canister_id,
+        } = request;
+
+        let sns_governance_canister_id = match sns_governance_canister_id {
+            None => None,
+            Some(id) => match CanisterId::try_from(id) {
+                Ok(canister_id) => Some(canister_id),
+                Err(_) => {
+                    return InsertUpgradePathEntriesResponse::error(format!(
+                        "Request.sns_governance_canister_id ({}) \
+                        could not be converted to a canister ID",
+                        id
+                    ))
+                }
+            },
+        };
+
+        if upgrade_path.is_empty() {
+            return InsertUpgradePathEntriesResponse::error(
+                "No Upgrade Paths in request. No action taken.".to_string(),
+            );
+        }
+
+        let mut versions_submitted = vec![];
+        for upgrade_step in &upgrade_path {
+            let SnsUpgrade {
+                current_version,
+                next_version,
+            } = upgrade_step.clone();
+
+            if current_version.is_none() || next_version.is_none() {
+                return InsertUpgradePathEntriesResponse::error(
+                    "A provided SnsUpgrade entry does not have a current_version or next_version"
+                        .to_string(),
+                );
+            }
+            versions_submitted.append(&mut current_version.unwrap().version_hashes());
+            versions_submitted.append(&mut next_version.unwrap().version_hashes());
+        }
+        let versions_submitted: HashSet<Vec<u8>> = versions_submitted.into_iter().collect();
+
+        // Ensure we have the WASMs in the submitted versions, otherwise the SNS could not execute
+        // the upgrade request.
+        for version in versions_submitted {
+            let hash = match vec_to_hash(version) {
+                Ok(h) => h,
+                Err(e) => return InsertUpgradePathEntriesResponse::error(e),
+            };
+            if !self.wasm_indexes.contains_key(&hash) {
+                return InsertUpgradePathEntriesResponse::error(
+                    "Upgrade paths include WASM hashes that do not reference WASMs known by SNS-W"
+                        .to_string(),
+                );
+            }
+        }
+
+        // Ensure the governance canister in the request belongs to a known SNS.
+        if let Some(sns_governance_canister_id) = sns_governance_canister_id {
+            // Note, if we ever get a substantial list here, we should make a data structure to
+            // make this faster.
+            if !self.deployed_sns_list.iter().any(|deployment| {
+                deployment.governance_canister_id.is_some()
+                    && deployment.governance_canister_id.unwrap()
+                        == sns_governance_canister_id.into()
+            }) {
+                return InsertUpgradePathEntriesResponse::error(format!(
+                    "Cannot add custom upgrade path for non-existent SNS.  Governance canister {} \
+                     not found in list of deployed SNSes.",
+                    sns_governance_canister_id
+                ));
+            }
+        }
+
+        if let Some(sns_governance_canister_id) = sns_governance_canister_id {
+            for upgrade_step in upgrade_path {
+                self.upgrade_path.insert_sns_specific_upgrade_path_entry(
+                    upgrade_step.current_version.unwrap(),
+                    upgrade_step.next_version.unwrap(),
+                    sns_governance_canister_id,
+                );
+            }
+        } else {
+            for upgrade_step in upgrade_path {
+                self.upgrade_path.insert_upgrade_path_entry(
+                    upgrade_step.current_version.unwrap(),
+                    upgrade_step.next_version.unwrap(),
+                );
+            }
+        }
+
+        InsertUpgradePathEntriesResponse { error: None }
+    }
+
+    /// List the upgrade steps in human-readable form from a given starting point
+    /// If a canister is provided, interleave custom entries.  If not, use default only
+    /// If a starting_at version is provided, do not list versions before the given version,
+    /// otherwise, list all known versions
+    pub fn list_upgrade_steps(&self, payload: ListUpgradeStepsRequest) -> ListUpgradeStepsResponse {
+        let ListUpgradeStepsRequest {
+            starting_at,
+            sns_governance_canister_id,
+            limit,
+        } = payload;
+
+        // TODO extract this constant
+        let limit = if limit == 0 { 200 } else { limit };
+
+        let sns_governance_canister_id =
+            sns_governance_canister_id.unwrap_or_else(PrincipalId::new_anonymous);
+        // Note, if we retire parts of the version path, we will need to
+        // update this, or store it somewhere
+        let mut current_version = starting_at.unwrap_or_else(|| SnsVersion {
+            root_wasm_hash: vec![],
+            governance_wasm_hash: vec![],
+            ledger_wasm_hash: vec![],
+            swap_wasm_hash: vec![],
+            archive_wasm_hash: vec![],
+            index_wasm_hash: vec![],
+        });
+
+        let mut versions = vec![current_version.clone()];
+
+        for _ in 0..limit {
+            let next_version = match self
+                .upgrade_path
+                .get_next_version(current_version, sns_governance_canister_id)
+            {
+                None => break,
+                Some(v) => v,
+            };
+
+            versions.push(next_version.clone());
+            current_version = next_version;
+        }
+
+        ListUpgradeStepsResponse {
+            steps: versions
+                .into_iter()
+                .filter(|v| v.is_complete_version())
+                .map(|v| ListUpgradeStep::new(v))
+                .collect(),
+        }
     }
 
     /// Returns a list of Deployed SNS root CanisterId's and the subnet they were deployed to.
@@ -807,10 +960,19 @@ where
     pub fn get_next_sns_version(
         &self,
         request: GetNextSnsVersionRequest,
+        caller: PrincipalId,
     ) -> GetNextSnsVersionResponse {
-        let next_version = request
-            .current_version
-            .and_then(|sns_version| self.upgrade_path.upgrade_path.get(&sns_version).cloned());
+        let GetNextSnsVersionRequest {
+            governance_canister_id,
+            current_version,
+        } = request;
+
+        let governance_canister_id = governance_canister_id.or(Some(caller));
+
+        let next_version = current_version.and_then(|sns_version| {
+            self.upgrade_path
+                .get_next_version(sns_version, governance_canister_id.unwrap())
+        });
 
         GetNextSnsVersionResponse { next_version }
     }
@@ -1033,6 +1195,11 @@ pub struct UpgradePath {
 
     /// Maps SnsVersions to the SnsVersion that should be upgraded to.
     pub upgrade_path: HashMap<SnsVersion, SnsVersion>,
+
+    /// Maps SnsVersions to SnsVersions for particular governance canisters to allow
+    /// custom responses when a particular SNS becomes impossible to upgrade.
+    /// These paths should tie back into the upgrade_path after the difficulty is resolved.
+    pub sns_specific_upgrade_path: HashMap<CanisterId, HashMap<SnsVersion, SnsVersion>>,
 }
 
 impl UpgradePath {
@@ -1055,6 +1222,72 @@ impl UpgradePath {
             .insert(self.latest_version.clone(), new_latest_version.clone());
         self.latest_version = new_latest_version;
     }
+
+    pub fn get_next_version(
+        &self,
+        from_version: SnsVersion,
+        caller: PrincipalId,
+    ) -> Option<SnsVersion> {
+        match CanisterId::try_from(caller) {
+            // If not a canister id, just check normal path
+            Err(_) => self.upgrade_path.get(&from_version).cloned(),
+            // Check if special entry
+            Ok(canister_id) => match self.sns_specific_upgrade_path.get(&canister_id) {
+                // No special entry, use normal path map
+                None => self.upgrade_path.get(&from_version).cloned(),
+                // Special canister path map, but if no entry for version, fallback to regular path
+                Some(emergency_paths) => emergency_paths
+                    .get(&from_version)
+                    .or_else(|| self.upgrade_path.get(&from_version))
+                    .cloned(),
+            },
+        }
+    }
+
+    pub fn insert_sns_specific_upgrade_path_entry(
+        &mut self,
+        from: SnsVersion,
+        to: SnsVersion,
+        sns_governance_canister_id: CanisterId,
+    ) {
+        match self
+            .sns_specific_upgrade_path
+            .entry(sns_governance_canister_id)
+            .or_insert_with(|| HashMap::new())
+            .entry(from)
+        {
+            Entry::Occupied(occupied) => {
+                println!(
+                    "Speical Entry for {}  from {:?} to {:?} is being overwritten with new value {:?}",
+                    sns_governance_canister_id,
+                    occupied.key(),
+                    occupied.get(),
+                    to
+                );
+            }
+            Entry::Vacant(vacant) => {
+                vacant.insert(to);
+            }
+        };
+    }
+
+    pub fn insert_upgrade_path_entry(&mut self, from: SnsVersion, to: SnsVersion) {
+        match self.upgrade_path.entry(from) {
+            Entry::Occupied(mut occupied) => {
+                println!(
+                    "Entry from {:?} to {:?} is being overwritten with new value {:?}",
+                    occupied.key(),
+                    occupied.get(),
+                    to
+                );
+                occupied.insert(to);
+            }
+            Entry::Vacant(vacant) => {
+                vacant.insert(to);
+            }
+        };
+        // self.upgrade_path.insert(from, to);
+    }
 }
 
 pub fn assert_unique_canister_ids(sns_1: &SnsCanisterIds, sns_2: &SnsCanisterIds) {
@@ -1071,7 +1304,6 @@ pub fn assert_unique_canister_ids(sns_1: &SnsCanisterIds, sns_2: &SnsCanisterIds
         ("swap 2", sns_2.swap.unwrap()),
         ("index 2", sns_2.index.unwrap()),
     ] {
-        use std::collections::hash_map::Entry;
         match canister_id_to_name.entry(canister_id) {
             Entry::Vacant(entry) => {
                 // Looking good so far (no panic).
@@ -1094,6 +1326,7 @@ pub fn assert_unique_canister_ids(sns_1: &SnsCanisterIds, sns_2: &SnsCanisterIds
 mod test {
     use super::*;
     use crate::canister_stable_memory::TestCanisterStableMemory;
+    use crate::pb::v1::SnsUpgrade;
     use async_trait::async_trait;
     use candid::{Decode, Encode};
     use ic_base_types::PrincipalId;
@@ -1274,9 +1507,26 @@ mod test {
 
     /// Add some placeholder wasms with different values so we can test
     /// that each value is installed into the correct spot
-    fn add_mock_wasms(canister: &mut SnsWasmCanister<TestCanisterStableMemory>) -> SnsVersion {
+    /// group_number tells you which group of wasms you are adding so that they
+    /// will have different content and therefore different hashes
+    fn add_dummy_wasms(
+        canister: &mut SnsWasmCanister<TestCanisterStableMemory>,
+        group_number: Option<u8>,
+    ) -> (
+        SnsVersion,
+        SnsVersion,
+        SnsVersion,
+        SnsVersion,
+        SnsVersion,
+        SnsVersion,
+    ) {
+        let current_version = canister.upgrade_path.latest_version.clone();
+        let mut added_versions = vec![];
+
+        let delta = group_number.unwrap_or(0) * 6;
+
         let root = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta],
             canister_type: i32::from(SnsCanisterType::Root),
         };
         let root_wasm_hash = root.sha256_hash().to_vec();
@@ -1284,8 +1534,14 @@ mod test {
             wasm: Some(root),
             hash: root_wasm_hash.clone(),
         });
+
+        added_versions.push(SnsVersion {
+            root_wasm_hash,
+            ..current_version
+        });
+
         let governance = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 1],
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 1],
             canister_type: i32::from(SnsCanisterType::Governance),
         };
         let governance_wasm_hash = governance.sha256_hash().to_vec();
@@ -1293,8 +1549,14 @@ mod test {
             wasm: Some(governance),
             hash: governance_wasm_hash.clone(),
         });
+
+        added_versions.push(SnsVersion {
+            governance_wasm_hash,
+            ..added_versions.last().cloned().unwrap()
+        });
+
         let ledger = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 2],
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 2],
             canister_type: i32::from(SnsCanisterType::Ledger),
         };
         let ledger_wasm_hash = ledger.sha256_hash().to_vec();
@@ -1302,8 +1564,13 @@ mod test {
             wasm: Some(ledger),
             hash: ledger_wasm_hash.clone(),
         });
+
+        added_versions.push(SnsVersion {
+            ledger_wasm_hash,
+            ..added_versions.last().cloned().unwrap()
+        });
         let swap = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 3],
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 3],
             canister_type: i32::from(SnsCanisterType::Swap),
         };
         let swap_wasm_hash = swap.sha256_hash().to_vec();
@@ -1311,8 +1578,14 @@ mod test {
             wasm: Some(swap),
             hash: swap_wasm_hash.clone(),
         });
+
+        added_versions.push(SnsVersion {
+            swap_wasm_hash,
+            ..added_versions.last().cloned().unwrap()
+        });
+
         let archive = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 4],
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 4],
             canister_type: i32::from(SnsCanisterType::Archive),
         };
         let archive_wasm_hash = archive.sha256_hash().to_vec();
@@ -1320,8 +1593,14 @@ mod test {
             wasm: Some(archive),
             hash: archive_wasm_hash.clone(),
         });
+
+        added_versions.push(SnsVersion {
+            archive_wasm_hash,
+            ..added_versions.last().cloned().unwrap()
+        });
+
         let index = SnsWasm {
-            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 5],
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, delta + 5],
             canister_type: i32::from(SnsCanisterType::Index),
         };
         let index_wasm_hash = index.sha256_hash().to_vec();
@@ -1329,14 +1608,21 @@ mod test {
             wasm: Some(index),
             hash: index_wasm_hash.clone(),
         });
-        SnsVersion {
-            root_wasm_hash,
-            governance_wasm_hash,
-            ledger_wasm_hash,
-            swap_wasm_hash,
-            archive_wasm_hash,
+
+        added_versions.push(SnsVersion {
             index_wasm_hash,
-        }
+            ..added_versions.last().cloned().unwrap()
+        });
+
+        let mut iter = added_versions.into_iter();
+        (
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+        )
     }
 
     #[test]
@@ -1482,6 +1768,441 @@ mod test {
     }
 
     #[test]
+    fn test_api_insert_upgrade_path_entries_validation() {
+        let mut canister = new_wasm_canister();
+        let initial_version = add_dummy_wasms(&mut canister, None).5;
+
+        // 1. validate request not empty
+        let response = canister.insert_upgrade_path_entries(InsertUpgradePathEntriesRequest {
+            upgrade_path: vec![],
+            sns_governance_canister_id: None,
+        });
+        assert_eq!(
+            response.error,
+            Some(SnsWasmError {
+                message: "No Upgrade Paths in request. No action taken.".to_string()
+            })
+        );
+
+        // 1a. Validate all SnsVersion entries are Some()
+        let response = canister.insert_upgrade_path_entries(InsertUpgradePathEntriesRequest {
+            upgrade_path: vec![SnsUpgrade {
+                current_version: None,
+                next_version: None,
+            }],
+            sns_governance_canister_id: None,
+        });
+        assert_eq!(
+            response.error,
+            Some(SnsWasmError {
+                message:
+                    "A provided SnsUpgrade entry does not have a current_version or next_version"
+                        .to_string()
+            })
+        );
+
+        // 2. validate that an upgrade path must have real SNS-Wasms in it
+        let governance = SnsWasm {
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 6],
+            canister_type: SnsCanisterType::Governance.into(),
+        };
+        let governance_wasm_hash = governance.sha256_hash().to_vec();
+
+        let next_version = SnsVersion {
+            governance_wasm_hash: governance_wasm_hash.clone(),
+            ..initial_version.clone()
+        };
+        let upgrade = SnsUpgrade {
+            current_version: Some(initial_version),
+            next_version: Some(next_version),
+        };
+        let response = canister.insert_upgrade_path_entries(InsertUpgradePathEntriesRequest {
+            upgrade_path: vec![upgrade.clone()],
+            sns_governance_canister_id: None,
+        });
+
+        assert_eq!(
+            response.error,
+            Some(SnsWasmError {
+                message:
+                    "Upgrade paths include WASM hashes that do not reference WASMs known by SNS-W"
+                        .to_string()
+            })
+        );
+        canister.add_wasm(AddWasmRequest {
+            wasm: Some(governance),
+            hash: governance_wasm_hash,
+        });
+
+        // 3. Validate that the governance canister is known
+        let response = canister.insert_upgrade_path_entries(InsertUpgradePathEntriesRequest {
+            upgrade_path: vec![upgrade],
+            sns_governance_canister_id: Some(CanisterId::from_u64(10).into()),
+        });
+        assert_eq!(
+            response.error,
+            Some(SnsWasmError {
+                message:
+                format!("Cannot add custom upgrade path for non-existent SNS.  Governance canister {} not \
+                found in list of deployed SNSes.", CanisterId::from_u64(10)
+                )
+            })
+        );
+    }
+
+    #[test]
+    fn test_api_get_wasm_correctly_checks_caller_for_overrides() {
+        let mut canister = new_wasm_canister();
+        let initial_version = add_dummy_wasms(&mut canister, None).5;
+
+        let governance = SnsWasm {
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 6],
+            canister_type: i32::from(SnsCanisterType::Governance),
+        };
+        let governance_wasm_hash = governance.sha256_hash().to_vec();
+        canister.add_wasm(AddWasmRequest {
+            wasm: Some(governance),
+            hash: governance_wasm_hash.clone(),
+        });
+
+        let ledger = SnsWasm {
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 7],
+            canister_type: i32::from(SnsCanisterType::Ledger),
+        };
+        let ledger_wasm_hash = ledger.sha256_hash().to_vec();
+        canister.add_wasm(AddWasmRequest {
+            wasm: Some(ledger),
+            hash: ledger_wasm_hash.clone(),
+        });
+
+        let second_version = SnsVersion {
+            governance_wasm_hash: governance_wasm_hash.clone(),
+            ..initial_version.clone()
+        };
+
+        let third_version = SnsVersion {
+            ledger_wasm_hash,
+            ..second_version.clone()
+        };
+
+        let next_version_response = canister.get_next_sns_version(
+            GetNextSnsVersionRequest {
+                current_version: Some(initial_version.clone()),
+                governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
+            },
+            CanisterId::from_u64(999).into(),
+        );
+
+        assert_eq!(next_version_response, second_version.clone().into());
+
+        let special_governance_canister_id = CanisterId::from_u64(1000).into();
+
+        canister.deployed_sns_list.push(DeployedSns {
+            root_canister_id: Some(CanisterId::from_u64(999).into()),
+            governance_canister_id: Some(special_governance_canister_id),
+            ledger_canister_id: Some(CanisterId::from_u64(1001).into()),
+            swap_canister_id: Some(CanisterId::from_u64(1002).into()),
+            index_canister_id: Some(CanisterId::from_u64(1003).into()),
+        });
+        let custom_version = SnsVersion {
+            archive_wasm_hash: governance_wasm_hash,
+            ..initial_version.clone()
+        };
+
+        // just needs to be different, we dont' care what it is
+        canister.insert_upgrade_path_entries(InsertUpgradePathEntriesRequest {
+            upgrade_path: vec![SnsUpgrade {
+                current_version: Some(initial_version.clone()),
+                next_version: Some(custom_version.clone()),
+            }],
+            sns_governance_canister_id: Some(special_governance_canister_id),
+        });
+        // Call it 2x to exercise the "occupied" code path
+        canister.insert_upgrade_path_entries(InsertUpgradePathEntriesRequest {
+            upgrade_path: vec![SnsUpgrade {
+                current_version: Some(initial_version.clone()),
+                next_version: Some(custom_version.clone()),
+            }],
+            sns_governance_canister_id: Some(special_governance_canister_id),
+        });
+
+        // For another governance, we should get default response, even if our special one is the caller
+        let next_version_response = canister.get_next_sns_version(
+            GetNextSnsVersionRequest {
+                current_version: Some(initial_version.clone()),
+                governance_canister_id: Some(CanisterId::from_u64(999).into()),
+            },
+            special_governance_canister_id,
+        );
+        assert_eq!(next_version_response, second_version.clone().into());
+
+        // For our governance with a special path added, we should get the new response
+        let response_for_custom_governance = canister.get_next_sns_version(
+            GetNextSnsVersionRequest {
+                current_version: Some(initial_version),
+                governance_canister_id: None,
+            },
+            special_governance_canister_id,
+        );
+
+        assert_eq!(response_for_custom_governance, custom_version.into());
+
+        // For our governance with special path, we should get normal response if no entry
+        // exists for a particular query
+        let response_to_custom_governance_no_entry = canister.get_next_sns_version(
+            GetNextSnsVersionRequest {
+                current_version: Some(second_version.clone()),
+                governance_canister_id: None,
+            },
+            special_governance_canister_id,
+        );
+        assert_eq!(
+            response_to_custom_governance_no_entry,
+            third_version.clone().into()
+        );
+
+        let response_to_other_governance = canister.get_next_sns_version(
+            GetNextSnsVersionRequest {
+                current_version: Some(second_version),
+                governance_canister_id: None,
+            },
+            CanisterId::from_u64(999).into(),
+        );
+        assert_eq!(response_to_other_governance, third_version.into());
+    }
+
+    #[test]
+    fn test_insert_upgrade_path_works_for_non_sns_specific_paths() {
+        let mut canister = new_wasm_canister();
+        let initial_version = add_dummy_wasms(&mut canister, None).5;
+
+        let governance = SnsWasm {
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 6],
+            canister_type: i32::from(SnsCanisterType::Governance),
+        };
+        let governance_wasm_hash = governance.sha256_hash().to_vec();
+        canister.add_wasm(AddWasmRequest {
+            wasm: Some(governance),
+            hash: governance_wasm_hash.clone(),
+        });
+
+        let ledger = SnsWasm {
+            wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 7],
+            canister_type: i32::from(SnsCanisterType::Ledger),
+        };
+        let ledger_wasm_hash = ledger.sha256_hash().to_vec();
+        canister.add_wasm(AddWasmRequest {
+            wasm: Some(ledger),
+            hash: ledger_wasm_hash,
+        });
+
+        let second_version = SnsVersion {
+            governance_wasm_hash: governance_wasm_hash.clone(),
+            ..initial_version.clone()
+        };
+
+        let next_version_response = canister.get_next_sns_version(
+            GetNextSnsVersionRequest {
+                current_version: Some(initial_version.clone()),
+                governance_canister_id: None,
+            },
+            PrincipalId::new_user_test_id(1),
+        );
+
+        assert_eq!(next_version_response, second_version.into());
+
+        let custom_version = SnsVersion {
+            archive_wasm_hash: governance_wasm_hash.clone(),
+            ..initial_version.clone()
+        };
+
+        let custom_version_2 = SnsVersion {
+            ledger_wasm_hash: governance_wasm_hash,
+            ..custom_version.clone()
+        };
+
+        // just needs to be different, we dont' care what it is
+        canister.insert_upgrade_path_entries(InsertUpgradePathEntriesRequest {
+            upgrade_path: vec![SnsUpgrade {
+                current_version: Some(initial_version.clone()),
+                next_version: Some(custom_version.clone()),
+            }],
+            sns_governance_canister_id: None,
+        });
+
+        let new_default_response = canister.get_next_sns_version(
+            GetNextSnsVersionRequest {
+                current_version: Some(initial_version),
+                governance_canister_id: None,
+            },
+            PrincipalId::new_user_test_id(1),
+        );
+
+        assert_eq!(new_default_response, custom_version.clone().into());
+
+        // Now set one never set before
+        canister.insert_upgrade_path_entries(InsertUpgradePathEntriesRequest {
+            upgrade_path: vec![SnsUpgrade {
+                current_version: Some(custom_version.clone()),
+                next_version: Some(custom_version_2.clone()),
+            }],
+            sns_governance_canister_id: None,
+        });
+
+        let new_default_response = canister.get_next_sns_version(
+            GetNextSnsVersionRequest {
+                current_version: Some(custom_version),
+                governance_canister_id: None,
+            },
+            PrincipalId::new_user_test_id(1),
+        );
+
+        assert_eq!(new_default_response, custom_version_2.into());
+    }
+
+    // This assumes we create the following scenario
+    // Normal Path: A -> B  -> C -> D -> E -> F -> G
+    //                   \         /
+    // One SNS Path:      ->  C'->
+    // A = initial_version
+    // G = final_version
+    #[test]
+    fn test_list_upgrade_steps_parameters_work_for_normal_and_custom_paths() {
+        let mut canister = new_wasm_canister();
+
+        let a_version = add_dummy_wasms(&mut canister, None).5;
+        let (b_version, c_version, d_version, e_version, f_version, g_version) =
+            add_dummy_wasms(&mut canister, Some(1));
+
+        let alt_c_version = SnsVersion {
+            governance_wasm_hash: a_version.ledger_wasm_hash.clone(),
+            ..b_version.clone()
+        };
+
+        let special_governance_canister_id = CanisterId::from_u64(1000).into();
+        canister.deployed_sns_list.push(DeployedSns {
+            root_canister_id: Some(CanisterId::from_u64(999).into()),
+            governance_canister_id: Some(special_governance_canister_id),
+            ledger_canister_id: Some(CanisterId::from_u64(1001).into()),
+            swap_canister_id: Some(CanisterId::from_u64(1002).into()),
+            index_canister_id: Some(CanisterId::from_u64(1003).into()),
+        });
+
+        let insert_response =
+            canister.insert_upgrade_path_entries(InsertUpgradePathEntriesRequest {
+                upgrade_path: vec![
+                    SnsUpgrade {
+                        current_version: Some(b_version.clone()),
+                        next_version: Some(alt_c_version.clone()),
+                    },
+                    SnsUpgrade {
+                        current_version: Some(alt_c_version.clone()),
+                        next_version: Some(d_version.clone()),
+                    },
+                ],
+                sns_governance_canister_id: Some(special_governance_canister_id),
+            });
+
+        assert_eq!(insert_response.error, None);
+
+        let list_normal_canister = canister.list_upgrade_steps(ListUpgradeStepsRequest {
+            starting_at: None,
+            sns_governance_canister_id: None,
+            limit: 0,
+        });
+
+        assert_eq!(
+            list_normal_canister,
+            ListUpgradeStepsResponse {
+                steps: vec![
+                    ListUpgradeStep::new(a_version.clone()),
+                    ListUpgradeStep::new(b_version.clone()),
+                    ListUpgradeStep::new(c_version),
+                    ListUpgradeStep::new(d_version.clone()),
+                    ListUpgradeStep::new(e_version.clone()),
+                    ListUpgradeStep::new(f_version.clone()),
+                    ListUpgradeStep::new(g_version.clone()),
+                ]
+            }
+        );
+
+        let list_custom_canister = canister.list_upgrade_steps(ListUpgradeStepsRequest {
+            starting_at: None,
+            sns_governance_canister_id: Some(special_governance_canister_id),
+            limit: 0,
+        });
+
+        assert_eq!(
+            list_custom_canister,
+            ListUpgradeStepsResponse {
+                steps: vec![
+                    ListUpgradeStep::new(a_version),
+                    ListUpgradeStep::new(b_version.clone()),
+                    ListUpgradeStep::new(alt_c_version.clone()),
+                    ListUpgradeStep::new(d_version.clone()),
+                    ListUpgradeStep::new(e_version.clone()),
+                    ListUpgradeStep::new(f_version.clone()),
+                    ListUpgradeStep::new(g_version.clone()),
+                ]
+            }
+        );
+
+        // Testing "starting_at" field for both cases.
+
+        let list_normal_canister = canister.list_upgrade_steps(ListUpgradeStepsRequest {
+            starting_at: Some(e_version.clone()),
+            sns_governance_canister_id: None,
+            limit: 0,
+        });
+
+        assert_eq!(
+            list_normal_canister,
+            ListUpgradeStepsResponse {
+                steps: vec![
+                    ListUpgradeStep::new(e_version.clone()),
+                    ListUpgradeStep::new(f_version.clone()),
+                    ListUpgradeStep::new(g_version.clone()),
+                ]
+            }
+        );
+
+        let list_custom_canister = canister.list_upgrade_steps(ListUpgradeStepsRequest {
+            starting_at: Some(b_version.clone()),
+            sns_governance_canister_id: Some(special_governance_canister_id),
+            limit: 0,
+        });
+
+        assert_eq!(
+            list_custom_canister,
+            ListUpgradeStepsResponse {
+                steps: vec![
+                    ListUpgradeStep::new(b_version.clone()),
+                    ListUpgradeStep::new(alt_c_version.clone()),
+                    ListUpgradeStep::new(d_version),
+                    ListUpgradeStep::new(e_version),
+                    ListUpgradeStep::new(f_version),
+                    ListUpgradeStep::new(g_version),
+                ]
+            }
+        );
+
+        let list_custom_canister = canister.list_upgrade_steps(ListUpgradeStepsRequest {
+            starting_at: Some(b_version.clone()),
+            sns_governance_canister_id: Some(special_governance_canister_id),
+            limit: 1,
+        });
+        assert_eq!(
+            list_custom_canister,
+            ListUpgradeStepsResponse {
+                steps: vec![
+                    ListUpgradeStep::new(b_version),
+                    ListUpgradeStep::new(alt_c_version),
+                ]
+            }
+        );
+    }
+
+    #[test]
     fn test_update_allowed_principals() {
         let mut canister = new_wasm_canister();
 
@@ -1578,15 +2299,22 @@ mod test {
     fn test_add_wasm_updates_upgrade_path() {
         let mut canister = new_wasm_canister();
 
+        let some_principal = PrincipalId::new_user_test_id(1);
         assert_eq!(
-            canister.get_next_sns_version(SnsVersion::default().into()),
+            canister.get_next_sns_version(
+                GetNextSnsVersionRequest {
+                    current_version: None,
+                    governance_canister_id: None
+                },
+                some_principal
+            ),
             GetNextSnsVersionResponse::default()
         );
 
         let mut wasm = smallest_valid_wasm();
 
         // Add a Governance WASM
-        wasm.canister_type = i32::from(SnsCanisterType::Governance);
+        wasm.canister_type = SnsCanisterType::Governance.into();
 
         let valid_hash = wasm.sha256_hash();
         canister.add_wasm(AddWasmRequest {
@@ -1595,7 +2323,7 @@ mod test {
         });
 
         // Add a Root WASM
-        wasm.canister_type = i32::from(SnsCanisterType::Root);
+        wasm.canister_type = SnsCanisterType::Root.into();
 
         canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
@@ -1603,7 +2331,7 @@ mod test {
         });
 
         // Add a Ledger WASM
-        wasm.canister_type = i32::from(SnsCanisterType::Ledger);
+        wasm.canister_type = SnsCanisterType::Ledger.into();
 
         canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
@@ -1611,7 +2339,7 @@ mod test {
         });
 
         // Add a Swap WASM
-        wasm.canister_type = i32::from(SnsCanisterType::Swap);
+        wasm.canister_type = SnsCanisterType::Swap.into();
 
         canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
@@ -1619,7 +2347,7 @@ mod test {
         });
 
         // Add an Archive WASM
-        wasm.canister_type = i32::from(SnsCanisterType::Archive);
+        wasm.canister_type = SnsCanisterType::Archive.into();
 
         canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm.clone()),
@@ -1627,7 +2355,7 @@ mod test {
         });
 
         // Add an Index WASM
-        wasm.canister_type = i32::from(SnsCanisterType::Index);
+        wasm.canister_type = SnsCanisterType::Index.into();
 
         canister.add_wasm(AddWasmRequest {
             wasm: Some(wasm),
@@ -1680,30 +2408,66 @@ mod test {
         };
 
         assert_eq!(
-            canister.get_next_sns_version(SnsVersion::default().into()),
+            canister.get_next_sns_version(
+                GetNextSnsVersionRequest {
+                    current_version: Some(Default::default()),
+                    governance_canister_id: None
+                },
+                some_principal
+            ),
             expected_next_sns_version1.clone().into()
         );
 
         assert_eq!(
-            canister.get_next_sns_version(expected_next_sns_version1.into()),
+            canister.get_next_sns_version(
+                GetNextSnsVersionRequest {
+                    current_version: Some(expected_next_sns_version1),
+                    governance_canister_id: None
+                },
+                some_principal
+            ),
             expected_next_sns_version2.clone().into()
         );
 
         assert_eq!(
-            canister.get_next_sns_version(expected_next_sns_version2.into()),
+            canister.get_next_sns_version(
+                GetNextSnsVersionRequest {
+                    current_version: Some(expected_next_sns_version2),
+                    governance_canister_id: None
+                },
+                some_principal
+            ),
             expected_next_sns_version3.clone().into()
         );
 
         assert_eq!(
-            canister.get_next_sns_version(expected_next_sns_version3.into()),
+            canister.get_next_sns_version(
+                GetNextSnsVersionRequest {
+                    current_version: Some(expected_next_sns_version3),
+                    governance_canister_id: None
+                },
+                some_principal
+            ),
             expected_next_sns_version4.clone().into()
         );
         assert_eq!(
-            canister.get_next_sns_version(expected_next_sns_version4.into()),
+            canister.get_next_sns_version(
+                GetNextSnsVersionRequest {
+                    current_version: Some(expected_next_sns_version4),
+                    governance_canister_id: None
+                },
+                some_principal
+            ),
             expected_next_sns_version5.clone().into()
         );
         assert_eq!(
-            canister.get_next_sns_version(expected_next_sns_version5.into()),
+            canister.get_next_sns_version(
+                GetNextSnsVersionRequest {
+                    current_version: Some(expected_next_sns_version5),
+                    governance_canister_id: None
+                },
+                some_principal
+            ),
             expected_next_sns_version6.into()
         );
     }
@@ -2151,7 +2915,7 @@ mod test {
                     .set_sns_subnets(vec![available_subnet.unwrap()]);
             }
             if wasm_available {
-                add_mock_wasms(&mut c.borrow_mut());
+                add_dummy_wasms(&mut c.borrow_mut(), None);
             }
         });
 
@@ -2197,8 +2961,7 @@ mod test {
         let test_id = subnet_test_id(1);
         let deployed_version = CANISTER_WRAPPER.with(|c| {
             c.borrow_mut().set_sns_subnets(vec![test_id]);
-            let sns_version = add_mock_wasms(&mut c.borrow_mut());
-            sns_version
+            add_dummy_wasms(&mut c.borrow_mut(), None).5
         });
 
         let init_payload = SnsInitPayload::with_valid_values_for_testing();
@@ -2384,7 +3147,7 @@ mod test {
 
         CANISTER_WRAPPER.with(|c| {
             c.borrow_mut().set_sns_subnets(vec![test_id]);
-            add_mock_wasms(&mut c.borrow_mut());
+            add_dummy_wasms(&mut c.borrow_mut(), None);
         });
 
         let sns_1 = SnsWasmCanister::deploy_new_sns(
