@@ -14,7 +14,7 @@ export class MalformedHostnameError extends Error {
 
 export class CurrentGatewayResolveError extends Error {
   constructor() {
-    super(`Fail to resolve gateway for current location.`);
+    super(`Fail to resolve gateway for current location`);
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
