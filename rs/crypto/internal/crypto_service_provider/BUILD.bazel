@@ -81,8 +81,6 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/crypto/internal/crypto_service_provider",
     },
-    # https://dfinity.atlassian.net/browse/CRP-1833
-    flaky = True,
     proc_macro_deps = [
         "@crate_index//:proptest-derive",
     ],
