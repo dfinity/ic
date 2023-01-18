@@ -106,18 +106,21 @@ you will prepare an upgrade proposal and submit it.
 This process will be done on a machine that has an HSM key available.
 
 First, run 
-`./prepare-mainnet-proposal-text.sh <LAST_DEPLOY_COMMIT> <TARGET_DEPLOY_COMMIT> <CANISTER_NAME> <PROPOSAL_FILE>`
+`./prepare-mainnet-proposal-text.sh  <CANISTER_NAME> <TARGET_VERSION> <PROPOSAL_FILE>`
 
-`<LAST_DEPLOY_COMMIT>` should be obtained from the last relevant proposal for the given canister at present.
+`PREVIOUS_COMMIT` can be optionally added as an environment variable if the canister in question does not have its currently  
+ deployed commit as canister metadata. 
 
 For example:
-`./prepare-mainnet-proposal-text.sh f818cf1eb89bcbc9aecb1fb73de8c8de6c258c42 d2d9d63309cf568e3b2c2a0bc366b6850b044792 registry /tmp/upgrade_registry.md`
+`./prepare-mainnet-proposal-text.sh registry d2d9d63309cf568e3b2c2a0bc366b6850b044792 /tmp/upgrade_registry.md`
 
 Next, you will need to open the file, and edit the section with `TODO ADD FEATURE NOTES` in it, and add a list of features
 to be deployed.  These can be determined by looking at the list of commits generated in the proposal.
 
 Finally, after inspecting the proposal, run 
 `./submit-mainnet-upgrade-proposal.sh <PROPOSAL_FILE> <YOUR_NEURON_ID>`
+
+In this case, it is the neuron id associated with your HSM key (which must be plugged into your computer).
 
 For example:
 `./submit-mainnet-upgrade-proposal.sh /tmp/upgrade_registry.md 123`
