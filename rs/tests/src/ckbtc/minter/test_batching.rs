@@ -1,7 +1,7 @@
-use crate::ckbtc::minter::utils::retrieve_btc;
 use crate::ckbtc::minter::utils::{
-    ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
-    wait_for_finalization_no_new_blocks, wait_for_mempool_change, wait_for_update_balance,
+    ensure_wallet, generate_blocks, get_btc_address, get_btc_client, retrieve_btc,
+    send_to_btc_address, wait_for_finalization_no_new_blocks, wait_for_mempool_change,
+    wait_for_update_balance,
 };
 use crate::{
     ckbtc::lib::{

@@ -1,7 +1,7 @@
 use clap::Parser;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    canister_http, ckbtc, consensus, driver::driver_setup::initialize_env, execution, ledger_tests,
+    canister_http, consensus, driver::driver_setup::initialize_env, execution, ledger_tests,
     message_routing, networking, nns_tests, orchestrator, rosetta_test, tecdsa,
     wasm_generator_test, workload_counter_canister_test,
 };
@@ -331,64 +331,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
             ],
         )
         .with_alert(ENG_CONSENSUS_CHANNEL),
-    );
-
-    m.add_suite(
-        suite(
-            "ckbtc_pre_master",
-            vec![
-                pot_with_setup(
-                    "minter_pot_basics",
-                    ckbtc::lib::config,
-                    seq!(
-                        par(vec![
-                            sys_t(
-                                "minter_get_btc_address",
-                                ckbtc::minter::test_get_btc_address::test_get_btc_address
-                            ),
-                            sys_t(
-                                "minter_get_withdrawal_account",
-                                ckbtc::minter::test_get_withdrawal_account::test_get_withdrawal_account
-                            ),
-                        ]),
-                        sys_t("ckbtc_minter_agent", ckbtc::agent::test_ckbtc_minter_agent),
-                    ),
-                ),
-                pot_with_setup(
-                    "minter_pot_update_balance",
-                    ckbtc::lib::config,
-                    seq!(sys_t(
-                        "minter_update_balance",
-                        ckbtc::minter::test_update_balance::test_update_balance
-                    ),),
-                ),
-                pot_with_setup(
-                    "minter_pot_retrieve_btc",
-                    ckbtc::lib::config,
-                    seq!(sys_t(
-                        "minter_retrieve_btc",
-                        ckbtc::minter::test_retrieve_btc::test_retrieve_btc
-                    ),),
-                ),
-                pot_with_setup(
-                    "minter_pot_heartbeat",
-                    ckbtc::lib::config,
-                    seq!(sys_t(
-                        "minter_heartbeat_btc",
-                        ckbtc::minter::test_heartbeat::test_heartbeat
-                    ),),
-                ),
-                pot_with_setup(
-                    "minter_pot_heartbeat_batching",
-                    ckbtc::lib::config,
-                    seq!(sys_t(
-                        "minter_heartbeat_heartbeat_btc",
-                        ckbtc::minter::test_batching::test_batching
-                    ),),
-                ),
-            ],
-        )
-        .with_alert(ENG_FINANCIAL_INTEGRATION),
     );
 
     m.add_suite(suite(
