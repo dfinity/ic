@@ -44,7 +44,7 @@ use hyper::{
     client::HttpConnector, server::conn::Http, Body, Client, Request, Response, StatusCode,
 };
 use hyper_tls::HttpsConnector;
-use ic_async_utils::start_tcp_listener;
+use ic_async_utils::{receive_body, start_tcp_listener};
 use ic_certification::validate_subnet_delegation_certificate;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces::TlsHandshake;
@@ -129,6 +129,10 @@ const MAX_TCP_PEEK_TIMEOUT_SECS: u64 = 11;
 // Request with body size bigger than 'MAX_REQUEST_SIZE_BYTES' will be rejected
 // and appropriate error code will be returned to the user.
 pub(crate) const MAX_REQUEST_SIZE_BYTES: Byte = Byte::from_bytes(5 * 1024 * 1024); // 5MB
+
+// Delegation certificate requests with body size bigger than 'MAX_DELEGATION_CERTIFICATE_SIZE' will be rejected.
+// For valid IC delegation certificates this is never the case since the size is always constant.
+pub(crate) const MAX_DELEGATION_CERTIFICATE_SIZE: Byte = Byte::from_bytes(1024 * 1024); // 1MB
 
 // If the request body is not received/parsed within
 // 'MAX_REQUEST_RECEIVE_DURATION', then the request will be rejected and
@@ -888,7 +892,13 @@ async fn load_root_delegation(
             }
         };
 
-        let raw_response = match hyper::body::to_bytes(raw_response_res).await {
+        let raw_response = match receive_body(
+            raw_response_res.into_body(),
+            MAX_REQUEST_RECEIVE_DURATION,
+            MAX_DELEGATION_CERTIFICATE_SIZE,
+        )
+        .await
+        {
             Ok(raw_response) => raw_response,
             Err(err) => {
                 // Fetching the NNS delegation failed. Do a random backoff and try again.
