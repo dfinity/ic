@@ -75,7 +75,8 @@ use crate::pb::v1::governance::{
 use crate::pb::v1::manage_neuron_response::StakeMaturityResponse;
 use crate::pb::v1::transfer_sns_treasury_funds::TransferFrom;
 use crate::sns_upgrade::{
-    get_all_sns_canisters, get_running_version, get_upgrade_params, get_wasm, UpgradeSnsParams,
+    get_all_sns_canisters, get_running_version, get_upgrade_params, get_wasm, SnsCanisterType,
+    UpgradeSnsParams,
 };
 use crate::types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock};
 use candid::{Decode, Encode};
@@ -1946,16 +1947,18 @@ impl Governance {
                 let upgrade_sns_result =
                     self.perform_upgrade_to_next_sns_version(proposal_id).await;
 
-                // If the upgrade returned `Ok` that means the upgrade has successfully been
-                // kicked-off asynchronously. Governance's heartbeat logic will continuously
-                // check the status of the upgrade and mark the proposal as either executed or
-                // failed. So we call `return` in the `Ok` branch so that
-                // `set_proposal_execution_status` doesn't get called and set the proposal status
-                // prematurely. If the result is `Err`, we do want to set the proposal status,
-                // and passing the value through is sufficient.
+                // If the upgrade returned `Ok(true)` that means the upgrade completed successfully
+                // and the proposal can be marked as "executed". If the upgrade returned `Ok(false)`
+                // that means the upgrade has successfully been kicked-off asynchronously, but not
+                // completed. Governance's heartbeat logic will continuously check the status of the
+                // upgrade and mark the proposal as either executed or failed. So we call `return`
+                // in the `Ok(false)` branch so that `set_proposal_execution_status` doesn't get
+                // called and set the proposal status prematurely. If the result is `Err`, we do
+                // want to set the proposal status, and passing the value through is sufficient.
                 match upgrade_sns_result {
-                    Ok(()) => return,
-                    Err(_) => upgrade_sns_result,
+                    Ok(true) => Ok(()),
+                    Ok(false) => return,
+                    Err(e) => Err(e),
                 }
             }
             // TODO(NNS1-1434) - account for not allowing upgrades off of the blessed upgrade path through GenericNervousSystemFunctions
@@ -2390,10 +2393,12 @@ impl Governance {
             })
     }
 
+    /// Return `Ok(true)` if the upgrade was completed successfully, return `Ok(false)` if an
+    /// upgrade was successfully kicked-off, but its completion is pending.
     async fn perform_upgrade_to_next_sns_version(
         &mut self,
         proposal_id: u64,
-    ) -> Result<(), GovernanceError> {
+    ) -> Result<bool, GovernanceError> {
         err_if_another_upgrade_is_in_progress(&self.proto.proposals, proposal_id)?;
 
         let current_version = self.proto.deployed_version_or_panic();
@@ -2412,6 +2417,15 @@ impl Governance {
                     format!("Could not execute proposal: {}", e),
                 )
             })?;
+
+        // SNS Swap is controlled by NNS Governance, so this SNS instance cannot upgrade it.
+        // Simply set `deployed_version` to `next_version` version so that other SNS upgrades can
+        // be executed, and let the Swap upgrade occur externally (e.g. by someone submitting an
+        // NNS proposal).
+        if canister_type_to_upgrade == SnsCanisterType::Swap {
+            self.proto.deployed_version = Some(next_version);
+            return Ok(true);
+        }
 
         let target_wasm = get_wasm(&*self.env, new_wasm_hash.to_vec(), canister_type_to_upgrade)
             .await
@@ -2449,7 +2463,7 @@ impl Governance {
             canister_type_to_upgrade,
         );
 
-        Ok(())
+        Ok(false)
     }
 
     async fn perform_transfer_sns_treasury_funds(
