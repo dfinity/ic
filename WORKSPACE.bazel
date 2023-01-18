@@ -63,7 +63,7 @@ rust_register_toolchains(
 
 git_repository(
     name = "rules_foreign_cc",
-    commit = "b1e65fec980c59cf5c2e21f7eb90fed331c36c66",
+    commit = "9acbb356916760192d4c16301a69267fe44e6dec",
     remote = "https://github.com/bazelbuild/rules_foreign_cc.git",
 )
 
@@ -107,6 +107,20 @@ external_crates_repository(
             build_script_env = {
                 "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
             },
+        )],
+        "openssl-sys": [crate.annotation(
+            build_script_data = [
+                "@openssl//:gen_dir",
+                "@openssl//:openssl",
+            ],
+            # https://github.com/sfackler/rust-openssl/tree/master/openssl-sys/build
+            build_script_data_glob = ["build/**/*.c"],
+            build_script_env = {
+                "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
+                "OPENSSL_STATIC": "true",
+            },
+            data = ["@openssl"],
+            deps = ["@openssl"],
         )],
         "librocksdb-sys": [crate.annotation(
             build_script_env = {
@@ -199,6 +213,13 @@ load(
     "@io_bazel_rules_docker//repositories:repositories.bzl",
     container_repositories = "repositories",
 )
+load("//third_party/openssl:openssl_repositories.bzl", "openssl_repositories")
+
+openssl_repositories()
+
+load("//third_party/openssl:openssl_setup.bzl", "openssl_setup")
+
+openssl_setup()
 
 container_repositories()
 

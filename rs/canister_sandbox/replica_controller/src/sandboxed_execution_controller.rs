@@ -1502,11 +1502,24 @@ fn evict_sandbox_processes(
         })
         .collect();
 
+    let last_used_threshold = match Instant::now().checked_sub(max_sandbox_idle_time) {
+        Some(threshold) => threshold,
+        None => {
+            // This case may happen on MacOS where `Instant::now()` returns the time after the reboot.
+            // Since `Instant` doesn't have a default/zero value, we return the oldest `last_used`.
+            candidates
+                .iter()
+                .map(|x| x.last_used)
+                .min()
+                .unwrap_or_else(Instant::now)
+        }
+    };
+
     let evicted = sandbox_process_eviction::evict(
         candidates,
         min_active_sandboxes,
         max_active_sandboxes,
-        Instant::now() - max_sandbox_idle_time,
+        last_used_threshold,
     );
 
     // Actually evict all the selected eviction candidates.

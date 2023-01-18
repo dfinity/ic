@@ -567,6 +567,9 @@ def external_crates_repository(name, annotations):
             "openssl": crate.spec(
                 version = "^0.10.29",
             ),
+            "openssl-sys": crate.spec(
+                version = "0.9",
+            ),
             "opentelemetry": crate.spec(
                 version = "^0.17.0",
             ),
