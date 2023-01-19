@@ -18,10 +18,10 @@ Runbook::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
+use crate::driver::test_env::{SshKeyGen, TestEnv};
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationExt,
-    SshSession, ADMIN, DEVICE_NAME,
+    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+    NnsInstallationExt, SshSession, ADMIN, DEVICE_NAME,
 };
 use crate::util::{
     self, agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
@@ -70,42 +70,21 @@ const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1); // Thi
 // This config holds these parameters.
 #[derive(Debug, Clone, Copy)]
 pub struct Config {
-    nodes_system_subnet: usize,
-    nodes_app_subnet: usize,
-    runtime: Duration,
-    rps: usize,
-    max_failures_ratio: f64,
+    pub nodes_system_subnet: usize,
+    pub nodes_app_subnet: usize,
+    pub runtime: Duration,
+    pub rps: usize,
+    pub max_failures_ratio: f64,
 }
 
-impl Config {
-    /// Builds the IC instance.
-    pub fn build(&self) -> impl FnOnce(TestEnv) {
-        let config = *self;
-        move |env: TestEnv| Config::config(env, config)
-    }
-
-    fn config(env: TestEnv, config: Config) {
-        InternetComputer::new()
-            .add_subnet(Subnet::new(SubnetType::System).add_nodes(config.nodes_system_subnet))
-            .add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_app_subnet))
-            .setup_and_start(&env)
-            .expect("Failed to setup IC under test.");
-    }
-
-    /// Returns a test function based on the configuration.
-    pub fn test(self) -> impl Fn(TestEnv) {
-        move |env: TestEnv| test(env, self)
-    }
-}
-
-pub fn config_sys_4_nodes_app_4_nodes() -> Config {
-    Config {
-        nodes_app_subnet: 4,
-        nodes_system_subnet: 4,
-        rps: 100,
-        runtime: Duration::from_secs(180),
-        max_failures_ratio: 0.05,
-    }
+pub fn setup(env: TestEnv, config: Config) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
+    InternetComputer::new()
+        .add_subnet(Subnet::new(SubnetType::System).add_nodes(config.nodes_system_subnet))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_app_subnet))
+        .setup_and_start(&env)
+        .expect("Failed to setup IC under test.");
 }
 
 pub fn test(env: TestEnv, config: Config) {

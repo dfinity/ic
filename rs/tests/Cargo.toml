@@ -317,3 +317,7 @@ path = "bin/replicable_mock_test.rs"
 [[bin]]
 name = "ic-systest-mainnet"
 path = "bin/mainnet_test.rs"
+
+[[bin]]
+name = "ic-systest-network-reliability"
+path = "bin/network_reliability_test.rs"
