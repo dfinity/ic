@@ -315,6 +315,10 @@ name = "ic-systest-replicable-mock-test"
 path = "bin/replicable_mock_test.rs"
 
 [[bin]]
+name = "ic-systest-remote-replicable-mock-test"
+path = "bin/remote_replicable_mock_test.rs"
+
+[[bin]]
 name = "ic-systest-mainnet"
 path = "bin/mainnet_test.rs"
 

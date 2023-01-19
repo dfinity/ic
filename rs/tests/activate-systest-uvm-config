@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+find /config -name *.tar -exec docker load -i {} \;
