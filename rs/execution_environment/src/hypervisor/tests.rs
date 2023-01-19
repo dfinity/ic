@@ -107,6 +107,29 @@ fn ic0_stable_grow_works() {
 }
 
 #[test]
+fn ic0_stable_grow_returns_neg_one_when_exceeding_memory_limit() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "stable_size" (func $stable_size (result i32)))
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+
+            (func (export "canister_update test")
+                ;; Grow the memory by 1000 pages and verify that the return value
+                ;; is -1 because the grow should fail.
+                (if (i32.ne (call $stable_grow (i32.const 1000)) (i32.const -1))
+                    (then (unreachable))
+                )
+            )
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    test.canister_update_allocations_settings(canister_id, None, Some(30 * 1024 * 1024))
+        .unwrap();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+}
+
+#[test]
 fn ic0_stable_write_increases_heap_delta() {
     let mut test = ExecutionTestBuilder::new().build();
     fn wat(bytes: usize) -> String {
@@ -214,16 +237,37 @@ fn ic0_grow_handles_overflow() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
-            (import "ic0" "stable_size" (func $stable_size (result i32)))
             (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
 
             (func (export "canister_update test")
                 ;; Grow the memory by 10 pages.
                 (drop (call $stable_grow (i32.const 10)))
-                ;; Grow the memory by 2^32-1 pages.
+                ;; Grow the memory up to 64 * 1024 + 1 pages.
                 ;; This should fail since it's bigger than the maximum number of memory
-                ;; pages that can be allocated and return -1.
-                (if (i32.ne (call $stable_grow (i32.const 4294967295)) (i32.const -1))
+                ;; pages that can be used with the 32-bit API and return -1.
+                (if (i32.ne (call $stable_grow (i32.const 65527)) (i32.const -1))
+                    (then (unreachable))
+                )
+            )
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+}
+
+#[test]
+fn ic0_grow_can_reach_max_number_of_pages() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+
+            (func (export "canister_update test")
+                ;; Grow the memory by 10 pages.
+                (drop (call $stable_grow (i32.const 10)))
+                ;; Grow the memory up to 64 * 1024 pages which is the maximum allowed.
+                ;; The result should be the previous number of pages (10).
+                (if (i32.ne (call $stable_grow (i32.const 65526)) (i32.const 10))
                     (then (unreachable))
                 )
             )
@@ -293,6 +337,32 @@ fn ic0_stable_grow_by_0_traps_if_memory_exceeds_4gb() {
                 )
                 ;; Grow the memory by 0 pages using 32-bit API. This should trap.
                 (drop (call $stable_grow (i32.const 0)))
+            )
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
+    assert_eq!(ErrorCode::CanisterTrapped, err.code());
+    assert!(err
+        .description()
+        .contains("32 bit stable memory api used on a memory larger than 4GB"));
+}
+
+#[test]
+fn ic0_stable_size_traps_if_memory_exceeds_4gb() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+            (import "ic0" "stable_size" (func $stable_size (result i32)))
+
+            (func (export "canister_update test")
+                ;; Grow the memory to 4GiB + 1 page.
+                (if (i64.ne (call $stable64_grow (i64.const 65537)) (i64.const 0))
+                    (then (unreachable))
+                )
+
+                ;; This should trap because stable memory is too big for 32-bit API.
+                (drop (call $stable_size))
             )
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();

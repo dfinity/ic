@@ -21,6 +21,7 @@ use self::{instrumentation::instrument, validation::validate_wasm_binary};
 
 pub mod decoding;
 pub mod instrumentation;
+mod system_api_replacements;
 pub mod validation;
 pub mod wasm_transform;
 
@@ -147,6 +148,22 @@ impl Segments {
             })
             .into_iter()
             .collect()
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum SystemApiFunc {
+    StableGrow,
+    StableSize,
+}
+
+impl SystemApiFunc {
+    fn from_import_name(name: &str) -> Option<Self> {
+        match name {
+            "stable_grow" => Some(Self::StableGrow),
+            "stable_size" => Some(Self::StableSize),
+            _ => None,
+        }
     }
 }
 

@@ -191,8 +191,10 @@ impl WasmtimeEmbedder {
 
     pub fn compile(&self, wasm_binary: &BinaryEncodedWasm) -> HypervisorResult<Module> {
         let module = wasmtime::Module::new(&self.create_engine()?, wasm_binary.as_slice())
-            .map_err(|_| {
-                HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule)
+            .map_err(|e| {
+                HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(
+                    format!("{:?}", e),
+                ))
             })?;
         // Note that a wasmtime::Module object is cheaply clonable (just doing
         // a bit of reference counting, i.e. it is a "shallow copy"). This is
@@ -304,7 +306,9 @@ impl WasmtimeEmbedder {
                     "Failed to instantiate module for {}: {}", canister_id, err
                 );
                 return Err((
-                    HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule),
+                    HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(
+                        format!("{:?}", err),
+                    )),
                     store.into_data().system_api,
                 ));
             }
@@ -419,7 +423,9 @@ impl WasmtimeEmbedder {
                     );
                     return Err((
                         HypervisorError::WasmEngineError(
-                            WasmEngineError::FailedToInstantiateModule,
+                            WasmEngineError::FailedToInstantiateModule(
+                                "Unable to find memory when instantiating".to_string(),
+                            ),
                         ),
                         store.into_data().system_api,
                     ));
@@ -477,7 +483,9 @@ impl WasmtimeEmbedder {
                     "Unable to find memory bytemap for canister {} when instantiating", canister_id
                 );
                 Err((
-                    HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule),
+                    HypervisorError::WasmEngineError(WasmEngineError::FailedToInstantiateModule(
+                        "Unable to find bytemap memory when instantiating".to_string(),
+                    )),
                     store.into_data().system_api,
                 ))
             }
