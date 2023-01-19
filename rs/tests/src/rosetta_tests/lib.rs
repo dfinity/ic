@@ -5,6 +5,7 @@ use crate::rosetta_tests::lib::convert::neuron_subaccount_bytes_from_public_key;
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use candid::Principal;
 use ic_canister_client_sender::Secp256k1KeyPair;
+use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::Tokens;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -19,11 +20,12 @@ use ic_rosetta_api::models::amount::{signed_amount, tokens_to_amount};
 use ic_rosetta_api::models::operation::OperationType;
 use ic_rosetta_api::models::{
     ConstructionCombineResponse, ConstructionParseResponse, ConstructionPayloadsRequestMetadata,
-    ConstructionPayloadsResponse, CurveType, Error, PublicKey, RosettaSupportedKeyPair, Signature,
-    SignatureType,
+    ConstructionPayloadsResponse, CurveType, Error, Object, PublicKey, RosettaSupportedKeyPair,
+    Signature, SignatureType,
 };
 use ic_rosetta_api::models::{ConstructionSubmitResponse, Error as RosettaError};
 use ic_rosetta_api::request::request_result::RequestResult;
+use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
 use ic_rosetta_api::request::transaction_results::TransactionResults;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{
@@ -38,6 +40,7 @@ use icp_ledger::{AccountIdentifier, Operation};
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, SeedableRng};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -160,6 +163,42 @@ where
             }
             Ok((submit_res.transaction_identifier, results, charged_fee))
         }
+        Err(e) => Err(e),
+    }
+}
+
+// the 'external' version returning TransactionOperationResults.
+pub async fn do_multiple_txn_external<T: RosettaSupportedKeyPair>(
+    ros: &RosettaApiClient,
+    requests: &[RequestInfo<T>],
+    accept_suggested_fee: bool,
+    ingress_end: Option<u64>,
+    created_at_time: Option<u64>,
+) -> Result<
+    (
+        TransactionIdentifier,
+        TransactionOperationResults,
+        Tokens, // charged fee
+    ),
+    RosettaError,
+>
+where
+    Arc<T>: RosettaSupportedKeyPair,
+{
+    match do_multiple_txn_submit(
+        ros,
+        requests,
+        accept_suggested_fee,
+        ingress_end,
+        created_at_time,
+    )
+    .await
+    {
+        Ok((submit_res, charged_fee)) => Ok((
+            submit_res.transaction_identifier,
+            submit_res.metadata,
+            charged_fee,
+        )),
         Err(e) => Err(e),
     }
 }
@@ -595,6 +634,34 @@ pub struct NeuronDetails {
     pub(crate) neuron_account: AccountIdentifier,
 }
 
+pub fn assert_canister_error(err: &RosettaError, code: u32, text: &str) {
+    let err = if let ApiError::OperationsErrors(results, _) =
+        errors::convert_to_api_error(err.clone(), DEFAULT_TOKEN_SYMBOL)
+    {
+        errors::convert_to_error(&results.error().unwrap().clone())
+    } else {
+        err.clone()
+    };
+
+    assert_eq!(
+        err.code, code,
+        "rosetta error {:?} does not have code: {}",
+        err, code
+    );
+    let details = err.details.as_ref().unwrap();
+    assert!(
+        details
+            .get("error_message")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains(text),
+        "rosetta error {:?} does not contain '{}'",
+        err,
+        text
+    );
+}
+
 pub fn assert_ic_error(err: &RosettaError, code: u32, ic_http_status: u64, text: &str) {
     let err = if let ApiError::OperationsErrors(results, _) =
         errors::convert_to_api_error(err.clone(), DEFAULT_TOKEN_SYMBOL)
@@ -629,4 +696,101 @@ pub fn acc_id(seed: u64) -> AccountIdentifier {
     let public_key_der =
         ic_canister_client_sender::ed25519_public_key_to_der(keypair.public_key.to_vec());
     PrincipalId::new_self_authenticating(&public_key_der).into()
+}
+
+pub async fn raw_construction(ros: &RosettaApiClient, operation: &str, req: Value) -> Object {
+    let req = req.to_string();
+    let res = &ros
+        .raw_construction_endpoint(operation, req.as_bytes())
+        .await
+        .unwrap();
+    let output: Object = serde_json::from_slice(&res.0).unwrap();
+    assert!(
+        res.1.is_success(),
+        "Result of {} should be a success, got: {:?}",
+        operation,
+        output
+    );
+    output
+}
+
+pub fn sign(payload: &Value, keypair: &Arc<EdKeypair>) -> Value {
+    let hex_bytes: &str = payload.get("hex_bytes").unwrap().as_str().unwrap();
+    let bytes = from_hex(hex_bytes).unwrap();
+    let signature_bytes = keypair.sign(&bytes);
+    let hex_bytes = to_hex(&signature_bytes);
+    json!(hex_bytes)
+}
+
+pub async fn send_icpts<T: RosettaSupportedKeyPair>(
+    ros: &RosettaApiClient,
+    keypair: Arc<T>,
+    dst: AccountIdentifier,
+    amount: Tokens,
+) -> Result<
+    (
+        TransactionIdentifier,
+        Option<BlockIndex>,
+        Tokens, // charged fee
+    ),
+    RosettaError,
+>
+where
+    Arc<T>: RosettaSupportedKeyPair,
+{
+    send_icpts_with_window(ros, keypair, dst, amount, None, None).await
+}
+
+pub async fn send_icpts_with_window<T: RosettaSupportedKeyPair>(
+    ros: &RosettaApiClient,
+    keypair: Arc<T>,
+    dst: AccountIdentifier,
+    amount: Tokens,
+    ingress_end: Option<u64>,
+    created_at_time: Option<u64>,
+) -> Result<
+    (
+        TransactionIdentifier,
+        Option<BlockIndex>,
+        Tokens, // charged fee
+    ),
+    RosettaError,
+>
+where
+    Arc<T>: RosettaSupportedKeyPair,
+{
+    let public_key_der = ic_canister_client_sender::ed25519_public_key_to_der(keypair.get_pb_key());
+
+    let from: AccountIdentifier = PrincipalId::new_self_authenticating(&public_key_der).into();
+
+    let t = Operation::Transfer {
+        from,
+        to: dst,
+        amount,
+        fee: Tokens::ZERO,
+    };
+
+    do_txn(ros, keypair, t, true, ingress_end, created_at_time)
+        .await
+        .and_then(|(_, results, fee)| {
+            if let Some(RequestResult {
+                _type: Request::Transfer(Operation::Transfer { .. }),
+                transaction_identifier,
+                block_index,
+                ..
+            }) = results.operations.last()
+            {
+                Ok((
+                    transaction_identifier
+                        .clone()
+                        .expect("Transfers must return a real transaction identifier"),
+                    *block_index,
+                    fee,
+                ))
+            } else {
+                Err(errors::convert_to_error(
+                    &convert::transaction_results_to_api_error(results, DEFAULT_TOKEN_SYMBOL),
+                ))
+            }
+        })
 }

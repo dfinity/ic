@@ -15,11 +15,15 @@ fn main() -> Result<()> {
                 .add_test(systest!(tests::network::test))
                 .add_test(systest!(tests::derive::test))
                 .add_test(systest!(tests::make_transaction::test))
-                .add_test(systest!(tests::staking::test))
                 .add_test(systest!(tests::neuron_disburse::test))
-                .add_test(systest!(tests::neuron_hotkey::test)),
+                .add_test(systest!(tests::neuron_hotkey::test))
+                .add_test(systest!(tests::neuron_dissolve::test))
+                .add_test(systest!(tests::neuron_spawn::test))
+                .add_test(systest!(tests::neuron_staking::test))
+                .add_test(systest!(tests::neuron_follow::test))
+                .add_test(systest!(tests::neuron_info::test))
+                .add_test(systest!(tests::neuron_maturity::test)),
         )
-        // TODO add other tests here.
         .execute_from_args()?;
     Ok(())
 }

@@ -1,84 +1,71 @@
 use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::{
-    check_balance, create_ledger_client, do_multiple_txn, hex2addr, make_user,
-    one_day_from_now_nanos,
+    assert_canister_error, check_balance, create_ledger_client, do_multiple_txn, make_user_ed25519,
+    one_day_from_now_nanos, raw_construction, sign, to_public_key,
 };
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::setup;
+use crate::rosetta_tests::test_neurons::TestNeurons;
 use crate::util::block_on;
 use assert_json_diff::{assert_json_eq, assert_json_include};
 use ic_ledger_core::Tokens;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_rosetta_api::convert::{
-    from_hex, from_model_account_identifier, neuron_account_from_public_key, to_hex,
-};
+use ic_rosetta_api::convert::{from_model_account_identifier, neuron_account_from_public_key};
 use ic_rosetta_api::models::seconds::Seconds;
-use ic_rosetta_api::models::{NeuronState, Object};
+use ic_rosetta_api::models::NeuronState;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::{SetDissolveTimestamp, Stake, StartDissolve, StopDissolve};
-use ic_rosetta_test_utils::{assert_canister_error, to_public_key, EdKeypair, RequestInfo};
+use ic_rosetta_test_utils::{EdKeypair, RequestInfo};
 use icp_ledger::{AccountIdentifier, Operation, DEFAULT_TRANSFER_FEE};
 use serde_json::{json, Value};
-use slog::{info, Logger};
+use slog::info;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
 const PORT: u32 = 8103;
-const VM_NAME: &str = "rosetta-test-staking";
+const VM_NAME: &str = "rosetta-test-neuron-staking";
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
 
-    // Accounts for test and initial ledger balances.
     let mut ledger_balances = HashMap::new();
-    let (acc_a, _kp_a, _pk_a, _pid_a) = make_user(100);
-    //let kp_a = Arc::new(kp_a);
-    let (acc_b, kp_b, _pk_b, _pid_b) = make_user(101);
-    let _kp_b = Arc::new(kp_b);
-    let acc1 = hex2addr("35548ec29e9d85305850e87a2d2642fe7214ff4bb36334070deafc3345c3b127");
-    let acc2 = hex2addr("42a3eb61d549dc9fe6429ce2361ec60a569b8befe43eb15a3fc5c88516711bc5");
-    let acc3 = hex2addr("eaf407f7fa3770edb621ce920f6c83cefb63df333044d1cdcd2a300ceb85cb1c");
-    let acc4 = hex2addr("ba5b33d11f93033ba45b0a0136d4f7f6310ee482cfb1cfebdb4cea55f4aeda17");
-    let acc5 = hex2addr("776ab0ef12a63f5b1bd605f202b1b5cefeaf5791c0241c773fc8e76a6c4a8b40");
-    let acc6 = hex2addr("88bf52d6380bf2ed7b5fd4010afd145dc351cbf386def9b9be017bbeb640a919");
-    let acc7 = hex2addr("92c9c807da64528240f65ec29b58c839bf2374e9c1c38b7661da65fd8710124e");
-    ledger_balances.insert(acc1, Tokens::from_e8s(100_000_000_001));
-    ledger_balances.insert(acc2, Tokens::from_e8s(100_000_000_002));
-    ledger_balances.insert(acc3, Tokens::from_e8s(100_000_000_003));
-    ledger_balances.insert(acc4, Tokens::from_e8s(100_000_000_004));
-    ledger_balances.insert(acc5, Tokens::from_e8s(100_000_000_005));
-    ledger_balances.insert(acc6, Tokens::from_e8s(100_000_000_006));
-    ledger_balances.insert(acc7, Tokens::from_e8s(100_000_000_007));
-    ledger_balances.insert(acc_a, Tokens::from_e8s(200_000_000_000));
-    ledger_balances.insert(acc_b, Tokens::new(1000, 0).unwrap());
+    let (acc, _, _, _) = make_user_ed25519(101);
+    ledger_balances.insert(acc, Tokens::new(1000, 0).unwrap());
 
-    let client = setup(&env, PORT, VM_NAME, Some(ledger_balances), None);
+    // Create neurons.
+    let one_year_from_now = 60 * 60 * 24 * 365
+        + std::time::SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+    let neurons = TestNeurons::new(2000, &mut ledger_balances);
+
+    // Create Rosetta and ledger clients.
+    let neurons = neurons.get_neurons();
+    let client = setup(&env, PORT, VM_NAME, Some(ledger_balances), Some(neurons));
     let ledger_client = create_ledger_client(&env, &client);
 
     block_on(async {
-        test_staking(&client, &logger).await;
-        test_staking_raw(&client, &logger).await;
-        test_staking_failure(&client, &logger).await;
-        test_staking_flow(&client, &ledger_client, &logger).await;
-        test_staking_flow_two_txns(&client, &ledger_client, &logger).await;
+        info!(logger, "Test staking");
+        let _ = test_staking(&client).await;
+        info!(logger, "Test staking (raw JSON)");
+        let _ = test_staking_raw(&client).await;
+        info!(logger, "Test staking failure");
+        test_staking_failure(&client).await;
+        info!(logger, "Test staking flow");
+        test_staking_flow(&client, &ledger_client, Seconds(one_year_from_now)).await;
+        info!(logger, "Test staking flow two transactions");
+        test_staking_flow_two_txns(&client, &ledger_client, Seconds(one_year_from_now)).await;
     });
 }
 
-async fn test_staking(
-    client: &RosettaApiClient,
-    logger: &Logger,
-) -> (AccountIdentifier, Arc<EdKeypair>) {
-    info!(&logger, "Test staking");
+async fn test_staking(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKeypair>) {
+    let (acc, kp_b, _pk_b, _pid_b) = make_user_ed25519(101);
+    let key_pair = Arc::new(kp_b);
 
-    // Accounts and keys.
-    let (acc_b, kp_b, _pk_b, _pid_b) = make_user(101);
-    let kp_b = Arc::new(kp_b);
-    let key_pair = Arc::clone(&kp_b);
-
-    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1300);
-    // let dst_acc = dst_acc.into();
+    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user_ed25519(1300);
     let dst_acc_kp = Arc::new(dst_acc_kp);
     let neuron_index = 2;
 
@@ -94,7 +81,7 @@ async fn test_staking(
         &[
             RequestInfo {
                 request: Request::Transfer(Operation::Transfer {
-                    from: acc_b,
+                    from: acc,
                     to: dst_acc,
                     amount: (staked_amount + DEFAULT_TRANSFER_FEE).unwrap(),
                     fee: DEFAULT_TRANSFER_FEE,
@@ -171,15 +158,70 @@ async fn test_staking(
     (dst_acc, dst_acc_kp)
 }
 
-async fn test_staking_raw(
-    ros: &RosettaApiClient,
-    _logger: &Logger,
-) -> (AccountIdentifier, Arc<EdKeypair>) {
-    let (acc, kp_b, _, _) = make_user(101);
-    let kp_b = Arc::new(kp_b);
-    let key_pair = Arc::clone(&kp_b);
+async fn test_staking_failure(client: &RosettaApiClient) {
+    let (acc, kp_b, _pk_b, _pid_b) = make_user_ed25519(101);
+    let key_pair = Arc::new(kp_b);
 
-    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1300);
+    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user_ed25519(1301);
+    let dst_acc_kp = Arc::new(dst_acc_kp);
+    let neuron_index = 2;
+
+    // This is just below the minimum (NetworkEconomics.neuron_minimum_stake_e8s).
+    let staked_amount = (Tokens::new(1, 0).unwrap() - Tokens::from_e8s(1)).unwrap();
+
+    // Could use /construction/derive for this.
+    let neuron_account =
+        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &dst_acc_pk, neuron_index).unwrap();
+    let neuron_account = from_model_account_identifier(&neuron_account).unwrap();
+
+    let err = do_multiple_txn(
+        client,
+        &[
+            RequestInfo {
+                request: Request::Transfer(Operation::Transfer {
+                    from: acc,
+                    to: dst_acc,
+                    amount: (staked_amount + DEFAULT_TRANSFER_FEE).unwrap(),
+                    fee: DEFAULT_TRANSFER_FEE,
+                }),
+                sender_keypair: Arc::clone(&key_pair),
+            },
+            RequestInfo {
+                request: Request::Transfer(Operation::Transfer {
+                    from: dst_acc,
+                    to: neuron_account,
+                    amount: staked_amount,
+                    fee: DEFAULT_TRANSFER_FEE,
+                }),
+                sender_keypair: Arc::clone(&dst_acc_kp),
+            },
+            RequestInfo {
+                request: Request::Stake(Stake {
+                    account: dst_acc,
+                    neuron_index,
+                }),
+                sender_keypair: Arc::clone(&dst_acc_kp),
+            },
+        ],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .unwrap_err();
+
+    assert_canister_error(
+        &err,
+        750,
+        "Could not claim neuron: InsufficientFunds: Account does not have enough funds to stake a neuron",
+    );
+}
+
+async fn test_staking_raw(client: &RosettaApiClient) -> (AccountIdentifier, Arc<EdKeypair>) {
+    let (acc, kp_b, _pk_b, _pid_b) = make_user_ed25519(101);
+    let key_pair = Arc::new(kp_b);
+
+    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user_ed25519(1300);
     let dst_acc_kp = Arc::new(dst_acc_kp);
     let neuron_index = 2;
 
@@ -194,13 +236,13 @@ async fn test_staking_raw(
 
     // Call /construction/derive.
     let req_derive = json!({
-        "network_identifier": &ros.network_id(),
+        "network_identifier": &client.network_id(),
         "public_key": pk1,
         "metadata": {
             "account_type": "ledger"
         }
     });
-    let res_derive = raw_construction(ros, "derive", req_derive).await;
+    let res_derive = raw_construction(client, "derive", req_derive).await;
     let address = res_derive
         .get("account_identifier")
         .unwrap()
@@ -324,11 +366,11 @@ async fn test_staking_raw(
         }
     ]);
     let req_preprocess = json!({
-        "network_identifier": &ros.network_id(),
+        "network_identifier": &client.network_id(),
         "operations": operations,
         "metadata": {},
     });
-    let res_preprocess = raw_construction(ros, "preprocess", req_preprocess).await;
+    let res_preprocess = raw_construction(client, "preprocess", req_preprocess).await;
     let options = res_preprocess.get("options");
     assert_json_eq!(
         json!({
@@ -343,11 +385,11 @@ async fn test_staking_raw(
 
     // Call /construction/metadata
     let req_metadata = json!({
-        "network_identifier": &ros.network_id(),
+        "network_identifier": &client.network_id(),
         "options": options,
         "public_keys": [pk1]
     });
-    let res_metadata = raw_construction(ros, "metadata", req_metadata).await;
+    let res_metadata = raw_construction(client, "metadata", req_metadata).await;
     assert_json_eq!(
         json!([
             {
@@ -361,12 +403,12 @@ async fn test_staking_raw(
 
     // Call /construction/payloads
     let req_payloads = json!({
-        "network_identifier": &ros.network_id(),
+        "network_identifier": &client.network_id(),
         "operations": operations,
         "metadata": res_metadata,
         "public_keys": [pk1,pk2]
     });
-    let res_payloads = raw_construction(ros, "payloads", req_payloads).await;
+    let res_payloads = raw_construction(client, "payloads", req_payloads).await;
     let unsigned_transaction: &Value = res_payloads.get("unsigned_transaction").unwrap();
     let payloads = res_payloads.get("payloads").unwrap();
     let payloads = payloads.as_array().unwrap();
@@ -374,11 +416,11 @@ async fn test_staking_raw(
 
     // Call /construction/parse (unsigned).
     let req_parse = json!({
-        "network_identifier": &ros.network_id(),
+        "network_identifier": &client.network_id(),
         "signed": false,
         "transaction": &unsigned_transaction
     });
-    let _res_parse = raw_construction(ros, "parse", req_parse).await;
+    let _res_parse = raw_construction(client, "parse", req_parse).await;
 
     // Call /construction/combine.
     let signatures = json!([
@@ -416,34 +458,34 @@ async fn test_staking_raw(
     ]);
 
     let req_combine = json!({
-        "network_identifier": &ros.network_id(),
+        "network_identifier": &client.network_id(),
         "unsigned_transaction": &unsigned_transaction,
         "signatures": signatures
     });
-    let res_combine = raw_construction(ros, "combine", req_combine).await;
+    let res_combine = raw_construction(client, "combine", req_combine).await;
 
     // Call /construction/parse (signed).
     let signed_transaction: &Value = res_combine.get("signed_transaction").unwrap();
     let req_parse = json!({
-        "network_identifier": &ros.network_id(),
+        "network_identifier": &client.network_id(),
         "signed": true,
         "transaction": &signed_transaction
     });
-    let _res_parse = raw_construction(ros, "parse", req_parse).await;
+    let _res_parse = raw_construction(client, "parse", req_parse).await;
 
     // Call /construction/hash.
     let req_hash = json!({
-        "network_identifier": &ros.network_id(),
+        "network_identifier": &client.network_id(),
         "signed_transaction": &signed_transaction
     });
-    let _res_hash = raw_construction(ros, "hash", req_hash).await;
+    let _res_hash = raw_construction(client, "hash", req_hash).await;
 
     // Call /construction/submit.
     let req_submit = json!({
-        "network_identifier": &ros.network_id(),
+        "network_identifier": &client.network_id(),
         "signed_transaction": &signed_transaction
     });
-    let res_submit = raw_construction(ros, "submit", req_submit).await;
+    let res_submit = raw_construction(client, "submit", req_submit).await;
 
     // Check proper state after staking.
     let operations = res_submit
@@ -495,7 +537,7 @@ async fn test_staking_raw(
         .find_map(|r| r.get("metadata").and_then(|r| r.get("block_index")));
     assert!(last_block_idx.is_some());
 
-    let neuron_info = ros
+    let neuron_info = client
         .account_balance_neuron(neuron_account, neuron_id, None, false)
         .await
         .unwrap()
@@ -508,106 +550,17 @@ async fn test_staking_raw(
     (dst_acc, dst_acc_kp)
 }
 
-async fn test_staking_failure(ros: &RosettaApiClient, _logger: &Logger) {
-    let (acc, kp_b, _, _) = make_user(101);
-    let kp_b = Arc::new(kp_b);
-    let key_pair = Arc::clone(&kp_b);
-
-    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1301);
-    let dst_acc_kp = Arc::new(dst_acc_kp);
-    let neuron_index = 2;
-
-    // This is just below the minimum (NetworkEconomics.neuron_minimum_stake_e8s).
-    let staked_amount = (Tokens::new(1, 0).unwrap() - Tokens::from_e8s(1)).unwrap();
-
-    // Could use /construction/derive for this.
-    let neuron_account =
-        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &dst_acc_pk, neuron_index).unwrap();
-    let neuron_account = from_model_account_identifier(&neuron_account).unwrap();
-
-    let err = do_multiple_txn(
-        ros,
-        &[
-            RequestInfo {
-                request: Request::Transfer(Operation::Transfer {
-                    from: acc,
-                    to: dst_acc,
-                    amount: (staked_amount + DEFAULT_TRANSFER_FEE).unwrap(),
-                    fee: DEFAULT_TRANSFER_FEE,
-                }),
-                sender_keypair: Arc::clone(&key_pair),
-            },
-            RequestInfo {
-                request: Request::Transfer(Operation::Transfer {
-                    from: dst_acc,
-                    to: neuron_account,
-                    amount: staked_amount,
-                    fee: DEFAULT_TRANSFER_FEE,
-                }),
-                sender_keypair: Arc::clone(&dst_acc_kp),
-            },
-            RequestInfo {
-                request: Request::Stake(Stake {
-                    account: dst_acc,
-                    neuron_index,
-                }),
-                sender_keypair: Arc::clone(&dst_acc_kp),
-            },
-        ],
-        false,
-        Some(one_day_from_now_nanos()),
-        None,
-    )
-    .await
-    .unwrap_err();
-
-    assert_canister_error(
-        &err,
-        750,
-        "Could not claim neuron: InsufficientFunds: Account does not have enough funds to stake a neuron",
-    );
-}
-
-async fn raw_construction(ros: &RosettaApiClient, operation: &str, req: Value) -> Object {
-    let req = req.to_string();
-    let res = &ros
-        .raw_construction_endpoint(operation, req.as_bytes())
-        .await
-        .unwrap();
-    let output: Object = serde_json::from_slice(&res.0).unwrap();
-    assert!(
-        res.1.is_success(),
-        "Result of {} should be a success, got: {:?}",
-        operation,
-        output
-    );
-    output
-}
-
-fn sign(payload: &Value, keypair: &Arc<EdKeypair>) -> Value {
-    let hex_bytes: &str = payload.get("hex_bytes").unwrap().as_str().unwrap();
-    let bytes = from_hex(hex_bytes).unwrap();
-    let signature_bytes = keypair.sign(&bytes);
-    let hex_bytes = to_hex(&signature_bytes);
-    json!(hex_bytes)
-}
-
-async fn test_staking_flow(ros: &RosettaApiClient, ledger_client: &LedgerClient, _logger: &Logger) {
-    let one_year_from_now = 60 * 60 * 24 * 365
-        + std::time::SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-    let timestamp = Seconds(one_year_from_now);
-
-    let (acc, kp_b, _, _) = make_user(101);
-    let test_account = acc;
-    let kp_b = Arc::new(kp_b);
-    let test_key_pair = Arc::clone(&kp_b);
+async fn test_staking_flow(
+    client: &RosettaApiClient,
+    ledger_client: &LedgerClient,
+    timestamp: Seconds,
+) {
+    let (test_account, kp_b, _pk_b, _pid_b) = make_user_ed25519(101);
+    let test_key_pair = Arc::new(kp_b);
 
     let (_, tip_idx) = ledger_client.get_tip().await;
     let balance_before = ledger_client.get_account_balance(test_account).await;
-    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1400);
+    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user_ed25519(1400);
     let dst_acc_kp = Arc::new(dst_acc_kp);
 
     let staked_amount = Tokens::new(1, 0).unwrap();
@@ -619,7 +572,7 @@ async fn test_staking_flow(ros: &RosettaApiClient, ledger_client: &LedgerClient,
     let neuron_account = from_model_account_identifier(&neuron_account).unwrap();
 
     let (_tid, res, _fee) = do_multiple_txn(
-        ros,
+        client,
         &[
             RequestInfo {
                 request: Request::Transfer(Operation::Transfer {
@@ -681,10 +634,10 @@ async fn test_staking_flow(ros: &RosettaApiClient, ledger_client: &LedgerClient,
     if let Some(h) = res.last_block_index() {
         assert_eq!(h, expected_idx);
     }
-    let _ = ros.wait_for_block_at(expected_idx).await.unwrap();
+    let _ = client.wait_for_block_at(expected_idx).await.unwrap();
 
     check_balance(
-        ros,
+        client,
         ledger_client,
         &test_account,
         (((balance_before - staked_amount).unwrap() - DEFAULT_TRANSFER_FEE).unwrap()
@@ -695,26 +648,17 @@ async fn test_staking_flow(ros: &RosettaApiClient, ledger_client: &LedgerClient,
 }
 
 async fn test_staking_flow_two_txns(
-    ros: &RosettaApiClient,
+    client: &RosettaApiClient,
     ledger_client: &LedgerClient,
-    _logger: &Logger,
+    timestamp: Seconds,
 ) {
-    let one_year_from_now = 60 * 60 * 24 * 365
-        + std::time::SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-    let timestamp = Seconds(one_year_from_now);
-
-    let (acc, kp_b, _, _) = make_user(101);
-    let test_account = acc;
-    let kp_b = Arc::new(kp_b);
-    let test_key_pair = Arc::clone(&kp_b);
+    let (test_account, kp_b, _pk_b, _pid_b) = make_user_ed25519(101);
+    let test_key_pair = Arc::new(kp_b);
 
     let (_, tip_idx) = ledger_client.get_tip().await;
     let balance_before = ledger_client.get_account_balance(test_account).await;
 
-    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user(1401);
+    let (dst_acc, dst_acc_kp, dst_acc_pk, _pid) = make_user_ed25519(1401);
     let dst_acc_kp = Arc::new(dst_acc_kp);
 
     let staked_amount = Tokens::new(1, 0).unwrap();
@@ -726,7 +670,7 @@ async fn test_staking_flow_two_txns(
     let neuron_account = from_model_account_identifier(&neuron_account).unwrap();
 
     let (_tid, _bh, _fee) = do_multiple_txn(
-        ros,
+        client,
         &[
             RequestInfo {
                 request: Request::Transfer(Operation::Transfer {
@@ -755,7 +699,7 @@ async fn test_staking_flow_two_txns(
     .unwrap();
 
     let (_tid, res, _fee) = do_multiple_txn(
-        ros,
+        client,
         &[
             RequestInfo {
                 request: Request::Stake(Stake {
@@ -799,10 +743,10 @@ async fn test_staking_flow_two_txns(
     if let Some(h) = res.last_block_index() {
         assert_eq!(h, expected_idx);
     }
-    let _ = ros.wait_for_block_at(expected_idx).await.unwrap();
+    let _ = client.wait_for_block_at(expected_idx).await.unwrap();
 
     check_balance(
-        ros,
+        client,
         ledger_client,
         &test_account,
         (((balance_before - staked_amount).unwrap() - DEFAULT_TRANSFER_FEE).unwrap()

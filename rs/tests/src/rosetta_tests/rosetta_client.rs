@@ -31,7 +31,6 @@ pub struct RosettaApiClient {
     api_url: String,
     ledger_canister_id: CanisterId,
     // governance_canister_id: CanisterId,
-    // vm: AllocatedVm,
     logger: Logger,
 }
 

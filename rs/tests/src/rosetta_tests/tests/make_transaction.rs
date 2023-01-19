@@ -1,31 +1,41 @@
 use crate::driver::test_env::TestEnv;
 use crate::rosetta_tests::ledger_client::LedgerClient;
 use crate::rosetta_tests::lib::{
-    check_balance, create_ledger_client, do_txn, hex2addr, make_user, make_user_ecdsa_secp256k1,
-    one_day_from_now_nanos,
+    acc_id, assert_canister_error, check_balance, create_ledger_client, do_multiple_txn, do_txn,
+    hex2addr, make_user, make_user_ecdsa_secp256k1, make_user_ed25519, one_day_from_now_nanos,
+    send_icpts, send_icpts_with_window,
 };
 use crate::rosetta_tests::rosetta_client::RosettaApiClient;
 use crate::rosetta_tests::setup::{setup, TRANSFER_FEE};
 use crate::util::block_on;
 use ic_ledger_core::Tokens;
-use ic_rosetta_api::models::RosettaSupportedKeyPair;
+use ic_rosetta_api::models::{EdKeypair, RosettaSupportedKeyPair};
+use ic_rosetta_api::request::Request;
+use ic_rosetta_test_utils::RequestInfo;
 use icp_ledger::{AccountIdentifier, Operation};
+use lazy_static::lazy_static;
 use slog::{debug, info, Logger};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 const PORT: u32 = 8102;
 const VM_NAME: &str = "rosetta-test-make-transaction";
+
+lazy_static! {
+    static ref FEE: Tokens = Tokens::from_e8s(10_000);
+}
 
 pub fn test(env: TestEnv) {
     let logger = env.logger();
 
     // Accounts for test and initial ledger balances.
     let mut ledger_balances = HashMap::new();
+
     let (acc_a, kp_a, _pk_a, _pid_a) = make_user(100);
     let kp_a = Arc::new(kp_a);
     let (acc_b, kp_b, _pk_b, _pid_b) = make_user(101);
-    let _kp_b = Arc::new(kp_b);
+    let kp_b = Arc::new(kp_b);
     let (acc_secp256k1, kp_secp256k1, _pk_secp256k1, _pid_secp256k1) =
         make_user_ecdsa_secp256k1(200);
     let kp_secp256k1 = Arc::new(kp_secp256k1);
@@ -86,7 +96,7 @@ pub fn test(env: TestEnv) {
         );
 
         test_make_transaction(&client, &ledger_client, acc_a, Arc::clone(&kp_a), &logger).await;
-        //Test make transaction with secp256k1 keypair
+        //Test make transaction with secp256k1 keypair.
         test_make_transaction(
             &client,
             &ledger_client,
@@ -95,6 +105,16 @@ pub fn test(env: TestEnv) {
             &logger,
         )
         .await;
+
+        // Some more advanced tests
+        info!(logger, "Test no funds");
+        test_no_funds(&client, Arc::clone(&kp_a)).await;
+        info!(logger, "Test configurable ingress window");
+        test_ingress_window(&client, Arc::clone(&kp_a)).await;
+        info!(logger, "Test multiple transfers");
+        test_multiple_transfers(&client, &ledger_client, acc_b, Arc::clone(&kp_b)).await;
+        info!(logger, "Test multiple transfers (fail)");
+        test_multiple_transfers_fail(&client, &ledger_client, acc_b, Arc::clone(&kp_b)).await;
     });
 }
 
@@ -178,4 +198,234 @@ async fn test_make_transaction<T: RosettaSupportedKeyPair>(
         (dst_balance_before + amount).unwrap(),
     )
     .await;
+}
+
+async fn test_no_funds(ros: &RosettaApiClient, funding_key_pair: Arc<EdKeypair>) {
+    let (acc1, keypair1, _, _) = make_user_ed25519(9275456);
+    let keypair1 = Arc::new(keypair1);
+    let acc2 = acc_id(598620493);
+
+    // charge up user1
+    let (_, bh, _) = send_icpts(
+        ros,
+        funding_key_pair,
+        acc1,
+        (Tokens::from_e8s(10_000) + *FEE).unwrap(),
+    )
+    .await
+    .unwrap();
+    ros.wait_for_tip_sync(bh.unwrap()).await.unwrap();
+
+    // Transfer some funds from user1 to user2
+    let (_, bh, _) = send_icpts(ros, Arc::clone(&keypair1), acc2, Tokens::from_e8s(1000))
+        .await
+        .unwrap();
+    ros.wait_for_tip_sync(bh.unwrap()).await.unwrap();
+
+    // Try to transfer more. This should fail with an error from the canister.
+    let err = send_icpts(ros, keypair1, acc2, Tokens::from_e8s(10_000))
+        .await
+        .unwrap_err();
+    assert_canister_error(&err, 750, "account doesn't have enough funds");
+
+    // and now try to make a transfer from an empty account
+    let (_, empty_acc_kp, _, _) = make_user_ed25519(434561);
+    let err = send_icpts(ros, Arc::new(empty_acc_kp), acc2, Tokens::from_e8s(100))
+        .await
+        .unwrap_err();
+    assert_canister_error(&err, 750, "account doesn't have enough funds");
+}
+
+async fn test_ingress_window(ros: &RosettaApiClient, funding_key_pair: Arc<EdKeypair>) {
+    let (acc1, _keypair1, _, _) = make_user_ed25519(42);
+
+    let now = ic_types::time::current_time();
+    let expiry = now + Duration::from_secs(24 * 60 * 60);
+
+    // charge up user1
+    let (_, bh, _) = send_icpts_with_window(
+        ros,
+        Arc::clone(&funding_key_pair),
+        acc1,
+        Tokens::from_e8s(10_000),
+        Some(expiry.as_nanos_since_unix_epoch()),
+        Some(now.as_nanos_since_unix_epoch()),
+    )
+    .await
+    .unwrap();
+    ros.wait_for_tip_sync(bh.unwrap()).await.unwrap();
+
+    // do the same transaction again; this should be rejected
+    // note that we pass the same created_at value to get the same
+    // transaction
+    let err = send_icpts_with_window(
+        ros,
+        funding_key_pair,
+        acc1,
+        Tokens::from_e8s(10_000),
+        None,
+        Some(now.as_nanos_since_unix_epoch()),
+    )
+    .await
+    .unwrap_err();
+    assert_canister_error(&err, 750, "transaction is a duplicate");
+}
+
+/// Test doing multiple transfers in a single submit call
+async fn test_multiple_transfers(
+    ros: &RosettaApiClient,
+    ledger: &LedgerClient,
+    acc: AccountIdentifier,
+    key_pair: Arc<EdKeypair>,
+) {
+    let (dst_acc1, dst_acc1_kp, _pk, _pid) = make_user_ed25519(1100);
+    let (dst_acc2, dst_acc2_kp, _pk, _pid) = make_user_ed25519(1101);
+    let (dst_acc3, _kp, _pk, _pid) = make_user_ed25519(1102);
+
+    let amount1 = Tokens::new(3, 0).unwrap();
+    let amount2 = Tokens::new(2, 0).unwrap();
+    let amount3 = Tokens::new(1, 0).unwrap();
+
+    let tip_idx = ros
+        .network_status()
+        .await
+        .unwrap()
+        .unwrap()
+        .current_block_identifier
+        .index as u64;
+    let expected_idx = tip_idx + 3;
+
+    let (tid, results, _fee) = do_multiple_txn(
+        ros,
+        &[
+            RequestInfo {
+                request: Request::Transfer(Operation::Transfer {
+                    from: acc,
+                    to: dst_acc1,
+                    amount: amount1,
+                    fee: *FEE,
+                }),
+                sender_keypair: Arc::clone(&key_pair),
+            },
+            RequestInfo {
+                request: Request::Transfer(Operation::Transfer {
+                    from: dst_acc1,
+                    to: dst_acc2,
+                    amount: amount2,
+                    fee: *FEE,
+                }),
+                sender_keypair: Arc::new(dst_acc1_kp),
+            },
+            RequestInfo {
+                request: Request::Transfer(Operation::Transfer {
+                    from: dst_acc2,
+                    to: dst_acc3,
+                    amount: amount3,
+                    fee: *FEE,
+                }),
+                sender_keypair: Arc::new(dst_acc2_kp),
+            },
+        ],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .unwrap();
+
+    if let Some(h) = results.last_block_index() {
+        assert_eq!(h, expected_idx);
+    }
+    let block = ros.wait_for_block_at(expected_idx).await.unwrap();
+    assert_eq!(block.transactions.len(), 1);
+
+    let t = block.transactions.first().unwrap();
+    assert_eq!(t.transaction_identifier, tid);
+
+    check_balance(
+        ros,
+        ledger,
+        &dst_acc1,
+        ((amount1 - amount2).unwrap() - *FEE).unwrap(),
+    )
+    .await;
+    check_balance(
+        ros,
+        ledger,
+        &dst_acc2,
+        ((amount2 - amount3).unwrap() - *FEE).unwrap(),
+    )
+    .await;
+    check_balance(ros, ledger, &dst_acc3, amount3).await;
+}
+
+/// Test part of a multiple transfer failing. This is not atomic.
+async fn test_multiple_transfers_fail(
+    ros: &RosettaApiClient,
+    ledger: &LedgerClient,
+    acc: AccountIdentifier,
+    key_pair: Arc<EdKeypair>,
+) {
+    let (dst_acc1, dst_acc1_kp, _pk, _pid) = make_user_ed25519(1200);
+    let (dst_acc2, dst_acc2_kp, _pk, _pid) = make_user_ed25519(1201);
+    let (dst_acc3, _kp, _pk, _pid) = make_user_ed25519(1202);
+
+    let amount1 = Tokens::new(3, 0).unwrap();
+    let amount2 = Tokens::new(2, 0).unwrap();
+    let amount3 = Tokens::new(100_000, 0).unwrap();
+
+    let tip_idx = ros
+        .network_status()
+        .await
+        .unwrap()
+        .unwrap()
+        .current_block_identifier
+        .index as u64;
+    let expected_idx = tip_idx + 1;
+
+    let err = do_multiple_txn(
+        ros,
+        &[
+            RequestInfo {
+                request: Request::Transfer(Operation::Transfer {
+                    from: acc,
+                    to: dst_acc1,
+                    amount: amount1,
+                    fee: *FEE,
+                }),
+                sender_keypair: Arc::clone(&key_pair),
+            },
+            RequestInfo {
+                request: Request::Transfer(Operation::Transfer {
+                    from: acc,
+                    to: dst_acc3,
+                    amount: amount3,
+                    fee: *FEE,
+                }),
+                sender_keypair: Arc::new(dst_acc2_kp),
+            },
+            RequestInfo {
+                request: Request::Transfer(Operation::Transfer {
+                    from: dst_acc1,
+                    to: dst_acc2,
+                    amount: amount2,
+                    fee: *FEE,
+                }),
+                sender_keypair: Arc::new(dst_acc1_kp),
+            },
+        ],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .unwrap_err();
+    assert_canister_error(&err, 750, "debit account doesn't have enough funds");
+
+    let block = ros.wait_for_block_at(expected_idx).await.unwrap();
+    assert_eq!(block.transactions.len(), 1);
+
+    check_balance(ros, ledger, &dst_acc1, amount1).await;
+    check_balance(ros, ledger, &dst_acc2, Tokens::ZERO).await;
+    check_balance(ros, ledger, &dst_acc3, Tokens::ZERO).await;
 }
