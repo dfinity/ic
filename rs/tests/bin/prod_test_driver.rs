@@ -11,7 +11,6 @@ use ic_tests::{
         config::{self, *},
         driver_setup::{create_driver_context_from_cli, mk_stdout_logger},
         evaluation::{evaluate, generate_suite_execution_contract},
-        ic::{AmountOfMemoryKiB, NrOfVCPUs, VmResources},
         pot_dsl::*,
         test_env::TestEnv,
     },
@@ -612,7 +611,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
-    let network_reliability = networking::network_reliability::config_sys_4_nodes_app_4_nodes();
     m.add_suite(suite(
         "nightly_short_duration",
         vec![
@@ -632,19 +630,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     canister_http::http_time_out::test,
                 )]),
             ),
-            pot_with_setup(
-                "network_reliability_pot",
-                network_reliability.build(),
-                par(vec![sys_t(
-                    "network_reliability_test",
-                    network_reliability.test(),
-                )]),
-            )
-            .with_default_vm_resources(Some(VmResources {
-                vcpus: Some(NrOfVCPUs::new(8)),
-                memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
-                boot_image_minimal_size_gibibytes: None,
-            })),
         ],
     ));
 
