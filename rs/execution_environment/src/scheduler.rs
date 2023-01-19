@@ -1954,6 +1954,10 @@ fn observe_replicated_state_metrics(
 
     metrics.observe_consumed_cycles(consumed_cycles_total);
 
+    metrics
+        .ecdsa_signature_agreements
+        .set(state.metadata.subnet_metrics.ecdsa_signature_agreements as i64);
+
     let observe_reading = |status: CanisterStatusType, num: i64| {
         metrics
             .registered_canisters

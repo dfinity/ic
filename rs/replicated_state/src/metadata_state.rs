@@ -418,6 +418,7 @@ pub struct SubnetMetrics {
     pub consumed_cycles_by_deleted_canisters: NominalCycles,
     pub consumed_cycles_http_outcalls: NominalCycles,
     pub consumed_cycles_ecdsa_outcalls: NominalCycles,
+    pub ecdsa_signature_agreements: u64,
 }
 
 impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
@@ -428,6 +429,7 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
             ),
             consumed_cycles_http_outcalls: Some((&item.consumed_cycles_http_outcalls).into()),
             consumed_cycles_ecdsa_outcalls: Some((&item.consumed_cycles_ecdsa_outcalls).into()),
+            ecdsa_signature_agreements: Some(item.ecdsa_signature_agreements),
         }
     }
 }
@@ -450,6 +452,7 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
                 "SubnetMetrics::consumed_cycles_ecdsa_outcalls",
             )
             .unwrap_or_else(|_| NominalCycles::from(0_u128)),
+            ecdsa_signature_agreements: item.ecdsa_signature_agreements.unwrap_or_default(),
         })
     }
 }

@@ -41,9 +41,12 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::system_state::PausedExecutionId;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::ExecutionTask;
+use ic_replicated_state::{
+    canister_state::system_state::PausedExecutionId,
+    metadata_state::subnet_call_context_manager::SubnetCallContext,
+};
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::{
         EcdsaDealingsContext, SetupInitialDkgContext, SignWithEcdsaContext,
@@ -385,6 +388,13 @@ impl ExecutionEnvironment {
                                 Payload::Reject(_) => Err(ErrorCode::CanisterRejectedMessage),
                             },
                         );
+
+                        if matches!(
+                            (&context, &response.response_payload),
+                            (&SubnetCallContext::SignWithEcsda(_), &Payload::Data(_))
+                        ) {
+                            state.metadata.subnet_metrics.ecdsa_signature_agreements += 1;
+                        }
 
                         state.push_subnet_output_response(
                             Response {
