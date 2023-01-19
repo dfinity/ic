@@ -10,9 +10,9 @@ use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode,
     HypervisorError::{self, *},
-    HypervisorResult, OutOfInstructionsHandler, PerformanceCounterType, SubnetAvailableMemory,
-    SystemApi,
-    TrapCode::CyclesAmountTooBigFor64Bit,
+    HypervisorResult, OutOfInstructionsHandler, PerformanceCounterType, StableGrowOutcome,
+    StableMemoryApi, SubnetAvailableMemory, SystemApi,
+    TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
@@ -45,6 +45,8 @@ const TRACE_SYSCALLS: bool = false;
 /// This error should be displayed if stable memory is used through the system
 /// API when Wasm-native stable memory is enabled.
 const WASM_NATIVE_STABLE_MEMORY_ERROR: &str = "Stable memory cannot be accessed through the System API when Wasm-native stable memory is enabled.";
+
+const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: u64 = 64 * 1024; // 4GiB
 
 // This macro is used in system calls for tracing.
 macro_rules! trace_syscall {
@@ -2472,15 +2474,15 @@ impl SystemApi for SystemApiImpl {
 
     fn update_available_memory(
         &mut self,
-        native_memory_grow_res: i32,
-        additional_pages: u32,
-    ) -> HypervisorResult<i32> {
+        native_memory_grow_res: i64,
+        additional_pages: u64,
+    ) -> HypervisorResult<()> {
         let result = {
             if native_memory_grow_res == -1 {
-                return Ok(-1);
+                return Ok(());
             }
             match self.memory_usage.allocate_pages(additional_pages as usize) {
-                Ok(()) => Ok(native_memory_grow_res),
+                Ok(()) => Ok(()),
                 Err(_err) => Err(HypervisorError::OutOfMemory),
             }
         };
@@ -2492,6 +2494,33 @@ impl SystemApi for SystemApiImpl {
             additional_pages
         );
         result
+    }
+
+    fn try_grow_stable_memory(
+        &mut self,
+        current_size: u64,
+        additional_pages: u64,
+        stable_memory_api: ic_interfaces::execution_environment::StableMemoryApi,
+    ) -> HypervisorResult<StableGrowOutcome> {
+        if let StableMemoryApi::Stable32 = stable_memory_api {
+            if current_size > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
+                return Err(HypervisorError::Trapped(
+                    TrapCode::StableMemoryTooBigFor32Bit,
+                ));
+            }
+            if current_size.saturating_add(additional_pages) > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
+                return Ok(StableGrowOutcome::Failure);
+            }
+        }
+        match self.memory_usage.allocate_pages(additional_pages as usize) {
+            Ok(()) => Ok(StableGrowOutcome::Success),
+            Err(_) => Ok(StableGrowOutcome::Failure),
+        }
+    }
+
+    fn deallocate_pages(&mut self, additional_pages: u64) {
+        self.memory_usage
+            .deallocate_pages(additional_pages as usize)
     }
 
     fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64> {

@@ -308,6 +308,39 @@ pub trait OutOfInstructionsHandler {
     fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64>;
 }
 
+/// Indicates the type of stable memory API being used.
+pub enum StableMemoryApi {
+    Stable64 = 0,
+    Stable32 = 1,
+}
+
+impl TryFrom<i32> for StableMemoryApi {
+    type Error = ();
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Stable64),
+            1 => Ok(Self::Stable32),
+            _ => Err(()),
+        }
+    }
+}
+
+#[test]
+fn stable_memory_api_round_trip() {
+    for i in 0..10 {
+        if let Ok(api) = StableMemoryApi::try_from(i) {
+            assert_eq!(i, api as i32)
+        }
+    }
+}
+
+/// Indicates whether an attempt to grow stable memory succeeded or failed.
+pub enum StableGrowOutcome {
+    Success,
+    Failure,
+}
+
 /// A trait for providing all necessary imports to a Wasm module.
 pub trait SystemApi {
     /// Stores the total execution complexity.
@@ -690,9 +723,21 @@ pub trait SystemApi {
     /// available memory left.
     fn update_available_memory(
         &mut self,
-        native_memory_grow_res: i32,
-        additional_pages: u32,
-    ) -> HypervisorResult<i32>;
+        native_memory_grow_res: i64,
+        additional_pages: u64,
+    ) -> HypervisorResult<()>;
+
+    /// Attempts to allocate memory before calling stable grow. Will also check
+    /// that the current size if valid for the stable memory API being used.
+    fn try_grow_stable_memory(
+        &mut self,
+        current_size: u64,
+        additional_pages: u64,
+        stable_memory_api: StableMemoryApi,
+    ) -> HypervisorResult<StableGrowOutcome>;
+
+    /// Return memory from a previous call to `update_available_memory`.
+    fn deallocate_pages(&mut self, additional_pages: u64);
 
     /// (deprecated) Please use `ic0_canister_cycle_balance128` instead.
     /// This API supports only 64-bit values.

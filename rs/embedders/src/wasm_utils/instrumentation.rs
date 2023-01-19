@@ -21,12 +21,15 @@
 //! counter overflows, the value of the counter is the initial value minus the
 //! sum of cost of all executed instructions.
 //!
-//! In more details, first, it inserts two System API functions:
+//! In more details, first, it inserts up to four System API functions:
 //!
 //! ```wasm
 //! (import "__" "out_of_instructions" (func (;0;) (func)))
 //! (import "__" "update_available_memory" (func (;1;) ((param i32 i32) (result i32))))
+//! (import "__" "try_grow_stable_memory" (func (;1;) ((param i64 i64 i32) (result i64))))
+//! (import "__" "deallocate_pages" (func (;1;) ((param i64))))
 //! ```
+//! Where the last two will only be inserted if Wasm-native stable memory is enabled.
 //!
 //! It then inserts (and exports) a global mutable counter:
 //! ```wasm
@@ -105,7 +108,9 @@
 //! ```
 //!
 
-use super::{InstrumentationOutput, Segments};
+use super::system_api_replacements::replacement_functions;
+use super::validation::API_VERSION_IC0;
+use super::{InstrumentationOutput, Segments, SystemApiFunc};
 use ic_config::flag_status::FlagStatus;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::PAGE_SIZE;
@@ -124,13 +129,25 @@ use wasmparser::{
     Operator, Type, TypeRef, ValType,
 };
 
+use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 // The indicies of injected function imports.
 enum InjectedImports {
-    OutOfInstructionsFn = 0,
-    UpdateAvailableMemoryFn = 1,
-    Count = 2,
+    OutOfInstructions = 0,
+    UpdateAvailableMemory = 1,
+    TryGrowStableMemory = 2,
+    DeallocatePages = 3,
+}
+
+impl InjectedImports {
+    fn count(wasm_native_stable_memory: FlagStatus) -> usize {
+        if wasm_native_stable_memory == FlagStatus::Enabled {
+            4
+        } else {
+            2
+        }
+    }
 }
 
 // Gets the cost of an instruction.
@@ -164,6 +181,8 @@ fn instruction_to_cost(i: &Operator) -> u64 {
 const INSTRUMENTED_FUN_MODULE: &str = "__";
 const OUT_OF_INSTRUCTIONS_FUN_NAME: &str = "out_of_instructions";
 const UPDATE_MEMORY_FUN_NAME: &str = "update_available_memory";
+const TRY_GROW_STABLE_MEMORY_FUN_NAME: &str = "try_grow_stable_memory";
+const DEALLOCATE_PAGES_NAME: &str = "deallocate_pages";
 const TABLE_STR: &str = "table";
 const CANISTER_COUNTER_INSTRUCTIONS_STR: &str = "canister counter_instructions";
 const CANISTER_START_STR: &str = "canister_start";
@@ -187,7 +206,7 @@ fn add_type(module: &mut Module, ty: Type) -> u32 {
     (module.types.len() - 1) as u32
 }
 
-fn inject_helper_functions(mut module: Module) -> Module {
+fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagStatus) -> Module {
     // insert types
     let ooi_type = Type::Func(FuncType::new([], []));
     let uam_type = Type::Func(FuncType::new([ValType::I32, ValType::I32], [ValType::I32]));
@@ -209,13 +228,37 @@ fn inject_helper_functions(mut module: Module) -> Module {
     };
 
     let mut old_imports = module.imports;
-    module.imports = Vec::with_capacity(old_imports.len() + 2);
+    module.imports =
+        Vec::with_capacity(old_imports.len() + InjectedImports::count(wasm_native_stable_memory));
     module.imports.push(ooi_imp);
     module.imports.push(uam_imp);
+
+    if wasm_native_stable_memory == FlagStatus::Enabled {
+        let tgsm_type = Type::Func(FuncType::new(
+            [ValType::I64, ValType::I64, ValType::I32],
+            [ValType::I64],
+        ));
+        let dp_type = Type::Func(FuncType::new([ValType::I64], []));
+        let tgsm_type_idx = add_type(&mut module, tgsm_type);
+        let dp_type_idx = add_type(&mut module, dp_type);
+        let tgsm_imp = Import {
+            module: INSTRUMENTED_FUN_MODULE,
+            name: TRY_GROW_STABLE_MEMORY_FUN_NAME,
+            ty: TypeRef::Func(tgsm_type_idx as u32),
+        };
+        let dp_imp = Import {
+            module: INSTRUMENTED_FUN_MODULE,
+            name: DEALLOCATE_PAGES_NAME,
+            ty: TypeRef::Func(dp_type_idx as u32),
+        };
+        module.imports.push(tgsm_imp);
+        module.imports.push(dp_imp);
+    }
+
     module.imports.append(&mut old_imports);
 
     // now increment all function references by InjectedImports::Count
-    let cnt = InjectedImports::Count as u32;
+    let cnt = InjectedImports::count(wasm_native_stable_memory) as u32;
     for func_body in &mut module.code_sections {
         for instr in &mut func_body.instructions {
             if let Operator::Call { function_index } = instr {
@@ -240,12 +283,21 @@ fn inject_helper_functions(mut module: Module) -> Module {
     }
 
     debug_assert!(
-        module.imports[InjectedImports::OutOfInstructionsFn as usize].name == "out_of_instructions"
+        module.imports[InjectedImports::OutOfInstructions as usize].name == "out_of_instructions"
     );
     debug_assert!(
-        module.imports[InjectedImports::UpdateAvailableMemoryFn as usize].name
+        module.imports[InjectedImports::UpdateAvailableMemory as usize].name
             == "update_available_memory"
     );
+    if wasm_native_stable_memory == FlagStatus::Enabled {
+        debug_assert!(
+            module.imports[InjectedImports::TryGrowStableMemory as usize].name
+                == "try_grow_stable_memory"
+        );
+        debug_assert!(
+            module.imports[InjectedImports::DeallocatePages as usize].name == "deallocate_pages"
+        );
+    }
 
     module
 }
@@ -268,10 +320,10 @@ pub(super) fn instrument(
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
-    let mut _stable_memory_index = 0;
-    let mut module = inject_helper_functions(module);
+    let stable_memory_index;
+    let mut module = inject_helper_functions(module, wasm_native_stable_memory);
     module = export_table(module);
-    (module, _stable_memory_index) =
+    (module, stable_memory_index) =
         update_memories(module, write_barrier, wasm_native_stable_memory);
 
     let mut extra_strs: Vec<String> = Vec::new();
@@ -336,6 +388,10 @@ pub(super) fn instrument(
     let mut extra_data: Option<Vec<u8>> = None;
     module = export_additional_symbols(module, &export_module_data, &mut extra_data);
 
+    if wasm_native_stable_memory == FlagStatus::Enabled {
+        replace_system_api_functions(&mut module, stable_memory_index)
+    }
+
     let exported_functions = module
         .exports
         .iter()
@@ -388,6 +444,71 @@ pub(super) fn instrument(
     })
 }
 
+fn calculate_api_indexes(module: &Module<'_>) -> BTreeMap<SystemApiFunc, u32> {
+    module
+        .imports
+        .iter()
+        .filter(|imp| matches!(imp.ty, TypeRef::Func(_)))
+        .enumerate()
+        .filter_map(|(func_index, import)| {
+            if import.module == API_VERSION_IC0 {
+                // The imports get function indexes before defined functions (so
+                // starting at zero) and these are required to fit in 32-bits.
+                SystemApiFunc::from_import_name(import.name).map(|api| (api, func_index as u32))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Replace all function calls in a single pass over the module.
+fn swap_function_calls(module: &mut Module<'_>, func_index_replacements: &BTreeMap<u32, u32>) {
+    // TODO: Also handle tables, etc.
+    for body in module.code_sections.iter_mut() {
+        for inst in body.instructions.iter_mut() {
+            match inst {
+                // TODO: Are any other instructions needed?
+                Operator::ReturnCall { function_index } | Operator::Call { function_index } => {
+                    if let Some(new_index) = func_index_replacements.get(function_index) {
+                        *function_index = *new_index;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+fn replace_system_api_functions(module: &mut Module<'_>, stable_memory_index: u32) {
+    let api_indexes = calculate_api_indexes(module);
+    let number_of_func_imports = module
+        .imports
+        .iter()
+        .filter(|i| matches!(i.ty, TypeRef::Func(_)))
+        .count();
+
+    // Collect a single map of all the function indexes that need to be
+    // replaced.
+    let mut func_index_replacements = BTreeMap::new();
+    for (api, (ty, body)) in replacement_functions(
+        stable_memory_index,
+        InjectedImports::TryGrowStableMemory as u32,
+        InjectedImports::DeallocatePages as u32,
+    ) {
+        if let Some(old_index) = api_indexes.get(&api) {
+            let type_idx = add_type(module, ty);
+            let new_index = (number_of_func_imports + module.functions.len()) as u32;
+            module.functions.push(type_idx);
+            module.code_sections.push(body);
+            func_index_replacements.insert(*old_index, new_index);
+        }
+    }
+
+    // Perform all the replacements in a single pass.
+    swap_function_calls(module, &func_index_replacements);
+}
+
 // Helper function used by instrumentation to export additional symbols.
 //
 // Returns the new module or an error if a symbol is not reserved.
@@ -424,7 +545,7 @@ pub fn export_additional_symbols<'a>(
             blockty: BlockType::Empty,
         },
         Call {
-            function_index: InjectedImports::OutOfInstructionsFn as u32,
+            function_index: InjectedImports::OutOfInstructions as u32,
         },
         End,
         // Return the original param so this function doesn't alter the stack
@@ -583,7 +704,7 @@ fn inject_metering(code: &mut Vec<Operator>, export_data_module: &ExportModuleDa
                             blockty: BlockType::Empty,
                         },
                         Call {
-                            function_index: InjectedImports::OutOfInstructionsFn as u32,
+                            function_index: InjectedImports::OutOfInstructions as u32,
                         },
                         End,
                     ]);
@@ -806,7 +927,7 @@ fn inject_update_available_memory(func_body: &mut wasm_transform::Body, func_typ
                     local_index: memory_local_ix,
                 },
                 Call {
-                    function_index: InjectedImports::UpdateAvailableMemoryFn as u32,
+                    function_index: InjectedImports::UpdateAvailableMemory as u32,
                 },
             ]);
             last_injection_position = point + 1;
@@ -932,7 +1053,7 @@ fn update_memories(
     mut module: Module,
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
-) -> (Module, usize) {
+) -> (Module, u32) {
     let mut stable_index = 0;
 
     let mut memory_already_exported = false;
@@ -968,7 +1089,7 @@ fn update_memories(
     }
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
-        stable_index = module.memories.len();
+        stable_index = module.memories.len() as u32;
         module.memories.push(MemoryType {
             memory64: true,
             shared: false,
@@ -979,20 +1100,20 @@ fn update_memories(
         module.exports.push(Export {
             name: STABLE_MEMORY_NAME,
             kind: ExternalKind::Memory,
-            index: stable_index as u32,
+            index: stable_index,
         });
 
         module.memories.push(MemoryType {
             memory64: false,
             shared: false,
-            initial: 0,
+            initial: STABLE_BYTEMAP_SIZE_IN_WASM_PAGES,
             maximum: Some(STABLE_BYTEMAP_SIZE_IN_WASM_PAGES),
         });
 
         module.exports.push(Export {
             name: STABLE_BYTEMAP_MEMORY_NAME,
             kind: ExternalKind::Memory,
-            index: stable_index as u32 + 1,
+            index: stable_index + 1,
         })
     }
 

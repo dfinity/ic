@@ -13,6 +13,11 @@ pub enum InstOrBytes<'a> {
 }
 
 pub struct Body<'a> {
+    /// Local variables of the function, given as tuples of (# of locals, type).
+    /// Note that these do not include the function parameters which are given
+    /// indices before the locals. So if a function has 2 parameters and a local
+    /// defined here then local indices 0 and 1 will refer to the parameters and
+    /// index 2 will refer to the local here.
     pub locals: Vec<(u32, ValType)>,
     pub instructions: Vec<Operator<'a>>,
 }

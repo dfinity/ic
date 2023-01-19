@@ -4,7 +4,8 @@ use crate::wasmtime_embedder::{
 
 use ic_config::{embedders::FeatureFlags, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
-    ExecutionComplexity, HypervisorError, HypervisorResult, PerformanceCounterType, SystemApi,
+    ExecutionComplexity, HypervisorError, HypervisorResult, PerformanceCounterType,
+    StableGrowOutcome, SystemApi, TrapCode,
 };
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
@@ -1383,9 +1384,44 @@ pub(crate) fn syscalls<S: SystemApi>(
                   native_memory_grow_res: i32,
                   additional_pages: i32| {
                 with_system_api(&mut caller, |s| {
-                    s.update_available_memory(native_memory_grow_res, additional_pages as u32)
+                    s.update_available_memory(
+                        native_memory_grow_res as i64,
+                        additional_pages as u32 as u64,
+                    )
+                })
+                .map(|()| native_memory_grow_res)
+                .map_err(|e| process_err(&mut caller, e))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("__", "try_grow_stable_memory", {
+            move |mut caller: Caller<'_, StoreData<S>>,
+                  current_size: i64,
+                  additional_pages: i64,
+                  stable_memory_api: i32| {
+                with_system_api(&mut caller, |s| {
+                    match s.try_grow_stable_memory(
+                        current_size as u64,
+                        additional_pages as u64,
+                        stable_memory_api
+                            .try_into()
+                            .map_err(|()| HypervisorError::Trapped(TrapCode::Other))?,
+                    )? {
+                        StableGrowOutcome::Success => Ok(current_size),
+                        StableGrowOutcome::Failure => Ok(-1),
+                    }
                 })
                 .map_err(|e| process_err(&mut caller, e))
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("__", "deallocate_pages", {
+            move |mut caller: Caller<'_, StoreData<S>>, additional_pages: i64| {
+                with_system_api(&mut caller, |s| s.deallocate_pages(additional_pages as u64))
             }
         })
         .unwrap();

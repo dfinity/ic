@@ -36,7 +36,7 @@ struct FunctionSignature {
 }
 
 const METHOD_MODULE: &str = "method";
-const API_VERSION_IC0: &str = "ic0";
+pub(super) const API_VERSION_IC0: &str = "ic0";
 
 // Constructs a map of function name -> HashMap<String,
 // `FunctionSignature`> (to allow the same function to be imported from

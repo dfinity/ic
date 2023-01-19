@@ -220,7 +220,18 @@ impl SystemApi for SystemApiEmpty {
     fn out_of_instructions(&mut self, _instruction_counter: i64) -> Result<i64, HypervisorError> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn update_available_memory(&mut self, _: i32, _: u32) -> HypervisorResult<i32> {
+    fn update_available_memory(&mut self, _: i64, _: u64) -> HypervisorResult<()> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn try_grow_stable_memory(
+        &mut self,
+        _: u64,
+        _: u64,
+        _: ic_interfaces::execution_environment::StableMemoryApi,
+    ) -> HypervisorResult<ic_interfaces::execution_environment::StableGrowOutcome> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
+    fn deallocate_pages(&mut self, _: u64) {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64> {

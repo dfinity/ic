@@ -171,7 +171,7 @@ impl std::fmt::Display for WasmInstrumentationError {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum WasmEngineError {
     FailedToInitializeEngine,
-    FailedToInstantiateModule,
+    FailedToInstantiateModule(String),
     FailedToSetAsyncStack,
     FailedToSetWasmStack,
     FailedToSerializeModule(String),
@@ -185,8 +185,8 @@ impl std::fmt::Display for WasmEngineError {
             Self::FailedToInitializeEngine => {
                 write!(f, "Failed to initialize engine")
             }
-            Self::FailedToInstantiateModule => {
-                write!(f, "Failed to instantiate module")
+            Self::FailedToInstantiateModule(s) => {
+                write!(f, "Failed to instantiate module: {}", s)
             }
             Self::FailedToSetWasmStack => {
                 write!(f, "Failed to set Wasm stack")
