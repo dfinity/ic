@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     "src/cow_safety.wasm",
     "src/message.wasm",
+    "activate-systest-uvm-config",
 ])
 
 DEPENDENCIES = [
@@ -855,5 +856,17 @@ system_test(
     flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
+    name = "remote_replicable_mock_test",
+    flaky = False,  # remove after when PFOPS-3148 is resolved
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "manual",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + [":replicable_mock_test_uvm_config_image"],
     deps = DEPENDENCIES + [":tests"],
 )

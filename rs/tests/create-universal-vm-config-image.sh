@@ -76,4 +76,4 @@ echo "image size: $size"
 truncate -s $size "$tmp"
 mkfs.vfat -n "$LABEL" "$tmp"
 mcopy -i "$tmp" -sQ "$INPUT_DIR"/* ::
-zstd -i "$tmp" -o "$OUTPUT_FILE" --force
+zstd --threads=0 -10 -i "$tmp" -o "$OUTPUT_FILE" --force

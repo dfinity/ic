@@ -76,8 +76,10 @@ def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", flaky
         **kwargs
     )
 
+    container_name = name + "_image"
+
     container_image(
-        name = name + "_image",
+        name = container_name,
         base = "//rs/tests/replicated_tests:test_driver_image_base",
         directory = "/home/root/root_env/dependencies",
         data_path = "/",
@@ -88,6 +90,24 @@ def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", flaky
         tags = ["manual"],  # this target will be built if required as a dependency of another target
         user = "root",
         workdir = "/home/root",
+    )
+
+    uvm_config_image_name = name + "_uvm_config_image"
+
+    uvm_config_image(
+        name = uvm_config_image_name,
+        srcs = [
+            ":" + container_name + ".tar",
+            ":activate-systest-uvm-config",
+        ],
+        remap_paths = {
+            "/activate-systest-uvm-config": "/activate",
+        },
+        mode = "664",
+        modes = {
+            "activate": "775",
+        },
+        tags = ["manual"],  # this target will be built if required as a dependency of another target
     )
 
     run_system_test(
@@ -120,7 +140,7 @@ symlink_dir = rule(
     },
 )
 
-def _uvm_config_img_impl(ctx):
+def _uvm_config_image_impl(ctx):
     out = ctx.actions.declare_file(ctx.label.name + ".zst")
 
     input_tar = ctx.attr.input_tar[DefaultInfo].files.to_list()[0]
@@ -139,8 +159,8 @@ def _uvm_config_img_impl(ctx):
         ),
     ]
 
-uvm_config_img_impl = rule(
-    implementation = _uvm_config_img_impl,
+uvm_config_image_impl = rule(
+    implementation = _uvm_config_image_impl,
     attrs = {
         "input_tar": attr.label(),
         "_create_universal_vm_config_image_from_tar": attr.label(
@@ -156,7 +176,7 @@ uvm_config_img_impl = rule(
     },
 )
 
-def uvm_config_img(name, **kws):
+def uvm_config_image(name, **kws):
     tar = name + "_tar"
 
     pkg_tar(
@@ -164,8 +184,8 @@ def uvm_config_img(name, **kws):
         **kws
     )
 
-    uvm_config_img_impl(
+    uvm_config_image_impl(
         name = name,
         input_tar = ":" + tar,
-        target_compatible_with = ["@platforms//os:linux"],  # we expect the coreutils from linux
+        tags = ["manual"],
     )
