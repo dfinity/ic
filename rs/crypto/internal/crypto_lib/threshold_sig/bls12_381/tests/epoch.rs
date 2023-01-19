@@ -18,12 +18,15 @@ proptest! {
         let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed);
 
         let (_pk, mut sk) = kgen(&associated_data, sys, &mut rng);
-        assert!(!sk.is_exhausted());
+        assert_eq!(sk.current_epoch(), Some(Epoch::from(0)));
 
         for i in 0..100 {
-            let next_epoch = tau_from_epoch(Epoch::from(i));
-            sk.update_to(&next_epoch, sys, &mut rng);
-            assert!(!sk.is_exhausted());
+            sk.update_to(Epoch::from(i), sys, &mut rng);
+            assert_eq!(sk.current_epoch(), Some(Epoch::from(i)));
+
+            // no-op:
+            sk.update_to(Epoch::from(i), sys, &mut rng);
+            assert_eq!(sk.current_epoch(), Some(Epoch::from(i)));
         }
     }
     #[test]
@@ -36,14 +39,17 @@ proptest! {
         let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed);
 
         let (_pk, mut sk) = kgen(&associated_data, sys, &mut rng);
-        assert!(!sk.is_exhausted());
+        assert_eq!(sk.current_epoch(), Some(Epoch::from(0)));
 
         let mut sorted_epochs : Vec<u32>= epochs;
         sorted_epochs.sort_unstable();
         for epoch in sorted_epochs{
-            let tau = tau_from_epoch(Epoch::from(epoch));
-            sk.update_to(&tau, sys, &mut rng);
-            assert!(!sk.is_exhausted());
+            sk.update_to(Epoch::from(epoch), sys, &mut rng);
+            assert_eq!(sk.current_epoch(), Some(Epoch::from(epoch)));
+
+            // no-op:
+            sk.update_to(Epoch::from(epoch), sys, &mut rng);
+            assert_eq!(sk.current_epoch(), Some(Epoch::from(epoch)));
         }
     }
     #[test]
@@ -53,26 +59,20 @@ proptest! {
         let mut rng = rand_chacha::ChaCha20Rng::from_seed(seed);
 
         let (_pk, mut sk) = kgen(&associated_data, sys, &mut rng);
-
-        assert!(!sk.is_exhausted());
+        assert_eq!(sk.current_epoch(), Some(Epoch::from(0)));
         for i in (0..100).rev() {
-            let next_epoch = tau_from_epoch(Epoch::from(MAXIMUM_EPOCH - i));
-            sk.update_to(&next_epoch, sys, &mut rng);
-            assert!(!sk.is_exhausted());
+            let next_epoch = Epoch::from(MAXIMUM_EPOCH - i);
+            sk.update_to(next_epoch, sys, &mut rng);
+            assert_eq!(sk.current_epoch(), Some(next_epoch));
+
+            // no-op:
+            sk.update_to(next_epoch, sys, &mut rng);
+            assert_eq!(sk.current_epoch(), Some(next_epoch));
         }
         // The key should be at the last epoch, the next update should erase the secret key.
         sk.update(sys, &mut rng);
-        assert!(sk.is_exhausted());
+        assert_eq!(sk.current_epoch(), None);
+
     }
 
-}
-
-proptest! {
-    #[test]
-    fn should_convert_tau_to_epoch(epoch: u32) {
-        let epoch = Epoch::from(epoch);
-        let tau = tau_from_epoch(epoch);
-
-        assert_eq!(epoch, epoch_from_tau_vec(&tau));
-    }
 }

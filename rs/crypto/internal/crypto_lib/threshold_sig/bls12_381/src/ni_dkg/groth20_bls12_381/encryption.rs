@@ -7,36 +7,29 @@
 
 use super::types::FsEncryptionKeySetWithPop;
 use super::ALGORITHM_ID;
-use crate::api::ni_dkg_errors::CspDkgVerifyDealingError;
 use crate::api::ni_dkg_errors::{
-    DecryptError, EncryptAndZKProveError, MalformedPublicKeyError, SizeError,
+    CspDkgVerifyDealingError, DecryptError, EncryptAndZKProveError, MalformedPublicKeyError,
+    SizeError,
 };
-use conversions::Tau;
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_seed::Seed;
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    FsEncryptionCiphertextBytes, FsEncryptionPublicKey, NodeIndex,
+use ic_crypto_internal_types::sign::threshold_sig::{
+    ni_dkg::ni_dkg_groth20_bls12_381::{
+        FsEncryptionCiphertextBytes, FsEncryptionPublicKey, NodeIndex, ZKProofDec, ZKProofShare,
+    },
+    ni_dkg::Epoch,
+    public_coefficients::bls12_381::PublicCoefficientsBytes,
 };
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
-    ZKProofDec, ZKProofShare,
-};
-use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::Epoch;
-use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
-use ic_types::crypto::error::InvalidArgumentError;
-use ic_types::crypto::AlgorithmId;
-use ic_types::NumberOfNodes;
+use ic_types::{crypto::error::InvalidArgumentError, crypto::AlgorithmId, NumberOfNodes};
 use rand::{CryptoRng, RngCore};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-pub(crate) mod conversions;
-
 mod crypto {
     pub use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::EncryptionKeyPop;
     pub use crate::ni_dkg::fs_ni_dkg::forward_secure::{
-        dec_chunks, enc_chunks, epoch_from_tau_vec, kgen, verify_ciphertext_integrity, Bit,
-        EncryptionWitness, FsEncryptionCiphertext, PlaintextChunks, PublicKeyWithPop, SecretKey,
-        SysParam,
+        dec_chunks, enc_chunks, kgen, verify_ciphertext_integrity, EncryptionWitness,
+        FsEncryptionCiphertext, PlaintextChunks, PublicKeyWithPop, SecretKey, SysParam,
     };
     pub use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{
         prove_chunking, verify_chunking, ChunkingInstance, ChunkingWitness, ProofChunking,
@@ -88,9 +81,10 @@ pub fn create_forward_secure_key_pair(
 /// * `seed` - Randomness used in updating the secret key to the given `epoch`.
 pub fn update_key_inplace_to_epoch(secret_key: &mut crypto::SecretKey, epoch: Epoch, seed: Seed) {
     let mut rng = seed.into_rng();
-    let tau = Tau::from(epoch);
-    if secret_key.epoch() < epoch {
-        secret_key.update_to(&tau.0, crypto::SysParam::global(), &mut rng);
+    if let Some(current_epoch) = secret_key.current_epoch() {
+        if current_epoch < epoch {
+            secret_key.update_to(epoch, crypto::SysParam::global(), &mut rng);
+        }
     }
 }
 
@@ -143,11 +137,10 @@ pub fn encrypt_and_prove(
         v
     };
 
-    let tau = Tau::from(epoch);
     let mut rng = seed.into_rng();
     let (ciphertext, encryption_witness) = crypto::enc_chunks(
         &keys_and_messages,
-        &tau.0[..],
+        epoch,
         associated_data,
         crypto::SysParam::global(),
         &mut rng,
@@ -161,11 +154,7 @@ pub fn encrypt_and_prove(
         &mut rng,
     );
 
-    let public_coefficients = public_coefficients
-        .coefficients
-        .iter()
-        .map(G2Affine::deserialize)
-        .collect::<Result<Vec<_>, _>>()
+    let public_coefficients = G2Affine::batch_deserialize(&public_coefficients.coefficients)
         .map_err(|_| EncryptAndZKProveError::MalformedPublicCoefficients)?;
 
     let sharing_proof = prove_sharing(
@@ -244,17 +233,17 @@ pub fn decrypt(
             node_index,
         });
     }
-    let current_epoch = secret_key.epoch();
-    if epoch < current_epoch {
-        return Err(DecryptError::EpochTooOld {
-            ciphertext_epoch: epoch,
-            secret_key_epoch: current_epoch,
-        });
+    if let Some(current_epoch) = secret_key.current_epoch() {
+        if epoch < current_epoch {
+            return Err(DecryptError::EpochTooOld {
+                ciphertext_epoch: epoch,
+                secret_key_epoch: current_epoch,
+            });
+        }
     }
     let ciphertext = crypto::FsEncryptionCiphertext::deserialize(ciphertext)
         .map_err(DecryptError::MalformedCiphertext)?;
-    let tau = Tau::from(epoch);
-    crypto::dec_chunks(secret_key, index, &ciphertext, &tau.0[..], associated_data)
+    crypto::dec_chunks(secret_key, index, &ciphertext, epoch, associated_data)
         .map_err(|_| DecryptError::InvalidChunk)
 }
 
@@ -377,10 +366,9 @@ pub fn verify_zk_proofs(
         })
     })?;
 
-    let tau = Tau::from(epoch);
     crypto::verify_ciphertext_integrity(
         &ciphertext,
-        &tau.0[..],
+        epoch,
         associated_data,
         crypto::SysParam::global(),
     )

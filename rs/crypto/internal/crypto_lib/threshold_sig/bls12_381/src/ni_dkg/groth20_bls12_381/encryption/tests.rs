@@ -47,7 +47,9 @@ fn epoch_of_a_new_key_should_be_zero() {
     const KEY_GEN_ASSOCIATED_DATA: &[u8] = &[2u8, 3u8, 0u8, 6u8];
     let key_set =
         create_forward_secure_key_pair(Seed::from_bytes(&[12u8; 32]), KEY_GEN_ASSOCIATED_DATA);
-    let epoch = SecretKey::deserialize(&key_set.secret_key).epoch();
+    let epoch = SecretKey::deserialize(&key_set.secret_key)
+        .current_epoch()
+        .unwrap();
     assert_eq!(epoch.get(), 0);
 }
 
@@ -65,7 +67,7 @@ fn single_stepping_a_key_should_increment_current_epoch() {
             secret_key_epoch,
             Seed::from_bytes(&[9u8; 32]),
         );
-        let key_epoch = secret_key.epoch().get();
+        let key_epoch = secret_key.current_epoch().unwrap().get();
         assert_eq!(
             key_epoch, epoch,
             "Deleted epoch {} but key epoch is {}\n",
