@@ -17,6 +17,7 @@ use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
 #[cfg(test)]
 use ic_crypto_internal_threshold_sig_ecdsa::EccScalarBytes;
 use ic_crypto_internal_threshold_sig_ecdsa::{CommitmentOpeningBytes, MEGaKeySetK256Bytes};
+use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use ic_types::crypto::AlgorithmId;
 use serde::{Deserialize, Serialize};
 use strum_macros::{EnumCount, IntoStaticStr};
@@ -267,4 +268,13 @@ impl CspSignature {
 /// from the bytes of a signature to a CspSignature
 pub struct SigConverter {
     target_algorithm: AlgorithmId,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ExternalPublicKeys {
+    pub node_signing_public_key: PublicKey,
+    pub committee_signing_public_key: PublicKey,
+    pub tls_certificate: X509PublicKeyCert,
+    pub dkg_dealing_encryption_public_key: PublicKey,
+    pub idkg_dealing_encryption_public_key: PublicKey,
 }

@@ -61,10 +61,17 @@ impl TryFrom<PublicKeyProto> for CspPublicKey {
     // TODO (CRP-540): move the key bytes from pk_proto.key_value to the
     //   resulting csp_pk (instead of copying/cloning them).
     fn try_from(pk_proto: PublicKeyProto) -> Result<Self, Self::Error> {
+        Self::try_from(&pk_proto)
+    }
+}
+
+impl TryFrom<&PublicKeyProto> for CspPublicKey {
+    type Error = CryptoError;
+    fn try_from(pk_proto: &PublicKeyProto) -> Result<Self, Self::Error> {
         match AlgorithmId::from(pk_proto.algorithm) {
             AlgorithmId::Ed25519 => {
                 let public_key_bytes =
-                    ed25519_types::PublicKeyBytes::try_from(&pk_proto).map_err(|e| {
+                    ed25519_types::PublicKeyBytes::try_from(pk_proto).map_err(|e| {
                         CryptoError::MalformedPublicKey {
                             algorithm: AlgorithmId::Ed25519,
                             key_bytes: Some(e.key_bytes),
@@ -75,7 +82,7 @@ impl TryFrom<PublicKeyProto> for CspPublicKey {
             }
             AlgorithmId::MultiBls12_381 => {
                 let public_key_bytes =
-                    multi_types::PublicKeyBytes::try_from(&pk_proto).map_err(|e| {
+                    multi_types::PublicKeyBytes::try_from(pk_proto).map_err(|e| {
                         CryptoError::MalformedPublicKey {
                             algorithm: AlgorithmId::MultiBls12_381,
                             key_bytes: Some(e.key_bytes),

@@ -4,6 +4,9 @@ use ic_crypto_internal_csp::api::{
     CspCreateMEGaKeyError, CspSecretKeyStoreChecker, NodePublicKeyData,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
+use ic_crypto_internal_csp::keygen::utils::{
+    mega_public_key_from_proto, MEGaPublicKeyFromProtoError,
+};
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::Csp;
 use ic_crypto_internal_csp::{public_key_store, CryptoServiceProvider};
@@ -11,7 +14,7 @@ use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_crypto_utils_basic_sig::conversions as basicsig_conversions;
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_protobuf::registry::crypto::v1::{AlgorithmId as AlgorithmIdProto, X509PublicKeyCert};
+use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, CurrentNodePublicKeys};
 use ic_types::NodeId;
 use std::path::Path;
@@ -21,7 +24,6 @@ use tempfile::TempDir;
 
 use ic_crypto_internal_csp::types::conversions::CspPopFromPublicKeyProtoError;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
@@ -182,34 +184,6 @@ pub fn get_node_keys_or_generate_if_missing(
         }
         Err(e) => panic!("Node contains inconsistent key material: {}", e),
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum MEGaPublicKeyFromProtoError {
-    UnsupportedAlgorithm {
-        algorithm_id: Option<AlgorithmIdProto>,
-    },
-    MalformedPublicKey {
-        key_bytes: Vec<u8>,
-    },
-}
-
-/// Deserialize a Protobuf public key to a MEGaPublicKey.
-pub fn mega_public_key_from_proto(
-    proto: &PublicKeyProto,
-) -> Result<MEGaPublicKey, MEGaPublicKeyFromProtoError> {
-    let curve_type = match AlgorithmIdProto::from_i32(proto.algorithm) {
-        Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
-        alg_id => Err(MEGaPublicKeyFromProtoError::UnsupportedAlgorithm {
-            algorithm_id: alg_id,
-        }),
-    }?;
-
-    MEGaPublicKey::deserialize(curve_type, &proto.key_value).map_err(|_| {
-        MEGaPublicKeyFromProtoError::MalformedPublicKey {
-            key_bytes: proto.key_value.clone(),
-        }
-    })
 }
 
 /// Checks whether this crypto component has complete local key material, i.e.

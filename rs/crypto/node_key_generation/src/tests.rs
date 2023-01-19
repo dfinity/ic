@@ -494,6 +494,7 @@ mod tls {
 mod idkg {
     use super::*;
     use crate::IDkgDealingEncryptionKeysGenerationError;
+    use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
     use std::fs;
     use std::fs::Permissions;
     use std::os::unix::fs::PermissionsExt;

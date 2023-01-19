@@ -146,6 +146,7 @@ enum CspVaultMethod {
     LoadThresholdSigningKey,
     RetainThresholdKeysIfPresent,
     SksContains,
+    PksAndSksContains,
     PksContains,
     CurrentNodePublicKeys,
     CurrentNodePublicKeysWithTimestamps,
@@ -196,6 +197,9 @@ impl CspVaultMethod {
                 "retain_threshold_keys_if_present",
             ),
             CspVaultMethod::SksContains => (MetricsDomain::KeyManagement, "sks_contains"),
+            CspVaultMethod::PksAndSksContains => {
+                (MetricsDomain::KeyManagement, "pks_and_sks_contains")
+            }
             CspVaultMethod::PksContains => (MetricsDomain::KeyManagement, "pks_contains"),
             CspVaultMethod::CurrentNodePublicKeys => {
                 (MetricsDomain::KeyManagement, "current_node_public_keys")
@@ -251,6 +255,7 @@ impl From<&TarpcCspVaultRequest> for CspVaultMethod {
             Req::LoadThresholdSigningKey { .. } => Method::LoadThresholdSigningKey,
             Req::RetainThresholdKeysIfPresent { .. } => Method::RetainThresholdKeysIfPresent,
             Req::SksContains { .. } => Method::SksContains,
+            Req::PksAndSksContains { .. } => Method::PksAndSksContains,
             Req::PksContains { .. } => Method::PksContains,
             Req::CurrentNodePublicKeys { .. } => Method::CurrentNodePublicKeys,
             Req::CurrentNodePublicKeysWithTimestamps { .. } => {
@@ -289,6 +294,7 @@ impl From<&TarpcCspVaultResponse> for CspVaultMethod {
             Resp::LoadThresholdSigningKey { .. } => Method::LoadThresholdSigningKey,
             Resp::RetainThresholdKeysIfPresent { .. } => Method::RetainThresholdKeysIfPresent,
             Resp::SksContains { .. } => Method::SksContains,
+            Resp::PksAndSksContains { .. } => Method::PksAndSksContains,
             Resp::PksContains { .. } => Method::PksContains,
             Resp::CurrentNodePublicKeys { .. } => Method::CurrentNodePublicKeys,
             Resp::CurrentNodePublicKeysWithTimestamps { .. } => {

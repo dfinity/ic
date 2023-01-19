@@ -300,13 +300,16 @@ pub fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_when_all_ot
         .expect("Error calling idkg_key_count");
     assert_eq!(0, result);
 }
-fn generate_idkg_dealing_encryption_key_pair(csp_vault: &Arc<dyn CspVault>) -> MEGaPublicKey {
+
+pub(crate) fn generate_idkg_dealing_encryption_key_pair(
+    csp_vault: &Arc<dyn CspVault>,
+) -> MEGaPublicKey {
     csp_vault
         .idkg_gen_dealing_encryption_key_pair()
         .expect("Failed to generate IDkg dealing encryption keys")
 }
 
-fn generate_all_keys(csp_vault: &Arc<dyn CspVault>) -> CurrentNodePublicKeys {
+pub(crate) fn generate_all_keys(csp_vault: &Arc<dyn CspVault>) -> CurrentNodePublicKeys {
     let _node_signing_pk = csp_vault
         .gen_node_signing_key_pair()
         .expect("Failed to generate node signing key pair");
