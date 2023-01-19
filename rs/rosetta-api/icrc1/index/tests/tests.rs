@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use candid::{Decode, Encode, Nat};
 use ic_base_types::PrincipalId;
 use ic_icrc1::{
@@ -19,6 +17,8 @@ use ic_ledger_core::{
 };
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use num_traits::cast::ToPrimitive;
+use std::path::PathBuf;
+use std::time::Duration;
 
 const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
@@ -308,6 +308,7 @@ fn test() {
         .collect();
 
     let env = StateMachine::new();
+
     let ledger_id = install_ledger(&env, initial_balances, default_archive_options());
 
     let index_id = install_index(&env, ledger_id);
@@ -324,6 +325,7 @@ fn test() {
     transfer(&env, ledger_id, account(2), account(1), 20); // block=4
     burn(&env, ledger_id, account(1), 10000); // block=5
 
+    env.advance_time(Duration::from_secs(60));
     env.tick(); // trigger index heartbeat
 
     let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
@@ -349,6 +351,7 @@ fn test() {
     transfer(&env, ledger_id, account(1), account(3), 6); // block=6
     transfer(&env, ledger_id, account(1), account(2), 7); // block=7
 
+    env.advance_time(Duration::from_secs(60));
     env.tick(); // trigger index heartbeat
 
     // fetch the more recent transfers
@@ -378,6 +381,46 @@ fn test() {
 }
 
 #[test]
+fn test_wait_time() {
+    let env = StateMachine::new();
+    let ledger_id = install_ledger(&env, vec![], default_archive_options());
+    let index_id = install_index(&env, ledger_id);
+
+    env.tick();
+
+    // add some transactions
+    mint(&env, ledger_id, account(1), 100000); // block=0
+    mint(&env, ledger_id, account(2), 200000); // block=1
+    transfer(&env, ledger_id, account(1), account(2), 1); // block=2
+    transfer(&env, ledger_id, account(2), account(1), 10); // block=3
+    burn(&env, ledger_id, account(1), 10000); // block=4
+
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+    let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
+    assert!(!txs.transactions.is_empty());
+
+    // Next heartbeat should happen 60 seconds later, as we only indexed
+    // 5 transactions.
+    mint(&env, ledger_id, account(3), 100000); // block=5
+    env.tick(); // trigger index heartbeat that shouldn't index new transactions.
+
+    let txs = get_account_transactions(&env, index_id, account(3), None, u64::MAX);
+    assert!(txs.transactions.is_empty());
+    env.advance_time(Duration::from_secs(50));
+    env.tick();
+
+    let txs = get_account_transactions(&env, index_id, account(3), None, u64::MAX);
+    assert!(txs.transactions.is_empty());
+
+    env.advance_time(Duration::from_secs(10));
+    env.tick();
+
+    let txs = get_account_transactions(&env, index_id, account(3), None, u64::MAX);
+    assert!(!txs.transactions.is_empty());
+}
+
+#[test]
 fn test_upgrade() {
     let env = StateMachine::new();
     let ledger_id = install_ledger(&env, vec![], default_archive_options());
@@ -387,6 +430,7 @@ fn test_upgrade() {
     mint(&env, ledger_id, account(1), 100000); // block=0
     transfer(&env, ledger_id, account(1), account(2), 1); // block=1
 
+    env.advance_time(Duration::from_secs(60));
     // upgrade the Index
     env.upgrade_canister(index_id, index_wasm(), vec![])
         .expect("Failed to upgrade the Index canister");
