@@ -799,10 +799,8 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         debug!(self.log, "Processing batch {}", batch.batch_number);
         let commit_height = Height::from(batch.batch_number.get());
 
-        let mut metadata = state.system_metadata().clone();
         let time = batch.time;
-        metadata.batch_time = time;
-        state.set_system_metadata(metadata);
+        state.metadata.batch_time = time;
 
         // Get only ingress and ignore xnet and self-validating messages
         let (signed_ingress_msgs, _certified_stream_slices, _get_successors_response) =
