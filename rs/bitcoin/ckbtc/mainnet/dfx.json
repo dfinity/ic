@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "dfx": "0.12.1",
+  "canisters": {
+    "minter": {
+      "type": "custom",
+      "build": ["bazel build //rs/bitcoin/ckbtc/minter:ckbtc_minter"],
+      "wasm": "../../../../bazel-bin/rs/bitcoin/ckbtc/minter/ckbtc_minter.wasm",
+      "candid": "../minter/ckbtc_minter.did",
+      "shrink": false
+    },
+    "ledger": {
+      "type": "custom",
+      "build": ["bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister"],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister.wasm",
+      "candid": "../../../rosetta-api/icrc1/ledger/icrc1.did",
+      "shrink": false
+    },
+    "archive": {
+      "type": "custom",
+      "build": ["bazel build //rs/rosetta-api/icrc1/archive:archive_canister"],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/archive/archive_canister.wasm",
+      "candid": "../../../rosetta-api/icrc1/archive/archive.did",
+      "shrink": false
+    },
+    "index": {
+      "type": "custom",
+      "build": ["bazel build //rs/rosetta-api/icrc1/index:index_canister"],
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index/index_canister.wasm",
+      "candid": "../../../rosetta-api/icrc1/index/index.did",
+      "shrink": false
+    }
+  },
+  "defaults": {
+    "build": {
+      "packtool": "",
+      "args": ""
+    }
+  },
+  "networks": {
+    "local": {
+      "bind": "127.0.0.1:8000",
+      "type": "ephemeral"
+    }
+  }
+}
