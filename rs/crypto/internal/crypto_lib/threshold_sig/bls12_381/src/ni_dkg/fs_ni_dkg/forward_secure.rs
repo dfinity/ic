@@ -53,7 +53,7 @@ const DOMAIN_CIPHERTEXT_NODE: &str = "ic-fs-encryption/binary-tree-node";
 
 /// Type for a single bit
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Zeroize)]
-pub enum Bit {
+pub(crate) enum Bit {
     Zero = 0,
     One = 1,
 }
@@ -77,8 +77,8 @@ impl From<&Bit> for u8 {
     }
 }
 
-impl From<&Bit> for i32 {
-    fn from(b: &Bit) -> i32 {
+impl From<&Bit> for u32 {
+    fn from(b: &Bit) -> u32 {
         match &b {
             Bit::Zero => 0,
             Bit::One => 1,
@@ -86,36 +86,67 @@ impl From<&Bit> for i32 {
     }
 }
 
-/// Generates tau (a vector of bits) from an epoch.
-pub fn tau_from_epoch(epoch: Epoch) -> Vec<Bit> {
-    (0..LAMBDA_T)
-        .rev()
-        .map(|index| {
-            if (epoch.get() >> index) & 1 == 0 {
-                Bit::Zero
-            } else {
-                Bit::One
+/// Represents a prefix of an epoch.
+///
+/// The bits are the encoding (in big-endian ordering) of an
+/// integer which represents a prefix of an epoch.
+#[derive(Debug, Clone, Zeroize)]
+pub(crate) struct Tau(pub Vec<Bit>);
+
+impl Tau {
+    pub fn empty() -> Self {
+        Self(vec![])
+    }
+
+    pub fn extended_by(&self, bit: Bit) -> Self {
+        let mut ext = self.clone();
+        ext.push(bit);
+        ext
+    }
+
+    pub fn push(&mut self, bit: Bit) {
+        self.0.push(bit);
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn is_prefix_of_epoch(&self, epoch: Epoch) -> bool {
+        fn is_prefix(xs: &[Bit], ys: &[Bit]) -> bool {
+            if xs.len() > ys.len() {
+                return false;
             }
-        })
-        .collect()
+            for i in 0..xs.len() {
+                if xs[i] != ys[i] {
+                    return false;
+                }
+            }
+            true
+        }
+
+        is_prefix(&self.0, &Tau::from(epoch).0)
+    }
 }
 
-/// Converts an epoch prefix to an epoch by filling in remaining bits with
-/// zeros.
-pub fn epoch_from_tau_vec(tau: &[Bit]) -> Epoch {
-    let num_bits = ::std::mem::size_of::<Epoch>() * 8;
-    Epoch::from(
-        (0..num_bits)
+impl std::ops::Index<usize> for Tau {
+    type Output = Bit;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.0[index]
+    }
+}
+
+impl From<Epoch> for Tau {
+    /// Gets the leaf node tau for a given epoch
+    fn from(epoch: Epoch) -> Tau {
+        let epoch = epoch.get();
+        let num_bits = std::mem::size_of::<Epoch>() * 8;
+        Tau((0..num_bits)
             .rev()
-            .zip(tau)
-            .fold(0u32, |epoch, (shift, tau)| {
-                epoch
-                    | ((match *tau {
-                        Bit::One => 1,
-                        Bit::Zero => 0,
-                    }) << shift)
-            }),
-    )
+            .map(|shift| Bit::from(((epoch >> shift) & 1) as u8))
+            .collect())
+    }
 }
 
 /// A node of a Binary Tree Encryption scheme.
@@ -123,7 +154,7 @@ pub fn epoch_from_tau_vec(tau: &[Bit]) -> Epoch {
 /// Notation from section 7.2.
 pub(crate) struct BTENode {
     // Bit-vector, indicating a path in a binary tree.
-    pub tau: Vec<Bit>,
+    pub tau: Tau,
 
     pub a: G1Affine,
     pub b: G2Affine,
@@ -162,7 +193,7 @@ impl Drop for BTENode {
 impl BTENode {
     pub(crate) fn serialize(&self) -> BTENodeBytes {
         BTENodeBytes {
-            tau: self.tau.iter().map(|i| *i as u8).collect(),
+            tau: self.tau.0.iter().map(|i| *i as u8).collect(),
             a: self.a.serialize_to::<G1Bytes>(),
             b: self.b.serialize_to::<G2Bytes>(),
             d_t: self
@@ -184,7 +215,7 @@ impl BTENode {
     /// Assumes inputs are trusted points. Panics if deserialization fails.
     pub(crate) fn deserialize_unchecked(node: &BTENodeBytes) -> Self {
         Self {
-            tau: node.tau.iter().copied().map(Bit::from).collect(),
+            tau: Tau(node.tau.iter().copied().map(Bit::from).collect()),
             a: G1Affine::deserialize_unchecked(&node.a).expect("Malformed secret key at BTENode.a"),
             b: G2Affine::deserialize_unchecked(&node.b).expect("Malformed secret key at BTENode.b"),
             d_t: node
@@ -315,7 +346,7 @@ pub fn kgen<R: RngCore + CryptoRng>(
 
     let e = G2Affine::from(&sys.h * &rho);
     let bte_root = BTENode {
-        tau: Vec::new(),
+        tau: Tau::empty(),
         a,
         b,
         d_t,
@@ -344,48 +375,6 @@ pub fn kgen<R: RngCore + CryptoRng>(
 }
 
 impl SecretKey {
-    /// The current key (the end of list of BTENodes) of a `SecretKey` should
-    /// always correspond to an epoch described by LAMBDA_T bits. Some
-    /// internal operations break this invariant, leaving less than LAMBDA_T
-    /// bits in the current key. This function should be called when this
-    /// happens; it modifies the list so the current key corresponds to the
-    /// first epoch of the subtree described by the current key.
-    ///
-    /// For example, if LAMBDA_T = 5, then [..., 011] will change to
-    /// [..., 0111, 01101, 01100].
-    /// The current key's `tau` now has 5 bits, and the other entries cover the
-    /// rest of the 011 subtree after we delete the current key.
-    ///
-    /// Another example: during the very first epoch the private key is
-    /// [1, 01, 001, 0001, 00001, 00000].
-    ///
-    /// This makes key update easy: pop off the current key, then call this
-    /// function.
-    ///
-    /// An alternative is to only store the root nodes of the subtrees that
-    /// cover the remaining valid keys. Thus the first epoch, the private
-    /// key would simply be \[0\], and would only change to [1, 01, 001, 0001,
-    /// 00001] after the first update. Generally, some computations
-    /// happen one epoch later than they would with our current scheme. However,
-    /// key update is a bit fiddlier.
-    ///
-    /// No-op if `self` is empty.
-    pub(crate) fn fast_derive<R: RngCore + CryptoRng>(&mut self, sys: &SysParam, rng: &mut R) {
-        let mut epoch = Vec::new();
-        if self.bte_nodes.is_empty() {
-            return;
-        }
-        let now = self.current().expect("bte_nodes unexpectedly empty");
-        for i in 0..LAMBDA_T {
-            if i < now.tau.len() {
-                epoch.push(now.tau[i]);
-            } else {
-                epoch.push(Bit::Zero);
-            }
-        }
-        self.update_to(&epoch, sys, rng);
-    }
-
     fn new(bte_root: BTENode) -> SecretKey {
         let mut bte_nodes = LinkedList::new();
         bte_nodes.push_back(bte_root);
@@ -399,49 +388,87 @@ impl SecretKey {
 
     /// Gets the current epoch for a secret key.
     ///
-    /// # Panics
-    /// This will panic if the secret key has expired; in this case it has no
-    /// current epoch.
-    pub(crate) fn epoch(&self) -> Epoch {
-        epoch_from_tau_vec(&self.current().expect("No more secret keys left").tau)
-    }
+    /// Returns None if the key has been exhausted
+    pub fn current_epoch(&self) -> Option<Epoch> {
+        if let Some(node) = self.current() {
+            let mut epoch = 0u32;
+            for i in 0..LAMBDA_T {
+                let x = if let Some(t) = node.tau.0.get(i) {
+                    t.into()
+                } else {
+                    0
+                };
 
-    /// Return if this key has been exhausted and can no longer be used
-    pub fn is_exhausted(&self) -> bool {
-        self.current().is_none()
+                epoch |= x << (LAMBDA_T - 1 - i);
+            }
+            Some(Epoch::from(epoch))
+        } else {
+            None
+        }
     }
 
     /// Updates this key to the next epoch.  After an update,
     /// the decryption keys for previous epochs are not accessible any more.
     /// (KUpd(dk, 1) from Sect. 9.1)
+    ///
+    /// The current key (the end of list of BTENodes) of a `SecretKey` should
+    /// always correspond to an epoch described by LAMBDA_T bits. However this
+    /// invariant is broken when we pop the final node. The second call to
+    /// update_to modifies the list so the current key corresponds to the
+    /// first epoch of the subtree described by the current key.
+    ///
+    /// For example, if LAMBDA_T = 5, then [..., 011] will change to
+    /// [..., 0111, 01101, 01100].
+    /// The current key's `tau` now has 5 bits, and the other entries cover the
+    /// rest of the 011 subtree after we delete the current key.
+    ///
+    /// Another example: during the very first epoch the private key is
+    /// [1, 01, 001, 0001, 00001, 00000].
+    ///
+    /// This makes key update easy: pop off the current key, then update again
+    ///
+    /// An alternative is to only store the root nodes of the subtrees that
+    /// cover the remaining valid keys. Thus the first epoch, the private
+    /// key would simply be \[0\], and would only change to [1, 01, 001, 0001,
+    /// 00001] after the first update. Generally, some computations
+    /// happen one epoch later than they would with our current scheme. However,
+    /// key update is a bit fiddlier.
     pub fn update<R: RngCore + CryptoRng>(&mut self, sys: &SysParam, rng: &mut R) {
-        self.fast_derive(sys, rng);
+        if let Some(current_epoch) = self.current_epoch() {
+            self.update_to(current_epoch, sys, rng);
+        }
         match self.bte_nodes.pop_back() {
             None => {}
             Some(mut dk) => {
                 dk.zeroize();
-                self.fast_derive(sys, rng);
+                if let Some(current_epoch) = self.current_epoch() {
+                    self.update_to(current_epoch, sys, rng);
+                }
             }
         }
     }
 
     /// Updates `self` to the given `epoch`.
     ///
-    /// If `epoch` is in the past, then disables `self`.
+    /// If `epoch` is in the past, with respect to the current key, then nothing happens
+    /// If `epoch` is the current epoch of the key, then nothing happens
     ///
     /// A key update can take up to 2*LAMBDA_T*LAMBDA_H G2 multiplications
-    pub fn update_to<R: RngCore + CryptoRng>(
-        &mut self,
-        epoch: &[Bit],
-        sys: &SysParam,
-        rng: &mut R,
-    ) {
-        // dropWhileEnd (\node -> not $ tau node `isPrefixOf` epoch) bte_nodes
+    pub fn update_to<R: RngCore + CryptoRng>(&mut self, epoch: Epoch, sys: &SysParam, rng: &mut R) {
+        if let Some(current_epoch) = self.current_epoch() {
+            if current_epoch > epoch {
+                return;
+            }
+        }
+
+        // Drop nodes from the end of bte_nodes until we either run out of nodes
+        // (in which case return, with the key disabled) or until we arrive at a
+        // node whose tau value is a prefix of the target epoch.
         loop {
             match self.bte_nodes.back() {
                 None => return,
                 Some(cur) => {
-                    if is_prefix(&cur.tau, epoch) {
+                    if cur.tau.is_prefix_of_epoch(epoch) {
                         break;
                     }
                 }
@@ -452,7 +479,7 @@ impl SecretKey {
                 .zeroize();
         }
 
-        let g1 = G1Affine::generator();
+        let epoch = Tau::from(epoch);
 
         // At this point, bte_nodes.back() is a prefix of `epoch`.
         // Replace it with the nodes for `epoch` and later (in the subtree).
@@ -463,9 +490,8 @@ impl SecretKey {
         //   * We can still derive the keys for 01110 and 01111 from 0111.
         //   * We can no longer decrypt 01100.
         let mut node = self.bte_nodes.pop_back().expect("self.bte_nodes was empty");
-        let mut n = node.tau.len();
         // Nothing to do if `node.tau` is already `epoch`.
-        if n == epoch.len() {
+        if node.tau.len() == epoch.len() {
             self.bte_nodes.push_back(node);
             return;
         }
@@ -476,14 +502,14 @@ impl SecretKey {
         let mut b_acc = G2Projective::from(&node.b);
         let mut f_acc = ftau_partial(&node.tau, sys).expect("node.tau not the expected size");
         let mut tau = node.tau.clone();
-        while n < epoch.len() {
+
+        for n in node.tau.len()..epoch.len() {
             if epoch[n] == Bit::Zero {
                 // Save the root of the right subtree for later.
-                let mut tau_1 = tau.clone();
-                tau_1.push(Bit::One);
+                let tau_1 = tau.extended_by(Bit::One);
                 let delta = Scalar::random(rng);
 
-                let a_blind = (g1 * &delta) + &node.a;
+                let a_blind = (G1Affine::generator() * &delta) + &node.a;
                 let mut b_blind =
                     G2Projective::from(d_t.pop_front().expect("d_t not sufficiently large"));
                 b_blind += &b_acc;
@@ -519,18 +545,17 @@ impl SecretKey {
                 b_acc += d_t.pop_front().expect("d_t not sufficiently large");
             }
             tau.push(epoch[n]);
-            n += 1;
         }
 
         let delta = Scalar::random(rng);
-        let a = g1 * &delta + &node.a;
+        let a = G1Affine::generator() * &delta + &node.a;
         let e = &sys.h * &delta + &node.e;
         b_acc += f_acc * &delta;
 
         let mut d_t_blind = LinkedList::new();
         // Typically `d_t_blind` remains empty.
         // It is only nontrivial if `epoch` is less than LAMBDA_T bits.
-        let mut k = n;
+        let mut k = epoch.len();
         d_t.iter().for_each(|d| {
             let tmp = (&sys.f[k] * &delta) + d;
             d_t_blind.push_back(tmp.to_affine());
@@ -682,7 +707,7 @@ pub struct EncryptionWitness {
 /// in the NIZK proofs.
 pub fn enc_chunks<R: RngCore + CryptoRng>(
     recipient_and_message: &[(G1Affine, PlaintextChunks)],
-    tau: &[Bit],
+    epoch: Epoch,
     associated_data: &[u8],
     sys: &SysParam,
     rng: &mut R,
@@ -720,8 +745,7 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
         cc
     };
 
-    let extended_tau = extend_tau(&cc, &rr, &ss, tau, associated_data);
-    let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
+    let id = ftau_extended(&cc, &rr, &ss, sys, epoch, associated_data);
     let mut zz = Vec::with_capacity(NUM_CHUNKS);
 
     let id_h_tbl = G2Projective::compute_mul2_tbl(&id, &G2Projective::from(&sys.h));
@@ -737,20 +761,10 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
     (crsz, witness)
 }
 
-fn is_prefix(xs: &[Bit], ys: &[Bit]) -> bool {
-    if xs.len() > ys.len() {
-        return false;
-    }
-    for i in 0..xs.len() {
-        if xs[i] != ys[i] {
-            return false;
-        }
-    }
-    true
-}
-
-fn find_prefix<'a>(dks: &'a SecretKey, tau: &[Bit]) -> Option<&'a BTENode> {
-    dks.bte_nodes.iter().find(|&node| is_prefix(&node.tau, tau))
+fn find_prefix(dks: &SecretKey, epoch: Epoch) -> Option<&BTENode> {
+    dks.bte_nodes
+        .iter()
+        .find(|&node| node.tau.is_prefix_of_epoch(epoch))
 }
 
 /// Error while decrypting
@@ -776,7 +790,7 @@ pub fn dec_chunks(
     dks: &SecretKey,
     i: usize,
     crsz: &FsEncryptionCiphertext,
-    tau: &[Bit],
+    epoch: Epoch,
     associated_data: &[u8],
 ) -> Result<Scalar, DecErr> {
     let n = crsz.cc.len();
@@ -786,25 +800,25 @@ pub fn dec_chunks(
         return Err(DecErr::InvalidCiphertext);
     }
 
-    let extended_tau = extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, tau, associated_data);
-    let dk = match find_prefix(dks, tau) {
-        None => return Err(DecErr::ExpiredKey),
-        Some(node) => node,
+    let dk = find_prefix(dks, epoch).ok_or(DecErr::ExpiredKey)?;
+
+    let bneg = {
+        let extended_tau = extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, epoch, associated_data);
+
+        let mut bneg = G2Projective::from(&dk.b);
+
+        for (i, t) in dk.d_t.iter().enumerate() {
+            if extended_tau[dk.tau.len() + i] == Bit::One {
+                bneg += t;
+            }
+        }
+        for k in 0..LAMBDA_H {
+            if extended_tau[LAMBDA_T + k] == Bit::One {
+                bneg += &dk.d_h[k];
+            }
+        }
+        bneg.neg()
     };
-    let mut bneg = G2Projective::from(&dk.b);
-    let mut l = dk.tau.len();
-    for t in dk.d_t.iter() {
-        if extended_tau[l] == Bit::One {
-            bneg += t;
-        }
-        l += 1
-    }
-    for k in 0..LAMBDA_H {
-        if extended_tau[LAMBDA_T + k] == Bit::One {
-            bneg += &dk.d_h[k];
-        }
-    }
-    bneg = bneg.neg();
 
     let cj = &crsz.cc[i];
 
@@ -868,7 +882,7 @@ pub fn dec_chunks(
 /// we must also verify ciphertext integrity.
 pub fn verify_ciphertext_integrity(
     crsz: &FsEncryptionCiphertext,
-    tau: &[Bit],
+    epoch: Epoch,
     associated_data: &[u8],
     sys: &SysParam,
 ) -> Result<(), ()> {
@@ -884,8 +898,7 @@ pub fn verify_ciphertext_integrity(
         return Err(());
     }
 
-    let extended_tau = extend_tau(&crsz.cc, &crsz.rr, &crsz.ss, tau, associated_data);
-    let id = ftau(&extended_tau, sys).expect("extended_tau not the correct size");
+    let id = ftau_extended(&crsz.cc, &crsz.rr, &crsz.ss, sys, epoch, associated_data);
 
     let g1_neg = G1Affine::generator().neg();
     let precomp_id = G2Prepared::from(&id);
@@ -911,58 +924,70 @@ pub fn verify_ciphertext_integrity(
 /// Returns (tau || RO(cc, rr, ss, tau, associated_data)).
 ///
 /// See the description of Deal in Section 7.1.
-pub fn extend_tau(
+pub(crate) fn extend_tau(
     cc: &[Vec<G1Affine>],
     rr: &[G1Affine],
     ss: &[G1Affine],
-    tau: &[Bit],
+    epoch: Epoch,
     associated_data: &[u8],
-) -> Vec<Bit> {
+) -> Tau {
     let mut map = HashedMap::new();
     map.insert_hashed("ciphertext-chunks", &cc.to_vec());
     map.insert_hashed("randomizers-r", &rr.to_vec());
     map.insert_hashed("randomizers-s", &ss.to_vec());
-    map.insert_hashed("epoch", &(epoch_from_tau_vec(tau).get() as usize));
+    map.insert_hashed("epoch", &(epoch.get() as usize));
     map.insert_hashed("associated-data", &associated_data.to_vec());
 
     let hash = random_oracle(DOMAIN_CIPHERTEXT_NODE, &map);
 
-    let mut extended_tau: Vec<Bit> = tau.to_vec();
+    let tau = Tau::from(epoch);
+
+    let mut extended_tau: Vec<Bit> = tau.0;
     hash.iter().for_each(|byte| {
         for b in 0..8 {
             extended_tau.push(Bit::from((byte >> b) & 1));
         }
     });
-    extended_tau
+    Tau(extended_tau)
 }
 
-/// Computes the function f of the paper.
+/// Extends tau using the random oracle, and computes the function f
 ///
-/// The bit vector tau must have length LAMBDA_T + LAMBDA_H.
-pub fn ftau(tau: &[Bit], sys: &SysParam) -> Option<G2Projective> {
-    if tau.len() != LAMBDA_T + LAMBDA_H {
-        return None;
-    }
+/// See the description of Deal in Section 7.1.
+pub fn ftau_extended(
+    cc: &[Vec<G1Affine>],
+    rr: &[G1Affine],
+    ss: &[G1Affine],
+    sys: &SysParam,
+    epoch: Epoch,
+    associated_data: &[u8],
+) -> G2Projective {
+    let extended_tau = extend_tau(cc, rr, ss, epoch, associated_data);
+
     let mut id = G2Projective::from(&sys.f0);
-    for (n, t) in tau.iter().enumerate() {
-        if *t == Bit::One {
-            if n < LAMBDA_T {
-                id += &sys.f[n];
-            } else {
-                id += &sys.f_h[n - LAMBDA_T];
-            }
+
+    for i in 0..LAMBDA_T {
+        if extended_tau.0[i] == Bit::One {
+            id += &sys.f[i];
         }
     }
-    Some(id)
+
+    for i in 0..LAMBDA_H {
+        if extended_tau.0[LAMBDA_T + i] == Bit::One {
+            id += &sys.f_h[i];
+        }
+    }
+
+    id
 }
 
 /// Computes f for bit vectors tau <= LAMBDA_T.
-fn ftau_partial(tau: &[Bit], sys: &SysParam) -> Option<G2Projective> {
-    if tau.len() > LAMBDA_T {
+pub(crate) fn ftau_partial(tau: &Tau, sys: &SysParam) -> Option<G2Projective> {
+    if tau.0.len() > LAMBDA_T {
         return None;
     }
     let mut id = G2Projective::from(&sys.f0);
-    tau.iter().zip(sys.f.iter()).for_each(|(t, f)| {
+    tau.0.iter().zip(sys.f.iter()).for_each(|(t, f)| {
         if *t == Bit::One {
             id += f;
         }

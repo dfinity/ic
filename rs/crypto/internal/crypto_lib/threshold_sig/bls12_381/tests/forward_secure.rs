@@ -88,8 +88,7 @@ fn keys_and_ciphertext_for<R: RngCore + CryptoRng>(
 
     let pks_and_scalars = pks.iter().cloned().zip(ptext_chunks).collect::<Vec<_>>();
 
-    let tau = tau_from_epoch(epoch);
-    let (crsz, _witness) = enc_chunks(&pks_and_scalars, &tau, associated_data, sys, rng);
+    let (crsz, _witness) = enc_chunks(&pks_and_scalars, epoch, associated_data, sys, rng);
     (keys, ptext, crsz)
 }
 
@@ -107,9 +106,8 @@ fn integrity_check_should_return_error_on_wrong_associated_data() {
     };
 
     let (_keys, _message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
-    let tau = tau_from_epoch(epoch);
 
-    assert!(verify_ciphertext_integrity(&crsz, &tau, &wrong_associated_data, sys).is_err());
+    assert!(verify_ciphertext_integrity(&crsz, epoch, &wrong_associated_data, sys).is_err());
 }
 
 #[test]
@@ -120,11 +118,10 @@ fn should_encrypt_with_empty_associated_data() {
     let associated_data = [];
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
-    let tau = tau_from_epoch(epoch);
-    assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
+    assert!(verify_ciphertext_integrity(&crsz, epoch, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
-        let out = dec_chunks(&keys[i].1, i, &crsz, &tau, &associated_data);
+        let out = dec_chunks(&keys[i].1, i, &crsz, epoch, &associated_data);
         assert_eq!(out.unwrap(), message[i], "Message decrypted wrongly");
     }
 }
@@ -188,15 +185,14 @@ fn should_decrypt_correctly_for_cheating_dealer() {
         .zip(cheating_chunks.iter().cloned())
         .collect::<Vec<_>>();
 
-    let tau = tau_from_epoch(epoch);
-    let (crsz, _witness) = enc_chunks(&pks_and_chunks, &tau, &associated_data, sys, &mut rng);
+    let (crsz, _witness) = enc_chunks(&pks_and_chunks, epoch, &associated_data, sys, &mut rng);
 
     // still a valid ciphertext
-    assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
+    assert!(verify_ciphertext_integrity(&crsz, epoch, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
         let secret_key = &keys[i].1;
-        let out = dec_chunks(secret_key, i, &crsz, &tau, &associated_data);
+        let out = dec_chunks(secret_key, i, &crsz, epoch, &associated_data);
         assert_eq!(
             out.unwrap(),
             cheating_chunks[i].recombine_to_scalar(),
@@ -213,12 +209,11 @@ fn should_decrypt_correctly_for_epoch_0() {
     let associated_data = rng.gen::<[u8; 10]>();
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
-    let tau = tau_from_epoch(epoch);
-    assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
+    assert!(verify_ciphertext_integrity(&crsz, epoch, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
         let secret_key = &keys[i].1;
-        let out = dec_chunks(secret_key, i, &crsz, &tau, &associated_data);
+        let out = dec_chunks(secret_key, i, &crsz, epoch, &associated_data);
         assert_eq!(out.unwrap(), message[i], "Message decrypted wrongly");
     }
 }
@@ -231,12 +226,11 @@ fn should_decrypt_correctly_for_epoch_1() {
     let associated_data = rng.gen::<[u8; 10]>();
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
-    let tau = tau_from_epoch(epoch);
-    assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
+    assert!(verify_ciphertext_integrity(&crsz, epoch, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
         let secret_key = &keys[i].1;
-        let out = dec_chunks(secret_key, i, &crsz, &tau, &associated_data);
+        let out = dec_chunks(secret_key, i, &crsz, epoch, &associated_data);
         assert_eq!(out.unwrap(), message[i], "Message decrypted wrongly");
     }
 }
@@ -248,12 +242,11 @@ fn should_decrypt_correctly_for_epoch_5() {
     let associated_data = rng.gen::<[u8; 10]>();
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
-    let tau = tau_from_epoch(epoch);
-    assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
+    assert!(verify_ciphertext_integrity(&crsz, epoch, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
         let secret_key = &keys[i].1;
-        let out = dec_chunks(secret_key, i, &crsz, &tau, &associated_data);
+        let out = dec_chunks(secret_key, i, &crsz, epoch, &associated_data);
         assert_eq!(out.unwrap(), message[i], "Message decrypted wrongly");
     }
 }
@@ -265,12 +258,11 @@ fn should_decrypt_correctly_for_epoch_10() {
     let associated_data = rng.gen::<[u8; 10]>();
     let (keys, message, crsz) = keys_and_ciphertext_for(epoch, &associated_data, &mut rng);
 
-    let tau = tau_from_epoch(epoch);
-    assert!(verify_ciphertext_integrity(&crsz, &tau, &associated_data, sys).is_ok());
+    assert!(verify_ciphertext_integrity(&crsz, epoch, &associated_data, sys).is_ok());
 
     for i in 0..keys.len() {
         let secret_key = &keys[i].1;
-        let out = dec_chunks(secret_key, i, &crsz, &tau, &associated_data);
+        let out = dec_chunks(secret_key, i, &crsz, epoch, &associated_data);
         assert_eq!(out.unwrap(), message[i], "Message decrypted wrongly");
     }
 }
