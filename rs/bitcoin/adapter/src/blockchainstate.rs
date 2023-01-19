@@ -209,15 +209,17 @@ impl BlockchainState {
     ) -> (Vec<CachedHeader>, Option<AddHeaderError>) {
         let mut added_headers = vec![];
 
-        for header in headers {
-            match self.add_header(*header) {
+        let err = headers
+            .iter()
+            .try_for_each(|header| match self.add_header(*header) {
                 Ok(AddHeaderResult::HeaderAdded(cached_header)) => {
                     added_headers.push(cached_header);
+                    Ok(())
                 }
-                Ok(AddHeaderResult::HeaderAlreadyExists(_)) => {}
-                Err(err) => return (added_headers, Some(err)),
-            }
-        }
+                Ok(AddHeaderResult::HeaderAlreadyExists(_)) => Ok(()),
+                Err(err) => Err(err),
+            })
+            .err();
 
         // Sort the tips by the total work
         self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
@@ -226,7 +228,7 @@ impl BlockchainState {
             .tip_height
             .set(self.get_active_chain_tip().height.into());
 
-        (added_headers, None)
+        (added_headers, err)
     }
 
     /// This method adds the input header to the `header_cache`.
@@ -303,6 +305,7 @@ impl BlockchainState {
         let result = self
             .add_header(block.header)
             .map_err(AddBlockError::Header)?;
+        self.tips.sort_unstable_by(|a, b| b.work.cmp(&a.work));
         self.block_cache.insert(block_hash, block);
         self.metrics
             .block_cache_size
@@ -424,7 +427,7 @@ mod test {
 
     use super::*;
     use crate::{
-        common::test_common::{block_1, block_2, generate_headers, TestState},
+        common::test_common::{block_1, block_2, generate_header, generate_headers, TestState},
         config::test::ConfigBuilder,
     };
     use std::collections::HashSet;
@@ -682,5 +685,50 @@ mod test {
         let block_cache_size = state.get_block_cache_size();
 
         assert_eq!(expected_cache_size, block_cache_size);
+    }
+
+    /// Test that verifies that the tip is always correctly sorted in case of forks and blocks
+    /// with unknown headers.
+    #[test]
+    fn test_sorted_tip() {
+        let config = ConfigBuilder::new().with_network(Network::Regtest).build();
+        let mut state = BlockchainState::new(&config, &MetricsRegistry::default());
+        let h1 = state.genesis().clone();
+        // h1 - h2
+        let h2 = generate_header(h1.header.block_hash(), h1.header.time, 0);
+        state.add_headers(&[h2]);
+        assert_eq!(state.get_active_chain_tip().header, h2);
+
+        // Create a fork with 3 headers where the last one is invalid and check that h3f is the tip.
+        //      h2f - h3f
+        //    /
+        // h1 - h2
+
+        let h2f = generate_header(h1.header.block_hash(), h1.header.time, 1);
+        let h3f = generate_header(h2f.block_hash(), h2f.time, 0);
+        // Set time to zero to make header invalid
+        let h4f_invalid = generate_header(h2f.block_hash(), 0, 0);
+        state.add_headers(&[h2f, h3f, h4f_invalid]);
+        assert_eq!(state.get_active_chain_tip().header, h3f);
+
+        // Extend non fork chain with blocks (with unknown headers) and make sure h4 is tip.
+        //      h2f - h3f
+        //    /
+        // h1 - h2  - h3  - h4
+        let h3 = generate_header(h2.block_hash(), h2.time, 0);
+        let h4 = generate_header(h3.block_hash(), h3.time, 0);
+        state
+            .add_block(Block {
+                header: h3,
+                txdata: Vec::new(),
+            })
+            .unwrap();
+        state
+            .add_block(Block {
+                header: h4,
+                txdata: Vec::new(),
+            })
+            .unwrap();
+        assert_eq!(state.get_active_chain_tip().header, h4);
     }
 }
