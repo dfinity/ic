@@ -211,9 +211,9 @@ pub mod test_common {
         let known_hashes: HashSet<BlockHash> = previous_blockhashes.iter().copied().collect();
 
         for _ in 0..limit {
-            let mut header = generate_header(prev_blockhash, prev_time);
+            let mut header = generate_header(prev_blockhash, prev_time, 0);
             while known_hashes.contains(&header.block_hash()) {
-                header = generate_header(prev_blockhash, prev_time);
+                header = generate_header(prev_blockhash, prev_time, 0);
             }
             prev_blockhash = header.block_hash();
             prev_time = header.time;
@@ -224,14 +224,14 @@ pub mod test_common {
     }
 
     /// This helper generates a single header with a given previous blockhash.
-    pub fn generate_header(prev_blockhash: BlockHash, prev_time: u32) -> BlockHeader {
+    pub fn generate_header(prev_blockhash: BlockHash, prev_time: u32, nonce: u32) -> BlockHeader {
         let mut header = BlockHeader {
             version: 1,
             prev_blockhash,
             merkle_root: TxMerkleNode::default(),
             time: prev_time + gen_time_delta(),
             bits: BlockHeader::compact_target_from_u256(&TARGET),
-            nonce: 0,
+            nonce,
         };
 
         solve_proof_of_work(&mut header);
