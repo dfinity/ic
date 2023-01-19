@@ -138,11 +138,6 @@ in
         pkgs.lib.optionalString pkgs.stdenv.isLinux ''
           taskset -acp 0-255 $$
         '' + ''
-          checkout_root=$(${pkgs.gitMinimal}/bin/git rev-parse --show-toplevel 2>/dev/null)
-          if [ "$?" == 0 ]; then
-            source "$checkout_root/dshell/load"
-          fi
-
           if (( $(ulimit -n) < 8192 )); then
             ulimit -n 8192
           fi
