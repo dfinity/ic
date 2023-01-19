@@ -1,3 +1,4 @@
+use crate::ckbtc::lib::install_bitcoin_canister;
 use crate::ckbtc::minter::utils::{
     ensure_wallet, generate_blocks, get_btc_address, get_btc_client, retrieve_btc,
     send_to_btc_address, wait_for_finalization_no_new_blocks, wait_for_mempool_change,
@@ -5,26 +6,29 @@ use crate::ckbtc::minter::utils::{
 };
 use crate::{
     ckbtc::lib::{
-        activate_ecdsa_signature, create_canister, install_ledger, install_minter, subnet_app,
+        activate_ecdsa_signature, create_canister_at_id, install_ledger, install_minter,
         subnet_sys, BTC_MIN_CONFIRMATIONS, TEST_KEY_LOCAL,
     },
     driver::{
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
-    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
+    util::{assert_create_agent, block_on, runtime_from_url},
 };
 use bitcoincore_rpc::{
     bitcoin::{hashes::Hash, Txid},
     RpcApi,
 };
-use candid::{Nat, Principal};
+use candid::{CandidType, Deserialize, Nat, Principal};
+use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
 use ic_icrc1::endpoints::TransferArg;
 use ic_icrc1_agent::Icrc1Agent;
+use serde::Serialize;
+use serde_bytes::ByteBuf;
 use slog::{debug, info};
 use std::time::{Duration, Instant};
 
@@ -32,13 +36,25 @@ pub const SHORT_TIMEOUT: Duration = Duration::from_secs(300);
 
 pub const RETRIEVE_REQUESTS_COUNT_TO_BATCH: usize = 20;
 
+#[derive(Clone, Debug, CandidType, Serialize)]
+struct HttpRequest {
+    method: String,
+    url: String,
+    headers: Vec<(String, String)>,
+    body: ByteBuf,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct HttpResponse {
+    pub status_code: u16,
+    pub headers: Vec<(String, String)>,
+    pub body: ByteBuf,
+}
+
 pub fn test_batching(env: TestEnv) {
     let logger = env.logger();
-    let subnet_app = subnet_app(&env);
     let subnet_sys = subnet_sys(&env);
-    let node = subnet_app.nodes().next().expect("No node in app subnet.");
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
-    let app_subnet_id = subnet_app.subnet_id;
     let btc_rpc = get_btc_client(&env);
     ensure_wallet(&btc_rpc, &logger);
 
@@ -52,10 +68,15 @@ pub fn test_batching(env: TestEnv) {
         .generate_to_address(101, &default_btc_address)
         .unwrap();
 
+    let minter_id = CanisterId::from_u64(200);
+    let ledger_id = CanisterId::from_u64(201);
+
     block_on(async {
-        let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
-        let mut ledger_canister = create_canister(&runtime).await;
-        let mut minter_canister = create_canister(&runtime).await;
+        let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
+        install_bitcoin_canister(&runtime, &logger, &env).await;
+
+        let mut ledger_canister = create_canister_at_id(&runtime, ledger_id.get()).await;
+        let mut minter_canister = create_canister_at_id(&runtime, minter_id.get()).await;
         let minting_user = minter_canister.canister_id().get();
         let ledger_id = install_ledger(&env, &mut ledger_canister, minting_user, &logger).await;
 
@@ -74,11 +95,9 @@ pub fn test_batching(env: TestEnv) {
 
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
-        let agent = assert_create_agent(node.get_public_url().as_str()).await;
-        let _universal_canister =
-            UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
-                .await;
-        activate_ecdsa_signature(sys_node, app_subnet_id, TEST_KEY_LOCAL, &logger).await;
+        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
+
+        activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
 
         let ledger_agent = Icrc1Agent {
             agent: agent.clone(),

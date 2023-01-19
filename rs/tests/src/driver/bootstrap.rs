@@ -45,6 +45,7 @@ pub fn init_ic(
     ic: &InternetComputer,
     test_env: &TestEnv,
     logger: &Logger,
+    specific_ids: bool,
 ) -> Result<InitializedIc> {
     let mut next_node_index = 0u64;
     let ic_name = ic.name();
@@ -149,7 +150,7 @@ pub fn init_ic(
             )
         }
     };
-    let ic_config = IcConfig::new(
+    let mut ic_config = IcConfig::new(
         working_dir.path(),
         ic_topology,
         Some(initial_replica.replica_version),
@@ -168,6 +169,8 @@ pub fn init_ic(
         ic.ssh_readonly_access_to_unassigned_nodes.clone(),
         /* guest_launch_measurement_sha256_hex= */ None,
     );
+
+    ic_config.set_use_specified_ids_allocation_range(specific_ids);
 
     info!(test_env.logger(), "Initializing via {:?}", &ic_config);
 

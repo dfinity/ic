@@ -157,6 +157,115 @@ impl NnsCanisters<'_> {
         }
     }
 
+    /// Creates and installs all of the NNS canisters at the right ids that are scheduled to
+    /// exist at genesis, and sets the controller on each canister.
+    pub async fn set_up_at_ids(
+        runtime: &'_ Runtime,
+        init_payloads: NnsInitPayloads,
+    ) -> NnsCanisters<'_> {
+        let since_start_secs = {
+            let s = SystemTime::now();
+            move || (SystemTime::now().duration_since(s).unwrap()).as_secs_f32()
+        };
+
+        // Let's create the canisters at the desired IDs
+        let mut registry = runtime
+            .create_canister_at_id_max_cycles_with_retries(REGISTRY_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut governance = runtime
+            .create_canister_at_id_max_cycles_with_retries(GOVERNANCE_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut ledger = runtime
+            .create_canister_at_id_max_cycles_with_retries(LEDGER_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut root = runtime
+            .create_canister_at_id_max_cycles_with_retries(ROOT_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut cycles_minting = runtime
+            .create_canister_at_id_max_cycles_with_retries(CYCLES_MINTING_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut lifeline = runtime
+            .create_canister_at_id_max_cycles_with_retries(LIFELINE_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut genesis_token = runtime
+            .create_canister_at_id_max_cycles_with_retries(GENESIS_TOKEN_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let identity = runtime
+            .create_canister_at_id_max_cycles_with_retries(IDENTITY_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let nns_ui = runtime
+            .create_canister_at_id_max_cycles_with_retries(NNS_UI_CANISTER_ID.get())
+            .await
+            .unwrap();
+        let mut sns_wasms = runtime
+            .create_canister_at_id_max_cycles_with_retries(SNS_WASM_CANISTER_ID.get())
+            .await
+            .unwrap();
+
+        // Install all the canisters
+        // Registry and Governance need to first or the process hangs,
+        // Ledger is just added as to avoid Governance spamming the logs.
+        futures::join!(
+            install_registry_canister(&mut registry, init_payloads.registry.clone()),
+            install_governance_canister(&mut governance, init_payloads.governance.clone()),
+            install_ledger_canister(&mut ledger, init_payloads.ledger.clone()),
+        );
+        // nns_ui and identity do not need to be installed for this test,
+        // because their init payload is not available in our tests.
+        futures::join!(
+            install_root_canister(&mut root, init_payloads.root.clone()),
+            install_cycles_minting_canister(
+                &mut cycles_minting,
+                init_payloads.cycles_minting.clone()
+            ),
+            install_lifeline_canister(&mut lifeline, init_payloads.lifeline.clone()),
+            install_genesis_token_canister(&mut genesis_token, init_payloads.genesis_token.clone()),
+            install_sns_wasm_canister(&mut sns_wasms, init_payloads.sns_wasms.clone())
+        );
+
+        eprintln!("NNS canisters installed after {:.1} s", since_start_secs());
+
+        // We can set all the controllers at once. Several -- or all -- may go
+        // into the same block, this makes setup faster.
+        futures::try_join!(
+            registry.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            governance.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            ledger.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            // The root is special! it's controlled by the lifeline
+            root.set_controller_with_retries(LIFELINE_CANISTER_ID.get()),
+            cycles_minting.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            lifeline.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            genesis_token.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            identity.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            nns_ui.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+            sns_wasms.set_controller_with_retries(ROOT_CANISTER_ID.get()),
+        )
+        .unwrap();
+
+        eprintln!("NNS canisters set up after {:.1} s", since_start_secs());
+
+        NnsCanisters {
+            registry,
+            governance,
+            ledger,
+            root,
+            cycles_minting,
+            lifeline,
+            genesis_token,
+            identity,
+            nns_ui,
+            sns_wasms,
+        }
+    }
+
     pub fn all_canisters(&self) -> [&Canister<'_>; NUM_NNS_CANISTERS] {
         [
             &self.registry,

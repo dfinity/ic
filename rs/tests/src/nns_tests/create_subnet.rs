@@ -82,7 +82,7 @@ pub fn hourly_config(env: TestEnv) {
                 .with_dkg_interval_length(Height::from(NNS_SUBNET_SIZE as u64 * 2)),
         )
         .with_unassigned_nodes(APP_SUBNET_SIZE as i32)
-        .setup_and_start(&env)
+        .setup_and_start_with_ids(&env)
         .expect("failed to setup IC under test");
     env.topology_snapshot().subnets().for_each(|subnet| {
         subnet

@@ -1,11 +1,9 @@
 use crate::{
-    btc_integration,
-    canister_http::lib::install_nns_canisters,
     driver::{
         test_env::TestEnv,
         test_env_api::{
             HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-            SubnetSnapshot,
+            NnsInstallationExt, SubnetSnapshot,
         },
     },
     icrc1_agent_test::install_icrc1_ledger,
@@ -16,12 +14,17 @@ use crate::{
     util::{assert_create_agent, runtime_from_url, MessageCanister},
 };
 use candid::Encode;
+use candid::{CandidType, Deserialize};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
+use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_types::Network;
 use ic_canister_client::Sender;
+use ic_cdk::export::Principal;
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, Mode};
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
+use ic_ic00_types::CanisterIdRecord;
+use ic_ic00_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_icrc1::Account;
 use ic_icrc1_ledger::InitArgs;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
@@ -37,7 +40,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
+use serde::Serialize;
 use slog::{debug, info, Logger};
+use std::str::FromStr;
+use std::time::Duration;
 
 pub(crate) const TEST_KEY_LOCAL: &str = "dfx_test_key";
 
@@ -47,13 +53,33 @@ pub(crate) const TRANSFER_FEE: u64 = 1_000;
 
 pub(crate) const RETRIEVE_BTC_MIN_AMOUNT: u64 = 100;
 
+pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
+
+const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
+
+/// Maximum time (in nanoseconds) spend in queue at 0 to make the minter treat requests rigth away
+pub const MAX_NANOS_IN_QUEUE: u64 = 0;
+
 pub const BTC_MIN_CONFIRMATIONS: u32 = 6;
 
 pub fn config(env: TestEnv) {
     // Use the btc integration setup.
-    btc_integration::btc::config(env.clone());
+    crate::ckbtc::btc_config::config(env.clone());
     check_nodes_health(&env);
-    install_nns_canisters(&env);
+    install_nns_canisters_at_ids(&env);
+}
+
+pub fn install_nns_canisters_at_ids(env: &TestEnv) {
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .expect("there is no NNS node");
+    nns_node
+        .install_nns_canisters_at_ids()
+        .expect("NNS canisters not installed");
+    info!(&env.logger(), "NNS canisters installed");
 }
 
 fn check_nodes_health(env: &TestEnv) {
@@ -188,11 +214,25 @@ pub(crate) fn subnet_sys(env: &TestEnv) -> SubnetSnapshot {
         .unwrap()
 }
 
-pub(crate) fn subnet_app(env: &TestEnv) -> SubnetSnapshot {
-    env.topology_snapshot()
-        .subnets()
-        .find(|s| s.subnet_type() == SubnetType::Application)
-        .unwrap()
+pub(crate) async fn create_canister_at_id(
+    runtime: &Runtime,
+    specified_id: PrincipalId,
+) -> Canister<'_> {
+    let canister_id_record: CanisterIdRecord = runtime
+        .get_management_canister()
+        .update_(
+            ic_ic00_types::Method::ProvisionalCreateCanisterWithCycles.to_string(),
+            candid,
+            (ProvisionalCreateCanisterWithCyclesArgs::new(
+                None,
+                Some(specified_id),
+            ),),
+        )
+        .await
+        .expect("Fail");
+    let canister_id = canister_id_record.get_canister_id();
+    assert_eq!(canister_id.get(), specified_id);
+    Canister::new(runtime, canister_id)
 }
 
 /// Create an empty canister.
@@ -255,6 +295,7 @@ pub(crate) async fn install_minter(
         min_confirmations: Some(BTC_MIN_CONFIRMATIONS),
         mode: Mode::GeneralAvailability,
     };
+
     install_rust_canister_from_path(
         canister,
         env.get_dependency_path("rs/bitcoin/ckbtc/minter/ckbtc_minter_debug.wasm"),
@@ -262,4 +303,114 @@ pub(crate) async fn install_minter(
     )
     .await;
     canister.canister_id()
+}
+
+pub(crate) async fn install_bitcoin_canister(
+    runtime: &Runtime,
+    logger: &Logger,
+    env: &TestEnv,
+) -> CanisterId {
+    info!(&logger, "Installing bitcoin canister ...");
+    let mut bitcoin_canister = create_canister_at_id(
+        runtime,
+        PrincipalId::from_str(BITCOIN_TESTNET_CANISTER_ID).unwrap(),
+    )
+    .await;
+
+    let args = Config {
+        stability_threshold: 6,
+        network: NetworkInPayload::Regtest,
+        blocks_source: Principal::management_canister(),
+        syncing: Flag::Enabled,
+        fees: Fees {
+            get_utxos_base: 0,
+            get_utxos_cycles_per_ten_instructions: 0,
+            get_utxos_maximum: 0,
+            get_balance: 0,
+            get_balance_maximum: 0,
+            get_current_fee_percentiles: 0,
+            get_current_fee_percentiles_maximum: 0,
+            send_transaction_base: 0,
+            send_transaction_per_byte: 0,
+        },
+        api_access: Flag::Enabled,
+    };
+
+    install_rust_canister_from_path(
+        &mut bitcoin_canister,
+        env.get_dependency_path("external/btc_canister/file/ic-btc-canister.wasm.gz"),
+        Some(Encode!(&args).unwrap()),
+    )
+    .await;
+    bitcoin_canister.canister_id()
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct Config {
+    pub stability_threshold: u128,
+    pub network: NetworkInPayload,
+
+    /// The principal from which blocks are retrieved.
+    ///
+    /// Setting this source to the management canister means that the blocks will be
+    /// fetched directly from the replica, and that's what is used in production.
+    pub blocks_source: Principal,
+
+    pub syncing: Flag,
+
+    pub fees: Fees,
+
+    /// Flag to control access to the apis provided by the canister.
+    pub api_access: Flag,
+}
+
+#[derive(CandidType, Serialize, Deserialize)]
+pub enum Flag {
+    #[serde(rename = "enabled")]
+    Enabled,
+    #[serde(rename = "disabled")]
+    Disabled,
+}
+
+#[derive(CandidType, Serialize, Deserialize)]
+pub enum NetworkInPayload {
+    #[serde(rename = "mainnet")]
+    Mainnet,
+    #[serde(rename = "testnet")]
+    Testnet,
+    #[serde(rename = "regtest")]
+    Regtest,
+}
+
+#[derive(CandidType, Serialize, Deserialize, PartialEq, Eq, Debug, Clone, Default)]
+pub struct Fees {
+    /// The base fee to charge for all `get_utxos` requests.
+    pub get_utxos_base: u128,
+
+    /// The number of cycles to charge per 10 instructions.
+    pub get_utxos_cycles_per_ten_instructions: u128,
+
+    /// The maximum amount of cycles that can be charged in a `get_utxos` request.
+    /// A request must send at least this amount for it to be accepted.
+    pub get_utxos_maximum: u128,
+
+    /// The flat fee to charge for a `get_balance` request.
+    pub get_balance: u128,
+
+    /// The maximum amount of cycles that can be charged in a `get_balance` request.
+    /// A request must send at least this amount for it to be accepted.
+    pub get_balance_maximum: u128,
+
+    /// The flat fee to charge for a `get_current_fee_percentiles` request.
+    pub get_current_fee_percentiles: u128,
+
+    /// The maximum amount of cycles that can be charged in a `get_current_fee_percentiles` request.
+    /// A request must send at least this amount for it to be accepted.
+    pub get_current_fee_percentiles_maximum: u128,
+
+    /// The base fee to charge for all `send_transaction` requests.
+    pub send_transaction_base: u128,
+
+    /// The number of cycles to charge for each byte in the transaction.
+    pub send_transaction_per_byte: u128,
 }

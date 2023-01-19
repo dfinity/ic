@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "//rs/backup",
     "//rs/bitcoin/ckbtc/agent",
     "//rs/bitcoin/ckbtc/minter",
+    "//rs/bitcoin/canister",
     "//rs/bitcoin/types/public",
     "//rs/canister_client",
     "//rs/canister_client/sender",
@@ -203,6 +204,7 @@ GUESTOS_RUNTIME_DEPS = [
 CKBTC_RUNTIME_DEPS = [
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+    "@btc_canister//file",
 ]
 
 GUESTOS_MALICIOUS_RUNTIME_DEPS = [
