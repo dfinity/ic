@@ -10,6 +10,7 @@ use ic00::{
 };
 use ic_btc_types::NetworkInRequest;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfigs};
+use ic_error_types::RejectCode;
 use ic_ic00_types::{
     self as ic00, BitcoinGetBalanceArgs, CanisterIdRecord, CanisterStatusType, EcdsaCurve,
     EmptyBlob, Method, Payload as _,
@@ -30,7 +31,7 @@ use ic_test_utilities::{
     },
 };
 use ic_test_utilities_metrics::{fetch_gauge, fetch_int_gauge, fetch_int_gauge_vec, metric_vec};
-use ic_types::messages::{CallbackId, Payload, MAX_RESPONSE_COUNT_BYTES};
+use ic_types::messages::{CallbackId, Payload, RejectContext, Response, MAX_RESPONSE_COUNT_BYTES};
 use ic_types::methods::SystemMethod;
 use ic_types::{time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes};
 use proptest::prelude::*;
@@ -2489,6 +2490,148 @@ fn scheduler_maintains_canister_order() {
             canister_indexes[canister_id]
         });
     }
+}
+
+#[test]
+fn ecdsa_signature_agreements_metric_is_updated() {
+    let ecdsa_key = EcdsaKeyId {
+        curve: EcdsaCurve::Secp256k1,
+        name: String::from("secp256k1"),
+    };
+    let mut test = SchedulerTestBuilder::new()
+        .with_ecdsa_key(ecdsa_key.clone())
+        .build();
+
+    let canister_id = test.create_canister();
+
+    let payload = Encode!(&SignWithECDSAArgs {
+        message_hash: [0; 32],
+        derivation_path: Vec::new(),
+        key_id: ecdsa_key
+    })
+    .unwrap();
+
+    // inject two signing request
+    test.inject_call_to_ic00(
+        Method::SignWithECDSA,
+        payload.clone(),
+        test.ecdsa_signature_fee(),
+        canister_id,
+        InputQueueType::RemoteSubnet,
+    );
+    test.inject_call_to_ic00(
+        Method::SignWithECDSA,
+        payload,
+        test.ecdsa_signature_fee(),
+        canister_id,
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Check that the SubnetCallContextManager contains both requests.
+    let sign_with_ecdsa_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts;
+    assert_eq!(sign_with_ecdsa_contexts.len(), 2);
+
+    // reject the first one
+    let (callback_id, context) = sign_with_ecdsa_contexts.iter().next().unwrap();
+    let response = Response {
+        originator: context.request.sender,
+        respondent: ic_types::CanisterId::ic_00(),
+        originator_reply_callback: *callback_id,
+        refund: context.request.payment,
+        response_payload: Payload::Reject(RejectContext {
+            code: RejectCode::SysFatal,
+            message: "".into(),
+        }),
+    };
+
+    test.state_mut().consensus_queue.push(response);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        1.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
+
+    let ecdsa_signature_agreements_before = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .ecdsa_signature_agreements;
+    let metric_before = fetch_int_gauge(
+        test.metrics_registry(),
+        "replicated_state_ecdsa_signature_agreements_total",
+    )
+    .unwrap();
+
+    // metric and state variable should not have been updated
+    assert_eq!(ecdsa_signature_agreements_before, metric_before);
+    assert_eq!(0, metric_before);
+
+    let sign_with_ecdsa_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts;
+    assert_eq!(sign_with_ecdsa_contexts.len(), 1);
+
+    // send a reply to the second request
+    let (callback_id, context) = sign_with_ecdsa_contexts.iter().next().unwrap();
+    let response = Response {
+        originator: context.request.sender,
+        respondent: ic_types::CanisterId::ic_00(),
+        originator_reply_callback: *callback_id,
+        refund: context.request.payment,
+        response_payload: Payload::Data(
+            ic00::SignWithECDSAReply {
+                signature: vec![1, 2, 3],
+            }
+            .encode(),
+        ),
+    };
+
+    test.state_mut().consensus_queue.push(response);
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        2.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
+
+    let ecdsa_signature_agreements_after = test
+        .state()
+        .metadata
+        .subnet_metrics
+        .ecdsa_signature_agreements;
+    let metric_after = fetch_int_gauge(
+        test.metrics_registry(),
+        "replicated_state_ecdsa_signature_agreements_total",
+    )
+    .unwrap();
+
+    assert_eq!(
+        ecdsa_signature_agreements_before + 1,
+        ecdsa_signature_agreements_after
+    );
+    assert_eq!(ecdsa_signature_agreements_after, metric_after);
+
+    // Check that the request was removed.
+    let sign_with_ecdsa_contexts = &test
+        .state()
+        .metadata
+        .subnet_call_context_manager
+        .sign_with_ecdsa_contexts;
+    assert!(sign_with_ecdsa_contexts.is_empty());
 }
 
 #[test]

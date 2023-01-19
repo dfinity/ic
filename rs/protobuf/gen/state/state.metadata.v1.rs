@@ -256,6 +256,8 @@ pub struct SubnetMetrics {
     #[prost(message, optional, tag = "3")]
     pub consumed_cycles_ecdsa_outcalls:
         ::core::option::Option<super::super::super::types::v1::NominalCycles>,
+    #[prost(uint64, optional, tag = "4")]
+    pub ecdsa_signature_agreements: ::core::option::Option<u64>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

@@ -88,6 +88,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_paused_install_code: Histogram,
     pub(super) canister_aborted_install_code: Histogram,
     pub(super) inducted_messages: IntCounterVec,
+    pub(super) ecdsa_signature_agreements: IntGauge,
 }
 
 const LABEL_MESSAGE_KIND: &str = "kind";
@@ -199,6 +200,10 @@ impl SchedulerMetrics {
             consumed_cycles_since_replica_started: metrics_registry.gauge(
                 "replicated_state_consumed_cycles_since_replica_started",
                 "Number of cycles consumed since replica started",
+            ),
+            ecdsa_signature_agreements: metrics_registry.int_gauge(
+                "replicated_state_ecdsa_signature_agreements_total",
+                "Total number of ECDSA signature agreements created",
             ),
             input_queue_messages: metrics_registry.int_gauge_vec(
                 "execution_input_queue_messages",

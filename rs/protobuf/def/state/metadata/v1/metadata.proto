@@ -168,6 +168,7 @@ message SubnetMetrics {
   types.v1.NominalCycles consumed_cycles_by_deleted_canisters = 1;
   types.v1.NominalCycles consumed_cycles_http_outcalls = 2;
   types.v1.NominalCycles consumed_cycles_ecdsa_outcalls = 3;
+  optional uint64 ecdsa_signature_agreements = 4;
 }
 
 message BitcoinGetSuccessorsFollowUpResponses {
