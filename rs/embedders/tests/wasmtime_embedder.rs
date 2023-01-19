@@ -615,6 +615,27 @@ mod test {
         );
     }
 
+    #[test]
+    fn zero_size_memory() {
+        let wat = r#"
+            (module
+                (import "ic0" "trap" (func $ic_trap (param i32 i32)))
+                (func $test (param i32)
+                    (call $ic_trap (i32.const 0) (i32.const 0))
+                )
+                (table funcref (elem $test))
+                (memory (export "memory") 0)
+            )"#;
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance
+            .run(FuncRef::UpdateClosure(WasmClosure::new(0, 0)))
+            .unwrap_err();
+        assert_eq!(
+            err,
+            HypervisorError::CalledTrap(std::str::from_utf8(&[0; 0]).unwrap().to_string())
+        );
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn read_before_write_stats() {

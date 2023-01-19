@@ -30,6 +30,7 @@ pub struct WasmtimeInstanceBuilder {
     num_instructions: NumInstructions,
     subnet_type: SubnetType,
     network_topology: NetworkTopology,
+    config: ic_config::embedders::Config,
 }
 
 impl Default for WasmtimeInstanceBuilder {
@@ -41,6 +42,7 @@ impl Default for WasmtimeInstanceBuilder {
             num_instructions: DEFAULT_NUM_INSTRUCTIONS,
             subnet_type: SubnetType::Application,
             network_topology: NetworkTopology::default(),
+            config: ic_config::embedders::Config::default(),
         }
     }
 }
@@ -48,6 +50,10 @@ impl Default for WasmtimeInstanceBuilder {
 impl WasmtimeInstanceBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_config(self, config: ic_config::embedders::Config) -> Self {
+        Self { config, ..self }
     }
 
     pub fn with_wat(self, wat: &str) -> Self {
@@ -83,8 +89,7 @@ impl WasmtimeInstanceBuilder {
         let log = no_op_logger();
         let wasm = wat::parse_str(self.wat).expect("Failed to convert wat to wasm");
 
-        let config = ic_config::embedders::Config::default();
-        let embedder = WasmtimeEmbedder::new(config, log.clone());
+        let embedder = WasmtimeEmbedder::new(self.config, log.clone());
         let (compiled, result) = compile(&embedder, &BinaryEncodedWasm::new(wasm));
         result.expect("Failed to compile wat in WasmtimeInstance");
 
