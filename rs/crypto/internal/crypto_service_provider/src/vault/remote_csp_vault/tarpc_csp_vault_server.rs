@@ -6,7 +6,8 @@ use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspPublicKeyStoreError, IDkgProtocolCspVault, MultiSignatureCspVault,
-    NiDkgCspVault, PublicKeyStoreCspVault, PublicRandomSeedGenerator, SecretKeyStoreCspVault,
+    NiDkgCspVault, PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault,
+    PublicKeyStoreCspVault, PublicRandomSeedGenerator, SecretKeyStoreCspVault,
     ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault, TlsHandshakeCspVault,
 };
 use crate::vault::api::{
@@ -16,6 +17,7 @@ use crate::vault::api::{
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::remote_csp_vault::{remote_vault_codec_builder, TarpcCspVault};
+use crate::ExternalPublicKeys;
 use crate::{
     SecretKeyStore, CANISTER_SKS_DATA_FILENAME, PUBLIC_KEY_STORE_DATA_FILENAME, SKS_DATA_FILENAME,
 };
@@ -323,6 +325,17 @@ impl<
     async fn idkg_key_count(self, _: context::Context) -> Result<usize, CspPublicKeyStoreError> {
         let vault = self.local_csp_vault;
         let job = move || vault.idkg_dealing_encryption_pubkeys_count();
+        execute_on_thread_pool(self.thread_pool_handle, job).await
+    }
+
+    // PublicAndSecretKeyStoreCspVault-methods.
+    async fn pks_and_sks_contains(
+        self,
+        _: context::Context,
+        external_public_keys: ExternalPublicKeys,
+    ) -> Result<(), PksAndSksContainsErrors> {
+        let vault = self.local_csp_vault;
+        let job = move || vault.pks_and_sks_contains(external_public_keys);
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 

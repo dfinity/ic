@@ -71,7 +71,7 @@ impl CspSecretKeyStoreChecker for Csp {
 /// Some key related utils
 pub mod utils {
     use crate::types::{CspPop, CspPublicKey};
-    use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
+    use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
     use ic_crypto_internal_types::encrypt::forward_secure::{
         CspFsEncryptionPop, CspFsEncryptionPublicKey,
     };
@@ -137,5 +137,33 @@ pub mod utils {
             proof_data: None,
             timestamp: None,
         }
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub enum MEGaPublicKeyFromProtoError {
+        UnsupportedAlgorithm {
+            algorithm_id: Option<AlgorithmIdProto>,
+        },
+        MalformedPublicKey {
+            key_bytes: Vec<u8>,
+        },
+    }
+
+    /// Deserialize a Protobuf public key to a MEGaPublicKey.
+    pub fn mega_public_key_from_proto(
+        proto: &PublicKeyProto,
+    ) -> Result<MEGaPublicKey, MEGaPublicKeyFromProtoError> {
+        let curve_type = match AlgorithmIdProto::from_i32(proto.algorithm) {
+            Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
+            alg_id => Err(MEGaPublicKeyFromProtoError::UnsupportedAlgorithm {
+                algorithm_id: alg_id,
+            }),
+        }?;
+
+        MEGaPublicKey::deserialize(curve_type, &proto.key_value).map_err(|_| {
+            MEGaPublicKeyFromProtoError::MalformedPublicKey {
+                key_bytes: proto.key_value.clone(),
+            }
+        })
     }
 }

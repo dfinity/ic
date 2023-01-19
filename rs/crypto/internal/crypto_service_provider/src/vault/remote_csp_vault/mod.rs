@@ -3,7 +3,7 @@ use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspPublicKeyStoreError, CspSecretKeyStoreContainsError,
-    CspThresholdSignatureKeygenError, CspTlsKeygenError, CspTlsSignError,
+    CspThresholdSignatureKeygenError, CspTlsKeygenError, CspTlsSignError, PksAndSksContainsErrors,
 };
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -36,6 +36,7 @@ mod tarpc_csp_vault_client;
 mod tarpc_csp_vault_server;
 
 use crate::key_id::KeyId;
+use crate::ExternalPublicKeys;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use std::sync::Arc;
 pub use tarpc_csp_vault_client::RemoteCspVault;
@@ -144,6 +145,11 @@ pub trait TarpcCspVault {
 
     // Corresponds to `PublicKeyStoreCspVault.idkg_key_count()`.
     async fn idkg_key_count() -> Result<usize, CspPublicKeyStoreError>;
+
+    // Corresponds to `PublicAndSecretKeyStoreCspVault.pks_and_sks_contains()`.
+    async fn pks_and_sks_contains(
+        external_public_keys: ExternalPublicKeys,
+    ) -> Result<(), PksAndSksContainsErrors>;
 
     // Corresponds to `TlsHandshakeCspVault.gen_tls_key_pair()`.
     async fn gen_tls_key_pair(

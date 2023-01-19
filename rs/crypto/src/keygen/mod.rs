@@ -8,6 +8,9 @@ use crate::{key_from_registry, CryptoComponentFatClient};
 use ic_crypto_internal_csp::api::CspSecretKeyStoreChecker;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
+use ic_crypto_internal_csp::keygen::utils::{
+    mega_public_key_from_proto, MEGaPublicKeyFromProtoError,
+};
 use ic_crypto_internal_csp::types::conversions::CspPopFromPublicKeyProtoError;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
 use ic_crypto_internal_csp::CryptoServiceProvider;
@@ -17,7 +20,6 @@ use ic_crypto_internal_logmon::metrics::{
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
-use ic_crypto_node_key_generation::{mega_public_key_from_proto, MEGaPublicKeyFromProtoError};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_interfaces::crypto::{
     CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError,

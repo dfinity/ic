@@ -2,12 +2,12 @@ use assert_matches::assert_matches;
 use ic_base_types::NodeId;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::{CryptoComponent, CryptoComponentFatClient};
+use ic_crypto_internal_csp::keygen::utils::{
+    mega_public_key_from_proto, MEGaPublicKeyFromProtoError,
+};
 use ic_crypto_internal_csp::Csp;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_in_temp_dir;
-use ic_crypto_node_key_generation::{
-    derive_node_id, get_node_keys_or_generate_if_missing, mega_public_key_from_proto,
-    MEGaPublicKeyFromProtoError,
-};
+use ic_crypto_node_key_generation::{derive_node_id, get_node_keys_or_generate_if_missing};
 use ic_interfaces::crypto::KeyManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;

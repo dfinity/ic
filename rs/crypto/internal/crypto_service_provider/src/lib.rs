@@ -26,15 +26,15 @@ use crate::vault::remote_csp_vault::RemoteCspVault;
 use crate::api::{
     CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker, CspSigVerifier, CspSigner,
     CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner, CspTlsHandshakeSignerProvider,
-    NiDkgCspClient, NodePublicKeyData, ThresholdSignatureCspClient,
+    DkgDealingEncryptionKeyIdRetrievalError, NiDkgCspClient, NodePublicKeyData,
+    NodePublicKeyDataError, ThresholdSignatureCspClient,
 };
-use crate::api::{DkgDealingEncryptionKeyIdRetrievalError, NodePublicKeyDataError};
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
-use crate::types::CspPublicKey;
+use crate::types::{CspPublicKey, ExternalPublicKeys};
 use crate::vault::api::{CspPublicKeyStoreError, CspVault};
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;

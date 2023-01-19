@@ -6,12 +6,13 @@ use crate::vault::api::{
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspPublicKeyStoreError,
     CspSecretKeyStoreContainsError, CspThresholdSignatureKeygenError, CspTlsKeygenError,
     CspTlsSignError, IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault,
-    PublicKeyStoreCspVault, PublicRandomSeedGenerator, PublicRandomSeedGeneratorError,
-    SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault,
+    PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault,
+    PublicRandomSeedGenerator, PublicRandomSeedGeneratorError, SecretKeyStoreCspVault,
+    ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault,
 };
 use crate::vault::remote_csp_vault::codec::{CspVaultClientObserver, ObservableCodec};
 use crate::vault::remote_csp_vault::{remote_vault_codec_builder, TarpcCspVaultClient};
-use crate::TlsHandshakeCspVault;
+use crate::{ExternalPublicKeys, TlsHandshakeCspVault};
 use core::future::Future;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
@@ -335,6 +336,23 @@ impl PublicKeyStoreCspVault for RemoteCspVault {
         )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(CspPublicKeyStoreError::TransientInternalError(
+                rpc_error.to_string(),
+            ))
+        })
+    }
+}
+
+impl PublicAndSecretKeyStoreCspVault for RemoteCspVault {
+    fn pks_and_sks_contains(
+        &self,
+        external_public_keys: ExternalPublicKeys,
+    ) -> Result<(), PksAndSksContainsErrors> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .pks_and_sks_contains(context_with_timeout(self.rpc_timeout), external_public_keys),
+        )
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(PksAndSksContainsErrors::TransientInternalError(
                 rpc_error.to_string(),
             ))
         })

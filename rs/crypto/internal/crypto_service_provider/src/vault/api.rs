@@ -2,6 +2,7 @@ use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::key_id::KeyId;
 use crate::types::CspPublicCoefficients;
 use crate::types::{CspPop, CspPublicKey, CspSignature};
+use crate::ExternalPublicKeys;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
@@ -147,6 +148,50 @@ pub enum CspTlsSignError {
     },
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NodeKeysErrors {
+    pub node_signing_key_error: Option<NodeKeysError>,
+    pub committee_signing_key_error: Option<NodeKeysError>,
+    pub tls_certificate_error: Option<NodeKeysError>,
+    pub dkg_dealing_encryption_key_error: Option<NodeKeysError>,
+    pub idkg_dealing_encryption_key_error: Option<NodeKeysError>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NodeKeysError {
+    pub external_public_key_error: Option<ExternalPublicKeyError>,
+    pub local_public_key_error: Option<LocalPublicKeyError>,
+    pub secret_key_error: Option<SecretKeyError>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ExternalPublicKeyError(pub Box<String>);
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum LocalPublicKeyError {
+    /// No local public key exists.
+    NotFound,
+    /// A local public key exists, but it is not the same as the external key passed in.
+    Mismatch,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum SecretKeyError {
+    /// Unable to compute the key ID using the externally provided public key.
+    CannotComputeKeyId,
+    /// A local secret key matching the externally provided public key does not exist
+    NotFound,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PksAndSksContainsErrors {
+    /// If one or more keys were missing, or were malformed, or did not match the corresponding
+    /// external public key.
+    NodeKeysErrors(NodeKeysErrors),
+    /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
+    TransientInternalError(String),
+}
+
 /// `CspVault` offers a selection of operations that involve
 /// secret keys managed by the vault.
 pub trait CspVault:
@@ -159,6 +204,7 @@ pub trait CspVault:
     + SecretKeyStoreCspVault
     + TlsHandshakeCspVault
     + PublicRandomSeedGenerator
+    + PublicAndSecretKeyStoreCspVault
     + PublicKeyStoreCspVault
 {
 }
@@ -175,6 +221,7 @@ impl<T> CspVault for T where
         + SecretKeyStoreCspVault
         + TlsHandshakeCspVault
         + PublicRandomSeedGenerator
+        + PublicAndSecretKeyStoreCspVault
         + PublicKeyStoreCspVault
 {
 }
@@ -476,6 +523,30 @@ pub trait PublicKeyStoreCspVault {
     /// # Errors
     /// * if a transient error (e.g., RPC timeout) occurs when accessing the public key store
     fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError>;
+}
+
+/// Operations of `CspVault` related to querying both the public and private key stores.
+pub trait PublicAndSecretKeyStoreCspVault {
+    /// Checks whether the keys corresponding to the provided external public keys exist locally.
+    /// In particular, this means the provided public keys themselves are stored locally, as well
+    /// as the corresponding secret keys. Key comparisons will not take timestamps into account.
+    ///
+    /// # Parameters
+    /// The current external node public keys and TLS certificate.
+    ///
+    /// # Returns
+    /// An empty result if all the external public keys, and the corresponding secret keys, were
+    /// all found locally.
+    ///
+    /// # Errors
+    /// * `PksAndSksContainsErrors::NodeKeysErrors` if local public or secret keys were not
+    ///   consistent with the provided external keys.
+    /// * `PksAndSksContainsErrors::TransientInternalError` if a transient internal error, e.g., an RPC
+    ///   error, occurred.
+    fn pks_and_sks_contains(
+        &self,
+        external_public_keys: ExternalPublicKeys,
+    ) -> Result<(), PksAndSksContainsErrors>;
 }
 
 /// Operations of `CspVault` related to TLS handshakes.

@@ -2,6 +2,7 @@ mod basic_sig;
 mod idkg;
 mod multi_sig;
 mod ni_dkg;
+mod public_and_secret_key_store;
 mod public_key_store;
 mod public_seed;
 mod secret_key_store;
@@ -238,6 +239,16 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let sks_write_lock = self.node_secret_key_store.write();
         let pks_write_lock = self.public_key_store.write();
         (sks_write_lock, pks_write_lock)
+    }
+
+    /// Acquires read locks for both the node secret key store and the public key store.
+    ///
+    /// The locks are acquired according to the total resource order defined in the
+    /// section on deadlock prevention in the documentation of the `LocalCspVault`.
+    fn sks_and_pks_read_locks(&self) -> (RwLockReadGuard<'_, S>, RwLockReadGuard<'_, P>) {
+        let sks_read_lock = self.node_secret_key_store.read();
+        let pks_read_lock = self.public_key_store.read();
+        (sks_read_lock, pks_read_lock)
     }
 
     fn sks_read_lock(&self) -> RwLockReadGuard<'_, S> {

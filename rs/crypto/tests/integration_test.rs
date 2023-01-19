@@ -267,6 +267,7 @@ fn should_fail_check_keys_with_registry_if_tls_cert_is_missing_in_registry() {
         .add_generated_node_signing_key_to_registry()
         .add_generated_committee_signing_key_to_registry()
         .add_generated_dkg_dealing_enc_key_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
@@ -329,6 +330,7 @@ fn should_fail_check_keys_with_registry_if_node_signing_secret_key_is_missing() 
         .add_generated_committee_signing_key_to_registry()
         .add_generated_dkg_dealing_enc_key_to_registry()
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
@@ -356,6 +358,7 @@ fn should_fail_check_keys_with_registry_if_committee_member_secret_key_is_missin
         .with_committee_signing_key_in_registry(committee_pk_without_corresponding_secret_key)
         .add_generated_dkg_dealing_enc_key_to_registry()
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
@@ -382,19 +385,12 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_secret_key_is_
             dkg_dealing_enc_public_key_with_valid_pop_but_without_secret_part_in_store,
         )
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(result.is_err());
-    let is_secret_key_err = match result.unwrap_err() {
-        CryptoError::SecretKeyNotFound { algorithm, .. } => {
-            algorithm == AlgorithmId::Groth20_Bls12_381
-        }
-        _ => false,
-    };
-
-    assert!(is_secret_key_err);
+    assert_matches!(result, Err(CryptoError::SecretKeyNotFound { algorithm, key_id: _ }) if algorithm == AlgorithmId::Groth20_Bls12_381);
 }
 
 #[test]
@@ -410,6 +406,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pubkey_is_malf
         .add_generated_committee_signing_key_to_registry()
         .with_dkg_dealing_enc_key_in_registry(dkg_dealing_encryption_pubkey_with_malformed_pubkey)
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
@@ -439,6 +436,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_missing
         .add_generated_committee_signing_key_to_registry()
         .with_dkg_dealing_enc_key_in_registry(dkg_dealing_encryption_pubkey_with_missing_pop)
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
@@ -468,6 +466,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_empty()
         .add_generated_committee_signing_key_to_registry()
         .with_dkg_dealing_enc_key_in_registry(dkg_dealing_encryption_pubkey_with_empty_pop)
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
@@ -499,6 +498,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_malform
         .add_generated_committee_signing_key_to_registry()
         .with_dkg_dealing_enc_key_in_registry(dkg_dealing_encryption_pubkey_with_malformed_pop)
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
@@ -528,6 +528,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_missing() {
         .with_committee_signing_key_in_registry(committee_key_without_pop)
         .add_generated_dkg_dealing_enc_key_to_registry()
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
@@ -557,6 +558,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_empty() {
         .with_committee_signing_key_in_registry(committee_key_with_empty_pop)
         .add_generated_dkg_dealing_enc_key_to_registry()
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
@@ -586,6 +588,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_malformed() {
         .with_committee_signing_key_in_registry(committee_key_with_malformed_pop)
         .add_generated_dkg_dealing_enc_key_to_registry()
         .add_generated_tls_cert_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
@@ -613,6 +616,7 @@ fn should_fail_check_keys_with_registry_if_tls_cert_secret_key_is_missing() {
         .add_generated_node_signing_key_to_registry()
         .add_generated_committee_signing_key_to_registry()
         .add_generated_dkg_dealing_enc_key_to_registry()
+        .add_generated_idkg_dealing_enc_key_to_registry()
         .with_tls_cert_in_registry(cert_without_corresponding_secret_key.clone())
         .build(NODE_ID, REG_V1);
 

@@ -3,8 +3,10 @@
 mod errors;
 pub use errors::*;
 
+use ic_crypto_internal_csp::keygen::utils::{
+    mega_public_key_from_proto, MEGaPublicKeyFromProtoError,
+};
 use ic_crypto_internal_threshold_sig_ecdsa::{IDkgDealingInternal, MEGaPublicKey};
-use ic_crypto_node_key_generation::{mega_public_key_from_proto, MEGaPublicKeyFromProtoError};
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_registry_client_helpers::crypto::CryptoRegistry;

@@ -30,9 +30,17 @@ impl TryFrom<PublicKeyProto> for CspFsEncryptionPublicKey {
     type Error = MalformedFsEncryptionPublicKeyError;
 
     fn try_from(pk_proto: PublicKeyProto) -> Result<Self, MalformedFsEncryptionPublicKeyError> {
+        Self::try_from(&pk_proto)
+    }
+}
+
+impl TryFrom<&PublicKeyProto> for CspFsEncryptionPublicKey {
+    type Error = MalformedFsEncryptionPublicKeyError;
+
+    fn try_from(pk_proto: &PublicKeyProto) -> Result<Self, MalformedFsEncryptionPublicKeyError> {
         if pk_proto.algorithm != AlgorithmIdProto::Groth20Bls12381 as i32 {
             return Err(MalformedFsEncryptionPublicKeyError {
-                key_bytes: pk_proto.key_value,
+                key_bytes: pk_proto.clone().key_value,
                 internal_error: format!("Unknown algorithm: {}", pk_proto.algorithm),
             });
         }
