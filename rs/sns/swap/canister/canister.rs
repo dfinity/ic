@@ -25,12 +25,12 @@ use ic_sns_swap::{
     pb::v1::{
         CanisterCallError, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest,
         FinalizeSwapResponse, GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest,
-        GetBuyersTotalResponse, GetCanisterStatusRequest, GetInitRequest, GetInitResponse,
-        GetLifecycleRequest, GetLifecycleResponse, GetStateRequest, GetStateResponse,
-        GovernanceError, Init, OpenRequest, OpenResponse, RefreshBuyerTokensRequest,
-        RefreshBuyerTokensResponse, RestoreDappControllersRequest, RestoreDappControllersResponse,
-        SetDappControllersRequest, SetDappControllersResponse, SettleCommunityFundParticipation,
-        Swap,
+        GetBuyersTotalResponse, GetCanisterStatusRequest, GetDerivedStateRequest,
+        GetDerivedStateResponse, GetInitRequest, GetInitResponse, GetLifecycleRequest,
+        GetLifecycleResponse, GetStateRequest, GetStateResponse, GovernanceError, Init,
+        OpenRequest, OpenResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
+        RestoreDappControllersRequest, RestoreDappControllersResponse, SetDappControllersRequest,
+        SetDappControllersResponse, SettleCommunityFundParticipation, Swap,
     },
     swap::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient, LOG_PREFIX},
 };
@@ -417,6 +417,19 @@ async fn get_init_(_request: GetInitRequest) -> GetInitResponse {
     GetInitResponse {
         init: swap().init.clone(),
     }
+}
+
+/// Return the current derived state of the Sale
+#[export_name = "canister_query get_derived_state"]
+fn get_derived_state() {
+    over_async(candid_one, get_derived_state_)
+}
+
+/// Return the current derived state of the Sale
+#[candid_method(query, rename = "get_derived_state")]
+async fn get_derived_state_(_request: GetDerivedStateRequest) -> GetDerivedStateResponse {
+    println!("{}get_derived_state", LOG_PREFIX);
+    swap().derived_state().into()
 }
 
 // =============================================================================

@@ -49,6 +49,10 @@ type FinalizeSwapResponse = record {
 type GetBuyerStateRequest = record { principal_id : opt principal };
 type GetBuyerStateResponse = record { buyer_state : opt BuyerState };
 type GetBuyersTotalResponse = record { buyers_total : nat64 };
+type GetDerivedStateResponse = record {
+  sns_tokens_per_icp : opt float64;
+  buyer_total_icp_e8s : opt nat64;
+};
 type GetInitResponse = record { init : opt Init };
 type GetLifecycleResponse = record { lifecycle : opt int32 };
 type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
@@ -134,6 +138,7 @@ service : (Init) -> {
   get_buyer_state : (GetBuyerStateRequest) -> (GetBuyerStateResponse) query;
   get_buyers_total : (record {}) -> (GetBuyersTotalResponse);
   get_canister_status : (record {}) -> (CanisterStatusResultV2);
+  get_derived_state : (record {}) -> (GetDerivedStateResponse) query;
   get_init : (record {}) -> (GetInitResponse) query;
   get_lifecycle : (record {}) -> (GetLifecycleResponse) query;
   get_state : (record {}) -> (GetStateResponse) query;
