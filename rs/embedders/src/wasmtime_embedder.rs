@@ -837,7 +837,7 @@ impl<S: SystemApi> WasmtimeInstance<S> {
             // We only need to scan the bytemap up to and including the last
             // page that is actually used by the existing memory (i.e. the page
             // of the last byte of heap memory).
-            let bytemap = &bytemap[0..=(heap_memory.len() - 1) / PAGE_SIZE];
+            let bytemap = &bytemap[0..=(heap_memory.len().saturating_sub(1)) / PAGE_SIZE];
             // SAFETY: It is always safe to transmute a sequence of `u8` to a
             // `u128`. These will then be converted back to `u8` using
             // the native ordering.
