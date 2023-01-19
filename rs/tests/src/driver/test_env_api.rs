@@ -1214,6 +1214,8 @@ pub trait NnsInstallationExt {
     /// is installed with test neurons enabled which simplify voting on
     /// proposals in testing.
     fn install_nns_canisters(&self) -> Result<()>;
+
+    fn install_nns_canisters_at_ids(&self) -> Result<()>;
 }
 
 impl<T> NnsInstallationExt for T
@@ -1232,7 +1234,23 @@ where
         };
         info!(log, "Wait for node reporting healthy status");
         self.await_status_is_healthy().unwrap();
-        install_nns_canisters(&log, url, &prep_dir, true);
+        install_nns_canisters(&log, url, &prep_dir, true, false);
+        Ok(())
+    }
+
+    fn install_nns_canisters_at_ids(&self) -> Result<()> {
+        let test_env = self.test_env();
+        test_env.set_nns_canisters_env_vars()?;
+        let log = test_env.logger();
+        let ic_name = self.ic_name();
+        let url = self.get_public_url();
+        let prep_dir = match test_env.prep_dir(&ic_name) {
+            Some(v) => v,
+            None => bail!("Prep Dir for IC {:?} does not exist.", ic_name),
+        };
+        info!(log, "Wait for node reporting healthy status");
+        self.await_status_is_healthy().unwrap();
+        install_nns_canisters(&log, url, &prep_dir, true, true);
         Ok(())
     }
 }
@@ -1506,6 +1524,7 @@ pub fn install_nns_canisters(
     url: Url,
     ic_prep_state_dir: &IcPrepStateDir,
     nns_test_neurons_present: bool,
+    install_at_ids: bool,
 ) {
     let rt = Rt::new().expect("Could not create tokio runtime.");
     info!(
@@ -1550,7 +1569,11 @@ pub fn install_nns_canisters(
             effective_canister_id: REGISTRY_CANISTER_ID.into(),
         });
 
-        NnsCanisters::set_up(&runtime, init_payloads.build()).await;
+        if install_at_ids {
+            NnsCanisters::set_up_at_ids(&runtime, init_payloads.build()).await;
+        } else {
+            NnsCanisters::set_up(&runtime, init_payloads.build()).await;
+        }
     });
 }
 

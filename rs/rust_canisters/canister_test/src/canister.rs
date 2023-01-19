@@ -352,6 +352,41 @@ impl<'a> Runtime {
             .map_err(|e| format!("Creation of a canister timed out. Last error was: {}", e))
     }
 
+    pub async fn create_canister_at_id(
+        &'a self,
+        specified_id: PrincipalId,
+    ) -> Result<Canister<'a>, String> {
+        let canister_id_record: CanisterIdRecord = self
+            .get_management_canister()
+            .update_(
+                ic_ic00_types::Method::ProvisionalCreateCanisterWithCycles.to_string(),
+                candid,
+                (ProvisionalCreateCanisterWithCyclesArgs::new(
+                    None,
+                    Some(specified_id),
+                ),),
+            )
+            .await
+            .expect("Failed to create canister at specific id.");
+        let canister_id = canister_id_record.get_canister_id();
+        assert_eq!(canister_id.get(), specified_id);
+        Ok(Canister {
+            runtime: self,
+            effective_canister_id: canister_id.into(),
+            canister_id,
+            wasm: None,
+        })
+    }
+
+    pub async fn create_canister_at_id_max_cycles_with_retries(
+        &'a self,
+        specified_id: PrincipalId,
+    ) -> Result<Canister<'a>, String> {
+        execute_with_retries(|| self.create_canister_at_id(specified_id))
+            .await
+            .map_err(|e| format!("Creation of a canister timed out. Last error was: {}", e))
+    }
+
     /// Clean up the run times (if any clean up is needed)
     pub fn stop(&self) {
         if let Runtime::Local(r) = self {

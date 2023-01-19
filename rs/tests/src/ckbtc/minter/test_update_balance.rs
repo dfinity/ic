@@ -6,8 +6,8 @@ use crate::ckbtc::minter::utils::{
 };
 use crate::{
     ckbtc::lib::{
-        activate_ecdsa_signature, create_canister, install_ledger, install_minter, subnet_app,
-        subnet_sys, BTC_MIN_CONFIRMATIONS, TEST_KEY_LOCAL,
+        activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_ledger,
+        install_minter, subnet_sys, BTC_MIN_CONFIRMATIONS, TEST_KEY_LOCAL,
     },
     driver::{
         test_env::TestEnv,
@@ -31,11 +31,8 @@ use slog::{debug, info};
 /// Verify proper utxo management in case of a ledger failure during the mint operation.
 pub fn test_update_balance(env: TestEnv) {
     let logger = env.logger();
-    let subnet_app = subnet_app(&env);
     let subnet_sys = subnet_sys(&env);
-    let node = subnet_app.nodes().next().expect("No node in app subnet.");
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
-    let app_subnet_id = subnet_app.subnet_id;
 
     // Get access to btc replica.
     let btc_rpc = get_btc_client(&env);
@@ -54,7 +51,9 @@ pub fn test_update_balance(env: TestEnv) {
         .unwrap();
 
     block_on(async {
-        let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
+        let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
+        install_bitcoin_canister(&runtime, &logger, &env).await;
+
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
         let minting_user = minter_canister.canister_id().get();
@@ -62,11 +61,11 @@ pub fn test_update_balance(env: TestEnv) {
         let minter_id = install_minter(&env, &mut minter_canister, ledger_id, &logger, 0).await;
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
-        let agent = assert_create_agent(node.get_public_url().as_str()).await;
+        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
         let universal_canister =
-            UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+            UniversalCanister::new_with_retries(&agent, sys_node.effective_canister_id(), &logger)
                 .await;
-        activate_ecdsa_signature(sys_node, app_subnet_id, TEST_KEY_LOCAL, &logger).await;
+        activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
 
         let ledger_agent = Icrc1Agent {
             agent: agent.clone(),

@@ -19,8 +19,8 @@ end::catalog[] */
 use crate::util::runtime_from_url;
 use crate::{
     ckbtc::lib::{
-        activate_ecdsa_signature, create_canister, install_ledger, install_minter, subnet_app,
-        subnet_sys, ADDRESS_LENGTH, TEST_KEY_LOCAL,
+        activate_ecdsa_signature, create_canister, install_ledger, install_minter, subnet_sys,
+        ADDRESS_LENGTH, TEST_KEY_LOCAL,
     },
     driver::{
         test_env::TestEnv,
@@ -40,23 +40,20 @@ use slog::info;
 
 pub fn test_ckbtc_minter_agent(env: TestEnv) {
     let logger = env.logger();
-    let subnet_app = subnet_app(&env);
     let subnet_sys = subnet_sys(&env);
-    let node = subnet_app.nodes().next().expect("No node in app subnet.");
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
-    let app_subnet_id = subnet_app.subnet_id;
 
     info!(&logger, "Testing ckBTC minter agent");
     block_on(async {
-        let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
+        let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
         let minting_user = minter_canister.canister_id().get();
         let ledger_id = install_ledger(&env, &mut ledger_canister, minting_user, &logger).await;
         let minter_id = install_minter(&env, &mut minter_canister, ledger_id, &logger, 0).await;
         let minter = Principal::try_from_slice(minter_id.as_ref()).unwrap();
-        let agent = assert_create_agent(node.get_public_url().as_str()).await;
-        activate_ecdsa_signature(sys_node, app_subnet_id, TEST_KEY_LOCAL, &logger).await;
+        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
+        activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
 
         // Build agent.
         let agent = CkBtcMinterAgent {
