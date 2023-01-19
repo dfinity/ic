@@ -446,10 +446,6 @@ impl ReplicatedState {
         &self.metadata
     }
 
-    pub fn set_system_metadata(&mut self, metadata: SystemMetadata) {
-        self.metadata = metadata;
-    }
-
     pub fn get_ingress_status(&self, message_id: &MessageId) -> IngressStatus {
         self.metadata
             .ingress_history
@@ -659,7 +655,7 @@ impl ReplicatedState {
     }
 
     /// Creates a new loop detector.
-    pub fn subnet_queues_loop_detector(&mut self) -> CanisterQueuesLoopDetector {
+    pub fn subnet_queues_loop_detector(&self) -> CanisterQueuesLoopDetector {
         CanisterQueuesLoopDetector::default()
     }
 
