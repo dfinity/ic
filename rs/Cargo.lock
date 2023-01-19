@@ -5597,6 +5597,7 @@ name = "ic-crypto-secrets-containers"
 version = "0.8.0"
 dependencies = [
  "serde",
+ "serde_bytes",
  "serde_cbor",
  "zeroize",
 ]

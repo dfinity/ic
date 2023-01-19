@@ -17,6 +17,7 @@ rust_test(
     name = "secrets_containers_test",
     crate = ":secrets_containers",
     deps = [
+        "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
     ],
 )
