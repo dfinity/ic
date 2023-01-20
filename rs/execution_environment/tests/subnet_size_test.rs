@@ -735,7 +735,9 @@ fn is_almost_eq(a: Cycles, b: Cycles) -> bool {
     let abs_tolerance = 1;
     let diff = a.abs_diff(b);
 
-    diff <= abs_tolerance && diff <= rel_tolerance
+    // Absolute tolerance works for big diff values (>0.1%), eg. is_almost_eq(50, 51) == true.
+    // Relative tolerance works for small diff values (<0.1%), eg. is_almost_eq(1_000_000, 1_000_500) == true.
+    diff <= std::cmp::max(abs_tolerance, rel_tolerance)
 }
 
 fn convert_instructions_to_cycles(
@@ -989,7 +991,7 @@ fn test_subnet_size_execute_install_code_cost() {
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={subnet_size}"
+            "subnet_size={subnet_size}, simulated_cost={simulated_cost}, calculated_cost={calculated_cost}"
         );
     }
 }
@@ -1038,7 +1040,7 @@ fn test_subnet_size_ingress_induction_cost() {
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={subnet_size}"
+            "subnet_size={subnet_size}, simulated_cost={simulated_cost}, calculated_cost={calculated_cost}"
         );
     }
 }
@@ -1086,7 +1088,7 @@ fn test_subnet_size_execute_message_cost() {
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={subnet_size}"
+            "subnet_size={subnet_size}, simulated_cost={simulated_cost}, calculated_cost={calculated_cost}"
         );
     }
 }
@@ -1135,7 +1137,7 @@ fn test_subnet_size_execute_heartbeat_cost() {
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={subnet_size}"
+            "subnet_size={subnet_size}, simulated_cost={simulated_cost}, calculated_cost={calculated_cost}"
         );
     }
 }
@@ -1284,7 +1286,7 @@ fn test_subnet_size_http_request_cost() {
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={subnet_size}"
+            "subnet_size={subnet_size}, simulated_cost={simulated_cost}, calculated_cost={calculated_cost}"
         );
     }
 }
@@ -1323,7 +1325,7 @@ fn test_subnet_size_xnet_call_cost() {
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={subnet_size}"
+            "subnet_size={subnet_size}, simulated_cost={simulated_cost}, calculated_cost={calculated_cost}"
         );
     }
 }
@@ -1367,7 +1369,7 @@ fn test_subnet_size_create_canister_cost() {
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
             is_almost_eq(simulated_cost, calculated_cost),
-            "subnet_size={subnet_size}"
+            "subnet_size={subnet_size}, simulated_cost={simulated_cost}, calculated_cost={calculated_cost}"
         );
     }
 }
