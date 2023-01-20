@@ -22,8 +22,8 @@ use ic_interfaces::{
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    bitcoin_state::BitcoinState, canister_state::NextExecution, CanisterState, CanisterStatus,
-    ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
+    bitcoin_state::BitcoinState, canister_state::NextExecution, testing::ReplicatedStateTesting,
+    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
@@ -875,34 +875,37 @@ impl SchedulerImpl {
 
     fn purge_expired_ingress_messages(&self, state: &mut ReplicatedState) {
         let current_time = state.time();
+        let not_expired_yet = |ingress: &Arc<Ingress>| ingress.expiry_time >= current_time;
+        let mut expired_ingress_messages = state
+            .subnet_queues_mut()
+            .filter_ingress_messages(not_expired_yet);
         let mut canisters = state.take_canister_states();
         for canister in canisters.values_mut() {
-            let closure = |ingress: &Arc<Ingress>| {
-                if ingress.expiry_time >= current_time {
-                    true
-                } else {
-                    self.metrics.expired_ingress_messages_count.inc();
-                    let error = UserError::new(
-                        ErrorCode::IngressMessageTimeout,
-                        format!(
-                            "Ingress message {} timed out waiting to start executing.",
-                            ingress.message_id
-                        ),
-                    );
-                    self.ingress_history_writer.set_status(
-                        state,
-                        ingress.message_id.clone(),
-                        IngressStatus::Known {
-                            receiver: ingress.receiver.get(),
-                            user_id: ingress.source,
-                            time: current_time,
-                            state: IngressState::Failed(error),
-                        },
-                    );
-                    false
-                }
-            };
-            canister.system_state.filter_ingress_messages(closure);
+            expired_ingress_messages.extend(
+                canister
+                    .system_state
+                    .filter_ingress_messages(not_expired_yet),
+            );
+        }
+        for ingress in expired_ingress_messages.iter() {
+            self.metrics.expired_ingress_messages_count.inc();
+            let error = UserError::new(
+                ErrorCode::IngressMessageTimeout,
+                format!(
+                    "Ingress message {} timed out waiting to start executing.",
+                    ingress.message_id
+                ),
+            );
+            self.ingress_history_writer.set_status(
+                state,
+                ingress.message_id.clone(),
+                IngressStatus::Known {
+                    receiver: ingress.receiver.get(),
+                    user_id: ingress.source,
+                    time: current_time,
+                    state: IngressState::Failed(error),
+                },
+            );
         }
         state.put_canister_states(canisters);
     }

@@ -833,11 +833,11 @@ impl SystemState {
     }
 
     /// See IngressQueue::filter_messages() for documentation
-    pub fn filter_ingress_messages<F>(&mut self, filter: F)
+    pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Arc<Ingress>) -> bool,
     {
-        self.queues.filter_ingress_messages(filter);
+        self.queues.filter_ingress_messages(filter)
     }
 
     /// Returns the memory currently in use by the `SystemState`.
