@@ -117,7 +117,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             let CanisterHttpRequest {
                 id: request_id,
                 timeout: request_timeout,
-                content:
+                context:
                     CanisterHttpRequestContext {
                         request:
                             Request {
@@ -401,7 +401,7 @@ mod tests {
         CanisterHttpRequest {
             id: CallbackId::from(request_id),
             timeout: request_timeout,
-            content: CanisterHttpRequestContext {
+            context: CanisterHttpRequestContext {
                 request: RequestBuilder::default()
                     .receiver(CanisterId::from(1))
                     .sender(CanisterId::from(1))

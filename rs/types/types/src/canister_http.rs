@@ -1,35 +1,46 @@
-//! This module implements the types necessary for consensus to perform http requests.
+//! Types necessary for consensus to perform http requests.
 //!
-//! The life of a request looks as follows (from consensus' perspective):
+//! The lifecycle of a request looks as follows:
 //!
-//! 1. A [`CanisterHttpRequestContext`] is stored in the state.
-//! The canister http pool manager will take the request pass it to the network layer to make the actual request.
-//! The response may be passed to a filter and then is returned to the consensus layer as a [`CanisterHttpResponseContent`].
+//! 1a. When a canister makes a http request, the [`CanisterHttpRequestContext`] is stored in the state.
+//! The canister http pool manager (which is a thread that continously checks for requests)
+//! will take the request and pass it to the network layer to make the actual request.
+//!
+//! 1b. The response may be passed to a transform function, which can make arbitrary changes to the response.
+//! The purpose of the transform function is to give the canister developer the ability to shrink the response to
+//! only contain the data that they are interested in. Furthermore, it allows the canister developer to remove
+//! non-determistic parts of the response (such as timestamps) from the response, to help reaching consensus on
+//! the response.
+//! Afterwards it is returned to the consensus layer as a [`CanisterHttpResponseContent`].
 //!
 //! 2. Now we need to get consensus of the content. Since the actual [`CanisterHttpResponseContent`] could be large and we
 //! require n-to-n communication, we will turn the content into a much smaller [`CanisterHttpResponseMetadata`] object,
-//! that contains all the the important information required to archieve consensus.
+//! that contains all the the important information (such as the response hash) required to archieve consensus.
 //!
-//! 3. We sign the metdata to get the [`CanisterHttpResponseShare`] and store it together with the content as
-//! a [`CanisterHttpResponseShare`] in the pool.
+//! 3a. We sign the metadata to get the [`CanisterHttpResponseShare`] and store it in the pool.
 //!
-//! 4a. We gossip [`CanisterHttpResponseShare`]s, until we have enough of those to aggregate them into a
+//! 3b. We gossip [`CanisterHttpResponseShare`]s, until we have enough shares to aggregate them into a
 //! [`CanisterHttpResponseProof`]. Together with the content, this artifact forms the [`CanisterHttpResponseWithConsensus`],
 //! which is the artifact we can include into the block to prove consensus on the response.
-//! Once the [`CanisterHttpResponseWithConsensus`] has made it into a finalized block, the response is delivered
+//!
+//! 4a. Once the [`CanisterHttpResponseWithConsensus`] has made it into a finalized block, the response is delivered
 //! to execution to resume the initial call.
 //!
 //! 4b. Since there is no guarantee that all nodes will get the same [`CanisterHttpResponseContent`] back from the server,
 //! there is no guarantee to reach consensus on a single [`CanisterHttpResponseMetadata`] either.
-//! This can often be detected by the block maker.
-//! The blockmaker can then compile a [`CanisterHttpResponseDivergence`] proof and include it in it's payload.
+//! This can often be detected by the block maker, allowing to return an error as soon as possible
+//! to the canister, such that execution to resume faster.
+//! The blockmaker compiles a [`CanisterHttpResponseDivergence`] proof and includes it in it's payload.
 //! Once the proof has made it into a finalized block, the request is answered with an error message.
-//! This is a qualitiy-of-live feature, as the timeout mechanism would eventually end the request anyway.
-//! However, returning the error as soon as possible allows the canister execution to resume faster.
 //!
-//! 4c. If neither 4a nor 4b yield a result after a certrain amount of time, the timeout mechanism ends the request
-//! with an error and unblocks the requesting canister.
-
+//! Early detection of non-determinsitic server responses is not guaranteed to work if malicious nodes are present,
+//! which sign multiple different responses for the same request.
+//! In that case, the non-determisitic server responses will time out using the timeout mechanism (see 4c).
+//!
+//! 4c. If neither 4a nor 4b yield a result after a certrain amount of time, the timeout mechanism ends the request.
+//! The blockmaker indicates, which requests have timed out, i.e. the blocktime of the latest finalized block is higher than
+//! the timestamp of a request plus the timeout interval. This condition is verifiable by the other nodes in the network.
+//! Once a timeout has made it into a finalized block, the request is answered with an error message.
 use crate::{
     crypto::{CryptoHashOf, Signed},
     messages::{CallbackId, RejectContext, Request},
@@ -50,7 +61,6 @@ use std::{
     mem::size_of,
 };
 
-// TODO: Make these amounts configurable
 /// Time after which a response is considered timed out and a timeout error will be returned to execution
 pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
 
@@ -60,16 +70,13 @@ pub const CANISTER_HTTP_TIMEOUT_INTERVAL: Duration = Duration::from_secs(60);
 /// could become too large.
 pub const CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK: usize = 500;
 
-/// The following constants are defined in Interface Spec:
-/// https://ic-interface-spec.netlify.app/#ic-http_request
-///
-/// Maximum number of request bytes for canister http_request.
+/// Maximum number of request bytes for a canister http request.
 pub const MAX_CANISTER_HTTP_REQUEST_BYTES: u64 = 2_000_000;
 
-/// Maximum number of response bytes for canister http_request.
+/// Maximum number of response bytes for a canister http request.
 pub const MAX_CANISTER_HTTP_RESPONSE_BYTES: u64 = 2_000_000;
 
-/// Maximum number of bytes to represent URL for canister http_request.
+/// Maximum number of bytes to represent URL for a canister http request.
 pub const MAX_CANISTER_HTTP_URL_SIZE: usize = 8192;
 
 /// Maximum number of all HTTP headers.
@@ -81,6 +88,8 @@ pub const MAX_CANISTER_HTTP_HEADER_NAME_VALUE_LENGTH: usize = 8 * 1024;
 /// Maximum total number of bytes to represent all HTTP header names and values.
 pub const MAX_CANISTER_HTTP_HEADER_TOTAL_SIZE: usize = 48 * 1024;
 
+/// In the context of canister http, the [`CallbackId`] of the request
+/// is used to uniquely identify the request and it's associated artifacts.
 pub type CanisterHttpRequestId = CallbackId;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -201,6 +210,8 @@ impl TryFrom<pb_metadata::CanisterHttpRequestContext> for CanisterHttpRequestCon
     }
 }
 
+/// Check that the header and body of the request conform to the
+/// [Interface Spec](https://ic-interface-spec.netlify.app/#ic-http_request).
 pub fn validate_http_headers_and_body(
     headers: &[HttpHeader],
     body: &[u8],
@@ -335,7 +346,7 @@ impl CanisterHttpRequestContext {
 }
 
 /// The error that occurs when an end-user specifies an invalid
-/// [`max_response_bytes`].
+/// `max_response_bytes`
 #[derive(Debug)]
 pub struct InvalidMaxResponseBytes {
     min: u64,
@@ -343,6 +354,8 @@ pub struct InvalidMaxResponseBytes {
     given: u64,
 }
 
+/// The error occurs when the [`PrincipalId`] of the transform
+/// function is invalid
 #[derive(Debug)]
 pub struct InvalidTransformPrincipalId {
     expected_principal_id: PrincipalId,
@@ -423,17 +436,22 @@ impl From<CanisterHttpRequestContextError> for UserError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+/// Contains the information that the pool manager hands to the canister http
+/// client to make a request
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct CanisterHttpRequest {
+    /// Timestamp indicating when this request will be considered timed out.
     pub timeout: Time,
-    pub id: CallbackId,
-    pub content: CanisterHttpRequestContext,
+    /// This requests unique identifier
+    pub id: CanisterHttpRequestId,
+    /// The context of the request which captures all the metadata about this request
+    pub context: CanisterHttpRequestContext,
 }
 
-/// The content of a response of a after the filtering step.
+/// The content of a response after the transformation
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct CanisterHttpResponse {
-    pub id: CallbackId,
+    pub id: CanisterHttpRequestId,
     pub timeout: Time,
     pub canister_id: CanisterId,
     pub content: CanisterHttpResponseContent,
@@ -445,9 +463,13 @@ impl CountBytes for CanisterHttpResponse {
     }
 }
 
+/// Content of a [`CanisterHttpResponse`]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CanisterHttpResponseContent {
+    /// In the case of a success, this will be the data returned by the server.
     Success(Vec<u8>),
+    /// In case of a reject, this will be a [`CanisterHttpReject`], indicating why the
+    /// request was rejected.
     Reject(CanisterHttpReject),
 }
 
@@ -460,9 +482,13 @@ impl CountBytes for CanisterHttpResponseContent {
     }
 }
 
+/// If a [`CanisterHttpRequest`] is rejected, the [`CanisterHttpReject`] provides additional
+/// information about the rejection.
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct CanisterHttpReject {
+    /// The [`RejectCode`] of the request
     pub reject_code: RejectCode,
+    /// Error message to provide additional information
     pub message: String,
 }
 
@@ -478,12 +504,14 @@ impl CountBytes for CanisterHttpReject {
     }
 }
 
+/// A header to be included in a [`CanisterHttpRequest`].
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub struct CanisterHttpHeader {
     pub name: String,
     pub value: String,
 }
 
+/// Specifies the HTTP method that is used in the [`CanisterHttpRequest`].
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 pub enum CanisterHttpMethod {
     GET,
@@ -570,11 +598,24 @@ impl CountBytes for CanisterHttpResponseProof {
     }
 }
 
+/// Used by the artifact pool as to differentiate [`CanisterHttpResponse`] artifacts
+///
+/// The current implementation of the canister http feature only has a single type of
+/// artifact, which is shares and therefore needs an attribute.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CanisterHttpResponseAttribute {
+    /// Attributes of a [`CanisterHttpResponseShare`].
+    ///
+    /// It is not sufficient to differentiate the [`CanisterHttpResponseShare`]s by their
+    /// [`CanisterHttpRequestId`]. The reason is, that if the membership of the subnet changes
+    /// while a [`CanisterHttpRequest`] is in progress, the new nodes can not get consensus on
+    /// the old nodes [`CanisterHttpResponseShare`]s.
+    ///
+    /// Instead, they need to make new shares, which is why the [`RegistryVersion`]
+    /// under which they where generated and signed is part of the attribute.
     Share(
         RegistryVersion,
-        CallbackId,
+        CanisterHttpRequestId,
         CryptoHashOf<CanisterHttpResponse>,
     ),
 }

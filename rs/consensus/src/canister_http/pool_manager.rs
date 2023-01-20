@@ -25,7 +25,7 @@ use std::{
     time::Duration,
 };
 
-/// CanisterHttpPoolManagerImpl implements the pool and state monitoring
+/// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and
 /// responses can be inserted into consensus. Concretely, it has the following responsibilities:
 /// - It must decide when to trigger purging by noticing when consensus time changes
@@ -45,7 +45,7 @@ pub struct CanisterHttpPoolManagerImpl {
 }
 
 impl CanisterHttpPoolManagerImpl {
-    /// Create a CanisterHttpPoolManagerImpl
+    /// Create a new [`CanisterHttpPoolManagerImpl`]
     pub fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         http_adapter_shim: Arc<Mutex<CanisterHttpAdapterClient>>,
@@ -177,9 +177,9 @@ impl CanisterHttpPoolManagerImpl {
             .cloned()
             .collect();
 
-        for (id, content) in http_requests {
+        for (id, context) in http_requests {
             if !request_ids_already_made.contains(&id) {
-                let timeout = content.time + Duration::from_secs(5 * 60);
+                let timeout = context.time + Duration::from_secs(5 * 60);
                 if let Err(err) = self
                     .http_adapter_shim
                     .lock()
@@ -187,7 +187,7 @@ impl CanisterHttpPoolManagerImpl {
                     .send(CanisterHttpRequest {
                         id,
                         timeout,
-                        content,
+                        context,
                     })
                 {
                     warn!(
@@ -638,7 +638,7 @@ pub mod test {
                         id: CallbackId::from(7),
                         timeout: ic_types::Time::from_nanos_since_unix_epoch(10)
                             + Duration::from_secs(60 * 5),
-                        content: request.clone(),
+                        context: request.clone(),
                     }))
                     .times(1)
                     .return_const(Ok(()));
