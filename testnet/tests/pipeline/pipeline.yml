@@ -1,6 +1,6 @@
 .prod-test:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .rules-prod-tests
   stage: prod-tests
   dependencies: []  # don't copy artifacts from other jobs by default

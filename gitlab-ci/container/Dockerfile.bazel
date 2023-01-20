@@ -2,21 +2,21 @@
 # focal-20220922
 FROM ubuntu@sha256:e722c7335fdd0ce77044ab5942cb1fbd2b5f60d1f5416acfcdb0814b2baf7898
 
-ARG USER=ubuntu
-ARG UID=1000
 ARG BAZEL_VERSION=invalid
 
 ENV TZ=UTC
+
+COPY --chown=0700 ./files/known_hosts /etc/ssh/ssh_known_hosts
 
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt -yq update && apt -yqq install  \
     curl build-essential git gnupg node-json5 uuid-dev \
     # GitLab CI \
-    sudo gosu jq \
+    sudo gosu jq rclone \
     # RUST \
     gcc lld pkg-config libssl-dev libunwind-dev libsqlite3-dev zlib1g-dev libclang-10-dev \
     # IC-OS \
-    python3 fakeroot android-sdk-ext4-utils cryptsetup-bin zstd lsb-release grub-efi-amd64-bin libsystemd-dev faketime dosfstools libselinux-dev mtools
+    python3 python-is-python3 fakeroot android-sdk-ext4-utils cryptsetup-bin zstd lsb-release grub-efi-amd64-bin libsystemd-dev faketime dosfstools libselinux-dev mtools
 
 ARG buildevents_version=0.6.0
 RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${buildevents_version}/buildevents-linux-amd64 -o /usr/bin/buildevents && \
@@ -35,12 +35,10 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
 
-RUN useradd -ms /bin/bash -u ${UID} ${USER} && \
-    mkdir -p /home/${USER} && \
-    chown -R ${UID}.${UID} /home/${USER}
+RUN groupadd -g 1234 ubuntu && useradd -ms /bin/bash -u 1234 -g 1234 ubuntu
 
 # CI before script requires sudo
-RUN usermod -a -G sudo ${USER} && echo "${USER} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # Init for reaping zombies and performing signal forwarding (https://github.com/krallin/tini)
 ARG tini_version=0.19.0
@@ -50,27 +48,21 @@ RUN curl -fsSL https://github.com/krallin/tini/releases/download/v${tini_version
 RUN gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 595E85A6B1B4779EA4DAAEC70B588DFF0527A9B7 && \
     gpg --batch --verify /tini.asc /tini && chmod +x /tini
 
-COPY generate-bazel-completion.sh /tmp/
+COPY ./files/generate-bazel-completion.sh /tmp/
 RUN /tmp/generate-bazel-completion.sh
+RUN echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
-USER ${USER}
-
-RUN echo "source /etc/bash_completion.d/bazel" >>/home/${USER}/.bashrc
-
-# Pre-populate the Bazel installation.
+# Pre-populate the Bazel installation for root
 RUN USE_BAZEL_VERSION=${BAZEL_VERSION} bazel version
-
-RUN mkdir --mode=0700 /home/${USER}/.ssh
-COPY ./files/known_hosts /home/${USER}/.ssh/known_hosts
-
-COPY entrypoint.sh /entrypoint.sh
+USER ubuntu
+# Pre-populate the Bazel installation for ubuntu
+RUN USE_BAZEL_VERSION=${BAZEL_VERSION} bazel version
 WORKDIR /
 USER 0
 
 RUN mv /usr/bin/docker /usr/bin/docker-bin
-COPY containers.conf /etc/containers/containers.conf
-COPY docker.sh /usr/bin/docker
+COPY ./files/containers.conf /etc/containers/containers.conf
+COPY ./files/docker.sh /usr/bin/docker
 
-RUN echo "USER=${USER}" > /entrypoint_user
-
-ENTRYPOINT ["/tini", "--", "/entrypoint.sh"]
+ENTRYPOINT ["/tini", "--"]
+CMD ["/bin/bash"]

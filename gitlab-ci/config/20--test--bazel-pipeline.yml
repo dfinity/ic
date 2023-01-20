@@ -42,7 +42,6 @@
   extends:
     - .bazel-rules-pipeline
     - .bazel-build-k8s
-    - .ic-build-bazel-image
   stage: test
   needs: []
   artifacts:

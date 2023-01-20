@@ -1,11 +1,11 @@
-docker-autobuild-protected:
+container-autobuild-protected:
   extends: 
     - .ubuntu-nix-docker
   rules:
     # Run immediatly on Dockerfile changes pushed to a protected branch - such as master.
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "push"'
       changes:
-        - gitlab-ci/docker/TAG
+        - gitlab-ci/container/TAG
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $SCHEDULE_NAME == "run-all-master"'
   image:
     name: "dfinity/ic-build-nix:latest"
@@ -15,6 +15,7 @@ docker-autobuild-protected:
     - dfinity-launch
   script:
     - |
+      # use docker on protected runner
       set -euo pipefail
 
       nix-collect-garbage -d
@@ -25,8 +26,8 @@ docker-autobuild-protected:
       CI_IMAGE_NAME=$(echo "$CI_IMAGE" | cut -d':' -f1)
       CI_IMAGE_TAG=$(echo "$CI_IMAGE" | cut -d':' -f2)
       cd -
-      # docker image tag
-      TAG=$(cat ./gitlab-ci/docker/TAG)
+      # container image tag
+      TAG=$(cat ./gitlab-ci/container/TAG)
 
       # check if we have it in dockerhub
       EXISTS=$(curl -s https://hub.docker.com/v2/repositories/dfinity/ic-build/tags | jq -r "[.results? | .[]? | .name == \"$TAG\"] | any")
@@ -38,7 +39,7 @@ docker-autobuild-protected:
         # no image on this protected runner
         # build it and push it to dockerhub
         echo -e "\e[0Ksection_start:$(date +%s):docker_build_script[collapsed=true]\r\e[0KClick here to see the docker_build_script"
-        ./gitlab-ci/docker/docker-build-image.sh --nix
+        ./gitlab-ci/container/build-image.sh --nix
         echo -e "\e[0Ksection_end:$(date +%s):docker_build_script\r\e[0K"
 
         # push new image to dockerhub
@@ -71,7 +72,7 @@ docker-autobuild-protected:
       docker ps -a
       echo -e "\e[0Ksection_end:$(date +%s):sys_info\r\e[0K"
 
-docker-autobuild:
+container-autobuild:
   extends:
     - .ubuntu-nix-docker-k8s
     - .rules-prs-dockerfile-changes
@@ -80,7 +81,6 @@ docker-autobuild:
   # build container image in ch due to better network uplink
   tags:
     - dfinity
-    - docker
     - ubuntu
     - ch
   script:
@@ -96,8 +96,8 @@ docker-autobuild:
       fi
 
       # check if tag changed
-      pushd gitlab-ci/docker
-      TAG="$(./docker-get-image-tag.sh)"
+      pushd gitlab-ci/container
+      TAG="$(./get-image-tag.sh)"
       cd ../config
       # names must match with names in docker-build-image.sh!
       IMG_NAME="registry.gitlab.com/dfinity-lab/core/docker/ic-build"
@@ -118,7 +118,7 @@ docker-autobuild:
       popd
 
       # build new ic-build image
-      ./gitlab-ci/docker/docker-build-image.sh --nix
+      ./gitlab-ci/container/build-image.sh --nix
 
       # push the new ic-build[-nix] image it to gitlab registry
       docker login -u gitlab-ci-token -p "$GITLAB_API_TOKEN" registry.gitlab.com
@@ -131,7 +131,7 @@ docker-autobuild:
       sed -i -E "s|$IMG_NAME:[^\"]{5,}|$IMG_NAME_FULL|g" -- *
       sed -i -E "s|$IMG_NIX_NAME:[^\"]{5,}|$IMG_NIX_NAME_FULL|g" -- *
       sed -i -E "s|$IMG_BAZEL_NAME:[^\"]{5,}|$IMG_BAZEL_NAME_FULL|g" -- *
-      cd ../docker
+      cd ../container
       echo "$TAG" > TAG
       popd
 

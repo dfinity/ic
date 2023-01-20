@@ -1,6 +1,6 @@
 docker-generate-runner-list:
   extends: 
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .rules-simple-prober
   stage: init
   tags:

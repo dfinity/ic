@@ -104,11 +104,11 @@ If you have further questions, please contact the testing team on #eng-testing.
 **IMPORTANT**: Bazel runs of the system tests are not yet fully standardized and are therefore discouraged. T&V team is working actively on the [bazelification](https://docs.google.com/document/d/1RGyvOkRluFsqroDmyM9hfr37VG-nCrTOrutQnStJsco/edit#heading=h.fcajjuvgc2dn) of all system tests. However, currently we strongly encourage developers to only use the [conventional approach](#how-can-i-run-system-tests) for launching system tests. If in **strong** need, try to use an *experimental* way of launching a bazelified system test.
 Namely, login to the docker container:
 ```
-/ic$ ./gitlab-ci/tools/docker-run --bazel
+/ic$ ./gitlab-ci/container/container-run.sh
 ```
 To launch a test target (`my_test_target` in this case) within the docker run:
 ```
-docker$ bazel test --config=systest //rs/tests:my_test_target
+devenv-container$ bazel test --config=systest //rs/tests:my_test_target
 ```
 
 # How to write a system test

@@ -6,11 +6,11 @@ build-determinism-binaries:
   needs:
     - job: wait-for-bazel-test-all
       artifacts: false
-    - job: docker-build-ic
+    - job: build-ic
       artifacts: false
   variables:
     PATH0: "release"
-    PATH1: "docker-build-ic/release"
+    PATH1: "build-ic/release"
   script:
     - |
       set -eExuo pipefail
@@ -24,11 +24,11 @@ build-determinism-canisters:
   needs:
     - job: wait-for-bazel-test-all
       artifacts: false
-    - job: docker-build-ic
+    - job: build-ic
       artifacts: false
   variables:
     PATH0: "canisters"
-    PATH1: "docker-build-ic/canisters"
+    PATH1: "build-ic/canisters"
   script:
     - |
       set -eExuo pipefail
@@ -42,14 +42,14 @@ build-determinism-guest-update-img:
   needs:
     - job: wait-for-bazel-test-all
       artifacts: false
-    - job: docker-build-ic
+    - job: build-ic
       artifacts: false
   artifacts:
     paths:
       - artifacts
   variables:
     PATH0: "guest-os/update-img"
-    PATH1: "docker-build-ic/guest-os/update-img"
+    PATH1: "build-ic/guest-os/update-img"
   script:
     - |
       set -eExuo pipefail
