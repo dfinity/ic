@@ -11,7 +11,7 @@ use num_traits::cast::ToPrimitive;
 
 use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::compute_subaccount};
 use crate::{
-    address::{BitcoinAddress, ParseAddressError},
+    address::{account_to_bitcoin_address, BitcoinAddress, ParseAddressError},
     guard::{retrieve_btc_guard, GuardError},
     state::{self, mutate_state, read_state, RetrieveBtcRequest},
 };
@@ -76,10 +76,34 @@ impl From<ParseAddressError> for RetrieveBtcError {
 
 pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcError> {
     let caller = ic_cdk::caller();
+
     state::read_state(|s| s.mode.is_available_for(&caller))
         .map_err(RetrieveBtcError::TemporarilyUnavailable)?;
 
     init_ecdsa_public_key().await;
+
+    let main_account = Account {
+        owner: ic_cdk::id().into(),
+        subaccount: None,
+    };
+
+    let main_address = match state::read_state(|s| {
+        s.ecdsa_public_key
+            .clone()
+            .map(|key| account_to_bitcoin_address(&key, &main_account))
+    }) {
+        Some(address) => address,
+        None => {
+            ic_cdk::trap(
+                "unreachable: have retrieve BTC requests but the ECDSA key is not initialized",
+            );
+        }
+    };
+
+    if args.address == main_address.display(state::read_state(|s| s.btc_network)) {
+        ic_cdk::trap("illegal retrieve_btc target");
+    }
+
     let _guard = retrieve_btc_guard(caller)?;
     let (min_amount, btc_network) = read_state(|s| (s.retrieve_btc_min_amount, s.btc_network));
     if args.amount < min_amount {

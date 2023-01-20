@@ -1,4 +1,5 @@
 use candid::candid_method;
+use candid::Principal;
 use ic_canister_log::export as export_logs;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{heartbeat, init, post_upgrade, query, update};
@@ -66,6 +67,12 @@ fn check_postcondition<T>(t: T) -> T {
     t
 }
 
+fn check_anonymous_caller() {
+    if ic_cdk::caller() == Principal::anonymous() {
+        panic!("anonymous caller not allowed")
+    }
+}
+
 #[heartbeat]
 async fn heartbeat() {
     #[cfg(feature = "self_check")]
@@ -82,24 +89,28 @@ fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
 #[candid_method(update)]
 #[update]
 async fn get_btc_address(args: GetBtcAddressArgs) -> String {
+    check_anonymous_caller();
     updates::get_btc_address::get_btc_address(args).await
 }
 
 #[candid_method(update)]
 #[update]
 async fn get_withdrawal_account() -> Account {
+    check_anonymous_caller();
     updates::get_withdrawal_account::get_withdrawal_account().await
 }
 
 #[candid_method(update)]
 #[update]
 async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcError> {
+    check_anonymous_caller();
     check_postcondition(updates::retrieve_btc::retrieve_btc(args).await)
 }
 
 #[candid_method(query)]
 #[query]
 fn retrieve_btc_status(req: RetrieveBtcStatusRequest) -> RetrieveBtcStatus {
+    check_anonymous_caller();
     read_state(|s| s.retrieve_btc_status(req.block_index))
 }
 
@@ -108,6 +119,7 @@ fn retrieve_btc_status(req: RetrieveBtcStatusRequest) -> RetrieveBtcStatus {
 async fn update_balance(
     args: UpdateBalanceArgs,
 ) -> Result<UpdateBalanceResult, UpdateBalanceError> {
+    check_anonymous_caller();
     check_postcondition(updates::update_balance::update_balance(args).await)
 }
 

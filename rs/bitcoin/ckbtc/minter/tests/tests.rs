@@ -14,6 +14,7 @@ use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
 use icp_ledger::ArchiveOptions;
 use std::path::PathBuf;
+use std::str::FromStr;
 
 fn ledger_wasm() -> Vec<u8> {
     let path = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
@@ -91,6 +92,10 @@ fn test_upgrade_read_only() {
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
 
+    let authorized_principal =
+        Principal::from_str("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
+            .unwrap();
+
     // upgrade
     let upgrade_args = UpgradeArgs {
         retrieve_btc_min_amount: Some(100),
@@ -109,7 +114,8 @@ fn test_upgrade_read_only() {
         subaccount: None,
     };
     let res = env
-        .execute_ingress(
+        .execute_ingress_as(
+            authorized_principal.into(),
             minter_id,
             "update_balance",
             Encode!(&update_balance_args).unwrap(),
@@ -128,7 +134,8 @@ fn test_upgrade_read_only() {
         address: "".into(),
     };
     let res = env
-        .execute_ingress(
+        .execute_ingress_as(
+            authorized_principal.into(),
             minter_id,
             "retrieve_btc",
             Encode!(&retrieve_btc_args).unwrap(),
@@ -144,8 +151,6 @@ fn test_upgrade_read_only() {
 
 #[test]
 fn test_upgrade_restricted() {
-    use std::str::FromStr;
-
     let env = StateMachine::new();
     let ledger_id = install_ledger(&env);
     let minter_id = install_minter(&env, ledger_id);
@@ -209,4 +214,36 @@ fn test_upgrade_restricted() {
         "unexpected result: {:?}",
         res
     );
+}
+
+#[test]
+fn test_illegal_caller() {
+    let env = StateMachine::new();
+    let ledger_id = install_ledger(&env);
+    let minter_id = install_minter(&env, ledger_id);
+
+    let authorized_principal =
+        Principal::from_str("k2t6j-2nvnp-4zjm3-25dtz-6xhaa-c7boj-5gayf-oj3xs-i43lp-teztq-6ae")
+            .unwrap();
+
+    // update_balance with minter's principal as target
+    let update_balance_args = UpdateBalanceArgs {
+        owner: Some(Principal::from_str(&minter_id.get().to_string()).unwrap()),
+        subaccount: None,
+    };
+    // This call should panick
+    let res = env.execute_ingress_as(
+        authorized_principal.into(),
+        minter_id,
+        "update_balance",
+        Encode!(&update_balance_args).unwrap(),
+    );
+    assert!(res.is_err());
+    // Anonynmous call should fail
+    let res = env.execute_ingress(
+        minter_id,
+        "update_balance",
+        Encode!(&update_balance_args).unwrap(),
+    );
+    assert!(res.is_err());
 }

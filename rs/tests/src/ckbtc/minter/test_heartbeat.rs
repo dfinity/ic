@@ -122,7 +122,7 @@ pub fn test_heartbeat(env: TestEnv) {
 
         info!(&logger, "Call retrieve_btc");
 
-        let retrieve_amount = 99_997_180_u64 - TRANSFER_FEE;
+        let retrieve_amount = 500_000 - TRANSFER_FEE;
         let retrieve_response = minter_agent
             .retrieve_btc(RetrieveBtcArgs {
                 amount: retrieve_amount,
@@ -182,6 +182,22 @@ pub fn test_heartbeat(env: TestEnv) {
 
         // Check that we can modify the fee
         assert!(get_tx_infos.bip125_replaceable);
+
+        // Try to retrieve btc to minter's main_address
+        let main_btc_address = minter_agent
+            .get_btc_address(Some(minter_id.get().into()), None)
+            .await
+            .unwrap();
+        info!(&logger, "minter's btc main address: {}", main_btc_address);
+
+        let retrieve_amount = 500_000 - TRANSFER_FEE;
+        let illegal_retrieve_response = minter_agent
+            .retrieve_btc(RetrieveBtcArgs {
+                amount: retrieve_amount,
+                address: main_btc_address.clone(),
+            })
+            .await;
+        assert!(illegal_retrieve_response.is_err());
 
         // Generate more blocks and wait for the minter to finalize the retrieval.
         generate_blocks(
