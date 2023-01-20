@@ -250,6 +250,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
     match code {
         SubnetOversubscribed => "Subnet Oversubscribed",
         MaxNumberOfCanistersReached => "Max Number of Canisters Reached",
+        IngressHistoryFull => "Ingress History Full",
         CanisterInvalidController => "Canister Invalid Controller",
         CanisterNotFound => "Canister Not Found",
         CanisterMethodNotFound => "Canister Method Not Found",
