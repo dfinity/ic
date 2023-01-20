@@ -4,13 +4,14 @@
 #![allow(clippy::ptr_arg)]
 
 use ic_base_types::NumBytes;
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_constants::{INGRESS_HISTORY_MAX_MESSAGES, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::IngressHistoryWriter;
 use ic_logger::{debug, error, trace, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, buckets::linear_buckets, MetricsRegistry};
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     replicated_state::{
         LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
@@ -183,8 +184,8 @@ impl ValidSetRuleImpl {
                     StateError::CanisterOutOfCycles { .. } => ErrorCode::CanisterOutOfCycles,
                     StateError::UnknownSubnetMethod(_) => ErrorCode::CanisterOutOfCycles,
                     StateError::InvalidSubnetPayload => ErrorCode::CanisterOutOfCycles,
-                    StateError::QueueFull { .. }
-                    | StateError::OutOfMemory { .. }
+                    StateError::QueueFull { .. } => ErrorCode::IngressHistoryFull,
+                    StateError::OutOfMemory { .. }
                     | StateError::InvariantBroken { .. }
                     | StateError::NonMatchingResponse { .. }
                     | StateError::BitcoinStateError(_) => {
@@ -259,6 +260,14 @@ impl ValidSetRuleImpl {
         msg: SignedIngressContent,
         subnet_size: usize,
     ) -> Result<(), StateError> {
+        if state.metadata.own_subnet_type != SubnetType::System
+            && state.metadata.ingress_history.len() >= INGRESS_HISTORY_MAX_MESSAGES
+        {
+            return Err(StateError::QueueFull {
+                capacity: INGRESS_HISTORY_MAX_MESSAGES,
+            });
+        }
+
         let effective_canister_id =
             match extract_effective_canister_id(&msg, state.metadata.own_subnet_id) {
                 Ok(effective_canister_id) => effective_canister_id,
