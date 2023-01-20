@@ -23,9 +23,11 @@ use std::time::Instant;
 
 const RETRIES_RSYNC_HOST: u64 = 5;
 const RETRIES_BINARY_DOWNLOAD: u64 = 3;
+const BUCKET_SIZE: u64 = 10000;
 
 pub struct BackupHelper {
     pub subnet_id: SubnetId,
+    pub initial_replica_version: ReplicaVersion,
     pub nns_url: String,
     pub root_dir: PathBuf,
     pub excluded_dirs: Vec<String>,
@@ -356,10 +358,12 @@ impl BackupHelper {
         last_checkpoint(&self.state_dir())
     }
 
-    pub fn replay(&self, replica_version: ReplicaVersion) -> ReplicaVersion {
+    pub fn replay(&self) {
         let start_height = self.last_state_checkpoint();
         let start_time = Instant::now();
-        let mut current_replica_version = replica_version;
+        let mut current_replica_version = self
+            .retrieve_replica_version()
+            .unwrap_or_else(|| self.initial_replica_version.clone());
 
         // replay the current version once, but if there is upgrade do it again
         loop {
@@ -400,7 +404,6 @@ impl BackupHelper {
                 "No height progress after the last replay detected!".to_string(),
             );
         }
-        current_replica_version
     }
 
     fn replay_current_version(
@@ -459,6 +462,42 @@ impl BackupHelper {
                 Err("No ic-replay output".to_string())
             }
         }
+    }
+
+    fn retrieve_replica_version(&self) -> Option<ReplicaVersion> {
+        if !self.spool_dir().exists() {
+            return None;
+        }
+        let spool_dirs = match collect_only_dirs(&self.spool_dir()) {
+            Ok(dirs) => dirs,
+            Err(err) => {
+                error!(self.log, "{:?}", err);
+                return None;
+            }
+        };
+        if spool_dirs.is_empty() {
+            return None;
+        }
+
+        let last_checkpoint = self.last_state_checkpoint();
+        if last_checkpoint == 0 {
+            return None;
+        }
+
+        let mut highest_containing = 0;
+        let mut curent_replica_version = None;
+        for spool_dir in spool_dirs {
+            let replica_version = into_replica_version(&self.log, &spool_dir);
+            if is_height_in_spool(&spool_dir, last_checkpoint) && replica_version.is_some() {
+                let (top_height, _) = fetch_top_height(&spool_dir);
+                if highest_containing < top_height {
+                    highest_containing = top_height;
+                    curent_replica_version = replica_version;
+                }
+            }
+        }
+
+        curent_replica_version
     }
 
     fn check_upgrade_request(&self, stdout: String) -> Option<String> {
@@ -641,13 +680,13 @@ impl BackupHelper {
             .clone()
             .into_os_string()
             .into_string()
-            .expect("proper work directory string");
+            .expect("work directory is missing or invalid");
         let pack_dirs = collect_only_dirs(&work_dir)?;
         for pack_dir in pack_dirs {
             let replica_version = pack_dir
                 .file_name()
                 .into_string()
-                .expect("proper work directory entry");
+                .expect("replica version entry in work directory is missing or invalid");
             info!(self.log, "Packing artifacts of {}", replica_version);
             let timestamp = Utc::now().timestamp();
             let (top_height, _) = fetch_top_height(&pack_dir);
@@ -731,6 +770,21 @@ impl BackupHelper {
     }
 }
 
+fn into_replica_version(log: &Logger, spool_dir: &DirEntry) -> Option<ReplicaVersion> {
+    let replica_version_str = spool_dir
+        .file_name()
+        .into_string()
+        .expect("replica version directory entry in spool is missing or invalid");
+    let replica_version = match ReplicaVersion::try_from(replica_version_str) {
+        Ok(ver) => ver,
+        Err(err) => {
+            error!(log, "{:?}", err);
+            return None;
+        }
+    };
+    Some(replica_version)
+}
+
 fn collect_only_dirs(path: &PathBuf) -> Result<Vec<DirEntry>, String> {
     Ok(read_dir(path)
         .map_err(|e| format!("Error reading directory {path:?}: {e}"))?
@@ -744,6 +798,13 @@ fn fetch_top_height(replica_version_dir: &DirEntry) -> (u64, PathBuf) {
     let height_bucket = last_dir_height(&replica_version_path, 10);
     let top_height = last_dir_height(&replica_version_path.join(format!("{}", height_bucket)), 10);
     (top_height, replica_version_path)
+}
+
+fn is_height_in_spool(replica_version_dir: &DirEntry, height: u64) -> bool {
+    let replica_version_path = replica_version_dir.path();
+    let height_bucket = height / BUCKET_SIZE * BUCKET_SIZE;
+    let path = replica_version_path.join(format!("{}/{}", height_bucket, height));
+    path.exists()
 }
 
 fn height_from_dir_entry_radix(filename: &DirEntry, radix: u32) -> u64 {
