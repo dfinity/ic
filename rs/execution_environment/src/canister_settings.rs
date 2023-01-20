@@ -105,6 +105,72 @@ impl TryFrom<Option<CanisterSettingsArgs>> for CanisterSettings {
     }
 }
 
+pub(crate) struct CanisterSettingsBuilder {
+    controller: Option<PrincipalId>,
+    controllers: Option<Vec<PrincipalId>>,
+    compute_allocation: Option<ComputeAllocation>,
+    memory_allocation: Option<MemoryAllocation>,
+    freezing_threshold: Option<NumSeconds>,
+}
+
+#[allow(dead_code)]
+impl CanisterSettingsBuilder {
+    pub fn new() -> Self {
+        Self {
+            controller: None,
+            controllers: None,
+            compute_allocation: None,
+            memory_allocation: None,
+            freezing_threshold: None,
+        }
+    }
+
+    pub fn build(self) -> CanisterSettings {
+        CanisterSettings {
+            controller: self.controller,
+            controllers: self.controllers,
+            compute_allocation: self.compute_allocation,
+            memory_allocation: self.memory_allocation,
+            freezing_threshold: self.freezing_threshold,
+        }
+    }
+
+    pub fn with_controller(self, controller: PrincipalId) -> Self {
+        Self {
+            controller: Some(controller),
+            ..self
+        }
+    }
+
+    pub fn with_controllerr(self, controllers: Vec<PrincipalId>) -> Self {
+        Self {
+            controllers: Some(controllers),
+            ..self
+        }
+    }
+
+    pub fn with_compute_allocation(self, compute_allocation: ComputeAllocation) -> Self {
+        Self {
+            compute_allocation: Some(compute_allocation),
+            ..self
+        }
+    }
+
+    pub fn with_memory_allocation(self, memory_allocation: MemoryAllocation) -> Self {
+        Self {
+            memory_allocation: Some(memory_allocation),
+            ..self
+        }
+    }
+
+    pub fn with_freezing_threshold(self, freezing_threshold: NumSeconds) -> Self {
+        Self {
+            freezing_threshold: Some(freezing_threshold),
+            ..self
+        }
+    }
+}
+
 pub enum UpdateSettingsError {
     ComputeAllocation(InvalidComputeAllocationError),
     MemoryAllocation(InvalidMemoryAllocationError),

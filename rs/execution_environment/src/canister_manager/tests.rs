@@ -4,7 +4,7 @@ use crate::{
         uninstall_canister, CanisterManager, CanisterManagerError, CanisterMgrConfig,
         InstallCodeContext, StopCanisterResult,
     },
-    canister_settings::CanisterSettings,
+    canister_settings::{CanisterSettings, CanisterSettingsBuilder},
     execution::test_utilities::{
         get_reply, get_routing_table_with_specified_ids_allocation_range, wasm_compilation_cost,
         wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
@@ -3376,13 +3376,9 @@ fn lower_memory_allocation_than_usage_fails() {
         assert!(res.1.is_ok());
         state.put_canister_state(res.2.unwrap());
 
-        let settings = CanisterSettings::new(
-            None,
-            None,
-            None,
-            Some(MemoryAllocation::try_from(NumBytes::from(2)).unwrap()),
-            None,
-        );
+        let settings = CanisterSettingsBuilder::new()
+            .with_memory_allocation(MemoryAllocation::try_from(NumBytes::from(2)).unwrap())
+            .build();
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
@@ -3404,13 +3400,9 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
         let wasm = ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec();
 
         let sender = canister_test_id(100).get();
-        let settings = CanisterSettings::new(
-            None,
-            None,
-            None,
-            Some(MemoryAllocation::try_from(NumBytes::from(2)).unwrap()),
-            None,
-        );
+        let settings = CanisterSettingsBuilder::new()
+            .with_memory_allocation(MemoryAllocation::try_from(NumBytes::from(2)).unwrap())
+            .build();
         let canister_id = canister_manager
             .create_canister(
                 sender,
@@ -3449,13 +3441,11 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
 
         // Update memory allocation to a big enough value via canister settings. The
         // install should succeed.
-        let settings = CanisterSettings::new(
-            None,
-            None,
-            None,
-            Some(MemoryAllocation::try_from(NumBytes::from(MEMORY_CAPACITY.get() / 2)).unwrap()),
-            None,
-        );
+        let settings = CanisterSettingsBuilder::new()
+            .with_memory_allocation(
+                MemoryAllocation::try_from(NumBytes::from(MEMORY_CAPACITY.get() / 2)).unwrap(),
+            )
+            .build();
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
@@ -3492,15 +3482,11 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             compute_allocation_used: state.total_compute_allocation(),
         };
         let sender = canister_test_id(100).get();
-        let settings = CanisterSettings::new(
-            None,
-            None,
-            None,
-            Some(
+        let settings = CanisterSettingsBuilder::new()
+            .with_memory_allocation(
                 MemoryAllocation::try_from(NumBytes::from(WASM_PAGE_SIZE_IN_BYTES + 100)).unwrap(),
-            ),
-            None,
-        );
+            )
+            .build();
         let wat = r#"
         (module
             (memory $memory 1)
@@ -3569,16 +3555,12 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
 
         // Update memory allocation to a big enough value via canister settings. The
         // upgrade should succeed.
-        let settings = CanisterSettings::new(
-            None,
-            None,
-            None,
-            Some(
+        let settings = CanisterSettingsBuilder::new()
+            .with_memory_allocation(
                 MemoryAllocation::try_from(NumBytes::from(WASM_PAGE_SIZE_IN_BYTES * 2 + 100))
                     .unwrap(),
-            ),
-            None,
-        );
+            )
+            .build();
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
@@ -3657,7 +3639,7 @@ fn test_install_when_setting_memory_allocation_to_zero() {
         let wasm = ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec();
 
         let sender = canister_test_id(100).get();
-        let settings = CanisterSettings::new(None, None, None, None, None);
+        let settings = CanisterSettings::default();
         let canister_id = canister_manager
             .create_canister(
                 sender,
@@ -3673,13 +3655,9 @@ fn test_install_when_setting_memory_allocation_to_zero() {
             .unwrap();
 
         // Set memory allocation to 0.
-        let settings = CanisterSettings::new(
-            None,
-            None,
-            None,
-            Some(MemoryAllocation::try_from(NumBytes::from(0)).unwrap()),
-            None,
-        );
+        let settings = CanisterSettingsBuilder::new()
+            .with_memory_allocation(MemoryAllocation::try_from(NumBytes::from(0)).unwrap())
+            .build();
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
@@ -3724,13 +3702,11 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
         let wasm = ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM.to_vec();
 
         let sender = canister_test_id(100).get();
-        let settings = CanisterSettings::new(
-            None,
-            None,
-            None,
-            Some(MemoryAllocation::try_from(NumBytes::from(MEMORY_CAPACITY.get() / 2)).unwrap()),
-            None,
-        );
+        let settings = CanisterSettingsBuilder::new()
+            .with_memory_allocation(
+                MemoryAllocation::try_from(NumBytes::from(MEMORY_CAPACITY.get() / 2)).unwrap(),
+            )
+            .build();
         let canister_id = canister_manager
             .create_canister(
                 sender,
@@ -3764,13 +3740,9 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
         state.put_canister_state(res.2.unwrap());
 
         // Set memory allocation to 0.
-        let settings = CanisterSettings::new(
-            None,
-            None,
-            None,
-            Some(MemoryAllocation::try_from(NumBytes::from(0)).unwrap()),
-            None,
-        );
+        let settings = CanisterSettingsBuilder::new()
+            .with_memory_allocation(MemoryAllocation::try_from(NumBytes::from(0)).unwrap())
+            .build();
 
         let canister = state.canister_state_mut(&canister_id).unwrap();
 
