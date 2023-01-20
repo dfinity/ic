@@ -10,7 +10,7 @@ use dfn_protobuf::ToProto;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha::Sha256;
-use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use ic_nervous_system_common::{NervousSystemError, E8, SECONDS_PER_DAY};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
@@ -35,8 +35,8 @@ use ic_nns_governance::{
         add_or_remove_node_provider::Change,
         governance::GovernanceCachedMetrics,
         governance_error::ErrorType::{
-            self, External, InsufficientFunds, InvalidCommand, NotAuthorized, NotFound,
-            PreconditionFailed, ResourceExhausted,
+            self, InsufficientFunds, InvalidCommand, NotAuthorized, NotFound, PreconditionFailed,
+            ResourceExhausted,
         },
         manage_neuron,
         manage_neuron::{
@@ -120,6 +120,8 @@ pub mod common;
 
 use common::increase_dissolve_delay_raw;
 use ic_nervous_system_common::ledger::IcpLedger;
+use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
+use ic_nns_governance::pb::v1::settle_community_fund_participation::Committed;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 
@@ -4561,8 +4563,8 @@ fn test_merge_neurons_fails() {
             &NeuronId { id: 7 },
         ),
         Err(GovernanceError{error_type: code, error_message: msg})
-        if code == External as i32 &&
-           msg == "Source account doesn't exist");
+        if code == InvalidCommand as i32 &&
+           msg == "Subaccount of source neuron is not valid");
 
     // 8. Subaccount of target neuron to be merged must be present
     assert_matches!(
@@ -4572,8 +4574,8 @@ fn test_merge_neurons_fails() {
             &NeuronId { id: 8 },
         ),
         Err(GovernanceError{error_type: code, error_message: msg})
-        if code == External as i32 &&
-           msg == "Target account doesn't exist");
+        if code == InvalidCommand as i32 &&
+           msg == "Subaccount of target neuron is not valid");
 
     // 9. Neither neuron can be the proposer of an open proposal
     let _pid = nns.propose_and_vote("-----------P", "the unique proposal".to_string());
@@ -11304,6 +11306,282 @@ async fn test_open_sns_token_swap_proposal_execution_fails() {
         .recent_ballots
         .clear();
     assert_eq!(observed_neurons, *SWAP_ID_TO_NEURON);
+}
+
+/// Multiple calls to settle_community_fund should be idempotent.
+#[tokio::test]
+async fn test_settle_community_fund_is_idempotent() {
+    use settle_community_fund_participation::Result;
+
+    // Step 1: Prepare the world.
+    let governance_proto = GovernanceProto {
+        economics: Some(NetworkEconomics::with_default_values()),
+        neurons: SWAP_ID_TO_NEURON.clone(),
+        ..Default::default()
+    };
+
+    let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
+        [
+            EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
+            // Called by validation.
+            EXPECTED_SWAP_GET_STATE_CALL.clone(),
+            // Called again by fetch_swap_background_information. This is
+            // admittedly a bit wasteful, but not super horrible.
+            EXPECTED_SWAP_GET_STATE_CALL.clone(),
+            EXPECTED_SNS_ROOT_GET_SNS_CANISTERS_SUMMARY_CALL.clone(),
+            (
+                EXPECTED_SWAP_OPEN_CALL.clone(),
+                Ok(Encode!(&sns_swap_pb::OpenResponse {}).unwrap()),
+            ),
+        ]
+        .into(),
+    ));
+
+    let driver = fake::FakeDriver::default().with_ledger_accounts(vec![]); // Initialize the minting account
+
+    let mut gov = Governance::new(
+        governance_proto,
+        Box::new(MockEnvironment {
+            expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+        }),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Run code under test.
+
+    // Create an OpenSnsTokenSwap Proposal that will decrement CF neuron's stake a measurable amount
+    let proposal_id = gov
+        .make_proposal(
+            &NeuronId { id: 1 },
+            &principal(1),
+            &OPEN_SNS_TOKEN_SWAP_PROPOSAL,
+        )
+        .await
+        .unwrap();
+
+    // Step 3: Inspect results.
+
+    let proposal = gov.get_proposal_data(proposal_id).unwrap();
+    // Assert that the proposal is executed and the lifecycle has been set
+    assert!(proposal.executed_timestamp_seconds > 0);
+    assert_eq!(
+        proposal.sns_token_swap_lifecycle,
+        Some(sns_swap_pb::Lifecycle::Open as i32)
+    );
+
+    // Calculate the AccountIdentifier of SNS Governance for balance lookups
+    let sns_governance_icp_account =
+        AccountIdentifier::new(*SNS_GOVERNANCE_CANISTER_ID, /* Subaccount*/ None);
+
+    // Get the treasury accounts balance
+    let sns_governance_treasury_balance_before_commitment = driver
+        .get_fake_ledger()
+        .account_balance(sns_governance_icp_account)
+        .await
+        .unwrap();
+
+    // The value should be zero since the maturity has not been minted
+    assert_eq!(
+        sns_governance_treasury_balance_before_commitment.get_e8s(),
+        0
+    );
+
+    // Settle the CommunityFund participation for the first time.
+    let response = gov
+        .settle_community_fund_participation(
+            *TARGET_SWAP_CANISTER_ID,
+            &SettleCommunityFundParticipation {
+                open_sns_token_swap_proposal_id: Some(proposal.id.unwrap().id),
+                result: Some(Result::Committed(Committed {
+                    sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+                })),
+            },
+        )
+        .await;
+
+    // Assert that the settling process succeeded
+    assert!(response.is_ok(), "{:?}", response);
+
+    // Get the treasury account's balance again
+    let sns_governance_treasury_balance_after_commitment = driver
+        .get_fake_ledger()
+        .account_balance(sns_governance_icp_account)
+        .await
+        .unwrap();
+
+    // The balance should now not be zero.
+    assert!(sns_governance_treasury_balance_after_commitment.get_e8s() > 0);
+    assert!(
+        sns_governance_treasury_balance_after_commitment
+            > sns_governance_treasury_balance_before_commitment
+    );
+
+    // Make sure the ProposalData's sns_token_swap_lifecycle was also set, as this is how
+    // idempotency is achieved
+    let proposal = gov.get_proposal_data(proposal_id).unwrap();
+    assert_eq!(
+        proposal.sns_token_swap_lifecycle,
+        Some(sns_swap_pb::Lifecycle::Committed as i32)
+    );
+
+    // Try to settle the CommunityFund participation for the second time.
+    let response = gov
+        .settle_community_fund_participation(
+            *TARGET_SWAP_CANISTER_ID,
+            &SettleCommunityFundParticipation {
+                open_sns_token_swap_proposal_id: Some(proposal.id.unwrap().id),
+                result: Some(Result::Committed(Committed {
+                    sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+                })),
+            },
+        )
+        .await;
+
+    // Assert that the call did not fail.
+    assert!(response.is_ok());
+
+    // Get the treasury account's balance again
+    let sns_governance_treasury_balance_after_second_settle_call = driver
+        .get_fake_ledger()
+        .account_balance(sns_governance_icp_account)
+        .await
+        .unwrap();
+
+    // Assert that no work has been done, the balance should not have changed
+    assert_eq!(
+        sns_governance_treasury_balance_after_commitment,
+        sns_governance_treasury_balance_after_second_settle_call
+    );
+
+    // Assert that the ProposalData's sns_token_swap_lifecycle hasn't changed
+    let proposal = gov.get_proposal_data(proposal_id).unwrap();
+    assert_eq!(
+        proposal.sns_token_swap_lifecycle,
+        Some(sns_swap_pb::Lifecycle::Committed as i32)
+    );
+}
+
+/// Failure when settling the CommunityFund should result in the Lifecycle remaining
+/// what it was before the method invocation.
+#[tokio::test]
+async fn test_settle_community_fund_participation_restores_lifecycle_on_failure() {
+    use settle_community_fund_participation::Result;
+
+    // Step 1: Prepare the world.
+    let governance_proto = GovernanceProto {
+        economics: Some(NetworkEconomics::with_default_values()),
+        neurons: SWAP_ID_TO_NEURON.clone(),
+        ..Default::default()
+    };
+
+    let expected_call_canister_method_calls: Arc<Mutex<VecDeque<_>>> = Arc::new(Mutex::new(
+        [
+            EXPECTED_LIST_DEPLOYED_SNSES_CALL.clone(),
+            // Called by validation.
+            EXPECTED_SWAP_GET_STATE_CALL.clone(),
+            // Called again by fetch_swap_background_information. This is
+            // admittedly a bit wasteful, but not super horrible.
+            EXPECTED_SWAP_GET_STATE_CALL.clone(),
+            EXPECTED_SNS_ROOT_GET_SNS_CANISTERS_SUMMARY_CALL.clone(),
+            (
+                EXPECTED_SWAP_OPEN_CALL.clone(),
+                Ok(Encode!(&sns_swap_pb::OpenResponse {}).unwrap()),
+            ),
+        ]
+        .into(),
+    ));
+
+    let driver = fake::FakeDriver::default();
+
+    let icp_ledger: SpyLedger = SpyLedger::new(vec![LedgerReply::TransferFunds(Err(
+        NervousSystemError::new_with_message("Error conducting the the transfer"),
+    ))]);
+
+    let mut gov = Governance::new(
+        governance_proto,
+        Box::new(MockEnvironment {
+            expected_call_canister_method_calls: Arc::clone(&expected_call_canister_method_calls),
+        }),
+        Box::new(icp_ledger),
+        driver.get_fake_cmc(),
+    );
+
+    // Step 2: Run code under test.
+
+    // Create an OpenSnsTokenSwap Proposal that will decrement CF neuron's stake a measurable amount
+    let proposal_id = gov
+        .make_proposal(
+            &NeuronId { id: 1 },
+            &principal(1),
+            &OPEN_SNS_TOKEN_SWAP_PROPOSAL,
+        )
+        .await
+        .unwrap();
+
+    // Step 3: Inspect results.
+
+    let proposal = gov.get_proposal_data(proposal_id).unwrap();
+    // Assert that the proposal is executed and the lifecycle has been set
+    assert!(proposal.executed_timestamp_seconds > 0);
+    assert_eq!(
+        proposal.sns_token_swap_lifecycle,
+        Some(sns_swap_pb::Lifecycle::Open as i32)
+    );
+
+    // Calculate the AccountIdentifier of SNS Governance for balance lookups
+    let sns_governance_icp_account =
+        AccountIdentifier::new(*SNS_GOVERNANCE_CANISTER_ID, /* Subaccount*/ None);
+
+    // Get the treasury accounts balance
+    let sns_governance_treasury_balance_before_commitment = driver
+        .get_fake_ledger()
+        .account_balance(sns_governance_icp_account)
+        .await
+        .unwrap();
+
+    // The value should be zero since the maturity has not been minted
+    assert_eq!(
+        sns_governance_treasury_balance_before_commitment.get_e8s(),
+        0
+    );
+
+    // Settle the CommunityFund participation. This should fail with the error added to
+    // the ICP SpyLedger
+    let response = gov
+        .settle_community_fund_participation(
+            *TARGET_SWAP_CANISTER_ID,
+            &SettleCommunityFundParticipation {
+                open_sns_token_swap_proposal_id: Some(proposal.id.unwrap().id),
+                result: Some(Result::Committed(Committed {
+                    sns_governance_canister_id: Some(*SNS_GOVERNANCE_CANISTER_ID),
+                })),
+            },
+        )
+        .await;
+
+    // Assert that the settling process failed as expected
+    assert!(response.is_err(), "{:?}", response);
+
+    // Get the treasury account's balance again
+    let sns_governance_treasury_balance_after_commitment = driver
+        .get_fake_ledger()
+        .account_balance(sns_governance_icp_account)
+        .await
+        .unwrap();
+
+    // The balance should still be zero.
+    assert_eq!(
+        sns_governance_treasury_balance_after_commitment.get_e8s(),
+        0
+    );
+
+    // Make sure the ProposalData's sns_token_swap_lifecycle is still Open.
+    let proposal = gov.get_proposal_data(proposal_id).unwrap();
+    assert_eq!(
+        proposal.sns_token_swap_lifecycle,
+        Some(sns_swap_pb::Lifecycle::Open as i32)
+    );
 }
 
 #[tokio::test]

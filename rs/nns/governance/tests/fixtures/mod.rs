@@ -119,7 +119,7 @@ pub fn prorated_neuron_age(
 }
 
 /// The LedgerFixture allows for independent testing of Ledger functionality.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct LedgerFixture {
     accounts: LedgerMap,
 }
@@ -130,7 +130,6 @@ impl LedgerFixture {
     }
 }
 
-#[derive(Default)]
 pub struct LedgerBuilder {
     ledger_fixture: LedgerFixture,
 }
@@ -166,6 +165,18 @@ impl LedgerBuilder {
     #[allow(dead_code)]
     pub fn get_account_balance(&self, ident: AccountIdentifier) -> Option<u64> {
         self.ledger_fixture.accounts.get(&ident).copied()
+    }
+}
+
+impl Default for LedgerBuilder {
+    fn default() -> Self {
+        let mut ledger_builder = LedgerBuilder {
+            ledger_fixture: LedgerFixture::default(),
+        };
+
+        // Always insert the minting_account.
+        ledger_builder.add_account(LedgerBuilder::minting_account(), 0);
+        ledger_builder
     }
 }
 
@@ -336,13 +347,20 @@ impl NeuronBuilder {
     }
 
     pub fn create(self, now: u64, ledger: &mut LedgerBuilder) -> Neuron {
-        let subaccount = Self::subaccount(self.owner, self.ident);
-        if !self.do_not_create_subaccount {
-            ledger.add_account(neuron_subaccount(subaccount), self.stake);
-        }
+        let subaccount = match self.do_not_create_subaccount {
+            false => {
+                let subaccount = Self::subaccount(self.owner, self.ident);
+                ledger.add_account(neuron_subaccount(subaccount), self.stake);
+                subaccount.to_vec()
+            }
+            true => {
+                vec![]
+            }
+        };
+
         Neuron {
             id: Some(NeuronId { id: self.ident }),
-            account: subaccount.to_vec(),
+            account: subaccount,
             controller: self.owner,
             hot_keys: self.hot_keys,
             cached_neuron_stake_e8s: self.stake,
@@ -418,6 +436,9 @@ impl IcpLedger for NNSFixture {
         to_account: AccountIdentifier,
         _: u64,
     ) -> Result<u64, NervousSystemError> {
+        // Minting operations (sending ICP from Gov main account) should just create ICP.
+        let is_minting_operation = from_subaccount.is_none();
+
         let from_account = from_subaccount.map_or(governance_minting_account(), neuron_subaccount);
         println!(
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
@@ -425,23 +446,21 @@ impl IcpLedger for NNSFixture {
         );
         let accounts = &mut self.nns_state.try_lock().unwrap().ledger.accounts;
 
-        let _to_e8s = accounts
-            .get(&to_account)
-            .ok_or_else(|| NervousSystemError::new_with_message("Target account doesn't exist"))?;
         let from_e8s = accounts
             .get_mut(&from_account)
             .ok_or_else(|| NervousSystemError::new_with_message("Source account doesn't exist"))?;
 
         let requested_e8s = amount_e8s + fee_e8s;
 
-        if *from_e8s < requested_e8s {
-            return Err(NervousSystemError::new_with_message(format!(
-                "Insufficient funds. Available {} requested {}",
-                *from_e8s, requested_e8s
-            )));
+        if !is_minting_operation {
+            if *from_e8s < requested_e8s {
+                return Err(NervousSystemError::new_with_message(format!(
+                    "Insufficient funds. Available {} requested {}",
+                    *from_e8s, requested_e8s
+                )));
+            }
+            *from_e8s -= requested_e8s;
         }
-
-        *from_e8s -= requested_e8s;
 
         *accounts.entry(to_account).or_default() += amount_e8s;
 
@@ -1031,6 +1050,13 @@ impl NNSBuilder {
     /// chained; they are applied in the order in which they were added.
     pub fn add_ledger_transform(mut self, transform: LedgerTransform) -> Self {
         self.ledger_transforms.push(transform);
+        self
+    }
+
+    pub fn add_proposal(mut self, proposal_data: ProposalData) -> Self {
+        self.governance
+            .proposals
+            .insert(proposal_data.id.unwrap().id, proposal_data);
         self
     }
 }

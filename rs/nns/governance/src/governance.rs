@@ -65,7 +65,7 @@ use ic_crypto_sha::Sha256;
 use ic_nervous_system_common::{
     ledger, ledger::IcpLedger, validate_proposal_url, NervousSystemError,
 };
-use ic_sns_swap::pb::v1::RestoreDappControllersRequest;
+use ic_sns_swap::pb::v1::{Lifecycle, RestoreDappControllersRequest};
 use icp_ledger::{Tokens, TOKEN_SUBDIVIDABLE_BY};
 use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 
@@ -1564,7 +1564,7 @@ impl ProposalData {
             }
 
             ProposalStatus::Executed => {
-                // Need to wait for settle_communify_fund_participation.
+                // Need to wait for settle_community_fund_participation.
                 self.sns_token_swap_lifecycle
                     .and_then(sns_swap_pb::Lifecycle::from_i32)
                     .unwrap_or(sns_swap_pb::Lifecycle::Unspecified)
@@ -1577,6 +1577,20 @@ impl ProposalData {
                     LOG_PREFIX, status, self,
                 );
                 false
+            }
+        }
+    }
+
+    fn set_sale_lifecycle_by_settle_cf_request_type(
+        &mut self,
+        result: &settle_community_fund_participation::Result,
+    ) {
+        match result {
+            settle_community_fund_participation::Result::Committed(_) => {
+                self.set_sns_token_swap_lifecycle(Lifecycle::Committed)
+            }
+            settle_community_fund_participation::Result::Aborted(_) => {
+                self.set_sns_token_swap_lifecycle(Lifecycle::Aborted)
             }
         }
     }
@@ -7094,37 +7108,78 @@ impl Governance {
             ));
         }
 
-        // Finally, execute.
-        use settle_community_fund_participation::Result;
-        let lifecycle = match &request.result {
+        // It's possible that settle_community_fund_participation is called twice for a single Sale,
+        // as such NNS Governance must treat this method as idempotent. If the proposal's
+        // sns_token_swap_lifecycle is already set to Aborted or Committed (only done in a previous
+        // call to settle_community_fund_participation), it is safe to do no work and return
+        // success.
+        if proposal_data
+            .sns_token_swap_lifecycle
+            .and_then(Lifecycle::from_i32)
+            .unwrap_or(Lifecycle::Unspecified)
+            .is_terminal()
+        {
+            println!(
+                "{}INFO: settle_community_fund_participation was called for a Sale \
+                    that has already been settled with ProposalId {:?}. Returning without \
+                    doing additional work.",
+                LOG_PREFIX, proposal_data.id
+            );
+            return Ok(());
+        }
+
+        // Get the type of request, i.e. Committed or Aborted.
+        let request_type = match &request.result {
             None => {
                 return Err(GovernanceError::new_with_message(
                     ErrorType::InvalidCommand,
                     format!(
-                        "Request must be either Committed or Aborted. request = {:#?}",
+                        "Request must be either Committed or Aborted, instead is None {:#?}",
                         request
                     ),
-                ))
+                ));
             }
+            Some(request_type) => request_type,
+        };
 
-            Some(Result::Committed(committed)) => {
+        // Record the proposal's current lifecycle. If an error occurs when settling the CF,
+        // the previous Lifecycle should be set to allow for retries.
+        let sns_token_swap_lifecycle_cache = proposal_data.sns_token_swap_lifecycle;
+
+        // Set the lifecycle of the proposal to avoid interleaving callers
+        proposal_data.set_sale_lifecycle_by_settle_cf_request_type(request_type);
+
+        // Finally, execute.
+        let settlement_result = match &request_type {
+            settle_community_fund_participation::Result::Committed(committed) => {
                 committed
                     .mint_to_sns_governance(proposal_data, &*self.ledger)
-                    .await?
+                    .await
             }
 
-            Some(Result::Aborted(_aborted)) => {
-                let _missing_neurons = refund_community_fund_maturity(
+            settle_community_fund_participation::Result::Aborted(_aborted) => {
+                let missing_neurons = refund_community_fund_maturity(
                     &mut self.proto.neurons,
                     &proposal_data.cf_participants,
                 );
-                sns_swap_pb::Lifecycle::Aborted
+                println!(
+                    "{}WARN: Neurons are missing from Governance when attempting to refund \
+                    community fund participation in an SNS Sale. Missing Neurons: {:?}",
+                    LOG_PREFIX, missing_neurons
+                );
+                Ok(())
             }
         };
 
-        // Record execution.
-        proposal_data.sns_token_swap_lifecycle = Some(lifecycle as i32);
-        Ok(())
+        match settlement_result {
+            Err(governance_error) => {
+                // Reset the Proposal's lifecycle
+                proposal_data.sns_token_swap_lifecycle = sns_token_swap_lifecycle_cache;
+                Err(governance_error)
+            }
+            // Nothing to do, Lifecycle has already been updated
+            Ok(()) => Ok(()),
+        }
     }
 
     /// Return the given Node Provider, if it exists
@@ -7393,7 +7448,7 @@ fn draw_funds_from_the_community_fund(
 /// Reverts mutations performed by draw_funds_from_the_community_fund.
 ///
 /// Returns elements where refunds failed (due to lack of a corresponding entry
-/// in id_to_neuron). These can be used to create replacement/ressurrected
+/// in id_to_neuron). These can be used to create replacement/resurrected
 /// neurons. Not done here, because that's a more disruptive change, which the
 /// caller might not want to make.
 #[must_use]
@@ -7788,13 +7843,16 @@ impl settle_community_fund_participation::Committed {
         &self,
         proposal_data: &ProposalData,
         ledger: &'_ dyn IcpLedger,
-    ) -> Result<sns_swap_pb::Lifecycle, GovernanceError> {
+    ) -> Result<(), GovernanceError> {
         let amount_e8s = sum_cf_participants_e8s(&proposal_data.cf_participants);
 
         // Send request to ICP ledger.
         let owner = self
             .sns_governance_canister_id
-            .expect("The sns_governance_canister_id field is not populated");
+            .ok_or_else(|| GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                "Expected sns_governance_canister_id to be set in SettleCommunityFundParticipation::Committed Request"
+            ))?;
         let destination = AccountIdentifier::new(owner, /* subaccount = */ None);
         let ledger_result = ledger
             .transfer_funds(
@@ -7808,8 +7866,7 @@ impl settle_community_fund_participation::Committed {
 
         // Convert result.
         match ledger_result {
-            Ok(_) => Ok(sns_swap_pb::Lifecycle::Committed),
-
+            Ok(_) => Ok(()),
             Err(err) => Err(GovernanceError::new_with_message(
                 ErrorType::External,
                 format!(

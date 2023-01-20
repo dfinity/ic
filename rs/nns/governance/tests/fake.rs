@@ -251,6 +251,9 @@ impl IcpLedger for FakeDriver {
         to_account: AccountIdentifier,
         _: u64,
     ) -> Result<u64, NervousSystemError> {
+        // Minting operations (sending ICP from Gov main account) should just create ICP.
+        let is_minting_operation = from_subaccount.is_none();
+
         let from_account = AccountIdentifier::new(
             ic_base_types::PrincipalId::from(GOVERNANCE_CANISTER_ID),
             from_subaccount,
@@ -267,14 +270,15 @@ impl IcpLedger for FakeDriver {
 
         let requested_e8s = amount_e8s + fee_e8s;
 
-        if *from_e8s < requested_e8s {
-            return Err(NervousSystemError::new_with_message(format!(
-                "Insufficient funds. Available {} requested {}",
-                *from_e8s, requested_e8s
-            )));
+        if !is_minting_operation {
+            if *from_e8s < requested_e8s {
+                return Err(NervousSystemError::new_with_message(format!(
+                    "Insufficient funds. Available {} requested {}",
+                    *from_e8s, requested_e8s
+                )));
+            }
+            *from_e8s -= requested_e8s;
         }
-
-        *from_e8s -= requested_e8s;
 
         *accounts.entry(to_account).or_default() += amount_e8s;
 

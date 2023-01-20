@@ -6947,6 +6947,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-common-test-utils",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-protobuf-generator",
