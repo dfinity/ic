@@ -36,6 +36,7 @@ PODMAN_RUN_ARGS=(
     -w "$WORKDIR"
 
     -u "$(id -u):$(id -g)"
+    --env PATH=/ic/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     --env HOME="/home/$USER"
     --hostname=devenv-container
 
@@ -68,7 +69,7 @@ fi
 if [ $# -eq 0 ]; then
     set -x
     sudo podman run -it --rm --privileged --network=host --cgroupns=host \
-        "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" bash
+        "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" bash --rcfile /etc/bash.bashrc
     set +x
 else
     set -x
