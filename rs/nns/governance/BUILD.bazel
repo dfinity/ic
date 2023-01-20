@@ -61,6 +61,7 @@ BUILD_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/config",
+    "//rs/nervous_system/common/test_utils",
     "//rs/nns/governance/protobuf_generator:lib",
     "//rs/sns/swap/protobuf_generator:lib",
     "//rs/test_utilities/compare_dirs",

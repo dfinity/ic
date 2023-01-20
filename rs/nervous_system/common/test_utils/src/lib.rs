@@ -8,10 +8,11 @@ use futures::{
     },
     StreamExt,
 };
-use ic_icrc1::{Account, Subaccount};
+use ic_icrc1::Account;
+use ic_nervous_system_common::ledger::IcpLedger;
 use ic_nervous_system_common::{ledger::ICRC1Ledger, NervousSystemError};
-use icp_ledger::Tokens;
-use std::sync::{atomic, atomic::Ordering as AtomicOrdering};
+use icp_ledger::{AccountIdentifier, Tokens};
+use std::sync::{atomic, atomic::Ordering as AtomicOrdering, Arc, Mutex};
 
 /// Reifies the methods of the Ledger trait, such that they can be sent over a
 /// channel
@@ -20,7 +21,7 @@ pub enum LedgerMessage {
     Transfer {
         amount_e8s: u64,
         fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
+        from_subaccount: Option<ic_icrc1::Subaccount>,
         to: Account,
         memo: u64,
     },
@@ -85,7 +86,7 @@ impl ICRC1Ledger for InterleavingTestLedger {
         &self,
         amount_e8s: u64,
         fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
+        from_subaccount: Option<ic_icrc1::Subaccount>,
         to: Account,
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
@@ -131,5 +132,144 @@ pub async fn drain_receiver_channel(
         ledger_control_message
             .send(Ok(()))
             .expect("Error draining the receiver_channel");
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum LedgerCall {
+    TransferFundsICRC1 {
+        amount_e8s: u64,
+        fee_e8s: u64,
+        from_subaccount: Option<ic_icrc1::Subaccount>,
+        to: Account,
+        memo: u64,
+    },
+    TransferFundsICP {
+        amount_e8s: u64,
+        fee_e8s: u64,
+        from_subaccount: Option<icp_ledger::Subaccount>,
+        to: AccountIdentifier,
+        memo: u64,
+    },
+}
+
+#[derive(Debug)]
+pub enum LedgerReply {
+    TransferFunds(Result</* block_height */ u64, NervousSystemError>),
+}
+
+/// Struct that allows tests to spy on the calls made
+#[derive(Default)]
+pub struct SpyLedger {
+    calls: Arc<Mutex<Vec<LedgerCall>>>,
+    replies: Arc<Mutex<Vec<LedgerReply>>>,
+}
+
+/// Struct that allows tests to mock replies from the ledger
+impl SpyLedger {
+    pub fn new(replies: Vec<LedgerReply>) -> Self {
+        Self {
+            calls: Arc::new(Mutex::new(Vec::<LedgerCall>::new())),
+            replies: Arc::new(Mutex::new(replies)),
+        }
+    }
+
+    pub fn get_calls_snapshot(&self) -> Vec<LedgerCall> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+#[async_trait]
+impl ICRC1Ledger for SpyLedger {
+    async fn transfer_funds(
+        &self,
+        amount_e8s: u64,
+        fee_e8s: u64,
+        from_subaccount: Option<ic_icrc1::Subaccount>,
+        to: Account,
+        memo: u64,
+    ) -> Result</* block_height: */ u64, NervousSystemError> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(LedgerCall::TransferFundsICRC1 {
+                amount_e8s,
+                fee_e8s,
+                from_subaccount,
+                to,
+                memo,
+            });
+
+        let ledger_reply = self
+            .replies
+            .lock()
+            .unwrap()
+            .pop()
+            .expect("Expected a LedgerReply to be in the queue");
+
+        match ledger_reply {
+            LedgerReply::TransferFunds(reply) => reply,
+        }
+    }
+
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+        unimplemented!();
+    }
+
+    async fn account_balance(&self, _account_id: Account) -> Result<Tokens, NervousSystemError> {
+        unimplemented!();
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        CanisterId::from_u64(1)
+    }
+}
+
+#[async_trait]
+impl IcpLedger for SpyLedger {
+    async fn transfer_funds(
+        &self,
+        amount_e8s: u64,
+        fee_e8s: u64,
+        from_subaccount: Option<icp_ledger::Subaccount>,
+        to: AccountIdentifier,
+        memo: u64,
+    ) -> Result</* block_height: */ u64, NervousSystemError> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(LedgerCall::TransferFundsICP {
+                amount_e8s,
+                fee_e8s,
+                from_subaccount,
+                to,
+                memo,
+            });
+
+        let ledger_reply = self
+            .replies
+            .lock()
+            .unwrap()
+            .pop()
+            .expect("Expected a LedgerReply to be on the stack");
+
+        match ledger_reply {
+            LedgerReply::TransferFunds(reply) => reply,
+        }
+    }
+
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+        unimplemented!()
+    }
+
+    async fn account_balance(
+        &self,
+        _account: AccountIdentifier,
+    ) -> Result<Tokens, NervousSystemError> {
+        unimplemented!()
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        unimplemented!()
     }
 }

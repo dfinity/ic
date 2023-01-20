@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use ic_base_types::CanisterId;
 use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{ledger::ICRC1Ledger, NervousSystemError, E8};
+use ic_nervous_system_common::{ledger::ICRC1Ledger, NervousSystemError};
 use ic_sns_governance::pb::v1::{
     manage_neuron_response, manage_neuron_response::ClaimOrRefreshResponse,
     ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, ManageNeuron, ManageNeuronResponse, SetMode,
@@ -196,76 +196,6 @@ impl NnsGovernanceClient for SpyNnsGovernanceClient {
                 request,
             ));
         Ok(Ok(()))
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, PartialOrd, Ord, Eq, Hash)]
-pub enum LedgerCall {
-    TransferFunds {
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: Account,
-        memo: u64,
-    },
-
-    AccountBalance {
-        account_id: Account,
-    },
-}
-
-/// Struct that allows tests to spy on the calls made
-pub struct SpyLedger {
-    calls: Arc<Mutex<Vec<LedgerCall>>>,
-}
-impl SpyLedger {
-    pub fn new(calls: Arc<Mutex<Vec<LedgerCall>>>) -> Self {
-        Self { calls }
-    }
-}
-
-impl Default for SpyLedger {
-    fn default() -> Self {
-        SpyLedger::new(Arc::new(Mutex::new(Vec::<LedgerCall>::new())))
-    }
-}
-
-#[async_trait]
-impl ICRC1Ledger for SpyLedger {
-    async fn transfer_funds(
-        &self,
-        amount_e8s: u64,
-        fee_e8s: u64,
-        from_subaccount: Option<Subaccount>,
-        to: Account,
-        memo: u64,
-    ) -> Result</* block_height: */ u64, NervousSystemError> {
-        self.calls.lock().unwrap().push(LedgerCall::TransferFunds {
-            amount_e8s,
-            fee_e8s,
-            from_subaccount,
-            to,
-            memo,
-        });
-
-        Ok(42)
-    }
-
-    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
-        unimplemented!();
-    }
-
-    async fn account_balance(&self, account_id: Account) -> Result<Tokens, NervousSystemError> {
-        self.calls
-            .lock()
-            .unwrap()
-            .push(LedgerCall::AccountBalance { account_id });
-
-        Ok(Tokens::from_e8s(10 * E8))
-    }
-
-    fn canister_id(&self) -> CanisterId {
-        CanisterId::from_u64(1)
     }
 }
 
