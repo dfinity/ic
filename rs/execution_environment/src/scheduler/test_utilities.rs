@@ -21,7 +21,7 @@ use ic_embedders::{
 };
 use ic_error_types::UserError;
 use ic_ic00_types::{
-    CanisterInstallMode, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method, Payload,
+    CanisterInstallMode, CanisterStatusType, EcdsaKeyId, InstallCodeArgs, Method, Payload, IC_00,
 };
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, HypervisorError, HypervisorResult, IngressHistoryWriter, InstanceStats,
@@ -144,6 +144,10 @@ impl SchedulerTest {
             .ingress_queue_size()
     }
 
+    pub fn subnet_ingress_queue_size(&self) -> usize {
+        self.state().subnet_queues().ingress_queue_size()
+    }
+
     pub fn last_round(&self) -> ExecutionRound {
         ExecutionRound::new(self.round.get().max(1) - 1)
     }
@@ -246,6 +250,20 @@ impl SchedulerTest {
         message_id
     }
 
+    pub fn send_ingress_with_expiry(
+        &mut self,
+        canister_id: CanisterId,
+        message: TestMessage,
+        expiry_time: Time,
+    ) -> MessageId {
+        let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
+        let mut state = self.state.take().unwrap();
+        let canister = state.canister_state_mut(&canister_id).unwrap();
+        let message_id = wasm_executor.push_ingress(canister_id, canister, message, expiry_time);
+        self.state = Some(state);
+        message_id
+    }
+
     pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
         self.state.as_ref().unwrap().get_ingress_status(message_id)
     }
@@ -305,6 +323,32 @@ impl SchedulerTest {
                 input_type,
             )
             .unwrap();
+    }
+
+    /// Injects an ingress to the management canister.
+    pub fn inject_ingress_to_ic00<S: ToString>(
+        &mut self,
+        method_name: S,
+        method_payload: Vec<u8>,
+        expiry_time: Time,
+    ) {
+        let ingress_id = {
+            let mut wasm_executor = self.wasm_executor.core.lock().unwrap();
+            wasm_executor.next_message_id()
+        };
+        self.state_mut().subnet_queues_mut().push_ingress(
+            (
+                SignedIngressBuilder::new()
+                    .canister_id(IC_00)
+                    .method_name(method_name)
+                    .method_payload(method_payload)
+                    .nonce(ingress_id as u64)
+                    .expiry_time(expiry_time)
+                    .build(),
+                None,
+            )
+                .into(),
+        );
     }
 
     /// Similar to `inject_call_to_ic00()` but supports `InstallCode` messages.
@@ -539,6 +583,7 @@ pub(crate) struct SchedulerTestBuilder {
     own_subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     subnet_type: SubnetType,
+    batch_time: Time,
     scheduler_config: SchedulerConfig,
     initial_canister_cycles: Cycles,
     subnet_total_memory: u64,
@@ -567,6 +612,7 @@ impl Default for SchedulerTestBuilder {
             own_subnet_id: subnet_test_id(1),
             nns_subnet_id: subnet_test_id(2),
             subnet_type,
+            batch_time: UNIX_EPOCH,
             scheduler_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
             subnet_total_memory,
@@ -656,6 +702,10 @@ impl SchedulerTestBuilder {
         }
     }
 
+    pub fn with_batch_time(self, batch_time: Time) -> Self {
+        Self { batch_time, ..self }
+    }
+
     pub fn build(self) -> SchedulerTest {
         let first_xnet_canister = u64::MAX / 2;
         let routing_table = Arc::new(
@@ -674,6 +724,7 @@ impl SchedulerTestBuilder {
         );
         state.metadata.network_topology.routing_table = routing_table;
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
+        state.metadata.batch_time = self.batch_time;
 
         let config = SubnetConfigs::default()
             .own_subnet_config(self.subnet_type)
