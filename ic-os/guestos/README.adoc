@@ -17,12 +17,12 @@ local machine for testing.
 == Quick build and test instructions (Linux required)
 To build a full system image for development, run:
 
-  scripts/build-disk-image.sh -o /tmp/disk.img -v <version>  -t dev -p <password> -x ../../artifacts/docker-build-ic/artifacts/release
+  scripts/build-disk-image.sh -o /tmp/disk.img -v <version>  -t dev -p <password> -x ../../artifacts/build-ic/artifacts/release
 
 When building your replica, nodemanger and other IC binaries, be sure *not* to use Nix to build those.
 Instead do a docker based build as described here: https://github.com/dfinity/ic#building-the-code
 
-  ./gitlab-ci/tools/docker-run --bazel
+  ./gitlab-ci/container/container-run.sh
 
   # Build binaries and canisters
   bazel build :binaries //publish/canisters

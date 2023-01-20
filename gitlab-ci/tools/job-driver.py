@@ -10,7 +10,7 @@ import yaml
 
 if len(sys.argv) < 2:
     print(
-        f"Usage: {os.path.dirname(__file__)}/docker-run gitlab-ci/tools/job-driver.py <ci-job-name> [<job-arg-1> <...>]"
+        f"Usage: {os.path.dirname(__file__)}/container-run.sh gitlab-ci/tools/job-driver.py <ci-job-name> [<job-arg-1> <...>]"
     )
     exit(1)
 

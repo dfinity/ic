@@ -1,0 +1,30 @@
+#cloud-config
+packages:
+  - sudo
+  - curl
+  - git
+  - podman
+  - expect-dev
+
+users:
+  - name: ubuntu
+    gecos: Ubuntu2204
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: sudo
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - $SSH_KEY
+
+runcmd:
+  - |
+    # Bazel Setup
+    curl -L0 -k https://github.com/bazelbuild/bazelisk/releases/download/v1.15.0/bazelisk-linux-amd64 -o /usr/local/bin/bazel
+    chmod 0755 /usr/local/bin/bazel
+  - |
+    # IC-OS Build
+    git clone https://github.com/dfinity/ic.git
+    cd ic
+    [ -n "$REVISION" ] && git checkout $REVISION
+    unbuffer ./gitlab-ci/container/build-ic.sh | tee /home/ubuntu/build.out
+    # while building: `tail -f /home/ubuntu/build.out`
+    # when completed: `tree /home/ubuntu/ic/artifacts`

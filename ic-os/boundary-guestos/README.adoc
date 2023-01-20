@@ -6,7 +6,7 @@ This contains the instructions to build the system images for a Boundary Node. M
 The entire build process relies on `bazel`. In order to build the Boundary Node image with `bazel`, use the provided build environment:
 
 [source,shell]
- gitlab-ci/tools/docker-run --bazel
+ gitlab-ci/container/container-run.sh
 
 Then, you can build any of the boundary-guestos targets (e.g., `prod`, `prod-sev`, `dev`, `dev-sev`):
 

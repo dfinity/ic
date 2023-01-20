@@ -9,8 +9,8 @@ TMPDIR=$(mktemp -d)
 
 # We implicitly pull dependent image.
 ARGS=(--pull)
-if [ "${CI_JOB_NAME:-}" == "docker-build-ic"* ]; then
-    # Don't use cache in "docker-build-ic*" CI job.
+if [ "${CI_JOB_NAME:-}" == "build-ic"* ]; then
+    # Don't use cache in "build-ic" CI job.
     ARGS+=(--no-cache)
 fi
 

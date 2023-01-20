@@ -140,7 +140,7 @@ before_script:
     # And the files will all be owned by root.
     # Some commands care about the permissions of the configs they use. For example, Ansible will refuse
     # to use a cfg file that a different user owns.
-      sudo chown ubuntu:ubuntu -R "${CI_PROJECT_DIR}"
+      sudo chown "$(id -u):$(id -g)" -R "${CI_PROJECT_DIR}"
       sudo find "${CI_PROJECT_DIR}" -type d -exec chmod 0755 '{}' \;
     fi
 
@@ -249,9 +249,7 @@ after_script:
 .bazel-build-k8s:
   extends:
     - .ubuntu-docker-k8s
-    # Replace with below bazel image once gen cargo pipeline is purged.
-    - .ic-build-image
-    # - .ic-build-bazel-image
+    - .ic-build-bazel-image
   tags:
     - dfinity
     - ubuntu
@@ -273,7 +271,7 @@ after_script:
   # - Build results are stored in non-persisted /cargo_target
   # - The container is destroyed and all non-persisted data is dropped, including /cargo_target
   variables:
-    # This MUST match the directory used in our `docker-build-ic` script
+    # This MUST match the directory used in our `build-ic.sh` script
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
 
 .ubuntu-nix-docker-k8s:
@@ -283,17 +281,18 @@ after_script:
     - dfinity
     - ubuntu
 
-.ubuntu-nix-docker-pinned-dc:
+.ubuntu-nix-docker-k8s-pinned-dc:
   extends: .ubuntu-nix-docker
   tags:
-    # We dynamically set tags to pin jobs to one DC
+    # We dynamically set tags to
+    # - pin jobs to one DC
+    # - distribute jobs between docker and k8s runners
     - $SELECTED_DC # 'zh', 'sf' or 'ch'
     - dfinity
     - ubuntu
-    - docker
 
-.ubuntu-nix-docker-k8s-pinned-dc:
-  extends: .ubuntu-nix-docker
+.ubuntu-docker-k8s-pinned-dc:
+  extends: .ubuntu-docker-k8s
   tags:
     # We dynamically set tags to
     # - pin jobs to one DC

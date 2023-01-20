@@ -31,7 +31,7 @@ cargo-pipeline:
   stage: test
   needs:
     - job: gen-cargo-pipeline
-    - job: docker-autobuild-protected
+    - job: container-autobuild-protected
       optional: true
   variables:
     CI_PARENT_PIPELINE_SOURCE: "${CI_PIPELINE_SOURCE}"

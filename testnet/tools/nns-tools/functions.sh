@@ -200,8 +200,8 @@ Verify that the hash of the gzipped WASM matches the proposed hash.
 \`\`\`
 git fetch
 git checkout $NEXT_COMMIT
-./gitlab-ci/tools/docker-build-ic --artifacts="canisters"
-sha256sum ./artifacts/docker-build-ic/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
+./gitlab-ci/container/build-ic.sh -c
+sha256sum ./artifacts/canisters/$(_canister_download_name_for_nns_canister_type "$CANISTER_NAME").wasm.gz
 \`\`\`
 ## Current Version
 - Current Git Hash: $LAST_COMMIT

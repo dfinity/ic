@@ -3,13 +3,13 @@
 # Script for comparing artifacts in AWS S3 that are produced from our CI
 #
 # We build and push artifacts to S3:
-# * [bazel] //publish/canister       -> ic/<sha256>/canisters
-# * [bazel] //publish/binaries        -> ic/<sha256>/binaries
-# * guest-os-updateimg               -> ic/<sha256>/guest-os/update-img
+# * [bazel] //publish/canister      -> ic/<sha256>/canisters
+# * [bazel] //publish/binaries      -> ic/<sha256>/binaries
+# * [bazel] //ic-os/guestos/prod:*  -> ic/<sha256>/guest-os/update-img
 # We build the same set of artifacts:
-# * docker-build-ic                  -> ic/<sha256>/docker-build-ic/canisters
-#                                    -> ic/<sha256>/docker-build-ic/binaries
-#                                    -> ic/<sha256>/docker-build-ic/icos/guest-os/update-img
+# * build-ic                        -> ic/<sha256>/build-ic/canisters
+#                                   -> ic/<sha256>/build-ic/binaries
+#                                   -> ic/<sha256>/build-ic/icos/guest-os/update-img
 #
 # This script compares SHA256SUMS file [diff] and also the actual artifacts [diffoscope]
 
@@ -18,16 +18,16 @@ usage() {
     echo -e ""
     echo -e "HEAD revision:"
     echo -e ""
-    echo -e "\t$0 docker-build-ic/canisters canisters [diff]"
-    echo -e "\t$0 docker-build-ic/release release [diff]"
-    echo -e "\t$0 docker-build-ic/release/replica.gz release/replica.gz [diffoscope]"
-    echo -e "\t$0 docker-build-ic/guest-os/update-img guest-os/update-img [diff/diffoscope]"
+    echo -e "\t$0 build-ic/canisters canisters [diff]"
+    echo -e "\t$0 build-ic/release release [diff]"
+    echo -e "\t$0 build-ic/release/replica.gz release/replica.gz [diffoscope]"
+    echo -e "\t$0 build-ic/guest-os/update-img guest-os/update-img [diff/diffoscope]"
     echo -e ""
     echo -e "Specific revision:"
     echo -e ""
-    echo -e "\t$0 /<sha256>/docker-build-ic/release release [diff]"
-    echo -e "\t$0 /<sha256>/docker-build-ic/release /<sha256'>/release [diff]"
-    echo -e "\t$0 /<sha256>/docker-build-ic/guest-os/update-img /<sha256>/guest-os/update-img [diff/diffoscope]"
+    echo -e "\t$0 /<sha256>/build-ic/release release [diff]"
+    echo -e "\t$0 /<sha256>/build-ic/release /<sha256'>/release [diff]"
+    echo -e "\t$0 /<sha256>/build-ic/guest-os/update-img /<sha256>/guest-os/update-img [diff/diffoscope]"
     echo -e ""
     echo -e "Note: <sha256>/<sha256'> is git revision and must be full, 40 char string."
 }

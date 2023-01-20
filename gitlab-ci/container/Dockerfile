@@ -27,7 +27,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         lldb libc-bin libclang-10-dev liblz4-dev librocksdb-dev libsnappy-dev libzstd-dev zstd vim emacs nano jq \
         zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev libcsmith-dev sqlite3 libsqlite3-dev libselinux-dev libunwind-dev libsystemd-dev uuid-dev \
         qemu-system-x86 ovmf iproute2 dosfstools mtools fakeroot faketime android-sdk-ext4-utils \
-        policycoreutils python3 python3-pip python3-gflags python3-cbor pipenv shellcheck \
+        policycoreutils python-is-python3 python3 python3-pip python3-gflags python3-cbor pipenv shellcheck \
         sudo docker-ce-cli ripgrep patchelf asciidoctor plantuml graphviz cpio nodejs npm gosu pigz zsh hub less \
         ca-certificates curl git isolinux p7zip-full syslinux xorriso cryptsetup-bin autoconf automake \
         grub-efi-amd64-bin podman buildah && \
@@ -45,7 +45,7 @@ RUN useradd -ms /bin/bash -u ${UID} ${USER} && \
     chmod +s /usr/sbin/gosu
 
 # Sudo is needed to run `ip tun` commands to create a virtual network for e2e tests
-RUN usermod -a -G sudo ${USER} && echo "${USER} ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+RUN usermod -a -G sudo ${USER} && echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 # Install Rust and Cargo in /opt
 ENV RUSTUP_HOME=/opt/rustup \
@@ -90,7 +90,7 @@ RUN gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 595E85A6B1
     gpg --batch --verify /tini.asc /tini && chmod +x /tini
 
 # To replace nix-shell loading the python packages required for python-tests and dependencies job
-RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit honeycomb-beeline junit-xml paramiko \
+RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit==2.20.0 honeycomb-beeline junit-xml paramiko \
     python-gitlab libhoney termcolor pygithub python-dateutil elasticsearch elasticsearch-dsl freezegun \
     jsonschema mypy pylint pytest-shutil pyyaml xmltodict pytest==5.4.3 codeowners jira toml aenum cvss pytest-cov \
     requests==2.27.1 urllib3==1.26.8 parse packaging==21.3
@@ -117,14 +117,14 @@ RUN USE_BAZEL_VERSION=${BAZEL_VERSION} bazel version
 RUN mkdir --mode=0700 /home/${USER}/.ssh
 COPY ./files/known_hosts /home/${USER}/.ssh/known_hosts
 
-COPY entrypoint.sh /entrypoint.sh
+COPY ./files/entrypoint.sh /entrypoint.sh
 WORKDIR /
 
 USER 0
 
 RUN mv /usr/bin/docker /usr/bin/docker-bin
-COPY containers.conf /etc/containers/containers.conf
-COPY docker.sh /usr/bin/docker
+COPY ./files/containers.conf /etc/containers/containers.conf
+COPY ./files/docker.sh /usr/bin/docker
 
 RUN echo "USER=${USER}" > /entrypoint_user
 

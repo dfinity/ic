@@ -387,7 +387,7 @@ def main():
         build_args.append("--pull")
     if any(
         [
-            os.environ.get("CI_JOB_NAME", "").startswith("docker-build-ic"),
+            os.environ.get("CI_JOB_NAME", "").startswith("build-ic"),
             os.environ.get("CI_COMMIT_REF_PROTECTED", "false") == "true",
         ]
     ):

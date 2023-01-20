@@ -4,7 +4,7 @@ set -euo pipefail
 
 print_usage() {
     cat >&2 <<-USAGE
-    This script builds and diffs the update image between CI and docker-build-ic
+    This script builds and diffs the update image between CI and build-ic
     options:
     -h	this help message
     -n	dry run mode, do not build local dev image
@@ -123,8 +123,8 @@ git clone --quiet "$cwd" .
 git checkout --quiet "$git_hash"
 
 if [ "$build_dev" -eq "1" ]; then
-    ./gitlab-ci/tools/docker-build-ic
-    mv artifacts/docker-build-ic/icos/update-img.tar.gz "$DEV_OUT"
+    ./gitlab-ci/container/build-ic.sh
+    mv artifacts/icos/update-img.tar.gz "$DEV_OUT"
 fi
 
 if [ ! -f "$CI_OUT/update-img.tar.gz" ]; then

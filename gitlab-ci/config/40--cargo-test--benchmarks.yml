@@ -1,6 +1,6 @@
 benchmarks:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-nix-docker-k8s
     - .rules-benchmarks-schedule
   stage: cargo-test
   needs: []

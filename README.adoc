@@ -77,39 +77,28 @@ The https://dfinity.org/[DFINITY Foundation] is a Swiss not-for-profit organizat
 == Prerequisites
 *For all environments*
 
-- https://www.docker.com/[Docker].
+- Ubuntu 20.04 or newer
+- https://podman.io/getting-started/installation/[Podman]
 - Git
-
-*Please note: The default memory assigned to the docker image may be less (2GB by default on MacOS). We recommend this should be increased to 10 GB avoid build failures within the Docker container.*
-
-ifdef::env-github[]
-++++
-<p align="center">
-  <img width="400" src="docker_memory.png">
-</p>
-++++
-endif::[]
 
 == Building the code
 
-To see what dependencies the Docker image pulls in, check https://github.com/dfinity/ic/blob/master/gitlab-ci/docker/Dockerfile[Dockerfile].
+See link:gitlab-ci/container/README.md[README] for more details.
 
 ----
-$ ./gitlab-ci/tools/docker-build-ic
+$ ./gitlab-ci/container/build-ic.sh
 ----
 
 This builds:
 
 * Native binaries (replica, orchestrator, et al -- for the full list, see `publish/binaries/BUILD.bazel`
 * Canisters
-* The ICOS disk image
+* The IC-OS disk image
 
-In order to build only the binaries or the canisters, add the following flag on the `build-ic` script:
+In order to build only the binaries and the canisters, use the following flags on the `build-ic.sh` script:
 ----
-$ ./gitlab-ci/tools/docker-build-ic --artifacts="binaries,canisters"
+$ ./gitlab-ci/container/build-ic.sh -b -c
 ----
-Specify the disk or canisters directory by using respectively `--disk-dir="dir"` and `--canisters-dir="dir"`. 
-Find more information by using `-h` or `--help`.
 
 All the built artifacts can be found in the top-level `artifacts/` directory.
 
@@ -119,7 +108,7 @@ https://dashboard.internetcomputer.org/releases[Each release proposal] contains 
 This information allows anyone to verify this release:
 
 * checkout the source tree at specific git revision
-* build the ICOS disk image using instructions above
+* build the IC-OS disk image using instructions above
 * compare the SHA256 checksum of resulting image with the one published in the release proposal payload.
 
 The https://github.com/dfinity/ic/blob/master/gitlab-ci/tools/repro-check.sh[repro-check.sh] script can be used to do it conveniently.
