@@ -18,6 +18,7 @@ use ic_registry_transport::pb::v1::{
 };
 use ic_registry_transport::{insert, upsert};
 use ic_types::crypto::KeyPurpose;
+use ic_types::ReplicaVersion;
 
 pub fn invariant_compliant_registry() -> Registry {
     let mut registry = Registry::new();
@@ -75,6 +76,7 @@ pub fn get_invariant_compliant_subnet_record(node_ids: Vec<NodeId>) -> SubnetRec
         gossip_max_duplicity: 1,
         gossip_max_chunk_wait_ms: 200,
         gossip_max_artifact_streams_per_peer: 1,
+        replica_version_id: ReplicaVersion::default().into(),
         node_ids,
         ..Default::default()
     }

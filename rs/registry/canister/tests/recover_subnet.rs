@@ -26,6 +26,7 @@ use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_registry_transport::{insert, upsert};
 use ic_replica_tests::{canister_test_with_config_async, get_ic_config};
 use ic_test_utilities::types::ids::subnet_test_id;
+use ic_types::ReplicaVersion;
 use registry_canister::mutations::common::decode_registry_value;
 use registry_canister::mutations::do_create_subnet::{
     CreateSubnetPayload, EcdsaInitialConfig, EcdsaKeyRequest,
@@ -221,6 +222,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
                 gossip_max_duplicity: 1,
                 gossip_max_chunk_wait_ms: 200,
                 gossip_max_artifact_streams_per_peer: 1,
+                replica_version_id: ReplicaVersion::default().into(),
                 ..CreateSubnetPayload::default()
             }
             .into();

@@ -14,6 +14,7 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;
+use ic_types::ReplicaVersion;
 use registry_canister::mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload;
 
 #[test]
@@ -28,7 +29,7 @@ fn test_submit_update_unassigned_nodes_config_proposal() {
         let ssh_keys = Some(vec!["key0".to_string(), "key1".to_string()]);
         // A registry invariant guards against exceeding the max number of keys.
         let ssh_keys_invalid = Some(vec!["key_invalid".to_string(); MAX_NUM_SSH_KEYS + 1]);
-        let replica_version = Some("version_42".to_string());
+        let replica_version = Some(ReplicaVersion::default().into());
 
         let payload = UpdateUnassignedNodesConfigPayload {
             ssh_readonly_access: ssh_keys.clone(),

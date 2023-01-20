@@ -17,12 +17,15 @@ use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{pb::v1::RegistryAtomicMutateRequest, upsert};
 
-use ic_types::p2p::{
-    MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_SIZE, MAX_CHUNK_WAIT_MS, MAX_DUPLICITY,
-    PFN_EVALUATION_PERIOD_MS, RECEIVE_CHECK_PEER_SET_SIZE, REGISTRY_POLL_PERIOD_MS,
-    RETRANSMISSION_REQUEST_MS,
-};
 use ic_types::NodeId;
+use ic_types::{
+    p2p::{
+        MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_SIZE, MAX_CHUNK_WAIT_MS, MAX_DUPLICITY,
+        PFN_EVALUATION_PERIOD_MS, RECEIVE_CHECK_PEER_SET_SIZE, REGISTRY_POLL_PERIOD_MS,
+        RETRANSMISSION_REQUEST_MS,
+    },
+    ReplicaVersion,
+};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_create_subnet::CreateSubnetPayload,
 };
@@ -371,7 +374,7 @@ fn make_create_subnet_payload(node_ids: Vec<NodeId>) -> CreateSubnetPayload {
         max_block_payload_size: 4 * 1024 * 1024,
         unit_delay_millis: 500,
         initial_notary_delay_millis: 1500,
-        replica_version_id: "version_42".to_string(),
+        replica_version_id: ReplicaVersion::default().into(),
         dkg_interval_length: 0,
         dkg_dealings_per_block: 1,
         gossip_max_artifact_streams_per_peer: MAX_ARTIFACT_STREAMS_PER_PEER,

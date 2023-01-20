@@ -354,7 +354,7 @@ mod tests {
         MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_WAIT_MS, MAX_DUPLICITY, PFN_EVALUATION_PERIOD_MS,
         RECEIVE_CHECK_PEER_SET_SIZE, REGISTRY_POLL_PERIOD_MS, RETRANSMISSION_REQUEST_MS,
     };
-    use ic_types::{PrincipalId, SubnetId};
+    use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
     use std::str::FromStr;
 
     fn make_ecdsa_key(name: &str) -> EcdsaKeyId {
@@ -459,7 +459,7 @@ mod tests {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: "version_42".to_string(),
+            replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             gossip_config: Some(GossipConfig {
@@ -543,7 +543,7 @@ mod tests {
                 max_block_payload_size: 200,
                 unit_delay_millis: 300,
                 initial_notary_delay_millis: 200,
-                replica_version_id: "version_42".to_string(),
+                replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 8,
                 dkg_dealings_per_block: 1,
                 gossip_config: Some(GossipConfig {
@@ -597,7 +597,7 @@ mod tests {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: "version_42".to_string(),
+            replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             gossip_config: Some(GossipConfig {
@@ -670,7 +670,7 @@ mod tests {
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 100,
                 initial_notary_delay_millis: 1500,
-                replica_version_id: "version_42".to_string(),
+                replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
                 gossip_config: Some(GossipConfig {
@@ -731,7 +731,7 @@ mod tests {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: "version_42".to_string(),
+            replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             gossip_config: None,
@@ -798,7 +798,7 @@ mod tests {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: "version_42".to_string(),
+            replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             gossip_config: Some(build_default_gossip_config()),
@@ -862,7 +862,7 @@ mod tests {
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 500,
                 initial_notary_delay_millis: 1500,
-                replica_version_id: "version_42".to_string(),
+                replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 0,
                 dkg_dealings_per_block: 1,
                 gossip_config: Some(GossipConfig {
@@ -899,7 +899,7 @@ mod tests {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: "version_42".to_string(),
+            replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             gossip_config: Some(GossipConfig {
@@ -972,7 +972,7 @@ mod tests {
                 max_block_payload_size: 4 * 1024 * 1024,
                 unit_delay_millis: 100,
                 initial_notary_delay_millis: 1500,
-                replica_version_id: "version_42".to_string(),
+                replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
                 gossip_config: Some(GossipConfig {

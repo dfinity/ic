@@ -28,7 +28,7 @@ use ic_registry_transport::pb::v1::{
     registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
 };
 use ic_types::p2p::build_default_gossip_config;
-use ic_types::NodeId;
+use ic_types::{NodeId, ReplicaVersion};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;
 use registry_canister::mutations::node_management::do_add_node::{
@@ -170,7 +170,7 @@ fn node_cannot_be_removed_if_in_subnet() {
         let test_subnet_id = SubnetId::from(*TEST_NEURON_1_OWNER_PRINCIPAL);
         let test_subnet_record = SubnetRecord {
             membership: vec![node_id.get().to_vec()],
-            replica_version_id: "version_42".to_string(),
+            replica_version_id: ReplicaVersion::default().into(),
             unit_delay_millis: 600,
             gossip_config: Some(build_default_gossip_config()),
             ..Default::default()

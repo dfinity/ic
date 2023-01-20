@@ -493,16 +493,14 @@ impl IcConfig {
             routing_table_record,
         );
 
-        fn opturl_to_string(opt_url: Option<Url>) -> String {
-            opt_url
-                .map(|u| u.to_string())
-                .unwrap_or_else(|| "".to_string())
+        fn opturl_to_string_vec(opt_url: Option<Url>) -> Vec<String> {
+            opt_url.map(|u| vec![u.to_string()]).unwrap_or_default()
         }
 
         let initial_replica_version = self.initial_replica_version_id.to_string();
         let replica_version_record = ReplicaVersionRecord {
             release_package_sha256_hex: self.initial_release_package_sha256_hex.unwrap_or_default(),
-            release_package_urls: vec![opturl_to_string(self.initial_release_package_url)],
+            release_package_urls: opturl_to_string_vec(self.initial_release_package_url),
             guest_launch_measurement_sha256_hex: self.initial_guest_launch_measurement_sha256_hex,
         };
 

@@ -219,16 +219,16 @@ pub fn invariant_compliant_mutation() -> Vec<RegistryMutation> {
         ..Default::default()
     };
 
-    const VERSION_REPLICA_ID: &str = "version_42";
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
     let release_package_url = "http://release_package.tar.gz".to_string();
+    let replica_version_id = ReplicaVersion::default().to_string();
     let replica_version = ReplicaVersionRecord {
         release_package_sha256_hex: MOCK_HASH.into(),
         release_package_urls: vec![release_package_url],
         guest_launch_measurement_sha256_hex: None,
     };
     let blessed_replica_version = BlessedReplicaVersions {
-        blessed_version_ids: vec![VERSION_REPLICA_ID.to_string()],
+        blessed_version_ids: vec![replica_version_id.clone()],
     };
 
     let subnet_list = SubnetListRecord {
@@ -237,7 +237,7 @@ pub fn invariant_compliant_mutation() -> Vec<RegistryMutation> {
     let system_subnet = SubnetRecord {
         membership: vec![node_pid.get().to_vec()],
         subnet_type: i32::from(SubnetType::System),
-        replica_version_id: VERSION_REPLICA_ID.to_string(),
+        replica_version_id: replica_version_id.clone(),
         unit_delay_millis: 600,
         gossip_config: Some(build_default_gossip_config()),
         ..Default::default()
@@ -258,7 +258,7 @@ pub fn invariant_compliant_mutation() -> Vec<RegistryMutation> {
             encode_or_panic(&node),
         ),
         insert(
-            make_replica_version_key(VERSION_REPLICA_ID).as_bytes(),
+            make_replica_version_key(replica_version_id).as_bytes(),
             encode_or_panic(&replica_version),
         ),
         insert(
@@ -320,7 +320,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
     let nr7 = make_node_record(&nor7);
     let nr7_pid = node_test_id(7);
 
-    const VERSION_REPLICA_ID: &str = "version_42";
+    let replica_version_id = ReplicaVersion::default().to_string();
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
     let release_package_url = "http://release_package.tar.gz".to_string();
     let replica_version = ReplicaVersionRecord {
@@ -329,7 +329,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         guest_launch_measurement_sha256_hex: None,
     };
     let blessed_replica_version = BlessedReplicaVersions {
-        blessed_version_ids: vec![VERSION_REPLICA_ID.to_string()],
+        blessed_version_ids: vec![replica_version_id.clone()],
     };
     let subnet_list = SubnetListRecord {
         subnets: vec![nns_subnet_id.get().to_vec()],
@@ -345,7 +345,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
             nr7_pid.get().to_vec(),
         ],
         subnet_type: i32::from(SubnetType::System),
-        replica_version_id: VERSION_REPLICA_ID.to_string(),
+        replica_version_id: replica_version_id.clone(),
         unit_delay_millis: 600,
         gossip_config: Some(build_default_gossip_config()),
         ..Default::default()
@@ -373,7 +373,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
             encode_or_panic(&RoutingTablePB::try_from(routing_table).unwrap()),
         ),
         insert(
-            make_replica_version_key(VERSION_REPLICA_ID).as_bytes(),
+            make_replica_version_key(replica_version_id).as_bytes(),
             encode_or_panic(&replica_version),
         ),
         insert(
@@ -510,11 +510,6 @@ pub fn prepare_registry_with_two_node_sets(
     let nodes_in_subnet2_ids = &node_ids[..num_nodes_in_subnet2];
 
     let replica_version = ReplicaVersion::default();
-    let replica_version_record = ReplicaVersionRecord::default();
-    mutations.push(insert(
-        &make_replica_version_key(&replica_version),
-        encode_or_panic(&replica_version_record),
-    ));
 
     // Subnet record 1
     let subnet_record = SubnetRecord {

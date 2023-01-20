@@ -19,10 +19,13 @@ use ic_registry_keys::{make_ecdsa_signing_subnet_list_key, make_subnet_record_ke
 use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
-use ic_types::p2p::{
-    build_default_gossip_config, MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_SIZE, MAX_CHUNK_WAIT_MS,
-    MAX_DUPLICITY, PFN_EVALUATION_PERIOD_MS, RECEIVE_CHECK_PEER_SET_SIZE, REGISTRY_POLL_PERIOD_MS,
-    RETRANSMISSION_REQUEST_MS,
+use ic_types::{
+    p2p::{
+        build_default_gossip_config, MAX_ARTIFACT_STREAMS_PER_PEER, MAX_CHUNK_SIZE,
+        MAX_CHUNK_WAIT_MS, MAX_DUPLICITY, PFN_EVALUATION_PERIOD_MS, RECEIVE_CHECK_PEER_SET_SIZE,
+        REGISTRY_POLL_PERIOD_MS, RETRANSMISSION_REQUEST_MS,
+    },
+    ReplicaVersion,
 };
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_update_subnet::UpdateSubnetPayload,
@@ -46,7 +49,7 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
         let initial_subnet_record = SubnetRecord {
             membership: vec![PrincipalId::new_node_test_id(999).to_vec()],
             subnet_type: i32::from(SubnetType::System),
-            replica_version_id: "version_42".to_string(),
+            replica_version_id: ReplicaVersion::default().into(),
             unit_delay_millis: 600,
             gossip_config: Some(build_default_gossip_config()),
             ..Default::default()
@@ -146,7 +149,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: "version_42".to_string(),
+            replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             gossip_config: Some(build_default_gossip_config()),
@@ -272,7 +275,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                             max_block_payload_size: 4 * 1024 * 1024,
                             unit_delay_millis: 500,
                             initial_notary_delay_millis: 1500,
-                            replica_version_id: "version_42".to_string(),
+                            replica_version_id: ReplicaVersion::default().into(),
                             dkg_interval_length: 0,
                             dkg_dealings_per_block: 1,
                             gossip_config: Some(build_default_gossip_config()),
@@ -365,7 +368,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
                 max_ingress_messages_per_block: 1000,
                 unit_delay_millis: 100,
                 initial_notary_delay_millis: 1500,
-                replica_version_id: "version_42".to_string(),
+                replica_version_id: ReplicaVersion::default().into(),
                 dkg_interval_length: 2,
                 dkg_dealings_per_block: 1,
                 gossip_config: Some(GossipConfig {
@@ -427,7 +430,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
             max_block_payload_size: 4 * 1024 * 1024,
             unit_delay_millis: 500,
             initial_notary_delay_millis: 1500,
-            replica_version_id: "version_42".to_string(),
+            replica_version_id: ReplicaVersion::default().into(),
             dkg_interval_length: 0,
             dkg_dealings_per_block: 1,
             gossip_config: Some(build_default_gossip_config()),
