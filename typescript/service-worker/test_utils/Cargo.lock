@@ -271,9 +271,9 @@ dependencies = [
 
 [[package]]
 name = "bumpalo"
-version = "3.11.0"
+version = "3.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1ad822118d20d2c234f427000d5acc36eabe1e29a348c89b63dd60b13f28e5d"
+checksum = "0d261e256854913907f67ed06efbc3338dfe6179796deefc1ff763fc1aee5535"
 
 [[package]]
 name = "byte-unit"
@@ -295,6 +295,18 @@ name = "bytes"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec8a7b6a70fde80372154c65702f00a0f56f3e1c36abbc6c440484be248856db"
+
+[[package]]
+name = "cached"
+version = "0.41.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec6d20b3d24b6c74e2c5331d2d3d8d1976a9883c7da179aa851afa4c90d62e36"
+dependencies = [
+ "hashbrown",
+ "instant",
+ "once_cell",
+ "thiserror",
+]
 
 [[package]]
 name = "candid"
@@ -1133,7 +1145,7 @@ dependencies = [
  "indexmap",
  "slab",
  "tokio",
- "tokio-util 0.7.4",
+ "tokio-util",
  "tracing",
 ]
 
@@ -1459,6 +1471,7 @@ dependencies = [
  "arrayvec",
  "async-trait",
  "base64 0.11.0",
+ "bincode",
  "clap",
  "ed25519-consensus",
  "hex",
@@ -1478,6 +1491,7 @@ dependencies = [
  "ic-crypto-tls-cert-validation",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-basic-sig",
+ "ic-crypto-utils-time",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-logger",
@@ -1539,6 +1553,7 @@ dependencies = [
  "hex",
  "ic-types",
  "simple_asn1 0.6.2",
+ "zeroize",
 ]
 
 [[package]]
@@ -1674,6 +1689,7 @@ dependencies = [
  "ic-crypto-secrets-containers",
  "ic-crypto-sha",
  "ic-crypto-tls-interfaces",
+ "ic-crypto-utils-time",
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
@@ -1697,7 +1713,7 @@ dependencies = [
  "tokio",
  "tokio-openssl",
  "tokio-serde",
- "tokio-util 0.6.10",
+ "tokio-util",
  "zeroize",
 ]
 
@@ -1773,6 +1789,7 @@ version = "0.8.0"
 dependencies = [
  "arrayvec",
  "base64 0.11.0",
+ "cached",
  "hex",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-seed",
@@ -1781,6 +1798,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-types",
  "lazy_static",
+ "parking_lot 0.12.1",
  "rand",
  "rand_chacha",
  "serde",
@@ -1947,7 +1965,6 @@ dependencies = [
  "base64 0.11.0",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
- "ic-interfaces",
  "ic-types",
 ]
 
@@ -1959,6 +1976,16 @@ dependencies = [
  "ic-crypto-internal-threshold-sig-bls12381-der",
  "ic-crypto-internal-types",
  "ic-types",
+]
+
+[[package]]
+name = "ic-crypto-utils-time"
+version = "0.8.0"
+dependencies = [
+ "ic-interfaces",
+ "ic-logger",
+ "ic-types",
+ "slog",
 ]
 
 [[package]]
@@ -2759,13 +2786,15 @@ dependencies = [
 
 [[package]]
 name = "opentelemetry"
-version = "0.16.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1cf9b1c4e9a6c4de793c632496fa490bdc0e1eea73f0c91394f7b6990935d22"
+checksum = "6105e89802af13fdf48c49d7646d3b533a70e536d818aae7e78ba0433d01acb8"
 dependencies = [
  "async-trait",
  "crossbeam-channel",
- "futures",
+ "futures-channel",
+ "futures-executor",
+ "futures-util",
  "js-sys",
  "lazy_static",
  "percent-encoding",
@@ -3773,9 +3802,9 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tarpc"
-version = "0.27.2"
+version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b85d0a9369a919ba0db919b142a2b704cd207dfc676f7a43c2d105d0bc225487"
+checksum = "71a98cc1a0a9013e8df3900d09c597dd65cfc6ea4d42968629b1b9ea949acf8f"
 dependencies = [
  "anyhow",
  "fnv",
@@ -3790,7 +3819,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-serde",
- "tokio-util 0.6.10",
+ "tokio-util",
  "tracing",
  "tracing-opentelemetry",
 ]
@@ -4058,21 +4087,6 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.6.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36943ee01a6d67977dd3f84a5a1d2efeb4ada3a1ae771cadfaa535d9d9fc6507"
-dependencies = [
- "bytes",
- "futures-core",
- "futures-sink",
- "log",
- "pin-project-lite",
- "slab",
- "tokio",
-]
-
-[[package]]
-name = "tokio-util"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0bb2e075f03b3d66d8d8785356224ba688d2906a371015e225beeb65ca92c740"
@@ -4081,6 +4095,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "pin-project-lite",
+ "slab",
  "tokio",
  "tracing",
 ]
@@ -4118,7 +4133,7 @@ dependencies = [
  "prost-derive",
  "tokio",
  "tokio-stream",
- "tokio-util 0.7.4",
+ "tokio-util",
  "tower",
  "tower-layer",
  "tower-service",
@@ -4153,7 +4168,7 @@ dependencies = [
  "rand",
  "slab",
  "tokio",
- "tokio-util 0.7.4",
+ "tokio-util",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -4236,10 +4251,11 @@ dependencies = [
 
 [[package]]
 name = "tracing-opentelemetry"
-version = "0.15.0"
+version = "0.17.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "599f388ecb26b28d9c1b2e4437ae019a7b336018b45ed911458cd9ebf91129f6"
+checksum = "fbbe89715c1dbbb790059e2565353978564924ee85017b5fff365c872ff6721f"
 dependencies = [
+ "once_cell",
  "opentelemetry",
  "tracing",
  "tracing-core",
@@ -4248,9 +4264,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-subscriber"
-version = "0.2.25"
+version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e0d2eaa99c3c2e41547cfa109e910a68ea03823cccad4a0525dcbc9b01e8c71"
+checksum = "a6176eae26dd70d0c919749377897b54a9276bd7061339665dd68777926b5a70"
 dependencies = [
  "sharded-slab",
  "thread_local",
