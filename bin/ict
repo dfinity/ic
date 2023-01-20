@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -eEou pipefail
+set -Eou pipefail
 
 GREEN="\x1b[32m"
 RED="\x1b[31m"
@@ -8,20 +8,33 @@ NC="\x1b[0m"
 
 BAZEL_ICT_TARGET="//rs/tests/ict:ict"
 
-# Firstly, we build the ict CLI binary.
-# As ict CLI is a wrapper around Bazel CLI, this `build` step is done prior (and separately) to the bin invocation.
-# I.e. the following build+invoke won't work: `bazel run //rs/tests/ict:ict test target`.
-echo -e "${BOLD}${GREEN}Compiling ict ...${NC}"
-set +e
-# Run command without stdout&stderr, just print a custom message in case of error without failing immediately. That's why "set +e" is needed.
-bazel build $BAZEL_ICT_TARGET --config=local >/dev/null 2>&1
+# Check if Bazel server is already running. If not print a message for user and start Bazel.
+pgrep -fi bazel >/dev/null >&1
 CODE=$?
-set -e
 if [ "${CODE}" != "0" ]; then
-    echo -e "${BOLD}${RED}ict compilation failed with code=${CODE}${NC}"
-    echo "Try running the build manually: bazel build ${BAZEL_ICT_TARGET}"
-    exit 1
+    echo -e "${BOLD}${GREEN}Starting Bazel server ...${NC}"
+    bazel >/dev/null 2>&1
+    CODE=$?
+    if [ "${CODE}" != "0" ]; then
+        echo -e "${BOLD}${RED}Failed to start Bazel server${NC}"
+        echo "Try starting Bazel manually: $ bazel"
+        exit 1
+    fi
 fi
-# Secondly, we invoke the binary with arguments.
+# Check whether ict binary is exists/up-to-date. If not compile/recompile + handle errors.
+echo -e "${BOLD}${GREEN}Checking ict is up-to-date ...${NC}"
+bazel build ${BAZEL_ICT_TARGET} --config=local --check_up_to_date >/dev/null 2>&1
+CODE=$?
+if [ "${CODE}" != "0" ]; then
+    echo -e "${BOLD}${GREEN}Compiling ict ...${NC}"
+    bazel build $BAZEL_ICT_TARGET --config=local >/dev/null 2>&1
+    CODE=$?
+    if [ "${CODE}" != "0" ]; then
+        echo -e "${BOLD}${RED}ict compilation failed with code=${CODE}${NC}"
+        echo "Try running the build manually: bazel build ${BAZEL_ICT_TARGET}"
+        exit 1
+    fi
+fi
+# Invoke binary with the arguments.
 ICT_BIN=$(bazel cquery --config=local --output=files ${BAZEL_ICT_TARGET} 2>/dev/null)
-$ICT_BIN "$@"
+"/ic/$ICT_BIN" "$@"
