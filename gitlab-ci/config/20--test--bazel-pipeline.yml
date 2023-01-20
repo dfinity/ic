@@ -90,7 +90,7 @@ bazel-test-all-allow-to-fail:
   extends:
     - .bazel-test-all
   variables:
-    BAZEL_EXTRA_ARGS: "--test_tag_filters=${BAZEL_TEST_TAG_FILTERS} --build_event_json_file=./build_event_file.json"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=${BAZEL_TEST_TAG_FILTERS} --build_event_json_file=./build_event_file.json"
     BAZEL_TARGETS: "//..."
   artifacts:
     when: always
@@ -119,7 +119,7 @@ bazel-system-test-nightly:
     - .bazel-test-all
     - .rules-rollout-pipeline-auto
   variables:
-    BAZEL_EXTRA_ARGS: "--test_tag_filters=system_test_nightly"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_nightly"
     BAZEL_TARGETS: "//..."
   timeout: 200 minutes
 
