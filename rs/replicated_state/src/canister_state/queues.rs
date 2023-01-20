@@ -301,11 +301,11 @@ impl CanisterQueues {
     }
 
     /// See `IngressQueue::filter_messages()` for documentation.
-    pub fn filter_ingress_messages<F>(&mut self, filter: F)
+    pub fn filter_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Arc<Ingress>) -> bool,
     {
-        self.ingress_queue.filter_messages(filter);
+        self.ingress_queue.filter_messages(filter)
     }
 
     /// Pushes a canister-to-canister message into the induction pool.

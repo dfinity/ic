@@ -846,12 +846,23 @@ impl IngressQueue {
 
     /// Calls `filter` on each ingress message in the queue, retaining the
     /// messages for whom the filter returns `true` and dropping the rest.
-    pub(super) fn filter_messages<F>(&mut self, filter: F)
+    pub(super) fn filter_messages<F>(&mut self, mut filter: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Arc<Ingress>) -> bool,
     {
-        self.queue.retain(filter);
-        self.size_bytes = Self::size_bytes(&self.queue)
+        let mut filtered_messages = vec![];
+        let mut new_queue = VecDeque::new();
+        for item in self.queue.iter() {
+            if filter(item) {
+                new_queue.push_back(Arc::clone(item));
+            } else {
+                filtered_messages.push(Arc::clone(item));
+            }
+        }
+
+        self.queue = new_queue;
+        self.size_bytes = Self::size_bytes(&self.queue);
+        filtered_messages
     }
 
     /// Calculates the size in bytes of an `IngressQueue` holding the given
