@@ -10,7 +10,7 @@ pub mod tree_diff;
 pub mod tree_hash;
 
 use crate::{
-    manifest::{build_meta_manifest, compute_bundled_manifest, MAX_SUPPORTED_STATE_SYNC_VERSION},
+    manifest::{build_meta_manifest, compute_bundled_manifest},
     state_sync::chunkable::cache::StateSyncCache,
     tip::{spawn_tip_thread, TipRequest},
 };
@@ -511,16 +511,6 @@ pub struct Snapshot {
     pub state: Arc<ReplicatedState>,
 }
 
-enum ComputeManifestRequest {
-    /// Compute manifest and store the result as a side effect.
-    Compute {
-        checkpoint_layout: CheckpointLayout<ReadOnly>,
-        manifest_delta: Option<manifest::ManifestDelta>,
-    },
-    /// When the request gets through the queue, notify by sending () into the provided channel.
-    Wait { sender: Sender<()> },
-}
-
 /// StateSyncRefs keeps track of the ongoing and aborted state syncs.
 #[derive(Clone)]
 pub struct StateSyncRefs {
@@ -628,14 +618,12 @@ pub struct StateManagerImpl {
     verifier: Arc<dyn Verifier>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
-    compute_manifest_request_sender: Sender<ComputeManifestRequest>,
     deallocation_sender: Sender<Deallocation>,
     // Cached latest state height.  We cache it separately because it's
     // requested quite often and this causes high contention on the lock.
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
     state_sync_refs: StateSyncRefs,
-    _state_hasher_handle: JoinOnDrop<()>,
     _deallocation_handle: JoinOnDrop<()>,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
@@ -846,8 +834,8 @@ fn report_last_diverged_state(
 struct PopulatedMetadata {
     certifications_metadata: CertificationsMetadata,
     states_metadata: StatesMetadata,
-    compute_manifest_requests: Vec<ComputeManifestRequest>,
-    snapshots: Vec<(Snapshot, CheckpointLayout<ReadOnly>)>,
+    checkpoint_layouts_to_compute_manifest: Vec<CheckpointLayout<ReadOnly>>,
+    snapshots_with_layouts: Vec<(Snapshot, CheckpointLayout<ReadOnly>)>,
 }
 
 /// An enum describing all possible PageMaps in ReplicatedState
@@ -1220,13 +1208,6 @@ impl StateManagerImpl {
             .unwrap_or_else(|err| fatal!(&log, "Failed to init state layout: {:?}", err));
         info!(log, "StateLayout init took {:?}", starting_time.elapsed());
 
-        let (_tip_thread_handle, tip_channel) = spawn_tip_thread(
-            log.clone(),
-            state_layout.capture_tip_handler(),
-            state_layout.clone(),
-            metrics.clone(),
-        );
-
         let starting_time = Instant::now();
         let loaded_states_metadata =
             Self::load_metadata(&log, state_layout.states_metadata().as_path());
@@ -1325,8 +1306,8 @@ impl StateManagerImpl {
         let PopulatedMetadata {
             certifications_metadata,
             states_metadata,
-            compute_manifest_requests,
-            snapshots,
+            checkpoint_layouts_to_compute_manifest,
+            snapshots_with_layouts,
         } = Self::populate_metadata(
             &log,
             &metrics,
@@ -1349,25 +1330,12 @@ impl StateManagerImpl {
             state: Arc::new(initial_state(own_subnet_id, own_subnet_type).take()),
         };
 
-        let tip_height_and_state = match snapshots.last() {
-            Some((snapshot, checkpoint_layout)) => {
-                // Set latest state height in metadata to be last checkpoint height
-                latest_state_height.store(snapshot.height.get(), Ordering::Relaxed);
-                let starting_time = Instant::now();
-
-                let tip = initialize_tip(&log, &tip_channel, snapshot, checkpoint_layout.clone());
-
-                info!(log, "Initialize tip took {:?}", starting_time.elapsed());
-                (snapshot.height, tip)
-            }
-            None => (
-                Self::INITIAL_STATE_HEIGHT,
-                ReplicatedState::new(own_subnet_id, own_subnet_type),
-            ),
-        };
-
         let snapshots: VecDeque<Snapshot> = std::iter::once(initial_snapshot)
-            .chain(snapshots.into_iter().map(|(snapshot, _)| snapshot))
+            .chain(
+                snapshots_with_layouts
+                    .iter()
+                    .map(|(snapshot, _)| snapshot.clone()),
+            )
             .collect();
 
         // Make sure the snapshots' order is maintained in initialization.
@@ -1389,42 +1357,36 @@ impl StateManagerImpl {
             snapshots,
             last_advertised: Self::INITIAL_STATE_HEIGHT,
             fetch_state: None,
-            tip: Some(tip_height_and_state),
+            tip: None,
         }));
-
-        let (compute_manifest_request_sender, compute_manifest_request_receiver) = unbounded();
 
         let persist_metadata_guard = Arc::new(Mutex::new(()));
 
-        let _state_hasher_handle = JoinOnDrop::new(
-            std::thread::Builder::new()
-                .name("StateHasher".to_string())
-                .spawn({
-                    let log = log.clone();
-                    let states = Arc::clone(&states);
-                    let metrics = metrics.clone();
-                    let state_layout = state_layout.clone();
-                    let persist_metadata_guard = persist_metadata_guard.clone();
-                    let mut manifest_thread_pool =
-                        scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
-
-                    move || {
-                        while let Ok(req) = compute_manifest_request_receiver.recv() {
-                            Self::handle_compute_manifest_request(
-                                &mut manifest_thread_pool,
-                                &metrics,
-                                &log,
-                                &states,
-                                &state_layout,
-                                req,
-                                &persist_metadata_guard,
-                                &malicious_flags,
-                            );
-                        }
-                    }
-                })
-                .expect("failed to spawn background state hasher"),
+        let (_tip_thread_handle, tip_channel) = spawn_tip_thread(
+            log.clone(),
+            state_layout.capture_tip_handler(),
+            state_layout.clone(),
+            metrics.clone(),
+            malicious_flags,
         );
+
+        let tip_height_and_state = match snapshots_with_layouts.last() {
+            Some((snapshot, checkpoint_layout)) => {
+                // Set latest state height in metadata to be last checkpoint height
+                latest_state_height.store(snapshot.height.get(), Ordering::Relaxed);
+                let starting_time = Instant::now();
+
+                let tip = initialize_tip(&log, &tip_channel, snapshot, checkpoint_layout.clone());
+
+                info!(log, "Initialize tip took {:?}", starting_time.elapsed());
+                (snapshot.height, tip)
+            }
+            None => (
+                Self::INITIAL_STATE_HEIGHT,
+                ReplicatedState::new(own_subnet_id, own_subnet_type),
+            ),
+        };
+        states.write().tip = Some(tip_height_and_state);
 
         let (deallocation_sender, deallocation_receiver) = unbounded();
         let _deallocation_handle = JoinOnDrop::new(
@@ -1442,9 +1404,14 @@ impl StateManagerImpl {
                 .expect("failed to spawn background deallocation thread"),
         );
 
-        for req in compute_manifest_requests {
-            compute_manifest_request_sender
-                .send(req)
+        for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
+            tip_channel
+                .send(TipRequest::ComputeManifest {
+                    checkpoint_layout,
+                    manifest_delta: None,
+                    persist_metadata_lock: persist_metadata_guard.clone(),
+                    states: states.clone(),
+                })
                 .expect("failed to send ComputeManifestRequest");
         }
 
@@ -1458,12 +1425,10 @@ impl StateManagerImpl {
             verifier,
             own_subnet_id,
             own_subnet_type,
-            compute_manifest_request_sender,
             deallocation_sender,
             latest_state_height,
             latest_certified_height,
             state_sync_refs: StateSyncRefs::new(log),
-            _state_hasher_handle,
             _deallocation_handle,
             persist_metadata_guard,
             tip_channel,
@@ -1576,132 +1541,6 @@ impl StateManagerImpl {
         );
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn handle_compute_manifest_request(
-        thread_pool: &mut scoped_threadpool::Pool,
-        metrics: &StateManagerMetrics,
-        log: &ReplicaLogger,
-        states: &parking_lot::RwLock<SharedState>,
-        state_layout: &StateLayout,
-        req: ComputeManifestRequest,
-        persist_metadata_lock: &Arc<Mutex<()>>,
-        #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
-    ) {
-        match req {
-            ComputeManifestRequest::Wait { sender } => {
-                sender.send(()).expect("failed to sync hasher")
-            }
-            ComputeManifestRequest::Compute {
-                checkpoint_layout,
-                manifest_delta,
-            } => {
-                let system_metadata = checkpoint_layout
-                    .system_metadata()
-                    .deserialize()
-                    .unwrap_or_else(|err| {
-                        fatal!(
-                            log,
-                            "Failed to decode system metadata @{}: {}",
-                            checkpoint_layout.height(),
-                            err
-                        )
-                    });
-
-                let state_sync_version = system_metadata.state_sync_version;
-
-                assert!(
-                    state_sync_version <= MAX_SUPPORTED_STATE_SYNC_VERSION,
-                    "Unable to compute a manifest with version {:?}. Maximum supported StateSync version is {:?}",
-                    state_sync_version,
-                    MAX_SUPPORTED_STATE_SYNC_VERSION
-                );
-
-                let start = Instant::now();
-                let manifest = crate::manifest::compute_manifest(
-                    thread_pool,
-                    &metrics.manifest_metrics,
-                    log,
-                    state_sync_version,
-                    checkpoint_layout.raw_path(),
-                    crate::manifest::DEFAULT_CHUNK_SIZE,
-                    manifest_delta,
-                )
-                .unwrap_or_else(|err| {
-                    fatal!(
-                        log,
-                        "Failed to compute manifest for checkpoint @{} after {:?}: {}",
-                        checkpoint_layout.height(),
-                        start.elapsed(),
-                        err
-                    )
-                });
-
-                let elapsed = start.elapsed();
-                metrics
-                    .checkpoint_op_duration
-                    .with_label_values(&["compute_manifest"])
-                    .observe(elapsed.as_secs_f64());
-
-                info!(
-                    log,
-                    "Computed manifest of state @{} in {:?}",
-                    checkpoint_layout.height(),
-                    elapsed
-                );
-
-                let state_size_bytes: i64 = manifest
-                    .file_table
-                    .iter()
-                    .map(|f| f.size_bytes as i64)
-                    .sum();
-
-                metrics.state_size.set(state_size_bytes);
-                metrics
-                    .last_computed_manifest_height
-                    .set(checkpoint_layout.height().get() as i64);
-
-                // This is where we maliciously alter the root_hash!
-                #[cfg(feature = "malicious_code")]
-                let malicious_root_hash = maliciously_return_wrong_hash(
-                    &manifest,
-                    log,
-                    malicious_flags,
-                    checkpoint_layout.height(),
-                );
-
-                let bundled_manifest = compute_bundled_manifest(manifest);
-
-                #[cfg(feature = "malicious_code")]
-                let bundled_manifest = BundledManifest {
-                    root_hash: malicious_root_hash,
-                    ..bundled_manifest
-                };
-
-                info!(
-                    log,
-                    "Computed root hash {:?} of state @{}",
-                    bundled_manifest.root_hash,
-                    checkpoint_layout.height()
-                );
-
-                let mut states = states.write();
-
-                if let Some(metadata) = states.states_metadata.get_mut(&checkpoint_layout.height())
-                {
-                    metadata.bundled_manifest = Some(bundled_manifest);
-                }
-
-                release_lock_and_persist_metadata(
-                    log,
-                    metrics,
-                    state_layout,
-                    states,
-                    persist_metadata_lock,
-                );
-            }
-        }
-    }
-
     fn latest_certified_state(
         &self,
     ) -> Option<(Arc<ReplicatedState>, Certification, Arc<HashTree>)> {
@@ -1787,11 +1626,12 @@ impl StateManagerImpl {
         mut metadatas: BTreeMap<Height, StateMetadata>,
         states: Vec<(Height, ReplicatedState)>,
     ) -> PopulatedMetadata {
-        let mut compute_manifest_requests = Vec::<ComputeManifestRequest>::new();
+        let mut checkpoint_layouts_to_compute_manifest = Vec::<CheckpointLayout<ReadOnly>>::new();
 
         let mut certifications_metadata = CertificationsMetadata::default();
         let mut states_metadata = StatesMetadata::default();
-        let mut snapshots: Vec<(Snapshot, CheckpointLayout<ReadOnly>)> = Default::default();
+        let mut snapshots_with_layouts: Vec<(Snapshot, CheckpointLayout<ReadOnly>)> =
+            Default::default();
 
         for (height, state) in states {
             certifications_metadata.insert(
@@ -1817,10 +1657,7 @@ impl StateManagerImpl {
             } else {
                 // It is possible that the replica did not finish manifest computation before restarting.
                 // In this case, we need to send a request of manifest computation for this checkpoint.
-                compute_manifest_requests.push(ComputeManifestRequest::Compute {
-                    checkpoint_layout: checkpoint_layout.clone(),
-                    manifest_delta: None,
-                });
+                checkpoint_layouts_to_compute_manifest.push(checkpoint_layout.clone());
 
                 states_metadata.insert(
                     height,
@@ -1832,7 +1669,7 @@ impl StateManagerImpl {
                 );
             }
 
-            snapshots.push((
+            snapshots_with_layouts.push((
                 Snapshot {
                     height,
                     state: Arc::new(state),
@@ -1844,8 +1681,8 @@ impl StateManagerImpl {
         PopulatedMetadata {
             certifications_metadata,
             states_metadata,
-            compute_manifest_requests,
-            snapshots,
+            checkpoint_layouts_to_compute_manifest,
+            snapshots_with_layouts,
         }
     }
 
@@ -2752,25 +2589,10 @@ impl StateManager for StateManagerImpl {
             base_height: Height,
         }
 
-        let mut previous_checkpoint_info: Option<PreviousCheckpointInfo> = None;
-        let (cp_layout, checkpointed_state) = match scope {
+        let checkpointed_state = match scope {
             CertificationScope::Full => {
                 let start = Instant::now();
-                {
-                    let _timer = self
-                        .metrics
-                        .checkpoint_metrics
-                        .make_checkpoint_step_duration
-                        .with_label_values(&["wait_for_manifest"])
-                        .start_timer();
-                    let (sender, recv) = unbounded();
-                    self.compute_manifest_request_sender
-                        .send(ComputeManifestRequest::Wait { sender })
-                        .expect("failed to send ComputeManifestRequest Wait message");
-                    recv.recv()
-                        .expect("failed to wait for ComputeManifest thread");
-                }
-                previous_checkpoint_info = {
+                let previous_checkpoint_info = {
                     let states = self.states.read();
                     states
                         .states_metadata
@@ -2807,14 +2629,47 @@ impl StateManager for StateManagerImpl {
                 };
 
                 let elapsed = start.elapsed();
-                let (cp_layout, checkpointed_state) = match result {
+                let checkpointed_state = match result {
                     Ok(checkpointed_state) => {
                         info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
+                        let manifest_delta = previous_checkpoint_info.map(
+                            |PreviousCheckpointInfo {
+                                 dirty_pages,
+                                 base_manifest,
+                                 base_height,
+                             }| {
+                                manifest::ManifestDelta {
+                                    base_manifest,
+                                    base_height,
+                                    target_height: height,
+                                    dirty_memory_pages: dirty_pages,
+                                }
+                            },
+                        );
+                        self.states.write().states_metadata.insert(
+                            height,
+                            StateMetadata {
+                                checkpoint_layout: Some(checkpointed_state.0.clone()),
+                                bundled_manifest: None,
+                                state_sync_file_group: None,
+                            },
+                        );
+                        // On the NNS subnet we never allow incremental manifest computation
+                        let is_nns =
+                            self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
+                        self.tip_channel
+                            .send(TipRequest::ComputeManifest {
+                                checkpoint_layout: checkpointed_state.0.clone(),
+                                manifest_delta: if is_nns { None } else { manifest_delta },
+                                states: self.states.clone(),
+                                persist_metadata_lock: self.persist_metadata_guard.clone(),
+                            })
+                            .expect("failed to send ComputeManifestRequest message");
                         self.metrics
                             .checkpoint_op_duration
                             .with_label_values(&["create"])
                             .observe(elapsed.as_secs_f64());
-                        checkpointed_state
+                        checkpointed_state.1
                     }
                     Err(CheckpointError::AlreadyExists(_)) => {
                         warn!(
@@ -2822,8 +2677,7 @@ impl StateManager for StateManagerImpl {
                                 "Failed to create checkpoint @{} because it already exists, re-loading the checkpoint from disk", height
                             );
 
-                        let checkpointed_state = self
-                            .state_layout
+                        self.state_layout
                             .checkpoint(height)
                             .map_err(|e| e.into())
                             .and_then(|layout| {
@@ -2846,11 +2700,7 @@ impl StateManager for StateManagerImpl {
                                     height,
                                     err
                                 )
-                            });
-                        (
-                            self.state_layout.checkpoint(height).unwrap(),
-                            checkpointed_state,
-                        )
+                            })
                     }
                     Err(err) => fatal!(
                         self.log,
@@ -2860,9 +2710,9 @@ impl StateManager for StateManagerImpl {
                     ),
                 };
                 switch_to_checkpoint(&mut state, &checkpointed_state);
-                (Some(cp_layout), checkpointed_state)
+                checkpointed_state
             }
-            CertificationScope::Metadata => (None, state.clone()),
+            CertificationScope::Metadata => state.clone(),
         };
 
         let certification_metadata =
@@ -2882,7 +2732,7 @@ impl StateManager for StateManagerImpl {
             );
         }
 
-        // It's possible that we already computed this state before.  We
+        // It's possible that we already computed this state before. We
         // validate that hashes agree to spot bugs causing non-determinism as
         // early as possible.
         if let Some(prev_metadata) = states.certifications_metadata.get(&height) {
@@ -2914,43 +2764,6 @@ impl StateManager for StateManagerImpl {
                     height,
                     state: Arc::new(checkpointed_state),
                 });
-
-                if scope == CertificationScope::Full {
-                    let manifest_delta = previous_checkpoint_info.map(
-                        |PreviousCheckpointInfo {
-                             dirty_pages,
-                             base_manifest,
-                             base_height,
-                         }| {
-                            manifest::ManifestDelta {
-                                base_manifest,
-                                base_height,
-                                target_height: height,
-                                dirty_memory_pages: dirty_pages,
-                            }
-                        },
-                    );
-
-                    states.states_metadata.insert(
-                        height,
-                        StateMetadata {
-                            checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
-                            bundled_manifest: None,
-                            state_sync_file_group: None,
-                        },
-                    );
-
-                    // On the NNS subnet we never allow incremental manifest computation
-                    let is_nns =
-                        self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
-
-                    self.compute_manifest_request_sender
-                        .send(ComputeManifestRequest::Compute {
-                            checkpoint_layout: cp_layout.unwrap(),
-                            manifest_delta: if is_nns { None } else { manifest_delta },
-                        })
-                        .expect("failed to send ComputeManifestRequest message");
-                }
 
                 states
                     .certifications_metadata
@@ -3348,36 +3161,5 @@ impl From<LayoutError> for CheckpointError {
             LayoutError::AlreadyExists(h) => CheckpointError::AlreadyExists(h),
             LayoutError::LatestCheckpoint(h) => CheckpointError::LatestCheckpoint(h),
         }
-    }
-}
-
-#[cfg(feature = "malicious_code")]
-/// When maliciously_corrupt_own_state_at_heights contains the given height,
-/// this function returns a false hash that contains all 0s.
-fn maliciously_return_wrong_hash(
-    manifest: &Manifest,
-    log: &ReplicaLogger,
-    malicious_flags: &MaliciousFlags,
-    height: Height,
-) -> CryptoHashOfState {
-    use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
-        MaliciousBehaviour, MaliciousBehaviourLogEntry,
-    };
-
-    if malicious_flags
-        .maliciously_corrupt_own_state_at_heights
-        .contains(&height.get())
-    {
-        ic_logger::info!(
-            log,
-            "[MALICIOUS] corrupting the hash of the state at height {}",
-            height.get();
-            malicious_behaviour => MaliciousBehaviourLogEntry { malicious_behaviour: MaliciousBehaviour::CorruptOwnStateAtHeights as i32}
-        );
-        CryptoHashOfState::from(CryptoHash(vec![0u8; 32]))
-    } else {
-        CryptoHashOfState::from(CryptoHash(
-            crate::manifest::manifest_hash(manifest).to_vec(),
-        ))
     }
 }
