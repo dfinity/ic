@@ -4,7 +4,7 @@ use crate::execution::install_code::{
 use crate::execution::{install::execute_install, upgrade::execute_upgrade};
 use crate::execution_environment::{CompilationCostHandling, RoundContext, RoundLimits};
 use crate::{
-    canister_settings::CanisterSettings,
+    canister_settings::{CanisterSettings, CanisterSettingsBuilder},
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
     util::GOVERNANCE_CANISTER_ID,
@@ -971,7 +971,9 @@ impl CanisterManager {
             .canister_state_mut(&canister_id)
             .ok_or(CanisterManagerError::CanisterNotFound(canister_id))?;
 
-        let settings = CanisterSettings::new(Some(new_controller), None, None, None, None);
+        let settings = CanisterSettingsBuilder::new()
+            .with_controller(new_controller)
+            .build();
         self.update_settings(sender, settings, canister, round_limits)
     }
 
