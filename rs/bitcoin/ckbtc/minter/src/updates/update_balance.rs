@@ -85,6 +85,10 @@ pub async fn update_balance(
     args: UpdateBalanceArgs,
 ) -> Result<UpdateBalanceResult, UpdateBalanceError> {
     let caller = ic_cdk::caller();
+    if args.owner.unwrap_or(caller) == ic_cdk::id() {
+        ic_cdk::trap("cannot update minter's balance");
+    }
+
     state::read_state(|s| s.mode.is_available_for(&caller))
         .map_err(UpdateBalanceError::TemporarilyUnavailable)?;
 
