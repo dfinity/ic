@@ -358,6 +358,7 @@ mod test {
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
+    use ic_types::ReplicaVersion;
 
     // Note: this can only be unit-tested b/c it fails before we hit inter-canister calls
     // for DKG + ECDSA
@@ -368,6 +369,7 @@ mod test {
     fn should_panic_if_ecdsa_keys_non_existing() {
         let mut registry = invariant_compliant_registry();
         let payload = CreateSubnetPayload {
+            replica_version_id: ReplicaVersion::default().into(),
             ecdsa_config: Some(EcdsaInitialConfig {
                 quadruples_to_create_in_advance: 1,
                 keys: vec![EcdsaKeyRequest {
@@ -424,6 +426,7 @@ mod test {
 
         // Make a request for the key from a subnet that does not have the key
         let payload = CreateSubnetPayload {
+            replica_version_id: ReplicaVersion::default().into(),
             ecdsa_config: Some(EcdsaInitialConfig {
                 quadruples_to_create_in_advance: 1,
                 keys: vec![EcdsaKeyRequest {
@@ -477,6 +480,7 @@ mod test {
 
         // Make a request for the key from a subnet that does not have the key
         let payload = CreateSubnetPayload {
+            replica_version_id: ReplicaVersion::default().into(),
             ecdsa_config: Some(EcdsaInitialConfig {
                 quadruples_to_create_in_advance: 1,
                 keys: vec![EcdsaKeyRequest {

@@ -18,6 +18,7 @@ use ic_registry_keys::{
 use ic_test_utilities::types::ids::subnet_test_id;
 
 use assert_matches::assert_matches;
+use ic_types::ReplicaVersion;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::{
@@ -63,7 +64,7 @@ fn test_the_anonymous_user_cannot_bless_a_version() {
             )
             .await,
             BlessedReplicaVersions {
-                blessed_version_ids: vec!["version_42".to_string()]
+                blessed_version_ids: vec![ReplicaVersion::default().into()]
             }
         );
 
@@ -81,7 +82,7 @@ fn test_the_anonymous_user_cannot_bless_a_version() {
             )
             .await,
             BlessedReplicaVersions {
-                blessed_version_ids: vec!["version_42".to_string()]
+                blessed_version_ids: vec![ReplicaVersion::default().into()]
             }
         );
 
@@ -138,7 +139,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_bless_a_version() {
             )
             .await,
             BlessedReplicaVersions {
-                blessed_version_ids: vec!["version_42".to_string()]
+                blessed_version_ids: vec![ReplicaVersion::default().into()]
             }
         );
         Ok(())
@@ -193,13 +194,16 @@ fn test_accepted_proposal_mutates_the_registry() {
             )
             .await,
             BlessedReplicaVersions {
-                blessed_version_ids: vec!["version_42".to_string(), "version_43".to_string()]
+                blessed_version_ids: vec![
+                    ReplicaVersion::default().into(),
+                    "version_43".to_string()
+                ]
             }
         );
 
         // Trying to mutate an existing record should have no effect.
         let payload_v42_mutate = BlessReplicaVersionPayload {
-            replica_version_id: "version_42".to_string(),
+            replica_version_id: ReplicaVersion::default().into(),
             binary_url: "".into(),
             sha256_hex: "".into(),
             node_manager_binary_url: "".into(),
@@ -223,7 +227,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         assert_eq!(
             get_value_or_panic::<ReplicaVersionRecord>(
                 &registry,
-                make_replica_version_key("version_42").as_bytes()
+                make_replica_version_key(&ReplicaVersion::default()).as_bytes()
             )
             .await,
             ReplicaVersionRecord {
@@ -239,7 +243,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         // Set the subnet to a blessed version: it should work
         let set_to_blessed_ = UpdateSubnetReplicaVersionPayload {
             subnet_id: subnet_test_id(999).get(),
-            replica_version_id: "version_42".to_string(),
+            replica_version_id: ReplicaVersion::default().into(),
         };
         assert!(
             forward_call_via_universal_canister(
@@ -257,7 +261,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             )
             .await
             .replica_version_id,
-            "version_42"
+            ReplicaVersion::default().to_string(),
         );
 
         // Try to set the subnet to an unblessed version: it should fail
@@ -281,7 +285,7 @@ fn test_accepted_proposal_mutates_the_registry() {
             )
             .await
             .replica_version_id,
-            "version_42"
+            ReplicaVersion::default().to_string(),
         );
 
         Ok(())

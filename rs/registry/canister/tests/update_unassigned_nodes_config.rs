@@ -10,6 +10,7 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::unassigned_nodes_config::v1::UnassignedNodesConfigRecord;
 use ic_registry_keys::make_unassigned_nodes_config_record_key;
+use ic_types::ReplicaVersion;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
@@ -90,7 +91,7 @@ fn test_updating_unassigned_nodes_config_does_not_break_invariants() {
         // New payload with already-blessed version
         payload = UpdateUnassignedNodesConfigPayload {
             ssh_readonly_access: None,
-            replica_version: Some("version_42".to_string()),
+            replica_version: Some(ReplicaVersion::default().into()),
         };
 
         assert!(
@@ -111,7 +112,7 @@ fn test_updating_unassigned_nodes_config_does_not_break_invariants() {
             .await,
             UnassignedNodesConfigRecord {
                 ssh_readonly_access: vec![],
-                replica_version: "version_42".to_string(),
+                replica_version: ReplicaVersion::default().into(),
             }
         );
 

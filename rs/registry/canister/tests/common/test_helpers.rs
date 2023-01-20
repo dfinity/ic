@@ -27,6 +27,7 @@ use ic_registry_transport::insert;
 use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
 use ic_types::crypto::KeyPurpose;
+use ic_types::ReplicaVersion;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::do_create_subnet::CreateSubnetPayload;
 use registry_canister::mutations::node_management::do_add_node::{
@@ -58,6 +59,7 @@ pub fn get_subnet_holding_ecdsa_keys(
         gossip_max_duplicity: 1,
         gossip_max_chunk_wait_ms: 200,
         gossip_max_artifact_streams_per_peer: 1,
+        replica_version_id: ReplicaVersion::default().into(),
         node_ids,
         ..Default::default()
     }

@@ -78,7 +78,7 @@ impl Registry {
         result = result.and(check_subnet_invariants(&snapshot));
 
         // Replica version invariants
-        result = result.and(check_replica_version_invariants(&snapshot, false));
+        result = result.and(check_replica_version_invariants(&snapshot));
 
         // Endpoint invariants
         result = result.and(check_endpoint_invariants(&snapshot, false));

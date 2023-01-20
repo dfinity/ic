@@ -24,7 +24,7 @@ use ic_registry_keys::{
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest, update};
 use ic_test_utilities::types::ids::{node_test_id, user_test_id};
-use ic_types::p2p::build_default_gossip_config;
+use ic_types::{p2p::build_default_gossip_config, ReplicaVersion};
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder, mutations::do_delete_subnet::DeleteSubnetPayload,
 };
@@ -38,7 +38,7 @@ fn test_subnet_is_only_deleted_when_appropriate() {
         let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(999));
         let application_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(997));
         let second_system_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(998));
-        const VERSION_REPLICA_ID: &str = "version_42";
+        let replica_version_id = ReplicaVersion::default().to_string();
 
         let connection_endpoint = ConnectionEndpoint {
             ip_addr: "128.0.0.1".to_string(),
@@ -63,7 +63,7 @@ fn test_subnet_is_only_deleted_when_appropriate() {
         let application_subnet = SubnetRecord {
             membership: vec![node_pid_2.get().to_vec()],
             subnet_type: i32::from(SubnetType::Application),
-            replica_version_id: VERSION_REPLICA_ID.to_string(),
+            replica_version_id: replica_version_id.clone(),
             unit_delay_millis: 600,
             gossip_config: Some(build_default_gossip_config()),
             ..Default::default()
@@ -73,7 +73,7 @@ fn test_subnet_is_only_deleted_when_appropriate() {
         let second_system_subnet = SubnetRecord {
             membership: vec![node_pid_3.get().to_vec()],
             subnet_type: i32::from(SubnetType::System),
-            replica_version_id: VERSION_REPLICA_ID.to_string(),
+            replica_version_id,
             unit_delay_millis: 600,
             gossip_config: Some(build_default_gossip_config()),
             ..Default::default()

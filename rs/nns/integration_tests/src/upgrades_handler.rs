@@ -16,6 +16,7 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
 use ic_registry_keys::make_blessed_replica_version_key;
+use ic_types::ReplicaVersion;
 use registry_canister::mutations::{
     do_bless_replica_version::BlessReplicaVersionPayload,
     do_retire_replica_version::RetireReplicaVersionPayload,
@@ -50,7 +51,7 @@ fn test_submit_and_accept_bless_retire_replica_version_proposal() {
         let nns_canisters = NnsCanisters::set_up(&runtime, nns_init_payload).await;
         let gov = &nns_canisters.governance;
 
-        let version_42 = "version_42";
+        let default_version = &ReplicaVersion::default().to_string();
         let test_unassigned_version = "test_unassigned_version";
         let test_replica_version1 = "test_replica_version1";
         let test_replica_version2 = "test_replica_version2";
@@ -64,8 +65,8 @@ fn test_submit_and_accept_bless_retire_replica_version_proposal() {
             node_manager_binary_url: "".into(),
             node_manager_sha256_hex: "".into(),
             release_package_url: "".into(),
-            release_package_sha256_hex: "".into(),
-            release_package_urls: Some(vec!["".to_string()]),
+            release_package_sha256_hex: "C0FFEE".into(),
+            release_package_urls: Some(vec!["http://release_package.tar.gz".to_string()]),
             guest_launch_measurement_sha256_hex: None,
         };
         let retire_version_payload = |ids: Vec<&str>| RetireReplicaVersionPayload {
@@ -122,7 +123,7 @@ fn test_submit_and_accept_bless_retire_replica_version_proposal() {
             .await,
             BlessedReplicaVersions {
                 blessed_version_ids: vec![
-                    version_42.to_string(),
+                    default_version.to_string(),
                     test_replica_version1.to_string(),
                     test_replica_version2.to_string(),
                     test_unassigned_version.to_string(),
@@ -151,7 +152,7 @@ fn test_submit_and_accept_bless_retire_replica_version_proposal() {
         let empty_payload = retire_version_payload(vec![]);
         let invalid_payload =
             retire_version_payload(vec![test_replica_version2, test_replica_version3]);
-        let in_use_payload = retire_version_payload(vec![test_replica_version1, version_42]);
+        let in_use_payload = retire_version_payload(vec![test_replica_version1, default_version]);
         let unassigned_payload =
             retire_version_payload(vec![test_replica_version1, test_unassigned_version]);
         let valid_payload =
@@ -205,7 +206,7 @@ fn test_submit_and_accept_bless_retire_replica_version_proposal() {
             .await,
             BlessedReplicaVersions {
                 blessed_version_ids: vec![
-                    version_42.to_string(),
+                    default_version.to_string(),
                     test_unassigned_version.to_string()
                 ]
             }
