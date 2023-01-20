@@ -113,6 +113,7 @@ pub struct StateManagerMetrics {
     states_metadata_pbuf_size: IntGauge,
     checkpoint_metrics: CheckpointMetrics,
     manifest_metrics: ManifestMetrics,
+    tip_handler_queue_length: IntGauge,
 }
 
 #[derive(Clone)]
@@ -270,6 +271,11 @@ impl StateManagerMetrics {
             "Size of states_metadata.pbuf in bytes.",
         );
 
+        let tip_handler_queue_length = metrics_registry.int_gauge(
+            "state_manager_tip_handler_queue_length",
+            "Length of TipChannel queue.",
+        );
+
         Self {
             state_manager_error_count,
             checkpoint_op_duration,
@@ -286,6 +292,7 @@ impl StateManagerMetrics {
             states_metadata_pbuf_size,
             checkpoint_metrics: CheckpointMetrics::new(metrics_registry),
             manifest_metrics: ManifestMetrics::new(metrics_registry),
+            tip_handler_queue_length,
         }
     }
 }
@@ -2731,6 +2738,10 @@ impl StateManager for StateManagerImpl {
             .api_call_duration
             .with_label_values(&["commit_and_certify"])
             .start_timer();
+
+        self.metrics
+            .tip_handler_queue_length
+            .set(self.tip_channel.len() as i64);
 
         self.populate_extra_metadata(&mut state, height);
         self.flush_page_maps(&mut state, height);
