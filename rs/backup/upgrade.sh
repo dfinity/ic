@@ -35,9 +35,10 @@ sudo systemctl stop ic-backup.service
 
 VERSION=$(get_config_version)
 
-if ((${VERSION} < 8)); then
-    download_backup_binary "114cbe228650f97e58f085833fda975e9b41cc86"
-    set_config_version 8
+if ((${VERSION} < 9)); then
+    download_backup_binary "0a1005e004e11ee8f0b8e1c55b9f8bf19899ac17"
+    rm -f backup/backup_manager_state.json5
+    set_config_version 9
 fi
 
 sudo systemctl start ic-backup.service
