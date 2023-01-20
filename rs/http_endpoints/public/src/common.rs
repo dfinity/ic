@@ -83,6 +83,7 @@ pub(crate) fn make_response(user_error: UserError) -> Response<Body> {
         C::CanisterOutputQueueFull => StatusCode::SERVICE_UNAVAILABLE,
         C::CanisterQueueNotEmpty => StatusCode::SERVICE_UNAVAILABLE,
         C::IngressMessageTimeout => StatusCode::GATEWAY_TIMEOUT,
+        C::IngressHistoryFull => StatusCode::SERVICE_UNAVAILABLE,
         C::CanisterNotFound => StatusCode::NOT_FOUND,
         C::CanisterMethodNotFound => StatusCode::NOT_FOUND,
         C::CanisterAlreadyInstalled => StatusCode::PRECONDITION_FAILED,
