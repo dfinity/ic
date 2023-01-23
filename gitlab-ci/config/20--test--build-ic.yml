@@ -31,7 +31,7 @@
       fi
 
       # run build-ic
-      gitlab-ci/container/build-ic.sh
+      gitlab-ci/container/build-ic.sh -i -c -b
 
       # release binaries
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \

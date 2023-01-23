@@ -11,7 +11,7 @@ Usage: $0 -b -c -i
 
     -b  Build IC Binaries
     -c  Build IC Canisters
-    -i  Build IC-OS Image (implies '-b' and '-c')
+    -i  Build IC-OS Image
     -h  Print help
 EOF
 }
@@ -29,9 +29,10 @@ export BUILD_BIN=false
 export BUILD_CAN=false
 export BUILD_IMG=false
 
-# build everything by default
 if [ "$#" == 0 ]; then
-    BUILD_IMG=true
+    echo_red "ERROR: Please specify one of '-b', '-c' or '-i'" >&2
+    echo ""
+    usage && exit 1
 fi
 
 while getopts ':bcih' opt; do
@@ -45,11 +46,6 @@ while getopts ':bcih' opt; do
     esac
 done
 shift "$(($OPTIND - 1))"
-
-if "$BUILD_IMG"; then
-    BUILD_BIN=true
-    BUILD_CAN=true
-fi
 
 export ROOT_DIR="$(git rev-parse --show-toplevel)"
 export VERSION="${VERSION:-$(git rev-parse HEAD)}"
