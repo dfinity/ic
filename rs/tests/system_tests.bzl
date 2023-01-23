@@ -68,6 +68,11 @@ def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", flaky
       flaky: rerun in case of failure (up to 3 times).
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
+
+    # Names are used as part of domain names; thus, limit their length
+    if len(name) > 40:
+        fail("Name of system test group too long (max 40): " + name)
+
     bin_name = name + "_bin"
 
     rust_binary(
