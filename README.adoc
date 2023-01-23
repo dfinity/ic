@@ -85,17 +85,14 @@ The https://dfinity.org/[DFINITY Foundation] is a Swiss not-for-profit organizat
 
 See link:gitlab-ci/container/README.md[README] for more details.
 
+To build the IC-OS disk image run:
 ----
-$ ./gitlab-ci/container/build-ic.sh
+$ ./gitlab-ci/container/build-ic.sh -i
 ----
 
-This builds:
+This builds the IC-OS disk image and all its dependencies.
 
-* Native binaries (replica, orchestrator, et al -- for the full list, see `publish/binaries/BUILD.bazel`
-* Canisters
-* The IC-OS disk image
-
-In order to build only the binaries and the canisters, use the following flags on the `build-ic.sh` script:
+In order to build only the binaries and the canisters, use the `-b` and/or `-c` flags on the `build-ic.sh` script:
 ----
 $ ./gitlab-ci/container/build-ic.sh -b -c
 ----

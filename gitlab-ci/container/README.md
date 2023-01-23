@@ -27,7 +27,7 @@ Cloud Config is being daily tested on official [Ubuntu 22.04 Image](https://clou
 ## Building IC-OS
 
 ```bash
-$ ./gitlab-ci/container/build-ic.sh
+$ ./gitlab-ci/container/build-ic.sh -i
 $ # artifacts are available under ./artifacts directory
 $ tree artifacts/
 ```
