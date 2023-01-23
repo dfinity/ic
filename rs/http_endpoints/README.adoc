@@ -9,19 +9,27 @@ communicate with each other.
 
 The replica components in this directory are:
 
-* public HTTPS API endpoints, serving incoming requests from boundary nodes and other replica nodes
-* metrics HTTPS endpoint, used by Prometheus for scraping
+* link:public/README.adoc[public HTTPS API endpoint], serving incoming requests from boundary nodes and other replica nodes
+* metrics HTTPS endpoint, used by https://prometheus.io/[Prometheus] for scraping
 
 == Connection management ==
 
 Components in scope assume persistent connections are established. A hard cap exists on
-the number of live TCP connections per source IP. If the limit is reached for an IP address, new
-incoming connections from the same IP are refused.
-Given the existence of persistent connections, we must detect dead peers and disconnections due
-to network inactivity. For this purpose, we use https://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html#whyuse[TCP alivekeep].
-Different sockets may use different TCP keepalive configurations.
+the number of live TCP connections. If the limit is reached, new incoming connections are refused.
+Under extreme load, when the rate of incoming connections is higher than the rate at which the
+replica accepts them, users may also observe refused connections due to a full TCP listener
+backlog queue.
 
-== Thread-per-request (aka Tower global concurrency buffer) ==
+Given the existence of persistent connections, we must detect dead peers, disconnections due
+to network inactivity and/or peers holding on to connections without sending requests.
+For this purpose, if no bytes are read from a connection for the duration of 
+'connection_read_timeout_seconds', defined in each component's config, then the connection is
+dropped. There is no point in setting a timeout on the write bytes since they are conditioned
+on the received requests. 
+
+Each component uses the ReplicaOS defaults for https://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html#whyuse[TCP alivekeep].
+
+== Thread-per-request ==
  
 Components in scope listen on a socket, parse the corresponding request and execute the requested API
 call by calling a downstream component(s) that may block the running thread. Since async code needs to be
@@ -32,7 +40,24 @@ queue in front of each thread pool that handles requests. Requests come in, they
 threads pick requests off the queue and perform the actual work (whatever actions are required by the replica).
 The caller is responsible for correctly handling the case when the queue is full.
 
-== Preventing Server Overload (aka Tower load shedding) ==
+If a request is cancelled before it is picked up from a thread, then the request is not executed.
+
+This design pattern is implemented using a https://docs.rs/tower/latest/tower/limit/concurrency/index.html[limit on number of requests being concurrently processed],
+https://docs.rs/threadpool/latest/threadpool/[threadpool] per downstream service and https://docs.rs/tokio/latest/tokio/sync/oneshot/index.html[Tokio oneshot channel].
+
+== Request timeout (504) ==
+
+We want to detect if any downstream service is stuck and and takes longer than it should to process a request.
+There is a https://docs.rs/tower/latest/tower/timeout/index.html[timeout] set for each received request. If a request is not completed within the timeout then 
+the endpoint responds with `+504 Gateway Timeout+`.
+
+Setting a timeout on requests guards against closing idle connections due to stuck downstream 
+services. For example, let's say a user uses HTTP1 over a single connection. If there is a downstream service
+that takes longer than it should, then the user is unable to send new requests until the last one completed.
+Hence, this may result in dropping the connection because no new bytes are read by the replica on that
+connection. 
+
+== Preventing Server Overload (429) ==
  
 Servers should protect themselves from becoming overloaded and crashing. When overloaded at either the frontend or
 backend layers, fail early and cheaply. For details, see 
@@ -41,4 +66,14 @@ https://sre.google/sre-book/addressing-cascading-failures/#xref_cascading-failur
 In addition, serving errors early and cheaply can be beneficial for replicated servers that stay behind load balancers.
 For example, https://sre.google/sre-book/load-balancing-datacenter/[Least-Loaded Round Robin] takes into account recent errors.
  
-== Fairness (aka Tower buffer) ==
+Given the listed best practices, when a particular queue in-front of a thread pool is full and request can't be added,
+the endpoint https://docs.rs/tower/latest/tower/load_shed/index.html#[sheds load] by responding with `+429 Too Many Requests+` for that particular request. 
+
+== Fairness ==
+
+== Too large and too slow requests ==
+
+If a http request body is greater than the configured limit, the endpoints responds with `+413 Payload Too Large+`.
+
+If a http request does not complete within the specified timeout it will be aborted and a `+408 Request Timeout+` response will be sent.
+
