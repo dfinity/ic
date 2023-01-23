@@ -41,6 +41,7 @@ struct Index {
     pub is_heartbeat_running: bool,
 
     // Next time to call [build_index]
+    #[serde(default)]
     pub next_build_index_time: u64,
 
     // The index of transactions per account
