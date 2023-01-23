@@ -28,7 +28,7 @@ impl NominalCycles {
     }
 
     pub fn from_cycles(input: Cycles) -> Self {
-        Self(input.get() as u128)
+        Self(input.get())
     }
 
     pub fn from_parts(high: u64, low: u64) -> Self {

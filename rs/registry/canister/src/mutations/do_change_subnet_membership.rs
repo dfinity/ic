@@ -60,7 +60,7 @@ impl Registry {
             subnet_membership_after_change,
         );
         let mutations = vec![upsert(
-            &make_subnet_record_key(subnet_id),
+            make_subnet_record_key(subnet_id),
             encode_or_panic(&subnet_record),
         )];
 

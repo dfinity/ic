@@ -20,7 +20,7 @@ enum Response {
 fn test() {
     let state_machine_binary =
         std::env::var_os("STATE_MACHINE_BIN").expect("missing state machine binary binary");
-    let mut child = Command::new(&state_machine_binary)
+    let mut child = Command::new(state_machine_binary)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .spawn()

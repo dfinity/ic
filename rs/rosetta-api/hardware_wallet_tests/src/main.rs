@@ -174,7 +174,7 @@ pub fn generate_zondax_test(
         "index": index,
         "name": format!("Send tx index {}", index),
         "valid": true,
-        "blob": hex::encode(&bytes),
+        "blob": hex::encode(bytes),
         "request_id": hex::encode(&request_id),
         "output": [
             "0 | Transaction type : Send ICP",
@@ -234,8 +234,8 @@ fn test_zondax_generator() {
         created_at_time: None,
     };
 
-    let mut rng = StdRng::seed_from_u64(1);
-    let keypair = EdKeypair::new(&mut rng);
+    let rng = StdRng::seed_from_u64(1);
+    let keypair = EdKeypair::new(rng);
 
     let s = generate_zondax_test(1, keypair, send_args);
     println!("{}", s);

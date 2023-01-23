@@ -418,7 +418,7 @@ impl TempCspVaultServer {
         let tokio_runtime = TokioRuntimeOrHandle::new(opt_tokio_rt_handle);
         let listener = {
             let _enter_guard = tokio_runtime.handle().enter();
-            UnixListener::bind(&vault_socket_path).expect("failed to bind")
+            UnixListener::bind(vault_socket_path).expect("failed to bind")
         };
         let server = TarpcCspVaultServerImpl::new(
             crypto_root,
@@ -1119,7 +1119,7 @@ fn copy_crypto_root(src: &Path, dest: &Path) {
         if path.is_file() {
             let filename = path.file_name().expect("failed to get src path");
             let dest_path = dest.join(filename);
-            std::fs::copy(&path, &dest_path).expect("failed to copy file");
+            std::fs::copy(&path, dest_path).expect("failed to copy file");
         }
     }
 }

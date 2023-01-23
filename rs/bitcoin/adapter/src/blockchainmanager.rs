@@ -677,8 +677,7 @@ impl BlockchainManager {
         // Update the list of peers.
         let active_connections = channel.available_connections();
         // Removing inactive peers.
-        let peer_addresses: Vec<SocketAddr> =
-            self.peer_info.iter().map(|(addr, _)| *addr).collect();
+        let peer_addresses: Vec<SocketAddr> = self.peer_info.keys().copied().collect();
 
         for addr in peer_addresses {
             if !active_connections.contains(&addr) {

@@ -380,10 +380,7 @@ mod database_access {
             |account: AccountIdentifier| -> Result<Option<(String, u64)>, BlockStoreError> {
                 let account_balance_opt = stmt_select
                     .query_map(params![account.to_hex(), hb.index], |row| {
-                        Ok((
-                            row.get(1).map(|x: String| x as String)?,
-                            row.get(2).map(|x: u64| x as u64)?,
-                        ))
+                        Ok((row.get(1).map(|x: String| x as String)?, row.get(2)?))
                     })
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?
                     .map(|x| x.unwrap())
@@ -554,9 +551,7 @@ mod database_access {
                 .map_err(|e| BlockStoreError::Other(e.to_string()))
                 .unwrap();
             let mut block_idx = stmt
-                .query_map(params![block_idx, acc], |row| {
-                    Ok(row.get(0).map(|x: u64| x as u64).unwrap())
-                })
+                .query_map(params![block_idx, acc], |row| Ok(row.get(0).unwrap()))
                 .map_err(|e| BlockStoreError::Other(e.to_string()))?;
             match block_idx.next() {
                 Some(Ok(idx)) => Ok(idx),
@@ -609,10 +604,7 @@ mod database_access {
             .unwrap();
         let account_history = stmt
             .query_map(params![account], |row| {
-                Ok((
-                    row.get(0).map(|x: u64| x as u64)?,
-                    row.get(1).map(|x| Tokens::from_e8s(x))?,
-                ))
+                Ok((row.get(0)?, row.get(1).map(|x| Tokens::from_e8s(x))?))
             })
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         for tuple in account_history {
@@ -688,7 +680,7 @@ impl Blocks {
             .expect("Unable to create directory for SQLite on-disk store.");
         let path = location.join("db.sqlite");
         let connection =
-            rusqlite::Connection::open(&path).expect("Unable to open SQLite database connection");
+            rusqlite::Connection::open(path).expect("Unable to open SQLite database connection");
         Self::new(connection)
     }
 

@@ -548,7 +548,7 @@ impl StateLayout {
     /// there is one).
     pub fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
         let cp_name = self.checkpoint_name(height);
-        let path = self.checkpoints().join(&cp_name);
+        let path = self.checkpoints().join(cp_name);
         if !path.exists() {
             return Err(LayoutError::NotFound(height));
         }
@@ -786,8 +786,8 @@ impl StateLayout {
 
         let dst_path = diverged_checkpoints_dir.join(&cp_name);
 
-        match std::fs::rename(&cp_path, &dst_path) {
-            Ok(()) => sync_path(&self.checkpoints()).map_err(|err| LayoutError::IoError {
+        match std::fs::rename(&cp_path, dst_path) {
+            Ok(()) => sync_path(self.checkpoints()).map_err(|err| LayoutError::IoError {
                 path: self.checkpoints(),
                 message: "Failed to sync checkpoints".to_string(),
                 io_err: err,
@@ -925,7 +925,7 @@ impl StateLayout {
             message: "Failed to sync backups".to_string(),
             io_err: err,
         })?;
-        sync_path(&self.checkpoints()).map_err(|err| LayoutError::IoError {
+        sync_path(self.checkpoints()).map_err(|err| LayoutError::IoError {
             path: self.checkpoints(),
             message: "Failed to sync checkpoints".to_string(),
             io_err: err,
@@ -972,7 +972,7 @@ impl StateLayout {
         thread_pool: Option<&mut scoped_threadpool::Pool>,
     ) -> std::io::Result<()> {
         let scratch_name = format!("scratchpad_{}", name);
-        let scratchpad = self.fs_tmp().join(&scratch_name);
+        let scratchpad = self.fs_tmp().join(scratch_name);
         self.ensure_dir_exists(&scratchpad)?;
 
         if dst.exists() {

@@ -571,5 +571,5 @@ async fn main() {
     )
     .await;
 
-    std::process::exit(if exit_code_success { 0 } else { 1 });
+    std::process::exit(i32::from(!exit_code_success));
 }

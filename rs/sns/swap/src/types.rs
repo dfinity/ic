@@ -679,7 +679,7 @@ mod tests {
             .expect("participant_neuron_basket not populated.")
             .count as u128;
         let available_sns_token_e8s_per_neuron =
-            sns_token_e8s / neuron_basket_count as u128 - init.transaction_fee_e8s.unwrap() as u128;
+            sns_token_e8s / neuron_basket_count - init.transaction_fee_e8s.unwrap() as u128;
         assert!(available_sns_token_e8s_per_neuron < u64::MAX as u128);
         let available_sns_token_e8s_per_neuron = available_sns_token_e8s_per_neuron as u64;
         assert!(init.neuron_minimum_stake_e8s.unwrap() <= available_sns_token_e8s_per_neuron);

@@ -130,7 +130,7 @@ fn main() -> Result<()> {
     let mut all_deps: BTreeMap<String, CrateSpec> = BTreeMap::new();
 
     for crt in pkg.workspace.members {
-        let crtfile = std::fs::read_to_string(manifest_dir.join(&crt).join("Cargo.toml"))?;
+        let crtfile = std::fs::read_to_string(manifest_dir.join(crt).join("Cargo.toml"))?;
         let crt_desc = toml::from_str::<Crate>(&crtfile).with_context(|| crtfile)?;
         process_deps(crt_desc.dependencies.iter(), &mut all_deps)?;
         process_deps(crt_desc.dev_dependencies.iter(), &mut all_deps)?;

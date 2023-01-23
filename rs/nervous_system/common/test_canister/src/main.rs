@@ -70,7 +70,7 @@ mod test {
         )
         .join("interface.did");
 
-        let expected = String::from_utf8(std::fs::read(&did_path).unwrap()).unwrap();
+        let expected = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
 
         candid::export_service!();
         let actual = __export_service();

@@ -126,7 +126,7 @@ pub struct LedgerFixture {
 
 impl LedgerFixture {
     pub fn get_supply(&self) -> Tokens {
-        Tokens::from_e8s(self.accounts.iter().map(|(_, y)| y).sum())
+        Tokens::from_e8s(self.accounts.values().sum())
     }
 }
 

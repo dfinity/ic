@@ -2216,7 +2216,7 @@ impl RosettaSupportedKeyPair for Secp256k1KeyPair {
         Ok(pid)
     }
     fn hex_encode_pk(&self) -> String {
-        hex::encode(&self.get_public_key().serialize_sec1(false))
+        hex::encode(self.get_public_key().serialize_sec1(false))
     }
     fn hex_decode_pk(pk_hex_encoded: &str) -> Result<Vec<u8>, ApiError> {
         hex::decode(pk_hex_encoded)
@@ -2321,7 +2321,7 @@ impl RosettaSupportedKeyPair for Arc<Secp256k1KeyPair> {
         Ok(pid)
     }
     fn hex_encode_pk(&self) -> String {
-        hex::encode(&self.get_public_key().serialize_sec1(false))
+        hex::encode(self.get_public_key().serialize_sec1(false))
     }
     fn hex_decode_pk(pk_hex_encoded: &str) -> Result<Vec<u8>, ApiError> {
         hex::decode(pk_hex_encoded)

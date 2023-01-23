@@ -159,15 +159,7 @@ impl FakeDriver {
     }
 
     pub fn get_supply(&self) -> Tokens {
-        Tokens::from_e8s(
-            self.state
-                .lock()
-                .unwrap()
-                .accounts
-                .iter()
-                .map(|(_, y)| y)
-                .sum(),
-        )
+        Tokens::from_e8s(self.state.lock().unwrap().accounts.values().sum())
     }
 
     /// Increases the time by the given amount.

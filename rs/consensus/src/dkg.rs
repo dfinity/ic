@@ -407,7 +407,7 @@ fn get_dealers_from_chain(
 ) -> HashMap<NiDkgId, HashSet<NodeId>> {
     get_dkg_dealings(pool_reader, block)
         .into_iter()
-        .map(|(dkg_id, dealings)| (dkg_id, dealings.into_iter().map(|(key, _)| key).collect()))
+        .map(|(dkg_id, dealings)| (dkg_id, dealings.into_keys().collect()))
         .collect()
 }
 

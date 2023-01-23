@@ -94,9 +94,9 @@ pub fn call_new(
             method.as_ptr() as u32,
             method.len() as u32,
             reply_fun as u32,
-            reply_env as u32,
+            reply_env,
             reject_fun as u32,
-            reject_env as u32,
+            reject_env,
         )
     }
 }
@@ -104,7 +104,7 @@ pub fn call_new(
 pub fn call_on_cleanup(fun: fn(u32) -> (), env: u32) {
     #[allow(clippy::fn_to_numeric_cast_with_truncation)]
     unsafe {
-        ic0::call_on_cleanup(fun as u32, env as u32)
+        ic0::call_on_cleanup(fun as u32, env)
     }
 }
 

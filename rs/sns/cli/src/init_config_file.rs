@@ -1265,7 +1265,7 @@ wait_for_quiet_deadline_increase_seconds: 1000
         // Read the test.png file into memory
         let logo_path = sns_cli_init_config.sns_governance.logo.unwrap();
 
-        let file = File::open(&logo_path).unwrap();
+        let file = File::open(logo_path).unwrap();
         let mut reader = BufReader::new(file);
         let mut buffer: Vec<u8> = vec![];
         reader.read_to_end(&mut buffer).unwrap();

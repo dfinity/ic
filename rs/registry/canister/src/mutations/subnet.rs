@@ -193,7 +193,7 @@ impl Registry {
         ecdsa_initial_config: &EcdsaInitialConfig,
         receiver_nodes: Vec<NodeId>,
     ) -> Vec<ComputeInitialEcdsaDealingsArgs> {
-        let latest_version = self.latest_version() as u64;
+        let latest_version = self.latest_version();
         ecdsa_initial_config
             .keys
             .iter()

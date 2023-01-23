@@ -507,7 +507,7 @@ impl EcdsaIdentity {
 
 impl Identity for EcdsaIdentity {
     fn sender(&self) -> Result<Principal, String> {
-        Ok(Principal::self_authenticating(&self.public_key_der()))
+        Ok(Principal::self_authenticating(self.public_key_der()))
     }
 
     fn sign(&self, msg: &[u8]) -> Result<Signature, String> {

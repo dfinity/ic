@@ -427,7 +427,7 @@ impl NiDkgAlgorithm for CryptoReturningOk {
         let mut transcript = NiDkgTranscript::dummy_transcript_for_tests_with_params(
             config.receivers().get().clone().into_iter().collect(),
             config.dkg_id().dkg_tag,
-            config.threshold().get().get() as u32,
+            config.threshold().get().get(),
             config.registry_version().get(),
         );
         transcript.dkg_id = config.dkg_id();

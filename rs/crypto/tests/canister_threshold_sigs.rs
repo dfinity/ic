@@ -170,7 +170,7 @@ mod create_transcript {
         assert_matches!(
             err,
             IDkgCreateTranscriptError::UnsatisfiedCollectionThreshold { threshold, dealing_count }
-            if (threshold as usize)==(params.collection_threshold().get() as usize) && (dealing_count as usize)==dealings.len()
+            if (threshold as usize)==(params.collection_threshold().get() as usize) && dealing_count==dealings.len()
         );
     }
 
@@ -2635,10 +2635,7 @@ mod verify_initial_dealings {
             &reshare_of_unmasked_params,
             &env.crypto_components,
         );
-        let mut signed_dealings_vec = signed_dealings
-            .into_iter()
-            .map(|(_dealer_id, signed_dealing)| signed_dealing)
-            .collect::<Vec<_>>();
+        let mut signed_dealings_vec = signed_dealings.into_values().collect::<Vec<_>>();
         if corrupt_first_dealing {
             if let Some(first_signed_dealing) = signed_dealings_vec.first_mut() {
                 let corrupted_sig = {
@@ -3171,8 +3168,8 @@ fn generate_complaints<'a>(
 
     let dealing_indices_to_corrupt = transcript
         .verified_dealings
-        .iter()
-        .map(|(index, _signed_dealing)| *index)
+        .keys()
+        .copied()
         .choose_multiple(rng, number_of_complaints);
     assert_eq!(dealing_indices_to_corrupt.len(), number_of_complaints);
 

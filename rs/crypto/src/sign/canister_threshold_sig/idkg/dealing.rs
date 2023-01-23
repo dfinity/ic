@@ -40,10 +40,7 @@ pub fn create_dealing<C: CspIDkgProtocol + CspSigner>(
         registry.as_ref(),
         params.registry_version(),
     )?;
-    let receiver_keys_vec = receiver_keys
-        .iter()
-        .map(|(_, k)| k.clone())
-        .collect::<Vec<_>>();
+    let receiver_keys_vec = receiver_keys.values().cloned().collect::<Vec<_>>();
 
     let csp_operation_type = IDkgTranscriptOperationInternal::try_from(params.operation_type())
         .map_err(|e| IDkgCreateDealingError::SerializationError {

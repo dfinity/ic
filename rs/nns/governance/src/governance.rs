@@ -3713,7 +3713,7 @@ impl Governance {
         if !parent_neuron.kyc_verified {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
-                &format!("Neuron is not kyc verified: {}", id.id),
+                format!("Neuron is not kyc verified: {}", id.id),
             ));
         }
 
@@ -5095,7 +5095,7 @@ impl Governance {
         let proposer = self.proto.neurons.get(&proposer_id.id).ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::NotFound,
-                &format!("Proposer neuron not found: {}", proposer_id.id),
+                format!("Proposer neuron not found: {}", proposer_id.id),
             )
         })?;
         // Check that the caller is authorized, i.e., either the
@@ -5450,7 +5450,7 @@ impl Governance {
 
         Err(GovernanceError::new_with_message(
             ErrorType::InvalidProposal,
-            &error_str,
+            error_str,
         ))
     }
 
@@ -5551,7 +5551,7 @@ impl Governance {
         let proposer = self.proto.neurons.get(&proposer_id.id).ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::NotFound,
-                &format!("Proposer neuron not found: {}", proposer_id.id),
+                format!("Proposer neuron not found: {}", proposer_id.id),
             )
         })?;
         // === Validation
@@ -5953,7 +5953,7 @@ impl Governance {
         // Find the neuron to modify.
         let neuron = self.proto.neurons.get_mut(&id.id).ok_or_else(||
             // The specified neuron is not present.
-            GovernanceError::new_with_message(ErrorType::NotFound, &format!("Leader neuron not found: {}", id.id)))?;
+            GovernanceError::new_with_message(ErrorType::NotFound, format!("Leader neuron not found: {}", id.id)))?;
 
         // Only the controller, or a proposal (which passes the controller as the
         // caller), can change the followees for the ManageNeuron topic.

@@ -102,8 +102,7 @@ fn dump_heap(test: &mut ExecutionTest, canister_id: CanisterId) -> Vec<u8> {
 fn buf_apply_write(heap: &mut [u8], write: &Write) {
     // match the behavior of write_bytes: copy the i32 `addr` to heap[0;4]
     heap[0..4].copy_from_slice(&write.dst.to_le_bytes());
-    heap[write.dst as usize..(write.dst as usize + write.bytes.len() as usize)]
-        .copy_from_slice(&write.bytes)
+    heap[write.dst as usize..(write.dst as usize + write.bytes.len())].copy_from_slice(&write.bytes)
 }
 
 const TEST_HEAP_SIZE_BYTES: usize = WASM_PAGE_SIZE_BYTES * TEST_NUM_PAGES;

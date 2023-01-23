@@ -3039,14 +3039,7 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
 fn test_approve_kyc() {
     let fixture = fixture_for_approve_kyc();
     let driver = fake::FakeDriver::default()
-        .with_ledger_from_neurons(
-            &fixture
-                .neurons
-                .iter()
-                .map(|(_, y)| y)
-                .cloned()
-                .collect::<Vec<Neuron>>(),
-        )
+        .with_ledger_from_neurons(&fixture.neurons.values().cloned().collect::<Vec<Neuron>>())
         .with_supply(Tokens::from_tokens(1_000_000).unwrap());
     let mut gov = Governance::new(
         fixture,
@@ -8006,10 +7999,7 @@ fn test_list_neurons() {
     let p1_access = vec![1, 12, 13, 21, 31]
         .into_iter()
         .collect::<HashSet<u64>>();
-    assert_eq!(
-        p1_access,
-        p1_listing.neuron_infos.iter().map(|(x, _)| *x).collect()
-    );
+    assert_eq!(p1_access, p1_listing.neuron_infos.keys().copied().collect());
     assert_eq!(
         p1_access,
         p1_listing
@@ -8031,8 +8021,8 @@ fn test_list_neurons() {
         p5_access,
         p5_listing
             .neuron_infos
-            .iter()
-            .map(|(x, _)| *x)
+            .keys()
+            .copied()
             .collect::<HashSet<u64>>()
     );
     assert_eq!(
@@ -8056,8 +8046,8 @@ fn test_list_neurons() {
         vec![4, 42, 99].into_iter().collect::<HashSet<u64>>(),
         p4_listing
             .neuron_infos
-            .iter()
-            .map(|(x, _)| *x)
+            .keys()
+            .copied()
             .collect::<HashSet<u64>>()
     );
     assert_eq!(
@@ -10491,7 +10481,7 @@ fn test_wfq_constant_flipping() {
     for i in 1..ONE_DAY_SECONDS / 10 {
         let vote = if i % 2 == 0 { Vote::Yes } else { Vote::No };
         neuron_votes.push(NeuronVote {
-            vote_and_time: Some((vote, 80 * i as u64)),
+            vote_and_time: Some((vote, 80 * i)),
             stake: 20,
         })
     }

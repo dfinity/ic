@@ -153,7 +153,7 @@ mod tests {
             blessed_version_ids: versions,
         });
 
-        let mutation = vec![insert(key.as_bytes(), &value)];
+        let mutation = vec![insert(key.as_bytes(), value)];
         registry.check_global_state_invariants(&mutation);
     }
 
@@ -245,7 +245,7 @@ mod tests {
             blessed_version_ids: vec![ReplicaVersion::default().into()],
         });
 
-        let mutation = vec![insert(key.as_bytes(), &value)];
+        let mutation = vec![insert(key.as_bytes(), value)];
         registry.check_global_state_invariants(&mutation);
     }
 
@@ -260,21 +260,21 @@ mod tests {
             replica_version: "unelected".into(),
         });
 
-        let mutation = vec![insert(key.as_bytes(), &value)];
+        let mutation = vec![insert(key.as_bytes(), value)];
         registry.check_global_state_invariants(&mutation);
     }
 
     fn check_replica_version(hash: &str, urls: Vec<String>) {
         let registry = invariant_compliant_registry();
 
-        let key = make_replica_version_key(&ReplicaVersion::default());
+        let key = make_replica_version_key(ReplicaVersion::default());
         let value = encode_or_panic(&ReplicaVersionRecord {
             release_package_sha256_hex: hash.into(),
             release_package_urls: urls,
             guest_launch_measurement_sha256_hex: None,
         });
 
-        let mutation = vec![upsert(key.as_bytes(), &value)];
+        let mutation = vec![upsert(key.as_bytes(), value)];
         registry.check_global_state_invariants(&mutation);
     }
 

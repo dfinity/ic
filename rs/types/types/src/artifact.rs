@@ -514,7 +514,7 @@ impl ChunkableArtifact for StateSyncMessage {
                     .checkpoint_root
                     .join(&self.manifest.file_table[chunk.file_index as usize].relative_path);
                 let mut buf = vec![0; chunk.size_bytes as usize];
-                let f = std::fs::File::open(&path).ok()?;
+                let f = std::fs::File::open(path).ok()?;
                 f.read_exact_at(&mut buf[..], chunk.offset).ok()?;
                 Some(buf)
             };

@@ -86,7 +86,7 @@ fn process_test_results(validated_args: ValidatedCliProcessTestsArgs) -> anyhow:
                 .join(config::TEST_RESULT_FILE);
             // On the contrary, test result file might be absent, e.g., if test timed out, or pot setup failed.
             // In case test result file is absent, pot_result is used to propagate error message of the pot setup to the test.
-            let test_result_file = fs::File::open(&test_result_path);
+            let test_result_file = fs::File::open(test_result_path);
             let test_result: TestResultNode = {
                 match test_result_file {
                     Ok(file) => serde_json::from_reader(&file)

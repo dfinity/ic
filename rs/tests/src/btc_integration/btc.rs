@@ -66,7 +66,7 @@ docker run  --name=bitcoind-node -d \
         .unwrap();
 
     let bitcoin_conf_path = config_dir.join("bitcoin.conf");
-    let mut bitcoin_conf = File::create(&bitcoin_conf_path).unwrap();
+    let mut bitcoin_conf = File::create(bitcoin_conf_path).unwrap();
     bitcoin_conf.write_all(r#"
     # Enable regtest mode. This is required to setup a private bitcoin network.
     regtest=1

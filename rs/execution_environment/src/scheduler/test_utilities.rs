@@ -782,8 +782,8 @@ impl SchedulerTestBuilder {
         };
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
-            subnet_memory_capacity: NumBytes::from(self.subnet_total_memory as u64),
-            subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory as u64),
+            subnet_memory_capacity: NumBytes::from(self.subnet_total_memory),
+            subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory),
             max_canister_memory_size: NumBytes::from(self.max_canister_memory_size),
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,

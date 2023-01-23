@@ -493,7 +493,7 @@ impl TryFrom<Option<Object>> for KeyMetadata {
 
 impl From<KeyMetadata> for Object {
     fn from(m: KeyMetadata) -> Self {
-        match serde_json::to_value(&m) {
+        match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
             _ => unreachable!(),
         }

@@ -259,10 +259,7 @@ mod non_interactive_distributed_key_generation {
 
         let transcripts = run_ni_dkg_and_create_receiver_transcripts(&config, &crypto_components);
 
-        let transcripts_set: HashSet<_> = transcripts
-            .iter()
-            .map(|(_node_id, transcript)| transcript)
-            .collect();
+        let transcripts_set: HashSet<_> = transcripts.values().collect();
         assert_eq!(transcripts_set.len(), 1);
     }
 

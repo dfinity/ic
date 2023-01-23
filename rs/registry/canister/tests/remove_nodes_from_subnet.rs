@@ -305,7 +305,7 @@ fn test_removing_unassigned_nodes_from_subnet_does_nothing() {
                 make_subnet_record_key(subnet_id).as_bytes(),
             )
             .await;
-            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
+            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
 
             let payload = RemoveNodesFromSubnetPayload {
                 node_ids: unassigned_node_ids.clone(),

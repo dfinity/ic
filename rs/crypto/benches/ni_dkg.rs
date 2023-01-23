@@ -255,7 +255,7 @@ mod nidkg_benches_test_vectors {
                 == "YES";
             if should_recreate {
                 if std::path::Path::new(&self.paths.toplevel()).exists() {
-                    std::fs::remove_dir_all(&self.paths.toplevel())
+                    std::fs::remove_dir_all(self.paths.toplevel())
                         .expect("failed to remove old test vectors directory");
                 }
                 self.establish(test_cases);

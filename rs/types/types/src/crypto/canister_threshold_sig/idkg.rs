@@ -1112,9 +1112,9 @@ fn context_data(
         &(transcript_id.source_subnet().get().as_slice().len() as u64).to_be_bytes(),
     );
     ret.extend_from_slice(transcript_id.source_subnet().get().as_slice());
-    ret.extend_from_slice(&(transcript_id.id() as u64).to_be_bytes());
+    ret.extend_from_slice(&transcript_id.id().to_be_bytes());
     ret.extend_from_slice(&(transcript_id.source_height().get()).to_be_bytes());
-    ret.extend_from_slice(&(registry_version.get() as u64).to_be_bytes());
+    ret.extend_from_slice(&registry_version.get().to_be_bytes());
     ret.push(algorithm_id as u8);
 
     ret

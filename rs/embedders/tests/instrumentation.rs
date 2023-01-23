@@ -30,7 +30,7 @@ fn inject_and_cmp(testname: &str) {
         std::env::var("CARGO_MANIFEST_DIR").unwrap(),
         testname
     );
-    let buff = wat::parse_file(&filename).expect("couldn't read the input file");
+    let buff = wat::parse_file(filename).expect("couldn't read the input file");
 
     let output = validate_and_instrument_for_testing(
         &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),

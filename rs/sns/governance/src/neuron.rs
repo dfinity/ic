@@ -563,7 +563,7 @@ impl Neuron {
             // = neuron.aging_since_timestamp_seconds.
         }
 
-        self.cached_neuron_stake_e8s = new_stake_e8s as u64;
+        self.cached_neuron_stake_e8s = new_stake_e8s;
     }
 
     /// Returns a neuron's subaccount or an error if there is none (a neuron

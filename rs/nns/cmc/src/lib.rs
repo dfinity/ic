@@ -158,7 +158,7 @@ impl TokensToCycles {
         Cycles::new(
             icpts.get_e8s() as u128
                 * self.xdr_permyriad_per_icp as u128
-                * self.cycles_per_xdr.get() as u128
+                * self.cycles_per_xdr.get()
                 / (icp_ledger::TOKEN_SUBDIVIDABLE_BY as u128 * 10_000),
         )
     }

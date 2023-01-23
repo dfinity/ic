@@ -147,8 +147,7 @@ fn get_utxos_from_chain(
         None => all_utxos,
         // There's some limit, so use it to chunk up the UTXOs if they don't fit.
         Some(utxo_limit) => {
-            let (utxos_to_return, rest) =
-                all_utxos.split_at(all_utxos.len().min(utxo_limit as usize));
+            let (utxos_to_return, rest) = all_utxos.split_at(all_utxos.len().min(utxo_limit));
 
             if !rest.is_empty() {
                 next_page = Some(

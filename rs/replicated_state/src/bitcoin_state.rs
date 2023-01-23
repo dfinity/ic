@@ -306,7 +306,7 @@ impl From<&AdapterQueues> for pb_bitcoin::AdapterQueues {
     fn from(queues: &AdapterQueues) -> pb_bitcoin::AdapterQueues {
         pb_bitcoin::AdapterQueues {
             next_callback_id: queues.next_callback_id,
-            requests: queues.requests.iter().map(|(_, v)| v.into()).collect(),
+            requests: queues.requests.values().map(|v| v.into()).collect(),
             responses: queues.responses.iter().map(|x| x.into()).collect(),
             requests_queue_capacity: queues.requests_queue_capacity,
         }

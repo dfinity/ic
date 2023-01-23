@@ -804,9 +804,8 @@ fn ingress_history_respects_limits() {
 
         assert_eq!(ingress_history.memory_usage, 0);
 
-        let terminal_size = NumBytes::from(
-            max_num_terminal as u64 * test_status_terminal(0).payload_bytes() as u64,
-        );
+        let terminal_size =
+            NumBytes::from(max_num_terminal * test_status_terminal(0).payload_bytes() as u64);
 
         for i in 1..=num_statuses {
             ingress_history.insert(

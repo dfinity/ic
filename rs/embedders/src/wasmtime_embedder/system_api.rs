@@ -1144,7 +1144,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     stable_memory_dirty_page_limit,
                 )?;
                 with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_stable64_write(offset as u64, src as u64, size as u64, memory)
+                    system_api.ic0_stable64_write(offset, src, size, memory)
                 })
             }
         })

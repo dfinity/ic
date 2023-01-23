@@ -142,7 +142,7 @@ impl<'a> OutputIterator<'a> {
 
         let mut rng = ChaChaRng::seed_from_u64(seed);
         let rotation = rng.gen_range(0..canister_iterators.len().max(1));
-        canister_iterators.rotate_left(rotation as usize);
+        canister_iterators.rotate_left(rotation);
 
         // Push the subnet queues in front in order to make sure that at least one
         // system message is always routed as long as there is space for it.

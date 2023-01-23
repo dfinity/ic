@@ -120,7 +120,7 @@ impl TryFrom<ExtendedDerivationPathProto> for ExtendedDerivationPath {
 // ----- Conversion helpers.
 fn idkg_transcript_id_proto(idkg_transcript_id: &IDkgTranscriptId) -> IDkgTranscriptIdProto {
     IDkgTranscriptIdProto {
-        id: idkg_transcript_id.id() as u64,
+        id: idkg_transcript_id.id(),
         subnet_id: Some(subnet_id_into_protobuf(*idkg_transcript_id.source_subnet())),
         source_height: idkg_transcript_id.source_height().get(),
     }
@@ -173,7 +173,7 @@ fn idkg_transcript_params_proto(params: &IDkgTranscriptParams) -> IDkgTranscript
             .iter()
             .map(|(dealer_index, dealer_id)| DealerTupleProto {
                 dealer_id: Some(node_id_into_protobuf(dealer_id)),
-                dealer_index: dealer_index as u32,
+                dealer_index,
             })
             .collect(),
         receivers: params
@@ -397,7 +397,7 @@ fn verified_idkg_dealing_proto(
     signed_dealing: &BatchSignedIDkgDealing,
 ) -> VerifiedIDkgDealingProto {
     VerifiedIDkgDealingProto {
-        dealer_index: *dealer_index as u32,
+        dealer_index: *dealer_index,
         signed_dealing_tuple: Some(signed_idkg_dealing_tuple_proto(
             signed_dealing.signed_idkg_dealing(),
         )),

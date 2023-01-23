@@ -44,13 +44,12 @@ impl<'a> WriteBuffer<'a> {
         use std::io::{Seek, SeekFrom};
 
         let offset = self.start_index.get() * PAGE_SIZE as u64;
-        file.seek(SeekFrom::Start(offset as u64)).map_err(|err| {
-            PersistenceError::FileSystemError {
+        file.seek(SeekFrom::Start(offset))
+            .map_err(|err| PersistenceError::FileSystemError {
                 path: path.display().to_string(),
                 context: format!("Failed to seek to {}", offset),
                 internal_error: err.to_string(),
-            }
-        })?;
+            })?;
 
         write_all_vectored(file, &self.content).map_err(|err| {
             PersistenceError::FileSystemError {

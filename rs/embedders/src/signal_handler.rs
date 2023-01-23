@@ -24,7 +24,7 @@ pub(crate) fn sigsegv_memory_tracker_handler(
         move |tracker: &mut MutexGuard<SigsegvMemoryTracker>,
               si_addr: *mut c_void,
               current_size_in_pages: &MemoryPageSize| unsafe {
-            let page_count = current_size_in_pages.load(Ordering::SeqCst) as usize;
+            let page_count = current_size_in_pages.load(Ordering::SeqCst);
             let heap_size = page_count * (wasmtime_environ::WASM_PAGE_SIZE as usize);
             let heap_start = tracker.area().addr() as *mut libc::c_void;
             if (heap_start <= si_addr) && (si_addr < { heap_start.add(heap_size) }) {

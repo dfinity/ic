@@ -1009,8 +1009,8 @@ impl IncompleteState {
 
             let copy_files_bytes: u64 = diff_script
                 .copy_files
-                .iter()
-                .map(|(i, _)| manifest_new.file_table[*i].size_bytes as u64)
+                .keys()
+                .map(|i| manifest_new.file_table[*i].size_bytes)
                 .sum();
 
             let copy_chunks_bytes: u64 =

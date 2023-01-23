@@ -771,7 +771,7 @@ impl CanisterQueues {
     /// Returns the sum total of bytes above `MAX_RESPONSE_COUNT_BYTES` per
     /// oversized request.
     pub fn oversized_requests_extra_bytes(&self) -> usize {
-        self.memory_usage_stats.oversized_requests_extra_bytes as usize
+        self.memory_usage_stats.oversized_requests_extra_bytes
     }
 
     /// Sets the (transient) size in bytes of responses routed from

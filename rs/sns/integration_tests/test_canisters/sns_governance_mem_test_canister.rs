@@ -157,7 +157,7 @@ fn generate_generic_nervous_system_functions(
 ) -> BTreeMap<u64, NervousSystemFunction> {
     let mut functions_map = BTreeMap::new();
     for i in 0..max_number_of_generic_functions {
-        let id = i as u64 + 1000; // Valid ids for GenericNervousSystemFunction start at 1000
+        let id = i + 1000; // Valid ids for GenericNervousSystemFunction start at 1000
         let nervous_system_function = NervousSystemFunction {
             id,
             name: "GenericNervousSystemFunction".to_string(),
@@ -401,7 +401,7 @@ fn populate_canister_state() {
 
     let settled_proposal_count_per_action = nervous_system_parameters
         .max_proposals_to_keep_per_action
-        .unwrap() as u32;
+        .unwrap();
 
     // Insert settled proposals first as they occupy less memory due to ballots being removed from
     // the proposal after settlement.
@@ -445,7 +445,7 @@ fn populate_canister_state() {
         // Open proposals have ballots, for the worst case we assume every neuron votes
         // on every open proposal
         proto.proposals.insert(
-            proposal_id as u64,
+            proposal_id,
             allocate_proposal_data(proposal_id, *action_iter.next().unwrap(), Some(&ballots)),
         );
         proposal_id += 1;

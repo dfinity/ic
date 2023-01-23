@@ -140,7 +140,7 @@ pub fn to_new_registry_record(
 ) -> (String, RegistryVersion, PublicKeyProto) {
     let key = make_crypto_node_key(record.key.node_id, record.key.key_purpose);
     let pk = PublicKeyProto {
-        algorithm: record.value.algorithm as i32,
+        algorithm: record.value.algorithm,
         key_value: record.value.key_value.clone(),
         version: 0,
         proof_data: None,

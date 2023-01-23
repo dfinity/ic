@@ -1150,7 +1150,7 @@ pub fn block_encoding_agrees_with_the_schema() {
     let block_cddl_path =
         PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("block.cddl");
     let block_cddl =
-        String::from_utf8(std::fs::read(&block_cddl_path).expect("failed to read block.cddl file"))
+        String::from_utf8(std::fs::read(block_cddl_path).expect("failed to read block.cddl file"))
             .unwrap();
 
     let mut runner = TestRunner::default();

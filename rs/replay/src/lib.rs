@@ -353,7 +353,7 @@ fn verify_cup_signature(cup_file: &Path, public_key_file: &Path) -> Result<(), B
     println!("CUP height: {}", &cup.content.height());
     println!(
         "State hash: {}",
-        hex::encode(&cup.content.clone().state_hash.get().0)
+        hex::encode(cup.content.clone().state_hash.get().0)
     );
     println!();
 

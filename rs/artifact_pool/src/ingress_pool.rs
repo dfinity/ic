@@ -90,7 +90,7 @@ impl<T: AsRef<IngressPoolObject>> IngressPoolSection<T> {
         for artifact in to_remove.values() {
             self.metrics.observe_remove(artifact.as_ref().count_bytes());
         }
-        Box::new(to_remove.into_iter().map(|(_, v)| v))
+        Box::new(to_remove.into_values())
     }
 }
 

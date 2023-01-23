@@ -573,7 +573,7 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
         self.lookup_key(msg_id).and_then(|key| {
             let info = info_for_msg_id(msg_id);
             let cf_handle = check_not_none_uw!(self.db.cf_handle(info.name));
-            let bytes = check_ok_uw!(self.db.get_cf(cf_handle, &key))?;
+            let bytes = check_ok_uw!(self.db.get_cf(cf_handle, key))?;
             deserialize_consensus_artifact(
                 Arc::new(StandaloneSnapshot::new(self.db.clone())),
                 &bytes,
@@ -586,7 +586,7 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
         self.lookup_key(msg_id).and_then(|key| {
             let info = info_for_msg_id(msg_id);
             let cf_handle = check_not_none_uw!(self.db.cf_handle(info.name));
-            let bytes = check_ok_uw!(self.db.get_cf(cf_handle, &key))?;
+            let bytes = check_ok_uw!(self.db.get_cf(cf_handle, key))?;
             deserialize_consensus_artifact(
                 Arc::new(StandaloneSnapshot::new(self.db.clone())),
                 &bytes,

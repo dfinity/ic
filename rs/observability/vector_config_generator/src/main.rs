@@ -144,7 +144,7 @@ fn main() -> Result<()> {
         ic_discovery,
         filters,
         stop_signal_rcv,
-        jobs.into_iter().map(|(job, _)| job).collect(),
+        jobs.into_keys().collect(),
         update_signal_rcv,
         cli_args.generation_dir,
         VectorConfigBuilderImpl::new(

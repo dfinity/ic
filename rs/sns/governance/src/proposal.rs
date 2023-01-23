@@ -464,7 +464,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
             .map(|c| c.to_string())
             .collect::<Vec<_>>()
             .join(", "),
-        hex::encode(&new_wasm_hash),
+        hex::encode(new_wasm_hash),
     ))
 }
 

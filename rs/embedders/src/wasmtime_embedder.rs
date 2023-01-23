@@ -170,7 +170,7 @@ impl WasmtimeEmbedder {
             // static. setting this to maximum Wasm memory size will guarantee
             // the memory is always static.
             .static_memory_maximum_size(
-                wasmtime_environ::WASM_PAGE_SIZE as u64 * wasmtime_environ::WASM32_MAX_PAGES as u64,
+                wasmtime_environ::WASM_PAGE_SIZE as u64 * wasmtime_environ::WASM32_MAX_PAGES,
             )
             .max_wasm_stack(embedder_config.max_wasm_stack_size);
 

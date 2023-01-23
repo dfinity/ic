@@ -129,11 +129,7 @@ impl BalanceHistory {
             self.inner.len()
         };
 
-        let start = if self.num_pruned_transactions == 0 {
-            0
-        } else {
-            1
-        };
+        let start = usize::from(self.num_pruned_transactions != 0);
         let end = std::cmp::max(end, start);
 
         &self.inner[start..end]

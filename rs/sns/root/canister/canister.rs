@@ -482,7 +482,7 @@ mod tests {
         )
         .join("canister/root.did");
 
-        let did_contents = String::from_utf8(std::fs::read(&did_path).unwrap()).unwrap();
+        let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
 
         // See comments in main above
         candid::export_service!();
