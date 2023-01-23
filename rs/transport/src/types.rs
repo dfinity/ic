@@ -120,9 +120,9 @@ pub(crate) struct TransportImpl {
 
     // Crypto and data required for TLS handshakes
     /// Clients that are allowed to connect to this node
-    pub allowed_clients: Arc<RwLock<BTreeSet<NodeId>>>,
+    pub allowed_clients: RwLock<BTreeSet<NodeId>>,
     /// The registry version that is used
-    pub registry_version: Arc<RwLock<RegistryVersion>>,
+    pub registry_version: RwLock<RegistryVersion>,
     /// Reference to the crypto component
     pub crypto: Arc<dyn TlsHandshake + Send + Sync>,
 
