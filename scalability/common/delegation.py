@@ -20,7 +20,7 @@ def install_ii_canister(hostname: str):
 
     Write the canister ID to a file, which can re-read on next try for re-use.
     """
-    args = ["dfx", "deploy", "--network", hostname, "--no-wallet"]
+    args = ["dfx", "deploy", "--network", hostname, "--no-wallet", "--yes"]
     logging.info("II: Installing canister: " + " ".join(args))
     output = subprocess.run(
         args,

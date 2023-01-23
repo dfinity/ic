@@ -734,7 +734,7 @@ delegated-identity-bench:
       $SHELL_WRAPPER pipenv --python 3
       $SHELL_WRAPPER pipenv install -r requirements.txt
 
-      $SHELL_WRAPPER pipenv run python3 experiments/run_delegation_experiment.py --testnet $TESTNET --num_procs 64 --num_requests 20 --num_tasks 8 --rps 30,40,50,60,70
+      $SHELL_WRAPPER pipenv run python3 experiments/run_delegation_experiment.py --testnet $TESTNET --num_procs 64 --iter_duration 30 --num_identities 200 --rps 30,100,200,500,1000
 
       find . -name  'workload-generator*stderr.txt' -print0 | xargs -0 pigz
       cd -

@@ -112,8 +112,6 @@ def main(argv):
                     "experiments/run_delegation_experiment.py",
                     "--num_procs",
                     "2",
-                    "--num_tasks",
-                    "2",
                     "--iter_duration",
                     "20",
                 ]

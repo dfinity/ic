@@ -54,7 +54,10 @@ def build_icos():
         )
 
     subprocess.check_output(
-        shlex.split("gitlab-ci/container/container-run.sh bazel run //ic-os/guestos/dev:upload_disk-img"), cwd=ic_root
+        shlex.split(
+            "./gitlab-ci/container/container-run.sh bazel run --config=systest //ic-os/guestos/dev:upload_disk-img"
+        ),
+        cwd=ic_root,
     )
     version = None
     url = None

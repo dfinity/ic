@@ -98,9 +98,7 @@ class BaseExperiment:
         if self.has_cache():
             try:
                 with open(FLAGS.cache_path) as f:
-                    print(
-                        f'♻️  Cache has been found at {FLAGS.cache_path}. Type "y" to use, if you know what you are doing.'
-                    )
+                    print(f"♻️  Cache has been found at {FLAGS.cache_path}.")
                     self.cache = json.loads(f.read())
             except Exception:
                 print(f"♻️  Cache {FLAGS.cache_path} did not exist yet, creating ..")
