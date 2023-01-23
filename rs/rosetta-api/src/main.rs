@@ -14,7 +14,7 @@ use url::Url;
 struct Opt {
     #[clap(short = 'a', long = "address", default_value = "0.0.0.0")]
     listen_address: String,
-    #[clap(short = 'p', long = "port", default_value = "8080")]
+    #[clap(short = 'p', long = "port", default_value = "8081")]
     listen_port: u16,
     #[clap(short = 'c', long = "canister-id")]
     ic_canister_id: Option<String>,

@@ -11,9 +11,10 @@ use crate::request::transaction_operation_results::TransactionOperationResults;
 use crate::request::transaction_results::TransactionResults;
 use crate::request::Request;
 use crate::request_types::{
-    DisburseMetadata, FollowMetadata, KeyMetadata, MergeMaturityMetadata, NeuronIdentifierMetadata,
-    NeuronInfoMetadata, PublicKeyOrPrincipal, RequestResultMetadata, SetDissolveTimestampMetadata,
-    SpawnMetadata, StakeMaturityMetadata, Status, STATUS_COMPLETED,
+    ChangeAutoStakeMaturityMetadata, DisburseMetadata, FollowMetadata, KeyMetadata,
+    MergeMaturityMetadata, NeuronIdentifierMetadata, NeuronInfoMetadata, PublicKeyOrPrincipal,
+    RequestResultMetadata, SetDissolveTimestampMetadata, SpawnMetadata, StakeMaturityMetadata,
+    Status, STATUS_COMPLETED,
 };
 use crate::transaction_id::TransactionIdentifier;
 use crate::{convert, errors};
@@ -143,6 +144,19 @@ pub fn operations_to_requests(
                 } = o.metadata.clone().try_into()?;
                 state.set_dissolve_timestamp(account, neuron_index, timestamp)?;
             }
+            OperationType::ChangeAutoStakeMaturity => {
+                validate_neuron_management_op()?;
+                let ChangeAutoStakeMaturityMetadata {
+                    neuron_index,
+                    requested_setting_for_auto_stake_maturity,
+                } = o.metadata.clone().try_into()?;
+                state.change_auto_stake_maturity(
+                    account,
+                    neuron_index,
+                    requested_setting_for_auto_stake_maturity,
+                )?;
+            }
+
             OperationType::StartDissolving => {
                 validate_neuron_management_op()?;
                 let NeuronIdentifierMetadata { neuron_index } = o.metadata.clone().try_into()?;

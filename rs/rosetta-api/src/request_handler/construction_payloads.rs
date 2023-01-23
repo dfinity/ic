@@ -24,8 +24,9 @@ use crate::models::{
 use crate::request::Request;
 use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
-    AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, PublicKeyOrPrincipal, RemoveHotKey,
-    RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo,
+    PublicKeyOrPrincipal, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn, Stake,
+    StakeMaturity, StartDissolve, StopDissolve,
 };
 use crate::{convert, models};
 
@@ -139,6 +140,13 @@ impl RosettaRequestHandler {
                     &ingress_expiries,
                 )?,
                 Request::SetDissolveTimestamp(req) => handle_set_dissolve_timestamp(
+                    req,
+                    &mut payloads,
+                    &mut updates,
+                    &pks_map,
+                    &ingress_expiries,
+                )?,
+                Request::ChangeAutoStakeMaturity(req) => handle_change_auto_stake_maturity(
                     req,
                     &mut payloads,
                     &mut updates,
@@ -512,6 +520,37 @@ fn handle_set_dissolve_timestamp(
     });
     add_neuron_management_payload(
         RequestType::SetDissolveTimestamp { neuron_index },
+        account,
+        None,
+        neuron_index,
+        command,
+        payloads,
+        updates,
+        pks_map,
+        ingress_expiries,
+    )?;
+    Ok(())
+}
+
+fn handle_change_auto_stake_maturity(
+    req: ChangeAutoStakeMaturity,
+    payloads: &mut Vec<SigningPayload>,
+    updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
+    ingress_expiries: &[u64],
+) -> Result<(), ApiError> {
+    let account = req.account;
+    let neuron_index = req.neuron_index;
+    let requested_setting_for_auto_stake_maturity = req.requested_setting_for_auto_stake_maturity;
+    let command = Command::Configure(manage_neuron::Configure {
+        operation: Some(configure::Operation::ChangeAutoStakeMaturity(
+            manage_neuron::ChangeAutoStakeMaturity {
+                requested_setting_for_auto_stake_maturity,
+            },
+        )),
+    });
+    add_neuron_management_payload(
+        RequestType::ChangeAutoStakeMaturity { neuron_index },
         account,
         None,
         neuron_index,

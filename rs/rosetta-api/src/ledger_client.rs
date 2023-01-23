@@ -1,4 +1,5 @@
 mod handle_add_hotkey;
+mod handle_change_auto_stake_maturity;
 mod handle_disburse;
 mod handle_follow;
 mod handle_merge_maturity;
@@ -42,13 +43,14 @@ use crate::convert;
 use crate::errors::{ApiError, Details, ICError};
 use crate::ledger_client::neuron_response::NeuronResponse;
 use crate::ledger_client::{
-    handle_add_hotkey::handle_add_hotkey, handle_disburse::handle_disburse,
-    handle_follow::handle_follow, handle_merge_maturity::handle_merge_maturity,
-    handle_neuron_info::handle_neuron_info, handle_remove_hotkey::handle_remove_hotkey,
-    handle_send::handle_send, handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
-    handle_spawn::handle_spawn, handle_stake::handle_stake,
-    handle_stake_maturity::handle_stake_maturity, handle_start_dissolve::handle_start_dissolve,
-    handle_stop_dissolve::handle_stop_dissolve,
+    handle_add_hotkey::handle_add_hotkey,
+    handle_change_auto_stake_maturity::handle_change_auto_stake_maturity,
+    handle_disburse::handle_disburse, handle_follow::handle_follow,
+    handle_merge_maturity::handle_merge_maturity, handle_neuron_info::handle_neuron_info,
+    handle_remove_hotkey::handle_remove_hotkey, handle_send::handle_send,
+    handle_set_dissolve_timestamp::handle_set_dissolve_timestamp, handle_spawn::handle_spawn,
+    handle_stake::handle_stake, handle_stake_maturity::handle_stake_maturity,
+    handle_start_dissolve::handle_start_dissolve, handle_stop_dissolve::handle_stop_dissolve,
 };
 use crate::models::{EnvelopePair, Object, SignedTransaction};
 use crate::request::request_result::RequestResult;
@@ -674,6 +676,7 @@ impl LedgerClient {
             RequestType::RemoveHotKey { .. } => handle_remove_hotkey(bytes),
             RequestType::Send => handle_send(bytes),
             RequestType::SetDissolveTimestamp { .. } => handle_set_dissolve_timestamp(bytes),
+            RequestType::ChangeAutoStakeMaturity { .. } => handle_change_auto_stake_maturity(bytes),
             RequestType::Spawn { .. } => handle_spawn(bytes),
             RequestType::Stake { .. } => handle_stake(bytes),
             RequestType::StartDissolve { .. } => handle_start_dissolve(bytes, request_type),

@@ -34,6 +34,8 @@ pub enum Request {
     Stake(Stake),
     #[serde(rename = "SET_DISSOLVE_TIMESTAMP")]
     SetDissolveTimestamp(SetDissolveTimestamp),
+    #[serde(rename = "CHANGE_AUTO_STAKE_MATURITY")]
+    ChangeAutoStakeMaturity(ChangeAutoStakeMaturity),
     #[serde(rename = "START_DISSOLVE")]
     StartDissolve(StartDissolve),
     #[serde(rename = "STOP_DISSOLVE")]
@@ -63,6 +65,11 @@ impl Request {
             Request::Stake(Stake { neuron_index, .. }) => Ok(RequestType::Stake {
                 neuron_index: *neuron_index,
             }),
+            Request::ChangeAutoStakeMaturity(ChangeAutoStakeMaturity { neuron_index, .. }) => {
+                Ok(RequestType::ChangeAutoStakeMaturity {
+                    neuron_index: *neuron_index,
+                })
+            }
             Request::SetDissolveTimestamp(SetDissolveTimestamp { neuron_index, .. }) => {
                 Ok(RequestType::SetDissolveTimestamp {
                     neuron_index: *neuron_index,
@@ -142,6 +149,7 @@ impl Request {
                 Request::Transfer(o) => builder.transfer(o, token_name)?,
                 Request::Stake(o) => builder.stake(o),
                 Request::SetDissolveTimestamp(o) => builder.set_dissolve_timestamp(o),
+                Request::ChangeAutoStakeMaturity(o) => builder.change_auto_stake_maturity(o),
                 Request::StartDissolve(o) => builder.start_dissolve(o),
                 Request::StopDissolve(o) => builder.stop_dissolve(o),
                 Request::Disburse(o) => builder.disburse(o, token_name),
@@ -166,6 +174,7 @@ impl Request {
             self,
             Request::Stake(_)
                 | Request::SetDissolveTimestamp(_)
+                | Request::ChangeAutoStakeMaturity(_)
                 | Request::StartDissolve(_)
                 | Request::StopDissolve(_)
                 | Request::Disburse(_)
@@ -248,6 +257,29 @@ impl TryFrom<&models::Request> for Request {
                 } else {
                     Err(ApiError::invalid_request(
                         "Request is missing set dissolve timestamp operation.",
+                    ))
+                }
+            }
+            RequestType::ChangeAutoStakeMaturity { neuron_index } => {
+                let command = manage_neuron()?;
+                if let Some(Command::Configure(Configure {
+                    operation:
+                        Some(configure::Operation::ChangeAutoStakeMaturity(
+                            manage_neuron::ChangeAutoStakeMaturity {
+                                requested_setting_for_auto_stake_maturity,
+                                ..
+                            },
+                        )),
+                })) = command
+                {
+                    Ok(Request::ChangeAutoStakeMaturity(ChangeAutoStakeMaturity {
+                        account,
+                        neuron_index: *neuron_index,
+                        requested_setting_for_auto_stake_maturity,
+                    }))
+                } else {
+                    Err(ApiError::invalid_request(
+                        "Request is missing change auto stake maturity operation.",
                     ))
                 }
             }

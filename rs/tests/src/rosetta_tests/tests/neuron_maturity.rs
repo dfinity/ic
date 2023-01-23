@@ -12,8 +12,11 @@ use ic_nns_governance::pb::v1::Neuron;
 use ic_rosetta_api::models::EdKeypair;
 use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::Request;
-use ic_rosetta_api::request_types::{MergeMaturity, StakeMaturity, Status};
+use ic_rosetta_api::request_types::{
+    ChangeAutoStakeMaturity, MergeMaturity, StakeMaturity, Status,
+};
 use ic_rosetta_test_utils::RequestInfo;
+use icp_ledger::AccountIdentifier;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -37,6 +40,7 @@ pub fn test(env: TestEnv) {
     let neuron4 = neurons.create(neuron_setup);
     let neuron5 = neurons.create(neuron_setup);
     let neuron6 = neurons.create(neuron_setup);
+    let neuron7 = neurons.create(neuron_setup);
 
     // Create Rosetta and ledger clients.
     let neurons = neurons.get_neurons();
@@ -51,6 +55,22 @@ pub fn test(env: TestEnv) {
         test_stake_maturity_all(&client, &ledger_client, &neuron4).await;
         test_stake_maturity_partial(&client, &ledger_client, &neuron5).await;
         test_stake_maturity_invalid(&client, &neuron6).await;
+        test_change_auto_stake_maturity(
+            &client,
+            neuron7.account_id,
+            Arc::new(neuron7.key_pair).clone(),
+            true,
+            neuron7.neuron_subaccount_identifier,
+        )
+        .await;
+        test_change_auto_stake_maturity(
+            &client,
+            neuron7.account_id,
+            Arc::new(neuron7.key_pair).clone(),
+            false,
+            neuron7.neuron_subaccount_identifier,
+        )
+        .await;
     });
 }
 
@@ -288,4 +308,57 @@ async fn test_stake_maturity_invalid(ros: &RosettaApiClient, neuron_info: &Neuro
         res.is_err(),
         "Error expected while trying to merge neuron maturity with an invalid percentage"
     );
+}
+
+async fn test_change_auto_stake_maturity(
+    ros: &RosettaApiClient,
+    acc: AccountIdentifier,
+    key_pair: Arc<EdKeypair>,
+    requested_setting_for_auto_stake_maturity: bool,
+    neuron_index: u64,
+) {
+    change_auto_stake_maturity(
+        ros,
+        acc,
+        key_pair,
+        requested_setting_for_auto_stake_maturity,
+        neuron_index,
+    )
+    .await
+    .unwrap();
+}
+
+async fn change_auto_stake_maturity(
+    ros: &RosettaApiClient,
+    acc: AccountIdentifier,
+    key_pair: Arc<EdKeypair>,
+    requested_setting_for_auto_stake_maturity: bool,
+    neuron_index: u64,
+) -> Result<(), ic_rosetta_api::models::Error> {
+    do_multiple_txn(
+        ros,
+        &[RequestInfo {
+            request: Request::ChangeAutoStakeMaturity(ChangeAutoStakeMaturity {
+                account: acc,
+                neuron_index,
+                requested_setting_for_auto_stake_maturity,
+            }),
+            sender_keypair: Arc::clone(&key_pair),
+        }],
+        false,
+        Some(one_day_from_now_nanos()),
+        None,
+    )
+    .await
+    .map(|(tx_id, results, _)| {
+        assert!(!tx_id.is_transfer());
+        assert!(matches!(
+            results.operations.first().unwrap(),
+            RequestResult {
+                _type: Request::ChangeAutoStakeMaturity(ChangeAutoStakeMaturity { .. }),
+                status: Status::Completed,
+                ..
+            }
+        ));
+    })
 }
