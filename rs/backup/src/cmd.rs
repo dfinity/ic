@@ -15,4 +15,5 @@ pub struct BackupArgs {
 pub enum SubCommand {
     Backup,
     Init,
+    Upgrade,
 }

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fs, io,
     path::PathBuf,
     process::Command,
@@ -33,6 +34,7 @@ struct SubnetBackup {
     pub sync_period: Duration,
     pub replay_period: Duration,
     pub backup_helper: BackupHelper,
+    pub thread_id: u32,
 }
 
 pub struct BackupManager {
@@ -62,7 +64,6 @@ impl BackupManager {
             Ok(f) => f,
             Err(e) => panic!("Bad file name for ssh credentials: {:?}", e),
         };
-        let nns_url = config.nns_url.expect("Missing NNS Url");
         let local_store_dir = config.root_dir.join("ic_registry_local_store");
         let data_provider = Arc::new(LocalStoreImpl::new(local_store_dir.clone()));
         let registry_client = Arc::new(RegistryClientImpl::new(data_provider, None));
@@ -78,7 +79,7 @@ impl BackupManager {
         ));
         let nns_public_key =
             parse_threshold_sig_key(&config.nns_pem).expect("Missing NNS public key");
-        let nns_urls = vec![nns_url.clone()];
+        let nns_urls = vec![config.nns_url.expect("Missing NNS Url")];
         let reg_replicator2 = registry_replicator.clone();
 
         info!(log.clone(), "Starting the registry replicator");
@@ -119,7 +120,6 @@ impl BackupManager {
             let backup_helper = BackupHelper {
                 subnet_id: s.subnet_id,
                 initial_replica_version: s.initial_replica_version,
-                nns_url: nns_url.to_string(),
                 root_dir: config.root_dir.clone(),
                 excluded_dirs: config.excluded_dirs.clone(),
                 ssh_private_key: ssh_credentials_file.clone(),
@@ -140,6 +140,7 @@ impl BackupManager {
                 sync_period,
                 replay_period,
                 backup_helper,
+                thread_id: s.thread_id,
             });
         }
         BackupManager {
@@ -150,6 +151,21 @@ impl BackupManager {
             subnet_backups: backups,
             log,
         }
+    }
+
+    pub fn upgrade(log: Logger, config_file: PathBuf) {
+        let mut config =
+            Config::load_config(config_file.clone()).expect("Config file can't be loaded");
+        if config.version < 10 {
+            let size = config.subnets.len();
+            for i in 0..size {
+                config.subnets[i].thread_id = i as u32;
+            }
+        }
+        config
+            .save_config(config_file)
+            .expect("Config file couldn't be saved");
+        info!(log, "Configuration updated with thread_ids");
     }
 
     pub fn init(log: Logger, config_file: PathBuf) {
@@ -166,6 +182,7 @@ impl BackupManager {
         }
 
         let stdin = io::stdin();
+        let mut thread_id = 0;
         loop {
             println!("Enter subnet ID of the subnet to backup (<ENTER> if done):");
             let mut subnet_id_str = String::new();
@@ -229,12 +246,14 @@ impl BackupManager {
                     .trim()
                     .parse::<u64>()
                     .unwrap_or(DEFAULT_REPLAY_PERIOD);
+            thread_id += 1; // run all of them in parallel
             config.subnets.push(SubnetConfig {
                 subnet_id,
                 initial_replica_version,
                 nodes_syncing,
                 sync_period_secs,
                 replay_period_secs,
+                thread_id,
             })
         }
 
@@ -339,13 +358,19 @@ impl BackupManager {
             }
         }
 
+        let mut thread_ids: HashSet<u32> = HashSet::new();
         for i in 0..size {
             // should we sync the subnet
             if self.subnet_backups[i].replay_period >= Duration::from_secs(1) {
-                let m = self.clone();
-                thread::spawn(move || replay_subnets(m, i));
+                let id = self.subnet_backups[i].thread_id;
+                if !thread_ids.contains(&id) {
+                    thread_ids.insert(id);
+                    let m = self.clone();
+                    thread::spawn(move || replay_subnets(m, id));
+                }
             }
         }
+
         thread::spawn(move || cold_store(self));
 
         loop {
@@ -374,16 +399,25 @@ fn sync_subnet(m: Arc<BackupManager>, i: usize) {
     }
 }
 
-fn replay_subnets(m: Arc<BackupManager>, i: usize) {
-    let b = &m.subnet_backups[i];
-    let subnet_id = &b.backup_helper.subnet_id;
-    info!(m.log, "Spawned replay for subnet {:?} thread...", subnet_id);
-    let mut replay_last_time = Instant::now() - b.replay_period;
+fn replay_subnets(m: Arc<BackupManager>, thread_id: u32) {
+    info!(m.log, "Spawned replay for ID {thread_id} thread...");
+    let size = m.subnet_backups.len();
+    let mut replay_last_time = Vec::new();
+    m.subnet_backups
+        .iter()
+        .for_each(|b| replay_last_time.push(Instant::now() - b.replay_period));
     loop {
-        if replay_last_time.elapsed() > b.replay_period {
-            replay_last_time = Instant::now();
-            b.backup_helper.replay();
+        for (i, it) in replay_last_time.iter_mut().enumerate().take(size) {
+            let b = &m.subnet_backups[i];
+            if b.thread_id != thread_id {
+                continue;
+            }
+            if it.elapsed() > b.replay_period {
+                *it = Instant::now();
+                b.backup_helper.replay();
+            }
         }
+
         // Have a small break before the next check for replays
         sleep_secs(30);
     }

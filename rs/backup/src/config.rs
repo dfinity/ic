@@ -15,6 +15,8 @@ pub struct SubnetConfig {
     pub nodes_syncing: usize,
     pub sync_period_secs: u64,
     pub replay_period_secs: u64,
+    #[serde(default)] // TODO: remove it
+    pub thread_id: u32,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColdStorage {
