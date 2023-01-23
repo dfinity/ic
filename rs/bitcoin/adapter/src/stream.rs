@@ -248,7 +248,7 @@ impl Stream {
         };
         let bytes = serialize(&raw_network_message);
         self.write_half
-            .write(bytes.as_slice())
+            .write_all(bytes.as_slice())
             .await
             .map_err(StreamError::Io)?;
         self.write_half.flush().await.map_err(StreamError::Io)
