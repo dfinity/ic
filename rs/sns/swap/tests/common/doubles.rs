@@ -9,11 +9,11 @@ use ic_sns_governance::pb::v1::{
     SetModeResponse,
 };
 use ic_sns_swap::{
+    clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
     pb::v1::{
         CanisterCallError, GovernanceError, SetDappControllersRequest, SetDappControllersResponse,
         SettleCommunityFundParticipation,
     },
-    swap::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient},
 };
 use std::sync::{Arc, Mutex};
 
