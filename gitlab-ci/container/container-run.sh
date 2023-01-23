@@ -39,6 +39,7 @@ PODMAN_RUN_ARGS=(
     --env PATH=/ic/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     --env HOME="/home/$USER"
     --hostname=devenv-container
+    --entrypoint=
 
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
     -e CI_COMMIT_REF_PROTECTED="${CI_COMMIT_REF_PROTECTED:-true}"
