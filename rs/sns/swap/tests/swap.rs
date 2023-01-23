@@ -2428,3 +2428,63 @@ async fn test_restore_dapp_controllers_happy() {
         }
     }
 }
+
+#[test]
+fn test_derived_state() {
+    let mut swap = Swap::default();
+
+    let expected_derived_state1 = DerivedState {
+        buyer_total_icp_e8s: 0,
+        sns_tokens_per_icp: 0f32,
+    };
+    let actual_derived_state1 = swap.derived_state();
+    assert_eq!(expected_derived_state1, actual_derived_state1);
+
+    let params = Params {
+        sns_token_e8s: 1_000_000_000,
+        ..Default::default()
+    };
+    swap.params = Some(params);
+
+    let expected_derived_state2 = DerivedState {
+        buyer_total_icp_e8s: 0,
+        sns_tokens_per_icp: 0f32,
+    };
+    let actual_derived_state2 = swap.derived_state();
+    assert_eq!(expected_derived_state2, actual_derived_state2);
+
+    let buyer_state: BuyerState = BuyerState {
+        icp: Some(TransferableAmount {
+            amount_e8s: 100_000_000,
+            transfer_start_timestamp_seconds: 10,
+            transfer_success_timestamp_seconds: 12,
+        }),
+    };
+    let buyers = btreemap! {
+        "".to_string() => buyer_state,
+    };
+
+    swap.buyers = buyers;
+
+    let expected_derived_state3 = DerivedState {
+        buyer_total_icp_e8s: 100_000_000,
+        sns_tokens_per_icp: 10f32,
+    };
+    let actual_derived_state3 = swap.derived_state();
+    assert_eq!(expected_derived_state3, actual_derived_state3);
+
+    swap.cf_participants = vec![CfParticipant {
+        hotkey_principal: "".to_string(),
+        cf_neurons: vec![CfNeuron {
+            nns_neuron_id: 0,
+            amount_icp_e8s: 300_000_000,
+        }],
+    }];
+
+    let expected_derived_state4 = DerivedState {
+        buyer_total_icp_e8s: 400_000_000,
+        sns_tokens_per_icp: 2.5f32,
+    };
+    let actual_derived_state4 = swap.derived_state();
+    assert_eq!(expected_derived_state4, actual_derived_state4);
+}

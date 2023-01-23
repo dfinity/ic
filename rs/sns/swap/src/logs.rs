@@ -5,3 +5,5 @@ declare_log_buffer!(name = INFO, capacity = 1000);
 
 // Error log messages.
 declare_log_buffer!(name = ERROR, capacity = 1000);
+
+pub const LOG_PREFIX: &str = "[Swap] ";
