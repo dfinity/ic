@@ -154,14 +154,18 @@ impl Segments {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum SystemApiFunc {
     StableGrow,
+    Stable64Grow,
     StableSize,
+    Stable64Size,
 }
 
 impl SystemApiFunc {
     fn from_import_name(name: &str) -> Option<Self> {
         match name {
             "stable_grow" => Some(Self::StableGrow),
+            "stable64_grow" => Some(Self::Stable64Grow),
             "stable_size" => Some(Self::StableSize),
+            "stable64_size" => Some(Self::Stable64Size),
             _ => None,
         }
     }
