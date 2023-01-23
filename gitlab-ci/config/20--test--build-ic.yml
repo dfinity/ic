@@ -3,9 +3,6 @@
     - .ic-build-bazel-image
   needs: []
   stage: test
-  tags:
-    - k8s
-    - dfinity
   artifacts:
     reports:
       dotenv: nns.release.env
@@ -16,7 +13,7 @@
       set -euo pipefail
       VERSION=$(git rev-parse HEAD)
 
-      if [ "$CI_JOB_NAME" != "build-ic" ]; then
+      if [ "$CI_JOB_NAME" == "build-ic-release" ]; then
           # read NNS release version from git tree
           NNS_RELEASE_VERSION="$(jq -r '.subnets["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]' testnet/mainnet_revisions.json)"
           # we pass nss version info to build-determinism-*-release jobs
@@ -30,21 +27,45 @@
           #       for revision $NNS_RELEASE_VERSION !!!
       fi
 
-      # run build-ic
-      gitlab-ci/container/build-ic.sh -i -c -b
+      PATH_PREFIX="artifacts/"
+      # depending on revision, we use docker or podman
+      if [ -e gitlab-ci/container/build-ic.sh ]; then
+          # run build-ic (podman)
+          gitlab-ci/container/build-ic.sh -i -c -b
+      else
+          # run docker-build-ic (docker)
+          gitlab-ci/tools/docker-build-ic
+          PATH_PREFIX="artifacts/docker-build-ic/"
+
+          # generate SHA256SUMS files
+          cd artifacts/docker-build-ic/release
+          GLOBIGNORE="SHA256SUMS"
+          echo "Binaries SHA256SUMS"
+          # shellcheck disable=SC2035
+          sha256sum -b *.gz | tee SHA256SUMS
+          cd ../canisters
+          echo "Canisters SHA256SUMS"
+          # shellcheck disable=SC2035
+          sha256sum -b *.gz | tee SHA256SUMS
+          cd ../icos
+          echo "IC-OS SHA256SUMS"
+          # shellcheck disable=SC2035
+          sha256sum -b *.tar.* | tee SHA256SUMS
+          cd ../../..
+      fi
 
       # release binaries
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-          "artifacts/release" "${CI_JOB_NAME}/release"
+          "${PATH_PREFIX}/release" "${CI_JOB_NAME}/release"
       # canister binaries
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-          "artifacts/canisters" "${CI_JOB_NAME}/canisters"
+          "${PATH_PREFIX}/canisters" "${CI_JOB_NAME}/canisters"
       # ic-os update img
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-          "artifacts/icos" "${CI_JOB_NAME}/guest-os/update-img"
+          "${PATH_PREFIX}/icos" "${CI_JOB_NAME}/guest-os/update-img"
 
       # collect dotenv
       if [ -f /tmp/nns.release.env ]; then
@@ -53,12 +74,19 @@
 
 # MR Pipeline
 build-ic:
+  tags:
+    - k8s
+    - dfinity
   extends:
     - .build-ic
     - .rules-parent-pipeline
 
 # Scheduled Pipeline
 build-ic-release:
+  tags:
+    # TODO: IDX-2625
+    - docker
+    - dfinity
   extends:
     - .build-ic
     - .rules-scheduled-reproducibility
