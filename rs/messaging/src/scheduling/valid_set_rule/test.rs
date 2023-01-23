@@ -1,5 +1,6 @@
 use super::*;
 
+use assert_matches::assert_matches;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_ic00_types::{CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00};
 use ic_logger::replica_logger::no_op_logger;
@@ -821,4 +822,128 @@ fn management_message_update_setting_is_inducted_but_not_charged() {
         .balance();
 
     assert_eq!(balance_after, balance_before);
+}
+
+#[test]
+fn ingress_history_max_messages_application_subnet() {
+    ingress_history_max_messages_impl(SubnetType::Application);
+}
+
+#[test]
+fn ingress_history_max_messages_verified_application_subnet() {
+    ingress_history_max_messages_impl(SubnetType::VerifiedApplication);
+}
+
+#[test]
+fn ingress_history_max_messages_system_subnet() {
+    ingress_history_max_messages_impl(SubnetType::System);
+}
+
+/// Common implementation for all `ingress_history_max_messages` tests.
+fn ingress_history_max_messages_impl(subnet_type: SubnetType) {
+    with_test_replica_logger(|log| {
+        let canister_id = canister_test_id(0);
+        let mut msgs: Vec<SignedIngressContent> = Vec::new();
+        for i in 0..4 {
+            msgs.push(
+                SignedIngressBuilder::new()
+                    .canister_id(canister_id)
+                    .sender(user_test_id(i))
+                    .method_payload(vec![i as u8])
+                    .build()
+                    .into(),
+            );
+        }
+        let msg3_id = msgs[3].id();
+
+        let mut ingress_history_writer = MockIngressHistory::new();
+        ingress_history_writer
+            .expect_set_status()
+            .with(always(), always(), always())
+            .times(4)
+            .returning(move |state, msg_id, status| {
+                state.set_ingress_status(msg_id, status, NumBytes::from(u64::MAX));
+            });
+
+        let mut state = ReplicatedState::new(subnet_test_id(1), subnet_type);
+        insert_canister(&mut state, canister_id);
+
+        let ingress_history_writer = Arc::new(ingress_history_writer);
+        let metrics_registry = MetricsRegistry::new();
+        let cycles_account_manager = Arc::new(
+            CyclesAccountManagerBuilder::new()
+                .with_subnet_type(subnet_type)
+                .build(),
+        );
+
+        // Create a `ValidSetRule` with a maximum ingress history size of 3.
+        let mut valid_set_rule = ValidSetRuleImpl::new(
+            ingress_history_writer,
+            cycles_account_manager,
+            &metrics_registry,
+            subnet_test_id(1),
+            log,
+        );
+        valid_set_rule.ingress_history_max_messages = 3;
+
+        // Attempt inducting all 4 messages.
+        valid_set_rule.induct_messages(&mut state, msgs);
+
+        match subnet_type {
+            // System subnets ignore the `ingress_history_max_messages` limit.
+            SubnetType::System => {
+                // All 4 messages should have been inducted.
+                assert_eq!(ingress_queue_size(&state, canister_id), 4);
+                // And all 4 should have a state in the ingress history.
+                assert_eq!(state.metadata.ingress_history.len(), 4);
+                // With msg3 having state `Received`.
+                let status = state.metadata.ingress_history.get(&msg3_id).cloned();
+                assert_matches!(
+                    status,
+                    Some(IngressStatus::Known {
+                        state: IngressState::Received,
+                        ..
+                    })
+                );
+
+                assert_inducted_ingress_messages_eq(
+                    metric_vec(&[(&[(LABEL_STATUS, LABEL_VALUE_SUCCESS)], 4)]),
+                    &metrics_registry,
+                );
+                assert_eq!(
+                    HistogramStats { count: 4, sum: 4.0 },
+                    fetch_inducted_payload_size_stats(&metrics_registry)
+                );
+            }
+
+            // Application subnets respect the `ingress_history_max_messages` limit.
+            SubnetType::Application | SubnetType::VerifiedApplication => {
+                // 3 messages should have been inducted.
+                assert_eq!(ingress_queue_size(&state, canister_id), 3);
+                // But all 4 should have a state in the ingress history.
+                assert_eq!(state.metadata.ingress_history.len(), 4);
+                // With msg3 having state `Failed`.
+                let status = state.metadata.ingress_history.get(&msg3_id).cloned();
+                assert_matches!(
+                    status,
+                    Some(IngressStatus::Known {
+                        state: IngressState::Failed(error),
+                        ..
+                    }) if error.code() == ErrorCode::IngressHistoryFull
+                );
+
+                assert_inducted_ingress_messages_eq(
+                    metric_vec(&[
+                        (&[(LABEL_STATUS, LABEL_VALUE_SUCCESS)], 3),
+                        (&[(LABEL_STATUS, LABEL_VALUE_QUEUE_FULL)], 1),
+                    ]),
+                    &metrics_registry,
+                );
+                assert_eq!(
+                    HistogramStats { count: 3, sum: 3.0 },
+                    fetch_inducted_payload_size_stats(&metrics_registry)
+                );
+            }
+        }
+    });
 }
