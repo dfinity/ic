@@ -206,6 +206,36 @@ fn add_type(module: &mut Module, ty: Type) -> u32 {
     (module.types.len() - 1) as u32
 }
 
+fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
+    for func_body in &mut module.code_sections {
+        for instr in &mut func_body.instructions {
+            match instr {
+                Operator::Call { function_index }
+                | Operator::ReturnCall { function_index }
+                | Operator::RefFunc { function_index } => {
+                    *function_index = f(*function_index);
+                }
+                _ => {}
+            }
+        }
+    }
+    for exp in &mut module.exports {
+        if let ExternalKind::Func = exp.kind {
+            exp.index = f(exp.index);
+        }
+    }
+    for (_, elem_items) in &mut module.elements {
+        if let wasm_transform::ElementItems::Functions(fun_items) = elem_items {
+            for idx in fun_items {
+                *idx = f(*idx);
+            }
+        }
+    }
+    if let Some(start_idx) = module.start.as_mut() {
+        *start_idx = f(*start_idx);
+    }
+}
+
 fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagStatus) -> Module {
     // insert types
     let ooi_type = Type::Func(FuncType::new([], []));
@@ -259,28 +289,7 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
 
     // now increment all function references by InjectedImports::Count
     let cnt = InjectedImports::count(wasm_native_stable_memory) as u32;
-    for func_body in &mut module.code_sections {
-        for instr in &mut func_body.instructions {
-            if let Operator::Call { function_index } = instr {
-                *function_index += cnt;
-            }
-        }
-    }
-    for exp in &mut module.exports {
-        if let ExternalKind::Func = exp.kind {
-            exp.index += cnt;
-        }
-    }
-    for (_, elem_items) in &mut module.elements {
-        if let wasm_transform::ElementItems::Functions(fun_items) = elem_items {
-            for idx in fun_items {
-                *idx += cnt;
-            }
-        }
-    }
-    if let Some(start_idx) = module.start.as_mut() {
-        *start_idx += cnt;
-    }
+    mutate_function_indices(&mut module, |i| i + cnt);
 
     debug_assert!(
         module.imports[InjectedImports::OutOfInstructions as usize].name == "out_of_instructions"
@@ -462,24 +471,6 @@ fn calculate_api_indexes(module: &Module<'_>) -> BTreeMap<SystemApiFunc, u32> {
         .collect()
 }
 
-/// Replace all function calls in a single pass over the module.
-fn swap_function_calls(module: &mut Module<'_>, func_index_replacements: &BTreeMap<u32, u32>) {
-    // TODO: Also handle tables, etc.
-    for body in module.code_sections.iter_mut() {
-        for inst in body.instructions.iter_mut() {
-            match inst {
-                // TODO: Are any other instructions needed?
-                Operator::ReturnCall { function_index } | Operator::Call { function_index } => {
-                    if let Some(new_index) = func_index_replacements.get(function_index) {
-                        *function_index = *new_index;
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-}
-
 fn replace_system_api_functions(module: &mut Module<'_>, stable_memory_index: u32) {
     let api_indexes = calculate_api_indexes(module);
     let number_of_func_imports = module
@@ -506,7 +497,9 @@ fn replace_system_api_functions(module: &mut Module<'_>, stable_memory_index: u3
     }
 
     // Perform all the replacements in a single pass.
-    swap_function_calls(module, &func_index_replacements);
+    mutate_function_indices(module, |idx| {
+        *func_index_replacements.get(&idx).unwrap_or(&idx)
+    });
 }
 
 // Helper function used by instrumentation to export additional symbols.

@@ -11,7 +11,7 @@ use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemor
 use ic_interfaces::messages::CanisterTask;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_replicated_state::{
     canister_state::execution_state::CustomSectionType, page_map::MemoryRegion, ExportedFunctions,
@@ -23,6 +23,7 @@ use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
 use ic_types::ingress::{IngressState, IngressStatus};
+use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
 use ic_types::{
     ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, methods::WasmMethod,
     CanisterId, Cycles, NumBytes, NumInstructions,
@@ -125,6 +126,32 @@ fn ic0_stable_grow_returns_neg_one_when_exceeding_memory_limit() {
     let canister_id = test.canister_from_wat(wat).unwrap();
     test.canister_update_allocations_settings(canister_id, None, Some(30 * 1024 * 1024))
         .unwrap();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+}
+
+#[test]
+fn ic0_stable64_size_works() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = r#"
+        (module
+            (import "ic0" "stable64_size" (func $stable_size (result i64)))
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+
+            (func (export "canister_update test")
+                ;; Grow the memory by 6 pages and verify that the return value
+                ;; is the previous number of pages, which should be 0.
+                (if (i32.ne (call $stable_grow (i32.const 6)) (i32.const 0))
+                    (then (unreachable))
+                )
+
+                ;; Stable memory size now should be 6
+                (if (i64.ne (call $stable_size) (i64.const 6))
+                    (then (unreachable))
+                )
+            )
+        )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
 }
@@ -309,6 +336,28 @@ fn ic0_stable64_grow_works() {
                 )
             )
         )"#;
+    let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "test", vec![]);
+    assert_empty_reply(result);
+}
+
+#[test]
+fn ic0_stable64_grow_beyond_max_pages_returns_neg_one() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let wat = format!(
+        r#"
+        (module
+            (import "ic0" "stable64_grow" (func $stable64_grow (param i64) (result i64)))
+
+            (func (export "canister_update test")
+                ;; Grow the memory by the maximum number of pages + 1. This should fail.
+                (if (i64.ne (call $stable64_grow (i64.const {})) (i64.const -1))
+                    (then (unreachable))
+                )
+            )
+        )"#,
+        (MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64) + 1
+    );
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
