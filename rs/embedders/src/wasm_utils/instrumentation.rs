@@ -21,15 +21,16 @@
 //! counter overflows, the value of the counter is the initial value minus the
 //! sum of cost of all executed instructions.
 //!
-//! In more details, first, it inserts up to four System API functions:
+//! In more details, first, it inserts up to five System API functions:
 //!
 //! ```wasm
 //! (import "__" "out_of_instructions" (func (;0;) (func)))
 //! (import "__" "update_available_memory" (func (;1;) ((param i32 i32) (result i32))))
 //! (import "__" "try_grow_stable_memory" (func (;1;) ((param i64 i64 i32) (result i64))))
 //! (import "__" "deallocate_pages" (func (;1;) ((param i64))))
+//! (import "__" "internal_trap" (func (;1;) ((param i32))))
 //! ```
-//! Where the last two will only be inserted if Wasm-native stable memory is enabled.
+//! Where the last three will only be inserted if Wasm-native stable memory is enabled.
 //!
 //! It then inserts (and exports) a global mutable counter:
 //! ```wasm
@@ -133,17 +134,18 @@ use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
 // The indicies of injected function imports.
-enum InjectedImports {
+pub(crate) enum InjectedImports {
     OutOfInstructions = 0,
     UpdateAvailableMemory = 1,
     TryGrowStableMemory = 2,
     DeallocatePages = 3,
+    InternalTrap = 4,
 }
 
 impl InjectedImports {
     fn count(wasm_native_stable_memory: FlagStatus) -> usize {
         if wasm_native_stable_memory == FlagStatus::Enabled {
-            4
+            5
         } else {
             2
         }
@@ -183,6 +185,7 @@ const OUT_OF_INSTRUCTIONS_FUN_NAME: &str = "out_of_instructions";
 const UPDATE_MEMORY_FUN_NAME: &str = "update_available_memory";
 const TRY_GROW_STABLE_MEMORY_FUN_NAME: &str = "try_grow_stable_memory";
 const DEALLOCATE_PAGES_NAME: &str = "deallocate_pages";
+const INTERNAL_TRAP_FUN_NAME: &str = "internal_trap";
 const TABLE_STR: &str = "table";
 const CANISTER_COUNTER_INSTRUCTIONS_STR: &str = "canister counter_instructions";
 const CANISTER_START_STR: &str = "canister_start";
@@ -283,6 +286,15 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         };
         module.imports.push(tgsm_imp);
         module.imports.push(dp_imp);
+
+        let it_type = Type::Func(FuncType::new([ValType::I32], []));
+        let it_type_idx = add_type(&mut module, it_type);
+        let it_imp = Import {
+            module: INSTRUMENTED_FUN_MODULE,
+            name: INTERNAL_TRAP_FUN_NAME,
+            ty: TypeRef::Func(it_type_idx as u32),
+        };
+        module.imports.push(it_imp);
     }
 
     module.imports.append(&mut old_imports);
@@ -305,6 +317,9 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         );
         debug_assert!(
             module.imports[InjectedImports::DeallocatePages as usize].name == "deallocate_pages"
+        );
+        debug_assert!(
+            module.imports[InjectedImports::InternalTrap as usize].name == "internal_trap"
         );
     }
 

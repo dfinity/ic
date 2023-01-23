@@ -11,7 +11,7 @@ use ic_types::{
 
 #[cfg(test)]
 mod test {
-    use ic_interfaces::execution_environment::HypervisorError;
+    use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS;
     use ic_types::{methods::WasmClosure, PrincipalId};
@@ -693,5 +693,348 @@ mod test {
         let stats = instance.get_stats();
         assert_eq!(stats.direct_write_count, 0);
         assert_eq!(stats.read_before_write_count, 1);
+    }
+
+    #[test]
+    fn stable_write_and_read() {
+        let wat = r#"
+            (module
+                (import "ic0" "stable_grow"
+                    (func $ic0_stable_grow (param $pages i32) (result i32)))
+                (import "ic0" "stable_read"
+                    (func $ic0_stable_read (param $dst i32) (param $offset i32) (param $size i32)))
+                (import "ic0" "stable_write"
+                    (func $ic0_stable_write (param $offset i32) (param $src i32) (param $size i32)))
+
+                (import "ic0" "trap" (func $ic_trap (param i32 i32)))
+                (func $test (export "canister_update test")
+
+                    (i32.store (i32.const 10) (i32.const 72))
+                    (i32.store (i32.const 11) (i32.const 101))
+                    (i32.store (i32.const 12) (i32.const 108))
+                    (i32.store (i32.const 13) (i32.const 108))
+                    (i32.store (i32.const 14) (i32.const 111))
+
+                    (drop (call $ic0_stable_grow (i32.const 1)))
+                    (call $ic0_stable_write (i32.const 100) (i32.const 10) (i32.const 5))
+                    (call $ic0_stable_read (i32.const 0) (i32.const 100) (i32.const 5))
+
+                    (call $ic_trap (i32.const 0) (i32.const 5))
+                )
+                (memory (export "memory") 1)
+            )"#;
+        let mut config = ic_config::embedders::Config::default();
+        config.feature_flags.wasm_native_stable_memory =
+            ic_config::flag_status::FlagStatus::Enabled;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config)
+            .with_wat(wat)
+            .build();
+        let err = instance
+            .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+            .unwrap_err();
+        assert_eq!(err, HypervisorError::CalledTrap("Hello".to_string()));
+    }
+
+    #[test]
+    fn stable64_write_and_read() {
+        let wat = r#"
+            (module
+                (import "ic0" "stable_grow"
+                    (func $ic0_stable_grow (param $pages i32) (result i32)))
+                (import "ic0" "stable64_read"
+                    (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+                (import "ic0" "stable64_write"
+                    (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+
+                (import "ic0" "trap" (func $ic_trap (param i32 i32)))
+                (func $test (export "canister_update test")
+
+                    (i32.store (i32.const 10) (i32.const 72))
+                    (i32.store (i32.const 11) (i32.const 101))
+                    (i32.store (i32.const 12) (i32.const 108))
+                    (i32.store (i32.const 13) (i32.const 108))
+                    (i32.store (i32.const 14) (i32.const 111))
+
+                    (drop (call $ic0_stable_grow (i32.const 1)))
+                    (call $ic0_stable64_write (i64.const 100) (i64.const 10) (i64.const 5))
+                    (call $ic0_stable64_read (i64.const 0) (i64.const 100) (i64.const 5))
+
+                    (call $ic_trap (i32.const 0) (i32.const 5))
+                )
+                (table funcref (elem $test))
+                (memory (export "memory") 1)
+            )"#;
+        let mut config = ic_config::embedders::Config::default();
+        config.feature_flags.wasm_native_stable_memory =
+            ic_config::flag_status::FlagStatus::Enabled;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config)
+            .with_wat(wat)
+            .build();
+        let err = instance
+            .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+            .unwrap_err();
+        assert_eq!(err, HypervisorError::CalledTrap("Hello".to_string()));
+    }
+
+    #[test]
+    fn stable_read_out_of_bounds() {
+        fn func_ref(name: &str) -> FuncRef {
+            FuncRef::Method(WasmMethod::Update(name.to_string()))
+        }
+
+        let wat = r#"
+        (module
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+            (import "ic0" "stable_read"
+                (func $stable_read (param $dst i32) (param $offset i32) (param $size i32)))
+            (func (export "canister_update test_src")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 1)))
+                ;; Reading from stable memory just after the page should trap.
+                (call $stable_read (i32.const 0) (i32.const 65536) (i32.const 1))
+            )
+            (func (export "canister_update test_dst")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 1)))
+                ;; Reading into heap just after the second page should trap.
+                (call $stable_read (i32.const 131072) (i32.const 0) (i32.const 1))
+            )
+            (func (export "canister_update test_len")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 1)))
+                ;; Reading into heap with dst_len after the second page should trap.
+                (call $stable_read (i32.const 65536) (i32.const 0) (i32.const 65537))
+            )
+            (memory 2 2)
+        )"#;
+
+        use HypervisorError::*;
+        use TrapCode::*;
+
+        // Host stable memory
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_src")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+        let err = instance.run(func_ref("test_dst")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+        let err = instance.run(func_ref("test_len")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        // native stable memory
+        let mut config = ic_config::embedders::Config::default();
+        config.feature_flags.wasm_native_stable_memory =
+            ic_config::flag_status::FlagStatus::Enabled;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config)
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_src")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+        let err = instance.run(func_ref("test_dst")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+        let err = instance.run(func_ref("test_len")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+    }
+
+    #[test]
+    fn stable64_read_out_of_bounds() {
+        fn func_ref(name: &str) -> FuncRef {
+            FuncRef::Method(WasmMethod::Update(name.to_string()))
+        }
+
+        let wat = r#"
+        (module
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+                (import "ic0" "stable64_read"
+                    (func $stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+
+            (func (export "canister_update test_src")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 1)))
+                ;; Reading from stable memory just after the page should trap.
+                (call $stable64_read (i64.const 0) (i64.const 65536) (i64.const 1))
+            )
+            (func (export "canister_update test_dst")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 1)))
+                ;; Reading into heap with dst > u32::max should trap.
+                (call $stable64_read (i64.const 4294967296) (i64.const 0) (i64.const 1))
+            )
+            (func (export "canister_update test_len")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 1)))
+                ;; Reading into heap with len > u32::max should trap.
+                (call $stable64_read (i64.const 0) (i64.const 0) (i64.const 4294967296))
+            )
+            (memory 2 2)
+        )"#;
+
+        use HypervisorError::*;
+        use TrapCode::*;
+
+        // Host stable memory
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+
+        let err = instance.run(func_ref("test_src")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let err = instance.run(func_ref("test_dst")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let err = instance.run(func_ref("test_len")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        // Native stable memory
+        let mut config = ic_config::embedders::Config::default();
+        config.feature_flags.wasm_native_stable_memory =
+            ic_config::flag_status::FlagStatus::Enabled;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config)
+            .with_wat(wat)
+            .build();
+
+        let err = instance.run(func_ref("test_len")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let err = instance.run(func_ref("test_dst")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let err = instance.run(func_ref("test_len")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+    }
+
+    #[test]
+    fn stable_write_out_of_bounds() {
+        fn func_ref(name: &str) -> FuncRef {
+            FuncRef::Method(WasmMethod::Update(name.to_string()))
+        }
+
+        let wat = r#"
+        (module
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+            (import "ic0" "stable_write"
+                (func $stable_write (param $offset i32) (param $src i32) (param $size i32)))
+            (func (export "canister_update test_src")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 1)))
+                ;; Writing to stable memory just after the page should trap.
+                (call $stable_write (i32.const 65536) (i32.const 0) (i32.const 1))
+            )
+            (func (export "canister_update test_dst")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 1)))
+                ;; Writing into heap just after the second page should trap.
+                (call $stable_write (i32.const 0) (i32.const 131072) (i32.const 1))
+            )
+            (func (export "canister_update test_len")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 1)))
+                ;; Writing into heap with dst_len after the second page should trap.
+                (call $stable_write (i32.const 0) (i32.const 65537) (i32.const 65536))
+            )
+            (memory 2 2)
+        )"#;
+
+        use HypervisorError::*;
+        use TrapCode::*;
+
+        // Host stable memory
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+
+        let err = instance.run(func_ref("test_src")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let err = instance.run(func_ref("test_dst")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let err = instance.run(func_ref("test_len")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        // native stable memory
+        let mut config = ic_config::embedders::Config::default();
+        config.feature_flags.wasm_native_stable_memory =
+            ic_config::flag_status::FlagStatus::Enabled;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config)
+            .with_wat(wat)
+            .build();
+
+        let err = instance.run(func_ref("test_src")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let err = instance.run(func_ref("test_dst")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let err = instance.run(func_ref("test_len")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+    }
+
+    #[test]
+    fn stable64_write_out_of_bounds() {
+        fn func_ref(name: &str) -> FuncRef {
+            FuncRef::Method(WasmMethod::Update(name.to_string()))
+        }
+
+        let wat = r#"
+        (module
+            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
+            (import "ic0" "stable64_write"
+                (func $stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+            (func (export "canister_update test_src")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 1)))
+                ;; Writing to stable memory just after the page should trap.
+                (call $stable64_write (i64.const 65536) (i64.const 0) (i64.const 1))
+            )
+            (func (export "canister_update test_dst")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 1)))
+                ;; Writing into heap with src > i32::max should trap.
+                (call $stable64_write (i64.const 0) (i64.const 4294967296) (i64.const 1))
+            )
+            (func (export "canister_update test_len")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 1)))
+                ;; Writing into heap with len > u32::max should trap.
+                (call $stable64_write (i64.const 0) (i64.const 0) (i64.const 4294967296))
+            )
+
+            (memory 2 2)
+        )"#;
+
+        use HypervisorError::*;
+        use TrapCode::*;
+
+        // Host stable memory
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+
+        let err = instance.run(func_ref("test_src")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let err = instance.run(func_ref("test_dst")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let err = instance.run(func_ref("test_len")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        // native stable memory
+        let mut config = ic_config::embedders::Config::default();
+        config.feature_flags.wasm_native_stable_memory =
+            ic_config::flag_status::FlagStatus::Enabled;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config)
+            .with_wat(wat)
+            .build();
+
+        let err = instance.run(func_ref("test_src")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let err = instance.run(func_ref("test_dst")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let err = instance.run(func_ref("test_len")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
     }
 }

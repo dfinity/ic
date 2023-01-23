@@ -157,6 +157,10 @@ enum SystemApiFunc {
     Stable64Grow,
     StableSize,
     Stable64Size,
+    StableRead,
+    Stable64Read,
+    StableWrite,
+    Stable64Write,
 }
 
 impl SystemApiFunc {
@@ -166,6 +170,10 @@ impl SystemApiFunc {
             "stable64_grow" => Some(Self::Stable64Grow),
             "stable_size" => Some(Self::StableSize),
             "stable64_size" => Some(Self::Stable64Size),
+            "stable_read" => Some(Self::StableRead),
+            "stable64_read" => Some(Self::Stable64Read),
+            "stable_write" => Some(Self::StableWrite),
+            "stable64_write" => Some(Self::Stable64Write),
             _ => None,
         }
     }
