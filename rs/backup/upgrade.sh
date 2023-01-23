@@ -34,11 +34,14 @@ function download_backup_binary() {
 sudo systemctl stop ic-backup.service
 
 VERSION=$(get_config_version)
-
 if ((${VERSION} < 9)); then
-    download_backup_binary "0a1005e004e11ee8f0b8e1c55b9f8bf19899ac17"
     rm -f backup/backup_manager_state.json5
     set_config_version 9
+fi
+if ((${VERSION} < 10)); then
+    download_backup_binary "473d73b15e4c79f9367a63a9623361c43acca889"
+    ./ic-backup --config-file config.json5 upgrade
+    set_config_version 10
 fi
 
 sudo systemctl start ic-backup.service

@@ -38,14 +38,16 @@ use tokio::task::spawn_blocking;
 //         "initial_replica_version": "2f844c50765df0833c075b7340ac5f2dd9d5dc21",
 //         "nodes_syncing": 5,
 //         "sync_period_secs": 1800,
-//         "replay_period_secs": 7200
+//         "replay_period_secs": 7200,
+//         "thread_id": 0
 //       },
 //       {
 //         "subnet_id": "qwzvq-hye2n-7o7ey-gllix-3bgyy-lfopp-q22hm-oaoez-yqtyi-qz64d-vqe",
 //         "initial_replica_version": "2f844c50765df0833c075b7340ac5f2dd9d5dc21",
 //         "nodes_syncing": 5,
 //         "sync_period_secs": 3600,
-//         "replay_period_secs": 7200
+//         "replay_period_secs": 7200,
+//         "thread_id": 1
 //       }
 //     ]
 // }
@@ -61,12 +63,14 @@ async fn main() {
     let args = BackupArgs::parse();
     let rt = Handle::current();
     spawn_blocking(move || {
-        if let Some(SubCommand::Init) = args.subcmd {
-            BackupManager::init(log, args.config_file);
-        } else {
-            let bm = BackupManager::new(args.config_file, &rt, log);
-            Arc::new(bm).do_backups();
-        }
+        match args.subcmd {
+            Some(SubCommand::Init) => BackupManager::init(log, args.config_file),
+            Some(SubCommand::Upgrade) => BackupManager::upgrade(log, args.config_file),
+            _ => {
+                let bm = BackupManager::new(args.config_file, &rt, log);
+                Arc::new(bm).do_backups();
+            }
+        };
     })
     .await
     .expect("Blocking task panicked")

@@ -28,7 +28,6 @@ const BUCKET_SIZE: u64 = 10000;
 pub struct BackupHelper {
     pub subnet_id: SubnetId,
     pub initial_replica_version: ReplicaVersion,
-    pub nns_url: String,
     pub root_dir: PathBuf,
     pub excluded_dirs: Vec<String>,
     pub ssh_private_key: String,
