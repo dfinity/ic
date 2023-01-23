@@ -96,6 +96,8 @@ mod database_access {
                 ])
                 .map_err(|e| BlockStoreError::Other(e.to_string()))?;
             }
+            Operation::Approve { .. } => todo!(),
+            Operation::TransferFrom { .. } => todo!(),
             Operation::Transfer {
                 from,
                 to,
@@ -417,11 +419,41 @@ mod database_access {
                     }
                 }
             }
+            Operation::Approve { from, fee, .. } => {
+                let account_balance_opt = extract_latest_balance(from)?;
+
+                let make_error = || {
+                    Err(BlockStoreError::Other(format!(
+                        "Account {} does not have enough funds to pay for an approval",
+                        from
+                    )))
+                };
+
+                match account_balance_opt {
+                    Some(mut balance) => {
+                        if balance.1 < fee.get_e8s() {
+                            return make_error();
+                        }
+                        balance.1 -= fee.get_e8s();
+                        new_balances.push(balance);
+                    }
+                    None => {
+                        return make_error();
+                    }
+                }
+            }
             Operation::Transfer {
                 from,
                 to,
                 amount,
                 fee,
+            }
+            | Operation::TransferFrom {
+                from,
+                to,
+                amount,
+                fee,
+                ..
             } => {
                 let account_balance_opt = extract_latest_balance(to)?;
                 let self_transfer = from.to_hex() == to.to_hex();

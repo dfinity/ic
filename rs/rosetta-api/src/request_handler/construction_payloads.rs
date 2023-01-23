@@ -233,6 +233,12 @@ fn handle_transfer(
         Operation::Mint { .. } => Err(ApiError::invalid_request(
             "Mint operations are not supported through Rosetta.",
         )),
+        Operation::Approve { .. } => Err(ApiError::invalid_request(
+            "Approve operations are not supported through Rosetta.",
+        )),
+        Operation::TransferFrom { .. } => Err(ApiError::invalid_request(
+            "TransferFrom operations are not supported through Rosetta.",
+        )),
         Operation::Transfer {
             from,
             to,

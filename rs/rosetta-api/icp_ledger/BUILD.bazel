@@ -6,7 +6,7 @@ load("@rules_motoko//motoko:defs.bzl", "motoko_binary", "motoko_library")
 package(default_visibility = ["//visibility:public"])
 
 exports_files([
-    "ledge.rdid",
+    "ledger.did",
     "ledger_archive.did",
 ])
 
@@ -113,6 +113,18 @@ rust_test(
         "@crate_index//:rand_0_8_4",
         "@crate_index//:rand_chacha_0_3_1",
         "@crate_index//:serde",
+    ],
+)
+
+rust_test(
+    name = "protobuf_encoding_test",
+    srcs = ["test/protobuf_encoding.rs"],
+    deps = [
+        ":icp_ledger",
+        "//rs/rosetta-api/ledger_core",
+        "//rs/rust_canisters/dfn_protobuf",
+        "@crate_index//:proptest",
+        "@crate_index//:serde_bytes",
     ],
 )
 

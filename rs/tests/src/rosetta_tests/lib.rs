@@ -365,6 +365,12 @@ where
             Request::Transfer(Operation::Mint { .. }) => {
                 panic!("Mint operations are not supported here")
             }
+            Request::Transfer(Operation::Approve { .. }) => {
+                panic!("Approve operations are not supported here")
+            }
+            Request::Transfer(Operation::TransferFrom { .. }) => {
+                panic!("TransferFrom operations are not supported here")
+            }
         };
 
         all_sender_pks.push(to_public_key(&request.sender_keypair));

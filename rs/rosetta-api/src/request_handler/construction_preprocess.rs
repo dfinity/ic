@@ -55,6 +55,12 @@ fn required_public_key(request: Request) -> Result<icp_ledger::AccountIdentifier
         Request::Transfer(Operation::Mint { .. }) => Err(ApiError::invalid_request(
             "Mint operations are not supported through rosetta",
         )),
+        Request::Transfer(Operation::Approve { .. }) => Err(ApiError::invalid_request(
+            "Approve operations are not supported through rosetta",
+        )),
+        Request::Transfer(Operation::TransferFrom { .. }) => Err(ApiError::invalid_request(
+            "TransferFrom operations are not supported through rosetta",
+        )),
         Request::Stake(Stake { account, .. })
         | Request::SetDissolveTimestamp(SetDissolveTimestamp { account, .. })
         | Request::ChangeAutoStakeMaturity(ChangeAutoStakeMaturity { account, .. })

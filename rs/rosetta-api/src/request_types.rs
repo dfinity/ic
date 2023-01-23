@@ -791,75 +791,51 @@ impl TransactionBuilder {
         operation: &LedgerOperation,
         token_name: &str,
     ) -> Result<(), ApiError> {
+        let mut push_op = |_type: OperationType, account: &AccountIdentifier, amount: i128| {
+            let operation_identifier = self.allocate_op_id();
+            self.ops.push(Operation {
+                operation_identifier,
+                _type,
+                status: None,
+                account: Some(to_model_account_identifier(account)),
+                amount: Some(signed_amount(amount, token_name)),
+                related_operations: None,
+                coin_change: None,
+                metadata: None,
+            });
+        };
+
         match operation {
             LedgerOperation::Burn { from, amount } => {
-                let operation_identifier = self.allocate_op_id();
-                self.ops.push(Operation {
-                    operation_identifier,
-                    _type: OperationType::Burn,
-                    status: None,
-                    account: Some(to_model_account_identifier(from)),
-                    amount: Some(signed_amount(-i128::from(amount.get_e8s()), token_name)),
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: None,
-                });
+                push_op(OperationType::Burn, from, -i128::from(amount.get_e8s()));
             }
             LedgerOperation::Mint { to, amount } => {
-                let operation_identifier = self.allocate_op_id();
-                self.ops.push(Operation {
-                    operation_identifier,
-                    _type: OperationType::Mint,
-                    status: None,
-                    account: Some(to_model_account_identifier(to)),
-                    amount: Some(tokens_to_amount(*amount, token_name)?),
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: None,
-                });
+                push_op(OperationType::Mint, to, i128::from(amount.get_e8s()));
+            }
+            LedgerOperation::Approve {
+                from, spender, fee, ..
+            } => {
+                push_op(OperationType::Transaction, from, 0);
+                push_op(OperationType::Transaction, spender, 0);
+                push_op(OperationType::Fee, from, -i128::from(fee.get_e8s()));
             }
             LedgerOperation::Transfer {
                 from,
                 to,
                 amount,
                 fee,
+            }
+            | LedgerOperation::TransferFrom {
+                from,
+                to,
+                amount,
+                fee,
+                ..
             } => {
-                let from_account = Some(to_model_account_identifier(from));
                 let amount = i128::from(amount.get_e8s());
-
-                let operation_identifier = self.allocate_op_id();
-                self.ops.push(Operation {
-                    operation_identifier,
-                    _type: OperationType::Transaction,
-                    status: None,
-                    account: from_account.clone(),
-                    amount: Some(signed_amount(-amount, token_name)),
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: None,
-                });
-                let operation_identifier = self.allocate_op_id();
-                self.ops.push(Operation {
-                    operation_identifier,
-                    _type: OperationType::Transaction,
-                    status: None,
-                    account: Some(to_model_account_identifier(to)),
-                    amount: Some(signed_amount(amount, token_name)),
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: None,
-                });
-                let operation_identifier = self.allocate_op_id();
-                self.ops.push(Operation {
-                    operation_identifier,
-                    _type: OperationType::Fee,
-                    status: None,
-                    account: from_account,
-                    amount: Some(signed_amount(-(fee.get_e8s() as i128), token_name)),
-                    related_operations: None,
-                    coin_change: None,
-                    metadata: None,
-                });
+                push_op(OperationType::Transaction, from, -amount);
+                push_op(OperationType::Transaction, to, amount);
+                push_op(OperationType::Fee, from, -i128::from(fee.get_e8s()));
             }
         };
         Ok(())

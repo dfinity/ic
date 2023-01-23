@@ -89,6 +89,20 @@ pub enum Operation {
         amount: Tokens,
         fee: Tokens,
     },
+    Approve {
+        from: AccountIdentifier,
+        spender: AccountIdentifier,
+        allowance: Tokens,
+        expires_at: Option<TimeStamp>,
+        fee: Tokens,
+    },
+    TransferFrom {
+        from: AccountIdentifier,
+        to: AccountIdentifier,
+        spender: AccountIdentifier,
+        amount: Tokens,
+        fee: Tokens,
+    },
 }
 
 pub fn apply_operation<S>(
@@ -107,6 +121,8 @@ where
         } => balances.transfer(from, to, *amount, *fee),
         Operation::Burn { from, amount, .. } => balances.burn(from, *amount),
         Operation::Mint { to, amount, .. } => balances.mint(to, *amount),
+        Operation::Approve { .. } => unimplemented!(),
+        Operation::TransferFrom { .. } => unimplemented!(),
     }
 }
 
@@ -593,6 +609,20 @@ pub enum CandidOperation {
         amount: Tokens,
         fee: Tokens,
     },
+    Approve {
+        from: AccountIdBlob,
+        spender: AccountIdBlob,
+        allowance: Tokens,
+        fee: Tokens,
+        expires_at: Option<TimeStamp>,
+    },
+    TransferFrom {
+        from: AccountIdBlob,
+        to: AccountIdBlob,
+        spender: AccountIdBlob,
+        amount: Tokens,
+        fee: Tokens,
+    },
 }
 
 impl From<Operation> for CandidOperation {
@@ -614,6 +644,32 @@ impl From<Operation> for CandidOperation {
             } => Self::Transfer {
                 from: from.to_address(),
                 to: to.to_address(),
+                amount,
+                fee,
+            },
+            Operation::Approve {
+                from,
+                spender,
+                allowance,
+                fee,
+                expires_at,
+            } => Self::Approve {
+                from: from.to_address(),
+                spender: spender.to_address(),
+                allowance,
+                fee,
+                expires_at,
+            },
+            Operation::TransferFrom {
+                from,
+                to,
+                spender,
+                amount,
+                fee,
+            } => Self::TransferFrom {
+                from: from.to_address(),
+                to: to.to_address(),
+                spender: spender.to_address(),
                 amount,
                 fee,
             },

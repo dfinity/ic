@@ -110,12 +110,15 @@ async fn store_account_balances_test() {
                 from_account = None;
                 to_account = Some(to.to_hex());
             }
-            Operation::Transfer {
-                from,
-                to,
-                amount: _,
-                fee: _,
-            } => {
+            Operation::Transfer { from, to, .. } => {
+                from_account = Some(from.to_hex());
+                to_account = Some(to.to_hex());
+            }
+            Operation::Approve { from, spender, .. } => {
+                from_account = Some(from.to_hex());
+                to_account = Some(spender.to_hex());
+            }
+            Operation::TransferFrom { from, to, .. } => {
                 from_account = Some(from.to_hex());
                 to_account = Some(to.to_hex());
             }

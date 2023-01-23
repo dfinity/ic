@@ -248,10 +248,36 @@ message Transaction {
 }
 
 message Send {
+  // The meaning of the [from] field depends on the transaction type:
+  //   - Transfer: [from] is the source account.
+  //   - TransferFrom: [from] is the approver.
+  //   - Approve: [from] is the approver.
   AccountIdentifier from = 1;
+  // The meaning of the [to] field depends on the transaction type:
+  //   - Transfer: [to] is the destination account.
+  //   - TransferFrom: [to] is the destination account.
+  //   - Approve: [to] is the default account id of the approved principal.
   AccountIdentifier to = 2;
+  // If the transaction type is Approve, the amount must be zero.
   Tokens amount = 3;
   Tokens max_fee = 4;
+
+  // We represent metadata of new operation types as submessages for
+  // backward compatibility with old clients.
+  oneof extension {
+    Approve approve = 5;
+    TransferFrom transfer_from = 6;
+  }
+}
+
+message TransferFrom {
+  // The default account id of the principal who sent the transaction.
+  AccountIdentifier spender = 1;
+}
+
+message Approve {
+  Tokens allowance = 1;
+  TimeStamp expires_at = 2;
 }
 
 message Mint {
