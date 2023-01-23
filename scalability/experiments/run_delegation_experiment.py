@@ -47,24 +47,23 @@ class DelegationExperiment(IcPyStressExperiment):
             # Remove request IDs (they are not Json serializable) and write to file
             f.write(json.dumps(dataclasses.replace(r, req_ids=[]).__dict__, indent=4))
 
-        if counter_diff > r.num_succ_submit:
+        if counter_diff > r.num_succ_executed:
             print(
                 colored(
-                    f"Counter value difference {counter_diff} is larger than the number of successful calls {r.num_succ_submit}",
+                    f"Counter value difference {counter_diff} is larger than the number of successful calls {r.num_succ_executed}",
                     "red",
                 ),
             )
-        if counter_diff < r.num_succ_submit:
+        if counter_diff < r.num_succ_executed:
             print(
                 colored(
-                    f"Counter value difference {counter_diff} is smaller than the number of successful calls {r.num_succ_submit}. ",
+                    f"Counter value difference {counter_diff} is smaller than the number of successful calls {r.num_succ_executed}. ",
                     "yellow",
                 ),
                 "This is not unexpected, since a submitted request might not be executed.",
             )
         num_total = r.num_succ_submit + r.num_fail_submit
         failure_rate = r.num_fail_submit / num_total
-        calculated_rate = statistics.mean(r.durations)
         print(
             colored(
                 (
@@ -76,46 +75,54 @@ class DelegationExperiment(IcPyStressExperiment):
             ),
             " (successful submit does not mean successful execution)",
         )
-        print(colored(f"Duration: {calculated_rate} - stderr: {statistics.stdev(r.durations)}", "blue"))
+        for exception, num in r.exception_histogram.items():
+            print(f"{exception} - {num}")
+        failure_rate = r.num_fail_executed / num_total
         print(
             colored(
                 (
-                    f"Average total rate: {num_total/calculated_rate} - "
-                    f"average succ rate: {r.num_succ_submit/calculated_rate}"
+                    f"Executed succ: {r.num_succ_executed} - "
+                    f"Executed fail: {r.num_fail_executed} - "
+                    f"Executed failure rate: {failure_rate}"
                 ),
-                "blue",
-            )
+                "yellow",
+            ),
+            " (successful execution means the ingress message has been succesfully executed by the canister)",
         )
+
         plot_outname = os.path.join(self.iter_outdir, f"delegate_requests_start_time-{iteration_uuid}.png")
-        plot_request_distribution(r.call_time, plot_outname)
-        print("Status codes:")
+        plot_request_distribution(r.call_time, r.durations, plot_outname, config["rps"])
+        plot_request_distribution(r.call_time, r.durations, "/tmp/plot.png", config["rps"])
+        print(colored("Status codes:", "blue"))
         for k, v in r.status_codes.items():
             print(k, v)
 
         return EvaluatedSummaries(
             failure_rate,
             [failure_rate],
-            num_total / statistics.median(r.durations),
-            num_total / statistics.mean(r.durations),
-            num_total / max(r.durations),
-            num_total / min(r.durations),
+            statistics.median(r.durations) / num_total,
+            statistics.mean(r.durations) / num_total,
+            max(r.durations) / num_total,
+            min(r.durations) / num_total,
             [],
             num_total,
-            r.num_succ_submit,
-            r.num_fail_submit,
+            r.num_succ_executed,
+            r.num_fail_executed,
             [],
         )
 
     def run_iterations(self, iterations=None):
+        results = {}
         self.init_experiment()
         for idx, i in enumerate(iterations):
-            self.run_experiment({"rps": i})
+            results[i] = self.run_experiment({"rps": i})
             rtype = "update"
             state = "running" if idx + 1 < len(iterations) else "done"
             self.write_summary_file(
                 "run_delegation_experiment",
                 {
-                    "iter_duration": -1,
+                    "iter_duration": FLAGS.iter_duration,
+                    "evaluated_summaries": {k: r.to_dict() for k, r in results.items()},
                 },
                 iterations,
                 "requests / s",

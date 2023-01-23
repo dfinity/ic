@@ -197,6 +197,15 @@ However, when running manually, it is sometimes desireable to skip some of those
  - Use `--iter_duration=60` or `--scale_duration=0.2` (for workload experiments) for shorter measurement duration
  - Set `--no_prometheus=True --no_instrument=True` to disable some extra steps for acquiering more data
 
+## Trouble shooting
+
+If something goes wrong with Python dependencies, one of the things to try is to delete the pipenv enviroment and recreate it.
+
+```
+pipenv --rm
+pipenv install -r requirements.txt
+```
+
 ## Debugging
 
 For debugging purposes, it is normally useful to instruct python to pop up a debugger on any exception.

@@ -63,6 +63,21 @@ class EvaluatedSummaries:
         self.num_fail = num_fail
         self.succ_rate_histograms = succ_rate_histograms
 
+    def to_dict(self):
+        return {
+            "failure_rate": self.failure_rate,
+            "failure_rates": self.failure_rates,
+            "t_median": self.t_median,
+            "t_average": self.t_average,
+            "t_max": self.t_max,
+            "t_min": self.t_min,
+            "percentiles": self.percentiles,
+            "total_number": self.total_number,
+            "num_success": self.num_success,
+            "num_fail": self.num_fail,
+            "succ_rate_histograms": self.succ_rate_histograms,
+        }
+
     def convert_tuple(self):
         """Mostly used for backward compatibility."""
         return (
