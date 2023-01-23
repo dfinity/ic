@@ -48,7 +48,7 @@ impl<PR: PendingRequests> Guard<PR> {
             if principals.contains(&principal) {
                 return Err(GuardError::AlreadyProcessing);
             }
-            if principals.len() >= MAX_CONCURRENT as usize {
+            if principals.len() >= MAX_CONCURRENT {
                 return Err(GuardError::TooManyConcurrentRequests);
             }
             principals.insert(principal);

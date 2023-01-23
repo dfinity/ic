@@ -274,7 +274,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
                     // We have already inserted some Blocks into this archive node.
                     // Hence, we already have a value to work with
                     Some(heights) => {
-                        heights.1 += chunk_len as u64;
+                        heights.1 += chunk_len;
                     }
                 }
                 archive.nodes_block_ranges.get(node_index).cloned().unwrap()

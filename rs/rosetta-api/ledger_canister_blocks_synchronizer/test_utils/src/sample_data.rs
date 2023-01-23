@@ -79,7 +79,7 @@ impl Scribe {
     }
 
     fn next_message(&self) -> Memo {
-        Memo(self.next_index() as u64)
+        Memo(self.next_index())
     }
 
     fn next_index(&self) -> BlockIndex {

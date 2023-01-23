@@ -139,7 +139,7 @@ impl BackupHelper {
         // already synced from the node.
         // That way it is guaranteed that the node is running the new replica version and
         // has the latest version of the ic.json5 file.
-        while !self.spool_dir().join(&cup_file).exists() {
+        while !self.spool_dir().join(cup_file.as_str()).exists() {
             sleep_secs(30);
         }
         info!(self.log, "Start downloading binaries.");

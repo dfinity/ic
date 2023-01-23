@@ -70,7 +70,7 @@ impl StableMemory {
     ) -> HypervisorResult<()> {
         let (dst, offset, size) = (dst as usize, offset as usize, size as usize);
 
-        if offset + size > (self.stable_size()? as usize * WASM_PAGE_SIZE_IN_BYTES as usize) {
+        if offset + size > (self.stable_size()? as usize * WASM_PAGE_SIZE_IN_BYTES) {
             return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
         }
 
@@ -93,7 +93,7 @@ impl StableMemory {
     ) -> HypervisorResult<()> {
         let (src, offset, size) = (src as usize, offset as usize, size as usize);
 
-        if offset + size > (self.stable_size()? as usize * WASM_PAGE_SIZE_IN_BYTES as usize) {
+        if offset + size > (self.stable_size()? as usize * WASM_PAGE_SIZE_IN_BYTES) {
             return Err(HypervisorError::Trapped(StableMemoryOutOfBounds));
         }
 

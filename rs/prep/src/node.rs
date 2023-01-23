@@ -184,7 +184,7 @@ impl InitializedNode {
         // nodes' ID, for example, to set up a subnet via NNS.
         let path = PathBuf::from(self.node_path.as_path()).join("derived_node_id");
         let output = format!("{}", node_id);
-        std::fs::write(&path, output).map_err(|source| InitializeNodeError::SavingNodeId { source })
+        std::fs::write(path, output).map_err(|source| InitializeNodeError::SavingNodeId { source })
     }
 }
 

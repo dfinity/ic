@@ -251,13 +251,13 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
     let ooi_imp = Import {
         module: INSTRUMENTED_FUN_MODULE,
         name: OUT_OF_INSTRUCTIONS_FUN_NAME,
-        ty: TypeRef::Func(ooi_type_idx as u32),
+        ty: TypeRef::Func(ooi_type_idx),
     };
 
     let uam_imp = Import {
         module: INSTRUMENTED_FUN_MODULE,
         name: UPDATE_MEMORY_FUN_NAME,
-        ty: TypeRef::Func(uam_type_idx as u32),
+        ty: TypeRef::Func(uam_type_idx),
     };
 
     let mut old_imports = module.imports;
@@ -277,12 +277,12 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         let tgsm_imp = Import {
             module: INSTRUMENTED_FUN_MODULE,
             name: TRY_GROW_STABLE_MEMORY_FUN_NAME,
-            ty: TypeRef::Func(tgsm_type_idx as u32),
+            ty: TypeRef::Func(tgsm_type_idx),
         };
         let dp_imp = Import {
             module: INSTRUMENTED_FUN_MODULE,
             name: DEALLOCATE_PAGES_NAME,
-            ty: TypeRef::Func(dp_type_idx as u32),
+            ty: TypeRef::Func(dp_type_idx),
         };
         module.imports.push(tgsm_imp);
         module.imports.push(dp_imp);
@@ -292,7 +292,7 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         let it_imp = Import {
             module: INSTRUMENTED_FUN_MODULE,
             name: INTERNAL_TRAP_FUN_NAME,
-            ty: TypeRef::Func(it_type_idx as u32),
+            ty: TypeRef::Func(it_type_idx),
         };
         module.imports.push(it_imp);
     }

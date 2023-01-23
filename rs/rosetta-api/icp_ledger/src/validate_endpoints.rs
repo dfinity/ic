@@ -159,7 +159,7 @@ impl ToProto for GetBlocksArgs {
 
     fn into_proto(self) -> Self::Proto {
         protobuf::GetBlocksRequest {
-            start: self.start as u64,
+            start: self.start,
             length: self.length as u64,
         }
     }

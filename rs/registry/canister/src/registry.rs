@@ -688,7 +688,7 @@ mod tests {
         ));
         assert_empty!(apply_mutations_skip_invariant_checks(
             &mut registry,
-            vec![insert(&key, &value2)]
+            vec![insert(&key, value2)]
         ));
 
         serialize_then_deserialize(registry);
@@ -770,7 +770,7 @@ mod tests {
         let max_value = vec![0; max_mutation_value_size(version, key)];
 
         let mutation1 = upsert([90; 50], [1; 50]);
-        let mutation2 = upsert(key, &max_value);
+        let mutation2 = upsert(key, max_value);
         let mutation3 = upsert([89; 200], [1; 200]);
 
         for mutation in [&mutation1, &mutation2, &mutation3] {
@@ -850,7 +850,7 @@ mod tests {
         // After inserting the key, delete should succeed.
         assert_empty!(apply_mutations_skip_invariant_checks(
             &mut registry,
-            vec![insert(&key, &value)]
+            vec![insert(&key, value)]
         ));
         assert_empty!(apply_mutations_skip_invariant_checks(
             &mut registry,
@@ -1004,7 +1004,7 @@ mod tests {
         let key = b"key";
 
         let max_value = vec![0; max_mutation_value_size(version, key)];
-        let mutations = vec![upsert(key, &max_value)];
+        let mutations = vec![upsert(key, max_value)];
         let req = RegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
@@ -1027,7 +1027,7 @@ mod tests {
         let key = b"key";
 
         let too_large_value = vec![0; max_mutation_value_size(version, key) + 1];
-        let mutations = vec![upsert(key, &too_large_value)];
+        let mutations = vec![upsert(key, too_large_value)];
         let req = RegistryAtomicMutateRequest {
             mutations,
             preconditions: vec![],
@@ -1065,7 +1065,7 @@ mod tests {
         let key = b"key";
 
         let too_large_value = vec![0; max_mutation_value_size(version, key) + 1];
-        let mutations = vec![upsert(key, &too_large_value)];
+        let mutations = vec![upsert(key, too_large_value)];
 
         apply_mutations_skip_invariant_checks(&mut registry, mutations);
     }
@@ -1082,7 +1082,7 @@ mod tests {
         let key = b"key";
 
         let value = vec![0; max_mutation_value_size(version, key) + bytes_above_max_size];
-        let mutation = upsert(key, &value);
+        let mutation = upsert(key, value);
         let mutations = vec![mutation.clone()];
         let req = RegistryAtomicMutateRequest {
             mutations,
@@ -1166,7 +1166,7 @@ mod tests {
         for k in &keys {
             apply_mutations_skip_invariant_checks(
                 &mut registry,
-                vec![insert(k.as_bytes(), &gen.sample(&mut rng))],
+                vec![insert(k.as_bytes(), gen.sample(&mut rng))],
             );
         }
         // Now let's do some mutations.
@@ -1178,7 +1178,7 @@ mod tests {
                 &mut registry,
                 vec![update(
                     &keys[key_index_distr.sample(&mut rng)],
-                    &gen.sample(&mut rng),
+                    gen.sample(&mut rng),
                 )],
             );
         }

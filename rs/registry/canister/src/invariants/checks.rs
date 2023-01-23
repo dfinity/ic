@@ -237,7 +237,7 @@ mod tests {
             ipv6: None,
         });
         let registry = Registry::new();
-        let mutation = vec![insert(key.as_bytes(), &value)];
+        let mutation = vec![insert(key.as_bytes(), value)];
         registry.check_global_state_invariants(&mutation);
     }
 
@@ -264,8 +264,8 @@ mod tests {
         let value2 = encode_or_panic(&canister_migrations);
 
         let mutations = vec![
-            insert(key1.as_bytes(), &value1),
-            insert(key2.as_bytes(), &value2),
+            insert(key1.as_bytes(), value1),
+            insert(key2.as_bytes(), value2),
         ];
 
         let registry = Registry::new();

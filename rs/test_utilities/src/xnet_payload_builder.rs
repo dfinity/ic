@@ -71,8 +71,8 @@ impl XNetPayloadBuilder for FakeXNetPayloadBuilder {
     ) -> Result<NumBytes, XNetPayloadValidationError> {
         let size: usize = payload
             .stream_slices
-            .iter()
-            .map(|(_, stream_slice)| stream_slice.payload.len() + stream_slice.merkle_proof.len())
+            .values()
+            .map(|stream_slice| stream_slice.payload.len() + stream_slice.merkle_proof.len())
             .sum();
 
         Ok(NumBytes::from(size as u64))

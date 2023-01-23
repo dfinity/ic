@@ -631,7 +631,7 @@ fn get_block(
                 convert::to_hash(&block_hash)?;
             if blocks.is_verified_by_hash(&hash)? {
                 let idx = blocks.get_block_idx_by_block_hash(&hash)?;
-                Ok(blocks.get_hashed_block(&(idx as u64))?)
+                Ok(blocks.get_hashed_block(&idx)?)
             } else {
                 Err(ApiError::InvalidBlockId(true, Default::default()))
             }

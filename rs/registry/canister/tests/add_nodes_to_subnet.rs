@@ -205,7 +205,7 @@ fn test_add_nodes_to_subnet_succeeds() {
                 make_subnet_record_key(subnet_id).as_bytes(),
             )
             .await;
-            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
+            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
 
             let payload = AddNodesToSubnetPayload {
                 subnet_id: subnet_id.get(),
@@ -302,7 +302,7 @@ fn test_adding_nodes_to_another_subnet_fails() {
                 make_subnet_record_key(subnet_id).as_bytes(),
             )
             .await;
-            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
+            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
 
             let payload = AddNodesToSubnetPayload {
                 subnet_id: subnet_id.get(),

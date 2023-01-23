@@ -77,7 +77,7 @@ macro_rules! trace_syscall {
 fn summarize(heap: &[u8], start: u32, size: u32) -> u64 {
     if TRACE_SYSCALLS {
         let start = (start as usize).min(heap.len());
-        let end = ((start as usize) + (size as usize)).min(heap.len());
+        let end = (start + (size as usize)).min(heap.len());
         // The actual hash function doesn't matter much as long as it is
         // cheap to compute and maps the input to u64 reasonably well.
         let mut sum = 0;

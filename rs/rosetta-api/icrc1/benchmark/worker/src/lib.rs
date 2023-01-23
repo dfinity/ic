@@ -162,7 +162,7 @@ async fn run_transactions_batch(batch_args: BatchArgs) -> BatchResult {
         let batch_size = min(BATCH_SIZE, remaining);
         for _ in 0..batch_size {
             index = (index + 1) % nb_users;
-            let to = users[index as usize];
+            let to = users[index];
             let args = TransferArg {
                 from_subaccount: None,
                 to: Account {
@@ -191,7 +191,7 @@ async fn run_transactions_batch(batch_args: BatchArgs) -> BatchResult {
         }
         let res = batch_result.expect("Error while getting batch result");
         nb_blocks += res.len() as u64;
-        last_block = *res[res.len() as usize - 1]
+        last_block = *res[res.len() - 1]
             .as_ref()
             .expect("Error while getting last block");
         ic_cdk::println!(

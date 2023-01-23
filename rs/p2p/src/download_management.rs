@@ -1040,7 +1040,7 @@ pub mod tests {
         /// The method returns an Iterator over the chunks to download.
         fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
             Box::new(
-                (0..self.num_chunks as u32)
+                (0..self.num_chunks)
                     .map(ChunkId::from)
                     .collect::<Vec<_>>()
                     .into_iter(),
@@ -1470,7 +1470,7 @@ pub mod tests {
         let mut gossip = new_test_gossip(num_replicas, &logger, tokio::runtime::Handle::current());
         gossip.gossip_config.max_artifact_streams_per_peer = 1;
         gossip.gossip_config.max_chunk_wait_ms = 1000;
-        let advert_range = 1..num_replicas as u32;
+        let advert_range = 1..num_replicas;
         // Node 1 and 2 both advertise advert 1 and 2.
         for i in 1..num_replicas {
             test_add_adverts(&gossip, advert_range.clone(), node_test_id(i as u64))

@@ -343,6 +343,7 @@ fn install_file_descriptors<Message: EnumerateInnerFileDescriptors>(
 
 /// Reads from a unix stream socket and passes individual messages
 /// to given handler.
+// Allow `unnecessary_cast` because `len` is `usize` for linux and `u32` for darwin.
 pub fn socket_read_messages<
     Message: DeserializeOwned + EnumerateInnerFileDescriptors + Clone,
     Handler: Fn(Message),
@@ -398,6 +399,7 @@ pub fn socket_read_messages<
                         let len = (*cmsg).cmsg_len - libc::CMSG_LEN(0) as MsgControlLenType;
                         let mut pos = 0;
                         while pos + 4 <= len {
+                            #[allow(clippy::unnecessary_cast)]
                             let src = std::slice::from_raw_parts(data.add(pos as usize), 4);
                             let mut raw: [libc::c_uchar; 4] = [0, 0, 0, 0];
                             raw.copy_from_slice(src);

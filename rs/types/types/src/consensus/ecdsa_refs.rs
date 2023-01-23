@@ -45,7 +45,7 @@ pub struct RequestId {
 impl From<RequestId> for pb::RequestId {
     fn from(request_id: RequestId) -> Self {
         Self {
-            quadruple_id: request_id.quadruple_id.0 as u64,
+            quadruple_id: request_id.quadruple_id.0,
             pseudo_random_id: request_id.pseudo_random_id.to_vec(),
             height: request_id.height.get(),
         }

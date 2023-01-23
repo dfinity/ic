@@ -803,7 +803,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
         test.scheduler()
             .metrics
             .num_canisters_uninstalled_out_of_cycles
-            .get() as u64,
+            .get(),
         3
     );
 }

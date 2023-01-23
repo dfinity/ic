@@ -24,7 +24,7 @@ async fn increment_array() -> Result<String, String> {
             let hi = MYVEC[ARRAYSIZE - 1];
             let lo = MYVEC[0];
 
-            print(&format!("Before increment hi {} lo {}", hi, lo));
+            print(format!("Before increment hi {} lo {}", hi, lo));
 
             for v in &mut MYVEC {
                 *v += 1;
@@ -33,7 +33,7 @@ async fn increment_array() -> Result<String, String> {
             let hi = MYVEC[ARRAYSIZE - 1];
             let lo = MYVEC[0];
 
-            print(&format!("After increment hi {} lo {}", hi, lo));
+            print(format!("After increment hi {} lo {}", hi, lo));
 
             if TRAP {
                 unreachable!()
@@ -53,7 +53,7 @@ async fn compute_sum() -> Result<u32, String> {
             let hi = MYVEC[ARRAYSIZE - 1];
             let lo = MYVEC[0];
 
-            print(&format!("Compute sum hi {} lo {}", hi, lo));
+            print(format!("Compute sum hi {} lo {}", hi, lo));
 
             let mut sum: u32 = 0;
 
@@ -61,7 +61,7 @@ async fn compute_sum() -> Result<u32, String> {
                 sum += *v as u32;
             }
 
-            print(&format!("Computed sum {}", sum));
+            print(format!("Computed sum {}", sum));
             Ok(sum)
         }
     }

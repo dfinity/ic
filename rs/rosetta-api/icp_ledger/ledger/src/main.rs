@@ -1009,7 +1009,7 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
         .into_iter()
         .map(|(canister_id, slice)| ArchivedBlocksRange {
             start: slice.start,
-            length: range_utils::range_len(&slice) as u64,
+            length: range_utils::range_len(&slice),
             callback: QueryArchiveFn {
                 canister_id,
                 method: "get_blocks".to_string(),
@@ -1017,7 +1017,7 @@ fn query_blocks(GetBlocksArgs { start, length }: GetBlocksArgs) -> QueryBlocksRe
         })
         .collect();
 
-    let chain_length = ledger.blockchain.chain_length() as u64;
+    let chain_length = ledger.blockchain.chain_length();
 
     QueryBlocksResponse {
         chain_length,

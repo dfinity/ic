@@ -297,7 +297,7 @@ fn write_prometheus_config_dir(config_dir: PathBuf, scrape_interval: Duration) -
         ],
     });
     let prometheus_config_path = prometheus_config_dir.join("prometheus.yml");
-    let prometheus_config_file = File::create(&prometheus_config_path)?;
+    let prometheus_config_file = File::create(prometheus_config_path)?;
     serde_json::to_writer(prometheus_config_file, &prometheus_config)?;
     Ok(())
 }
@@ -357,7 +357,7 @@ fn sync_prometheus_config_dir(
         ("node_exporter", node_exporter_p8s_static_configs),
     ] {
         ::serde_json::to_writer(
-            &File::create(&prometheus_config_dir.join(name).with_extension("json"))?,
+            &File::create(prometheus_config_dir.join(name).with_extension("json"))?,
             &p8s_static_configs,
         )?;
     }

@@ -255,7 +255,7 @@ fn add_past_blocks(
     let to_add = CERTIFIED_HEIGHT + PAST_PAYLOAD_HEIGHT + 1;
     for i in 1..=to_add {
         let mut block = Block::from_parent(&parent);
-        block.rank = Rank(i as u64);
+        block.rank = Rank(i);
         let ingress = prepare_ingress_payload(now, message_count, i as u8);
         block.payload = Payload::new(
             ic_types::crypto::crypto_hash,
@@ -271,7 +271,7 @@ fn add_past_blocks(
         );
 
         parent = block.clone();
-        let proposal = BlockProposal::fake(block, node_test_id(i as u64));
+        let proposal = BlockProposal::fake(block, node_test_id(i));
         changeset.push(ChangeAction::AddToValidated(proposal.into_message()));
     }
     let time_source = FastForwardTimeSource::new();

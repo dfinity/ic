@@ -360,5 +360,5 @@ fn call_dfx(args: &[&str]) -> Output {
 /// Given a `CandidType`, return the hex encoding of this object.
 pub fn hex_encode_candid(candid: impl CandidType) -> String {
     let bytes = Encode!(&candid).unwrap();
-    hex::encode(&bytes)
+    hex::encode(bytes)
 }

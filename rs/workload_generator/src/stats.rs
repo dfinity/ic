@@ -350,7 +350,7 @@ impl fmt::Display for Summary {
                 }
                 _ => "HTTP status code",
             };
-            writeln!(f, "  {:4.}: {:10.}   {}", k, v, desc)?;
+            writeln!(f, "  {:4}: {:10}   {}", k, v, desc)?;
         }
         if self.chart_size != ChartSize::None {
             writeln!(f)?;

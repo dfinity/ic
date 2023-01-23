@@ -7,6 +7,7 @@ cargo clippy --locked --all-features --tests --benches -- \
     -D warnings \
     -D clippy::all \
     -D clippy::mem_forget \
+    -A clippy::manual_clamp \
     -A clippy::redundant_closure \
     -A clippy::too_many_arguments \
     -C debug-assertions=off

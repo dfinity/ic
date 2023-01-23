@@ -111,7 +111,7 @@ impl Registry {
             }
             // Push all of our subnet_record mutations
             mutations.push(upsert(
-                &make_subnet_record_key(subnet_id),
+                make_subnet_record_key(subnet_id),
                 encode_or_panic(&subnet_record),
             ));
 

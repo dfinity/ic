@@ -296,7 +296,7 @@ impl CanisterStateBuilder {
         let stable_memory = if let Some(data) = self.stable_memory {
             Memory::new(
                 PageMap::from(&data[..]),
-                NumWasmPages::new((data.len() / WASM_PAGE_SIZE_BYTES) as usize + 1),
+                NumWasmPages::new((data.len() / WASM_PAGE_SIZE_BYTES) + 1),
             )
         } else {
             Memory::default()

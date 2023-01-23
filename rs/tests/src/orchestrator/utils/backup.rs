@@ -182,7 +182,7 @@ impl Backup {
         let registry_version = RegistryVersion::from(4);
         let hash = CryptoHashOf::from(CryptoHash(vec![1, 2, 3]));
         let path = Path::new(&self.spool_path())
-            .join(&self.subnet_id.to_string())
+            .join(self.subnet_id.to_string())
             .join(replica_version);
         let height = Height::from(self.get_end_height(replica_version) + 1);
 

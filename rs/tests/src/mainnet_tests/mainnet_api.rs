@@ -77,7 +77,7 @@ pub fn mainnet_config(env: TestEnv) {
         serde_json::to_string_pretty(&reg_snapshot).expect("Could not pretty print value.");
     IcPrepStateDir::new(target_dir.path());
     std::fs::write(
-        &target_dir.path().join("initial_registry_snapshot.json"),
+        target_dir.path().join("initial_registry_snapshot.json"),
         reg_snapshot_serialized,
     )
     .unwrap();

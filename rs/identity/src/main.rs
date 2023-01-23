@@ -48,7 +48,7 @@ fn main() -> Result<()> {
     fs::write(&secret_pem_file, secret_pem.into_bytes())?;
 
     let public_der_file = opts.out_dir.join(format!("{}_public.der", opts.name));
-    fs::write(&public_der_file, public_der)?;
+    fs::write(public_der_file, public_der)?;
 
     let mut permissions = fs::metadata(&secret_pem_file)?.permissions();
     permissions.set_readonly(true);

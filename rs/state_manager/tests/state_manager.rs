@@ -132,11 +132,11 @@ fn temporary_directory_gets_cleaned() {
     state_manager_restart_test(|state_manager, restart_fn| {
         // write something to some file in the tmp directory
         let test_file = state_manager.state_layout().tmp().join("some_file");
-        std::fs::write(&test_file, "some stuff").expect("failed to write to test file");
+        std::fs::write(test_file, "some stuff").expect("failed to write to test file");
 
         // same for fs_tmp
         let test_file = state_manager.state_layout().fs_tmp().join("some_file");
-        std::fs::write(&test_file, "some stuff").expect("failed to write to test file");
+        std::fs::write(test_file, "some stuff").expect("failed to write to test file");
 
         // restart the state_manager
         let state_manager = restart_fn(state_manager, None);
@@ -1510,7 +1510,7 @@ fn recomputes_metadata_on_restart_if_missing() {
     state_manager_restart_test(|state_manager, restart_fn| {
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-        std::fs::remove_file(&state_manager.state_layout().states_metadata())
+        std::fs::remove_file(state_manager.state_layout().states_metadata())
             .expect("Failed to remove states metadata");
         let cert_hashes = state_manager.list_state_hashes_to_certify();
         assert_eq!(1, cert_hashes.len());

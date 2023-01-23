@@ -120,7 +120,7 @@ fn time_nanos() -> u64 {
 fn on_reply(_env: *mut ()) {
     let (reply, _) =
         candid::Decode!(&api::arg_data()[..], Reply, Vec<u8>).expect("failed to decode response");
-    let elapsed = Duration::from_nanos((time_nanos() - reply.time_nanos) as u64);
+    let elapsed = Duration::from_nanos(time_nanos() - reply.time_nanos);
     METRICS.with(|m| m.borrow_mut().latency_distribution.observe(elapsed));
 }
 

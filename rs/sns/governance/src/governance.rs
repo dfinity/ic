@@ -3071,7 +3071,7 @@ impl Governance {
         // relationships, i.e., the `function_followee_index`.
         let neuron = self.proto.neurons.get_mut(&id.to_string()).ok_or_else(||
             // The specified neuron is not present.
-            GovernanceError::new_with_message(ErrorType::NotFound, &format!("Follower neuron not found: {}", id)))?;
+            GovernanceError::new_with_message(ErrorType::NotFound, format!("Follower neuron not found: {}", id)))?;
 
         // Check that the caller is authorized to change followers (same authorization
         // as voting required).
@@ -3099,7 +3099,7 @@ impl Governance {
         if !is_registered_function_id(f.function_id, &self.proto.id_to_nervous_system_functions) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotFound,
-                &format!(
+                format!(
                     "Function with id: {} is not present among the current set of functions.",
                     f.function_id,
                 ),
@@ -5000,7 +5000,7 @@ mod tests {
                 // Step 1.3: Create Governance that we will be sending manage_neuron calls to.
                 let mut governance = Governance::new(
                     ValidGovernanceProto::try_from(governance_proto).unwrap(),
-                    Box::new(NativeEnvironment::default()),
+                    Box::<NativeEnvironment>::default(),
                     Box::new(TestLedger {
                         transfer_funds_arrived: transfer_funds_arrived.clone(),
                         transfer_funds_continue: transfer_funds_continue.clone(),
@@ -5460,7 +5460,7 @@ mod tests {
             }
             .try_into()
             .unwrap(),
-            Box::new(NativeEnvironment::default()),
+            Box::<NativeEnvironment>::default(),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
         );
@@ -6005,7 +6005,7 @@ mod tests {
             }
             .try_into()
             .unwrap(),
-            Box::new(NativeEnvironment::default()),
+            Box::<NativeEnvironment>::default(),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
         );
@@ -7199,7 +7199,7 @@ mod tests {
             governance_proto
                 .try_into()
                 .expect("Failed validating governance proto"),
-            Box::new(NativeEnvironment::default()),
+            Box::<NativeEnvironment>::default(),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
         )

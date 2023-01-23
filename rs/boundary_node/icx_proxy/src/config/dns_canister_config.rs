@@ -350,6 +350,6 @@ mod tests {
     fn parse_config(aliases: Vec<&str>, suffixes: Vec<&str>) -> anyhow::Result<DnsCanisterConfig> {
         let aliases: Vec<String> = aliases.iter().map(|&s| String::from(s)).collect();
         let suffixes: Vec<String> = suffixes.iter().map(|&s| String::from(s)).collect();
-        DnsCanisterConfig::new(&aliases, &suffixes)
+        DnsCanisterConfig::new(aliases, suffixes)
     }
 }

@@ -491,7 +491,7 @@ impl Player {
             if self.state_manager.latest_state_height() >= height {
                 if let Some(hash) = get_state_hash(&*self.state_manager, height) {
                     println!("Latest checkpoint at height: {}", height);
-                    println!("Latest state hash: {}", hex::encode(&hash.get().0));
+                    println!("Latest state hash: {}", hex::encode(hash.get().0));
                 };
                 break;
             }
@@ -541,7 +541,7 @@ impl Player {
                 (last_cup.height(), last_cup.content.state_hash)
             }
         };
-        let hash = hex::encode(&hash_raw.get().0);
+        let hash = hex::encode(hash_raw.get().0);
 
         StateParams {
             height,

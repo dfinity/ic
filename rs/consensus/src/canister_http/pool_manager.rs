@@ -88,8 +88,8 @@ impl CanisterHttpPoolManagerImpl {
             .metadata
             .subnet_call_context_manager
             .canister_http_request_contexts
-            .iter()
-            .map(|(callback_id, _)| *callback_id)
+            .keys()
+            .copied()
             .collect();
 
         let ids_to_remove_from_cache: Vec<_> = self

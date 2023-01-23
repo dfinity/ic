@@ -9486,7 +9486,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "axum",
- "base64 0.13.1",
+ "base64 0.11.0",
  "candid",
  "clap 4.0.32",
  "flate2",
@@ -9889,7 +9889,7 @@ dependencies = [
 name = "kv_store"
 version = "0.1.0"
 dependencies = [
- "base64 0.13.1",
+ "base64 0.11.0",
  "flate2",
  "ic-cdk",
  "ic-cdk-macros",

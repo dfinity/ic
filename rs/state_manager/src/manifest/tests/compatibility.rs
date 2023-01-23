@@ -163,11 +163,11 @@ fn test_encoding_file_info() {
     };
 
     assert_eq!(
-        hex::encode(&encode_file_info_expected(&file_info)),
+        hex::encode(encode_file_info_expected(&file_info)),
         EXPECTED_ENCODED_FILE_INFO.to_owned()
     );
     assert_eq!(
-        hex::encode(&encode_file_info(&file_info)),
+        hex::encode(encode_file_info(&file_info)),
         EXPECTED_ENCODED_FILE_INFO.to_owned()
     );
 }
@@ -207,12 +207,12 @@ fn test_encoding_chunk_info() {
     };
 
     assert_eq!(
-        hex::encode(&encode_chunk_info_expected(&chunk_info)),
+        hex::encode(encode_chunk_info_expected(&chunk_info)),
         EXPECTED_ENCODED_CHUNK_INFO.to_owned()
     );
 
     assert_eq!(
-        hex::encode(&encode_chunk_info(&chunk_info)),
+        hex::encode(encode_chunk_info(&chunk_info)),
         EXPECTED_ENCODED_CHUNK_INFO.to_owned()
     );
 }
@@ -515,12 +515,12 @@ fn test_encoding_manifest() {
     let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
 
     assert_eq!(
-        hex::encode(&encode_manifest_expected(&manifest)),
+        hex::encode(encode_manifest_expected(&manifest)),
         EXPECTED_ENCODED_MANIFEST.to_owned()
     );
 
     assert_eq!(
-        hex::encode(&encode_manifest(&manifest)),
+        hex::encode(encode_manifest(&manifest)),
         EXPECTED_ENCODED_MANIFEST.to_owned()
     );
 }

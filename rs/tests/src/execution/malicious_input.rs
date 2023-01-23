@@ -38,17 +38,14 @@ fn test_invalid_content_type(env: TestEnv) {
     for e in ENDPOINTS {
         // Specifying a bogus content type should result in a 415.
         let res = client
-            .post(&format!(
-                "{}api/v2/canister/{}/{}",
-                node_url, canister_id, e
-            ))
+            .post(format!("{}api/v2/canister/{}/{}", node_url, canister_id, e))
             .header("Content-Type", "application/abc")
             .send()
             .unwrap();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 
         // Not specifying a content type should also result in a 400.
-        let res = client.post(&format!("{}{}", node_url, e)).send().unwrap();
+        let res = client.post(format!("{}{}", node_url, e)).send().unwrap();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
 }
@@ -61,10 +58,7 @@ fn test_invalid_get_requests(env: TestEnv) {
     let canister_id = CanisterId::from_u64(123456789);
     for e in ENDPOINTS {
         let res = client
-            .get(&format!(
-                "{}api/v2/canister/{}/{}",
-                node_url, canister_id, e
-            ))
+            .get(format!("{}api/v2/canister/{}/{}", node_url, canister_id, e))
             .send()
             .unwrap();
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
@@ -87,10 +81,7 @@ fn test_garbage_payload(env: TestEnv) {
     let canister_id = CanisterId::from_u64(123456789);
     for e in ENDPOINTS {
         let res = client
-            .post(&format!(
-                "{}api/v2/canister/{}/{}",
-                node_url, canister_id, e
-            ))
+            .post(format!("{}api/v2/canister/{}/{}", node_url, canister_id, e))
             .header("Content-Type", "application/cbor")
             .body(garbage_payload.clone())
             .send()
@@ -133,10 +124,7 @@ fn test_valid_query_followed_by_garbage(env: TestEnv) {
     body.extend(garbage_payload);
 
     let res = client
-        .post(&format!(
-            "{}api/v2/canister/{}/query",
-            node_url, canister_id
-        ))
+        .post(format!("{}api/v2/canister/{}/query", node_url, canister_id))
         .header("Content-Type", "application/cbor")
         .body(body)
         .send()
@@ -178,7 +166,7 @@ fn test_valid_update_followed_by_garbage(env: TestEnv) {
     body.extend(garbage_payload);
 
     let res = client
-        .post(&format!("{}api/v2/canister/{}/call", node_url, canister_id))
+        .post(format!("{}api/v2/canister/{}/call", node_url, canister_id))
         .header("Content-Type", "application/cbor")
         .body(body)
         .send()

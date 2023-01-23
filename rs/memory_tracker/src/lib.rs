@@ -54,7 +54,7 @@ impl MemoryArea {
 
     #[inline]
     pub fn addr(&self) -> usize {
-        self.addr as usize
+        self.addr
     }
 
     #[inline]
@@ -331,7 +331,7 @@ impl SigsegvMemoryTracker {
     }
 
     fn page_index_from(&self, addr: *mut libc::c_void) -> PageIndex {
-        let page_start_mask = !(PAGE_SIZE as usize - 1);
+        let page_start_mask = !(PAGE_SIZE - 1);
         let page_start_addr = (addr as usize) & page_start_mask;
 
         let page_index = (page_start_addr - self.memory_area.addr()) / PAGE_SIZE;
@@ -398,7 +398,7 @@ pub fn sigsegv_fault_handler_old(
 ) -> bool {
     // We need to handle page faults in units of pages(!). So, round faulting
     // address down to page boundary
-    let fault_address_page_boundary = fault_address as usize & !(PAGE_SIZE as usize - 1);
+    let fault_address_page_boundary = fault_address as usize & !(PAGE_SIZE - 1);
 
     let page_num = (fault_address_page_boundary - tracker.memory_area.addr()) / PAGE_SIZE;
 

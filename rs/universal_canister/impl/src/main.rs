@@ -96,7 +96,7 @@ type OpsBytes<'a> = &'a [u8];
 
 fn read_bytes<'a>(ops_bytes: &mut OpsBytes<'a>, len: usize) -> &'a [u8] {
     if len < ops_bytes.len() {
-        let (bytes, rest) = ops_bytes.split_at(len as usize);
+        let (bytes, rest) = ops_bytes.split_at(len);
         *ops_bytes = rest;
         bytes
     } else {

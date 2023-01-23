@@ -76,7 +76,7 @@ impl Persist for Persister {
                 pkg.name.to_owned()
             );
 
-            std::fs::write(&ssl_certificate_key_path, &pkg.pair.0)
+            std::fs::write(ssl_certificate_key_path, &pkg.pair.0)
                 .context("failed to write private key")?;
 
             // Certificate
@@ -86,7 +86,7 @@ impl Persist for Persister {
                 pkg.name.to_owned()
             );
 
-            std::fs::write(&ssl_certificate_path, &pkg.pair.1)
+            std::fs::write(ssl_certificate_path, &pkg.pair.1)
                 .context("failed to write certificate")?;
 
             Ok::<_, Error>(())
@@ -142,7 +142,7 @@ impl Persist for Persister {
             Ok::<_, Error>(inner)
         })()?;
 
-        std::fs::write(&self.domain_mappings_path, &cntnt)
+        std::fs::write(&self.domain_mappings_path, cntnt)
             .context("failed to write domain mappings")?;
 
         Ok(PersistStatus::Completed)

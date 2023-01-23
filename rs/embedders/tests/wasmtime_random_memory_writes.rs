@@ -353,8 +353,7 @@ fn buf_apply_write(heap: &mut [u8], write: &Write, copies_data_to_first_page: bo
     if copies_data_to_first_page {
         heap[4..4 + write.bytes.len()].copy_from_slice(&write.bytes);
     }
-    heap[write.dst as usize..(write.dst as usize + write.bytes.len() as usize)]
-        .copy_from_slice(&write.bytes)
+    heap[write.dst as usize..(write.dst as usize + write.bytes.len())].copy_from_slice(&write.bytes)
 }
 
 const TEST_HEAP_SIZE_BYTES: usize = WASM_PAGE_SIZE_BYTES * TEST_NUM_PAGES;
@@ -444,8 +443,8 @@ mod tests {
                 // Compare the written regions.
                 let wasm_heap: &[u8] = unsafe {
                     let addr = instance.heap_addr(CanisterMemoryType::Heap);
-                    let size_in_bytes = instance.heap_size(CanisterMemoryType::Heap).get() as usize
-                        * WASM_PAGE_SIZE_BYTES;
+                    let size_in_bytes =
+                        instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_BYTES;
                     std::slice::from_raw_parts_mut(addr as *mut _, size_in_bytes)
                 };
                 let start = write.dst as usize;
@@ -457,7 +456,7 @@ mod tests {
 
                     // Verify that wasm heap and test buffer are the same.
                     let i = result.dirty_pages.last().unwrap().get();
-                    let offset = i as usize * PAGE_SIZE as usize;
+                    let offset = i as usize * PAGE_SIZE;
                     let page1 = unsafe { test_heap.as_ptr().add(offset) };
                     let page2 = unsafe { wasm_heap.as_ptr().add(offset) };
                     let pages_match = unsafe {
@@ -681,7 +680,7 @@ mod tests {
             assert_eq!(
                 instructions_consumed_without_data.get(),
                 7 + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
-                    .get() as u64
+                    .get()
             );
         })
     }

@@ -128,7 +128,7 @@ fn test_recover_subnet_with_replacement_nodes() {
                 make_subnet_record_key(subnet_id).as_bytes(),
             )
             .await;
-            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet as usize);
+            assert_eq!(subnet_record.membership.len(), num_nodes_in_subnet);
 
             let payload = RecoverSubnetPayload {
                 subnet_id: subnet_id.get(),

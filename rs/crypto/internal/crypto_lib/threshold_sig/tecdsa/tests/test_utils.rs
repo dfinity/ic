@@ -139,7 +139,7 @@ impl ProtocolRound {
         number_of_dealers: usize,
         number_of_dealings_corrupted: usize,
     ) -> ThresholdEcdsaResult<Self> {
-        let shares = vec![SecretShares::Random; number_of_dealers as usize];
+        let shares = vec![SecretShares::Random; number_of_dealers];
         let mode = IDkgTranscriptOperationInternal::Random;
 
         let dealings = Self::create_dealings(

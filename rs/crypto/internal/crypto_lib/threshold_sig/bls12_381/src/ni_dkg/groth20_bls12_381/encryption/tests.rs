@@ -290,8 +290,8 @@ fn decryption_should_fail_below_epoch() {
         .iter()
         .map(|key| SecretKey::deserialize(&key.secret_key));
     let messages = key_message_pairs.iter().map(|key_message| &key_message.1);
-    #[allow(clippy::iter_next_loop)] // We test just one of the receivers
-    for ((mut secret_key, message), node_index) in secret_keys.zip(messages).zip(0..).next() {
+    if let Some(((mut secret_key, message), node_index)) = secret_keys.zip(messages).zip(0..).next()
+    {
         // Delete keys below epoch
         update_key_inplace_to_epoch(&mut secret_key, secret_key_epoch, Seed::from_rng(&mut rng));
 

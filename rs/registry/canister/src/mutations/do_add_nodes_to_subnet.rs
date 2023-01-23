@@ -36,7 +36,7 @@ impl Registry {
 
         self.replace_subnet_record_membership(subnet_id, &mut subnet_record, nodes_to_add);
         let mutations = vec![upsert(
-            &make_subnet_record_key(subnet_id),
+            make_subnet_record_key(subnet_id),
             encode_or_panic(&subnet_record),
         )];
 

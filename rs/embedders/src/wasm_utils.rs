@@ -87,8 +87,7 @@ impl Segments {
         &self,
         initial_wasm_pages: NumWasmPages,
     ) -> Result<(), WasmInstrumentationError> {
-        let initial_memory_size =
-            (initial_wasm_pages.get() as usize) * WASM_PAGE_SIZE_IN_BYTES as usize;
+        let initial_memory_size = initial_wasm_pages.get() * WASM_PAGE_SIZE_IN_BYTES;
         for Segment { offset, bytes } in self.0.iter() {
             let out_of_bounds = match offset.checked_add(bytes.len()) {
                 None => true,
@@ -143,7 +142,7 @@ impl Segments {
                     .entry(PageIndex::new(page_num as u64))
                     .or_insert_with(|| [0; PAGE_SIZE]);
                 let local_offset = offset % PAGE_SIZE;
-                list[local_offset..local_offset + (bytes.len() as usize)].copy_from_slice(&bytes);
+                list[local_offset..local_offset + bytes.len()].copy_from_slice(&bytes);
                 acc
             })
             .into_iter()

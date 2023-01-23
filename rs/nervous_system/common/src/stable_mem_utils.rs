@@ -241,7 +241,7 @@ impl Buf for BufferedStableMemReader {
     }
 
     fn chunk(&self) -> &[u8] {
-        &self.buffer[self.buffer_offset as usize..]
+        &self.buffer[self.buffer_offset..]
     }
 
     fn advance(&mut self, cnt: usize) {
@@ -326,7 +326,7 @@ mod test {
 
     #[test]
     fn test_buffer_sizes() {
-        let mut data = Vec::with_capacity(TEST_DATA_SIZE as usize);
+        let mut data = Vec::with_capacity(TEST_DATA_SIZE);
         let mut i: u8 = 0;
         for _ in 0..TEST_DATA_SIZE {
             data.push(i);

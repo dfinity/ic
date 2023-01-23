@@ -183,5 +183,5 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
     );
     ic_config.initialize().unwrap();
     let path: PathBuf = temp_dir.path().into();
-    (temp_dir, IcPrepStateDir::new(&path))
+    (temp_dir, IcPrepStateDir::new(path))
 }

@@ -169,7 +169,7 @@ impl InternetComputer {
             serde_json::to_string_pretty(&reg_snapshot).expect("Could not pretty print value.");
         IcPrepStateDir::new(init_ic.target_dir.to_str().expect("invalid target dir"));
         std::fs::write(
-            &init_ic.target_dir.join("initial_registry_snapshot.json"),
+            init_ic.target_dir.join("initial_registry_snapshot.json"),
             reg_snapshot_serialized,
         )
         .unwrap();
@@ -200,7 +200,7 @@ impl InternetComputer {
             serde_json::to_string_pretty(&reg_snapshot).expect("Could not pretty print value.");
         IcPrepStateDir::new(init_ic.target_dir.to_str().expect("invalid target dir"));
         std::fs::write(
-            &init_ic.target_dir.join("initial_registry_snapshot.json"),
+            init_ic.target_dir.join("initial_registry_snapshot.json"),
             reg_snapshot_serialized,
         )
         .unwrap();
