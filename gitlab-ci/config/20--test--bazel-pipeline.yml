@@ -28,16 +28,6 @@
       allow_failure: true
     - if: '$SCHEDULE_NAME == "run-all-master"'
 
-.bazel-rules-test-parity:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
-      changes:
-        - 'rs/**/*.rs'
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
-    - if: '$SCHEDULE_NAME == "run-all-master"'
-
 .bazel-test-all:
   extends:
     - .bazel-rules-pipeline
@@ -165,24 +155,3 @@ bazel-cache-perf-test-macos:
     - .bazel-rules-post-master
   needs:
     - bazel-build-macos
-
-bazel-cargo-test-parity:
-  extends:
-    - .bazel-test-all
-    - .bazel-rules-test-parity
-    - .ic-build-image
-  artifacts:
-    when: always
-    paths:
-      - artifacts/*
-  tags:
-    # TODO: remove when IDX-2575 is complete
-    - docker
-    - dfinity
-    - zh
-  script:
-    - |
-      set -eufo pipefail
-      echo "Checking bazel vs cargo test parity"
-
-      ./bazel/test_parity/compare_covered_tests.sh
