@@ -30,7 +30,9 @@ use ic_test_utilities::{
         messages::RequestBuilder,
     },
 };
-use ic_test_utilities_metrics::{fetch_gauge, fetch_int_gauge, fetch_int_gauge_vec, metric_vec};
+use ic_test_utilities_metrics::{
+    fetch_counter, fetch_gauge, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
+};
 use ic_types::messages::{CallbackId, Payload, RejectContext, Response, MAX_RESPONSE_COUNT_BYTES};
 use ic_types::methods::SystemMethod;
 use ic_types::{time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes};
@@ -2799,6 +2801,77 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
     assert_eq!(
         consumed_cycles_since_replica_started_before + NominalCycles::from(fee),
         consumed_cycles_since_replica_started_after
+    );
+}
+
+#[test]
+fn expired_ingress_messages_are_removed_from_ingress_queues() {
+    let batch_time = Time::from_nanos_since_unix_epoch(u64::MAX / 2);
+    let mut test = SchedulerTestBuilder::new()
+        .with_batch_time(batch_time)
+        .build();
+
+    let canister_id = test.create_canister();
+
+    // Add some ingress messages to a canister's queue.
+    // Half of them are set with expiry time before the
+    // time of the current round while the other half
+    // are set to expire after the current round.
+    let num_ingress_messages_to_canisters = 10;
+    for i in 0..num_ingress_messages_to_canisters {
+        if i % 2 == 0 {
+            test.send_ingress_with_expiry(
+                canister_id,
+                ingress(1000),
+                batch_time - Duration::from_secs(1),
+            );
+        } else {
+            test.send_ingress_with_expiry(
+                canister_id,
+                ingress(1000),
+                batch_time + Duration::from_secs(1),
+            );
+        }
+    }
+
+    // Add some ingress messages to the subnet's queue.
+    // Half of them are set with expiry time before the
+    // time of the current round while the other half
+    // are set to expire after the current round.
+    let num_ingress_messages_to_subnet: u64 = 20;
+    for i in 0..num_ingress_messages_to_subnet {
+        if i % 2 == 0 {
+            let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
+            test.inject_ingress_to_ic00(
+                Method::CanisterStatus,
+                payload,
+                batch_time + Duration::from_secs(1),
+            );
+        } else {
+            let payload = Encode!(&CanisterIdRecord::from(canister_id)).unwrap();
+            test.inject_ingress_to_ic00(
+                Method::CanisterStatus,
+                payload,
+                batch_time - Duration::from_secs(1),
+            );
+        }
+    }
+
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    // Ingress queues should be empty, messages either expired
+    // or were executed in the round.
+    assert_eq!(test.ingress_queue_size(canister_id), 0);
+    assert_eq!(test.subnet_ingress_queue_size(), 0);
+
+    // Verify that half of the messages expired.
+    assert_eq!(
+        fetch_counter(
+            test.metrics_registry(),
+            "scheduler_expired_ingress_messages_count",
+        )
+        .unwrap() as u64,
+        (num_ingress_messages_to_canisters / 2) + (num_ingress_messages_to_subnet / 2)
     );
 }
 
