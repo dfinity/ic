@@ -28,6 +28,7 @@ use ic_rosetta_api::request::request_result::RequestResult;
 use ic_rosetta_api::request::transaction_operation_results::TransactionOperationResults;
 use ic_rosetta_api::request::transaction_results::TransactionResults;
 use ic_rosetta_api::request::Request;
+use ic_rosetta_api::request_types::ChangeAutoStakeMaturity;
 use ic_rosetta_api::request_types::{
     AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, RemoveHotKey, SetDissolveTimestamp,
     Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
@@ -347,6 +348,7 @@ where
             | Request::StartDissolve(StartDissolve { account, .. })
             | Request::StopDissolve(StopDissolve { account, .. })
             | Request::SetDissolveTimestamp(SetDissolveTimestamp { account, .. })
+            | Request::ChangeAutoStakeMaturity(ChangeAutoStakeMaturity { account, .. })
             | Request::AddHotKey(AddHotKey { account, .. })
             | Request::RemoveHotKey(RemoveHotKey { account, .. })
             | Request::Disburse(Disburse { account, .. })

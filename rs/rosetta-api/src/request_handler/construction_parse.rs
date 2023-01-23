@@ -3,8 +3,9 @@ use crate::errors::ApiError;
 use crate::models::{ConstructionParseRequest, ConstructionParseResponse, ParsedTransaction};
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
-    AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, PublicKeyOrPrincipal, RemoveHotKey,
-    RequestType, SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo,
+    PublicKeyOrPrincipal, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn, Stake,
+    StakeMaturity, StartDissolve, StopDissolve,
 };
 
 use ic_nns_governance::pb::v1::{
@@ -58,6 +59,9 @@ impl RosettaRequestHandler {
                 }
                 RequestType::SetDissolveTimestamp { neuron_index } => {
                     set_dissolve_timestamp(&mut requests, arg, from, neuron_index)?
+                }
+                RequestType::ChangeAutoStakeMaturity { neuron_index } => {
+                    change_auto_stake_maturity(&mut requests, arg, from, neuron_index)?
                 }
                 RequestType::StartDissolve { neuron_index } => {
                     start_dissolve(&mut requests, arg, from, neuron_index)?
@@ -134,6 +138,38 @@ fn stake(
     requests.push(Request::Stake(Stake {
         account: from,
         neuron_index,
+    }));
+    Ok(())
+}
+
+fn change_auto_stake_maturity(
+    requests: &mut Vec<Request>,
+    arg: Blob,
+    from: AccountIdentifier,
+    neuron_index: u64,
+) -> Result<(), ApiError> {
+    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!(
+            "Could not decode Change Auto Stake Maturity argument: {:?}",
+            e
+        ))
+    })?;
+    let requested_setting_for_auto_stake_maturity = match manage.command {
+        Some(Command::Configure(manage_neuron::Configure {
+            operation: Some(manage_neuron::configure::Operation::ChangeAutoStakeMaturity(d)),
+        })) => Ok(d.requested_setting_for_auto_stake_maturity),
+        Some(e) => Err(ApiError::internal_error(format!(
+            "Incompatible manage_neuron command: {:?}",
+            e
+        ))),
+        None => Err(ApiError::internal_error(
+            "Missing manage_neuron command".to_string(),
+        )),
+    }?;
+    requests.push(Request::ChangeAutoStakeMaturity(ChangeAutoStakeMaturity {
+        account: from,
+        neuron_index,
+        requested_setting_for_auto_stake_maturity,
     }));
     Ok(())
 }

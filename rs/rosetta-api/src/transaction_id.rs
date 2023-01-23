@@ -68,6 +68,7 @@ impl TransactionIdentifier {
             | RequestType::StartDissolve { .. }
             | RequestType::StopDissolve { .. }
             | RequestType::SetDissolveTimestamp { .. }
+            | RequestType::ChangeAutoStakeMaturity { .. }
             | RequestType::Disburse { .. }
             | RequestType::AddHotKey { .. }
             | RequestType::RemoveHotKey { .. }

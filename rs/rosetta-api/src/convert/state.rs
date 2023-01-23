@@ -2,8 +2,9 @@ use crate::errors::ApiError;
 use crate::models::seconds::Seconds;
 use crate::request::Request;
 use crate::request_types::{
-    AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, PublicKeyOrPrincipal, RemoveHotKey,
-    SetDissolveTimestamp, Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
+    AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo,
+    PublicKeyOrPrincipal, RemoveHotKey, SetDissolveTimestamp, Spawn, Stake, StakeMaturity,
+    StartDissolve, StopDissolve,
 };
 use ic_types::PrincipalId;
 use icp_ledger::{Operation, Tokens, DEFAULT_TRANSFER_FEE};
@@ -161,6 +162,22 @@ impl State {
                 account,
                 neuron_index,
                 timestamp,
+            }));
+        Ok(())
+    }
+
+    pub fn change_auto_stake_maturity(
+        &mut self,
+        account: icp_ledger::AccountIdentifier,
+        neuron_index: u64,
+        requested_setting_for_auto_stake_maturity: bool,
+    ) -> Result<(), ApiError> {
+        self.flush()?;
+        self.actions
+            .push(Request::ChangeAutoStakeMaturity(ChangeAutoStakeMaturity {
+                account,
+                neuron_index,
+                requested_setting_for_auto_stake_maturity,
             }));
         Ok(())
     }

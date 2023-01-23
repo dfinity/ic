@@ -140,6 +140,9 @@ pub enum OperationType {
     #[serde(rename = "SET_DISSOLVE_TIMESTAMP")]
     #[strum(serialize = "SET_DISSOLVE_TIMESTAMP")]
     SetDissolveTimestamp,
+    #[serde(rename = "CHANGE_AUTO_STAKE_MATURITY")]
+    #[strum(serialize = "CHANGE_AUTO_STAKE_MATURITY")]
+    ChangeAutoStakeMaturity,
     #[serde(rename = "DISBURSE")]
     #[strum(serialize = "DISBURSE")]
     Disburse,

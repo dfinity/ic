@@ -25,6 +25,7 @@ pub const STAKE: &str = "STAKE";
 pub const START_DISSOLVE: &str = "START_DISSOLVE";
 pub const STOP_DISSOLVE: &str = "STOP_DISSOLVE";
 pub const SET_DISSOLVE_TIMESTAMP: &str = "SET_DISSOLVE_TIMESTAMP";
+pub const CHANGE_AUTO_STAKE_MATURITY: &str = "CHANGE_AUTO_STAKE_MATURITY";
 pub const DISBURSE: &str = "DISBURSE";
 pub const DISSOLVE_TIME_UTC_SECONDS: &str = "dissolve_time_utc_seconds";
 pub const ADD_HOT_KEY: &str = "ADD_HOT_KEY";
@@ -50,6 +51,9 @@ pub enum RequestType {
     #[serde(rename = "SET_DISSOLVE_TIMESTAMP")]
     #[serde(alias = "SetDissolveTimestamp")]
     SetDissolveTimestamp { neuron_index: u64 },
+    #[serde(rename = "CHANGE_AUTO_STAKE_MATURITY")]
+    #[serde(alias = "ChangeAutoStakeMaturity")]
+    ChangeAutoStakeMaturity { neuron_index: u64 },
     #[serde(rename = "START_DISSOLVE")]
     #[serde(alias = "StartDissolve")]
     StartDissolve { neuron_index: u64 },
@@ -94,6 +98,7 @@ impl RequestType {
             RequestType::Send { .. } => TRANSACTION,
             RequestType::Stake { .. } => STAKE,
             RequestType::SetDissolveTimestamp { .. } => SET_DISSOLVE_TIMESTAMP,
+            RequestType::ChangeAutoStakeMaturity { .. } => CHANGE_AUTO_STAKE_MATURITY,
             RequestType::StartDissolve { .. } => START_DISSOLVE,
             RequestType::StopDissolve { .. } => STOP_DISSOLVE,
             RequestType::Disburse { .. } => DISBURSE,
@@ -116,6 +121,7 @@ impl RequestType {
             self,
             RequestType::Stake { .. }
                 | RequestType::SetDissolveTimestamp { .. }
+                | RequestType::ChangeAutoStakeMaturity { .. }
                 | RequestType::StartDissolve { .. }
                 | RequestType::StopDissolve { .. }
                 | RequestType::Disburse { .. }
@@ -212,6 +218,14 @@ pub struct SetDissolveTimestamp {
     pub neuron_index: u64,
     /// The number of seconds since Unix epoch.
     pub timestamp: Seconds,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ChangeAutoStakeMaturity {
+    pub account: icp_ledger::AccountIdentifier,
+    #[serde(default)]
+    pub neuron_index: u64,
+    pub requested_setting_for_auto_stake_maturity: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -340,6 +354,35 @@ pub struct SetDissolveTimestampMetadata {
     #[serde(rename = "dissolve_time_utc_seconds")]
     /// The number of seconds since Unix epoch.
     pub timestamp: Seconds,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct ChangeAutoStakeMaturityMetadata {
+    #[serde(default)]
+    pub neuron_index: u64,
+    #[serde(rename = "set_auto_stake_maturity")]
+    pub requested_setting_for_auto_stake_maturity: bool,
+}
+
+impl From<ChangeAutoStakeMaturityMetadata> for Object {
+    fn from(m: ChangeAutoStakeMaturityMetadata) -> Self {
+        match serde_json::to_value(m) {
+            Ok(Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl TryFrom<Option<Object>> for ChangeAutoStakeMaturityMetadata {
+    type Error = ApiError;
+    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse a `neuron_index` from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
 }
 
 impl From<SetDissolveTimestampMetadata> for Object {
@@ -864,6 +907,35 @@ impl TransactionBuilder {
                 SetDissolveTimestampMetadata {
                     neuron_index: *neuron_index,
                     timestamp: *timestamp,
+                }
+                .into(),
+            ),
+        });
+    }
+
+    pub fn change_auto_stake_maturity(
+        &mut self,
+        setting_for_auto_stake_maturity: &ChangeAutoStakeMaturity,
+    ) {
+        let ChangeAutoStakeMaturity {
+            account,
+            neuron_index,
+            requested_setting_for_auto_stake_maturity,
+        } = setting_for_auto_stake_maturity;
+        let operation_identifier = self.allocate_op_id();
+        self.ops.push(Operation {
+            operation_identifier,
+            _type: OperationType::ChangeAutoStakeMaturity,
+            status: None,
+            account: Some(to_model_account_identifier(account)),
+            amount: None,
+            related_operations: None,
+            coin_change: None,
+            metadata: Some(
+                ChangeAutoStakeMaturityMetadata {
+                    neuron_index: *neuron_index,
+                    requested_setting_for_auto_stake_maturity:
+                        *requested_setting_for_auto_stake_maturity,
                 }
                 .into(),
             ),
