@@ -17,8 +17,7 @@ use std::fmt::{self, Debug, Formatter};
 use std::net::IpAddr;
 use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
-use strum::AsRefStr;
-use strum::IntoStaticStr;
+use strum::{AsRefStr, IntoStaticStr};
 use tokio::{
     io::{ReadHalf, WriteHalf},
     runtime::Handle,
@@ -317,6 +316,10 @@ impl PeerState {
     fn report_connection_state(&self) {
         self.control_plane_metrics
             .flow_state
+            .with_label_values(&[&self.peer_label])
+            .set(self.connection_state.idx());
+        self.control_plane_metrics
+            .connection_state
             .with_label_values(&[&self.peer_label])
             .set(self.connection_state.idx());
     }

@@ -29,10 +29,9 @@ impl Drop for IntGaugeResource {
 #[derive(Clone)]
 pub(crate) struct ControlPlaneMetrics {
     pub(crate) flow_state: IntGaugeVec,
+    pub(crate) connection_state: IntGaugeVec,
     pub(crate) tcp_accepts: IntCounterVec,
-    pub(crate) tcp_accept_conn_success: IntCounterVec,
     pub(crate) tcp_connects: IntCounterVec,
-    pub(crate) tcp_conn_to_server_success: IntCounterVec,
     pub(crate) retry_connection: IntCounterVec,
     pub(crate) tls_handshakes: IntCounterVec,
     pub(crate) async_tasks: IntGaugeVec,
@@ -41,11 +40,17 @@ pub(crate) struct ControlPlaneMetrics {
 impl ControlPlaneMetrics {
     pub(crate) fn new(metrics_registry: MetricsRegistry) -> Self {
         Self {
+            connection_state: metrics_registry.int_gauge_vec(
+                "transport_connection_state",
+                "Current state of the connection.",
+                &["peer_id"],
+            ),
             async_tasks: metrics_registry.int_gauge_vec(
                 "transport_async_tasks",
                 "Current number of running tokio tasks",
                 &["name"],
             ),
+            // deprecated. the naming is very confusing.
             flow_state: metrics_registry.int_gauge_vec(
                 "transport_flow_state",
                 "Current state of the flow",
@@ -56,20 +61,10 @@ impl ControlPlaneMetrics {
                 "Total incoming TcpStream in server mode",
                 &["status"],
             ),
-            tcp_accept_conn_success: metrics_registry.int_counter_vec(
-                "transport_tcp_accept_conn_success",
-                "Successfully connected to incoming TcpStream in server mode",
-                &["flow_tag"],
-            ),
             tcp_connects: metrics_registry.int_counter_vec(
                 "transport_tcp_connects_total",
                 "Total outgoing connects in client mode",
                 &["status"],
-            ),
-            tcp_conn_to_server_success: metrics_registry.int_counter_vec(
-                "transport_conn_to_server_success",
-                "Successfully connected to peer TCP server as client",
-                &["flow_peer_id", "flow_tag"],
             ),
             retry_connection: metrics_registry.int_counter_vec(
                 "transport_retry_connection",
