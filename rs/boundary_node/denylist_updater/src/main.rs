@@ -353,7 +353,7 @@ impl Update for Updater {
                 )
             };
 
-            f.write(line.as_bytes())
+            f.write_all(line.as_bytes())
                 .await
                 .context("failed to write entry")?;
         }
