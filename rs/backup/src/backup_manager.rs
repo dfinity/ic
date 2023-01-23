@@ -38,6 +38,7 @@ struct SubnetBackup {
 }
 
 pub struct BackupManager {
+    pub version: u32,
     pub root_dir: PathBuf,
     pub local_store: Arc<LocalStoreImpl>,
     pub registry_client: Arc<RegistryClientImpl>,
@@ -144,6 +145,7 @@ impl BackupManager {
             });
         }
         BackupManager {
+            version: config.version,
             root_dir: config.root_dir,
             local_store,
             registry_client,
@@ -427,6 +429,13 @@ fn cold_store(m: Arc<BackupManager>) {
     info!(m.log, "Spawned cold storage thread...");
     let size = m.subnet_backups.len();
     loop {
+        // announce the current version of the ic-backup here, once per hour
+        if !m.subnet_backups.is_empty() {
+            m.subnet_backups[0]
+                .backup_helper
+                .notification_client
+                .push_metrics_version(m.version);
+        }
         for i in 0..size {
             let b = &m.subnet_backups[i];
             let subnet_id = &b.backup_helper.subnet_id;
