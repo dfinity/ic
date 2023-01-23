@@ -1265,6 +1265,16 @@ impl NnsCanisterEnvVars for TestEnv {
     }
 }
 
+pub trait SnsCanisterEnvVars {
+    fn set_sns_canisters_env_vars(&self) -> Result<()>;
+}
+
+impl SnsCanisterEnvVars for TestEnv {
+    fn set_sns_canisters_env_vars(&self) -> Result<()> {
+        self.set_canister_env_vars("rs/tests/sns-canisters")
+    }
+}
+
 pub trait CanisterEnvVars {
     fn set_canister_env_vars<P: AsRef<Path>>(&self, dirname: P) -> Result<()>;
 }
