@@ -1,11 +1,14 @@
 use ic_base_types::{NodeId, RegistryVersion};
+use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_interfaces_transport::{
     Transport, TransportChannelId, TransportError, TransportEvent, TransportEventHandler,
     TransportPayload,
 };
-use ic_logger::ReplicaLogger;
+use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_transport::transport::create_transport;
 use ic_transport_test_utils::{
     basic_transport_message, basic_transport_message_v2, blocking_transport_message,
     create_mock_event_handler, get_free_localhost_port, large_transport_message, peer_down_message,
@@ -556,6 +559,49 @@ fn setup_blocking_event_handler(
         }
     });
     event_handler
+}
+
+// If no peers are connected and we should only have one reference to transport.
+// This means that if we drop transport here the all task, including the event handler will be dropped.
+#[test]
+fn test_event_handler_drop() {
+    let registry_version = REG_V1;
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (event_handler, mut handle) = create_mock_event_handler();
+    // Setup registry and crypto component
+    let registry_and_data = RegistryAndDataProvider::new();
+    let crypto = temp_crypto_component_with_tls_keys_in_registry(&registry_and_data, NODE_ID_1);
+    registry_and_data.registry.update_to_latest_version();
+
+    let peer_port = get_free_localhost_port().expect("Failed to get free localhost port");
+    let peer_config = TransportConfig {
+        node_ip: "127.0.0.1".to_string(),
+        listening_port: peer_port,
+        ..Default::default()
+    };
+
+    let peer = create_transport(
+        NODE_ID_1,
+        peer_config,
+        registry_version,
+        MetricsRegistry::new(),
+        Arc::new(crypto),
+        rt.handle().clone(),
+        no_op_logger(),
+        false,
+    );
+
+    peer.set_event_handler(event_handler);
+
+    std::mem::drop(peer);
+
+    // `next_request` returns `None` if the event handler is dropped.
+    rt.block_on(async {
+        assert!(
+            handle.next_request().await.is_none(),
+            "Dropped transport so we don't exepct any messages."
+        );
+    });
 }
 
 fn trigger_and_test_send_queue_full(
