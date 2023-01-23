@@ -221,10 +221,6 @@ impl TransportImpl {
                                         .await
                                         .expect("Can't panic on infallible");
                                     peer_state.update(ConnectionState::Connected(connected_state));
-                                    arc_self.control_plane_metrics
-                                        .tcp_accept_conn_success
-                                        .with_label_values(&[&channel_id.to_string()])
-                                            .inc()
                             }
                             // If there is an error completing the H2 handshake, we 
                             // will retry on a future iteration of the tcp.accept loop 
@@ -313,13 +309,6 @@ impl TransportImpl {
                                         .await
                                         .expect("Can't panic on infallible");
                                     peer_state.update(ConnectionState::Connected(connected_state));
-                                    arc_self.control_plane_metrics
-                                        .tcp_conn_to_server_success
-                                        .with_label_values(&[
-                                            &peer_id.to_string(),
-                                            &channel_id.to_string(),
-                                        ])
-                                        .inc();
                                     // Stop this task since we successfully spawned the read/write tasks
                                     return;
                                 }
