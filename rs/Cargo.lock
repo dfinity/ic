@@ -9467,6 +9467,7 @@ dependencies = [
  "lazy_static",
  "ledger-canister-protobuf-generator",
  "on_wire",
+ "proptest",
  "prost",
  "prost-derive",
  "rand 0.8.5",

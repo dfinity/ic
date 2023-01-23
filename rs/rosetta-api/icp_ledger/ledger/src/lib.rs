@@ -227,6 +227,8 @@ impl Ledger {
             Operation::Transfer { .. } => self.transfer_fee,
             Operation::Mint { .. } => Tokens::from_e8s(0),
             Operation::Burn { .. } => Tokens::from_e8s(0),
+            Operation::Approve { .. } => self.transfer_fee,
+            Operation::TransferFrom { .. } => self.transfer_fee,
         };
         core_ledger::apply_transaction(
             self,

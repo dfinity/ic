@@ -319,14 +319,52 @@ pub mod transaction {
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Send {
+    /// The meaning of the \[from\] field depends on the transaction type:
+    ///    - Transfer: \[from\] is the source account.
+    ///    - TransferFrom: \[from\] is the approver.
+    ///    - Approve: \[from\] is the approver.
     #[prost(message, optional, tag = "1")]
     pub from: ::core::option::Option<AccountIdentifier>,
+    /// The meaning of the \[to\] field depends on the transaction type:
+    ///    - Transfer: \[to\] is the destination account.
+    ///    - TransferFrom: \[to\] is the destination account.
+    ///    - Approve: \[to\] is the default account id of the approved principal.
     #[prost(message, optional, tag = "2")]
     pub to: ::core::option::Option<AccountIdentifier>,
+    /// If the transaction type is Approve, the amount must be zero.
     #[prost(message, optional, tag = "3")]
     pub amount: ::core::option::Option<Tokens>,
     #[prost(message, optional, tag = "4")]
     pub max_fee: ::core::option::Option<Tokens>,
+    /// We represent metadata of new operation types as submessages for
+    /// backward compatibility with old clients.
+    #[prost(oneof = "send::Extension", tags = "5, 6")]
+    pub extension: ::core::option::Option<send::Extension>,
+}
+/// Nested message and enum types in `Send`.
+pub mod send {
+    /// We represent metadata of new operation types as submessages for
+    /// backward compatibility with old clients.
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Extension {
+        #[prost(message, tag = "5")]
+        Approve(super::Approve),
+        #[prost(message, tag = "6")]
+        TransferFrom(super::TransferFrom),
+    }
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TransferFrom {
+    /// The default account id of the principal who sent the transaction.
+    #[prost(message, optional, tag = "1")]
+    pub spender: ::core::option::Option<AccountIdentifier>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct Approve {
+    #[prost(message, optional, tag = "1")]
+    pub allowance: ::core::option::Option<Tokens>,
+    #[prost(message, optional, tag = "2")]
+    pub expires_at: ::core::option::Option<TimeStamp>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Mint {

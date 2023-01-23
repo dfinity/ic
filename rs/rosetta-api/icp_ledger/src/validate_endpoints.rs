@@ -1,4 +1,4 @@
-use crate::protobuf::transaction::Transfer as PTransfer;
+use crate::protobuf::{send::Extension as PExt, transaction::Transfer as PTransfer};
 use crate::{protobuf, TransferFee, TransferFeeArgs};
 use crate::{
     AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockRes, CyclesResponse, EncodedBlock,
@@ -594,14 +594,51 @@ impl ToProto for Transaction {
                 from: Some(from),
                 amount: Some(amount),
                 max_fee,
-            }) => Operation::Transfer {
-                to: AccountIdentifier::from_proto(to)?,
-                from: AccountIdentifier::from_proto(from)?,
-                amount: tokens_from_proto(amount),
-                fee: match max_fee {
-                    Some(fee) => tokens_from_proto(fee),
-                    None => DEFAULT_TRANSFER_FEE,
+                extension,
+            }) => match extension {
+                None => Operation::Transfer {
+                    to: AccountIdentifier::from_proto(to)?,
+                    from: AccountIdentifier::from_proto(from)?,
+                    amount: tokens_from_proto(amount),
+                    fee: match max_fee {
+                        Some(fee) => tokens_from_proto(fee),
+                        None => DEFAULT_TRANSFER_FEE,
+                    },
                 },
+                Some(PExt::TransferFrom(protobuf::TransferFrom { spender })) => {
+                    let spender = spender.ok_or_else(|| {
+                        "Transfer from transaction: missing field `spender`".to_string()
+                    })?;
+                    Operation::TransferFrom {
+                        from: AccountIdentifier::from_proto(from)?,
+                        to: AccountIdentifier::from_proto(to)?,
+                        spender: AccountIdentifier::from_proto(spender)?,
+                        amount: tokens_from_proto(amount),
+                        fee: match max_fee {
+                            Some(fee) => tokens_from_proto(fee),
+                            None => DEFAULT_TRANSFER_FEE,
+                        },
+                    }
+                }
+                Some(PExt::Approve(protobuf::Approve {
+                    allowance,
+                    expires_at,
+                })) => {
+                    let allowance = allowance.ok_or_else(|| {
+                        "Approve transaction: missing field `allowance`".to_string()
+                    })?;
+
+                    Operation::Approve {
+                        from: AccountIdentifier::from_proto(from)?,
+                        spender: AccountIdentifier::from_proto(to)?,
+                        allowance: tokens_from_proto(allowance),
+                        expires_at: expires_at.map(timestamp_from_proto),
+                        fee: match max_fee {
+                            Some(fee) => tokens_from_proto(fee),
+                            None => DEFAULT_TRANSFER_FEE,
+                        },
+                    }
+                }
             },
             t => return Err(format!("Transaction lacked a required field: {:?}", t)),
         };
@@ -642,6 +679,38 @@ impl ToProto for Transaction {
                 amount: Some(tokens_into_proto(amount)),
                 from: Some(from.into_proto()),
                 max_fee: Some(tokens_into_proto(fee)),
+                extension: None,
+            }),
+            Operation::TransferFrom {
+                from,
+                to,
+                amount,
+                fee,
+                spender,
+            } => PTransfer::Send(protobuf::Send {
+                from: Some(from.into_proto()),
+                to: Some(to.into_proto()),
+                amount: Some(tokens_into_proto(amount)),
+                max_fee: Some(tokens_into_proto(fee)),
+                extension: Some(PExt::TransferFrom(protobuf::TransferFrom {
+                    spender: Some(spender.into_proto()),
+                })),
+            }),
+            Operation::Approve {
+                from,
+                spender,
+                allowance,
+                fee,
+                expires_at,
+            } => PTransfer::Send(protobuf::Send {
+                from: Some(from.into_proto()),
+                to: Some(spender.into_proto()),
+                amount: Some(tokens_into_proto(Tokens::ZERO)),
+                max_fee: Some(tokens_into_proto(fee)),
+                extension: Some(PExt::Approve(protobuf::Approve {
+                    allowance: Some(tokens_into_proto(allowance)),
+                    expires_at: expires_at.map(timestamp_into_proto),
+                })),
             }),
         };
         protobuf::Transaction {

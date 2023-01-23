@@ -35,6 +35,7 @@ canister-test = {path = "../../rust_canisters/canister_test"}
 ic-canister-client-sender = {path = "../../canister_client/sender"}
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 ledger-canister-protobuf-generator = { path = "./protobuf_generator" }
+proptest = "1"
 rand = "0.8"
 rand_chacha = "0.3"
 tempfile = "3.1.0"
@@ -46,6 +47,10 @@ path = "test/test.rs"
 [[test]]
 name = "check_generated_files"
 path = "test/check_generated_files.rs"
+
+[[test]]
+name = "protobuf_encoding"
+path = "test/protobuf_encoding.rs"
 
 [[bin]]
 name = "test-notified"

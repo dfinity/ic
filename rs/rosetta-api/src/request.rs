@@ -103,6 +103,14 @@ impl Request {
             Request::Transfer(icp_ledger::Operation::Mint { .. }) => Err(
                 ApiError::invalid_request("Mint operations are not supported through Rosetta"),
             ),
+            Request::Transfer(icp_ledger::Operation::Approve { .. }) => Err(
+                ApiError::invalid_request("Approve operations are not supported through Rosetta"),
+            ),
+            Request::Transfer(icp_ledger::Operation::TransferFrom { .. }) => {
+                Err(ApiError::invalid_request(
+                    "TransferFrom operations are not supported through Rosetta",
+                ))
+            }
             Request::Spawn(Spawn { neuron_index, .. }) => Ok(RequestType::Spawn {
                 neuron_index: *neuron_index,
             }),

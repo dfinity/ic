@@ -486,6 +486,14 @@ async fn verify_account_search(
     last_verified_idx: u64,
 ) {
     let mut history = BTreeMap::new();
+
+    let mut index = |account: AccountIdentifier, block_index: u64| {
+        history
+            .entry(account)
+            .or_insert_with(Vec::new)
+            .push(block_index);
+    };
+
     for hb in &scribe.blockchain {
         match Block::decode(hb.block.clone())
             .unwrap()
@@ -493,15 +501,31 @@ async fn verify_account_search(
             .operation
         {
             icp_ledger::Operation::Burn { from, .. } => {
-                history.entry(from).or_insert_with(Vec::new).push(hb.index);
+                index(from, hb.index);
             }
             icp_ledger::Operation::Mint { to, .. } => {
-                history.entry(to).or_insert_with(Vec::new).push(hb.index);
+                index(to, hb.index);
             }
             icp_ledger::Operation::Transfer { from, to, .. } => {
-                history.entry(from).or_insert_with(Vec::new).push(hb.index);
+                index(from, hb.index);
                 if from != to {
-                    history.entry(to).or_insert_with(Vec::new).push(hb.index);
+                    index(to, hb.index);
+                }
+            }
+            icp_ledger::Operation::Approve { from, spender, .. } => {
+                assert_ne!(from, spender);
+                index(from, hb.index);
+                index(spender, hb.index);
+            }
+            icp_ledger::Operation::TransferFrom {
+                from, to, spender, ..
+            } => {
+                index(from, hb.index);
+                if from != to {
+                    index(to, hb.index);
+                }
+                if spender != from && spender != to {
+                    index(spender, hb.index);
                 }
             }
         }
