@@ -1677,6 +1677,13 @@ fn assert_error_counters(metrics: &MetricsRegistry) {
     );
 }
 
+fn assert_no_remaining_chunks(metrics: &MetricsRegistry) {
+    assert_eq!(
+        0,
+        fetch_int_gauge(metrics, "state_sync_remaining_chunks").unwrap()
+    );
+}
+
 #[test]
 fn can_do_simple_state_sync_transfer() {
     state_manager_test(|src_metrics, src_state_manager| {
@@ -1726,11 +1733,8 @@ fn can_do_simple_state_sync_transfer() {
             assert_eq!(*state.as_ref(), tip);
             assert_eq!(vec![height(1)], heights_to_certify(&dst_state_manager));
 
-            assert_eq!(
-                0,
-                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
-            );
             assert_error_counters(dst_metrics);
+            assert_no_remaining_chunks(dst_metrics);
         })
     })
 }
@@ -1740,6 +1744,7 @@ fn can_state_sync_from_cache() {
     state_manager_test(|src_metrics, src_state_manager| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
+        insert_dummy_canister(&mut state, canister_test_id(200));
         let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
@@ -1765,15 +1770,12 @@ fn can_state_sync_from_cache() {
             {
                 let mut chunkable = dst_state_manager.create_chunkable_state(&id);
 
-                // First fetch chunk 0 (the manifest), and then ask for chunk 1,2,3,FILE_GROUP_CHUNK_ID_OFFSET afterwards,
-                // but only receive 2,3
+                // First fetch chunk 0 (the manifest), and then ask for all chunks afterwards,
+                // but never receive 1 and FILE_GROUP_CHUNK_ID_OFFSET
                 let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit);
                 assert!(completion.is_none(), "Unexpectedly completed state sync");
             }
-            assert_eq!(
-                0,
-                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
-            );
+            assert_no_remaining_chunks(dst_metrics);
             // Second state sync continues from first state and successfully finishes
             {
                 // Same state just higher height
@@ -1824,10 +1826,7 @@ fn can_state_sync_from_cache() {
                 );
                 assert_eq!(vec![height(2)], heights_to_certify(&dst_state_manager));
             }
-            assert_eq!(
-                0,
-                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
-            );
+            assert_no_remaining_chunks(dst_metrics);
             // Third state sync can copy all chunks immediately
             {
                 // Same state just higher height
@@ -1867,10 +1866,7 @@ fn can_state_sync_from_cache() {
                 );
             }
 
-            assert_eq!(
-                0,
-                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
-            );
+            assert_no_remaining_chunks(dst_metrics);
             assert_error_counters(dst_metrics);
         })
     })
@@ -1916,10 +1912,7 @@ fn can_state_sync_into_existing_checkpoint() {
                 }],
             );
 
-            assert_eq!(
-                0,
-                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
-            );
+            assert_no_remaining_chunks(dst_metrics);
             assert_error_counters(dst_metrics);
         })
     })
@@ -2005,6 +1998,7 @@ fn can_group_small_files_in_state_sync() {
             assert_eq!(state, recovered_state);
 
             assert_error_counters(dst_metrics);
+            assert_no_remaining_chunks(dst_metrics);
         })
     })
 }
@@ -2179,10 +2173,7 @@ fn can_state_sync_based_on_old_checkpoint() {
             tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
             assert_eq!(tip, *state.as_ref());
 
-            assert_eq!(
-                0,
-                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
-            );
+            assert_no_remaining_chunks(dst_metrics);
             assert_error_counters(dst_metrics);
         })
     });
@@ -2371,10 +2362,7 @@ fn can_recover_from_corruption_on_state_sync() {
             tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
             assert_eq!(tip, *state.as_ref());
 
-            assert_eq!(
-                0,
-                fetch_int_gauge(dst_metrics, "state_sync_remaining_chunks").unwrap()
-            );
+            assert_no_remaining_chunks(dst_metrics);
             assert_error_counters(dst_metrics);
         })
     });

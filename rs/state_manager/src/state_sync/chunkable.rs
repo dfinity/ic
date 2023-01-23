@@ -100,30 +100,36 @@ impl Drop for IncompleteState {
             }
             DownloadState::Loading {
                 manifest: _,
-                state_sync_file_group: _,
-                fetch_chunks: _,
+                state_sync_file_group,
+                fetch_chunks,
             } => {
                 self.metrics
                     .state_sync_metrics
                     .duration
                     .with_label_values(&["aborted"])
                     .observe(elapsed.as_secs_f64());
+
+                let dropped_chunks: usize = fetch_chunks
+                    .iter()
+                    .map(|ix| {
+                        if (*ix as u32) < FILE_GROUP_CHUNK_ID_OFFSET {
+                            1
+                        } else {
+                            state_sync_file_group
+                                .get(&(*ix as u32))
+                                .map(|vec| vec.len())
+                                .unwrap_or(0)
+                        }
+                    })
+                    .sum();
+                self.metrics
+                    .state_sync_metrics
+                    .remaining
+                    .sub(dropped_chunks as i64);
             }
             DownloadState::Complete(_) => {
                 // state sync duration already recorded earlier in make_checkpoint
             }
-        }
-
-        if let DownloadState::Loading {
-            manifest: _,
-            state_sync_file_group: _,
-            ref fetch_chunks,
-        } = self.state
-        {
-            self.metrics
-                .state_sync_metrics
-                .remaining
-                .sub(fetch_chunks.len() as i64);
         }
 
         // We need to record the download state before passing self to the cache, as
