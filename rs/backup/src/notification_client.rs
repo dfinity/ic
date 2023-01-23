@@ -107,4 +107,14 @@ impl NotificationClient {
         );
         self.push_metrics(message)
     }
+    pub fn push_metrics_version(&self, version: u32) {
+        let message = format!(
+            "# TYPE backup_version_number gauge\n\
+            # HELP backup_version_number The current version of the ic-backup tool that is running on this pod.\n\
+            backup_version_number{{ic=\"mercury\", ic_subnet=\"{}\"}} {}\n",
+            self.subnet,
+            version,
+        );
+        self.push_metrics(message)
+    }
 }

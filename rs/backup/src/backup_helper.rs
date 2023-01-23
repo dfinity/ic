@@ -641,6 +641,8 @@ impl BackupHelper {
             "Start moving old artifacts and states of subnet {:?} to the cold storage",
             self.subnet_id
         );
+        let old_space = self.get_disk_stats(DiskStats::Space)? as i32;
+        let old_inodes = self.get_disk_stats(DiskStats::Inodes)? as i32;
         let spool_dirs = collect_only_dirs(&self.spool_dir())?;
         let mut dir_heights = BTreeMap::new();
         spool_dirs.iter().for_each(|replica_version_dir| {
@@ -756,9 +758,12 @@ impl BackupHelper {
 
         remove_dir_all(trash_dir).map_err(|err| format!("Error deleting trashdir: {:?}", err))?;
 
+        let new_space = self.get_disk_stats(DiskStats::Space)? as i32; // i32 to calculate negative difference bellow
+        let new_inodes = self.get_disk_stats(DiskStats::Inodes)? as i32;
+
         self.notification_client.message_slack(format!(
-            "✅ Moved to cold storage artifacts of subnet {:?} and states up to {}",
-            self.subnet_id, max_height
+            "✅ Moved to cold storage artifacts of subnet {:?} and states up to height *{}*, saved {}% of space and {}% of inodes.",
+            self.subnet_id, max_height, old_space - new_space, old_inodes - new_inodes
         ));
         info!(
             self.log,
