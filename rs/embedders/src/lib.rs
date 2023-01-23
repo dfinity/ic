@@ -57,3 +57,21 @@ impl CompilationResult {
         }
     }
 }
+
+pub(crate) enum InternalErrorCode {
+    Unknown = 0,
+    HeapOutOfBounds = 1,
+    StableMemoryTooBigFor32Bit = 2,
+}
+
+impl InternalErrorCode {
+    fn from_i32(code: i32) -> Self {
+        match code {
+            code if code == Self::HeapOutOfBounds as i32 => Self::HeapOutOfBounds,
+            code if code == Self::StableMemoryTooBigFor32Bit as i32 => {
+                Self::StableMemoryTooBigFor32Bit
+            }
+            _ => Self::Unknown,
+        }
+    }
+}

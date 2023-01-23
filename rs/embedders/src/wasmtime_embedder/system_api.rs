@@ -14,6 +14,7 @@ use ic_types::{CanisterId, Cycles, NumBytes, NumInstructions, NumPages, Time};
 
 use wasmtime::{AsContextMut, Caller, Global, Linker, Store, Val};
 
+use crate::InternalErrorCode;
 use std::convert::TryFrom;
 
 fn process_err<S: SystemApi>(
@@ -1509,6 +1510,26 @@ pub(crate) fn syscalls<S: SystemApi>(
                             anyhow::Error::msg(format!("ic0_mint_cycles failed: {}", e))
                         })
                     })
+            }
+        })
+        .unwrap();
+
+    linker
+        .func_wrap("__", "internal_trap", {
+            move |mut caller: Caller<'_, StoreData<S>>, err_code: i32| -> Result<(), _> {
+                let err = match InternalErrorCode::from_i32(err_code) {
+                    InternalErrorCode::HeapOutOfBounds => {
+                        HypervisorError::Trapped(TrapCode::HeapOutOfBounds)
+                    }
+                    InternalErrorCode::StableMemoryTooBigFor32Bit => {
+                        HypervisorError::Trapped(TrapCode::StableMemoryTooBigFor32Bit)
+                    }
+                    InternalErrorCode::Unknown => HypervisorError::CalledTrap(format!(
+                        "Trapped with internal error code: {}",
+                        err_code
+                    )),
+                };
+                Err(process_err(&mut caller, err))
             }
         })
         .unwrap();

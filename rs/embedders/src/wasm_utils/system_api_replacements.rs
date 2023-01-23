@@ -1,3 +1,5 @@
+use crate::wasm_utils::instrumentation::InjectedImports;
+use crate::InternalErrorCode;
 use ic_interfaces::execution_environment::StableMemoryApi;
 use wasmparser::{BlockType, FuncType, Operator, Type, ValType};
 
@@ -169,6 +171,205 @@ pub(super) fn replacement_functions(
                         End, // End check on memory.grow result.
                         // Return the result of memory.grow.
                         LocalGet { local_index: 1 },
+                        End,
+                    ],
+                },
+            ),
+        ),
+        (
+            SystemApiFunc::StableRead,
+            (
+                Type::Func(FuncType::new(
+                    [ValType::I32, ValType::I32, ValType::I32],
+                    [],
+                )),
+                Body {
+                    locals: vec![],
+                    instructions: vec![
+                        // If memory is too big for 32bit api, we trap
+                        MemorySize {
+                            mem: stable_memory_index,
+                            mem_byte: 0, // This is ignored when serializing
+                        },
+                        I64Const {
+                            value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
+                        },
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::StableMemoryTooBigFor32Bit as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
+                        LocalGet { local_index: 0 },
+                        LocalGet { local_index: 1 },
+                        I64ExtendI32U,
+                        LocalGet { local_index: 2 },
+                        MemoryCopy {
+                            dst_mem: 0,
+                            src_mem: stable_memory_index,
+                        },
+                        End,
+                    ],
+                },
+            ),
+        ),
+        (
+            SystemApiFunc::Stable64Read,
+            (
+                Type::Func(FuncType::new(
+                    [ValType::I64, ValType::I64, ValType::I64],
+                    [],
+                )),
+                Body {
+                    locals: vec![],
+                    instructions: vec![
+                        // check if these i64 hold valid i32 heap addresses
+                        // check dst
+                        LocalGet { local_index: 0 },
+                        I64Const {
+                            value: u32::MAX as i64,
+                        },
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::HeapOutOfBounds as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
+                        // check len
+                        LocalGet { local_index: 2 },
+                        I64Const {
+                            value: u32::MAX as i64,
+                        },
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::HeapOutOfBounds as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
+                        // perform the copy
+                        LocalGet { local_index: 0 },
+                        I32WrapI64,
+                        LocalGet { local_index: 1 },
+                        LocalGet { local_index: 2 },
+                        I32WrapI64,
+                        MemoryCopy {
+                            dst_mem: 0,
+                            src_mem: stable_memory_index,
+                        },
+                        End,
+                    ],
+                },
+            ),
+        ),
+        (
+            SystemApiFunc::StableWrite,
+            (
+                Type::Func(FuncType::new(
+                    [ValType::I32, ValType::I32, ValType::I32],
+                    [],
+                )),
+                Body {
+                    locals: vec![],
+                    instructions: vec![
+                        // If memory is too big for 32bit api, we trap
+                        MemorySize {
+                            mem: stable_memory_index,
+                            mem_byte: 0, // This is ignored when serializing
+                        },
+                        I64Const {
+                            value: MAX_32_BIT_STABLE_MEMORY_IN_PAGES,
+                        },
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::StableMemoryTooBigFor32Bit as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
+                        LocalGet { local_index: 0 },
+                        I64ExtendI32U,
+                        LocalGet { local_index: 1 },
+                        LocalGet { local_index: 2 },
+                        MemoryCopy {
+                            dst_mem: stable_memory_index,
+                            src_mem: 0,
+                        },
+                        End,
+                    ],
+                },
+            ),
+        ),
+        (
+            SystemApiFunc::Stable64Write,
+            (
+                Type::Func(FuncType::new(
+                    [ValType::I64, ValType::I64, ValType::I64],
+                    [],
+                )),
+                Body {
+                    locals: vec![],
+                    instructions: vec![
+                        // check if these i64 hold valid i32 heap addresses
+                        // check src
+                        LocalGet { local_index: 1 },
+                        I64Const {
+                            value: u32::MAX as i64,
+                        },
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::HeapOutOfBounds as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
+                        // check len
+                        LocalGet { local_index: 2 },
+                        I64Const {
+                            value: u32::MAX as i64,
+                        },
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::HeapOutOfBounds as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
+                        LocalGet { local_index: 0 },
+                        LocalGet { local_index: 1 },
+                        I32WrapI64,
+                        LocalGet { local_index: 2 },
+                        I32WrapI64,
+                        MemoryCopy {
+                            dst_mem: stable_memory_index,
+                            src_mem: 0,
+                        },
                         End,
                     ],
                 },
