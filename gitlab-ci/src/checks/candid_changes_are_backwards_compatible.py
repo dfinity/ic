@@ -12,7 +12,6 @@ import textwrap
 import time
 import traceback
 
-
 ARGUMENT_PARSER = argparse.ArgumentParser(
     description="""
 Compares the working copy of Candid file(s) passed via the command line against
@@ -101,6 +100,10 @@ class SuspiciousDidcCheckOutput(Error):
         self.returncode = returncode
         self.stdout = encode(stdout)
         self.stderr = encode(stderr)
+
+
+override_also_reverse_string = "[override-also-reverse]"
+override_didc_check_string = "[override-didc-check]"
 
 
 def decode(s):
@@ -202,9 +205,11 @@ def print_didc_check_failure(didc, before_path, after_path, e):
     )
 
     print(
-        "  Tip:\n"
-        "    If the only thing you did was add a method, add [override-also-reverse]\n"
-        "    to the title of your merge request."
+        f"  Tip:\n"
+        f"    If the only thing you did was add a method, add {override_also_reverse_string}\n"
+        f"    to the title of your merge request.\n"
+        f"    To disable this check entirely, add {override_didc_check_string} to the title\n"
+        f"    to the title of your merge request.\n"
     )
 
 
@@ -306,6 +311,11 @@ def main(argv):
     pprint.pprint(sorted((k, v) for k, v in os.environ.items() if "commit" in k.lower()))
     print()
 
+    override_didc_check = override_didc_check_string in os.environ.get("CI_MERGE_REQUEST_TITLE", "")
+    if override_didc_check:
+        print(f"Found {override_didc_check_string} in merge request title. Skipping check.")
+        return
+
     args = ARGUMENT_PARSER.parse_args()
 
     print("Files to be inspected:")
@@ -316,8 +326,8 @@ def main(argv):
     diff_base = get_diff_base()
     print()
 
-    override = "[override-also-reverse]" in os.environ.get("CI_MERGE_REQUEST_TITLE", "")
-    also_reverse = args.also_reverse and not override
+    override_also_reverse = override_also_reverse_string in os.environ.get("CI_MERGE_REQUEST_TITLE", "")
+    also_reverse = args.also_reverse and not override_also_reverse
 
     try:
         any_defective_files = inspect_all_files(args.candid_file_paths, also_reverse=also_reverse, diff_base=diff_base)
