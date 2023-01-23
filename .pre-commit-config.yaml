@@ -63,7 +63,6 @@ repos:
     args: ["--config=buf.yaml"]
     exclude: |
       (?x)(
-      rs/sns/governance/proto |
       )
   - id: buf-lint
     args: ["--config=buf.yaml"]
