@@ -3,11 +3,13 @@
 Note: For an overview over the testing terminology, please visit [this
 notion-page](https://www.notion.so/Testing-Terminology-8cc0735dfcd945959f8d47caedf058b5).
 
+**Note**: If you want to add a system test, please jump right to the section
+about [bazelified system tests](How-can-I-run-system-tests-in-Bazel?).
+
 ## System tests
 
-System tests (declared in `rs/tests/bin/prod_test_driver.rs`) can involve all
-components in combination in the form of a functioning IC. The test API is
-implemented in Rust.
+System tests can involve all components in combination in the form of a
+functioning IC. The test API is implemented in Rust.
 
 The system test driver allows for the execution of arbitrary setup and test
 functions written in Rust. However, the accompanying APIs are geared towards
@@ -19,90 +21,14 @@ an Internet Computer instance, every node is instantiated as a virtual machine
 running the
 [ic-os](https://sourcegraph.com/github.com/dfinity/ic/-/tree/ic-os/guestos).
 
-System tests are organized in a hierarchy: every test belongs to a _pot_. A pot
-declares the test system (Internet Computer under test). Multiple tests can run
-using the same test instance (of a pot) either in parallel or in sequence. Pots
-in turn are grouped into _test suites_.
+### How can I run system tests in Bazel?
+T&V team is working actively on the
+[bazelification](https://docs.google.com/document/d/1RGyvOkRluFsqroDmyM9hfr37VG-nCrTOrutQnStJsco/edit#heading=h.fcajjuvgc2dn)
+of all system tests. When you want to write a new test or when you own system
+tests declared in `rs/tests/bin/prod_test_driver.rs`, take a look at the linked
+document.
 
-```
-Suite0
- |
- | -- Pot0
- |     |
- |     | -- Test0
- |     | -- Test1
- |
- | -- Pot1
- |     | -- Test0
- ...
-```
-
-### How can I run system tests?
-
-First, make sure you're in the `nix-shell` started from `ic/rs`.
-
-When running system tests, the base ic-os version has to be set manually.
-Currently, only disk images built by CI/CD can be used. Thus, you first need to
-find out the `IC_VERSION_ID` that belongs to the image that you want to use.
-Note that alongside the image itself, also all other build artifacts that belong
-to that version are downloaded from CI/CD (NNS canisters, auxiliary binaries,
-etc.). When run locally, only the test driver (including tests) is re-compiled
-and includes local changes.
-
-When running tests locally, it is possible, however, to provide all the test
-artifacts and build dependencies (with the exception of disk images) in a folder
-by specifying a corresponding directory in the `ARTIFACT_DIR` environment
-variable.
-
-You have two options to find the desired `IC_VERSION_ID`:
-
-1. To obtain a GuestOS image version for your commit, please push your branch
-to origin and create an MR. See http://go/guestos-image-version
-1. To obtain the latest GuestOS image version for `origin/master` (e.g., if your
-changes are withing `ic/rs/tests`), use the following command (Note: this
-command is not guaranteed to be deterministic):
-
-```bash
-ic/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master
-```
-
-For example, running all tests in a test suite `hourly` can be achieved as
-follows:
-
-```bash
-IC_VERSION_ID=<version> ./run-system-tests.py --suite hourly
-```
-
-The command line options `include-pattern` and `exclude-pattern` allow the
-inclusion and exclusion of tests based on regular expressions. See also the
-`--help` message for more information.
-
-For example, running the basic health test can be achieved using the following
-command:
-
-```bash
-IC_VERSION_ID=<version> ./run-system-tests.py --suite hourly --include-pattern basic_health_test
-```
-
-If your test is supposed to run for more than 50min, you need to set the
-`SYSTEM_TESTS_TIMEOUT` environment variable to a suitable value in seconds.
-
-Changing the replica log level for system test runs, e.g., to facilitate debugging, can
-be achieved by using log overrides. E.g., using the `DEBUG` level in certain modules
-you can use the following:
-
-```bash
-IC_VERSION_ID=<version> ./run-system-tests.py \
-    --include-pattern=http_basic_remote \
-    --suite=staging \
-    --replica-log-debug-overrides="ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors"
-```
-
-If you have further questions, please contact the testing team on #eng-testing.
-
-### How can I run system tests in Bazel? (experimental)
-**IMPORTANT**: Bazel runs of the system tests are not yet fully standardized and are therefore discouraged. T&V team is working actively on the [bazelification](https://docs.google.com/document/d/1RGyvOkRluFsqroDmyM9hfr37VG-nCrTOrutQnStJsco/edit#heading=h.fcajjuvgc2dn) of all system tests. However, currently we strongly encourage developers to only use the [conventional approach](#how-can-i-run-system-tests) for launching system tests. If in **strong** need, try to use an *experimental* way of launching a bazelified system test.
-Namely, login to the docker container:
+In order to run system tests, enter the build docker container:
 ```
 /ic$ ./gitlab-ci/container/container-run.sh
 ```
@@ -110,6 +36,16 @@ To launch a test target (`my_test_target` in this case) within the docker run:
 ```
 devenv-container$ bazel test --config=systest //rs/tests:my_test_target
 ```
+
+In the docker container, you can also use `ict` to start tests.
+
+```
+ict test //rs/tests:my_test_target
+```
+
+At some point in the future, ict should be the only thing a user needs to know.
+I.e., she can explore all options by interacting with ict and there is no need
+for a README here no more. ;-)
 
 # How to write a system test
 
