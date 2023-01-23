@@ -4,11 +4,11 @@ load("//publish:defs.bzl", "release_nostrip_binary", "release_strip_binary")
 
 NOSTRIP_SDK = [
     "//rs/canister_sandbox",
-    "//rs/bitcoin/adapter:ic-btc-adapter",
     "//rs/replica",
 ]
 
 STRIP_SDK = [
+    "//rs/bitcoin/adapter:ic-btc-adapter",
     "//rs/canister_http/adapter:ic-canister-http-adapter",
     "//rs/canister_sandbox/sandbox_launcher",
     "//rs/starter:ic-starter",
