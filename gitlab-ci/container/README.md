@@ -22,6 +22,8 @@ export SSH_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPUaR2BDvN0ZDfQ+WFNa3NW3X3V3
 envsubst < userdata-ubuntu-2204.yaml > userdata.yaml
 ```
 
+**Note:** Above `userdata.yaml` is possible for `$REVISION` that is newer then `08244b2bc9bbb19d417d37f6912acfebbdbf4f49` when `build-ic.sh` became available.
+
 Cloud Config is being daily tested on official [Ubuntu 22.04 Image](https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64-disk-kvm.img).
 
 ## Building IC-OS

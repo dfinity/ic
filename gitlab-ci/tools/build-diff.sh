@@ -58,8 +58,6 @@ alert() {
     ./gitlab-ci/src/notify_slack/notify_slack.py \
         "$MESSAGE" --channel "#eng-idx"
 
-    # TODO(marko): create jira ticket
-
     exit 1
 }
 
