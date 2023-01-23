@@ -116,18 +116,21 @@ impl TransportImpl {
         let weak_self = self.weak_self.read().unwrap().clone();
         let rt_handle = self.rt_handle.clone();
         let async_tasks_gauge_vec = self.control_plane_metrics.async_tasks.clone();
+        let control_plane_metrics = self.control_plane_metrics.clone();
+        let log = self.log.clone();
         self.rt_handle.spawn(async move {
             let task_gauge = async_tasks_gauge_vec.with_label_values(&[ACCEPT_TASK_NAME]);
             let _gauge_guard = IntGaugeResource::new(task_gauge);
             loop {
-                // If the TransportImpl has been deleted, abort.
-                let arc_self = match weak_self.upgrade() {
-                    Some(arc_self) => arc_self,
-                    _ => return,
-                };
+                // After peer connects check if transport has not been deleted.
                 match tcp_listener.accept().await {
                     Ok((stream, _)) => {
-                        arc_self.control_plane_metrics
+                        // If the TransportImpl has been deleted, abort.
+                        let arc_self = match weak_self.upgrade() {
+                            Some(arc_self) => arc_self,
+                            _ => return,
+                        };
+                        control_plane_metrics
                             .tcp_accepts
                             .with_label_values(&[STATUS_SUCCESS])
                             .inc();
@@ -136,7 +139,7 @@ impl TransportImpl {
                             (Ok(local_addr), Ok(peer_addr)) => (local_addr, peer_addr),
                             _ => {
                                 error!(
-                                    arc_self.log,
+                                    log,
                                     "ControlPlane::spawn_accept_task(): local_addr() and/or peer_addr() failed."
                                 );
                                 continue;
@@ -145,7 +148,7 @@ impl TransportImpl {
 
                         if let Err(err) = stream.set_nodelay(true) {
                             error!(
-                                arc_self.log,
+                                log,
                                 "ControlPlane::spawn_accept_task(): set_nodelay(true) failed: \
                                 error = {:?}, local_addr = {:?}, peer_addr = {:?}",
                                 err,
@@ -228,11 +231,11 @@ impl TransportImpl {
                         });
                     }
                     Err(err) => {
-                        arc_self.control_plane_metrics
+                        control_plane_metrics
                             .tcp_accepts
                             .with_label_values(&[STATUS_ERROR])
                             .inc();
-                        error!(arc_self.log, "ControlPlane::spawn_accept_task(): accept failed: error = {:?}", err);
+                        error!(log, "ControlPlane::spawn_accept_task(): accept failed: error = {:?}", err);
                     }
                 }
             }
