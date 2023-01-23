@@ -109,10 +109,12 @@ impl Registry {
                 // update as this is a new node joining the ECDSA subnet.
                 match pk.timestamp {
                     Some(last_update_timestamp) => {
-                        if Duration::from_millis(
-                            last_update_timestamp + idkg_key_rotation_period_ms,
-                        ) > duration_since_unix_epoch
-                        {
+                        let sum = last_update_timestamp
+                            .checked_add(idkg_key_rotation_period_ms)
+                            .ok_or_else(|| {
+                                "Integer overflow when adding key rotation period.".to_string()
+                            })?;
+                        if Duration::from_millis(sum) > duration_since_unix_epoch {
                             return Err("the key of this node is sufficiently fresh".to_string());
                         }
                         true
@@ -131,9 +133,12 @@ impl Registry {
                 let key_rotation_period_on_subnet =
                     (idkg_key_rotation_period_ms as f64 / subnet_size as f64 * DELAY_COMPENSATION)
                         as u64;
-                if Duration::from_millis(last_key_update_timestamp + key_rotation_period_on_subnet)
-                    > duration_since_unix_epoch
-                {
+                let sum = last_key_update_timestamp
+                    .checked_add(key_rotation_period_on_subnet)
+                    .ok_or_else(|| {
+                        "Integer overflow when adding key rotation period on subnet.".to_string()
+                    })?;
+                if Duration::from_millis(sum) > duration_since_unix_epoch {
                     return Err("the ECDSA subnet had a key update recently".to_string());
                 }
             }
