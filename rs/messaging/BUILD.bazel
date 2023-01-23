@@ -46,6 +46,7 @@ rust_test(
         "//rs/test_utilities",
         "//rs/test_utilities/logger",
         "//rs/test_utilities/metrics",
+        "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:lazy_static",
         "@crate_index//:maplit",

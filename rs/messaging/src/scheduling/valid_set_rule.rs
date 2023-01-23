@@ -16,7 +16,8 @@ use ic_replicated_state::{
     replicated_state::{
         LABEL_VALUE_CANISTER_NOT_FOUND, LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
         LABEL_VALUE_CANISTER_STOPPED, LABEL_VALUE_CANISTER_STOPPING,
-        LABEL_VALUE_INVALID_SUBNET_PAYLOAD, LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
+        LABEL_VALUE_INVALID_SUBNET_PAYLOAD, LABEL_VALUE_QUEUE_FULL,
+        LABEL_VALUE_UNKNOWN_SUBNET_METHOD,
     },
     ReplicatedState, StateError,
 };
@@ -88,6 +89,7 @@ impl VsrMetrics {
             LABEL_VALUE_SUCCESS,
             LABEL_VALUE_DUPLICATE,
             LABEL_VALUE_CANISTER_NOT_FOUND,
+            LABEL_VALUE_QUEUE_FULL,
             LABEL_VALUE_CANISTER_STOPPED,
             LABEL_VALUE_CANISTER_STOPPING,
             LABEL_VALUE_CANISTER_OUT_OF_CYCLES,
@@ -113,9 +115,10 @@ pub(crate) trait ValidSetRule: Send {
 
 pub(crate) struct ValidSetRuleImpl {
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
+    ingress_history_max_messages: usize,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    metrics: VsrMetrics,
     own_subnet_id: SubnetId,
+    metrics: VsrMetrics,
     log: ReplicaLogger,
 }
 
@@ -129,6 +132,7 @@ impl ValidSetRuleImpl {
     ) -> Self {
         Self {
             ingress_history_writer,
+            ingress_history_max_messages: INGRESS_HISTORY_MAX_MESSAGES,
             metrics: VsrMetrics::new(metrics_registry),
             own_subnet_id,
             cycles_account_manager,
@@ -261,10 +265,10 @@ impl ValidSetRuleImpl {
         subnet_size: usize,
     ) -> Result<(), StateError> {
         if state.metadata.own_subnet_type != SubnetType::System
-            && state.metadata.ingress_history.len() >= INGRESS_HISTORY_MAX_MESSAGES
+            && state.metadata.ingress_history.len() >= self.ingress_history_max_messages
         {
             return Err(StateError::QueueFull {
-                capacity: INGRESS_HISTORY_MAX_MESSAGES,
+                capacity: self.ingress_history_max_messages,
             });
         }
 
