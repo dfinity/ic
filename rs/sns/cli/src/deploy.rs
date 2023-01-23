@@ -392,10 +392,11 @@ pub struct DirectSnsDeployerForTests {
     pub sns_canisters: SnsCanisterIds,
     pub wallet_canister: PrincipalId,
     pub dfx_identity: PrincipalId,
+    pub testflight: bool,
 }
 
 impl DirectSnsDeployerForTests {
-    pub fn new(args: DeployArgs, sns_init_payload: SnsInitPayload) -> Self {
+    pub fn new(args: DeployArgs, sns_init_payload: SnsInitPayload, testflight: bool) -> Self {
         let sns_canisters = lookup_or_else_create_canisters(&args);
         // TODO - add version hash to test upgrade path locally?  Where would we find that?
         let sns_canister_payloads =
@@ -413,6 +414,7 @@ impl DirectSnsDeployerForTests {
             sns_canisters,
             wallet_canister,
             dfx_identity,
+            testflight,
         }
     }
 
@@ -511,16 +513,18 @@ impl DirectSnsDeployerForTests {
         // Index must be controlled by only Root
         self.add_controller(self.sns_canisters.root, "sns_index");
 
-        // Remove default controllers from SNS canisters
-        for sns_canister in [
-            "sns_governance",
-            "sns_root",
-            "sns_ledger",
-            "sns_swap",
-            "sns_index",
-        ] {
-            self.remove_controller(self.wallet_canister, sns_canister);
-            self.remove_controller(self.dfx_identity, sns_canister);
+        // Remove default controllers from SNS canisters if not in testflight
+        if !self.testflight {
+            for sns_canister in [
+                "sns_governance",
+                "sns_root",
+                "sns_ledger",
+                "sns_swap",
+                "sns_index",
+            ] {
+                self.remove_controller(self.wallet_canister, sns_canister);
+                self.remove_controller(self.dfx_identity, sns_canister);
+            }
         }
     }
 
@@ -570,35 +574,37 @@ impl DirectSnsDeployerForTests {
     /// Install and initialize Governance
     fn install_governance(&self) {
         let init_args = hex_encode_candid(&self.sns_canister_payloads.governance);
-        self.install_canister("sns_governance", &init_args);
+        self.install_canister("sns_governance", "sns-governance-canister", &init_args);
     }
 
     /// Install and initialize Ledger
     fn install_ledger(&self) {
         let init_args = hex_encode_candid(&self.sns_canister_payloads.ledger);
-        self.install_canister("sns_ledger", &init_args);
+        self.install_canister("sns_ledger", "ic-icrc1-ledger", &init_args);
     }
 
     /// Install and initialize Root
     fn install_root(&self) {
         let init_args = hex_encode_candid(&self.sns_canister_payloads.root);
-        self.install_canister("sns_root", &init_args);
+        self.install_canister("sns_root", "sns-root-canister", &init_args);
     }
 
     /// Install and initialize Swap
     fn install_swap(&self) {
         let init_args = hex_encode_candid(&self.sns_canister_payloads.swap);
-        self.install_canister("sns_swap", &init_args);
+        self.install_canister("sns_swap", "sns-swap-canister", &init_args);
     }
 
     /// Install and initialize Index
     fn install_index(&self) {
         let init_args = hex_encode_candid(&self.sns_canister_payloads.index);
-        self.install_canister("sns_index", &init_args);
+        self.install_canister("sns_index", "ic-icrc1-index", &init_args);
     }
 
     /// Install the given canister
-    fn install_canister(&self, sns_canister_name: &str, init_args: &str) {
+    fn install_canister(&self, sns_canister_name: &str, wasm_name: &str, init_args: &str) {
+        let mut wasm = self.args.wasms_dir.clone();
+        wasm.push(format!("{}.wasm", wasm_name));
         call_dfx(&[
             "canister",
             "--network",
@@ -607,6 +613,8 @@ impl DirectSnsDeployerForTests {
             "--argument-type=raw",
             "--argument",
             init_args,
+            "--wasm",
+            &wasm.into_os_string().into_string().unwrap(),
             sns_canister_name,
         ]);
     }

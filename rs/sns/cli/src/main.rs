@@ -41,6 +41,9 @@ enum SubCommand {
     /// Deploy an sns directly to a subnet, skipping the sns-wasms canister.
     /// For use in tests only.
     DeploySkippingSnsWasmsForTests(DeployArgs),
+    /// Deploy an sns directly to a subnet, skipping the sns-wasms canister.
+    /// For use in tests only.
+    DeployTestflight(DeployArgs),
     /// Add a wasms for one of the SNS canisters, skipping the NNS proposal,
     /// for tests.
     AddSnsWasmForTests(AddSnsWasmForTestsArgs),
@@ -99,6 +102,10 @@ pub struct DeployArgs {
     /// The fee to provide
     #[structopt(default_value = "180000000000000", long)]
     with_cycles: u64,
+
+    /// The directory with SNS canister WASMs.
+    #[structopt(default_value = ".", long)]
+    wasms_dir: PathBuf,
 }
 
 /// The arguments used to display the account balance of a user
@@ -199,8 +206,9 @@ fn main() {
     match args.sub_command {
         SubCommand::Deploy(args) => deploy(args),
         SubCommand::DeploySkippingSnsWasmsForTests(args) => {
-            deploy_skipping_sns_wasms_for_tests(args)
+            deploy_skipping_sns_wasms_for_tests(args, false)
         }
+        SubCommand::DeployTestflight(args) => deploy_skipping_sns_wasms_for_tests(args, true),
         SubCommand::AddSnsWasmForTests(args) => add_sns_wasm_for_tests(args),
         SubCommand::AccountBalance(args) => print_account_balance(args),
         SubCommand::InitConfigFile(args) => init_config_file::exec(args),
@@ -220,9 +228,9 @@ fn deploy(args: DeployArgs) {
     SnsWasmSnsDeployer::new(args, sns_init_payload).deploy();
 }
 
-/// Deploy an SNS with the given DeployArgs to a local subnet or a testnet,
-/// skipping sns-wasm. Does not work on mainnet.
-fn deploy_skipping_sns_wasms_for_tests(args: DeployArgs) {
+/// Deploy an SNS with the given DeployArgs, skipping sns-wasm.
+/// In testflight mode, no controllers of SNS canisters are removed.
+fn deploy_skipping_sns_wasms_for_tests(args: DeployArgs, testflight: bool) {
     args.validate();
     let sns_init_payload = args.generate_sns_init_payload().unwrap_or_else(|err| {
         eprintln!(
@@ -231,7 +239,7 @@ fn deploy_skipping_sns_wasms_for_tests(args: DeployArgs) {
         );
         exit(1);
     });
-    DirectSnsDeployerForTests::new(args, sns_init_payload).deploy()
+    DirectSnsDeployerForTests::new(args, sns_init_payload, testflight).deploy()
 }
 
 fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) {
