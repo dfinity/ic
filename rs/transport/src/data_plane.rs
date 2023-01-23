@@ -127,12 +127,8 @@ fn spawn_write_task(
     rt_handle.spawn(async move  {
         let _ = &data_plane_metrics;
         let _raii_gauge = IntGaugeResource::new(data_plane_metrics.write_tasks.clone());
-        loop {
-            // If the TransportImpl has been deleted, abort.
-            let arc_self = match weak_self.upgrade() {
-                Some(arc_self) => arc_self,
-                _ => return,
-            };
+        // If the TransportImpl has been deleted, exist the loop and exist the task.
+        while let Some(arc_self) = weak_self.upgrade() {
             // Wait for the send requests
             let dequeued = send_queue_reader
                 .dequeue(
@@ -220,12 +216,8 @@ fn spawn_read_task(
         let _raii_gauge = IntGaugeResource::new(data_plane_metrics.read_tasks.clone());
         let heartbeat_timeout = Duration::from_millis(TRANSPORT_HEARTBEAT_WAIT_INTERVAL_MS);
         let channel_id_str = channel_id.to_string();
-        loop {
-            // If the TransportImpl has been deleted, abort.
-            let arc_self = match weak_self.upgrade() {
-                Some(arc_self) => arc_self,
-                _ => return,
-            };
+        // If the TransportImpl has been deleted, exist the loop and exist the task.
+        while let Some(arc_self) = weak_self.upgrade() {
             // Read the next message from the socket
             let read_message_start = Instant::now();
             let read_one_msg_result = match reader {

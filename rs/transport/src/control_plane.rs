@@ -257,13 +257,9 @@ impl TransportImpl {
 
             // Loop till connection is established
             let mut retries: u32 = 0;
-            loop {
+            // If the TransportImpl has been deleted, exist the loop and exist the task.
+            while let Some(arc_self) = weak_self.upgrade() {
                 retries += 1;
-                // If the TransportImpl has been deleted, abort.
-                let arc_self = match weak_self.upgrade() {
-                    Some(arc_self) => arc_self,
-                    _ => return,
-                };
                 // We currently retry forever, which is fine as we have per-connection
                 // async task. This loop will terminate when the peer is removed from
                 // valid set.
