@@ -84,8 +84,6 @@ validate_build_env() {
         not_supported_prompt "This script is only supported on Linux!"
     elif ! grep -q 'Ubuntu' /etc/os-release; then
         not_supported_prompt "Build reproducibility is only supported on Ubuntu!"
-    elif ! podman info 2>&1 | grep -i -E '(storage driver|backing filesystem)' | grep -qi extfs; then
-        not_supported_prompt "Build reproducibility is only supported on extfs filesystem!"
     fi
 }
 

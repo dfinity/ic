@@ -126,6 +126,4 @@ RUN mv /usr/bin/docker /usr/bin/docker-bin
 COPY ./files/containers.conf /etc/containers/containers.conf
 COPY ./files/docker.sh /usr/bin/docker
 
-RUN echo "USER=${USER}" > /entrypoint_user
-
 ENTRYPOINT ["/tini", "--", "/entrypoint.sh"]

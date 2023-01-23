@@ -6,7 +6,9 @@
 
 set -eufo pipefail
 
-bazel version
+echo "Building as user: $(whoami)"
+echo "Bazel version: $(bazel version)"
+
 AWS_CREDS="${HOME}/.aws/credentials"
 mkdir -p "$(dirname "${AWS_CREDS}")"
 ln -fs "${AWS_SHARED_CREDENTIALS_FILE}" "${AWS_CREDS}"

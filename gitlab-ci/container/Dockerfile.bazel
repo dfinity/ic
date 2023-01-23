@@ -35,7 +35,7 @@ RUN curl -fsSL https://github.com/bazelbuild/bazelisk/releases/download/v1.12.2/
     echo "$bazelisk_sha /usr/bin/bazel" | sha256sum --check && \
     chmod 777 /usr/bin/bazel
 
-RUN groupadd -g 1234 ubuntu && useradd -ms /bin/bash -u 1234 -g 1234 ubuntu
+RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu
 
 # CI before script requires sudo
 RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
@@ -63,6 +63,7 @@ USER 0
 RUN mv /usr/bin/docker /usr/bin/docker-bin
 COPY ./files/containers.conf /etc/containers/containers.conf
 COPY ./files/docker.sh /usr/bin/docker
+COPY ./files/entrypoint.sh /entrypoint.sh
 
-ENTRYPOINT ["/tini", "--"]
+ENTRYPOINT ["/tini", "--", "/entrypoint.sh"]
 CMD ["/bin/bash"]
