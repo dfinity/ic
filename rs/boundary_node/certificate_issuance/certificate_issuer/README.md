@@ -1,13 +1,37 @@
 # Certificate Issuer
 
-The Certificate Issuer is a service that issues certificates for canisters. 
+This service runs on the boundary nodes. It handles domain registration requests
+from users, processes them and interacts with the `certificate_orchestrator` canister.
 
-## Checker
+The `certificate_issuer` provides two public endpoints, which can be used to
+submit registration requests and query the status of these requests:
 
-It features a checker, which checks whether an asset canister has a 
-well-known file that lists the domain name in question. The checker uses
-the `ic-agent` to query the asset canister for the `.well-known/custom-domains`
-file.
+* `/registrations`: submit a registration requests;
+* `/registrations/<registration_id>`: check the status of a submitted request.
+
+In addition, it provides a private endpoint for the `certificate_syncer` to obtain
+the certificates:
+
+* `/certificates`: obtain all registered domains and their corresponding certificates.
+
+Finally, it provides a metrics endpoint for Prometheus:
+
+* `/metrics`: get metrics for Prometheus.
+
+The `certificate_issuer` expects a delegation domain, which is managed through
+Cloudflare and is used for the [DNS-01 challenge](https://letsencrypt.org/docs/challenge-types/#dns-01-challenge). It uses Let's Encrypt as
+certificate authority.
+
+## Usage
+
+The following three files are used to setup and start the service on the boundary node:
+
+* [setup-certificate-issuer.service](../../../ic-os/boundary-guestos/rootfs/etc/systemd/system/setup-certificate-issuer.service)
+* [setup-certificate-issuer.sh](../../../ic-os/boundary-guestos/rootfs/opt/ic/bin/setup-certificate-issuer.sh)
+* [certificate-issuer.service](../../../ic-os/boundary-guestos/rootfs/etc/systemd/system/certificate-issuer.service)
+
+The `/registration` endpoint needs to be publicly accessible. To this end, the
+`nginx` configuration needs to expose and endpoint, which is routed to the certificate issuer.
 
 ## Changelog
 
