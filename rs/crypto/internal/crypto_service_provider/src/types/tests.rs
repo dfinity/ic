@@ -84,9 +84,7 @@ fn should_redact_csp_secret_key_thres_debug() {
 
 #[test]
 fn should_redact_csp_secret_key_tls_ed25519_debug() {
-    let cspsk_tls = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes {
-        bytes: vec![1u8; 3],
-    });
+    let cspsk_tls = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes::new(vec![1u8; 3]));
     assert_eq!(
         "CspSecretKey::TlsEd25519 - REDACTED",
         format!("{:?}", cspsk_tls)
@@ -144,7 +142,7 @@ fn should_return_correct_enum_variant() {
     assert_eq!(key.enum_variant(), "ThresBls12_381");
 
     // TlsEd25519
-    let key = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes { bytes: vec![] });
+    let key = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes::new(vec![]));
     assert_eq!(key.enum_variant(), "TlsEd25519");
 
     // FsEncryption

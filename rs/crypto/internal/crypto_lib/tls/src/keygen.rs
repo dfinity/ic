@@ -1,4 +1,5 @@
 //! Functionality to generate key material to be used for TLS connections.
+use ic_crypto_secrets_containers::SecretBytes;
 use openssl::asn1::Asn1Integer;
 use openssl::{
     asn1::Asn1Time,
@@ -47,11 +48,17 @@ pub enum TlsKeyPairAndCertGenerationError {
 
 /// The raw bytes of a DER-encoded Ed25519 secret key.
 #[derive(Clone, Eq, PartialEq, Deserialize, Serialize, Zeroize, ZeroizeOnDrop)]
-// TODO (CRP-1251) Use SecretVec in TlsEd25519CertificateDerBytes instead of Vec
 pub struct TlsEd25519SecretKeyDerBytes {
-    #[serde(with = "serde_bytes")]
-    pub bytes: Vec<u8>,
+    pub bytes: SecretBytes,
 }
+
+impl TlsEd25519SecretKeyDerBytes {
+    pub fn new(bytes: Vec<u8>) -> Self {
+        let bytes = SecretBytes::new(bytes);
+        Self { bytes }
+    }
+}
+
 impl fmt::Debug for TlsEd25519SecretKeyDerBytes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "REDACTED")
@@ -156,11 +163,11 @@ fn der_encode_cert_and_secret_key(
                 .to_der()
                 .expect("unable to DER encode certificate"),
         },
-        TlsEd25519SecretKeyDerBytes {
-            bytes: key_pair
+        TlsEd25519SecretKeyDerBytes::new(
+            key_pair
                 .private_key_to_der()
                 .expect("private key could not be DER encoded"),
-        },
+        ),
     )
 }
 

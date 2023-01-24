@@ -2,7 +2,7 @@
 
 use super::*;
 use assert_matches::assert_matches;
-use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
 use openssl::pkey::{Id, Public};
 use openssl::x509::X509VerifyResult;
 
@@ -25,7 +25,7 @@ fn should_return_secret_key_as_der() {
         generate_tls_key_pair_der(&mut reproducible_rng(), "common name", &not_after())
             .expect("generation of TLS key pair DER failed");
 
-    let result = PKey::private_key_from_der(&sk.bytes);
+    let result = PKey::private_key_from_der(sk.bytes.expose_secret());
 
     assert!(result.is_ok());
 }
@@ -164,10 +164,21 @@ fn should_set_not_after_correctly() {
 
 #[test]
 fn should_redact_tls_ed25519_secret_key_der_bytes_debug() {
-    let sk = TlsEd25519SecretKeyDerBytes {
-        bytes: vec![1u8, 5],
-    };
+    let sk = TlsEd25519SecretKeyDerBytes::new(vec![1u8; 5]);
     assert_eq!(format!("{:?}", sk), "REDACTED");
+}
+
+#[test]
+fn should_have_stable_representation_of_private_key() {
+    let mut rng = ReproducibleRng::from_seed([0x42u8; 32]);
+
+    let (_cert, sk) = generate_tls_key_pair_der(&mut rng, "common name", &not_after())
+        .expect("generation of TLS key pair failed");
+
+    let serialized_sk = serde_cbor::to_vec(&sk).unwrap();
+
+    assert_eq!(hex::encode(serialized_sk),
+               "a16562797465735830302e020100300506032b657004220420ff2fa8b8bea7a4d9aa95a41cffcd0fd54cb020cf83af28ea5ad80335ea48a959");
 }
 
 fn not_after() -> Asn1Time {

@@ -9,6 +9,7 @@ rust_library(
     version = "0.8.0",
     deps = [
         "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
+        "//rs/crypto/secrets_containers",
         "//rs/types/types",
         "@crate_index//:base64",
         "@crate_index//:openssl",
@@ -26,5 +27,7 @@ rust_test(
         "//rs/crypto/test_utils",
         "//rs/crypto/test_utils/reproducible_rng",
         "@crate_index//:assert_matches",
+        "@crate_index//:hex",
+        "@crate_index//:serde_cbor",
     ],
 )
