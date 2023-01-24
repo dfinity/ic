@@ -116,7 +116,8 @@ mod csp_new {
             ProtoSecretKeyStore::open(key_store_dir, node_secret_key_store_name, None);
         let canister_secret_key_store =
             ProtoSecretKeyStore::open(key_store_dir, canister_secret_key_store_name, None);
-        let public_key_store = ProtoPublicKeyStore::open(key_store_dir, public_key_store_name);
+        let public_key_store =
+            ProtoPublicKeyStore::open(key_store_dir, public_key_store_name, no_op_logger());
         (
             node_secret_key_store,
             canister_secret_key_store,

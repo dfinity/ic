@@ -204,8 +204,11 @@ impl Csp {
             CANISTER_SKS_DATA_FILENAME,
             Some(new_logger!(&logger)),
         );
-        let public_key_store =
-            ProtoPublicKeyStore::open(&config.crypto_root, PUBLIC_KEY_STORE_DATA_FILENAME);
+        let public_key_store = ProtoPublicKeyStore::open(
+            &config.crypto_root,
+            PUBLIC_KEY_STORE_DATA_FILENAME,
+            new_logger!(&logger),
+        );
         let csp_vault = Arc::new(LocalCspVault::new(
             secret_key_store,
             canister_key_store,

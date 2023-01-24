@@ -2,6 +2,7 @@ use crate::public_key_store::PublicKeyGenerationTimestamps;
 use crate::public_key_store::{
     PublicKeyAddError, PublicKeyRetainError, PublicKeySetOnceError, PublicKeyStore,
 };
+use ic_logger::{debug, ReplicaLogger};
 use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
 use ic_types::Time;
@@ -19,6 +20,7 @@ const CURRENT_PKS_VERSION: u32 = 1;
 pub struct ProtoPublicKeyStore {
     proto_file: PathBuf,
     keys: NodePublicKeys,
+    logger: ReplicaLogger,
 }
 
 impl ProtoPublicKeyStore {
@@ -26,7 +28,7 @@ impl ProtoPublicKeyStore {
     ///
     /// If the store does not exist on disk, a new one is created in memory.
     /// This store is then persisted to disk upon the first change of data.
-    pub fn open(dir: &Path, file_name: &str) -> Self {
+    pub fn open(dir: &Path, file_name: &str, logger: ReplicaLogger) -> Self {
         let proto_file = dir.join(file_name);
         let keys = match Self::read_node_public_keys_proto_from_disk(&proto_file) {
             Some(node_public_keys) => node_public_keys,
@@ -35,7 +37,11 @@ impl ProtoPublicKeyStore {
                 ..Default::default()
             },
         };
-        ProtoPublicKeyStore { proto_file, keys }
+        ProtoPublicKeyStore {
+            proto_file,
+            keys,
+            logger,
+        }
     }
 
     /// Returns the path to the protobuf file storing the keys.
@@ -140,6 +146,10 @@ impl PublicKeyStore for ProtoPublicKeyStore {
         &mut self,
         key: PublicKeyProto,
     ) -> Result<(), PublicKeyAddError> {
+        debug!(
+            self.logger,
+            "Adding new IDKG dealing encryption public key '{:?}'", &key
+        );
         self.keys.idkg_dealing_encryption_pks.push(key);
         self.write_node_public_keys_proto_to_disk()
             .map_err(|io_error| PublicKeyAddError::Io(io_error))
@@ -150,11 +160,15 @@ impl PublicKeyStore for ProtoPublicKeyStore {
         oldest_public_key_to_keep: &PublicKeyProto,
     ) -> Result<(), PublicKeyRetainError> {
         let mut idkg_public_keys_to_keep = Vec::new();
+        let mut idkg_public_keys_to_delete = Vec::new();
         let mut keep = false;
 
         for public_key_proto in &self.keys.idkg_dealing_encryption_pks {
             if !keep && public_key_proto.equal_ignoring_timestamp(oldest_public_key_to_keep) {
                 keep = true;
+            }
+            if !keep {
+                idkg_public_keys_to_delete.push(public_key_proto.clone());
             }
             if keep {
                 idkg_public_keys_to_keep.push(public_key_proto.clone());
@@ -163,6 +177,18 @@ impl PublicKeyStore for ProtoPublicKeyStore {
         if idkg_public_keys_to_keep.is_empty() {
             return Err(PublicKeyRetainError::OldestPublicKeyNotFound);
         }
+        idkg_public_keys_to_delete.iter().for_each(|public_key| {
+            debug!(
+                self.logger,
+                "Deleting IDKG dealing encryption public key '{:?}'", public_key
+            )
+        });
+        idkg_public_keys_to_keep.iter().for_each(|public_key| {
+            debug!(
+                self.logger,
+                "Retaining IDKG dealing encryption public key '{:?}'", public_key
+            )
+        });
         self.keys.idkg_dealing_encryption_pks = idkg_public_keys_to_keep;
         self.write_node_public_keys_proto_to_disk()
             .map_err(|io_error| PublicKeyRetainError::Io(io_error))

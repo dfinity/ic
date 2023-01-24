@@ -142,7 +142,8 @@ impl<R: Rng + CryptoRng>
 
         let sks = ProtoSecretKeyStore::open(temp_dir.path(), sks_file, None);
         let canister_sks = ProtoSecretKeyStore::open(temp_dir.path(), canister_sks_file, None);
-        let public_key_store = ProtoPublicKeyStore::open(temp_dir.path(), public_key_store_file);
+        let public_key_store =
+            ProtoPublicKeyStore::open(temp_dir.path(), public_key_store_file, no_op_logger());
 
         let vault = Self::new_internal(
             rng,
@@ -304,6 +305,7 @@ pub mod builder {
         canister_secret_key_store: Box<dyn FnOnce() -> C>,
         public_key_store: Box<dyn FnOnce() -> P>,
         time_source: Arc<dyn TimeSource>,
+        logger: ReplicaLogger,
     }
 
     impl Default
@@ -321,6 +323,7 @@ pub mod builder {
                 canister_secret_key_store: Box::new(|| TempSecretKeyStore::new()),
                 public_key_store: Box::new(|| TempPublicKeyStore::new()),
                 time_source: FastForwardTimeSource::new(),
+                logger: no_op_logger(),
             }
         }
     }
@@ -334,7 +337,8 @@ pub mod builder {
         ///   This is simply the productive implementation ([`ProtoSecretKeyStore`]) in a temporary directory.
         /// * [`TempPublicKeyStore`] is used for the public key store.
         ///   This is simply the productive implementation ([`ProtoPublicKeyStore`]) in a temporary directory.
-        /// * Logger and metrics are (currently) disabled.
+        /// * [`no_op_logger`] is used to disable logging for testing.
+        /// * Metrics is (currently) disabled.
         pub fn builder() -> LocalCspVaultBuilder<
             ReproducibleRng,
             TempSecretKeyStore,
@@ -362,6 +366,7 @@ pub mod builder {
                 canister_secret_key_store: self.canister_secret_key_store,
                 public_key_store: self.public_key_store,
                 time_source: self.time_source,
+                logger: self.logger,
             }
         }
 
@@ -375,6 +380,7 @@ pub mod builder {
                 canister_secret_key_store: self.canister_secret_key_store,
                 public_key_store: self.public_key_store,
                 time_source: self.time_source,
+                logger: self.logger,
             }
         }
 
@@ -388,6 +394,7 @@ pub mod builder {
                 canister_secret_key_store: Box::new(|| canister_secret_key_store),
                 public_key_store: self.public_key_store,
                 time_source: self.time_source,
+                logger: self.logger,
             }
         }
 
@@ -401,11 +408,17 @@ pub mod builder {
                 canister_secret_key_store: self.canister_secret_key_store,
                 public_key_store: Box::new(|| public_key_store),
                 time_source: self.time_source,
+                logger: self.logger,
             }
         }
 
         pub fn with_time_source(mut self, time_source: Arc<dyn TimeSource>) -> Self {
             self.time_source = time_source;
+            self
+        }
+
+        pub fn with_logger(mut self, logger: ReplicaLogger) -> Self {
+            self.logger = logger;
             self
         }
 
@@ -417,7 +430,7 @@ pub mod builder {
                 (self.public_key_store)(),
                 self.time_source,
                 Arc::new(CryptoMetrics::none()),
-                no_op_logger(),
+                self.logger,
             )
         }
     }
