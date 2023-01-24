@@ -369,7 +369,10 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     }
 
     // Inspect wasm.
-    const WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
+    const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
+    const GZIPPED_WASM_HEADER: [u8; 2] = [0x1f, 0x8b];
+    // Minimum length of raw WASM is 8 bytes (4 magic bytes and 4 bytes encoding version).
+    // Minimum length of gzipped WASM is 10 bytes (2 magic bytes and 8 additional gzip header bytes).
     const MIN_WASM_LEN: usize = 8;
     if let Err(err) = validate_len(
         "new_canister_wasm",
@@ -378,7 +381,9 @@ fn validate_and_render_upgrade_sns_controlled_canister(
         usize::MAX,
     ) {
         defects.push(err);
-    } else if upgrade.new_canister_wasm[..4] != WASM_HEADER[..] {
+    } else if upgrade.new_canister_wasm[..4] != RAW_WASM_HEADER[..]
+        && upgrade.new_canister_wasm[..2] != GZIPPED_WASM_HEADER[..]
+    {
         defects.push("new_canister_wasm lacks the magic value in its header.".into());
     }
 
@@ -1412,6 +1417,24 @@ mod tests {
         }
 
         assert_validate_upgrade_sns_controlled_canister_is_err(&proposal);
+    }
+
+    #[test]
+    fn upgrade_wasm_can_be_gzipped() {
+        let mut proposal = basic_upgrade_sns_controlled_canister_proposal();
+
+        match proposal.action.as_mut().unwrap() {
+            proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
+                upgrade.new_canister_wasm =
+                    vec![0x1f, 0x8b, 0x08, 0x08, 0xa3, 0x8e, 0xcf, 0x63, 0, 0x03];
+                assert!(upgrade.new_canister_wasm.len() >= 8); // The minimum wasm len.
+                assert_is_ok(validate_and_render_upgrade_sns_controlled_canister(upgrade));
+            }
+            _ => panic!("Proposal.action is not an UpgradeSnsControlledCanister."),
+        }
+
+        assert_is_ok(validate_default_proposal(&proposal));
+        assert_is_ok(validate_default_action(&proposal.action));
     }
 
     fn basic_add_nervous_system_function_proposal() -> Proposal {
