@@ -25,7 +25,7 @@ def _docker_tar_impl(ctx):
         tools = [tool],
     )
 
-    return [DefaultInfo(files = depset([tar_file, hash_list_file]))]
+    return [DefaultInfo(files = depset([tar_file, hash_list_file]), runfiles = ctx.runfiles([tar_file, hash_list_file]))]
 
 docker_tar = rule(
     implementation = _docker_tar_impl,
