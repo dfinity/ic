@@ -640,6 +640,7 @@ pub struct StateManagerImpl {
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
+    malicious_flags: MaliciousFlags,
 }
 
 fn load_checkpoint(
@@ -1396,6 +1397,7 @@ impl StateManagerImpl {
 
         let persist_metadata_guard = Arc::new(Mutex::new(()));
 
+        let malicious_flags_clone = malicious_flags.clone();
         let _state_hasher_handle = JoinOnDrop::new(
             std::thread::Builder::new()
                 .name("StateHasher".to_string())
@@ -1418,7 +1420,7 @@ impl StateManagerImpl {
                                 &state_layout,
                                 req,
                                 &persist_metadata_guard,
-                                &malicious_flags,
+                                &malicious_flags_clone,
                             );
                         }
                     }
@@ -1468,6 +1470,7 @@ impl StateManagerImpl {
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
+            malicious_flags,
         }
     }
 
@@ -1496,6 +1499,7 @@ impl StateManagerImpl {
                 NUMBER_OF_CHECKPOINT_THREADS,
             ))),
             self.state_sync_refs.clone(),
+            self.malicious_flags.clone(),
         ))
     }
 

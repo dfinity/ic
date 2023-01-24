@@ -20,6 +20,7 @@ use ic_test_utilities::{
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload},
     ingress::{IngressState, IngressStatus, WasmResult},
+    malicious_flags::MaliciousFlags,
     messages::SignedIngress,
     Randomness, RegistryVersion,
 };
@@ -225,6 +226,7 @@ fn criterion_calls(criterion: &mut Criterion) {
         &bench_replica.metrics_registry,
         bench_replica.log.clone(),
         registry,
+        MaliciousFlags::default(),
     );
 
     struct BenchData {

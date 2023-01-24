@@ -2,6 +2,7 @@
 
 use crate::malicious_flags::MaliciousFlags;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 /// When testing our system we need to make some nodes act badly to make sure
 /// they don't affect the system more than we expect. These options should NEVER
@@ -125,6 +126,20 @@ impl MaliciousBehaviour {
     pub fn set_maliciously_corrupt_ecdsa_dealings(self) -> Self {
         self.set_malicious_behaviour(|mut s| {
             s.malicious_flags.maliciously_corrupt_ecdsa_dealings = true;
+            s
+        })
+    }
+
+    pub fn set_maliciously_delay_execution(self, delay: Duration) -> Self {
+        self.set_malicious_behaviour(|mut s| {
+            s.malicious_flags.maliciously_delay_execution = Some(delay);
+            s
+        })
+    }
+
+    pub fn set_maliciously_delay_state_sync(self, delay: Duration) -> Self {
+        self.set_malicious_behaviour(|mut s| {
+            s.malicious_flags.maliciously_delay_state_sync = Some(delay);
             s
         })
     }

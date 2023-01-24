@@ -274,6 +274,14 @@ name = "ic-systest-dual-workload-test"
 path = "bin/dual_workload_test.rs"
 
 [[bin]]
+name = "ic-systest-catch-up-possible-test"
+path = "bin/catch_up_possible_test.rs"
+
+[[bin]]
+name = "ic-systest-catch-up-impossible-test"
+path = "bin/catch_up_impossible_test.rs"
+
+[[bin]]
 name = "ic-systest-max-xnet-payload-size-test"
 path = "bin/max_xnet_payload_size_test.rs"
 

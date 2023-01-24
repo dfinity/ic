@@ -10,6 +10,7 @@
 //! It is desirable to have a description for each flag in this file
 
 use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant};
 
 /// Groups all available malicious flags.
 #[derive(Clone, Default, Deserialize, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -25,6 +26,10 @@ pub struct MaliciousFlags {
     pub maliciously_corrupt_own_state_at_heights: Vec<u64>,
     pub maliciously_disable_ingress_validation: bool,
     pub maliciously_corrupt_ecdsa_dealings: bool,
+    /// Delay execution such that it takes at least [`Duration`] time
+    pub maliciously_delay_execution: Option<Duration>,
+    /// Delay state sync such that it takes at least [`Duration`] time
+    pub maliciously_delay_state_sync: Option<Duration>,
 }
 
 impl MaliciousFlags {
@@ -35,5 +40,31 @@ impl MaliciousFlags {
             || self.maliciously_propose_empty_blocks
             || self.maliciously_finalize_all
             || self.maliciously_notarize_all
+    }
+
+    /// Delay the execution as specified by `maliciously_delay_execution`
+    pub fn delay_execution(&self, execution_start: Instant) -> Option<Duration> {
+        self.maliciously_delay_execution
+            .and_then(|delay| Self::delay(delay, execution_start))
+    }
+
+    /// Delay the state sync, as specified by `maliciously_delay_state_sync`
+    pub fn delay_state_sync(&self, sync_start: Instant) -> Option<Duration> {
+        self.maliciously_delay_state_sync
+            .and_then(|delay| Self::delay(delay, sync_start))
+    }
+
+    /// Delays the execution, such that the function returns only after `min_time` has elapsed
+    fn delay(min_time: Duration, start: Instant) -> Option<Duration> {
+        let wait_until = start + min_time;
+        let now = Instant::now();
+
+        if wait_until > now {
+            let delay_duration = wait_until - now;
+            std::thread::sleep(delay_duration);
+            Some(delay_duration)
+        } else {
+            None
+        }
     }
 }

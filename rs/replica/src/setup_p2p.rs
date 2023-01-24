@@ -173,6 +173,7 @@ pub fn construct_ic_stack(
             &metrics_registry,
             replica_logger.clone(),
             Arc::clone(&registry) as Arc<_>,
+            config.malicious_behaviour.malicious_flags.clone(),
         )
     };
     let message_router = Arc::new(message_router);
