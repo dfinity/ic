@@ -51,6 +51,7 @@ use ic_registry_transport::{
 use ic_replica::setup::get_subnet_type;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
+use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload},
     consensus::{catchup::CUPWithOriginalProtobuf, CatchUpPackage, HasHeight, HasVersion},
@@ -298,7 +299,7 @@ impl Player {
             &metrics_registry,
             &cfg.state_manager,
             None,
-            ic_types::malicious_flags::MaliciousFlags::default(),
+            MaliciousFlags::default(),
         ));
         let execution_service = ExecutionServices::setup_execution(
             log.clone(),
@@ -321,6 +322,7 @@ impl Player {
             &metrics_registry,
             log.clone(),
             registry.clone(),
+            MaliciousFlags::default(),
         ));
         let certification_pool = consensus_pool.as_ref().map(|_| {
             CertificationPoolImpl::new(

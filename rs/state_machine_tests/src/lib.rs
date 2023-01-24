@@ -69,6 +69,7 @@ use ic_types::crypto::{
     canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId, CombinedThresholdSig,
     CombinedThresholdSigOf, Signable, Signed,
 };
+use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::messages::{CallbackId, Certificate};
 use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
@@ -544,6 +545,7 @@ impl StateMachine {
             &metrics_registry,
             replica_logger,
             Arc::clone(&registry_client) as _,
+            MaliciousFlags::default(),
         );
 
         // fixed seed to keep tests reproducible

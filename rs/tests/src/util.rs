@@ -4,7 +4,7 @@ use anyhow::bail;
 use candid::{Decode, Encode};
 use canister_test::{Canister, RemoteTestRuntime, Runtime, Wasm};
 use dfn_protobuf::{protobuf, ProtoBuf};
-use futures::future::{select_all, try_join_all};
+use futures::future::{join_all, select_all, try_join_all};
 use futures::FutureExt;
 use ic_agent::export::Principal;
 use ic_agent::{
@@ -32,6 +32,7 @@ use icp_ledger::{
 use itertools::Itertools;
 use on_wire::FromWire;
 use slog::{debug, info};
+use std::collections::BTreeMap;
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::{
     convert::{TryFrom, TryInto},
@@ -1250,5 +1251,83 @@ impl LogStream {
 
         let bf = BufReader::new(stream);
         Ok(bf.lines())
+    }
+}
+
+/// Tool to fetch metrics from a set of nodes.
+///
+/// Can be useful if waiting for a specific condition of a metric to become true.
+pub struct MetricsFetcher {
+    nodes: Vec<IcNodeSnapshot>,
+    metrics: Vec<String>,
+}
+
+impl MetricsFetcher {
+    /// Create a new [`MetricsFetcher`]
+    pub fn new(nodes: impl Iterator<Item = IcNodeSnapshot>, metrics: Vec<String>) -> Self {
+        Self {
+            nodes: nodes.collect(),
+            metrics,
+        }
+    }
+
+    /// Fetch the metrics
+    pub async fn fetch(&self) -> reqwest::Result<BTreeMap<String, Vec<u64>>> {
+        // Fetch the metrics from the nodes in parallel and collect into a result
+        let metrics = join_all(
+            self.nodes
+                .iter()
+                .map(|node| Box::pin(self.fetch_from_node(node.get_ip_addr()))),
+        )
+        .await
+        .into_iter()
+        .collect::<Result<Vec<BTreeMap<String, u64>>, reqwest::Error>>()?;
+
+        // Accumulate results into a single BTreeMap
+        let mut results = BTreeMap::new();
+        for metric in metrics {
+            for (metric_name, val) in metric.into_iter() {
+                results
+                    .entry(metric_name)
+                    .and_modify(|entry: &mut Vec<u64>| entry.push(val))
+                    .or_insert_with(|| vec![val]);
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Fetch metrics from a single node
+    async fn fetch_from_node(&self, ip_addr: IpAddr) -> reqwest::Result<BTreeMap<String, u64>> {
+        let ip_addr = match ip_addr {
+            IpAddr::V4(_) => panic!("Ipv4 addresses not supported"),
+            IpAddr::V6(ipv6_addr) => ipv6_addr,
+        };
+
+        let socket_addr: SocketAddr = SocketAddr::V6(SocketAddrV6::new(ip_addr, 9090, 0, 0));
+        let url = format!("http://{}", socket_addr);
+        let response = reqwest::get(url).await?.text().await?;
+
+        // Filter out only lines that contain metrics we are interested in
+        let mut result = BTreeMap::new();
+        for line in response.split('\n') {
+            // Skip the comment lines
+            if line.starts_with('#') {
+                continue;
+            }
+
+            if self
+                .metrics
+                .iter()
+                .any(|metric_name| line.starts_with(metric_name))
+            {
+                let metric = line.split(' ').collect::<Vec<_>>();
+                assert_eq!(metric.len(), 2);
+
+                let val: u64 = metric[1].parse().expect("Failed to parse metric");
+                result.insert(metric[0].to_string(), val);
+            }
+        }
+        Ok(result)
     }
 }

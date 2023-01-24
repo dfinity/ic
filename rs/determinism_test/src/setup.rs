@@ -26,7 +26,10 @@ use ic_test_utilities::{consensus::fake::FakeVerifier, types::ids::subnet_test_i
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
-use ic_types::{replica_config::ReplicaConfig, NodeId, PrincipalId, RegistryVersion, SubnetId};
+use ic_types::{
+    malicious_flags::MaliciousFlags, replica_config::ReplicaConfig, NodeId, PrincipalId,
+    RegistryVersion, SubnetId,
+};
 use std::sync::Arc;
 
 fn get_registry(
@@ -151,6 +154,7 @@ pub(crate) fn setup() -> (
         &metrics_registry,
         log.clone().into(),
         Arc::clone(&registry) as _,
+        MaliciousFlags::default(),
     );
 
     (

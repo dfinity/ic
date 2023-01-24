@@ -104,6 +104,7 @@ fn incomplete_state_for_tests(
         SubnetType::Application,
         Arc::new(Mutex::new(scoped_threadpool::Pool::new(NUM_THREADS))),
         state_sync_refs,
+        MaliciousFlags::default(),
     );
 
     // The constructor doesn't create the directory, it gets created when we receive

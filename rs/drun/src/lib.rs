@@ -30,6 +30,7 @@ use ic_test_utilities::consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
+use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload},
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -228,6 +229,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         &metrics_registry,
         log.clone().into(),
         Arc::clone(&registry) as _,
+        MaliciousFlags::default(),
     );
 
     msg_stream.try_for_each(|parse_result| {

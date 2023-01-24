@@ -16,6 +16,7 @@ use ic_types::{
         ArtifactErrorCode::{self, ChunkVerificationFailed, ChunksMoreNeeded},
         ChunkId, Chunkable,
     },
+    malicious_flags::MaliciousFlags,
     state_sync::{
         decode_manifest, FileGroupChunks, Manifest, FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK,
     },
@@ -76,6 +77,8 @@ pub struct IncompleteState {
     own_subnet_type: SubnetType,
     thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
     state_sync_refs: StateSyncRefs,
+    #[allow(dead_code)]
+    malicious_flags: MaliciousFlags,
 }
 
 impl Drop for IncompleteState {
@@ -160,6 +163,7 @@ impl IncompleteState {
         own_subnet_type: SubnetType,
         thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
         state_sync_refs: StateSyncRefs,
+        malicious_flags: MaliciousFlags,
     ) -> Self {
         if state_sync_refs.insert(height, root_hash.clone()).is_some() {
             // Currently, we don't handle two concurrent fetches of the same state
@@ -185,6 +189,7 @@ impl IncompleteState {
             own_subnet_type,
             thread_pool,
             state_sync_refs,
+            malicious_flags,
         }
     }
 
@@ -1357,6 +1362,13 @@ impl Chunkable for IncompleteState {
                         .cache
                         .write()
                         .register_successful_sync(self.height);
+
+                    // Delay delivery of artifact
+                    #[cfg(feature = "malicious_code")]
+                    if let Some(delay) = self.malicious_flags.delay_state_sync(self.started_at) {
+                        info!(self.log, "[MALICIOUS]: Delayed state sync by {:?}", delay);
+                    }
+
                     return Ok(artifact);
                 }
 

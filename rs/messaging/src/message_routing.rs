@@ -31,6 +31,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{NetworkTopology, NodeTopology, ReplicatedState, SubnetTopology};
 use ic_types::{
     batch::Batch,
+    malicious_flags::MaliciousFlags,
     registry::RegistryClientError,
     xnet::{StreamHeader, StreamIndex},
     Height, NodeId, NumBytes, RegistryVersion, SubnetId,
@@ -39,12 +40,15 @@ use ic_utils::thread::JoinOnDrop;
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::TryFrom;
 use std::ops::Range;
 use std::sync::mpsc::{sync_channel, TrySendError};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::sleep;
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    time::Instant,
+};
 
 // How many batches we allow in the execution queue before we start rejecting
 // incoming batches.
@@ -338,6 +342,8 @@ struct BatchProcessorImpl {
     bitcoin_config: BitcoinConfig,
     metrics: Arc<MessageRoutingMetrics>,
     log: ReplicaLogger,
+    #[allow(dead_code)]
+    malicious_flags: MaliciousFlags,
 }
 
 impl BatchProcessorImpl {
@@ -348,6 +354,7 @@ impl BatchProcessorImpl {
         bitcoin_config: BitcoinConfig,
         metrics: Arc<MessageRoutingMetrics>,
         log: ReplicaLogger,
+        malicious_flags: MaliciousFlags,
     ) -> Self {
         Self {
             state_manager,
@@ -356,6 +363,7 @@ impl BatchProcessorImpl {
             bitcoin_config,
             metrics,
             log,
+            malicious_flags,
         }
     }
 
@@ -655,6 +663,7 @@ fn get_subnet_public_key(
 
 impl BatchProcessor for BatchProcessorImpl {
     fn process_batch(&self, batch: Batch) {
+        let _process_batch_start = Instant::now();
         let timer = Timer::start();
 
         // Fetch the mutable tip from StateManager
@@ -731,6 +740,11 @@ impl BatchProcessor for BatchProcessorImpl {
             state_after_round.garbage_collect_canister_queues();
         }
         self.observe_canisters_memory_usage(&state_after_round);
+
+        #[cfg(feature = "malicious_code")]
+        if let Some(delay) = self.malicious_flags.delay_execution(_process_batch_start) {
+            info!(self.log, "[MALICIOUS]: Delayed execution by {:?}", delay);
+        }
 
         let phase_timer = Timer::start();
 
@@ -891,6 +905,7 @@ impl MessageRoutingImpl {
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
         registry: Arc<dyn RegistryClient>,
+        malicious_flags: MaliciousFlags,
     ) -> Self {
         let time_in_stream_metrics = Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
             metrics_registry,
@@ -937,6 +952,7 @@ impl MessageRoutingImpl {
             hypervisor_config.bitcoin,
             Arc::clone(&metrics),
             log.clone(),
+            malicious_flags,
         ));
 
         Self::from_batch_processor(state_manager, batch_processor, Arc::clone(&metrics), log)

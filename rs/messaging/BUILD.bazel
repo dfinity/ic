@@ -5,6 +5,10 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "messaging",
     srcs = glob(["src/**"]),
+    crate_features = select({
+        "//bazel:malicious_code_enabled": ["malicious_code"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_messaging",
     version = "0.8.0",
     deps = [
