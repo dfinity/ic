@@ -64,11 +64,36 @@ impl Purger {
         let mut changeset = ChangeSet::new();
         self.purge_unvalidated_pool_by_expected_batch_height(pool, &mut changeset);
         self.purge_validated_pool_by_catch_up_package(pool, &mut changeset);
-        self.purge_replicated_state_by_finalized_certified_height(pool);
-        self.purge_checkpoints_below_recent_cup(pool);
+
+        let certified_height_increased = self.update_finalized_certified_height(pool);
+        let cup_height_increased = self.update_cup_height(pool);
+
+        if certified_height_increased {
+            self.purge_replicated_state_by_finalized_certified_height(pool);
+        }
+        // If we observe a new CUP with a larger height than the previous max
+        // OR the finalized certified height increases(see: CON-930), purge
+        if cup_height_increased || certified_height_increased {
+            self.purge_checkpoints_below_cup_height(pool);
+        }
         changeset
     }
-
+    /// Updates the purger's copy of the finalized certified height, and returns true if
+    /// if the height increased. Otherwise returns false.
+    fn update_finalized_certified_height(&self, pool: &PoolReader<'_>) -> bool {
+        let finalized_certified_height = pool.get_finalized_tip().context.certified_height;
+        let prev_finalized_certified_height = self
+            .prev_finalized_certified_height
+            .replace(finalized_certified_height);
+        finalized_certified_height > prev_finalized_certified_height
+    }
+    /// Updates the purger's copy of the cup height, and returns true if the height
+    /// increased.
+    fn update_cup_height(&self, pool: &PoolReader<'_>) -> bool {
+        let cup_height = pool.get_catch_up_height();
+        let prev_cup_height = self.prev_maximum_cup_height.replace(cup_height);
+        cup_height > prev_cup_height
+    }
     /// Unvalidated pool below or equal to the latest expected batch height can
     /// be purged from the pool.
     ///
@@ -175,30 +200,22 @@ impl Purger {
         }
     }
 
-    /// Ask state manager to purge all states below the certified height
-    /// recorded in the block in the latest finalized block.
-    fn purge_replicated_state_by_finalized_certified_height(&self, pool_reader: &PoolReader<'_>) {
-        let finalized_tip = pool_reader.get_finalized_tip();
-        let finalized_certified_height = finalized_tip.context.certified_height;
-        let prev_finalized_certified_height = self
-            .prev_finalized_certified_height
-            .replace(finalized_certified_height);
-        if finalized_certified_height > prev_finalized_certified_height {
-            self.state_manager
-                .remove_inmemory_states_below(finalized_certified_height);
-            trace!(
-                self.log,
-                "Purge replicated states below [memory] {:?}",
-                finalized_certified_height
-            );
-        }
+    /// Ask state manager to purge all states below the given height
+    fn purge_replicated_state_by_finalized_certified_height(&self, pool: &PoolReader<'_>) {
+        let height = pool.get_finalized_tip().context.certified_height;
+        self.state_manager.remove_inmemory_states_below(height);
+        trace!(
+            self.log,
+            "Purge replicated states below [memory] {:?}",
+            height
+        );
         self.metrics
             .replicated_state_purge_height
-            .set(finalized_certified_height.get() as i64);
+            .set(height.get() as i64);
     }
 
     /// Notify the [`StateManager`] that states with heights strictly less than
-    /// the highest CUP height can be removed.
+    /// the given height can be removed.
     ///
     /// Note from the [`StateManager::remove_states_below`] docs:
     ///  * The initial state (height = 0) cannot be removed.
@@ -208,17 +225,14 @@ impl Purger {
     ///
     /// To find more details on the concrete StateManager implementation and the heuristic for
     /// state removal, check: [`ic_state_manager::StateManagerImpl::remove_states_below`].
-    fn purge_checkpoints_below_recent_cup(&self, pool_reader: &PoolReader<'_>) {
-        let cup_height = pool_reader.get_catch_up_height();
-        let prev_cup_height = self.prev_maximum_cup_height.replace(cup_height);
-        if cup_height > prev_cup_height {
-            self.state_manager.remove_states_below(cup_height);
-            trace!(
-                self.log,
-                "Purge replicated states below [disk] {:?}",
-                cup_height
-            );
-        }
+    fn purge_checkpoints_below_cup_height(&self, pool: &PoolReader<'_>) {
+        let cup_height = pool.get_catch_up_height();
+        self.state_manager.remove_states_below(cup_height);
+        trace!(
+            self.log,
+            "Purge replicated states below [disk] {:?}",
+            cup_height
+        );
         self.metrics
             .replicated_state_purge_height_disk
             .set(cup_height.get() as i64);
