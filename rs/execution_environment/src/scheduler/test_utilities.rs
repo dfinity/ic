@@ -6,7 +6,6 @@ use std::{
 };
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_btc_canister::BitcoinCanister;
 use ic_config::{
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfigs},
@@ -821,17 +820,12 @@ impl SchedulerTestBuilder {
             config,
             Arc::clone(&cycles_account_manager),
         );
-        let bitcoin_canister = Arc::new(BitcoinCanister::new(
-            &self.metrics_registry,
-            self.log.clone(),
-        ));
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
             self.own_subnet_id,
             ingress_history_writer,
             Arc::new(exec_env),
             Arc::clone(&cycles_account_manager),
-            bitcoin_canister,
             &self.metrics_registry,
             self.log,
             rate_limiting_of_heap_delta,

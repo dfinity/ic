@@ -8,12 +8,10 @@ use candid::Encode;
 use ic00::{
     CanisterHttpRequestArgs, HttpMethod, SignWithECDSAArgs, TransformContext, TransformFunc,
 };
-use ic_btc_types::NetworkInRequest;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfigs};
 use ic_error_types::RejectCode;
 use ic_ic00_types::{
-    self as ic00, BitcoinGetBalanceArgs, CanisterIdRecord, CanisterStatusType, EcdsaCurve,
-    EmptyBlob, Method, Payload as _,
+    self as ic00, CanisterIdRecord, CanisterStatusType, EcdsaCurve, EmptyBlob, Method, Payload as _,
 };
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
@@ -1184,81 +1182,6 @@ fn subnet_messages_respect_instruction_limit_per_round() {
     let metrics = &test.scheduler().metrics;
     assert_eq!(metrics.round_subnet_queue.messages.get_sample_sum(), 3.0);
     assert_eq!(metrics.round_inner.messages.get_sample_sum(), 10.0);
-}
-
-#[test]
-fn subnet_messages_respect_bitcoin_request_limit_per_round() {
-    // In this test we have a canister with `MAX_BITCOIN_REQUESTS_PER_ROUND` + 1
-    // bitcoin requests in the subnet queues and we expect that only
-    // `MAX_BITCOIN_REQUESTS_PER_ROUND` are executed.
-    let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            instruction_overhead_per_message: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
-        })
-        .build();
-
-    let payload = Encode!(&BitcoinGetBalanceArgs {
-        address: String::from("my_address"),
-        network: NetworkInRequest::Testnet,
-        min_confirmations: None,
-    })
-    .unwrap();
-    let payment = Cycles::new(1000000);
-    for _ in 0..MAX_BITCOIN_REQUESTS_PER_ROUND + 1 {
-        test.inject_call_to_ic00(
-            Method::BitcoinGetBalance,
-            payload.clone(),
-            payment,
-            test.xnet_canister_id(),
-            InputQueueType::RemoteSubnet,
-        )
-    }
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    let metrics = &test.scheduler().metrics;
-    assert_eq!(
-        metrics.round_subnet_queue.messages.get_sample_sum(),
-        MAX_BITCOIN_REQUESTS_PER_ROUND as f64
-    );
-}
-
-#[test]
-fn non_bitcoin_subnet_messages_not_affected_by_bitcoin_request_limit() {
-    // In this test we have a canister with 2 * `MAX_BITCOIN_REQUESTS_PER_ROUND`
-    // non-bitcoin requests in the subnet queues and we expect that only
-    // all of them are executed.
-    let mut test = SchedulerTestBuilder::new()
-        .with_scheduler_config(SchedulerConfig {
-            scheduler_cores: 2,
-            instruction_overhead_per_message: NumInstructions::from(0),
-            instruction_overhead_per_canister: NumInstructions::from(0),
-            ..SchedulerConfig::application_subnet()
-        })
-        .build();
-
-    let canister = test.create_canister();
-
-    let payload = Encode!(&CanisterIdRecord::from(canister)).unwrap();
-    let payment = Cycles::new(1000000);
-    for _ in 0..2 * MAX_BITCOIN_REQUESTS_PER_ROUND {
-        test.inject_call_to_ic00(
-            Method::CanisterStatus,
-            payload.clone(),
-            payment,
-            test.xnet_canister_id(),
-            InputQueueType::RemoteSubnet,
-        )
-    }
-    test.execute_round(ExecutionRoundType::OrdinaryRound);
-
-    let metrics = &test.scheduler().metrics;
-    assert_eq!(
-        metrics.round_subnet_queue.messages.get_sample_sum(),
-        2.0 * MAX_BITCOIN_REQUESTS_PER_ROUND as f64
-    );
 }
 
 #[test]

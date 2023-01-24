@@ -5,5 +5,4 @@
 
 # testing related code that runs in CI, 
 tests/
-bitcoin/canister/src/examples/
 crypto/tests/

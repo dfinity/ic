@@ -14,7 +14,6 @@ DEPENDENCIES = [
     "//rs/backup",
     "//rs/bitcoin/ckbtc/agent",
     "//rs/bitcoin/ckbtc/minter",
-    "//rs/bitcoin/canister",
     "//rs/bitcoin/types/public",
     "//rs/canister_client",
     "//rs/canister_client/sender",

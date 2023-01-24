@@ -22,7 +22,6 @@ pub use execution_environment::{
 pub use history::{IngressHistoryReaderImpl, IngressHistoryWriterImpl};
 pub use hypervisor::{Hypervisor, HypervisorMetrics};
 use ic_base_types::PrincipalId;
-use ic_btc_canister::BitcoinCanister;
 use ic_config::{execution_environment::Config, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::AnonymousQueryService;
@@ -174,15 +173,12 @@ impl ExecutionServices {
             scheduler_config.max_instructions_per_message_without_dts,
         );
 
-        let bitcoin_canister = Arc::new(BitcoinCanister::new(metrics_registry, logger.clone()));
-
         let scheduler = Box::new(SchedulerImpl::new(
             scheduler_config,
             own_subnet_id,
             Arc::clone(&ingress_history_writer) as Arc<_>,
             Arc::clone(&exec_env) as Arc<_>,
             Arc::clone(&cycles_account_manager),
-            bitcoin_canister,
             metrics_registry,
             logger,
             config.rate_limiting_of_heap_delta,
