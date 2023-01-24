@@ -211,6 +211,10 @@ CKBTC_RUNTIME_DEPS = [
     "@btc_canister//file",
 ]
 
+BTC_RUNTIME_DEPS = [
+    "@btc_canister//file",
+]
+
 GUESTOS_MALICIOUS_RUNTIME_DEPS = [
     "//ic-os/guestos/dev-malicious:hash_and_upload_disk-img",
     "//ic-os/guestos/dev-malicious:hash_and_upload_update-img",
@@ -522,7 +526,8 @@ system_test(
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS,
+        NNS_CANISTER_RUNTIME_DEPS +
+        BTC_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 
