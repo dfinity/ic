@@ -9,8 +9,6 @@ const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
 
 pub(super) fn replacement_functions(
     stable_memory_index: u32,
-    try_grow_stable_memory_func: u32,
-    deallocate_pages_func: u32,
 ) -> Vec<(SystemApiFunc, (Type, Body<'static>))> {
     use Operator::*;
     vec![
@@ -32,7 +30,12 @@ pub(super) fn replacement_functions(
                         If {
                             blockty: BlockType::Empty,
                         },
-                        Unreachable,
+                        I32Const {
+                            value: InternalErrorCode::StableMemoryTooBigFor32Bit as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
                         End,
                         MemorySize {
                             mem: stable_memory_index,
@@ -78,7 +81,7 @@ pub(super) fn replacement_functions(
                             value: StableMemoryApi::Stable32 as i32,
                         },
                         Call {
-                            function_index: try_grow_stable_memory_func,
+                            function_index: InjectedImports::TryGrowStableMemory as u32,
                         },
                         // If result is -1, return -1
                         I64Const { value: -1 },
@@ -106,7 +109,7 @@ pub(super) fn replacement_functions(
                         LocalGet { local_index: 0 },
                         I64ExtendI32U,
                         Call {
-                            function_index: deallocate_pages_func,
+                            function_index: InjectedImports::DeallocatePages as u32,
                         },
                         I32Const { value: -1 },
                         Return,
@@ -138,7 +141,7 @@ pub(super) fn replacement_functions(
                             value: StableMemoryApi::Stable64 as i32,
                         },
                         Call {
-                            function_index: try_grow_stable_memory_func,
+                            function_index: InjectedImports::TryGrowStableMemory as u32,
                         },
                         // If result is -1, return -1
                         I64Const { value: -1 },
@@ -164,7 +167,7 @@ pub(super) fn replacement_functions(
                         },
                         LocalGet { local_index: 0 },
                         Call {
-                            function_index: deallocate_pages_func,
+                            function_index: InjectedImports::DeallocatePages as u32,
                         },
                         I64Const { value: -1 },
                         Return,

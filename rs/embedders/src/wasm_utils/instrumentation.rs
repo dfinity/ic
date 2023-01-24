@@ -497,11 +497,7 @@ fn replace_system_api_functions(module: &mut Module<'_>, stable_memory_index: u3
     // Collect a single map of all the function indexes that need to be
     // replaced.
     let mut func_index_replacements = BTreeMap::new();
-    for (api, (ty, body)) in replacement_functions(
-        stable_memory_index,
-        InjectedImports::TryGrowStableMemory as u32,
-        InjectedImports::DeallocatePages as u32,
-    ) {
+    for (api, (ty, body)) in replacement_functions(stable_memory_index) {
         if let Some(old_index) = api_indexes.get(&api) {
             let type_idx = add_type(module, ty);
             let new_index = (number_of_func_imports + module.functions.len()) as u32;
