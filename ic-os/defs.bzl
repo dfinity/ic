@@ -124,6 +124,21 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         ],
     )
 
+    native.sh_binary(
+        name = "vuln-scan",
+        srcs = ["//ic-os:vuln-scan.sh"],
+        data = [
+            "@trivy//:trivy",
+            ":rootfs-tree.tar",
+            "//ic-os:vuln-scan.html",
+        ],
+        env = {
+            "trivy_path": "$(rootpath @trivy//:trivy)",
+            "DOCKER_TAR": "$(rootpaths :rootfs-tree.tar)",
+            "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan.html)",
+        },
+    )
+
     ext4_image(
         name = "partition-config.tar",
         partition_size = "100M",
@@ -604,6 +619,21 @@ def boundary_node_icos_build(name, mode = None, sev = False, visibility = None):
         boundary_node_base_img = boundary_node_img_bases["sev"]
     else:
         boundary_node_base_img = boundary_node_img_bases["prod"]
+
+    native.sh_binary(
+        name = "vuln-scan",
+        srcs = ["//ic-os:vuln-scan.sh"],
+        data = [
+            "@trivy//:trivy",
+            ":rootfs-tree.tar",
+            "//ic-os:vuln-scan.html",
+        ],
+        env = {
+            "trivy_path": "$(rootpath @trivy//:trivy)",
+            "DOCKER_TAR": "$(rootpaths :rootfs-tree.tar)",
+            "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan.html)",
+        },
+    )
 
     docker_tar(
         visibility = visibility,
