@@ -1149,11 +1149,11 @@ fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
 }
 
+candid::export_service!();
+
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn get_canidid_interface() {
-    over(candid_one, |()| -> &'static str {
-        include_str!(env!("LEDGER_DID_PATH"))
-    })
+    over(candid_one, |()| -> String { __export_service() })
 }
 
 #[cfg(test)]
@@ -1164,8 +1164,6 @@ mod tests {
 
     #[test]
     fn check_candid_interface_compatibility() {
-        candid::export_service!();
-
         let new_interface = __export_service();
         let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
         for candid_file in ["../ledger.did", "../../icrc1/ledger/icrc1.did"].iter() {

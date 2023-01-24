@@ -1,4 +1,4 @@
-use candid::CandidType;
+use candid::{utils::service_compatible, utils::CandidSource, CandidType};
 use canister_test::*;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_protobuf::protobuf;
@@ -19,9 +19,12 @@ use icp_ledger::{
 };
 use on_wire::IntoWire;
 use serde::Deserialize;
-use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::time::{Duration, SystemTime};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 #[derive(CandidType, Deserialize)]
 struct TestQueryBlocksArgs {
@@ -1801,8 +1804,19 @@ fn test_ledger_candid_interface_endpoint() {
             .await?;
 
         let candid_interface: String = fetch_candid_interface(&ledger).await.unwrap();
-        assert_eq!(candid_interface, include_str!("../ledger.did"));
-
+        let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+        let old_interface = manifest_dir.join("ledger.did");
+        service_compatible(
+            CandidSource::Text(&candid_interface),
+            CandidSource::File(old_interface.as_path()),
+        )
+        .unwrap_or_else(|e| {
+            panic!(
+                "the ledger interface is not compatible with {}: {:?}",
+                old_interface.display(),
+                e
+            )
+        });
         Ok(())
     });
 }
