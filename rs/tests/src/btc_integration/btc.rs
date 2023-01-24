@@ -19,12 +19,14 @@ end::catalog[] */
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
+use crate::ckbtc::lib::install_bitcoin_canister;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     retry, retry_async, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    NnsInstallationExt, SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
 use crate::driver::universal_vm::UniversalVms;
+use crate::util::runtime_from_url;
 use crate::util::{block_on, UniversalCanister};
 use crate::{
     driver::ic::{InternetComputer, Subnet},
@@ -33,8 +35,6 @@ use crate::{
 use anyhow::bail;
 use bitcoincore_rpc::{Auth, Client, RpcApi};
 use candid::Decode;
-use ic_btc_types::Network;
-use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use ic_universal_canister::{management, wasm};
@@ -93,21 +93,14 @@ docker run  --name=bitcoind-node -d \
 
     InternetComputer::new()
         .with_bitcoind_addr(SocketAddr::new(IpAddr::V6(btc_node_ipv6), 18444))
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(
-            Subnet::new(SubnetType::Application)
+            Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(10))
-                .with_features(SubnetFeatures {
-                    bitcoin: Some(BitcoinFeature {
-                        network: Network::Regtest,
-                        status: BitcoinFeatureStatus::Enabled,
-                    }),
-                    ..SubnetFeatures::default()
-                })
                 .add_nodes(1),
         )
-        .setup_and_start(&env)
+        .setup_and_start_with_ids(&env)
         .expect("failed to setup IC under test");
+
     info!(logger, "Checking readiness of all nodes ...");
     env.topology_snapshot().subnets().for_each(|subnet| {
         subnet
@@ -190,27 +183,14 @@ pub fn get_balance(env: TestEnv) {
     // should be 50 * 101 = 5050 bitcoin or 505000000000 satoshis.
     let expected_balance_in_satoshis = 5050_0000_0000_u64;
     let topology = env.topology_snapshot();
-    let nns_node = topology.root_subnet().nodes().next().unwrap();
-    info!(logger, "Installing NNS canisters ...");
-    nns_node
-        .install_nns_canisters()
-        .expect("Could not install NNS canisters");
-    info!(logger, "NNS canisters installed successfully");
-    let app_node = topology
-        .subnets()
-        .find(|s| s.subnet_type() == SubnetType::Application)
-        .unwrap()
-        .nodes()
-        .next()
-        .unwrap();
-    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+    let node = topology.root_subnet().nodes().next().unwrap();
+    let agent = node.with_default_agent(|agent| async move { agent });
     let res = block_on(async {
-        let canister = UniversalCanister::new_with_retries(
-            &app_agent,
-            app_node.effective_canister_id(),
-            &logger,
-        )
-        .await;
+        let runtime = runtime_from_url(node.get_public_url(), node.effective_canister_id());
+        install_bitcoin_canister(&runtime, &logger, &env).await;
+        let canister =
+            UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                .await;
         retry_async(&logger, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || async {
             let res = canister
                 .update(wasm().call(management::bitcoin_get_balance(
