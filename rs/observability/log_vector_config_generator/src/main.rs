@@ -82,7 +82,7 @@ fn main() -> Result<()> {
         vec![JobType::NodeExporter(NodeOS::Guest)],
         update_signal_rcv,
         cli_args.vector_config_dir,
-        VectorConfigBuilderImpl::new(),
+        VectorConfigBuilderImpl::new(cli_args.batch_size),
     );
     info!(log, "Spawning config generator thread.");
     let config_join_handle = std::thread::spawn(config_generator_loop);
@@ -182,6 +182,16 @@ Possible only if the version is not a ZERO_REGISTRY_VERSION
 "#
     )]
     skip_sync: bool,
+
+    #[clap(
+        long = "batch-size",
+        help = r#"
+Batch size for generated sources. It represents the amount of log lines before 
+persisting the cursor. Default value is 32
+        "#,
+        default_value = "32"
+    )]
+    batch_size: u64,
 }
 
 impl CliArgs {
