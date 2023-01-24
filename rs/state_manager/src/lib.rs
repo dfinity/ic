@@ -2066,6 +2066,14 @@ impl StateManagerImpl {
 
         // We obtain the latest certified state inside the state mutex to avoid race conditions where new certifications might arrive
         let latest_certified_height = self.latest_certified_height();
+        let latest_manifest_height =
+            states
+                .states_metadata
+                .iter()
+                .rev()
+                .find_map(|(height, state_metadata)| {
+                    state_metadata.bundled_manifest.as_ref().map(|_| *height)
+                });
 
         let heights_to_keep: BTreeSet<Height> = states
             .states_metadata
@@ -2075,6 +2083,7 @@ impl StateManagerImpl {
                 *height == Self::INITIAL_STATE_HEIGHT || *height >= last_checkpoint_to_keep
             })
             .chain(std::iter::once(latest_certified_height))
+            .chain(latest_manifest_height.into_iter())
             .collect();
 
         // Send object to deallocation thread if it has capacity.
