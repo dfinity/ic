@@ -20,7 +20,7 @@ end::catalog[] */
 
 use std::time::{Duration, SystemTime};
 
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Principal};
 use ic_agent::AgentError;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha::Sha256;
@@ -29,14 +29,16 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::proposal::Action;
 use ic_nns_governance::pb::v1::{NnsFunction, OpenSnsTokenSwap, Proposal};
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
+
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
 use ic_sns_swap::pb::v1::{GetStateRequest, GetStateResponse, Lifecycle, Params};
 use ic_sns_wasm::pb::v1::{
-    AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterType, SnsWasm,
-    UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
+    AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
+    SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
 };
 use ic_types::{Cycles, Height};
+use serde::{Deserialize, Serialize};
 use slog::info;
 
 use crate::driver::test_env::TestEnv;
@@ -49,7 +51,7 @@ use crate::nns::{
     vote_execute_proposal_assert_executed,
 };
 use crate::orchestrator::utils::rw_message::install_nns_and_check_progress;
-use crate::util::{block_on, runtime_from_url, UniversalCanister};
+use crate::util::{block_on, runtime_from_url, to_principal_id, UniversalCanister};
 
 use crate::driver::ic::{InternetComputer, Subnet};
 
@@ -61,6 +63,7 @@ use ic_nns_governance::pb::v1::{
 use canister_test::{Project, Runtime};
 use dfn_candid::candid_one;
 
+use crate::driver::test_env::TestEnvAttribute;
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
@@ -70,6 +73,95 @@ const DKG_INTERVAL: u64 = 199;
 const SUBNET_SIZE: usize = 4;
 
 const DAYS: Duration = Duration::from_secs(24 * 60 * 60);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnsClient {
+    sns_canisters: SnsCanisterIds,
+    wallet_canister_id: PrincipalId,
+}
+
+impl TestEnvAttribute for SnsClient {
+    fn attribute_name() -> String {
+        "sns_client".to_string()
+    }
+}
+
+impl SnsClient {
+    pub fn assert_state(&self, env: &TestEnv, state: Lifecycle) {
+        let log = env.logger();
+        let swap_id = self.sns_canisters.swap();
+        let app_node = env.get_first_healthy_application_node_snapshot();
+        let agent = app_node.build_default_agent();
+        let wallet_canister = UniversalCanister::from_canister_id(
+            &agent,
+            Principal::try_from(self.wallet_canister_id).unwrap(),
+        );
+        info!(log, r#"Sending "get_state" to SNS swap"#);
+        let res = block_on(get_swap_state(&wallet_canister, swap_id))
+            .expect("get_state failed")
+            .swap
+            .expect("No swap");
+        info!(log, "Received {res:?}");
+        assert_eq!(res.lifecycle(), state);
+    }
+
+    pub fn initiate_token_swap(&self, env: &TestEnv) {
+        let log = env.logger();
+        let swap_id = self.sns_canisters.swap();
+        info!(log, "Sending open token swap proposal");
+        let payload = open_sns_token_swap_payload_for_tests(swap_id.get());
+        let nns_node = env.get_first_healthy_nns_node_snapshot();
+        let runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+        block_on(open_sns_token_swap(&runtime, payload));
+    }
+
+    pub fn install_sns_and_check_healthy(env: &TestEnv) -> SnsClient {
+        add_all_wasms_to_sns_wasm(env);
+
+        let log = env.logger();
+        let nns_node = env.get_first_healthy_nns_node_snapshot();
+        let runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+        let app_node = env.get_first_healthy_application_node_snapshot();
+        let subnet_id = app_node.subnet_id().unwrap();
+        let agent = app_node.build_default_agent();
+
+        info!(log, "Creating new canister with cycles");
+        let wallet_canister = block_on(UniversalCanister::new_with_cycles_with_retries(
+            &agent,
+            app_node.effective_canister_id(),
+            900_000_000_000_000_000u64,
+            &log,
+        ));
+        let principal_id = PrincipalId(wallet_canister.canister_id());
+
+        info!(log, "Adding canister principal to SNS deploy whitelist");
+        block_on(add_principal_to_sns_deploy_whitelist(
+            &runtime,
+            principal_id,
+        ));
+
+        info!(log, "Adding subnet {subnet_id} to SNS deploy whitelist");
+        block_on(add_subnet_to_sns_deploy_whitelist(&runtime, subnet_id));
+
+        info!(log, "Sending deploy_new_sns to SNS WASM canister");
+        let init = SnsInitPayload::with_valid_values_for_testing();
+        let res = block_on(deploy_new_sns(&wallet_canister, init)).expect("Deploy new SNS failed");
+        info!(log, "Received {res:?}");
+        if let Some(error) = res.error {
+            panic!("DeployNewSnsResponse returned error: {error:?}");
+        }
+        assert_eq!(res.subnet_id.expect("No subnet ID"), subnet_id.get());
+        let sns_canisters = res.canisters.expect("No canister IDs");
+        let wallet_canister_id = to_principal_id(&wallet_canister.canister_id());
+
+        let sns_client = SnsClient {
+            sns_canisters,
+            wallet_canister_id,
+        };
+        sns_client.write_attribute(env);
+        sns_client
+    }
+}
 
 pub fn setup(env: TestEnv) {
     env.ensure_group_setup_created();
@@ -89,65 +181,23 @@ pub fn setup(env: TestEnv) {
         .expect("failed to setup IC under test");
 
     install_nns_and_check_progress(env.topology_snapshot());
-    add_all_wasms_to_sns_wasm(&env);
+    SnsClient::install_sns_and_check_healthy(&env);
 }
 
 pub fn test(env: TestEnv) {
     let log = env.logger();
-    let nns_node = env.get_first_healthy_nns_node_snapshot();
-    let runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
-    let app_node = env.get_first_healthy_application_node_snapshot();
-    let subnet_id = app_node.subnet_id().unwrap();
-    let agent = app_node.build_default_agent();
-
-    info!(log, "Creating new canister with cycles");
-    let wallet_canister = block_on(UniversalCanister::new_with_cycles_with_retries(
-        &agent,
-        app_node.effective_canister_id(),
-        900_000_000_000_000_000u64,
-        &log,
-    ));
-    let principal_id = PrincipalId(wallet_canister.canister_id());
-
-    info!(log, "Adding canister principal to SNS deploy whitelist");
-    block_on(add_principal_to_sns_deploy_whitelist(
-        &runtime,
-        principal_id,
-    ));
-
-    info!(log, "Adding subnet {subnet_id} to SNS deploy whitelist");
-    block_on(add_subnet_to_sns_deploy_whitelist(&runtime, subnet_id));
-
-    info!(log, "Sending deploy_new_sns to SNS WASM canister");
-    let init = SnsInitPayload::with_valid_values_for_testing();
-    let res = block_on(deploy_new_sns(&wallet_canister, init)).expect("Deploy new SNS failed");
-    info!(log, "Received {res:?}");
-    if let Some(error) = res.error {
-        panic!("DeployNewSnsResponse returned error: {error:?}");
-    }
-    assert_eq!(res.subnet_id.expect("No subnet ID"), subnet_id.get());
-    let canisters = res.canisters.expect("No canister IDs");
-    let swap_id = canisters.swap();
-
-    info!(log, r#"Sending "get_state" to SNS swap"#);
-    let res = block_on(get_swap_state(&wallet_canister, swap_id))
-        .expect("get_state failed")
-        .swap
-        .expect("No swap");
-    info!(log, "Received {res:?}");
-    assert_eq!(res.lifecycle(), Lifecycle::Pending);
-
-    info!(log, "Sending open token swap proposal");
-    let payload = open_sns_token_swap_payload_for_tests(swap_id.get());
-    block_on(open_sns_token_swap(&runtime, payload));
-
-    info!(log, r#"Sending "get_state" to SNS swap"#);
-    let res = block_on(get_swap_state(&wallet_canister, swap_id))
-        .expect("get_state failed")
-        .swap
-        .expect("No swap in get_state response");
-    info!(log, "Received {res:?}");
-    assert_eq!(res.lifecycle(), Lifecycle::Open);
+    let sns_client = SnsClient::read_attribute(&env);
+    sns_client.assert_state(&env, Lifecycle::Pending);
+    info!(
+        log,
+        "=========== The SNS has been installed sucessfully ==========="
+    );
+    sns_client.initiate_token_swap(&env);
+    sns_client.assert_state(&env, Lifecycle::Open);
+    info!(
+        log,
+        "=========== The SNS token sale been been initialized sucessfully ==========="
+    );
 }
 
 /// Send and execute 6 proposals to add all SNS canister WASMs to the SNS WASM canister
@@ -313,6 +363,7 @@ pub async fn open_sns_token_swap(nns_api: &'_ Runtime, payload: OpenSnsTokenSwap
         id: TEST_NEURON_1_ID,
     };
     let manage_neuron_payload = ManageNeuron {
+        id: Some(neuron_id),
         neuron_id_or_subaccount: None,
         command: Some(Command::MakeProposal(Box::new(Proposal {
             title: Some("title".to_string()),
@@ -320,7 +371,6 @@ pub async fn open_sns_token_swap(nns_api: &'_ Runtime, payload: OpenSnsTokenSwap
             url: "https://forum.dfinity.org/t/x/".to_string(),
             action: Some(Action::OpenSnsTokenSwap(payload)),
         }))),
-        id: Some(neuron_id),
     };
     let proposer = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
     let res: ManageNeuronResponse = governance_canister

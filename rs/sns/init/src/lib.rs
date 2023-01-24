@@ -27,6 +27,7 @@ use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::Init as SwapInit;
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 
 #[cfg(feature = "test")]
@@ -59,7 +60,7 @@ lazy_static! {
 }
 
 /// The canister IDs of all SNS canisters
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnsCanisterIds {
     pub governance: PrincipalId,
     pub ledger: PrincipalId,
