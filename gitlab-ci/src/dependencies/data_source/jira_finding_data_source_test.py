@@ -4,9 +4,10 @@ from unittest.mock import Mock
 import pytest
 from data_source.commit_type import CommitType
 from data_source.jira_finding_data_source import JIRA_BOARD_KEY
-from data_source.jira_finding_data_source import JIRA_CURRENT_RISK_ASSESSOR_TICKET
+from data_source.jira_finding_data_source import JIRA_DEFAULT_RISK_ASSESSORS
 from data_source.jira_finding_data_source import JIRA_FINDING_ISSUE_TYPE
 from data_source.jira_finding_data_source import JIRA_FINDING_TO_CUSTOM_FIELD
+from data_source.jira_finding_data_source import JIRA_INCIDENT_RESPONDER_EPIC
 from data_source.jira_finding_data_source import JIRA_LABEL_PATCH_ALLDEP_PUBLISHED
 from data_source.jira_finding_data_source import JIRA_LABEL_PATCH_VULNDEP_PUBLISHED
 from data_source.jira_finding_data_source import JIRA_MERGE_REQUEST_EXCEPTION_TICKET
@@ -37,13 +38,13 @@ def test_get_risk_assessor_return_single_user(jira_ds, jira_lib_mock):
     user.displayName = "John Doe"
     user.emailAddress = "jd@example.com"
     issue = Mock()
-    issue.get_field.return_value = [user]
-    jira_lib_mock.issue.return_value = issue
+    issue.get_field.return_value = user
+    jira_lib_mock.search_issues.return_value = [issue]
 
     res = jira_ds.get_risk_assessor()
 
     assert res == [User("foo", "John Doe", "jd@example.com")]
-    assert_get_risk_assessor_issue_and_field_called(jira_lib_mock, issue)
+    assert_get_risk_assessor_issue_and_field_called(jira_lib_mock, [issue])
 
 
 def test_get_risk_assessor_return_two_users(jira_ds, jira_lib_mock):
@@ -53,40 +54,45 @@ def test_get_risk_assessor_return_two_users(jira_ds, jira_lib_mock):
     user2 = Mock(["accountId" "emailAddress"])
     user2.accountId = "mouse"
     user2.emailAddress = "mouse@example.com"
-    issue = Mock()
-    issue.get_field.return_value = [user1, user2]
-    jira_lib_mock.issue.return_value = issue
+    issue1 = Mock()
+    issue1.get_field.return_value = user1
+    issue2 = Mock()
+    issue2.get_field.return_value = user2
+    jira_lib_mock.search_issues.return_value = [issue1, issue2]
 
     res = jira_ds.get_risk_assessor()
 
     assert res == [User("mickey", "Mickey Mouse"), User("mouse", None, "mouse@example.com")]
-    assert_get_risk_assessor_issue_and_field_called(jira_lib_mock, issue)
+    assert_get_risk_assessor_issue_and_field_called(jira_lib_mock, [issue1, issue2])
 
 
-def test_get_risk_assessor_raise_error_if_no_users_returned(jira_ds, jira_lib_mock):
+def test_get_risk_assessor_return_default_if_no_users_returned(jira_ds, jira_lib_mock):
     issue = Mock()
     issue.get_field.return_value = None
-    jira_lib_mock.issue.return_value = issue
+    jira_lib_mock.search_issues.return_value = [issue]
 
-    with pytest.raises(RuntimeError):
-        jira_ds.get_risk_assessor()
+    res = jira_ds.get_risk_assessor()
 
-    assert_get_risk_assessor_issue_and_field_called(jira_lib_mock, issue)
+    assert res == JIRA_DEFAULT_RISK_ASSESSORS
+    assert_get_risk_assessor_issue_and_field_called(jira_lib_mock, [issue])
 
 
-def test_get_risk_assessor_raise_error_if_no_issue_returned(jira_ds, jira_lib_mock):
-    jira_lib_mock.issue.return_value = None
+def test_get_risk_assessor_return_default_if_no_issue_returned(jira_ds, jira_lib_mock):
+    jira_lib_mock.search_issues.return_value = None
 
-    with pytest.raises(AttributeError):
-        jira_ds.get_risk_assessor()
+    res = jira_ds.get_risk_assessor()
 
+    assert res == JIRA_DEFAULT_RISK_ASSESSORS
     assert_get_risk_assessor_issue_and_field_called(jira_lib_mock, None)
 
 
-def assert_get_risk_assessor_issue_and_field_called(jira_lib_mock, issue):
-    jira_lib_mock.issue.assert_called_once_with(JIRA_CURRENT_RISK_ASSESSOR_TICKET)
-    if issue is not None:
-        issue.get_field.assert_called_once_with(JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0])
+def assert_get_risk_assessor_issue_and_field_called(jira_lib_mock, issues):
+    jira_lib_mock.search_issues.assert_called_once_with(
+        f'"Epic Link" = {JIRA_INCIDENT_RESPONDER_EPIC} AND status != Done'
+    )
+    if issues is not None:
+        for iss in issues:
+            iss.get_field.assert_called_once_with("assignee")
 
 
 @pytest.mark.parametrize("commit_type", [CommitType.MERGE_COMMIT, CommitType.RELEASE_COMMIT])

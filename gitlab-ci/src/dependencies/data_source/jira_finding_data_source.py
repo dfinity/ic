@@ -1,5 +1,6 @@
 import logging
 import os
+import traceback
 from copy import deepcopy
 from datetime import datetime
 from datetime import timezone
@@ -27,7 +28,11 @@ from model.vulnerability import Vulnerability
 JIRA_SERVER = "https://dfinity.atlassian.net"
 JIRA_USER = "vuln-mgmt@dfinity.org"
 JIRA_BOARD_KEY = "SCAVM"
-JIRA_CURRENT_RISK_ASSESSOR_TICKET = "SCAVM-1"
+JIRA_INCIDENT_RESPONDER_EPIC = "PSEC-885"
+JIRA_DEFAULT_RISK_ASSESSORS = [
+    User(id="62c2a69a7273faf658f02412", name="Thomas Müller", email="thomas.mueller@dfinity.org"),
+    User(id="6151750907ac3c00689d2802", name="Venkkatesh Sekar", email="venkkatesh.sekar@dfinity.org"),
+]
 JIRA_MERGE_REQUEST_EXCEPTION_TICKET = "SCAVM-2"
 JIRA_RELEASE_CANDIDATE_EXCEPTION_TICKET = "SCAVM-3"
 JIRA_API_KEY = os.environ.get("JIRA_API_TOKEN", "")
@@ -505,12 +510,24 @@ class JiraFindingDataSource(FindingDataSource):
 
     def get_risk_assessor(self) -> List[User]:
         logging.debug("get_risk_assessor()")
-        assessors: Optional[List[JiraUser]] = self.jira.issue(JIRA_CURRENT_RISK_ASSESSOR_TICKET).get_field(
-            JIRA_FINDING_TO_CUSTOM_FIELD.get("risk_assessor")[0]
-        )
-        if assessors is None or len(assessors) == 0:
-            raise RuntimeError(
-                f"risk assessor ticket {JIRA_CURRENT_RISK_ASSESSOR_TICKET} does not contain any risk assessors"
+        try:
+            incident_responder_tickets: List[Issue] = self.jira.search_issues(
+                f'"Epic Link" = {JIRA_INCIDENT_RESPONDER_EPIC} AND status != Done'
             )
-        logging.debug(f"read current risk assessors from ticket {JIRA_CURRENT_RISK_ASSESSOR_TICKET}: {assessors}")
-        return self.__jira_to_finding_users(assessors)
+            if incident_responder_tickets is None or len(incident_responder_tickets) == 0:
+                raise RuntimeError(
+                    f"found no open incident responders tickets under epic {JIRA_INCIDENT_RESPONDER_EPIC}"
+                )
+            incident_responder_ticket_keys: List[str] = [iss.key for iss in incident_responder_tickets]
+            assessors: Optional[List[JiraUser]] = list(
+                filter(lambda x: x is not None, map(lambda x: x.get_field("assignee"), incident_responder_tickets))
+            )
+            if assessors is None or len(assessors) == 0:
+                raise RuntimeError(f"found no assignees in incident responder tickets {incident_responder_ticket_keys}")
+            logging.debug(f"read current risk assessors from tickets {incident_responder_ticket_keys}: {assessors}")
+            return self.__jira_to_finding_users(assessors)
+        except RuntimeError:
+            logging.error(
+                f"could not determine risk assessors by ticket, reason:\n{traceback.format_exc()}\nusing default risk assessors instead"
+            )
+            return JIRA_DEFAULT_RISK_ASSESSORS
