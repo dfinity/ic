@@ -4,8 +4,7 @@ use ic_config::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    CanisterSettingsArgs, ErrorCode, PrincipalId, StateMachine, StateMachineConfig, SubnetId,
-    UserError,
+    CanisterSettingsArgs, ErrorCode, StateMachine, StateMachineConfig, UserError,
 };
 use ic_types::{ingress::WasmResult, Cycles, NumBytes};
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
@@ -462,58 +461,6 @@ fn test_manifest_computation_memory_expand() {
 
     let state_hash_3 = env.await_state_hash();
     assert_ne!(state_hash_2, state_hash_3);
-}
-
-/// Verifies that the state machine automatically removes stopped canisters
-/// outside of the assigned canister range.
-#[test]
-fn automatic_stopped_canister_removal() {
-    let env = StateMachine::new();
-
-    let canister_id_1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
-    let canister_id_2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
-    let canister_id_3 = env.install_canister_wat(TEST_CANISTER, vec![], None);
-
-    let own_subnet = env.get_subnet_id();
-    let new_subnet = SubnetId::from(PrincipalId::new_subnet_test_id(404));
-
-    env.prepare_canister_migrations(canister_id_1..=canister_id_1, own_subnet, new_subnet);
-    env.prepare_canister_migrations(canister_id_2..=canister_id_2, own_subnet, new_subnet);
-
-    env.reroute_canister_range(canister_id_1..=canister_id_1, new_subnet);
-    env.reroute_canister_range(canister_id_2..=canister_id_2, new_subnet);
-
-    env.execute_ingress(canister_id_1, "inc", vec![]).unwrap();
-    env.execute_ingress(canister_id_2, "inc", vec![]).unwrap();
-    env.execute_ingress(canister_id_3, "inc", vec![]).unwrap();
-
-    env.stop_canister(canister_id_1).unwrap();
-    env.stop_canister(canister_id_2).unwrap();
-
-    env.execute_ingress(canister_id_3, "inc", vec![]).unwrap();
-
-    // Canisters will not be removed if they have corresponding entries in canister migrations.
-    let user_error_1 = env
-        .execute_ingress(canister_id_1, "inc", vec![])
-        .unwrap_err();
-    assert_eq!(user_error_1.code(), ErrorCode::CanisterStopped);
-
-    let user_error_2 = env
-        .execute_ingress(canister_id_2, "inc", vec![])
-        .unwrap_err();
-    assert_eq!(user_error_2.code(), ErrorCode::CanisterStopped);
-
-    // After removing the canister migrations entries, canisters not the routing table will be deleted.
-    env.complete_canister_migrations(canister_id_1..=canister_id_1, vec![own_subnet, new_subnet]);
-    let user_error_1 = env
-        .execute_ingress(canister_id_1, "inc", vec![])
-        .unwrap_err();
-    assert_eq!(user_error_1.code(), ErrorCode::CanisterNotFound);
-
-    let user_error_2 = env
-        .execute_ingress(canister_id_2, "inc", vec![])
-        .unwrap_err();
-    assert_eq!(user_error_2.code(), ErrorCode::CanisterStopped);
 }
 
 /// Verifies that the state machine can install gzip-compressed canister

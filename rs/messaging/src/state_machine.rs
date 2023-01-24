@@ -1,10 +1,9 @@
 use crate::message_routing::MessageRoutingMetrics;
 use crate::routing::{demux::Demux, stream_builder::StreamBuilder};
-use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
-use ic_logger::{fatal, warn, ReplicaLogger};
+use ic_logger::{fatal, ReplicaLogger};
 use ic_metrics::Timer;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
@@ -17,7 +16,6 @@ mod tests;
 const PHASE_INDUCTION: &str = "induction";
 const PHASE_EXECUTION: &str = "execution";
 const PHASE_MESSAGE_ROUTING: &str = "message_routing";
-const PHASE_REMOVE_CANISTERS: &str = "remove_canisters_not_in_rt";
 const PHASE_TIME_OUT_REQUESTS: &str = "time_out_requests";
 
 pub(crate) trait StateMachine: Send {
@@ -63,45 +61,6 @@ impl StateMachineImpl {
             .with_label_values(&[phase])
             .observe(timer.elapsed());
     }
-
-    /// Removes stopped canisters that are missing from the routing table.
-    fn remove_canisters_not_in_routing_table(&self, state: &mut ReplicatedState) {
-        let _timer = self
-            .metrics
-            .process_batch_phase_duration
-            .with_label_values(&[PHASE_REMOVE_CANISTERS])
-            .start_timer();
-
-        let own_subnet_id = state.metadata.own_subnet_id;
-
-        let ids_to_remove =
-            ic_replicated_state::routing::find_canisters_to_remove(&self.log, state, own_subnet_id);
-
-        if ids_to_remove.is_empty() {
-            return;
-        }
-
-        for canister_id in ids_to_remove.iter() {
-            if let Some(canister_state) = state.canister_state(canister_id) {
-                if canister_state.status() != CanisterStatusType::Stopped {
-                    warn!(
-                        self.log,
-                        "Skipped removing canister {} in state {} that is not in the routing table",
-                        canister_id,
-                        canister_state.status()
-                    );
-                    continue;
-                }
-            }
-
-            warn!(
-                self.log,
-                "Removing canister {} that is not in the routing table", canister_id
-            );
-
-            state.canister_states.remove(canister_id);
-        }
-    }
 }
 
 impl StateMachine for StateMachineImpl {
@@ -122,8 +81,6 @@ impl StateMachine for StateMachineImpl {
             self.metrics
                 .observe_no_canister_allocation_range(&self.log, message);
         }
-
-        self.remove_canisters_not_in_routing_table(&mut state);
 
         if !state.consensus_queue.is_empty() {
             fatal!(
