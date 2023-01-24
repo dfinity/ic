@@ -898,36 +898,6 @@ impl ExecutionEnvironment {
                 Some((res, msg.take_cycles()))
             }
 
-            Ok(Ic00Method::BitcoinGetBalance) => {
-                let cycles = msg.take_cycles();
-                let res = crate::bitcoin::get_balance(msg.method_payload(), &mut state, cycles);
-                Some(res)
-            }
-
-            Ok(Ic00Method::BitcoinGetUtxos) => {
-                let cycles = msg.take_cycles();
-                let res = crate::bitcoin::get_utxos(msg.method_payload(), &mut state, cycles);
-                Some(res)
-            }
-
-            Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
-                let cycles = msg.take_cycles();
-                let res = crate::bitcoin::get_current_fee_percentiles(
-                    msg.method_payload(),
-                    &mut state,
-                    cycles,
-                );
-                Some(res)
-            }
-
-            Ok(Ic00Method::BitcoinSendTransaction) => {
-                let cycles = msg.take_cycles();
-                let res =
-                    crate::bitcoin::send_transaction(msg.method_payload(), &mut state, cycles);
-
-                Some(res)
-            }
-
             Ok(Ic00Method::BitcoinSendTransactionInternal) => match &msg {
                 CanisterCall::Request(request) => {
                     match crate::bitcoin::send_transaction_internal(
@@ -964,6 +934,20 @@ impl ExecutionEnvironment {
             }
             .map(|payload| (payload, msg.take_cycles())),
 
+            Ok(Ic00Method::BitcoinGetBalance)
+            | Ok(Ic00Method::BitcoinGetUtxos)
+            | Ok(Ic00Method::BitcoinSendTransaction)
+            | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
+                // Code path can only be triggered if there are no bitcoin canisters to route
+                // the request to.
+                Some((
+                    Err(UserError::new(
+                        ErrorCode::CanisterRejectedMessage,
+                        "No bitcoin canisters available.",
+                    )),
+                    msg.take_cycles(),
+                ))
+            }
             Err(ParseError::VariantNotFound) => {
                 let res = Err(UserError::new(
                     ErrorCode::CanisterMethodNotFound,

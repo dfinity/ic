@@ -7,7 +7,6 @@ edition = "2021"
 candid = "0.8.1"
 hex = "0.4.2"
 ic-base-types = { path = "../types/base_types" }
-ic-btc-canister = { path = "../bitcoin/canister" }
 ic-btc-types = { path = "../bitcoin/types/public" }
 ic-canister-sandbox-replica-controller = { path = "../canister_sandbox/replica_controller" }
 ic-config = { path = "../config" }

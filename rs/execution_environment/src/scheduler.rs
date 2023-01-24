@@ -7,7 +7,6 @@ use crate::{
     metrics::MeasurementScope,
     util::{self, process_responses},
 };
-use ic_btc_canister::BitcoinCanister;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
@@ -22,8 +21,8 @@ use ic_interfaces::{
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    bitcoin_state::BitcoinState, canister_state::NextExecution, testing::ReplicatedStateTesting,
-    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
+    canister_state::NextExecution, testing::ReplicatedStateTesting, CanisterState, CanisterStatus,
+    ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
@@ -48,10 +47,6 @@ use scheduler_metrics::*;
 mod round_schedule;
 pub use round_schedule::RoundSchedule;
 use round_schedule::*;
-
-/// Maximum number of allowed bitcoin requests per round. If this number is
-/// reached we stop executing more bitcoin requests for this round.
-const MAX_BITCOIN_REQUESTS_PER_ROUND: usize = 5;
 
 /// Only log potentially spammy messages this often (in rounds). With a block
 /// rate around 1.0, this will result in logging about once every 10 minutes.
@@ -99,7 +94,6 @@ pub(crate) struct SchedulerImpl {
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     exec_env: Arc<ExecutionEnvironment>,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    bitcoin_canister: Arc<BitcoinCanister>,
     metrics: Arc<SchedulerMetrics>,
     log: ReplicaLogger,
     thread_pool: RefCell<scoped_threadpool::Pool>,
@@ -340,7 +334,6 @@ impl SchedulerImpl {
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
         exec_env: Arc<ExecutionEnvironment>,
         cycles_account_manager: Arc<CyclesAccountManager>,
-        bitcoin_canister: Arc<BitcoinCanister>,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
         rate_limiting_of_heap_delta: FlagStatus,
@@ -355,7 +348,6 @@ impl SchedulerImpl {
             ingress_history_writer,
             exec_env,
             cycles_account_manager,
-            bitcoin_canister,
             metrics: Arc::new(SchedulerMetrics::new(metrics_registry)),
             log,
             rate_limiting_of_heap_delta,
@@ -432,8 +424,6 @@ impl SchedulerImpl {
         registry_settings: &RegistryExecutionSettings,
         ecdsa_subnet_public_keys: &BTreeMap<EcdsaKeyId, MasterEcdsaPublicKey>,
     ) -> ReplicatedState {
-        let mut total_bitcoin_requests = 0;
-
         loop {
             let mut available_subnet_messages = false;
             let mut loop_detector = state.subnet_queues_loop_detector();
@@ -457,10 +447,6 @@ impl SchedulerImpl {
                     &self.config,
                     &msg,
                 );
-
-                if is_bitcoin_request(&msg) {
-                    total_bitcoin_requests += 1;
-                }
 
                 let instructions_before = round_limits.instructions;
                 let (new_state, message_instructions) = self.exec_env.execute_subnet_message(
@@ -490,20 +476,6 @@ impl SchedulerImpl {
                 }
 
                 if round_limits.instructions <= RoundInstructions::from(0) {
-                    break;
-                }
-
-                // Stop after executing at most `MAX_BITCOIN_REQUESTS_PER_ROUND`.
-                //
-                // Note that this is a rather crude measure to ensure that we
-                // do not exceed a "reasonable" amount of work in a round. We
-                // rely on the assumption that no other subnet messages can
-                // exist on bitcoin enabled subnets, so blocking the subnet
-                // message progress does not affect other types of messages.
-                // On the other hand, on non-bitcoin enabled subnets, there
-                // should be no bitcoin related requests, so this should be
-                // a no-op for those subnets.
-                if total_bitcoin_requests >= MAX_BITCOIN_REQUESTS_PER_ROUND {
                     break;
                 }
             }
@@ -1351,20 +1323,6 @@ impl Scheduler for SchedulerImpl {
             }
         }
 
-        // Invoke the heartbeat of the bitcoin canister.
-        {
-            let bitcoin_state: BitcoinState = state.take_bitcoin_state();
-            let bitcoin_state = {
-                let _timer = self
-                    .metrics
-                    .round_bitcoin_canister_heartbeat_duration
-                    .start_timer();
-                self.bitcoin_canister
-                    .heartbeat(bitcoin_state, state.metadata.own_subnet_features.bitcoin())
-            };
-            state.put_bitcoin_state(bitcoin_state);
-        }
-
         // Ideally we would split the per-round limit between subnet messages and
         // canister messages, so that their sum cannot exceed the limit. That would
         // make the limit for canister messages variable, which would break assumptions
@@ -2097,43 +2055,5 @@ fn get_instructions_limits_for_subnet_message(
             ),
         },
         Err(_) => default_limits,
-    }
-}
-
-fn is_bitcoin_request(msg: &CanisterMessage) -> bool {
-    use Ic00Method::*;
-
-    match msg {
-        CanisterMessage::Ingress(_) => false,
-        CanisterMessage::Request(req) => match Ic00Method::from_str(&req.method_name) {
-            Ok(method) => match method {
-                BitcoinGetBalance
-                | BitcoinGetUtxos
-                | BitcoinSendTransaction
-                | BitcoinSendTransactionInternal
-                | BitcoinGetSuccessors
-                | BitcoinGetCurrentFeePercentiles => true,
-                CanisterStatus
-                | CreateCanister
-                | DeleteCanister
-                | DepositCycles
-                | ECDSAPublicKey
-                | RawRand
-                | SetController
-                | HttpRequest
-                | SetupInitialDKG
-                | SignWithECDSA
-                | ComputeInitialEcdsaDealings
-                | StartCanister
-                | StopCanister
-                | UninstallCode
-                | UpdateSettings
-                | ProvisionalCreateCanisterWithCycles
-                | ProvisionalTopUpCanister
-                | InstallCode => false,
-            },
-            Err(_) => false,
-        },
-        CanisterMessage::Response(_) => false,
     }
 }

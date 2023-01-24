@@ -82,7 +82,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/backup/                             @dfinity-lab/teams/consensus-owners
 /rs/bazelifier/                         @dfinity-lab/teams/idx
 /rs/bitcoin/adapter/                    @dfinity-lab/teams/networking-team
-/rs/bitcoin/canister/                   @dfinity-lab/teams/execution-owners
 /rs/bitcoin/ckbtc/                      @dfinity-lab/teams/financial-integrations
 /rs/bitcoin/client/                     @dfinity-lab/teams/networking-team
 /rs/bitcoin/consensus/                  @dfinity-lab/teams/execution-owners
