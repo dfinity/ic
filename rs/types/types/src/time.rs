@@ -93,6 +93,50 @@ impl Time {
     fn from_duration(t: Duration) -> Self {
         Time(t.as_nanos() as u64)
     }
+
+    /// Checked `Time` addition. Computes `self + rhs`, returning [`None`]
+    /// if overflow occurred.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// use ic_types::Time;
+    ///
+    /// assert_eq!(Time::from_nanos_since_unix_epoch(0).checked_add(Time::from_nanos_since_unix_epoch(1)), Some(Time::from_nanos_since_unix_epoch(1)));
+    /// assert_eq!(Time::from_nanos_since_unix_epoch(1).checked_add(Time::from_nanos_since_unix_epoch(u64::MAX)), None);
+    /// ```
+    pub const fn checked_add(self, rhs: Time) -> Option<Time> {
+        if let Some(result) = self.0.checked_add(rhs.0) {
+            Some(Time(result))
+        } else {
+            None
+        }
+    }
+
+    /// Checked `Time` addition with a `Duration`. Computes `self + rhs`, returning [`None`]
+    /// if overflow occurred.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use ic_types::Time;
+    ///
+    /// assert_eq!(Time::from_nanos_since_unix_epoch(0).checked_add_duration(Duration::from_nanos(1)), Some(Time::from_nanos_since_unix_epoch(1)));
+    /// assert_eq!(Time::from_nanos_since_unix_epoch(0).checked_add_duration(Duration::MAX), None);
+    /// assert_eq!(Time::from_nanos_since_unix_epoch(1).checked_add_duration(Duration::from_nanos(u64::MAX)), None);
+    /// ```
+    pub fn checked_add_duration(self, rhs: Duration) -> Option<Time> {
+        if let Ok(rhs_time) = Time::try_from(rhs) {
+            self.checked_add(rhs_time)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Error, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

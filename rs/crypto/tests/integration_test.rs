@@ -28,6 +28,7 @@ use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys, KeyPurpose};
+use ic_types::time::GENESIS;
 use ic_types::{RegistryVersion, Time};
 use ic_types_test_utils::ids::node_test_id;
 use openssl::asn1::Asn1Time;
@@ -1341,6 +1342,55 @@ fn should_return_registration_needed_from_check_keys_with_registry_if_local_idkg
         result,
         Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(missing_pk))
           if missing_pk == new_idkg_dealing_encryption_key_to_register
+    );
+}
+
+#[test]
+fn should_not_rotate_key_when_key_rotation_period_too_large_to_handle() {
+    let misconfigured_large_rotation_period = Duration::MAX;
+    let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+    let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+    let in_memory_logger = InMemoryReplicaLogger::new();
+    let crypto_component = TempCryptoComponent::builder()
+        .with_keys(NodeKeysToGenerate::all())
+        .with_registry_client_and_data(
+            Arc::clone(&registry_client) as Arc<_>,
+            Arc::clone(&registry_data) as Arc<_>,
+        )
+        .with_node_id(node_id())
+        .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
+            subnet_id(),
+            Some(node_id()),
+            Some(misconfigured_large_rotation_period),
+        ))
+        .with_logger(ReplicaLogger::from(&in_memory_logger))
+        .build();
+
+    let mut idkg_dealing_encryption_pk = crypto_component
+        .current_node_public_keys()
+        .expect("Failed to retrieve node public keys")
+        .idkg_dealing_encryption_public_key
+        .expect("no idkg dealing encryption key set");
+    idkg_dealing_encryption_pk.timestamp = Some(GENESIS.as_millis_since_unix_epoch());
+
+    add_public_key_to_registry(
+        idkg_dealing_encryption_pk,
+        crypto_component.get_node_id(),
+        KeyPurpose::IDkgMEGaEncryption,
+        Arc::clone(&registry_data),
+        REG_V2,
+    );
+    registry_client.reload();
+
+    let result = crypto_component.check_keys_with_registry(REG_V2);
+    let logs = in_memory_logger.drain_logs();
+
+    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
+    LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+        &Level::Warning,
+        "The addition of the key's registration time (2021-05-06 19:17:10 UTC) \
+        with the key rotation period (18446744073709551.615s) would overflow a u64 of nanoseconds (year 2554). \
+        Is the key rotation period misconfigured?",
     );
 }
 
