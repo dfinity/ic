@@ -101,6 +101,9 @@ pub const SAMPLE_CONFIG: &str = r#"
     artifact_pool: {
         // The directory that should be used to persist consensus artifacts.
         consensus_pool_path: "/tmp/ic_consensus_pool",
+        // usize::MAX on 64-bit
+        ingress_pool_max_count: 9223372036854775807,
+        ingress_pool_max_bytes: 9223372036854775807,
         backup: {
             // The directory for the blockchain backup.
             spool_path: "/tmp/ic_backup/",

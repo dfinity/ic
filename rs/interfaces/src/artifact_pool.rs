@@ -1,6 +1,6 @@
 //! The artifact pool public interface.
 use derive_more::From;
-use ic_types::{replica_version::ReplicaVersion, NodeId, Time};
+use ic_types::{replica_version::ReplicaVersion, CountBytes, NodeId, Time};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, From)]
@@ -37,6 +37,11 @@ pub struct ValidatedArtifact<T> {
     pub timestamp: Time,
 }
 
+impl<T: CountBytes> CountBytes for ValidatedArtifact<T> {
+    fn count_bytes(&self) -> usize {
+        self.msg.count_bytes() + self.timestamp.count_bytes()
+    }
+}
 impl<T> ValidatedArtifact<T> {
     pub fn map<U, F>(self, f: F) -> ValidatedArtifact<U>
     where
