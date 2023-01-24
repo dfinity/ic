@@ -264,6 +264,7 @@ mod idkg_retain_active_keys {
     use crate::vault::local_csp_vault::idkg::idkg_dealing_encryption_pk_to_proto;
     use crate::vault::local_csp_vault::test_utils::temp_local_csp_server::TempLocalCspVault;
     use crate::LocalCspVault;
+    use crate::SecretKeyStore;
     use assert_matches::assert_matches;
     use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
     use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint};
@@ -272,6 +273,8 @@ mod idkg_retain_active_keys {
     use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
     use mockall::predicate::eq;
     use mockall::Sequence;
+    use rand::CryptoRng;
+    use rand::Rng;
     use std::collections::BTreeSet;
 
     #[test]
@@ -317,18 +320,10 @@ mod idkg_retain_active_keys {
     #[test]
     fn should_retain_only_active_public_keys() {
         let temp_vault = TempLocalCspVault::new_with_rng(reproducible_rng());
-        let mut rotated_public_keys = Vec::new();
         let number_of_keys = 5;
         let oldest_public_key_index = 2;
-        for _ in 0..number_of_keys {
-            rotated_public_keys.push(
-                temp_vault
-                    .vault
-                    .idkg_gen_dealing_encryption_key_pair()
-                    .expect("error generating IDKG key pair"),
-            );
-        }
-        assert_eq!(rotated_public_keys.len(), number_of_keys);
+        let mut rotated_public_keys =
+            generate_idkg_dealing_encryption_key_pairs(&temp_vault.vault, number_of_keys);
 
         temp_vault
             .vault
@@ -356,18 +351,10 @@ mod idkg_retain_active_keys {
     #[test]
     fn should_retain_only_active_secret_keys() {
         let temp_vault = TempLocalCspVault::new_with_rng(reproducible_rng());
-        let mut rotated_public_keys = Vec::new();
         let number_of_keys = 5;
         let oldest_public_key_index = 2;
-        for _ in 0..number_of_keys {
-            rotated_public_keys.push(
-                temp_vault
-                    .vault
-                    .idkg_gen_dealing_encryption_key_pair()
-                    .expect("error generating IDKG key pair"),
-            );
-        }
-        assert_eq!(rotated_public_keys.len(), number_of_keys);
+        let rotated_public_keys =
+            generate_idkg_dealing_encryption_key_pairs(&temp_vault.vault, number_of_keys);
 
         temp_vault
             .vault
@@ -438,5 +425,26 @@ mod idkg_retain_active_keys {
 
     fn an_idkg_public_key() -> MEGaPublicKey {
         MEGaPublicKey::new(EccPoint::generator_g(EccCurveType::K256).expect("generator wrong"))
+    }
+
+    fn generate_idkg_dealing_encryption_key_pairs<
+        R: Rng + CryptoRng,
+        S: SecretKeyStore,
+        C: SecretKeyStore,
+        P: PublicKeyStore,
+    >(
+        vault: &LocalCspVault<R, S, C, P>,
+        number_of_key_pairs_to_generate: usize,
+    ) -> Vec<MEGaPublicKey> {
+        let mut rotated_public_keys = Vec::new();
+        for _ in 0..number_of_key_pairs_to_generate {
+            rotated_public_keys.push(
+                vault
+                    .idkg_gen_dealing_encryption_key_pair()
+                    .expect("error generating IDKG key pair"),
+            );
+        }
+        assert_eq!(rotated_public_keys.len(), number_of_key_pairs_to_generate);
+        rotated_public_keys
     }
 }

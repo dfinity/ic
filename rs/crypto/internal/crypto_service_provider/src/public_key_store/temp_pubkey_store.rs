@@ -3,6 +3,7 @@ use crate::public_key_store::PublicKeyGenerationTimestamps;
 use crate::public_key_store::{
     PublicKeyAddError, PublicKeyRetainError, PublicKeySetOnceError, PublicKeyStore,
 };
+use ic_logger::replica_logger::no_op_logger;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use std::fs;
 use std::fs::Permissions;
@@ -32,7 +33,8 @@ impl TempPublicKeyStore {
             )
         });
         let public_key_store_file = "temp_public_keys.pb";
-        let store = ProtoPublicKeyStore::open(temp_dir.path(), public_key_store_file);
+        let store =
+            ProtoPublicKeyStore::open(temp_dir.path(), public_key_store_file, no_op_logger());
         TempPublicKeyStore {
             store,
             _temp_dir: temp_dir,

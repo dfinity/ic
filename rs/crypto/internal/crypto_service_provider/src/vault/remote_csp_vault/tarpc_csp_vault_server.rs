@@ -554,8 +554,11 @@ impl TarpcCspVaultServerImpl<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, Pr
             CANISTER_SKS_DATA_FILENAME,
             Some(new_logger!(&logger)),
         );
-        let public_key_store =
-            ProtoPublicKeyStore::open(key_store_dir, PUBLIC_KEY_STORE_DATA_FILENAME);
+        let public_key_store = ProtoPublicKeyStore::open(
+            key_store_dir,
+            PUBLIC_KEY_STORE_DATA_FILENAME,
+            new_logger!(&logger),
+        );
         let local_csp_server = Arc::new(LocalCspVault::new(
             node_secret_key_store,
             canister_secret_key_store,
