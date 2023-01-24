@@ -178,7 +178,7 @@ type Event = variant {
         requests : vec nat64;
         txid : blob;
         utxos : vec Utxo;
-        change_output : opt record { vout : nat32; value : nat32 };
+        change_output : opt record { vout : nat32; value : nat64 };
         submitted_at : nat64;
     };
     confirmed_transaction : record { txid : blob };
