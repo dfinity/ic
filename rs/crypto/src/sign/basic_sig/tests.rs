@@ -2,11 +2,13 @@
 
 use super::*;
 use crate::common::test_utils::crypto_component::crypto_component_with;
+use crate::common::test_utils::crypto_component::crypto_component_with_csp;
+use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
 use crate::sign::tests::*;
 use assert_matches::assert_matches;
 use ic_crypto_internal_csp::key_id::KeyId;
-use ic_crypto_internal_csp_test_utils::public_key_store::MockPublicKeyStore;
-use ic_crypto_internal_csp_test_utils::secret_key_store_test_utils::MockSecretKeyStore;
+use ic_crypto_internal_csp::public_key_store::temp_pubkey_store::TempPublicKeyStore;
+use ic_crypto_internal_csp::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use ic_types::crypto::{AlgorithmId, SignableMock, DOMAIN_IC_REQUEST};
 use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
@@ -22,27 +24,26 @@ mod test_basic_sign {
 
         #[test]
         fn should_fail_with_key_not_found_if_public_key_not_found_in_registry() {
-            let crypto = crypto_component_with(
+            let crypto = crypto_component_with_csp(
+                MockAllCryptoServiceProvider::new(),
                 registry_returning_none(),
-                MockSecretKeyStore::new(),
-                MockPublicKeyStore::new(),
             );
 
             let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V1);
-            assert!(result.unwrap_err().is_public_key_not_found());
+
+            assert_matches!(result, Err(CryptoError::PublicKeyNotFound { .. }));
         }
 
         #[test]
-        fn should_fail_with_registryerror_if_registry_version_too_new() {
-            let crypto = crypto_component_with(
+        fn should_fail_with_registry_error_if_registry_version_too_new() {
+            let crypto = crypto_component_with_csp(
+                MockAllCryptoServiceProvider::new(),
                 registry_returning(RegistryClientError::VersionNotAvailable { version: REG_V2 }),
-                MockSecretKeyStore::new(),
-                MockPublicKeyStore::new(),
             );
 
             let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V2);
 
-            assert!(result.unwrap_err().is_registry_client_error());
+            assert_matches!(result, Err(CryptoError::RegistryClient(_)));
         }
 
         #[test]
@@ -56,8 +57,8 @@ mod test_basic_sign {
             );
             let crypto = crypto_component_with(
                 registry_with(key_record),
-                secret_key_store_returning_none(),
-                MockPublicKeyStore::new(),
+                TempSecretKeyStore::new(),
+                TempPublicKeyStore::new(),
             );
 
             let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V2);
@@ -87,10 +88,10 @@ mod test_basic_sign {
             let crypto = crypto_component_with(
                 registry_with(key_record),
                 secret_key_store,
-                MockPublicKeyStore::new(),
+                TempPublicKeyStore::new(),
             );
 
-            assert_eq!(crypto.sign_basic(&msg, NODE_1, REG_V2).unwrap(), sig);
+            assert_matches!(crypto.sign_basic(&msg, NODE_1, REG_V2), Ok(actual_sig) if actual_sig == sig);
         }
     }
 }
@@ -104,24 +105,25 @@ mod test_basic_sig_verification {
 
     mod verify_common {
         use super::*;
+        use crate::common::test_utils::crypto_component::crypto_component_with_csp;
         use crate::sign::tests::REG_V2;
         use ic_types_test_utils::ids::{NODE_1, NODE_2};
 
         #[test]
         fn should_fail_with_key_not_found_if_public_key_not_found_in_registry() {
             let (_, _, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
-            let crypto = crypto_component_with(
+            let crypto = crypto_component_with_csp(
+                MockAllCryptoServiceProvider::new(),
                 registry_returning_none(),
-                MockSecretKeyStore::new(),
-                MockPublicKeyStore::new(),
             );
 
             let result = crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V1);
-            assert!(result.unwrap_err().is_public_key_not_found());
+
+            assert_matches!(result, Err(CryptoError::PublicKeyNotFound { .. }));
         }
 
         #[test]
-        fn should_verify_without_using_secret_key_store() {
+        fn should_delegate_to_csp_to_verify() {
             let (_, pk, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
             let key_record = node_signing_record_with(
                 NODE_1,
@@ -129,11 +131,21 @@ mod test_basic_sig_verification {
                 KeyId::from(KEY_ID),
                 REG_V2,
             );
-            let crypto = crypto_component_with(
-                registry_with(key_record),
-                secret_key_store_panicking_on_usage(),
-                MockPublicKeyStore::new(),
-            );
+            let mut csp = MockAllCryptoServiceProvider::new();
+            let msg_clone = msg.clone();
+            let expected_signature = SigConverter::for_target(AlgorithmId::Ed25519)
+                .try_from_basic(&sig)
+                .expect("invalid signature");
+            csp.expect_verify()
+                .times(1)
+                .withf(move |signature, message_bytes, algorithm_id, public_key| {
+                    *signature == expected_signature
+                        && *message_bytes == msg_clone.as_signed_bytes()
+                        && *algorithm_id == AlgorithmId::Ed25519
+                        && *public_key == pk
+                })
+                .return_const(Ok(()));
+            let crypto = crypto_component_with_csp(csp, registry_with(key_record));
 
             assert!(crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2).is_ok());
         }
@@ -150,10 +162,9 @@ mod test_basic_sig_verification {
 
             let mut signatures = BTreeMap::new();
             signatures.insert(NODE_1, &sig);
-            let crypto = crypto_component_with(
+            let crypto = crypto_component_with_csp(
+                MockAllCryptoServiceProvider::new(),
                 registry_with(key_record),
-                secret_key_store_panicking_on_usage(),
-                MockPublicKeyStore::new(),
             );
 
             assert!(crypto.combine_basic_sig(signatures, REG_V2).is_ok());
@@ -180,10 +191,9 @@ mod test_basic_sig_verification {
             let mut signatures = BTreeMap::new();
             signatures.insert(NODE_1, &sig_1);
             signatures.insert(NODE_2, &sig_2);
-            let crypto = crypto_component_with(
+            let crypto = crypto_component_with_csp(
+                MockAllCryptoServiceProvider::new(),
                 registry_with_records(vec![key_record_1, key_record_2]),
-                secret_key_store_panicking_on_usage(),
-                MockPublicKeyStore::new(),
             );
 
             assert!(crypto.combine_basic_sig(signatures, REG_V2).is_ok());
@@ -201,10 +211,9 @@ mod test_basic_sig_verification {
 
             let signatures: BTreeMap<NodeId, &BasicSigOf<SignableMock>> = BTreeMap::new();
 
-            let crypto = crypto_component_with(
+            let crypto = crypto_component_with_csp(
+                MockAllCryptoServiceProvider::new(),
                 registry_with(key_record),
-                secret_key_store_panicking_on_usage(),
-                MockPublicKeyStore::new(),
             );
 
             assert_matches!(
@@ -228,8 +237,8 @@ mod test_basic_sig_verification {
             signatures.insert(NODE_1, &sig);
             let crypto = crypto_component_with(
                 registry_with(key_record),
-                secret_key_store_panicking_on_usage(),
-                MockPublicKeyStore::new(),
+                TempSecretKeyStore::new(),
+                TempPublicKeyStore::new(),
             );
 
             let sig_batch = crypto.combine_basic_sig(signatures, REG_V2);
@@ -265,13 +274,13 @@ mod test_basic_sig_verification {
             let crypto_1 = crypto_component_with(
                 registry_with_records(registry_records.clone()),
                 sks_1,
-                MockPublicKeyStore::new(),
+                TempPublicKeyStore::new(),
             );
             let sks_2 = secret_key_store_with(key_id_2, sk_2);
             let crypto_2 = crypto_component_with(
                 registry_with_records(registry_records),
                 sks_2,
-                MockPublicKeyStore::new(),
+                TempPublicKeyStore::new(),
             );
 
             let mut signatures = BTreeMap::new();
@@ -310,8 +319,8 @@ mod test_basic_sig_verification {
             let registry_records = vec![key_record_1, key_record_2];
             let crypto = crypto_component_with(
                 registry_with_records(registry_records),
-                secret_key_store_panicking_on_usage(),
-                MockPublicKeyStore::new(),
+                TempSecretKeyStore::new(),
+                TempPublicKeyStore::new(),
             );
             let mut signatures = BTreeMap::new();
             assert!(crypto
@@ -347,10 +356,9 @@ mod test_basic_sig_verification {
             let empty_batch = BasicSignatureBatch {
                 signatures_map: empty_signatures,
             };
-            let crypto = crypto_component_with(
+            let crypto = crypto_component_with_csp(
+                MockAllCryptoServiceProvider::new(),
                 registry_with(key_record),
-                secret_key_store_panicking_on_usage(),
-                MockPublicKeyStore::new(),
             );
 
             assert_matches!(
@@ -379,8 +387,8 @@ mod test_basic_sig_verification {
             );
             let crypto = crypto_component_with(
                 registry_with(key_record),
-                MockSecretKeyStore::new(),
-                MockPublicKeyStore::new(),
+                TempSecretKeyStore::new(),
+                TempPublicKeyStore::new(),
             );
 
             assert!(crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2).is_ok());
@@ -399,8 +407,8 @@ mod test_basic_sig_verification {
             );
             let crypto = crypto_component_with(
                 registry_with(key_record),
-                MockSecretKeyStore::new(),
-                MockPublicKeyStore::new(),
+                TempSecretKeyStore::new(),
+                TempPublicKeyStore::new(),
             );
 
             let result = crypto.verify_basic_sig(&wrong_sig, &msg, NODE_1, REG_V2);
@@ -421,8 +429,8 @@ mod test_basic_sig_verification {
             );
             let crypto = crypto_component_with(
                 registry_with(key_record),
-                MockSecretKeyStore::new(),
-                MockPublicKeyStore::new(),
+                TempSecretKeyStore::new(),
+                TempPublicKeyStore::new(),
             );
 
             let result = crypto.verify_basic_sig(&sig, &wrong_msg, NODE_1, REG_V2);
@@ -443,8 +451,8 @@ mod test_basic_sig_verification {
             );
             let crypto = crypto_component_with(
                 registry_with(key_record),
-                MockSecretKeyStore::new(),
-                MockPublicKeyStore::new(),
+                TempSecretKeyStore::new(),
+                TempPublicKeyStore::new(),
             );
 
             let result = crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2);
@@ -461,10 +469,9 @@ mod test_basic_sig_verification {
                 KeyId::from(KEY_ID),
                 REG_V2,
             );
-            let crypto = crypto_component_with(
+            let crypto = crypto_component_with_csp(
+                MockAllCryptoServiceProvider::new(),
                 registry_with(key_record),
-                MockSecretKeyStore::new(),
-                MockPublicKeyStore::new(),
             );
             let incompatible_sig = BasicSigOf::new(BasicSig(vec![1, 2, 3]));
 
@@ -484,7 +491,7 @@ mod test_basic_sig_verification {
         //         node_signing_record_with(NODE_1, vec![1, 2, 3],
         // KEY_ID, REG_V2);     let crypto =
         //         crypto_component_with(registry_with(invalid_key_rec),
-        // MockSecretKeyStore::new(), MockPublicKeyStore::new());
+        // MockSecretKeyStore::new(), TempPublicKeyStore::new());
         //
         //     let result = crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2);
         //
@@ -495,7 +502,9 @@ mod test_basic_sig_verification {
 
 mod test_request_id_sig_verification {
     use super::*;
+    use crate::common::test_utils::crypto_component::crypto_component_with_csp;
     use proptest::prelude::*;
+
     const REQUEST_SIG_ALGORITHMS: &[AlgorithmId] = &[AlgorithmId::Ed25519, AlgorithmId::EcdsaP256];
 
     proptest! {
@@ -510,7 +519,7 @@ mod test_request_id_sig_verification {
         ) {
             let request_id = request_id();
             let (sig, _pk) = request_id_signature_and_public_key(&request_id, AlgorithmId::Ed25519);
-            let crypto = crypto_component_with(dummy_registry(), dummy_secret_key_store(), MockPublicKeyStore::new());
+            let crypto = crypto_component_with_csp(MockAllCryptoServiceProvider::new(), dummy_registry());
             let err = crypto
                 .verify_basic_sig_by_public_key(&sig, &request_id, &not_supported_user_pubkey)
                 .unwrap_err();
@@ -525,8 +534,8 @@ mod test_request_id_sig_verification {
         let (sig, pk) = request_id_signature_and_public_key(&request_id, AlgorithmId::Ed25519);
         let crypto = crypto_component_with(
             registry_panicking_on_usage(),
-            dummy_secret_key_store(),
-            MockPublicKeyStore::new(),
+            TempSecretKeyStore::new(),
+            TempPublicKeyStore::new(),
         );
 
         assert!(crypto
@@ -535,14 +544,25 @@ mod test_request_id_sig_verification {
     }
 
     #[test]
-    fn should_verify_without_using_secret_key_store() {
+    fn should_delegate_to_csp_for_verify_basic_sig_by_public_key() {
         let request_id = request_id();
         let (sig, pk) = request_id_signature_and_public_key(&request_id, AlgorithmId::Ed25519);
-        let crypto = crypto_component_with(
-            dummy_registry(),
-            secret_key_store_panicking_on_usage(),
-            MockPublicKeyStore::new(),
-        );
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let msg_clone = request_id.clone();
+        let expected_signature = SigConverter::for_target(AlgorithmId::Ed25519)
+            .try_from_basic(&sig)
+            .expect("invalid signature");
+        let expected_public_key = CspPublicKey::try_from(&pk).expect("invalid public key");
+        csp.expect_verify()
+            .times(1)
+            .withf(move |signature, message_bytes, algorithm_id, public_key| {
+                *signature == expected_signature
+                    && *message_bytes == msg_clone.as_signed_bytes()
+                    && *algorithm_id == AlgorithmId::Ed25519
+                    && *public_key == expected_public_key
+            })
+            .return_const(Ok(()));
+        let crypto = crypto_component_with_csp(csp, dummy_registry());
 
         assert!(crypto
             .verify_basic_sig_by_public_key(&sig, &request_id, &pk)
@@ -558,8 +578,8 @@ mod test_request_id_sig_verification {
             let (sig, pk) = request_id_signature_and_public_key(&request_id, *alg_id);
             let crypto = crypto_component_with(
                 dummy_registry(),
-                dummy_secret_key_store(),
-                MockPublicKeyStore::new(),
+                TempSecretKeyStore::new(),
+                TempPublicKeyStore::new(),
             );
 
             assert!(crypto
@@ -577,8 +597,8 @@ mod test_request_id_sig_verification {
         );
         let crypto = crypto_component_with(
             dummy_registry(),
-            dummy_secret_key_store(),
-            MockPublicKeyStore::new(),
+            TempSecretKeyStore::new(),
+            TempPublicKeyStore::new(),
         );
         for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
             let request_id = request_id();
@@ -597,8 +617,8 @@ mod test_request_id_sig_verification {
     fn should_fail_to_verify_under_wrong_signature() {
         let crypto = crypto_component_with(
             dummy_registry(),
-            dummy_secret_key_store(),
-            MockPublicKeyStore::new(),
+            TempSecretKeyStore::new(),
+            TempPublicKeyStore::new(),
         );
         for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
             let request_id = request_id_1();
@@ -615,8 +635,8 @@ mod test_request_id_sig_verification {
     fn should_fail_to_verify_under_wrong_request_id() {
         let crypto = crypto_component_with(
             dummy_registry(),
-            dummy_secret_key_store(),
-            MockPublicKeyStore::new(),
+            TempSecretKeyStore::new(),
+            TempPublicKeyStore::new(),
         );
         for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
             let request_id = request_id_1();
@@ -633,8 +653,8 @@ mod test_request_id_sig_verification {
     fn should_fail_to_verify_under_wrong_public_key() {
         let crypto = crypto_component_with(
             dummy_registry(),
-            dummy_secret_key_store(),
-            MockPublicKeyStore::new(),
+            TempSecretKeyStore::new(),
+            TempPublicKeyStore::new(),
         );
         for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
             let request_id = request_id_1();
@@ -651,8 +671,8 @@ mod test_request_id_sig_verification {
     fn should_fail_to_verify_under_wrong_domain_separator() {
         let crypto = crypto_component_with(
             dummy_registry(),
-            dummy_secret_key_store(),
-            MockPublicKeyStore::new(),
+            TempSecretKeyStore::new(),
+            TempPublicKeyStore::new(),
         );
         for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
             let wrong_domain_separator = b"wrong_domain_separator";
@@ -672,11 +692,8 @@ mod test_request_id_sig_verification {
 
     #[test]
     fn should_fail_with_malformed_signature_if_signature_has_incompatible_length() {
-        let crypto = crypto_component_with(
-            dummy_registry(),
-            dummy_secret_key_store(),
-            MockPublicKeyStore::new(),
-        );
+        let crypto =
+            crypto_component_with_csp(MockAllCryptoServiceProvider::new(), dummy_registry());
         for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
             let request_id = request_id();
             let (_sig, pk) = request_id_signature_and_public_key(&request_id, *alg_id);
@@ -691,8 +708,8 @@ mod test_request_id_sig_verification {
     fn should_fail_with_malformed_public_key_if_public_key_has_incompatible_length() {
         let crypto = crypto_component_with(
             dummy_registry(),
-            dummy_secret_key_store(),
-            MockPublicKeyStore::new(),
+            TempSecretKeyStore::new(),
+            TempPublicKeyStore::new(),
         );
         for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
             let request_id = request_id();
