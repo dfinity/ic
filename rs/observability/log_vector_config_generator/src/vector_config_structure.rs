@@ -9,20 +9,25 @@ use std::string::ParseError;
 use regex::Regex;
 use service_discovery::{job_types::JobType, TargetGroup};
 
-pub struct VectorConfigBuilderImpl {}
+pub struct VectorConfigBuilderImpl {
+    batch_size: u64,
+}
 
 impl VectorConfigBuilderImpl {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(batch_size: u64) -> Self {
+        Self { batch_size }
     }
 }
 impl VectorConfigBuilder for VectorConfigBuilderImpl {
     fn build(&self, target_groups: BTreeSet<TargetGroup>, _job: JobType) -> VectorConfigEnriched {
-        from_targets_into_vector_config(target_groups)
+        from_targets_into_vector_config(self, target_groups)
     }
 }
 
-pub fn from_targets_into_vector_config(records: BTreeSet<TargetGroup>) -> VectorConfigEnriched {
+pub fn from_targets_into_vector_config(
+    builder: &VectorConfigBuilderImpl,
+    records: BTreeSet<TargetGroup>,
+) -> VectorConfigEnriched {
     let mut config = VectorConfigEnriched::new();
     for record in records {
         let key = record
@@ -32,7 +37,8 @@ pub fn from_targets_into_vector_config(records: BTreeSet<TargetGroup>) -> Vector
             .map(|t| t.to_string())
             .next()
             .unwrap();
-        let source: VectorSystemdGatewayJournaldSource = record.clone().try_into().unwrap();
+        let mut source: VectorSystemdGatewayJournaldSource = record.clone().try_into().unwrap();
+        source.batch_size = builder.batch_size;
         let transform: VectorSystemdGatewayJournaldTransform = record.clone().into();
         config.add_target_group(key, Box::new(source), Box::new(transform));
     }
@@ -44,6 +50,8 @@ struct VectorSystemdGatewayJournaldSource {
     #[serde(rename = "type")]
     _type: String,
     endpoint: String,
+    data_dir: String,
+    batch_size: u64,
 }
 
 impl VectorSource for VectorSystemdGatewayJournaldSource {
@@ -77,6 +85,8 @@ impl TryFrom<TargetGroup> for VectorSystemdGatewayJournaldSource {
         Ok(Self {
             _type: "systemd_journal_gatewayd".into(),
             endpoint,
+            data_dir: "logs".to_string(),
+            batch_size: 0,
         })
     }
 }
