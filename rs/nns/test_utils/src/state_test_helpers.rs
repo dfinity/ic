@@ -44,7 +44,9 @@ use ic_nns_governance::pb::v1::{
     ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Proposal,
 };
 use ic_sns_governance::{
-    pb::v1::{self as sns_pb, manage_neuron_response::Command as SnsCommandResponse},
+    pb::v1::{
+        self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
+    },
     types::DEFAULT_TRANSFER_FEE,
 };
 use icp_ledger::{BinaryAccountBalanceArgs, BlockIndex, Tokens};
@@ -848,6 +850,24 @@ pub fn sns_make_proposal(
         }
         _ => panic!("Unexpected MakeProposal response"),
     }
+}
+
+/// Call the get_mode method.
+pub fn sns_governance_get_mode(
+    state_machine: &mut StateMachine,
+    sns_governance_canister_id: CanisterId,
+) -> Result</* mode as i32 */ i32, String> {
+    let get_mode_response = query(
+        state_machine,
+        sns_governance_canister_id,
+        "get_mode",
+        Encode!(&sns_pb::GetMode {}).unwrap(),
+    )
+    .map_err(|e| format!("Error calling get_proposal: {}", e))?;
+
+    let GetModeResponse { mode } = Decode!(&get_mode_response, sns_pb::GetModeResponse).unwrap();
+
+    Ok(mode.unwrap())
 }
 
 /// Get a proposal from an SNS

@@ -2412,6 +2412,27 @@ pub struct SetMode {
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct SetModeResponse {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetMode {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetModeResponse {
+    #[prost(enumeration = "governance::Mode", optional, tag = "1")]
+    pub mode: ::core::option::Option<i32>,
+}
 /// The request for the `claim_swap_neurons` method.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct ClaimSwapNeuronsRequest {

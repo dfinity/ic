@@ -16,8 +16,8 @@ use crate::pb::v1::{
     neuron::{DissolveState, Followees},
     proposal, Account as AccountProto, Ballot, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
     DefaultFollowees, DeregisterDappCanisters, DisburseMaturityInProgress, Empty,
-    GetMetadataRequest, GetMetadataResponse, GetNeuron, GetNeuronResponse, GetProposal,
-    GetProposalResponse, GetSnsInitializationParametersRequest,
+    GetMetadataRequest, GetMetadataResponse, GetMode, GetModeResponse, GetNeuron,
+    GetNeuronResponse, GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
     GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
     ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
     ListProposalsResponse, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
@@ -674,6 +674,12 @@ impl Governance {
         gov.initialize_indices();
 
         gov
+    }
+
+    pub fn get_mode(&self, _: GetMode) -> GetModeResponse {
+        GetModeResponse {
+            mode: Some(self.proto.mode() as i32),
+        }
     }
 
     pub fn set_mode(&mut self, mode: i32, caller: PrincipalId) {

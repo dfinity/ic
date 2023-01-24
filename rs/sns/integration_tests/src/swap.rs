@@ -1,8 +1,9 @@
 use candid::{Decode, Encode};
+use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Account;
 use ic_nervous_system_common::{
-    ledger::compute_neuron_staking_subaccount, ExplosiveTokens, E8, SECONDS_PER_DAY,
+    assert_is_ok, ledger::compute_neuron_staking_subaccount, ExplosiveTokens, E8, SECONDS_PER_DAY,
     START_OF_2022_TIMESTAMP_SECONDS,
 };
 use ic_nervous_system_common_test_keys::{
@@ -32,10 +33,13 @@ use ic_nns_test_utils::{
         icrc1_balance, ledger_account_balance, nns_governance_get_full_neuron,
         nns_governance_get_proposal_info, nns_governance_make_proposal, nns_join_community_fund,
         nns_leave_community_fund, nns_stake_maturity, set_controllers, set_up_universal_canister,
-        setup_nns_canisters,
+        setup_nns_canisters, sns_governance_get_mode, sns_make_proposal, update_with_sender,
     },
 };
-use ic_sns_governance::pb::v1::ListNeurons;
+use ic_sns_governance::pb::v1::{
+    self as sns_governance_pb, governance::Mode as SnsGovernanceMode, ListNeurons,
+    NervousSystemParameters,
+};
 use ic_sns_init::pb::v1::{
     sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
     FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
@@ -320,6 +324,117 @@ fn begin_swap(
     let canister_ids = deploy_new_sns_response
         .canisters
         .unwrap_or_else(|| panic!("SNS deployment failed: {:#?}", deploy_new_sns_response));
+    let sns_governance_canister_id =
+        CanisterId::try_from(canister_ids.governance.unwrap()).unwrap();
+
+    let sns_neuron_principal_id = fractional_developer_voting_power
+        .airdrop_distribution
+        .as_ref()
+        .unwrap()
+        .airdrop_neurons[0]
+        .controller
+        .unwrap();
+    let sns_neuron_id = sns_governance_pb::NeuronId {
+        id: compute_neuron_staking_subaccount(sns_neuron_principal_id, /* memo */ 0)
+            .0
+            .to_vec(),
+    };
+
+    let assert_pre_initialization_swap_mode = |state_machine: &mut StateMachine| {
+        assert_eq!(
+            sns_governance_get_mode(state_machine, sns_governance_canister_id),
+            Ok(SnsGovernanceMode::PreInitializationSwap as i32),
+        );
+
+        let err = sns_make_proposal(
+            state_machine,
+            sns_governance_canister_id,
+            sns_neuron_principal_id,
+            sns_neuron_id.clone(),
+            sns_governance_pb::Proposal {
+                title: "Try to smuggle in a ManageNervousSystemParameters proposal while \
+                        in PreInitializationSwap mode."
+                    .to_string(),
+                summary: "".to_string(),
+                url: "".to_string(),
+                action: Some(
+                    sns_governance_pb::proposal::Action::ManageNervousSystemParameters(
+                        NervousSystemParameters {
+                            reject_cost_e8s: Some(20_000), // More strongly discourage spam
+                            ..Default::default()
+                        },
+                    ),
+                ),
+            },
+        )
+        .unwrap_err();
+        let sns_governance_pb::GovernanceError {
+            error_type,
+            error_message,
+        } = &err;
+
+        use sns_governance_pb::governance_error::ErrorType;
+        assert_eq!(
+            ErrorType::from_i32(*error_type).unwrap(),
+            ErrorType::PreconditionFailed,
+            "{:#?}",
+            err
+        );
+        assert!(
+            error_message.contains("PreInitializationSwap"),
+            "{:#?}",
+            err
+        );
+
+        // assert that SNS neuron is not allowed to start dissolving yet.
+        let start_dissolving_request = sns_governance_pb::ManageNeuron {
+            subaccount: sns_neuron_id.id.clone(),
+            command: Some(sns_governance_pb::manage_neuron::Command::Configure(
+                sns_governance_pb::manage_neuron::Configure {
+                    operation: Some(
+                        sns_governance_pb::manage_neuron::configure::Operation::StartDissolving(
+                            sns_governance_pb::manage_neuron::StartDissolving {},
+                        ),
+                    ),
+                },
+            )),
+        };
+        let start_dissolving_response: sns_governance_pb::ManageNeuronResponse =
+            update_with_sender(
+                state_machine,
+                sns_governance_canister_id,
+                "manage_neuron",
+                candid_one,
+                start_dissolving_request,
+                sns_neuron_principal_id,
+            )
+            .expect("Error calling the manage_neuron API.");
+        use sns_governance_pb::manage_neuron_response::Command;
+        match start_dissolving_response.command {
+            // An error is expected.
+            Some(Command::Error(error)) => {
+                let sns_governance_pb::GovernanceError {
+                    error_type,
+                    error_message,
+                } = &error;
+                // Inspect the error.
+                assert_eq!(
+                    ErrorType::from_i32(*error_type).unwrap(),
+                    ErrorType::PreconditionFailed,
+                    "{:#?}",
+                    error
+                );
+                assert!(
+                    error_message.contains("PreInitializationSwap"),
+                    "{:#?}",
+                    error
+                );
+            }
+
+            response => panic!("{:#?}", response),
+        };
+    };
+    assert_pre_initialization_swap_mode(state_machine);
 
     // Create dapp canister, and make it controlled by the SNS that was just created.
     let dapp_canister_id = state_machine.create_canister(/* settings = */ None);
@@ -400,6 +515,8 @@ fn begin_swap(
 
     before_proposal_is_adopted(state_machine);
 
+    assert_pre_initialization_swap_mode(state_machine);
+
     // Make all the neurons vote for the OpenSnsTokenSwap proposal.
     stuff_ballot_box(
         state_machine,
@@ -430,6 +547,8 @@ fn begin_swap(
             result
         );
     }
+
+    assert_pre_initialization_swap_mode(state_machine);
 
     let community_fund_neurons = nns_init_payloads
         .governance
@@ -778,6 +897,9 @@ proptest! {
     // take way too long for us, so tell it to generate fewer cases here.
     #![proptest_config(ProptestConfig::with_cases(10))]
 
+    // This is excluded unless `--test_args=--ignored` is part of the
+    // `bazel test` command.
+    #[ignore] // Too slow.
     #[test]
     fn test_community_fund_can_change_while_proposal_is_being_voted_on(
         stay_count in 1..25_u64, // TODO: Support testing of full CF turnover.
@@ -1091,6 +1213,264 @@ fn stake_maturity_does_not_interfere_with_community_fund() {
 
 fn do_nothing_special_before_proposal_is_adopted(_state_machine: &mut StateMachine) {
     // This function intentionally left blank.
+}
+
+#[test]
+fn sns_governance_starts_life_in_pre_initialization_swap_mode_but_transitions_to_normal_mode_after_sale(
+) {
+    // Step 1: Prepare the world.
+    let mut state_machine = StateMachine::new();
+
+    let direct_participant_principal_ids = generate_principal_ids(5);
+    let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(70 * E8);
+    let neuron_basket_count = 3;
+
+    let sns_canister_ids = begin_swap(
+        &mut state_machine,
+        &direct_participant_principal_ids,
+        &[], // additional_nns_neurons
+        planned_participation_amount_per_account,
+        ExplosiveTokens::from_e8s(30 * E8), // planned_community_fund_participation_amount
+        neuron_basket_count,
+        DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR,
+        do_nothing_special_before_proposal_is_adopted,
+    )
+    .0;
+    let sns_governance_canister_id =
+        CanisterId::try_from(*sns_canister_ids.governance.as_ref().unwrap()).unwrap();
+
+    // Get a principal and id of an SNS neuron who can make a proposal.
+    let sns_governance_pb::Neuron {
+        id: sns_neuron_id,
+        mut permissions,
+        ..
+    } = sns_governance_list_neurons(
+        &mut state_machine,
+        sns_governance_canister_id,
+        &sns_governance_pb::ListNeurons::default(),
+    )
+    .neurons
+    .into_iter()
+    .find(|neuron| {
+        neuron.dissolve_delay_seconds(neuron.created_timestamp_seconds) >= 6 * 30 * SECONDS_PER_DAY
+    })
+    .unwrap();
+    let sns_neuron_id = sns_neuron_id.unwrap();
+    let sns_neuron_principal_id = permissions.pop().unwrap().principal.unwrap();
+
+    // Step 1.1: Make sure we are in PreInitializationSwap mode, and that this
+    // restricts what we're allowed to do. (There are asserts for these things
+    // within begin_swap, but that's not evident here -> let's do those asserts
+    // again explicitly.)
+    assert_eq!(
+        sns_governance_get_mode(&mut state_machine, sns_governance_canister_id),
+        Ok(SnsGovernanceMode::PreInitializationSwap as i32),
+    );
+
+    // Step 1.1.1: Not allowed to make ManageNervousSystemParameter proposals.
+    let err = sns_make_proposal(
+        &state_machine,
+        sns_governance_canister_id,
+        sns_neuron_principal_id,
+        sns_neuron_id.clone(),
+        sns_governance_pb::Proposal {
+            title: "Try to smuggle in a ManageNervousSystemParameters proposal while \
+                    in PreInitializationSwap mode."
+                .to_string(),
+            summary: "".to_string(),
+            url: "".to_string(),
+            action: Some(
+                sns_governance_pb::proposal::Action::ManageNervousSystemParameters(
+                    NervousSystemParameters {
+                        reject_cost_e8s: Some(20_000), // More strongly discourage spam
+                        ..Default::default()
+                    },
+                ),
+            ),
+        },
+    )
+    .unwrap_err();
+    {
+        let sns_governance_pb::GovernanceError {
+            error_type,
+            error_message,
+        } = &err;
+        use sns_governance_pb::governance_error::ErrorType;
+        assert_eq!(
+            ErrorType::from_i32(*error_type).unwrap(),
+            ErrorType::PreconditionFailed,
+            "{:#?}",
+            err
+        );
+        assert!(
+            error_message.contains("PreInitializationSwap"),
+            "{:#?}",
+            err
+        );
+    }
+
+    // assert that SNS neuron is not allowed to start dissolving yet.
+    let start_dissolving_request = sns_governance_pb::ManageNeuron {
+        subaccount: sns_neuron_id.id.clone(),
+        command: Some(sns_governance_pb::manage_neuron::Command::Configure(
+            sns_governance_pb::manage_neuron::Configure {
+                operation: Some(
+                    sns_governance_pb::manage_neuron::configure::Operation::StartDissolving(
+                        sns_governance_pb::manage_neuron::StartDissolving {},
+                    ),
+                ),
+            },
+        )),
+    };
+    let start_dissolving_response: sns_governance_pb::ManageNeuronResponse = update_with_sender(
+        &state_machine,
+        sns_governance_canister_id,
+        "manage_neuron",
+        candid_one,
+        start_dissolving_request,
+        sns_neuron_principal_id,
+    )
+    .expect("Error calling the manage_neuron API.");
+    use sns_governance_pb::manage_neuron_response::Command;
+    match start_dissolving_response.command {
+        // An error is expected.
+        Some(Command::Error(error)) => {
+            let sns_governance_pb::GovernanceError {
+                error_type,
+                error_message,
+            } = &error;
+            use sns_governance_pb::governance_error::ErrorType;
+            // Inspect the error.
+            assert_eq!(
+                ErrorType::from_i32(*error_type).unwrap(),
+                ErrorType::PreconditionFailed,
+                "{:#?}",
+                error
+            );
+            assert!(
+                error_message.contains("PreInitializationSwap"),
+                "{:#?}",
+                error
+            );
+        }
+
+        response => panic!("{:#?}", response),
+    };
+
+    // Step 2: Make the swap succeed (and finalize).
+
+    // Have all the accounts we created participate in the swap
+    for principal_id in &direct_participant_principal_ids {
+        participate_in_swap(
+            &mut state_machine,
+            sns_canister_ids.swap.unwrap().try_into().unwrap(),
+            *principal_id,
+            planned_participation_amount_per_account,
+        );
+    }
+
+    // Make sure the swap reached the Committed state.
+    {
+        let result = swap_get_state(
+            &mut state_machine,
+            sns_canister_ids.swap.unwrap().try_into().unwrap(),
+            &swap_pb::GetStateRequest {},
+        )
+        .swap
+        .unwrap();
+
+        assert_eq!(
+            result.lifecycle(),
+            swap_pb::Lifecycle::Committed,
+            "{:#?}",
+            result
+        );
+    }
+
+    // Execute the swap.
+    let _finalize_swap_response = {
+        let result = state_machine
+            .execute_ingress(
+                sns_canister_ids.swap.unwrap().try_into().unwrap(),
+                "finalize_swap",
+                Encode!(&swap_pb::FinalizeSwapRequest {}).unwrap(),
+            )
+            .unwrap();
+        let result: Vec<u8> = match result {
+            WasmResult::Reply(reply) => reply,
+            WasmResult::Reject(reject) => panic!(
+                "finalize_swap call was rejected by swap canister: {:#?}",
+                reject
+            ),
+        };
+        Decode!(&result, swap_pb::FinalizeSwapResponse).unwrap()
+    };
+
+    // Step 3: Verify that we are no in normal mode, and can do things that were
+    // disallowed prior to the swapgoing through.
+    {
+        use sns_governance_pb::governance::Mode;
+        let sns_governance_canister_id =
+            CanisterId::try_from(sns_canister_ids.governance.unwrap()).unwrap();
+        assert_eq!(
+            sns_governance_get_mode(&mut state_machine, sns_governance_canister_id)
+                .map(|mode| Mode::from_i32(mode).unwrap()),
+            Ok(Mode::Normal),
+        );
+
+        // Now that we are in Normal mode, we should be able to make this
+        // proposal; whereas, we wouldn't have been able to do that prior to the
+        // successful execution of the decentralization sale.
+        assert_is_ok!(sns_make_proposal(
+            &state_machine,
+            sns_governance_canister_id,
+            sns_neuron_principal_id,
+            sns_neuron_id.clone(),
+            sns_governance_pb::Proposal {
+                title: "If this proposal is put up for a vote, then we are in normal mode."
+                    .to_string(),
+                summary: "".to_string(),
+                url: "".to_string(),
+                action: Some(
+                    sns_governance_pb::proposal::Action::ManageNervousSystemParameters(
+                        NervousSystemParameters {
+                            reject_cost_e8s: Some(20_000), // More strongly discourage spam
+                            ..Default::default()
+                        },
+                    ),
+                ),
+            },
+        ));
+
+        // Similarly, neurons can start dissolving now, if they want to.
+        let start_dissolving_request = sns_governance_pb::ManageNeuron {
+            subaccount: sns_neuron_id.id,
+            command: Some(sns_governance_pb::manage_neuron::Command::Configure(
+                sns_governance_pb::manage_neuron::Configure {
+                    operation: Some(
+                        sns_governance_pb::manage_neuron::configure::Operation::StartDissolving(
+                            sns_governance_pb::manage_neuron::StartDissolving {},
+                        ),
+                    ),
+                },
+            )),
+        };
+        let start_dissolving_response: sns_governance_pb::ManageNeuronResponse =
+            update_with_sender(
+                &state_machine,
+                sns_governance_canister_id,
+                "manage_neuron",
+                candid_one,
+                start_dissolving_request,
+                sns_neuron_principal_id,
+            )
+            .expect("Error calling the manage_neuron API.");
+        use sns_governance_pb::manage_neuron_response::Command;
+        match start_dissolving_response.command {
+            Some(Command::Configure(_)) => (),
+            _ => panic!("{:#?}", start_dissolving_response),
+        };
+    }
 }
 
 fn assert_successful_swap_finalizes_correctly(
@@ -1600,7 +1980,7 @@ fn assert_successful_swap_finalizes_correctly(
 
         let mut sns_neurons = sns_governance_list_neurons(
             &mut state_machine,
-            sns_canister_ids.governance.unwrap().try_into().unwrap(),
+            CanisterId::try_from(*sns_canister_ids.governance.as_ref().unwrap()).unwrap(),
             &ListNeurons {
                 limit: 100,
                 start_page_at: None,
@@ -1664,7 +2044,7 @@ fn assert_successful_swap_finalizes_correctly(
         }
     }
 
-    // STEP 3.4: NNS governance is responsible for "settling" CF participation.
+    // Step 3.4: NNS governance is responsible for "settling" CF participation.
     //
     // We already noticed the ICP being added to the SNS governance
     // canister's (default) account in step 3.2.1. Therefore, all that remains
@@ -1691,6 +2071,65 @@ fn assert_successful_swap_finalizes_correctly(
             planned_community_fund_participation_amount,
             100.0 * relative_error,
         );
+    }
+
+    // Step 3.5: SNS governance is now in Normal mode, not PreInitializationSwap mode.
+
+    // From step 3.1, it looks like SNS governance is in normal mode, but we
+    // verify this in a different way here.
+    {
+        use sns_governance_pb::governance::Mode;
+        let sns_governance_canister_id =
+            CanisterId::try_from(sns_canister_ids.governance.unwrap()).unwrap();
+        assert_eq!(
+            sns_governance_get_mode(&mut state_machine, sns_governance_canister_id)
+                .map(|mode| Mode::from_i32(mode).unwrap()),
+            Ok(Mode::Normal),
+        );
+
+        // Get a principal and id of an SNS neuron who can make a proposal.
+        let sns_governance_pb::Neuron {
+            id: sns_neuron_id,
+            mut permissions,
+            ..
+        } = sns_governance_list_neurons(
+            &mut state_machine,
+            sns_governance_canister_id,
+            &sns_governance_pb::ListNeurons::default(),
+        )
+        .neurons
+        .into_iter()
+        .find(|neuron| {
+            neuron.dissolve_delay_seconds(neuron.created_timestamp_seconds)
+                >= 6 * 30 * SECONDS_PER_DAY
+        })
+        .unwrap();
+        let sns_neuron_id = sns_neuron_id.unwrap();
+        let sns_neuron_principal_id = permissions.pop().unwrap().principal.unwrap();
+
+        // Now that we are in Normal mode, we should be able to make this
+        // proposal; whereas, we wouldn't have been able to do that prior to the
+        // successful execution of the decentralization sale.
+        assert_is_ok!(sns_make_proposal(
+            &state_machine,
+            sns_governance_canister_id,
+            sns_neuron_principal_id,
+            sns_neuron_id,
+            sns_governance_pb::Proposal {
+                title: "If this proposal is put up for a vote, then we are in normal mode."
+                    .to_string(),
+                summary: "".to_string(),
+                url: "".to_string(),
+                action: Some(
+                    sns_governance_pb::proposal::Action::ManageNervousSystemParameters(
+                        NervousSystemParameters {
+                            reject_cost_e8s: Some(20_000), // More strongly discourage spam
+                            ..Default::default()
+                        },
+                    ),
+                ),
+            },
+        ));
     }
 
     SwapPerformanceResults {
