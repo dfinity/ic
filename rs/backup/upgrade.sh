@@ -48,5 +48,9 @@ if ((${VERSION} < 11)); then
     download_backup_binary "d830848a6e9d6dd7f5ada9cdf6fcdbec6cf6b76b"
     set_config_version 11
 fi
+if ((${VERSION} < 12)); then
+    download_backup_binary "af1baff9d9968a3a47348d430c816ca9cb4d8a56"
+    set_config_version 12
+fi
 
 sudo systemctl start ic-backup.service
