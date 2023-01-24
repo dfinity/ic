@@ -17,17 +17,21 @@ use crate::common::EXPECTED_SNS_CREATION_FEE;
 use ic_ic00_types::CanisterInstallMode;
 use ic_icrc1::endpoints::{NumTokens, TransferArg, TransferError};
 use ic_icrc1::Account;
+use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nns_test_utils::sns_wasm::{
     build_archive_sns_wasm, build_governance_sns_wasm, build_index_sns_wasm, build_ledger_sns_wasm,
     build_root_sns_wasm, build_swap_sns_wasm, create_modified_wasm,
 };
-use ic_sns_governance::pb::v1::governance::{Mode, Version};
-use ic_sns_governance::pb::v1::proposal::Action;
-use ic_sns_governance::pb::v1::ProposalDecisionStatus;
-use ic_sns_governance::pb::v1::{
-    GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, Proposal, UpgradeSnsToNextVersion,
+use ic_sns_governance::{
+    pb::v1::{
+        self as sns_governance_pb,
+        governance::{Mode, Version},
+        proposal::Action,
+        GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, Proposal,
+        ProposalDecisionStatus, UpgradeSnsToNextVersion,
+    },
+    types::{DEFAULT_TRANSFER_FEE, E8S_PER_TOKEN},
 };
-use ic_sns_governance::types::{DEFAULT_TRANSFER_FEE, E8S_PER_TOKEN};
 use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution;
 use ic_sns_init::pb::v1::{
     AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
@@ -118,6 +122,14 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
         ..SnsInitPayload::with_valid_values_for_testing()
     };
 
+    // Will be used to make proposals and such. Fortunately, this guy has lots
+    // of money -> he'll be able to push proposals though.
+    let airdrop_sns_neuron_id = sns_governance_pb::NeuronId {
+        id: compute_neuron_staking_subaccount(user, /* memo */ 0)
+            .0
+            .to_vec(),
+    };
+
     let response = sns_wasm::deploy_new_sns(
         &machine,
         wallet_canister,
@@ -138,7 +150,7 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
     let governance = CanisterId::new(governance.unwrap()).unwrap();
 
     // Validate that upgrading Swap doesn't prevent upgrading other SNS canisters
-    let old_version = upgrade_swap(&machine, &wasm_map, governance);
+    let old_version = upgrade_swap(&machine, &wasm_map, governance, &airdrop_sns_neuron_id);
 
     let original_hash = wasm_map.get(&canister_type).unwrap().sha256_hash();
 
@@ -151,13 +163,11 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
     sns_wasm::add_wasm_via_proposal(&machine, sns_wasm_to_add);
 
     // Make a proposal to upgrade (that is auto-executed) with the neuron for our user.
-    let neuron_id =
-        state_test_helpers::sns_claim_staked_neuron(&machine, governance, user, 0, Some(1_000_000));
     let proposal_id = state_test_helpers::sns_make_proposal(
         &machine,
         governance,
         user,
-        neuron_id,
+        airdrop_sns_neuron_id,
         Proposal {
             title: "Upgrade Canister.".into(),
             action: Some(Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {})),
@@ -254,6 +264,7 @@ fn upgrade_swap(
     machine: &StateMachine,
     wasm_map: &BTreeMap<SnsCanisterType, SnsWasm>,
     governance: CanisterId,
+    neuron_id: &sns_governance_pb::NeuronId,
 ) -> Version {
     let user = PrincipalId::new_user_test_id(0);
     let original_swap_hash = wasm_map.get(&SnsCanisterType::Swap).unwrap().sha256_hash();
@@ -266,13 +277,11 @@ fn upgrade_swap(
 
     sns_wasm::add_wasm_via_proposal(machine, swap_wasm_to_add);
 
-    let neuron_id =
-        state_test_helpers::sns_claim_staked_neuron(machine, governance, user, 0, Some(1_000_000));
     let proposal_id = state_test_helpers::sns_make_proposal(
         machine,
         governance,
         user,
-        neuron_id,
+        neuron_id.clone(),
         Proposal {
             title: "Upgrade Canister.".into(),
             action: Some(Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {})),
@@ -934,6 +943,12 @@ fn test_custom_upgrade_path_for_sns() {
         ..SnsInitPayload::with_valid_values_for_testing()
     };
 
+    let airdrop_sns_neuron_id = sns_governance_pb::NeuronId {
+        id: compute_neuron_staking_subaccount(user, /* memo */ 0)
+            .0
+            .to_vec(),
+    };
+
     let response = sns_wasm::deploy_new_sns(
         &machine,
         wallet_canister,
@@ -1027,18 +1042,11 @@ fn test_custom_upgrade_path_for_sns() {
     );
 
     // Make a proposal to upgrade (that is auto-executed) with the neuron for our user.
-    let neuron_id = state_test_helpers::sns_claim_staked_neuron(
-        &machine,
-        sns_governance_canister_id,
-        user,
-        0,
-        Some(1_000_000),
-    );
     let proposal_id = state_test_helpers::sns_make_proposal(
         &machine,
         sns_governance_canister_id,
         user,
-        neuron_id,
+        airdrop_sns_neuron_id,
         Proposal {
             title: "Upgrade Canister.".into(),
             action: Some(Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {})),

@@ -15,7 +15,7 @@ impl GovernanceCanisterInitPayloadBuilder {
         Self {
             proto: Governance {
                 parameters: Some(NervousSystemParameters::with_default_values()),
-                mode: Mode::Normal as i32,
+                mode: Mode::PreInitializationSwap as i32,
                 sns_metadata: Some(SnsMetadata {
                     logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
                     name: Some("ServiceNervousSystemTest".to_string()),

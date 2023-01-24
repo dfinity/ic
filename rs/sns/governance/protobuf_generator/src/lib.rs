@@ -23,6 +23,14 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.extern_path(".ic_ledger.pb.v1", "::ledger-canister::protobuf");
 
     config.type_attribute(
+        "ic_sns_governance.pb.v1.GetMode",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.GetModeResponse",
+        ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
+    );
+    config.type_attribute(
         "ic_sns_governance.pb.v1.VotingRewardsParameters",
         ["#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]"].join(" "),
     );

@@ -1689,6 +1689,13 @@ message SetMode {
 message SetModeResponse {
 }
 
+message GetMode {
+}
+
+message GetModeResponse {
+  optional Governance.Mode mode = 1;
+}
+
 // The request for the `claim_swap_neurons` method.
 message ClaimSwapNeuronsRequest {
   // NeuronParameters groups parameters for creating a neuron in the

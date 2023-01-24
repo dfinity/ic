@@ -12,21 +12,19 @@ use ic_nervous_system_common::{i2d, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
-use ic_sns_governance::pb::v1::governance::SnsMetadata;
-use ic_sns_governance::pb::v1::manage_neuron::StakeMaturity;
 use ic_sns_governance::{
     account_to_proto,
     governance::Governance,
     ledger::ICRC1Ledger,
     neuron::{NeuronState, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER},
     pb::v1::{
-        governance,
+        governance::{self, SnsMetadata},
         governance_error::ErrorType,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
             configure::Operation,
             AddNeuronPermissions, ClaimOrRefresh, Command, Configure, DisburseMaturity,
-            IncreaseDissolveDelay, RemoveNeuronPermissions,
+            IncreaseDissolveDelay, RemoveNeuronPermissions, StakeMaturity,
         },
         manage_neuron_response::Command as CommandResponse,
         neuron::DissolveState,
@@ -201,7 +199,7 @@ fn test_claim_neuron_with_default_permissions() {
 }
 
 #[test]
-fn test_claim_neuron() {
+fn test_claim_neuron_happy() {
     local_test_on_sns_subnet(|runtime| async move {
         // Set up an SNS with a ledger account for a single user
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
@@ -264,7 +262,12 @@ fn test_claim_neuron() {
             }
             _ => panic!("Unexpected command response when claiming neuron"),
         };
-        assert_eq!(error.error_type, ErrorType::InsufficientFunds as i32);
+        assert_eq!(
+            ErrorType::from_i32(error.error_type).unwrap(),
+            ErrorType::InsufficientFunds,
+            "{:#?}",
+            error,
+        );
 
         // Now stake 1 governance token using the calculated subaccount
         sns_canisters

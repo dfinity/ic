@@ -23,7 +23,7 @@ use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_core::api::{call_bytes_with_cleanup, Funds};
 use dfn_core::{
     api::{caller, id, now},
-    over, over_async, over_init, println,
+    over, over_async, over_init,
 };
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
@@ -41,8 +41,8 @@ use ic_sns_governance::{
     ledger::LedgerCanister,
     pb::v1::{
         governance, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse, GetMetadataRequest,
-        GetMetadataResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-        GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
+        GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal,
+        GetProposalResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
         GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
         Governance as GovernanceProto, ListNervousSystemFunctionsResponse, ListNeurons,
         ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
@@ -249,7 +249,7 @@ fn canister_post_upgrade() {
             log!(
                 ERROR,
                 "Error deserializing canister state post-upgrade. \
-             CANISTER MIGHT HAVE BROKEN STATE!!!!. Error: {:?}",
+                 CANISTER MIGHT HAVE BROKEN STATE!!!!. Error: {:?}",
                 err
             );
             Err(err)
@@ -292,7 +292,7 @@ fn set_time_warp_(new_time_warp: TimeWarp) {
 /// Returns the governance's NervousSystemParameters
 #[export_name = "canister_query get_nervous_system_parameters"]
 fn get_nervous_system_parameters() {
-    println!("{}get_nervous_system_parameters", log_prefix());
+    log!(INFO, "get_nervous_system_parameters");
     over(candid_one, get_nervous_system_parameters_)
 }
 
@@ -309,7 +309,7 @@ fn get_nervous_system_parameters_(_: ()) -> NervousSystemParameters {
 /// Returns metadata describing the SNS.
 #[export_name = "canister_query get_metadata"]
 fn get_metadata() {
-    println!("{}get_metadata", log_prefix());
+    log!(INFO, "get_metadata");
     over(candid_one, get_metadata_)
 }
 
@@ -322,7 +322,7 @@ fn get_metadata_(request: GetMetadataRequest) -> GetMetadataResponse {
 /// Returns the initialization parameters used to spawn an SNS
 #[export_name = "canister_query get_sns_initialization_parameters"]
 fn get_sns_initialization_parameters() {
-    println!("{}get_sns_initialization_parameters", log_prefix());
+    log!(INFO, "get_sns_initialization_parameters");
     over(candid_one, get_sns_initialization_parameters_)
 }
 
@@ -347,7 +347,7 @@ fn get_sns_initialization_parameters_(
 /// - merge the neuron's maturity into the neuron's stake
 #[export_name = "canister_update manage_neuron"]
 fn manage_neuron() {
-    println!("{}manage_neuron", log_prefix());
+    log!(INFO, "manage_neuron");
     over_async(candid_one, manage_neuron_)
 }
 
@@ -362,7 +362,7 @@ async fn manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
 /// Returns the full neuron corresponding to the neuron with ID `neuron_id`.
 #[export_name = "canister_query get_neuron"]
 fn get_neuron() {
-    println!("{}get_neuron", log_prefix());
+    log!(INFO, "get_neuron");
     over(candid_one, get_neuron_)
 }
 
@@ -387,7 +387,7 @@ fn get_neuron_(get_neuron: GetNeuron) -> GetNeuronResponse {
 /// If this method is called as a query call, the returned list is not certified.
 #[export_name = "canister_query list_neurons"]
 fn list_neurons() {
-    println!("{}list_neurons", log_prefix());
+    log!(INFO, "list_neurons");
     over(candid_one, list_neurons_)
 }
 
@@ -423,7 +423,7 @@ fn get_proposal_(get_proposal: GetProposal) -> GetProposalResponse {
 /// If this method is called as a query call, the returned list is not certified.
 #[export_name = "canister_query list_proposals"]
 fn list_proposals() {
-    println!("{}list_proposals", log_prefix());
+    log!(INFO, "list_proposals");
     over(candid_one, list_proposals_)
 }
 
@@ -436,7 +436,7 @@ fn list_proposals_(list_proposals: ListProposals) -> ListProposalsResponse {
 /// Returns the current list of available NervousSystemFunctions.
 #[export_name = "canister_query list_nervous_system_functions"]
 fn list_nervous_system_functions() {
-    println!("{}list_nervous_system_functions", log_prefix());
+    log!(INFO, "list_nervous_system_functions");
     over(candid, |()| list_nervous_system_functions_())
 }
 
@@ -451,11 +451,7 @@ fn list_nervous_system_functions_() -> ListNervousSystemFunctionsResponse {
 fn get_latest_reward_event() {
     over(candid, |()| -> RewardEvent {
         let event = governance().latest_reward_event();
-        println!(
-            "{}get_latest_reward_event returns {}; ",
-            log_prefix(),
-            event
-        );
+        log!(INFO, "get_latest_reward_event returns {}; ", event);
         event
     });
 }
@@ -494,7 +490,7 @@ async fn get_root_canister_status_(_: ()) -> CanisterStatusResultV2 {
 /// running the same version.
 #[export_name = "canister_query get_running_sns_version"]
 fn get_running_sns_version() {
-    println!("{}get_running_sns_version", log_prefix());
+    log!(INFO, "get_running_sns_version");
     over(candid_one, get_running_sns_version_)
 }
 
@@ -514,7 +510,7 @@ fn get_running_sns_version_(_: GetRunningSnsVersionRequest) -> GetRunningSnsVers
 /// PreInitializationSwap.  whenever the swap canister calls this.
 #[export_name = "canister_update set_mode"]
 fn set_mode() {
-    println!("{}set_mode", log_prefix());
+    log!(INFO, "set_mode");
     over(candid_one, set_mode_);
 }
 
@@ -523,6 +519,17 @@ fn set_mode() {
 fn set_mode_(request: SetMode) -> SetModeResponse {
     governance_mut().set_mode(request.mode, caller());
     SetModeResponse {}
+}
+
+#[export_name = "canister_query get_mode"]
+fn get_mode() {
+    log!(INFO, "get_mode");
+    over(candid_one, get_mode_);
+}
+
+#[candid_method(query, rename = "get_mode")]
+fn get_mode_(request: GetMode) -> GetModeResponse {
+    governance().get_mode(request)
 }
 
 /// Claims a batch of neurons requested by the SNS Swap canister. This method is
@@ -541,7 +548,7 @@ fn set_mode_(request: SetMode) -> SetModeResponse {
 /// incremented and execution will continue.
 #[export_name = "canister_update claim_swap_neurons"]
 fn claim_swap_neurons() {
-    println!("{}claim_swap_neurons", log_prefix());
+    log!(INFO, "claim_swap_neurons");
     over(candid_one, claim_swap_neurons_)
 }
 

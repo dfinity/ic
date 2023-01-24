@@ -16,12 +16,11 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
 };
-use ic_sns_governance::pb::v1::RegisterDappCanisters;
 use ic_sns_governance::{
     governance::TimeWarp,
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
-        get_neuron_response, get_proposal_response,
+        self as sns_governance_pb, get_neuron_response, get_proposal_response,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
             configure::Operation,
@@ -38,8 +37,8 @@ use ic_sns_governance::{
         Governance, GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons,
         ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
         ManageNeuronResponse, Motion, NervousSystemParameters, Neuron, NeuronId,
-        NeuronPermissionList, Proposal, ProposalData, ProposalId, RewardEvent,
-        Subaccount as SubaccountProto, Vote,
+        NeuronPermissionList, Proposal, ProposalData, ProposalId, RegisterDappCanisters,
+        RewardEvent, Subaccount as SubaccountProto, Vote,
     },
     types::DEFAULT_TRANSFER_FEE,
 };
@@ -114,6 +113,10 @@ pub struct SnsTestsInitPayloadBuilder {
     pub index: IndexInitArgs,
 }
 
+/// Caveat emptor: Even though sns-wasm creates SNS governance in
+/// PreInitializationSwap mode, this uses Normal mode as the default. Use the
+/// with_governance_mode method to initialize SNS governance in
+/// PreInitializationSwap, like what sns-wasm does.
 #[allow(clippy::new_without_default)]
 impl SnsTestsInitPayloadBuilder {
     pub fn new() -> SnsTestsInitPayloadBuilder {
@@ -151,13 +154,22 @@ impl SnsTestsInitPayloadBuilder {
             ledger_id: CanisterId::from_u64(0),
         };
 
+        let mut governance = GovernanceCanisterInitPayloadBuilder::new();
+        // Existing tests expect this.
+        governance.with_mode(sns_governance_pb::governance::Mode::Normal);
+
         SnsTestsInitPayloadBuilder {
             root: SnsRootCanister::default(),
-            governance: GovernanceCanisterInitPayloadBuilder::new(),
+            governance,
             ledger,
             swap,
             index,
         }
+    }
+
+    pub fn with_governance_mode(&mut self, mode: sns_governance_pb::governance::Mode) -> &mut Self {
+        self.governance.with_mode(mode);
+        self
     }
 
     pub fn with_ledger_init_state(&mut self, state: LedgerInitArgs) -> &mut Self {
