@@ -668,6 +668,27 @@ fn load_checkpoint(
         })
 }
 
+#[cfg(debug_assertions)]
+fn check_certifications_metadata_snapshots_and_states_metadata_are_consistent(
+    states: &SharedState,
+) {
+    let certification_heights = states
+        .certifications_metadata
+        .keys()
+        .copied()
+        .collect::<Vec<_>>();
+    let snapshot_heights = states
+        .snapshots
+        .iter()
+        .map(|s| s.height)
+        .filter(|h| h.get() != 0)
+        .collect::<Vec<_>>();
+    debug_assert_eq!(certification_heights, snapshot_heights);
+    for h in states.states_metadata.keys() {
+        debug_assert!(states.certifications_metadata.contains_key(h));
+    }
+}
+
 fn initialize_tip(
     log: &ReplicaLogger,
     tip_channel: &Sender<TipRequest>,
@@ -1965,47 +1986,52 @@ impl StateManagerImpl {
             }
         }
 
+        let hash_tree = hash_lazy_tree(&LazyTree::from(&state));
+        let certification_metadata = CertificationMetadata {
+            certified_state_hash: crypto_hash_of_tree(&hash_tree),
+            hash_tree: Some(Arc::new(hash_tree)),
+            certification: None,
+        };
+
         let mut states = self.states.write();
+        #[cfg(debug_assertions)]
+        check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
         states.disable_state_fetch_below(height);
 
-        if let Some(snapshot) = states.snapshots.back() {
-            if snapshot.height >= height {
-                info!(
-                    self.log,
-                    "Completed StateSync for state {} that we already have locally", height
-                );
-                return;
-            }
+        if states
+            .snapshots
+            .iter()
+            .any(|snapshot| snapshot.height == height)
+        {
+            info!(
+                self.log,
+                "Completed StateSync for state {} that we already have locally", height
+            );
+            return;
         }
-
-        let hash_tree = hash_lazy_tree(&LazyTree::from(&state));
 
         states.snapshots.push_back(Snapshot {
             height,
             state: Arc::new(state),
         });
+        states
+            .snapshots
+            .make_contiguous()
+            .sort_by_key(|snapshot| snapshot.height);
 
         self.metrics
             .resident_state_count
             .set(states.snapshots.len() as i64);
 
-        states.certifications_metadata.insert(
-            height,
-            CertificationMetadata {
-                certified_state_hash: crypto_hash_of_tree(&hash_tree),
-                hash_tree: Some(Arc::new(hash_tree)),
-                certification: None,
-            },
-        );
+        states
+            .certifications_metadata
+            .insert(height, certification_metadata);
 
         let state_size_bytes: i64 = manifest
             .file_table
             .iter()
             .map(|f| f.size_bytes as i64)
             .sum();
-
-        self.metrics.state_size.set(state_size_bytes);
-
         // The computation of meta_manifest is temporary in this replica version.
         // In future versions, meta_manifest will also be part of StateSyncMessage
         // and can be directly populated here without extra computation.
@@ -2025,7 +2051,10 @@ impl StateManagerImpl {
         );
 
         let latest_height = update_latest_height(&self.latest_state_height, height);
-        self.metrics.max_resident_height.set(latest_height as i64);
+        if latest_height == height.get() {
+            self.metrics.max_resident_height.set(latest_height as i64);
+            self.metrics.state_size.set(state_size_bytes);
+        }
 
         self.release_lock_and_persist_metadata(states);
 
@@ -2882,6 +2911,8 @@ impl StateManager for StateManagerImpl {
             Self::compute_certification_metadata(&self.metrics, &self.log, &checkpointed_state);
 
         let mut states = self.states.write();
+        #[cfg(debug_assertions)]
+        check_certifications_metadata_snapshots_and_states_metadata_are_consistent(&states);
 
         // The following assert validates that we don't have two clients
         // modifying TIP at the same time and that each commit_and_certify()
@@ -2908,82 +2939,71 @@ impl StateManager for StateManagerImpl {
             );
         }
 
-        let (tip_height, tip) = match states.snapshots.back() {
-            Some(latest_snapshot) if height <= latest_snapshot.height => {
-                // This state is older than the one we already have.  This can
-                // happen if we state-sync and apply blocks in parallel.
-                info!(
-                    self.log,
-                    "Skip committing an outdated state {}, latest state is {}",
-                    height,
-                    latest_snapshot.height
+        if !states
+            .snapshots
+            .iter()
+            .any(|snapshot| snapshot.height == height)
+        {
+            states.snapshots.push_back(Snapshot {
+                height,
+                state: Arc::new(checkpointed_state),
+            });
+            states
+                .snapshots
+                .make_contiguous()
+                .sort_by_key(|snapshot| snapshot.height);
+
+            states
+                .certifications_metadata
+                .insert(height, certification_metadata);
+
+            if scope == CertificationScope::Full {
+                let manifest_delta = previous_checkpoint_info.map(
+                    |PreviousCheckpointInfo {
+                         dirty_pages,
+                         base_manifest,
+                         base_height,
+                     }| {
+                        manifest::ManifestDelta {
+                            base_manifest,
+                            base_height,
+                            target_height: height,
+                            dirty_memory_pages: dirty_pages,
+                        }
+                    },
                 );
-                // The next call to take_tip() will take care of updating the
-                // tip if needed.
-                (height, state)
-            }
-            _ => {
-                states.snapshots.push_back(Snapshot {
+
+                states.states_metadata.insert(
                     height,
-                    state: Arc::new(checkpointed_state),
-                });
+                    StateMetadata {
+                        checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
+                        bundled_manifest: None,
+                        state_sync_file_group: None,
+                    },
+                );
 
-                if scope == CertificationScope::Full {
-                    let manifest_delta = previous_checkpoint_info.map(
-                        |PreviousCheckpointInfo {
-                             dirty_pages,
-                             base_manifest,
-                             base_height,
-                         }| {
-                            manifest::ManifestDelta {
-                                base_manifest,
-                                base_height,
-                                target_height: height,
-                                dirty_memory_pages: dirty_pages,
-                            }
-                        },
-                    );
+                // On the NNS subnet we never allow incremental manifest computation
+                let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
 
-                    states.states_metadata.insert(
-                        height,
-                        StateMetadata {
-                            checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
-                            bundled_manifest: None,
-                            state_sync_file_group: None,
-                        },
-                    );
-
-                    // On the NNS subnet we never allow incremental manifest computation
-                    let is_nns =
-                        self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
-
-                    self.compute_manifest_request_sender
-                        .send(ComputeManifestRequest::Compute {
-                            checkpoint_layout: cp_layout.unwrap(),
-                            manifest_delta: if is_nns { None } else { manifest_delta },
-                        })
-                        .expect("failed to send ComputeManifestRequest message");
-                }
-
-                states
-                    .certifications_metadata
-                    .insert(height, certification_metadata);
-
-                update_latest_height(&self.latest_state_height, height);
-
-                (height, state)
+                self.compute_manifest_request_sender
+                    .send(ComputeManifestRequest::Compute {
+                        checkpoint_layout: cp_layout.unwrap(),
+                        manifest_delta: if is_nns { None } else { manifest_delta },
+                    })
+                    .expect("failed to send ComputeManifestRequest message");
             }
-        };
+
+            let latest_height = update_latest_height(&self.latest_state_height, height);
+            self.metrics.max_resident_height.set(latest_height as i64);
+        }
 
         self.metrics
             .resident_state_count
             .set(states.snapshots.len() as i64);
 
-        self.metrics
-            .max_resident_height
-            .set(tip_height.get() as i64);
-
-        states.tip = Some((tip_height, tip));
+        // The next call to take_tip() will take care of updating the
+        // tip if needed.
+        states.tip = Some((height, state));
 
         if scope == CertificationScope::Full {
             self.release_lock_and_persist_metadata(states);
