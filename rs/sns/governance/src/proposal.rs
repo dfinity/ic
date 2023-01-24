@@ -370,9 +370,10 @@ fn validate_and_render_upgrade_sns_controlled_canister(
 
     // Inspect wasm.
     const RAW_WASM_HEADER: [u8; 4] = [0, 0x61, 0x73, 0x6d];
-    const GZIPPED_WASM_HEADER: [u8; 2] = [0x1f, 0x8b];
+    // see https://ic-interface-spec.netlify.app/#canister-module-format
+    const GZIPPED_WASM_HEADER: [u8; 3] = [0x1f, 0x8b, 0x08];
     // Minimum length of raw WASM is 8 bytes (4 magic bytes and 4 bytes encoding version).
-    // Minimum length of gzipped WASM is 10 bytes (2 magic bytes and 8 additional gzip header bytes).
+    // Minimum length of gzipped WASM is 10 bytes (2 magic bytes, 1 byte encoding compression method, and 7 additional gzip header bytes).
     const MIN_WASM_LEN: usize = 8;
     if let Err(err) = validate_len(
         "new_canister_wasm",
@@ -382,7 +383,7 @@ fn validate_and_render_upgrade_sns_controlled_canister(
     ) {
         defects.push(err);
     } else if upgrade.new_canister_wasm[..4] != RAW_WASM_HEADER[..]
-        && upgrade.new_canister_wasm[..2] != GZIPPED_WASM_HEADER[..]
+        && upgrade.new_canister_wasm[..3] != GZIPPED_WASM_HEADER[..]
     {
         defects.push("new_canister_wasm lacks the magic value in its header.".into());
     }
