@@ -183,13 +183,11 @@ pub fn arbitrary_multi_bls12381_secret_key() -> CspSecretKey {
 /// This function is only used for tests
 #[allow(unused)]
 pub fn arbitrary_tls_ed25519_secret_key() -> CspSecretKey {
-    let mut random_bytes = [0; 42];
+    let mut random_bytes = vec![0; 42];
     for b in random_bytes.iter_mut() {
         *b = rand::random();
     }
-    CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes {
-        bytes: random_bytes.to_vec(),
-    })
+    CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes::new(random_bytes))
 }
 
 /// This function is only used for tests

@@ -19,13 +19,16 @@ pub struct ReproducibleRng {
 impl ReproducibleRng {
     pub fn new() -> Self {
         let mut thread_rng = rand::thread_rng();
-        let mut bytes = [0u8; 32];
-        thread_rng.fill(&mut bytes);
+        let mut seed = [0u8; 32];
+        thread_rng.fill(&mut seed);
+        Self::from_seed(seed)
+    }
+
+    pub fn from_seed(seed: [u8; 32]) -> Self {
         println!("Copy the seed below to reproduce the failed test.");
-        println!("let seed: [u8; 32] = {:?};", &bytes);
-        ReproducibleRng {
-            rng: ChaCha20Rng::from_seed(bytes),
-        }
+        println!("let seed: [u8; 32] = {:?};", &seed);
+        let rng = ChaCha20Rng::from_seed(seed);
+        Self { rng }
     }
 }
 

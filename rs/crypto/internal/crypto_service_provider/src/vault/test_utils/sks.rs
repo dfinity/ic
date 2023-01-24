@@ -136,9 +136,9 @@ pub fn secret_key_store_with_io_error_on_insert() -> impl SecretKeyStore {
 
 pub fn secret_key_store_containing_key_with_invalid_encoding(key_id: KeyId) -> impl SecretKeyStore {
     let mut key_store = TempSecretKeyStore::new();
-    let secret_key_with_invalid_der = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes {
-        bytes: b"invalid DER encoding".to_vec(),
-    });
+    let secret_key_with_invalid_der = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes::new(
+        b"invalid DER encoding".to_vec(),
+    ));
     assert!(key_store
         .insert(key_id, secret_key_with_invalid_der, None)
         .is_ok());
@@ -147,12 +147,14 @@ pub fn secret_key_store_containing_key_with_invalid_encoding(key_id: KeyId) -> i
 
 pub fn secret_key_store_containing_key_with_invalid_length(key_id: KeyId) -> impl SecretKeyStore {
     let mut key_store = TempSecretKeyStore::new();
-    let secret_key_with_invalid_length = CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes {
-        bytes: PKey::generate_ed448()
-            .expect("failed to create Ed2448 key pair")
-            .private_key_to_der()
-            .expect("failed to serialize Ed2448 key to DER"),
-    });
+
+    let bytes = PKey::generate_ed448()
+        .expect("failed to create Ed2448 key pair")
+        .private_key_to_der()
+        .expect("failed to serialize Ed2448 key to DER");
+
+    let secret_key_with_invalid_length =
+        CspSecretKey::TlsEd25519(TlsEd25519SecretKeyDerBytes::new(bytes));
     assert!(key_store
         .insert(key_id, secret_key_with_invalid_length, None)
         .is_ok());

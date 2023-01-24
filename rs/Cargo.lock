@@ -5497,7 +5497,9 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "base64 0.11.0",
+ "hex",
  "ic-crypto-internal-basic-sig-ed25519",
+ "ic-crypto-secrets-containers",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
@@ -5505,6 +5507,7 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_bytes",
+ "serde_cbor",
  "zeroize",
 ]
 

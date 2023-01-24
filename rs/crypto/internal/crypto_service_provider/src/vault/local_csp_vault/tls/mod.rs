@@ -61,7 +61,7 @@ fn ed25519_secret_key_bytes_from_der(
 ) -> Result<ed25519_types::SecretKeyBytes, CspTlsSignError> {
     // TODO (CRP-1229): Ensure proper zeroization of TLS secret key bytes
     let raw_private_key = SecretVec::new_and_zeroize_argument(
-        &mut PKey::private_key_from_der(&secret_key_der.bytes)
+        &mut PKey::private_key_from_der(secret_key_der.bytes.expose_secret())
             .map_err(
                 |_ignore_error_to_prevent_key_leakage| CspTlsSignError::MalformedSecretKey {
                     error:
