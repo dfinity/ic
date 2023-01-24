@@ -25,7 +25,7 @@ use ic_interfaces::crypto::{
     CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError,
     IdkgDealingEncPubKeysCountError, KeyManager, PublicKeyRegistrationStatus,
 };
-use ic_logger::{error, info};
+use ic_logger::{error, info, warn};
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
 use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -550,8 +550,23 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
     ) -> bool {
         let time_of_registration = Time::from_millis_since_unix_epoch(timestamp_in_millis)
             .expect("conversion error to happen in the year 2554");
-        let current_time = self.time_source.get_relative_time();
-        current_time > time_of_registration + key_rotation_period
+        if let Some(time_to_rotate) = time_of_registration.checked_add_duration(key_rotation_period)
+        {
+            let current_time = self.time_source.get_relative_time();
+            current_time > time_to_rotate
+        } else {
+            warn!(
+                self.logger,
+                "The addition of the key's registration time ({}) \
+            with the key rotation period ({:?}) would overflow a u64 of nanoseconds (year 2554). \
+            Is the key rotation period misconfigured?",
+                time_of_registration,
+                key_rotation_period
+            );
+            // time_of_registration + key_rotation_period overflows so it is guaranteed
+            // to be larger than current_time
+            false
+        }
     }
 }
 
