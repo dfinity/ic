@@ -1,26 +1,21 @@
 use ic_base_types::{CanisterId, NumBytes};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    CallOrigin,
-    //    testing::{CanisterQueuesTesting, SystemStateTesting},
-    CanisterState,
-    InputQueueType,
-    StateError,
-};
+use ic_replicated_state::{CanisterState, InputQueueType, StateError};
 use ic_test_utilities::{
     mock_time,
-    state::{get_running_canister, get_stopped_canister, get_stopping_canister},
+    state::{get_running_canister, get_stopped_canister, get_stopping_canister, register_callback},
+    types::ids::canister_test_id,
     types::messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
     messages::{CallbackId, Request, RequestOrResponse},
-    methods::{Callback, WasmClosure},
     xnet::QueueId,
-    Cycles, Time,
 };
+use std::sync::Arc;
 
 const CANISTER_ID: CanisterId = CanisterId::from_u64(0);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
+const CALLBACK_ID_RAW: u64 = 1;
 
 fn default_input_request() -> RequestOrResponse {
     RequestBuilder::new()
@@ -30,19 +25,24 @@ fn default_input_request() -> RequestOrResponse {
         .into()
 }
 
-fn default_input_response(callback_id: CallbackId) -> RequestOrResponse {
+fn input_response_from(respondent: CanisterId, callback_id: CallbackId) -> RequestOrResponse {
     ResponseBuilder::new()
         .originator(CANISTER_ID)
-        .respondent(OTHER_CANISTER_ID)
+        .respondent(respondent)
         .originator_reply_callback(callback_id)
         .build()
         .into()
 }
 
-fn default_output_request() -> Request {
+fn default_input_response() -> RequestOrResponse {
+    input_response_from(OTHER_CANISTER_ID, CallbackId::from(CALLBACK_ID_RAW))
+}
+
+fn output_request_to(canister_id: CanisterId, callback_id: CallbackId) -> Request {
     RequestBuilder::new()
         .sender(CANISTER_ID)
-        .receiver(OTHER_CANISTER_ID)
+        .receiver(canister_id)
+        .sender_reply_callback(callback_id)
         .build()
 }
 
@@ -73,32 +73,13 @@ impl CanisterFixture {
         }
     }
 
-    fn make_callback(&mut self) -> CallbackId {
-        let call_context_id = self
-            .canister_state
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1)),
-                Cycles::zero(),
-                Time::from_nanos_since_unix_epoch(0),
-            );
-        self.canister_state
-            .system_state
-            .call_context_manager_mut()
-            .unwrap()
-            .register_callback(Callback::new(
-                call_context_id,
-                Some(CANISTER_ID),
-                Some(OTHER_CANISTER_ID),
-                Cycles::zero(),
-                Some(Cycles::new(42)),
-                Some(Cycles::new(84)),
-                WasmClosure::new(0, 2),
-                WasmClosure::new(0, 2),
-                None,
-            ))
+    fn register_default_callback(&mut self) {
+        register_callback(
+            &mut self.canister_state,
+            CANISTER_ID,
+            OTHER_CANISTER_ID,
+            CallbackId::from(CALLBACK_ID_RAW),
+        );
     }
 
     fn push_input(
@@ -115,15 +96,22 @@ impl CanisterFixture {
         )
     }
 
+    fn push_output_request(&mut self, request: Request) -> Result<(), (StateError, Arc<Request>)> {
+        self.canister_state
+            .push_output_request(request.into(), mock_time())
+    }
+
     fn pop_output(&mut self) -> Option<(QueueId, RequestOrResponse)> {
         let mut iter = self.canister_state.output_into_iter();
         iter.pop()
     }
 
     fn with_input_reservation(&mut self) {
-        self.canister_state
-            .push_output_request(default_output_request().into(), mock_time())
-            .unwrap();
+        self.push_output_request(output_request_to(
+            OTHER_CANISTER_ID,
+            CallbackId::from(CALLBACK_ID_RAW),
+        ))
+        .unwrap();
         self.pop_output().unwrap();
     }
 }
@@ -137,9 +125,9 @@ fn running_canister_accepts_requests() {
 #[test]
 fn running_canister_accepts_responses() {
     let mut fixture = CanisterFixture::running();
+    fixture.register_default_callback();
     fixture.with_input_reservation();
-    let response = default_input_response(fixture.make_callback());
-    fixture.push_input(response).unwrap();
+    fixture.push_input(default_input_response()).unwrap();
 }
 
 #[test]
@@ -157,9 +145,9 @@ fn stopping_canister_rejects_requests() {
 #[test]
 fn stopping_canister_accepts_responses() {
     let mut fixture = CanisterFixture::stopping();
+    fixture.register_default_callback();
     fixture.with_input_reservation();
-    let response = default_input_response(fixture.make_callback());
-    fixture.push_input(response).unwrap();
+    fixture.push_input(default_input_response()).unwrap();
 }
 
 #[test]
@@ -177,11 +165,93 @@ fn stopped_canister_rejects_requests() {
 #[test]
 fn stopped_canister_rejects_responses() {
     let mut fixture = CanisterFixture::stopped();
-    fixture.with_input_reservation();
     // A stopped canister can't make a callback id.
-    let response = default_input_response(CallbackId::from(0));
+    fixture.with_input_reservation();
+    assert_eq!(
+        fixture.push_input(default_input_response()),
+        Err((
+            StateError::CanisterStopped(CANISTER_ID),
+            default_input_response(),
+        )),
+    );
+}
+
+#[test]
+fn validate_response_fails_when_unknown_callback_id() {
+    let mut fixture = CanisterFixture::running();
+    let response = input_response_from(OTHER_CANISTER_ID, CallbackId::from(13));
+
     assert_eq!(
         fixture.push_input(response.clone()),
-        Err((StateError::CanisterStopped(CANISTER_ID), response,)),
+        Err((
+            StateError::NonMatchingResponse {
+                err_str: "unknown callback id".to_string(),
+                originator: CANISTER_ID,
+                callback_id: CallbackId::from(13),
+                respondent: OTHER_CANISTER_ID,
+            },
+            response,
+        ))
     );
+}
+
+#[test]
+fn validate_responses_against_callback_details() {
+    let mut fixture = CanisterFixture::running();
+
+    let canister_b_id = canister_test_id(13);
+    let canister_c_id = canister_test_id(17);
+
+    // Creating the CallContext and registering the callback for a request from this canister -> canister B.
+    let callback_id_1 = CallbackId::from(1);
+    register_callback(
+        &mut fixture.canister_state,
+        CANISTER_ID,
+        canister_b_id,
+        callback_id_1,
+    );
+
+    // Creating the CallContext and registering the callback for a request from this canister -> canister C.
+    let callback_id_2 = CallbackId::from(2);
+    register_callback(
+        &mut fixture.canister_state,
+        CANISTER_ID,
+        canister_c_id,
+        callback_id_2,
+    );
+
+    // Reserving slots in the input queue for the corresponding responses.
+    // Request from this canister to canister B.
+    fixture
+        .push_output_request(output_request_to(canister_b_id, callback_id_1))
+        .unwrap();
+    fixture.pop_output();
+    // Request from this canister to canister C.
+    fixture
+        .push_output_request(output_request_to(canister_c_id, callback_id_2))
+        .unwrap();
+    fixture.pop_output();
+
+    // Creating invalid response from canister C to this canister.
+    // Using the callback_id from this canister -> canister B.
+    let response = input_response_from(canister_c_id, callback_id_1);
+    assert_eq!(
+        fixture.push_input(response.clone()),
+        Err((StateError::NonMatchingResponse { err_str: format!(
+            "invalid details, expected => [originator => {}, respondent => {}], but got response with",
+            CANISTER_ID, canister_b_id,
+        ), originator: response.receiver(), callback_id: callback_id_1, respondent: response.sender()}, response)),
+    );
+
+    // Creating valid response from canister C to this canister.
+    // Pushing the response in this canister's input queue is successful.
+    fixture
+        .push_input(input_response_from(canister_c_id, callback_id_2))
+        .unwrap();
+
+    // Creating valid response from canister B to this canister.
+    // Pushing the response in this canister's input queue is successful.
+    fixture
+        .push_input(input_response_from(canister_b_id, callback_id_1))
+        .unwrap();
 }
