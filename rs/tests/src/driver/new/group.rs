@@ -105,9 +105,10 @@ const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 mi
 const ROOT_TASK_NAME: &str = "root";
 const KEEPALIVE_TASK_NAME: &str = "keepalive";
 const SETUP_TASK_NAME: &str = "setup";
+const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 
 fn is_task_visible_to_user(task_id: &TaskId) -> bool {
-    matches!(task_id, TaskId::Test(task_name) if task_name.ne(ROOT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && !task_name.starts_with("dummy("))
+    matches!(task_id, TaskId::Test(task_name) if task_name.ne(ROOT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX) && !task_name.starts_with("dummy("))
 }
 
 /// A shortcut to represent the type of an event subscriber
@@ -266,7 +267,7 @@ impl SystemTestSubGroup {
             sub_group @ Self::Singleton { .. } => {
                 Self::Multiple {
                     tasks: once(sub_group).chain(once(singleton)).collect(),
-                    ordering: EvalOrder::Parallel, // TOOD: generalize this
+                    ordering: EvalOrder::Parallel, // TODO: generalize this
                 }
             }
         }
@@ -346,6 +347,14 @@ impl SystemTestGroup {
         }
     }
 
+    fn effective_timeout_per_test(&self) -> Duration {
+        self.timeout_per_test.unwrap_or(DEFAULT_TIMEOUT_PER_TEST)
+    }
+
+    fn effective_overall_timeout(&self) -> Duration {
+        self.overall_timeout.unwrap_or(DEFAULT_OVERALL_TIMEOUT)
+    }
+
     pub fn without_farm(mut self) -> Self {
         self.with_farm = false;
         self
@@ -380,12 +389,71 @@ impl SystemTestGroup {
         self
     }
 
+    pub fn add_sequential(self, sub_group: SystemTestSubGroup) -> Self {
+        self.add_group(sub_group, EvalOrder::Sequential)
+    }
+
     pub fn add_parallel(self, sub_group: SystemTestSubGroup) -> Self {
         self.add_group(sub_group, EvalOrder::Parallel)
     }
 
-    pub fn add_sequential(self, sub_group: SystemTestSubGroup) -> Self {
-        self.add_group(sub_group, EvalOrder::Sequential)
+    /// Add a subgroup with the specified minumal lifetime.
+    ///
+    /// Useful in experiments involving human interactions.
+    pub fn add_group_with_minimal_lifetime(
+        self,
+        sub_group: SystemTestSubGroup,
+        min_lifetime: Duration,
+    ) -> Self {
+        assert!(
+            min_lifetime <= self.effective_timeout_per_test(),
+            "min_lifetime of a SystemTestSubGroup cannot be greater than timeout_per_test"
+        );
+        assert!(
+            min_lifetime <= self.effective_overall_timeout(),
+            "min_lifetime of a SystemTestSubGroup cannot be greater than overall_timeout"
+        );
+        if min_lifetime.is_zero() {
+            // Optimization
+            return self.add_group(sub_group, EvalOrder::Parallel);
+        }
+        let lifetime_guard_task = move |env: TestEnv| {
+            info!(
+                env.logger(),
+                ">>> {LIFETIME_GUARD_TASK_PREFIX}task(min_lifetime={min_lifetime:?})"
+            );
+            std::thread::sleep(min_lifetime);
+        };
+        let lifetime_guard_task = TestFunction::new(
+            &format!("{LIFETIME_GUARD_TASK_PREFIX}{}_sec", min_lifetime.as_secs()),
+            lifetime_guard_task,
+        );
+        let lifetime_guard_sub_group = match sub_group {
+            SystemTestSubGroup::Singleton { .. } => sub_group.add_test(lifetime_guard_task),
+            SystemTestSubGroup::Multiple {
+                tasks: _,
+                ordering: EvalOrder::Parallel,
+            } => sub_group.add_test(lifetime_guard_task),
+            SystemTestSubGroup::Multiple {
+                tasks: _,
+                ordering: EvalOrder::Sequential,
+            } => {
+                todo!()
+            }
+        };
+        self.add_group(lifetime_guard_sub_group, EvalOrder::Parallel)
+    }
+
+    /// Add a single task with the specified minumal lifetime.
+    ///
+    /// Useful in experiments involving human interactions.
+    pub fn add_task_with_minimal_lifetime(
+        self,
+        task: TestFunction,
+        min_lifetime: Duration,
+    ) -> Self {
+        let sub_group = SystemTestSubGroup::new().add_test(task);
+        self.add_group_with_minimal_lifetime(sub_group, min_lifetime)
     }
 
     pub fn with_timeout_per_test(mut self, t: Duration) -> Self {
@@ -411,13 +479,15 @@ impl SystemTestGroup {
     ) -> Result<Plan<Box<dyn Task>>> {
         debug!(group_ctx.log(), "SystemTestGroup.make_plan");
 
+        let effective_overall_timeout = self.effective_overall_timeout();
+
         let mut compose_ctx = ComposeContext {
             rh,
             group_ctx: group_ctx.clone(),
             empty_task_counter: 0,
             subs: subs.clone(),
             logger: group_ctx.logger().clone(),
-            timeout_per_test: self.timeout_per_test.unwrap_or(DEFAULT_TIMEOUT_PER_TEST),
+            timeout_per_test: self.effective_timeout_per_test(),
         };
 
         // The ID of the root task is needed outside this function for awaiting when the plan execution finishes.
@@ -518,7 +588,7 @@ impl SystemTestGroup {
             EvalOrder::Sequential,
             vec![timed(
                 plan,
-                self.overall_timeout.unwrap_or(DEFAULT_OVERALL_TIMEOUT),
+                effective_overall_timeout,
                 Some(String::from("::group")),
                 &mut compose_ctx,
             )],
