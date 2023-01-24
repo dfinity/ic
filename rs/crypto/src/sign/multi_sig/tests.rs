@@ -46,11 +46,15 @@ mod test_multi_sign {
 
 mod test_multi_sig_verification {
     use super::*;
+    use crate::common::test_utils::crypto_component::crypto_component_with_csp;
     use crate::common::test_utils::hex_to_byte_vec;
+    use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
     use crate::common::test_utils::multi_bls12_381;
     use crate::common::test_utils::multi_bls12_381::MultiBls12381TestVector::{
         STABILITY_1, STABILITY_2,
     };
+    use ic_crypto_internal_csp::public_key_store::temp_pubkey_store::TempPublicKeyStore;
+    use ic_crypto_internal_csp::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_COMB_SIG_1_2;
     use ic_types::crypto::SignableMock;
 
@@ -101,8 +105,8 @@ mod test_multi_sig_verification {
 
         let crypto = crypto_component_with(
             registry_with_records(vec![pk_rec_1, pk_rec_2]),
-            secret_key_store_panicking_on_usage(),
-            public_key_store(),
+            TempSecretKeyStore::new(),
+            TempPublicKeyStore::new(),
         );
 
         assert_eq!(
@@ -125,10 +129,9 @@ mod test_multi_sig_verification {
         let empty_signatures: BTreeMap<NodeId, IndividualMultiSigOf<SignableMock>> =
             BTreeMap::new();
 
-        let crypto = crypto_component_with(
+        let crypto = crypto_component_with_csp(
+            MockAllCryptoServiceProvider::new(),
             registry_with_records(vec![pk_rec_1]),
-            secret_key_store_panicking_on_usage(),
-            public_key_store(),
         );
 
         assert_matches!(
@@ -162,8 +165,8 @@ mod test_multi_sig_verification {
 
         let crypto = crypto_component_with(
             registry_with_records(vec![pk_rec_1, pk_rec_2]),
-            secret_key_store_panicking_on_usage(),
-            public_key_store(),
+            TempSecretKeyStore::new(),
+            TempPublicKeyStore::new(),
         );
 
         assert!(crypto
@@ -193,10 +196,9 @@ mod test_multi_sig_verification {
             TESTVEC_MULTI_BLS12_381_COMB_SIG_1_2,
         )));
 
-        let crypto = crypto_component_with(
+        let crypto = crypto_component_with_csp(
+            MockAllCryptoServiceProvider::new(),
             registry_with_records(vec![pk_rec_1, pk_rec_2]),
-            secret_key_store_panicking_on_usage(),
-            public_key_store(),
         );
 
         assert_matches!(

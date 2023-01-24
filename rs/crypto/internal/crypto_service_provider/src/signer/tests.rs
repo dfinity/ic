@@ -756,3 +756,23 @@ mod multi {
         assert!(combination.unwrap_err().is_algorithm_not_supported());
     }
 }
+
+mod batch {
+    use super::*;
+
+    #[test]
+    fn should_verify_batch_of_single_signature_without_querying_secret_key_store() {
+        let (_sk, pk, msg, sig) = csp_testvec(RFC8032_ED25519_1);
+        let verifier = Csp::of(
+            ChaCha20Rng::seed_from_u64(69),
+            secret_key_store_panicking_on_usage(),
+            MockPublicKeyStore::new(),
+        );
+        let key_signature_pairs = vec![(pk, sig)];
+        let algorithm_id = AlgorithmId::Ed25519;
+
+        let result = verifier.verify_batch_vartime(&key_signature_pairs, &msg, algorithm_id);
+
+        assert_matches!(result, Ok(()));
+    }
+}

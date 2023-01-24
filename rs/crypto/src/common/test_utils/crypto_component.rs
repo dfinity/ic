@@ -31,3 +31,15 @@ pub fn crypto_component_with<S: SecretKeyStore + 'static, P: PublicKeyStore + 's
         node_test_id(NODE_ID),
     )
 }
+
+pub fn crypto_component_with_csp<C: CryptoServiceProvider>(
+    csp: C,
+    registry_client: Arc<dyn RegistryClient>,
+) -> CryptoComponentFatClient<C> {
+    CryptoComponentFatClient::new_with_csp_and_fake_node_id(
+        csp,
+        no_op_logger(),
+        registry_client,
+        node_test_id(NODE_ID),
+    )
+}

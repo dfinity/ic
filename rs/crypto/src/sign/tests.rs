@@ -5,12 +5,9 @@ use crate::common::test_utils::{CryptoRegistryKey, CryptoRegistryRecord};
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-use ic_crypto_internal_csp::public_key_store::PublicKeyStore;
 use ic_crypto_internal_csp::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use ic_crypto_internal_csp::secret_key_store::SecretKeyStore;
 use ic_crypto_internal_csp::types::CspSecretKey;
-use ic_crypto_internal_csp_test_utils::public_key_store::MockPublicKeyStore;
-use ic_crypto_internal_csp_test_utils::secret_key_store_test_utils::MockSecretKeyStore;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
@@ -202,33 +199,6 @@ pub fn registry_returning(error: RegistryClientError) -> Arc<dyn RegistryClient>
     Arc::new(registry)
 }
 
-#[allow(dead_code)]
-pub fn secret_key_store_returning_none() -> impl SecretKeyStore {
-    let mut sks = MockSecretKeyStore::new();
-    sks.expect_get().return_const(None);
-    sks
-}
-
-pub fn secret_key_store_panicking_on_usage() -> impl SecretKeyStore {
-    let mut sks = MockSecretKeyStore::new();
-    sks.expect_insert().never();
-    sks.expect_get().never();
-    sks.expect_contains().never();
-    sks.expect_remove().never();
-    sks
-}
-
-pub fn public_key_store() -> impl PublicKeyStore {
-    MockPublicKeyStore::new()
-}
-
-#[test]
-#[should_panic]
-pub fn should_panic_when_panicking_secret_key_store_is_used() {
-    let sks = secret_key_store_panicking_on_usage();
-    let _ = sks.get(&KeyId::from(KEY_ID));
-}
-
 // Note: it is not necessary to explicitly set the expectation that the
 // various methods of the trait are _never_ called with code like this
 //    ```
@@ -254,11 +224,6 @@ pub fn dummy_registry() -> Arc<dyn RegistryClient> {
     Arc::new(FakeRegistryClient::new(Arc::new(
         ProtoRegistryDataProvider::new(),
     )))
-}
-
-#[allow(dead_code)]
-pub fn dummy_secret_key_store() -> impl SecretKeyStore {
-    MockSecretKeyStore::new()
 }
 
 #[cfg(test)]
