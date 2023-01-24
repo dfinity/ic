@@ -16,7 +16,7 @@ use ic_interfaces::{
         CanisterHttpGossipPool, CertificationGossipPool, ConsensusGossipPool, DkgGossipPool,
         EcdsaGossipPool, IngressGossipPool,
     },
-    ingress_pool::IngressPool,
+    ingress_pool::{IngressPool, IngressPoolThrottler},
     time_source::TimeSource,
 };
 use ic_logger::{debug, ReplicaLogger};
@@ -359,8 +359,8 @@ impl<Pool> IngressClient<Pool> {
     }
 }
 
-impl<Pool: IngressPool + IngressGossipPool + Send + Sync> ArtifactClient<IngressArtifact>
-    for IngressClient<Pool>
+impl<Pool: IngressPool + IngressGossipPool + IngressPoolThrottler + Send + Sync + 'static>
+    ArtifactClient<IngressArtifact> for IngressClient<Pool>
 {
     /// The method checks whether the given signed ingress bytes constitutes a
     /// valid singed ingress message.
@@ -431,7 +431,15 @@ impl<Pool: IngressPool + IngressGossipPool + Send + Sync> ArtifactClient<Ingress
     ) -> Option<PriorityFn<IngressMessageId, IngressMessageAttribute>> {
         let start = self.time_source.get_relative_time();
         let range = start..=start + MAX_INGRESS_TTL;
+        let pool = self.ingress_pool.clone();
         Some(Box::new(move |ingress_id, _| {
+            if pool
+                .read()
+                .expect("couldn't acquire readers lock on ingress pool")
+                .exceeds_threshold()
+            {
+                return Priority::Drop;
+            }
             if range.contains(&ingress_id.expiry()) {
                 Priority::Later
             } else {
