@@ -40,11 +40,12 @@ if ((${VERSION} < 9)); then
     set_config_version 9
 fi
 if ((${VERSION} < 10)); then
+    download_backup_binary "d830848a6e9d6dd7f5ada9cdf6fcdbec6cf6b76b"
     ./ic-backup --config-file config.json5 upgrade
     set_config_version 10
 fi
 if ((${VERSION} < 11)); then
-    download_backup_binary "76b4541dcb8a0aa2da36030fb6422e0693168d9d"
+    download_backup_binary "d830848a6e9d6dd7f5ada9cdf6fcdbec6cf6b76b"
     set_config_version 11
 fi
 
