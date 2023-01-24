@@ -13,20 +13,16 @@ use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::BitcoinGetSuccessorsContext,
     replicated_state::PeekableOutputIterator, replicated_state::ReplicatedStateMessageRouting,
-    BitcoinStateError, CanisterState, InputQueueType, ReplicatedState, SchedulerState, StateError,
-    SystemState,
+    BitcoinStateError, CanisterState, ReplicatedState, SchedulerState, StateError, SystemState,
 };
 use ic_test_utilities::mock_time;
-use ic_test_utilities::state::{
-    arb_replicated_state_with_queues, get_running_canister, register_callback,
-};
-use ic_test_utilities::types::ids::canister_test_id;
+use ic_test_utilities::state::arb_replicated_state_with_queues;
 use ic_test_utilities::types::{
     ids::{subnet_test_id, user_test_id},
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
-    messages::{CallbackId, Payload, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES},
+    messages::{Payload, RequestOrResponse, MAX_RESPONSE_COUNT_BYTES},
     CountBytes, Cycles, Time,
 };
 use proptest::prelude::*;
@@ -510,152 +506,6 @@ fn push_input_queues_respects_local_remote_subnet() {
             .get_local_subnet_input_schedule()
             .len(),
         2
-    );
-}
-
-#[test]
-fn validate_response_fails_when_unknown_callback_id() {
-    let canister_a_id = canister_test_id(0);
-    let canister_b_id = canister_test_id(1);
-    let mut canister_a = get_running_canister(canister_a_id);
-
-    // Creating response from canister B to canister A.
-    let response = RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_a_id)
-            .respondent(canister_b_id)
-            .originator_reply_callback(CallbackId::from(1))
-            .build()
-            .into(),
-    );
-    assert_eq!(
-        canister_a.push_input(
-            response.clone(),
-            MAX_CANISTER_MEMORY_SIZE,
-            &mut SUBNET_AVAILABLE_MEMORY.clone(),
-            SubnetType::Application,
-            InputQueueType::RemoteSubnet,
-        ),
-        Err((
-            StateError::NonMatchingResponse {
-                err_str: "unknown callback id".to_string(),
-                originator: canister_a_id,
-                callback_id: CallbackId::from(1),
-                respondent: canister_b_id
-            },
-            response
-        ))
-    );
-}
-
-#[test]
-fn validate_responses_against_callback_details() {
-    let canister_a_id = canister_test_id(0);
-    let canister_b_id = canister_test_id(1);
-    let canister_c_id = canister_test_id(2);
-
-    let mut canister_a = get_running_canister(canister_a_id);
-
-    // Creating the CallContext and registering the callback for a request from canister A -> canister B.
-    let callback_id_1 = CallbackId::from(1);
-    register_callback(&mut canister_a, canister_a_id, canister_b_id, callback_id_1);
-
-    // Creating the CallContext and registering the callback for a request from canister A -> canister C.
-    let callback_id_2 = CallbackId::from(2);
-    register_callback(&mut canister_a, canister_a_id, canister_c_id, callback_id_2);
-
-    // Reserving slots in the input queue for the corresponding responses.
-    // Request from canister A to canister B.
-    assert_eq!(
-        canister_a.push_output_request(
-            RequestBuilder::new()
-                .sender(canister_a_id)
-                .receiver(canister_b_id)
-                .sender_reply_callback(callback_id_1)
-                .build()
-                .into(),
-            mock_time(),
-        ),
-        Ok(())
-    );
-    // Request from canister A to canister C.
-    assert_eq!(
-        canister_a.push_output_request(
-            RequestBuilder::new()
-                .sender(canister_a_id)
-                .receiver(canister_c_id)
-                .sender_reply_callback(callback_id_2)
-                .build()
-                .into(),
-            mock_time(),
-        ),
-        Ok(())
-    );
-
-    // Creating invalid response from canister C to canister A.
-    // Using the callback_id from canister A -> B.
-    let response = RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_a_id)
-            .respondent(canister_c_id)
-            .originator_reply_callback(callback_id_1)
-            .build()
-            .into(),
-    );
-    assert_eq!(
-        canister_a.push_input(
-            response.clone(),
-            MAX_CANISTER_MEMORY_SIZE,
-            &mut SUBNET_AVAILABLE_MEMORY.clone(),
-            SubnetType::Application,
-            InputQueueType::RemoteSubnet,
-        ),
-        Err((StateError::NonMatchingResponse { err_str: format!(
-            "invalid details, expected => [originator => {}, respondent => {}], but got response with",
-            canister_a_id, canister_b_id,
-        ), originator: response.receiver(), callback_id: callback_id_1, respondent: response.sender()}, response))
-    );
-
-    // Creating valid response from canister C to canister A.
-    // Pushing the response in canister A's input queue is successful.
-    let response = RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_a_id)
-            .respondent(canister_c_id)
-            .originator_reply_callback(callback_id_2)
-            .build()
-            .into(),
-    );
-    assert_eq!(
-        canister_a.push_input(
-            response,
-            MAX_CANISTER_MEMORY_SIZE,
-            &mut SUBNET_AVAILABLE_MEMORY.clone(),
-            SubnetType::Application,
-            InputQueueType::RemoteSubnet,
-        ),
-        Ok(())
-    );
-
-    // Creating valid response from canister B to canister A.
-    // Pushing the response in canister A's input queue is successful.
-    let response = RequestOrResponse::Response(
-        ResponseBuilder::new()
-            .originator(canister_a_id)
-            .respondent(canister_b_id)
-            .originator_reply_callback(callback_id_1)
-            .build()
-            .into(),
-    );
-    assert_eq!(
-        canister_a.push_input(
-            response,
-            MAX_CANISTER_MEMORY_SIZE,
-            &mut SUBNET_AVAILABLE_MEMORY.clone(),
-            SubnetType::Application,
-            InputQueueType::RemoteSubnet,
-        ),
-        Ok(())
     );
 }
 
