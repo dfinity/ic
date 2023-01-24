@@ -28,6 +28,7 @@ const DEFAULT_SYNC_PERIOD: u64 = 30;
 const DEFAULT_REPLAY_PERIOD: u64 = 240;
 const DEFAULT_VERSIONS_HOT: usize = 2;
 const SECONDS_IN_DAY: u64 = 24u64 * 60 * 60;
+const COLD_STORAGE_PERIOD: u64 = SECONDS_IN_DAY;
 
 struct SubnetBackup {
     pub nodes_syncing: usize,
@@ -429,15 +430,14 @@ fn cold_store(m: Arc<BackupManager>) {
     info!(m.log, "Spawned cold storage thread...");
     let size = m.subnet_backups.len();
     loop {
-        // announce the current version of the ic-backup here, once per hour
-        if !m.subnet_backups.is_empty() {
-            m.subnet_backups[0]
-                .backup_helper
-                .notification_client
-                .push_metrics_version(m.version);
-        }
         for i in 0..size {
             let b = &m.subnet_backups[i];
+
+            // announce the current version of the ic-backup here, once per day for each subnet
+            b.backup_helper
+                .notification_client
+                .push_metrics_version(m.version);
+
             let subnet_id = &b.backup_helper.subnet_id;
             match b.backup_helper.need_cold_storage_move() {
                 Ok(need) => {
@@ -464,7 +464,7 @@ fn cold_store(m: Arc<BackupManager>) {
                     .report_failure_slack(msg);
             }
         }
-        // make checks for cold storage archiving only once per hour or so
-        sleep_secs(3600);
+        // make checks for cold storage archiving only once per day or so
+        sleep_secs(COLD_STORAGE_PERIOD);
     }
 }

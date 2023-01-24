@@ -22,7 +22,7 @@ PUBLIC_KEY_NAME="ic_public_key.pem"
 PUBLIC_KEY_FILE="${TMP_DIR}/${PUBLIC_KEY_NAME}"
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="d830848a6e9d6dd7f5ada9cdf6fcdbec6cf6b76b"
+DEFAULT_BUILD_ID="af1baff9d9968a3a47348d430c816ca9cb4d8a56"
 echo "Enter the BUILD_ID of the proper ic-backup version:"
 echo "(default: ${DEFAULT_BUILD_ID}):"
 read BUILD_ID
@@ -52,6 +52,19 @@ if [ -z "${INPUT_WORK_DIR// /}" ]; then
     INPUT_WORK_DIR=${DEFAULT_WORK_DIR}
 fi
 
+DEFAULT_PUSH_METRICS="no"
+echo "Should the metrics be pushed?"
+echo "(default: ${DEFAULT_PUSH_METRICS})"
+read INPUT_PUSH_METRICS
+if [ -z "${INPUT_PUSH_METRICS// /}" ]; then
+    INPUT_PUSH_METRICS=${DEFAULT_PUSH_METRICS}
+fi
+if [ "${INPUT_PUSH_METRICS}" = "no" ]; then
+    PUSH_METRICS="false"
+else
+    PUSH_METRICS="true"
+fi
+
 WORK_DIR=$(realpath -s ${INPUT_WORK_DIR})
 
 echo
@@ -72,8 +85,8 @@ chmod +x ${BACKUP_EXE}
 
 read -r -d '' CONFIG <<-EOM
 {
-    "version": 11,
-    "push_metrics": true,
+    "version": 12,
+    "push_metrics": ${PUSH_METRICS},
     "backup_instance": "${BACKUP_INSTANCE}",
     "nns_url": "${NNS_URL}",
     "nns_pem": "${WORK_DIR}/$PUBLIC_KEY_NAME",
