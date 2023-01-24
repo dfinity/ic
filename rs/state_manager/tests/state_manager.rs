@@ -2375,7 +2375,60 @@ fn can_commit_below_state_sync() {
         insert_dummy_canister(&mut state, canister_test_id(100));
         let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let (_height, state) = src_state_manager.take_tip();
+        src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+
+        let hash = wait_for_checkpoint(&src_state_manager, height(2));
+        let id = StateSyncArtifactId {
+            height: height(2),
+            hash,
+        };
+
+        let msg = src_state_manager
+            .get_validated_by_identifier(&id)
+            .expect("failed to get state sync messages");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test(|dst_metrics, dst_state_manager| {
+            let (tip_height, state) = dst_state_manager.take_tip();
+            assert_eq!(tip_height, height(0));
+            let chunkable = dst_state_manager.create_chunkable_state(&id);
+            let dst_msg = pipe_state_sync(msg, chunkable);
+            dst_state_manager.process_changes(
+                time_source.as_ref(),
+                vec![UnvalidatedArtifact {
+                    message: dst_msg,
+                    peer_id: node_test_id(0),
+                    timestamp: mock_time(),
+                }],
+            );
+            // Check committing an old state doesn't panic
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+            wait_for_checkpoint(&dst_state_manager, height(1));
+
+            // take_tip should update the tip to the synced checkpoint
+            let (tip_height, _state) = dst_state_manager.take_tip();
+            assert_eq!(tip_height, height(2));
+            assert_eq!(dst_state_manager.latest_state_height(), height(2));
+            // state 1 should be removeable
+            dst_state_manager.remove_states_below(height(2));
+            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
+            assert_error_counters(dst_metrics);
+        })
+    })
+}
+
+#[test]
+fn can_state_sync_below_commit() {
+    state_manager_test(|src_metrics, src_state_manager| {
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        let time_source = ic_test_utilities::FastForwardTimeSource::new();
+
         src_state_manager.commit_and_certify(state.clone(), height(1), CertificationScope::Full);
+
         let hash = wait_for_checkpoint(&src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
@@ -2389,8 +2442,18 @@ fn can_commit_below_state_sync() {
         assert_error_counters(src_metrics);
 
         state_manager_test(|dst_metrics, dst_state_manager| {
-            let chunkable = dst_state_manager.create_chunkable_state(&id);
+            let (tip_height, state) = dst_state_manager.take_tip();
+            assert_eq!(tip_height, height(0));
+            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
+            let (_height, state) = dst_state_manager.take_tip();
+            dst_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+            wait_for_checkpoint(&dst_state_manager, height(2));
+
+            let (_height, state) = dst_state_manager.take_tip();
+            dst_state_manager.remove_states_below(height(2));
+            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
+            let chunkable = dst_state_manager.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
             dst_state_manager.process_changes(
                 time_source.as_ref(),
@@ -2400,11 +2463,19 @@ fn can_commit_below_state_sync() {
                     timestamp: mock_time(),
                 }],
             );
+            assert_eq!(
+                dst_state_manager.checkpoint_heights(),
+                vec![height(1), height(2)]
+            );
+            dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+            wait_for_checkpoint(&dst_state_manager, height(3));
 
-            dst_state_manager.take_tip();
-            // Check committing an old state doesn't panic
-            dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-
+            let (tip_height, _state) = dst_state_manager.take_tip();
+            assert_eq!(tip_height, height(3));
+            assert_eq!(dst_state_manager.latest_state_height(), height(3));
+            // state 1 should be removeable
+            dst_state_manager.remove_states_below(height(3));
+            assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
             assert_error_counters(dst_metrics);
         })
     })
