@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "cmd",
     srcs = [
+        "helpers.go",
         "root.go",
         "testCmd.go",
     ],
@@ -10,6 +11,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_fatih_color//:color",
+        "@com_github_schollz_closestmatch//:closestmatch",
         "@com_github_spf13_cobra//:cobra",
     ],
 )

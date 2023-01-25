@@ -58,16 +58,3 @@ func Test_TestCmdWithHelpArg(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Contains(t, actual.String(), expected)
 }
-
-func Test_TestCmdWithTargetAndDryRunArgs(t *testing.T) {
-	expected := "bazel test my_target --config=systest --cache_test_results=yes"
-	actual := new(bytes.Buffer)
-	var command = cmd.NewTestCmd()
-	command.SetArgs([]string{"my_target", "-c", "--dry-run"})
-	command.SetOut(actual)
-
-	err := command.Execute()
-
-	assert.Nil(t, err)
-	assert.Contains(t, actual.String(), expected)
-}

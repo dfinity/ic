@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -12,18 +13,33 @@ var RED = "\033[1;31m"
 var GREEN = "\033[1;32m"
 var CYAN = "\033[0;36m"
 var NC = "\033[0m"
+var FUZZY_MATCHES_COUNT = 7
 
 type Config struct {
-	isCacheTestResult bool
-	testTmpDir        string
-	isDryRun          bool
+	useCachedTestResult   bool
+	testTmpDir            string
+	isDryRun              bool
+	useFuzzyMatchedTarget bool
 }
 
 func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		target := args[0]
+		if res, err_target := check_target_exists(target); !res {
+			if err_target != nil {
+				return err_target
+			} else if closest_matches, err_match := get_closest_target_matches(target); err_match != nil {
+				return err_match
+			} else if len(closest_matches) == 0 {
+				return fmt.Errorf("No test target `%s` was found", target)
+			} else if cfg.useFuzzyMatchedTarget {
+				target = closest_matches[0]
+			} else {
+				return fmt.Errorf("No test target `%s` was found: \nDid you mean any of:\n%s", target, strings.Join(closest_matches, "\n"))
+			}
+		}
 		cache_test_results := "--cache_test_results="
-		if cfg.isCacheTestResult {
+		if cfg.useCachedTestResult {
 			cache_test_results += "yes"
 		} else {
 			cache_test_results += "no"
@@ -49,15 +65,16 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 func NewTestCmd() *cobra.Command {
 	var cfg = Config{}
 	var testCmd = &cobra.Command{
-		Use:     "test",
+		Use:     "test <system_test_target_arg>",
 		Aliases: []string{"system_test", "t"},
 		Short:   "Run system_test target with Bazel",
 		Example: "ict test //rs/tests:basic_health_test",
 		Args:    cobra.ExactArgs(1),
 		RunE:    TestCommandWithConfig(&cfg),
 	}
+	testCmd.Flags().BoolVarP(&cfg.useFuzzyMatchedTarget, "use-fuzzy-match", "f", false, "If test target is not found, use the closest fuzzy matched one.")
 	testCmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked.")
-	testCmd.Flags().BoolVarP(&cfg.isCacheTestResult, "cache_test_results", "c", false, "Bazel's cache_test_results, see --cache_test_results tag in Bazel docs.")
+	testCmd.Flags().BoolVarP(&cfg.useCachedTestResult, "cache_test_results", "c", false, "Bazel's cache_test_results, see --cache_test_results tag in Bazel docs.")
 	testCmd.PersistentFlags().StringVarP(&cfg.testTmpDir, "test_tmpdir", "t", "", "Dir for storing test results, see --test-tmpdir tag in Bazel docs.")
 	return testCmd
 }
