@@ -40,7 +40,7 @@ pub fn build_dashboard() -> Vec<u8> {
               <div class='background'><div class='content'>
                 <h3>Metadata</h3>
                 {}
-                <h3>Pending tx request</h3>
+                <h3>Pending retrieve BTC requests</h3>
                      <table>
                         <thead>
                             <tr>
@@ -75,7 +75,7 @@ pub fn build_dashboard() -> Vec<u8> {
                     </thead>
                     <tbody>{}</tbody>
                 </table>
-                <h3>Finalized requests</h3>
+                <h3>Finalized retrieve BTC requests</h3>
                 <table>
                     <thead>
                         <tr>
