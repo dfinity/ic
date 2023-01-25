@@ -2,11 +2,11 @@ use crate::{archive::ArchiveCanisterWasm, blockchain::Blockchain, range_utils, r
 use ic_base_types::CanisterId;
 use ic_canister_log::{log, Sink};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::ops::Range;
 use std::time::Duration;
 
-use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore};
+use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore, InspectableBalancesStore};
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Tokens;
@@ -21,7 +21,7 @@ pub struct TransactionInfo<TransactionType> {
 }
 
 pub trait LedgerTransaction: Sized {
-    type AccountId: std::hash::Hash + Eq;
+    type AccountId: Clone;
 
     /// Constructs a new "burn" transaction that removes the specified `amount` of tokens from the
     /// `from` account.
@@ -41,11 +41,11 @@ pub trait LedgerTransaction: Sized {
     /// Applies this transaction to the balance book.
     fn apply<S>(
         &self,
-        balances: &mut Balances<Self::AccountId, S>,
+        balances: &mut Balances<S>,
         effective_fee: Tokens,
     ) -> Result<(), BalanceError>
     where
-        S: Default + BalancesStore<Self::AccountId>;
+        S: Default + BalancesStore<AccountId = Self::AccountId>;
 }
 
 pub trait LedgerAccess {
@@ -72,6 +72,7 @@ pub trait LedgerData {
     type Runtime: Runtime;
     type Block: BlockType<Transaction = Self::Transaction>;
     type Transaction: LedgerTransaction<AccountId = Self::AccountId> + Ord + Clone;
+    type BalancesStore: InspectableBalancesStore<AccountId = Self::AccountId> + Default;
 
     // Purge configuration
 
@@ -102,8 +103,8 @@ pub trait LedgerData {
 
     // Ledger data structures
 
-    fn balances(&self) -> &Balances<Self::AccountId, HashMap<Self::AccountId, Tokens>>;
-    fn balances_mut(&mut self) -> &mut Balances<Self::AccountId, HashMap<Self::AccountId, Tokens>>;
+    fn balances(&self) -> &Balances<Self::BalancesStore>;
+    fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore>;
 
     fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm>;
     fn blockchain_mut(&mut self) -> &mut Blockchain<Self::Runtime, Self::ArchiveWasm>;
