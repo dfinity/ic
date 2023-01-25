@@ -111,13 +111,24 @@ pub async fn update_balance(
 
     let utxos = get_utxos(btc_network, &address, min_confirmations).await?;
 
-    let new_utxos = state::read_state(|s| match s.utxos_state_addresses.get(&caller_account) {
-        Some(known_utxos) => utxos
+    let new_utxos: Vec<_> = state::read_state(|s| {
+        let maybe_existing_utxos = s.utxos_state_addresses.get(&caller_account);
+        let maybe_finalized_utxos = s.finalized_utxos.get(&caller_account.owner);
+        utxos
             .into_iter()
-            .filter(|u| !known_utxos.contains(u))
-            .collect(),
-        None => utxos,
+            .filter(|u| {
+                !maybe_existing_utxos
+                    .map(|utxos| utxos.contains(u))
+                    .unwrap_or(false)
+                    && !maybe_finalized_utxos
+                        .map(|utxos| utxos.contains(u))
+                        .unwrap_or(false)
+            })
+            .collect()
     });
+
+    // Remove pending finalized transactions for the affected principal.
+    state::mutate_state(|s| s.finalized_utxos.remove(&caller_account.owner));
 
     let satoshis_to_mint = new_utxos.iter().map(|u| u.value).sum::<u64>();
 
