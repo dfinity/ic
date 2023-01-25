@@ -37,6 +37,7 @@ use ic_types::{
     replica_config::ReplicaConfig,
     time, CanisterId, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
 };
+use rand::distributions::{Distribution, Uniform};
 use slog::{Drain, Logger};
 use std::collections::BTreeMap;
 use std::fs::OpenOptions;
@@ -308,6 +309,13 @@ fn print_wasm_result(wasm_result: WasmResult) {
     }
 }
 
+fn get_random_seed() -> [u8; 32] {
+    let step = Uniform::new(0, u8::MAX);
+    let mut rng = rand::thread_rng();
+    let seed: Vec<u8> = step.sample_iter(&mut rng).take(32).collect();
+    seed.try_into().unwrap()
+}
+
 fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -> Batch {
     Batch {
         batch_number: message_routing.expected_batch_height(),
@@ -316,7 +324,7 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
             ingress: IngressPayload::from(msgs),
             ..BatchPayload::default()
         },
-        randomness: Randomness::from([0; 32]),
+        randomness: Randomness::from(get_random_seed()),
         ecdsa_subnet_public_keys: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),
         time: time::current_time(),
@@ -400,5 +408,23 @@ fn wait_extra_batches(message_routing: &dyn MessageRouting, extra_batches: u64) 
                 break;
             };
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_get_random_seed() {
+        let seed_1 = get_random_seed();
+        let seed_2 = get_random_seed();
+        let len = seed_1.len();
+        let mut equal = 0;
+        for i in 0..len {
+            if seed_1[i] == seed_2[i] {
+                equal += 1;
+            }
+        }
+        assert_ne!(equal, len);
     }
 }

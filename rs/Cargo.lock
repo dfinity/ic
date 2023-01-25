@@ -5970,6 +5970,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-registry",
  "ic-types",
+ "rand 0.8.5",
  "slog",
  "slog-term",
  "tokio",
