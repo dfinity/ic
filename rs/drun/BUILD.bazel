@@ -31,6 +31,7 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:slog-term",
     "@crate_index//:tokio",
+    "@crate_index//:rand_0_8_4",
 ]
 
 rust_library(
