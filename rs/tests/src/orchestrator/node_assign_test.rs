@@ -22,11 +22,19 @@ Success:: nodes can be added/killed to/within the existing subnet.
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed};
-use crate::util::*;
+use crate::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::{SshKeyGen, TestEnv},
+        test_env_api::{HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVm},
+    },
+    nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
+    orchestrator::utils::rw_message::install_nns_and_check_progress,
+    util::{
+        assert_create_agent, block_on, create_delay, get_app_subnet_and_node, get_nns_node,
+        runtime_from_url, MessageCanister,
+    },
+};
 use canister_test;
 use ic_base_types::NodeId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -42,6 +50,10 @@ const UPDATE_MSG_3: &str = "However this prose will NOT be persisted for future 
 const UNASSIGNED_NODES_COUNT: usize = 3; // must be >= 3, currently tested for X=3, f=1 and N=4
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen("admin")
+        .expect("Failed to generate ssh admin keys");
+
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -63,7 +75,6 @@ pub fn config(env: TestEnv) {
 pub fn test(env: TestEnv) {
     let topo_snapshot = env.topology_snapshot();
     let logger = env.logger();
-
     let nns_node = get_nns_node(&topo_snapshot);
 
     let unassigned_node_ids: Vec<NodeId> = topo_snapshot
@@ -71,7 +82,6 @@ pub fn test(env: TestEnv) {
         .map(|n| n.node_id)
         .collect();
     assert_eq!(unassigned_node_ids.len(), UNASSIGNED_NODES_COUNT);
-
     let unassigned_nodes = topo_snapshot.unassigned_nodes();
 
     // get application node
@@ -150,6 +160,7 @@ pub fn test(env: TestEnv) {
     for n in newly_assigned_nodes.iter().take(kill_nodes_count) {
         n.vm().kill();
     }
+
     // Second loop to paralelize the effects of the previous one
     info!(logger, "Wait for killed nodes to become unavailable");
     for n in newly_assigned_nodes.iter().take(kill_nodes_count) {
