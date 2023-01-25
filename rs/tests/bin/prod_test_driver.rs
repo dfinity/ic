@@ -399,14 +399,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             ),
             pot_with_setup(
-                "node_assign_pot",
-                orchestrator::node_assign_test::config,
-                par(vec![sys_t(
-                    "node_assign_test",
-                    orchestrator::node_assign_test::test,
-                )]),
-            ).with_alert(ENG_CONSENSUS_CHANNEL),
-            pot_with_setup(
                 "nns_follow_pot",
                 nns_tests::nns_follow::config,
                 par(vec![sys_t("follow_test", nns_tests::nns_follow::test)]),

@@ -220,12 +220,14 @@ pub(crate) fn install_nns_and_check_progress(topology: TopologySnapshot) {
                 .expect("Node's status endpoint didn't report healthy")
         })
     });
+
     // 2. Check that all unassigned nodes (if any) are healthy.
     topology.unassigned_nodes().for_each(|node| {
         node.await_can_login_as_admin_via_ssh()
             .expect("Timeout while waiting for all unassigned nodes to be healthy");
     });
     info!(logger, "IC is healthy and ready.");
+
     topology
         .root_subnet()
         .nodes()
@@ -234,6 +236,7 @@ pub(crate) fn install_nns_and_check_progress(topology: TopologySnapshot) {
         .install_nns_canisters()
         .expect("NNS canisters not installed");
     info!(logger, "NNS canisters are installed.");
+
     topology.subnets().for_each(|subnet| {
         if subnet.subnet_id != topology.root_subnet_id() {
             subnet.nodes().for_each(|node| {
