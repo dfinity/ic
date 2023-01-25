@@ -11,10 +11,8 @@ benchmarks:
   variables:
     RUST_BACKTRACE: 1
     CARGO_BENCH_TIMEOUT: 34200 # 9.5h
-  # Benchmarks should run on a dedicated machine, otherwise benchmark results are meaningless
   tags:
-    - dfinity-benchmarks
-    - docker
+    - dfinity
     - ubuntu
   script:
     - cd "${CI_PROJECT_DIR}/rs"

@@ -16,8 +16,7 @@
     paths:
       - $CI_JOB_STAGE/$CI_JOB_NAME
   tags:
-    - ic-prod-tests
-    - docker
+    - dfinity
     - ubuntu
   timeout: 3 hours
 
