@@ -4,7 +4,6 @@
 // TODO(CRP-1259): add tests with timeouts.
 
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
-use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::vault::api::BasicSignatureCspVault;
 use crate::vault::api::CspVault;
@@ -15,11 +14,10 @@ use crate::vault::test_utils::sks::secret_key_store_containing_key_with_invalid_
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use crate::LocalCspVault;
 use crate::RemoteCspVault;
-use crate::SecretKeyStore;
 use assert_matches::assert_matches;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::setup_listener;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_for_test;
-use rand::{CryptoRng, Rng};
+use rand::Rng;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,14 +28,9 @@ fn new_remote_csp_vault(rt_handle: &tokio::runtime::Handle) -> Arc<dyn CspVault>
     Arc::new(remote_csp_vault)
 }
 
-fn new_remote_csp_vault_with_local_csp_vault<
-    R: Rng + CryptoRng + Send + Sync + 'static,
-    S: SecretKeyStore + 'static,
-    C: SecretKeyStore + 'static,
-    P: PublicKeyStore + 'static,
->(
+fn new_remote_csp_vault_with_local_csp_vault<C: CspVault + 'static>(
     rt_handle: &tokio::runtime::Handle,
-    local_csp_vault: Arc<LocalCspVault<R, S, C, P>>,
+    local_csp_vault: Arc<C>,
 ) -> Arc<dyn CspVault> {
     let (socket_path, sks_dir, listener) = setup_listener(rt_handle);
     let server = TarpcCspVaultServerImpl::new_for_test(local_csp_vault, listener);
@@ -87,6 +80,64 @@ mod timeout {
             Err(CspDkgCreateFsKeyError::TransientInternalError ( internal_error ))
             if internal_error.contains("the request exceeded its deadline")
         );
+    }
+}
+
+mod basic_signature_csp_vault {
+    use super::*;
+    use crate::types::CspSignature;
+    use crate::vault::api::CspBasicSignatureError;
+    use crate::vault::local_csp_vault::mock_local_csp_vault::MockLocalCspVault;
+    use crate::KeyId;
+    use ic_crypto_internal_basic_sig_ed25519::types::SignatureBytes;
+    use ic_types::crypto::AlgorithmId;
+
+    #[test]
+    fn should_delegate_for_sign() {
+        let mut local_vault = MockLocalCspVault::new();
+        let algorithm_id = AlgorithmId::Ed25519;
+        let message = b"message to sign";
+        let key_id = KeyId::from([42; 32]);
+        let signature = CspSignature::Ed25519(SignatureBytes([42; 64]));
+        local_vault
+            .expect_sign()
+            .times(1)
+            .withf(move |del_algorithm_id, del_message, del_key_id| {
+                *del_algorithm_id == algorithm_id && del_message == message && *del_key_id == key_id
+            })
+            .return_const(Ok(signature.clone()));
+        let tokio_rt = new_tokio_runtime();
+        let remote_vault =
+            new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), Arc::new(local_vault));
+
+        let result = remote_vault.sign(algorithm_id, message, key_id);
+
+        assert_matches!(result, Ok(sig) if sig == signature);
+    }
+
+    #[test]
+    fn should_delegate_for_sign_returning_error() {
+        let mut local_vault = MockLocalCspVault::new();
+        let algorithm_id = AlgorithmId::Ed25519;
+        let message = b"message to sign";
+        let key_id = KeyId::from([42; 32]);
+        let expected_error = CspBasicSignatureError::MalformedSecretKey {
+            algorithm: AlgorithmId::Groth20_Bls12_381,
+        };
+        local_vault
+            .expect_sign()
+            .times(1)
+            .withf(move |del_algorithm_id, del_message, del_key_id| {
+                *del_algorithm_id == algorithm_id && del_message == message && *del_key_id == key_id
+            })
+            .return_const(Err(expected_error.clone()));
+        let tokio_rt = new_tokio_runtime();
+        let remote_vault =
+            new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), Arc::new(local_vault));
+
+        let result = remote_vault.sign(algorithm_id, message, key_id);
+
+        assert_matches!(result, Err(error) if error == expected_error);
     }
 }
 
