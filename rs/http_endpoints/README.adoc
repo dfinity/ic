@@ -69,11 +69,18 @@ For example, https://sre.google/sre-book/load-balancing-datacenter/[Least-Loaded
 Given the listed best practices, when a particular queue in-front of a thread pool is full and request can't be added,
 the endpoint https://docs.rs/tower/latest/tower/load_shed/index.html#[sheds load] by responding with `+429 Too Many Requests+` for that particular request. 
 
-== Fairness ==
-
 == Too large and too slow requests ==
 
 If a http request body is greater than the configured limit, the endpoints responds with `+413 Payload Too Large+`.
 
 If a http request does not complete within the specified timeout it will be aborted and a `+408 Request Timeout+` response will be sent.
+
+== Fairness ==
+
+Fairness implies that the rate at which requests from different connections are processed is more or less the same.
+
+Currently boundary nodes use https://www.nginx.com/[nginx] as reverse proxy. Thus, the boundary nodes
+can only use https://mailman.nginx.org/pipermail/nginx/2015-December/049445.html[HTTP1] for communicating with replicas.
+Hence, there can be at most one in-flight request in the replica from each connection. Given we use https://tokio.rs/blog/2019-10-scheduler[Tokio's fair schedule]
+and we have a dedicated Tokio task for serving each connection this is sufficient for request processing fairness accross connections.
 
