@@ -5,13 +5,12 @@ This module declares all direct rust dependencies.
 
 load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
 
-def external_crates_repository(name, annotations):
+def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
     crates_repository(
         name = name,
-        annotations = annotations,
         isolated = True,
-        cargo_lockfile = "//:Cargo.Bazel.toml.lock",
-        lockfile = "//:Cargo.Bazel.json.lock",
+        cargo_lockfile = cargo_lockfile,
+        lockfile = lockfile,
         cargo_config = "//:bazel/cargo.config",
         generator_urls = {
             "aarch64-apple-darwin": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-aarch64-apple-darwin",
@@ -21,6 +20,58 @@ def external_crates_repository(name, annotations):
             "x86_64-apple-darwin": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-x86_64-apple-darwin",
             "x86_64-unknown-linux-musl": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-x86_64-unknown-linux-musl",
             "aarch64-unknown-linux-gnu": "https://github.com/bazelbuild/rules_rust/releases/download/0.15.0/cargo-bazel-aarch64-unknown-linux-gnu",
+        },
+        annotations = {
+            "ic_bls12_381": [crate.annotation(
+                rustc_flags = [
+                    "-C",
+                    "opt-level=3",
+                ],
+            )],
+            "ring": [crate.annotation(
+                build_script_env = {
+                    "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
+                },
+            )],
+            "openssl-sys": [] if not static_openssl else [crate.annotation(
+                build_script_data = [
+                    "@openssl//:gen_dir",
+                    "@openssl//:openssl",
+                ],
+                # https://github.com/sfackler/rust-openssl/tree/master/openssl-sys/build
+                build_script_data_glob = ["build/**/*.c"],
+                build_script_env = {
+                    "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
+                    "OPENSSL_STATIC": "true",
+                },
+                data = ["@openssl"],
+                deps = ["@openssl"],
+            )],
+            "librocksdb-sys": [crate.annotation(
+                build_script_env = {
+                    # Bazel executors assign only one core when executing
+                    # the build script, making rocksdb compilation
+                    # extremely slow. Bazel doesn't provide any way to
+                    # override this settings so we cheat by starting more
+                    # processes in parallel.
+                    #
+                    # See IDX-2406.
+                    "NUM_JOBS": "8",
+                },
+            )],
+            "pprof": [crate.annotation(
+                build_script_data = [
+                    "@com_google_protobuf//:protoc",
+                ],
+                build_script_env = {
+                    "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+                },
+            )],
+            "prost-build": [crate.annotation(
+                build_script_env = {
+                    "PROTOC_NO_VENDOR": "1",
+                },
+            )],
         },
         packages = {
             "actix-rt": crate.spec(
@@ -574,6 +625,9 @@ def external_crates_repository(name, annotations):
             ),
             "openssl": crate.spec(
                 version = "^0.10.29",
+            ),
+            "openssl-sys": crate.spec(
+                version = "0.9",
             ),
             "opentelemetry": crate.spec(
                 version = "^0.17.0",

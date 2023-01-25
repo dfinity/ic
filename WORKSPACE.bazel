@@ -62,7 +62,7 @@ rust_register_toolchains(
 
 git_repository(
     name = "rules_foreign_cc",
-    commit = "b1e65fec980c59cf5c2e21f7eb90fed331c36c66",
+    commit = "9acbb356916760192d4c16301a69267fe44e6dec",
     remote = "https://github.com/bazelbuild/rules_foreign_cc.git",
 )
 
@@ -90,49 +90,18 @@ rules_proto_dependencies()
 
 rules_proto_toolchains()
 
-load("@rules_rust//crate_universe:defs.bzl", "crate")
 load("//bazel:external_crates.bzl", "external_crates_repository")
+load("//bazel/openssl_static_env:defs.bzl", "openssl_static_env")
+
+openssl_static_env(name = "openssl_static_env")
+
+load("@openssl_static_env//:defs.bzl", "DFINITY_OPENSSL_STATIC")
 
 external_crates_repository(
     name = "crate_index",
-    annotations = {
-        "ic_bls12_381": [crate.annotation(
-            rustc_flags = [
-                "-C",
-                "opt-level=3",
-            ],
-        )],
-        "ring": [crate.annotation(
-            build_script_env = {
-                "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
-            },
-        )],
-        "librocksdb-sys": [crate.annotation(
-            build_script_env = {
-                # Bazel executors assign only one core when executing
-                # the build script, making rocksdb compilation
-                # extremely slow. Bazel doesn't provide any way to
-                # override this settings so we cheat by starting more
-                # processes in parallel.
-                #
-                # See IDX-2406.
-                "NUM_JOBS": "8",
-            },
-        )],
-        "pprof": [crate.annotation(
-            build_script_data = [
-                "@com_google_protobuf//:protoc",
-            ],
-            build_script_env = {
-                "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
-            },
-        )],
-        "prost-build": [crate.annotation(
-            build_script_env = {
-                "PROTOC_NO_VENDOR": "1",
-            },
-        )],
-    },
+    cargo_lockfile = "//:Cargo.Bazel.StaticOpenSSL.toml.lock" if DFINITY_OPENSSL_STATIC else "//:Cargo.Bazel.toml.lock",
+    lockfile = "//:Cargo.Bazel.StaticOpenSSL.json.lock" if DFINITY_OPENSSL_STATIC else "//:Cargo.Bazel.json.lock",
+    static_openssl = DFINITY_OPENSSL_STATIC,
 )
 
 load("@crate_index//:defs.bzl", "crate_repositories")
@@ -198,6 +167,13 @@ load(
     "@io_bazel_rules_docker//repositories:repositories.bzl",
     container_repositories = "repositories",
 )
+load("//third_party/openssl:openssl_repositories.bzl", "openssl_repositories")
+
+openssl_repositories()
+
+load("//third_party/openssl:openssl_setup.bzl", "openssl_setup")
+
+openssl_setup()
 
 container_repositories()
 

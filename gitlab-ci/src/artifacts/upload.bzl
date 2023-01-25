@@ -3,11 +3,24 @@ Rules to manipulate with artifacts: download, upload etc.
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
+load("@openssl_static_env//:defs.bzl", "DFINITY_OPENSSL_STATIC")
 
 def _upload_artifact_impl(ctx):
     """
     Uploads an artifact to s3 and returns download link to it
     """
+
+    # To avoid shooting ourselves in the foot, make sure that the upload target
+    # makes explicit whether it's uploading a static openssl binary; and check this against
+    # the `DFINITY_OPENSSL_STATIC` environment variable.
+    if bool(DFINITY_OPENSSL_STATIC) and not ctx.attr.allow_openssl_static:
+        fail("Mismatch between `DFINITY_OPENSSL_STATIC` compilation mode and `allow_openssl_static` target attribute.")
+
+    # To avoid shooting ourselves in the foot, always upload statically linked binaries to a separate upload path.
+    if bool(DFINITY_OPENSSL_STATIC):
+        remote_subdir = "openssl-static-" + ctx.attr.remote_subdir
+    else:
+        remote_subdir = ctx.attr.remote_subdir
 
     uploader = ctx.actions.declare_file(ctx.label.name + "_uploader")
 
@@ -22,7 +35,7 @@ def _upload_artifact_impl(ctx):
         substitutions = {
             "@@RCLONE@@": ctx.file._rclone.path,
             "@@RCLONE_CONFIG@@": rclone_config.path,
-            "@@REMOTE_SUBDIR@@": ctx.attr.remote_subdir,
+            "@@REMOTE_SUBDIR@@": remote_subdir,
             "@@VERSION_FILE@@": ctx.version_file.path,
             "@@VERSION_TXT@@": ctx.file._version_txt.path,
         },
@@ -82,6 +95,7 @@ _upload_artifacts = rule(
     implementation = _upload_artifact_impl,
     executable = True,
     attrs = {
+        "allow_openssl_static": attr.bool(default = False),
         "inputs": attr.label_list(allow_files = True),
         "remote_subdir": attr.string(mandatory = True),
         "rclone_config": attr.label(allow_single_file = True, default = "//:.rclone.conf"),
@@ -93,6 +107,8 @@ _upload_artifacts = rule(
     },
 )
 
+# To avoid shooting ourselves in the foot, make sure that the upload rule invoker
+# states explicitly whether it expects statically linked openssl.
 def upload_artifacts(**kwargs):
     """
     Uploads artifacts to the S3 storage.

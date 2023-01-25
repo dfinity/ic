@@ -1,5 +1,5 @@
 {
-  "checksum": "7d28d3d9c14506c2ed81edc80a7bd05e7a6a77a1a4a8d0d595d011ab0655225b",
+  "checksum": "5352156c717ccfca189edfa1e30c8d51c374bb5dda2e7d608af9d4ae095a9ad1",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -29135,6 +29135,12 @@
         "compile_data_glob": [
           "**"
         ],
+        "data": {
+          "common": [
+            "@openssl"
+          ],
+          "selects": {}
+        },
         "deps": {
           "common": [
             {
@@ -29148,12 +29154,23 @@
           ],
           "selects": {}
         },
+        "extra_deps": [
+          "@openssl"
+        ],
         "edition": "2015",
         "version": "0.9.80"
       },
       "build_script_attrs": {
+        "data": {
+          "common": [
+            "@openssl//:gen_dir",
+            "@openssl//:openssl"
+          ],
+          "selects": {}
+        },
         "data_glob": [
-          "**"
+          "**",
+          "build/**/*.c"
         ],
         "deps": {
           "common": [
@@ -29178,6 +29195,13 @@
               }
             ]
           }
+        },
+        "build_script_env": {
+          "common": {
+            "OPENSSL_DIR": "$(execpath @openssl//:gen_dir)",
+            "OPENSSL_STATIC": "true"
+          },
+          "selects": {}
         },
         "links": "openssl"
       },
