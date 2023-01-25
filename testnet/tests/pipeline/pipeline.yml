@@ -48,13 +48,6 @@
 #
 # Find traces here: https://ui.honeycomb.io/dfinity/datasets/gitlab-ci-dfinity/result/G8UcQLcnfd3/a/3wQM1irQAYr/GitLab-Release-Candidate-Pipeline-Status?tab=traces
 # The overall dashboard is available here: https://ui.honeycomb.io/dfinity/board/58LbKzZgjTA/GitLab-Release-Candidate-Performance
-.prod-nightly-test-group-1-reserved:
-  stage: prod-tests-01
-  extends: .prod-nightly-test
-  variables:
-    TESTNET: $TESTNET1
-  resource_group: $TESTNET1
-
 .prod-nightly-test-group-2:
   stage: prod-tests-02
   extends: .prod-nightly-test
@@ -62,28 +55,6 @@
     TESTNET: $TESTNET2
     cd_debug_target: "true"
   resource_group: $TESTNET2
-
-.prod-nightly-test-group-3:
-  stage: prod-tests-03
-  extends: .prod-nightly-test
-  variables:
-    TESTNET: $TESTNET3
-    cd_debug_target: "true"
-  resource_group: $TESTNET3
-
-.prod-nightly-test-group-4:
-  stage: prod-tests-04
-  extends: .prod-nightly-test
-  variables:
-    TESTNET: $TESTNET4
-  resource_group: $TESTNET4
-
-.prod-nightly-test-group-5:
-  stage: prod-tests-05
-  extends: .prod-nightly-test
-  variables:
-    TESTNET: $TESTNET5
-  resource_group: $TESTNET5
 
 .prod-slo-test:
   extends: .prod-test
