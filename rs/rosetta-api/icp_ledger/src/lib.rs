@@ -40,7 +40,7 @@ pub const DEFAULT_TRANSFER_FEE: Tokens = Tokens::from_e8s(10_000);
 
 pub const MAX_BLOCKS_PER_REQUEST: usize = 2000;
 
-pub type LedgerBalances = Balances<AccountIdentifier, HashMap<AccountIdentifier, Tokens>>;
+pub type LedgerBalances = Balances<HashMap<AccountIdentifier, Tokens>>;
 
 #[derive(
     Serialize,
@@ -106,11 +106,11 @@ pub enum Operation {
 }
 
 pub fn apply_operation<S>(
-    balances: &mut Balances<AccountIdentifier, S>,
+    balances: &mut Balances<S>,
     operation: &Operation,
 ) -> Result<(), BalanceError>
 where
-    S: Default + BalancesStore<AccountIdentifier>,
+    S: Default + BalancesStore<AccountId = AccountIdentifier>,
 {
     match operation {
         Operation::Transfer {
@@ -168,11 +168,11 @@ impl LedgerTransaction for Transaction {
 
     fn apply<S>(
         &self,
-        balances: &mut Balances<Self::AccountId, S>,
+        balances: &mut Balances<S>,
         _effective_fee: Tokens,
     ) -> Result<(), BalanceError>
     where
-        S: Default + BalancesStore<Self::AccountId>,
+        S: Default + BalancesStore<AccountId = Self::AccountId>,
     {
         apply_operation(balances, &self.operation)
     }

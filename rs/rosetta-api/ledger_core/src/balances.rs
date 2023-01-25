@@ -4,22 +4,35 @@ use std::collections::{
     hash_map::Entry::{Occupied, Vacant},
     HashMap,
 };
-use std::marker::PhantomData;
 
-pub trait BalancesStore<AccountId> {
+pub trait BalancesStore {
+    type AccountId: Clone;
+
     /// Returns the balance on the specified account.
-    fn get_balance(&self, k: &AccountId) -> Option<&Tokens>;
+    fn get_balance(&self, k: &Self::AccountId) -> Option<&Tokens>;
 
     /// Update balance for an account using function f.
     /// Its arg is previous balance or None if not found and
     /// return value is the new balance.
-    fn update<F, E>(&mut self, acc: AccountId, action_on_acc: F) -> Result<Tokens, E>
+    fn update<F, E>(&mut self, acc: Self::AccountId, action_on_acc: F) -> Result<Tokens, E>
     where
         F: FnMut(Option<&Tokens>) -> Result<Tokens, E>;
 }
 
-impl<AccountId: std::hash::Hash + Eq> BalancesStore<AccountId> for HashMap<AccountId, Tokens> {
-    fn get_balance(&self, k: &AccountId) -> Option<&Tokens> {
+#[allow(clippy::len_without_is_empty)]
+pub trait InspectableBalancesStore: BalancesStore {
+    fn iter(&self) -> Box<dyn Iterator<Item = (&Self::AccountId, &Tokens)> + '_>;
+
+    fn len(&self) -> usize;
+}
+
+impl<AccountId> BalancesStore for HashMap<AccountId, Tokens>
+where
+    AccountId: std::hash::Hash + Eq + Clone,
+{
+    type AccountId = AccountId;
+
+    fn get_balance(&self, k: &Self::AccountId) -> Option<&Tokens> {
         self.get(k)
     }
 
@@ -48,6 +61,19 @@ impl<AccountId: std::hash::Hash + Eq> BalancesStore<AccountId> for HashMap<Accou
     }
 }
 
+impl<AccountId> InspectableBalancesStore for HashMap<AccountId, Tokens>
+where
+    AccountId: std::hash::Hash + Eq + Clone,
+{
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn iter(&self) -> Box<dyn Iterator<Item = (&Self::AccountId, &Tokens)> + '_> {
+        Box::new(self.iter())
+    }
+}
+
 /// An error returned by `Balances` if the debit operation fails.
 #[derive(Debug)]
 pub enum BalanceError {
@@ -58,43 +84,38 @@ pub enum BalanceError {
 
 /// Describes the state of users accounts at the tip of the chain
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct Balances<AccountId, S: BalancesStore<AccountId>> {
+pub struct Balances<S: BalancesStore> {
     // This uses a mutable map because we don't want to risk a space leak and we only require the
     // account balances at the tip of the chain
     pub store: S,
     #[serde(alias = "icpt_pool")]
     pub token_pool: Tokens,
-    #[serde(skip)]
-    _marker: PhantomData<AccountId>,
 }
 
-impl<AccountId, S> Default for Balances<AccountId, S>
+impl<S> Default for Balances<S>
 where
-    AccountId: Clone,
-    S: Default + BalancesStore<AccountId>,
+    S: Default + BalancesStore,
 {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<AccountId, S> Balances<AccountId, S>
+impl<S> Balances<S>
 where
-    AccountId: Clone,
-    S: Default + BalancesStore<AccountId>,
+    S: Default + BalancesStore,
 {
     pub fn new() -> Self {
         Self {
             store: S::default(),
             token_pool: Tokens::MAX,
-            _marker: PhantomData,
         }
     }
 
     pub fn transfer(
         &mut self,
-        from: &AccountId,
-        to: &AccountId,
+        from: &S::AccountId,
+        to: &S::AccountId,
         amount: Tokens,
         fee: Tokens,
     ) -> Result<(), BalanceError> {
@@ -112,13 +133,13 @@ where
         Ok(())
     }
 
-    pub fn burn(&mut self, from: &AccountId, amount: Tokens) -> Result<(), BalanceError> {
+    pub fn burn(&mut self, from: &S::AccountId, amount: Tokens) -> Result<(), BalanceError> {
         self.debit(from, amount)?;
         self.token_pool += amount;
         Ok(())
     }
 
-    pub fn mint(&mut self, to: &AccountId, amount: Tokens) -> Result<(), BalanceError> {
+    pub fn mint(&mut self, to: &S::AccountId, amount: Tokens) -> Result<(), BalanceError> {
         self.token_pool = (self.token_pool - amount).expect("total token supply exceeded");
         self.credit(to, amount);
         Ok(())
@@ -126,7 +147,7 @@ where
 
     // Debiting an account will automatically remove it from the `inner`
     // HashMap if the balance reaches zero.
-    pub fn debit(&mut self, from: &AccountId, amount: Tokens) -> Result<Tokens, BalanceError> {
+    pub fn debit(&mut self, from: &S::AccountId, amount: Tokens) -> Result<Tokens, BalanceError> {
         self.store.update(from.clone(), |prev| {
             let mut balance = match prev {
                 Some(x) => *x,
@@ -147,7 +168,7 @@ where
 
     // Crediting an account will automatically add it to the `inner` HashMap if
     // not already present.
-    pub fn credit(&mut self, to: &AccountId, amount: Tokens) {
+    pub fn credit(&mut self, to: &S::AccountId, amount: Tokens) {
         self.store
             .update(
                 to.clone(),
@@ -162,7 +183,7 @@ where
             .unwrap();
     }
 
-    pub fn account_balance(&self, account: &AccountId) -> Tokens {
+    pub fn account_balance(&self, account: &S::AccountId) -> Tokens {
         self.store
             .get_balance(account)
             .cloned()

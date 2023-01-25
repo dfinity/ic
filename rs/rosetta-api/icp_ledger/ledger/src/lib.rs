@@ -107,6 +107,7 @@ impl LedgerData for Ledger {
     type ArchiveWasm = IcpLedgerArchiveWasm;
     type Transaction = Transaction;
     type Block = Block;
+    type BalancesStore = HashMap<AccountIdentifier, Tokens>;
 
     fn transaction_window(&self) -> Duration {
         self.transaction_window
@@ -136,11 +137,11 @@ impl LedgerData for Ledger {
         &self.token_symbol
     }
 
-    fn balances(&self) -> &Balances<Self::AccountId, HashMap<Self::AccountId, Tokens>> {
+    fn balances(&self) -> &Balances<Self::BalancesStore> {
         &self.balances
     }
 
-    fn balances_mut(&mut self) -> &mut Balances<Self::AccountId, HashMap<Self::AccountId, Tokens>> {
+    fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
         &mut self.balances
     }
 

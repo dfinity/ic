@@ -311,11 +311,11 @@ impl LedgerTransaction for Transaction {
 
     fn apply<S>(
         &self,
-        balances: &mut Balances<Self::AccountId, S>,
+        balances: &mut Balances<S>,
         effective_fee: Tokens,
     ) -> Result<(), BalanceError>
     where
-        S: Default + BalancesStore<Self::AccountId>,
+        S: Default + BalancesStore<AccountId = Self::AccountId>,
     {
         match &self.operation {
             Operation::Transfer {
@@ -446,4 +446,4 @@ impl BlockType for Block {
     }
 }
 
-pub type LedgerBalances = Balances<Account, HashMap<Account, Tokens>>;
+pub type LedgerBalances = Balances<HashMap<Account, Tokens>>;
