@@ -27,6 +27,7 @@ BINARIES = {
     "ic-admin": "//rs/registry/admin:ic-admin",
     "ic-backup": "//rs/backup:ic-backup",
     "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
+    "ic-starter": "//rs/starter:ic-starter",
     "ic-canister-http-adapter": "//rs/canister_http/adapter:ic-canister-http-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
     "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
