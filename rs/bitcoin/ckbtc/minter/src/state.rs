@@ -15,7 +15,7 @@ use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::{address::BitcoinAddress, ECDSAPublicKey};
 use candid::{Deserialize, Principal};
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_types::{Network, OutPoint, Utxo};
 use ic_icrc1::Account;
 use serde::Serialize;
@@ -213,6 +213,16 @@ pub struct CkBtcMinterState {
 
     /// The map of known addresses to their utxos.
     pub utxos_state_addresses: BTreeMap<Account, BTreeSet<Utxo>>,
+
+    /// This map contains the UTXOs we removed due to a transaction finalization
+    /// while there was a concurrent update_balance call for the principal whose
+    /// UTXOs participated in the transaction. The UTXOs can belong to any
+    /// subaccount of the principal.
+    ///
+    /// We insert a new entry into this map if we discover a concurrent
+    /// update_balance calls during a transaction finalization and remove the
+    /// entry once the update_balance call completes.
+    pub finalized_utxos: BTreeMap<PrincipalId, BTreeSet<Utxo>>,
 
     /// Process one heartbeat at a time
     #[serde(skip)]
@@ -429,6 +439,16 @@ impl CkBtcMinterState {
 
     fn forget_utxo(&mut self, utxo: &Utxo) {
         if let Some(account) = self.outpoint_account.remove(&utxo.outpoint) {
+            if self
+                .update_balance_principals
+                .contains(&account.owner.into())
+            {
+                self.finalized_utxos
+                    .entry(account.owner)
+                    .or_insert_with(BTreeSet::new)
+                    .insert(utxo.clone());
+            }
+
             let last_utxo = match self.utxos_state_addresses.get_mut(&account) {
                 Some(utxo_set) => {
                     utxo_set.remove(utxo);
@@ -646,6 +666,7 @@ impl From<InitArgs> for CkBtcMinterState {
             available_utxos: Default::default(),
             outpoint_account: Default::default(),
             utxos_state_addresses: Default::default(),
+            finalized_utxos: Default::default(),
             is_heartbeat_running: false,
             mode: args.mode,
         }
