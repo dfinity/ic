@@ -1,9 +1,9 @@
 use clap::Parser;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    canister_http, consensus, driver::driver_setup::initialize_env, execution, ledger_tests,
-    message_routing, networking, nns_tests, orchestrator, rosetta_test, tecdsa,
-    wasm_generator_test, workload_counter_canister_test,
+    canister_http, driver::driver_setup::initialize_env, execution, ledger_tests, message_routing,
+    networking, nns_tests, orchestrator, rosetta_test, tecdsa, wasm_generator_test,
+    workload_counter_canister_test,
 };
 use ic_tests::{
     driver::{
@@ -406,14 +406,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     orchestrator::node_assign_test::test,
                 )]),
             ).with_alert(ENG_CONSENSUS_CHANNEL),
-            pot_with_setup(
-                "node_graceful_leaving_pot",
-                consensus::node_graceful_leaving_test::config,
-                par(vec![sys_t(
-                    "node_graceful_leaving_test",
-                    consensus::node_graceful_leaving_test::test,
-                )]),
-            ),
             pot_with_setup(
                 "nns_follow_pot",
                 nns_tests::nns_follow::config,
