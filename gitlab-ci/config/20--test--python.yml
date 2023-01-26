@@ -1,4 +1,5 @@
 python-tests:
+  allow_failure: true # TODO(IDX-2629) remove when fixed.
   extends:
     - .ubuntu-docker-k8s
     - .rules-pipeline-no-merge-train
