@@ -13,6 +13,8 @@ RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /et
     curl build-essential git gnupg node-json5 uuid-dev \
     # GitLab CI \
     sudo gosu jq rclone \
+    # test \
+    rsync \
     # RUST \
     gcc lld pkg-config libssl-dev libunwind-dev libsqlite3-dev zlib1g-dev libclang-10-dev \
     # IC-OS \
