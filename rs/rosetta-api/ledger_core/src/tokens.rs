@@ -114,6 +114,14 @@ impl Tokens {
     pub fn unpack(self) -> (u64, u64) {
         (self.get_tokens(), self.get_remainder_e8s())
     }
+
+    pub fn saturating_add(self, other: Tokens) -> Tokens {
+        Tokens::from_e8s(self.e8s.saturating_add(other.e8s))
+    }
+
+    pub fn saturating_sub(self, other: Tokens) -> Tokens {
+        Tokens::from_e8s(self.e8s.saturating_sub(other.e8s))
+    }
 }
 
 impl Add for Tokens {

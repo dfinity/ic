@@ -1,3 +1,4 @@
+pub mod approvals;
 pub mod balances;
 pub mod block;
 pub mod timestamp;
