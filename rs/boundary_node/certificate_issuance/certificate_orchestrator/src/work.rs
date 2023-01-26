@@ -1,9 +1,17 @@
 use std::cmp::Reverse;
 
 use certificate_orchestrator_interface::{Id, Registration};
-use ic_cdk::{api::time, caller};
+use ic_cdk::caller;
 use ic_stable_structures::StableBTreeMap;
 use priority_queue::PriorityQueue;
+
+cfg_if::cfg_if! {
+    if #[cfg(test)] {
+        use tests::time as time;
+    } else {
+        use ic_cdk::api::time;
+    }
+}
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
@@ -225,5 +233,56 @@ impl Retry for Retrier {
 
             Ok(())
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::{RETRIES, TASKS};
+
+    pub fn time() -> u64 {
+        0
+    }
+
+    #[test]
+    fn dispense_empty() {
+        match Dispenser::new(&TASKS, &RETRIES).dispense() {
+            Err(DispenseError::NoTasksAvailable) => {}
+            _ => panic!("Not the error that was expected."),
+        };
+    }
+
+    #[test]
+    fn dispense_ok() {
+        TASKS.with(|t| {
+            t.borrow_mut().push(
+                "id".into(), // item
+                Reverse(0),  // priority
+            )
+        });
+
+        let id = match Dispenser::new(&TASKS, &RETRIES).dispense() {
+            Ok(id) => id,
+            other => panic!("expected id but got {other:?}"),
+        };
+
+        assert_eq!(id, "id");
+    }
+
+    #[test]
+    fn dispense_unavailable() {
+        TASKS.with(|t| {
+            t.borrow_mut().push(
+                "id".into(), // item
+                Reverse(1),  // priority
+            )
+        });
+
+        match Dispenser::new(&TASKS, &RETRIES).dispense() {
+            Err(DispenseError::NoTasksAvailable) => {}
+            other => panic!("expected NoTasksAvailable but got {other:?}"),
+        };
     }
 }

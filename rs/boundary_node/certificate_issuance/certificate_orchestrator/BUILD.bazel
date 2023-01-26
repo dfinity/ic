@@ -1,4 +1,5 @@
 load("//bazel:canisters.bzl", "rust_canister")
+load("@rules_rust//rust:defs.bzl", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -30,5 +31,12 @@ rust_canister(
     crate_name = "certificate_orchestrator",
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":interface.did",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "certificate_orchestrator_test",
+    crate = ":_wasm_certificate_orchestrator",
+    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )

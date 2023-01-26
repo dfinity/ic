@@ -2,13 +2,12 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::Principal;
 use ic_agent::Agent;
-use std::sync::Arc;
-use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
-
 use ic_utils::{
     call::SyncCall,
     interfaces::http_request::{HttpRequestCanister, HttpResponse},
 };
+use std::sync::Arc;
+use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
 
 use crate::dns::Resolve;
 

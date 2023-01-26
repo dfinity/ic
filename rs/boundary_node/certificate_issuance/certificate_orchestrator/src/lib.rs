@@ -54,9 +54,9 @@ const ID_COUNTER_LEN: u32 = size_of::<u128>() as u32;
 const ID_SEED_LEN: u32 = size_of::<u128>() as u32;
 const REGISTRATION_ID_LEN: u32 = 64 * BYTE;
 const REGISTRATION_LEN: u32 = 128;
-const ENCRYPED_PRIVATE_KEY_LEN: u32 = KB; // 1 * KB
-const ENCRYPED_CERTIFICATE_LEN: u32 = 8 * KB;
-const ENCRYPTED_PAIR_LEN: u32 = ENCRYPED_PRIVATE_KEY_LEN + ENCRYPED_CERTIFICATE_LEN;
+const ENCRYPTED_PRIVATE_KEY_LEN: u32 = KB; // 1 * KB
+const ENCRYPTED_CERTIFICATE_LEN: u32 = 8 * KB;
+const ENCRYPTED_PAIR_LEN: u32 = ENCRYPTED_PRIVATE_KEY_LEN + ENCRYPTED_CERTIFICATE_LEN;
 
 const REGISTRATION_EXPIRATION_TTL: Duration = Duration::from_secs(6 * 3600); // 6 Hours
 const IN_PROGRESS_TTL: Duration = Duration::from_secs(10 * 60); // 10 Minutes
@@ -73,7 +73,7 @@ const MEMORY_ID_ID_COUNTER: u8 = 2;
 const MEMORY_ID_ID_SEED: u8 = 3;
 const MEMORY_ID_REGISTRATIONS: u8 = 4;
 const MEMORY_ID_NAMES: u8 = 5;
-const MEMORY_ID_ENCRPYTED_CERTIFICATES: u8 = 6;
+const MEMORY_ID_ENCRYPTED_CERTIFICATES: u8 = 6;
 const MEMORY_ID_TASKS: u8 = 7;
 const MEMORY_ID_EXPIRATIONS: u8 = 8;
 const MEMORY_ID_RETRIES: u8 = 9;
@@ -178,7 +178,7 @@ thread_local! {
 thread_local! {
     static ENCRYPTED_CERTIFICATES: RefCell<StableBTreeMap<Memory, Id, EncryptedPair>> = RefCell::new(
         StableBTreeMap::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ENCRPYTED_CERTIFICATES))),
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ENCRYPTED_CERTIFICATES))),
             REGISTRATION_ID_LEN, // MAX_KEY_SIZE,
             ENCRYPTED_PAIR_LEN,  // MAX_VALUE_SIZE
         )

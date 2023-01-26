@@ -3,18 +3,22 @@ use async_trait::async_trait;
 use instant_acme::{
     Account, Authorization, Challenge, ChallengeType, Identifier, NewOrder, OrderStatus,
 };
+use mockall::automock;
 use rcgen::{Certificate, CertificateParams, DistinguishedName};
 
+#[automock]
 #[async_trait]
 pub trait Order: Sync + Send {
     async fn order(&self, name: &str) -> Result<String, Error>;
 }
 
+#[automock]
 #[async_trait]
 pub trait Ready: Sync + Send {
     async fn ready(&self, name: &str) -> Result<(), Error>;
 }
 
+#[automock]
 #[async_trait]
 pub trait Finalize: Sync + Send {
     async fn finalize(&self, name: &str) -> Result<(String, String), Error>;

@@ -52,3 +52,55 @@ impl Authorize for Box<dyn Authorize> {
 }
 
 pub struct WithAuthorize<T, A>(pub T, pub A);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{acl::AuthorizeError, ROOT_PRINCIPALS};
+    use candid::Principal;
+
+    #[test]
+    fn authorizer_empty() {
+        let p = &Principal::from_text("llx5h-dqaaa-aaaag-abckq-cai").unwrap();
+
+        let result = Authorizer::new(&ROOT_PRINCIPALS).authorize(p);
+
+        match result {
+            Err(AuthorizeError::Unauthorized) => {}
+            _ => panic!("expected unauthorized error, got {result:?}"),
+        }
+    }
+
+    #[test]
+    fn authorizer_authorized() {
+        let p = &Principal::from_text("llx5h-dqaaa-aaaag-abckq-cai").unwrap();
+
+        ROOT_PRINCIPALS
+            .with(|m| m.borrow_mut().insert(p.to_text(), ()))
+            .unwrap();
+
+        let result = Authorizer::new(&ROOT_PRINCIPALS).authorize(p);
+
+        match result {
+            Ok(()) => {}
+            _ => panic!("expected unauthorized error, got {result:?}"),
+        }
+    }
+
+    #[test]
+    fn authorizer_unauthorized() {
+        let p1 = &Principal::from_text("llx5h-dqaaa-aaaag-abckq-cai").unwrap();
+        let p2 = &Principal::from_text("bb7pg-paaaa-aaaap-aav3q-cai").unwrap();
+
+        ROOT_PRINCIPALS
+            .with(|m| m.borrow_mut().insert(p1.to_text(), ()))
+            .unwrap();
+
+        let result = Authorizer::new(&ROOT_PRINCIPALS).authorize(p2);
+
+        match result {
+            Err(AuthorizeError::Unauthorized) => {}
+            _ => panic!("expected unauthorized error, got {result:?}"),
+        }
+    }
+}

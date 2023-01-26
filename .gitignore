@@ -127,3 +127,6 @@ user.bazelrc
 # Intellij
 .idea
 .clwb
+
+# OS X
+.DS_Store
