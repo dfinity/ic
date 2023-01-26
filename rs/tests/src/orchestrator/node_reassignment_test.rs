@@ -25,22 +25,31 @@ Coverage::
 
 end::catalog[] */
 
-use super::utils::rw_message::install_nns_and_check_progress;
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::nns::{add_nodes_to_subnet, change_subnet_membership, remove_nodes_via_endpoint};
-use crate::orchestrator::utils::rw_message::{
-    can_read_msg, can_read_msg_with_retries, store_message,
-};
-use crate::util::*;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::info;
+
+use crate::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::{SshKeyGen, TestEnv},
+        test_env_api::{HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+    },
+    nns::{add_nodes_to_subnet, change_subnet_membership, remove_nodes_via_endpoint},
+    orchestrator::utils::rw_message::{
+        can_read_msg, can_read_msg_with_retries, install_nns_and_check_progress, store_message,
+    },
+    util::{block_on, get_app_subnet_and_node},
+};
 
 const DKG_INTERVAL: u64 = 14;
 const SUBNET_SIZE: usize = 4;
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen("admin")
+        .expect("Failed to generate ssh admin keys");
+
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)

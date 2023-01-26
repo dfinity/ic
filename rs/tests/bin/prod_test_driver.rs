@@ -639,14 +639,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 .with_alert(TEST_FAILURE_CHANNEL)
                 .with_alert(ENG_TESTING_CHANNEL),
                 pot_with_setup(
-                    "node_reassignment_pot",
-                    orchestrator::node_reassignment_test::config,
-                    par(vec![sys_t(
-                        "node_reassignment_test",
-                        orchestrator::node_reassignment_test::test,
-                    )]),
-                ).with_alert(ENG_CONSENSUS_CHANNEL),
-                pot_with_setup(
                     "token_fault_tolerance_pot",
                     ledger_tests::token_fault_tolerance::config,
                     par(vec![sys_t(
