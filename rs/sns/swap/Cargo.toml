@@ -38,6 +38,7 @@ ic-metrics-encoder = "1"
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-protobuf = { path = "../../protobuf" }
+ic-stable-structures = "0.4.0"
 ic-sns-governance = { path = "../governance" }
 # TODO(NNS1-1589): Delete hack, and uncomment this.
 # ic-sns-root = { path = "../root" }

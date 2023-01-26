@@ -9,16 +9,16 @@ use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ic00_types::CanisterStatusResultV2;
 use ic_nervous_system_common::{
-    serve_logs, serve_metrics,
-    stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
+    serve_logs, serve_metrics, stable_mem_utils::BufferedStableMemReader,
 };
 use ic_sns_governance::ledger::LedgerCanister;
-use ic_sns_swap::clients::ManagementCanister;
 use ic_sns_swap::{
     clients::{
-        ProdManagementCanister, RealNnsGovernanceClient, RealSnsGovernanceClient, RealSnsRootClient,
+        ManagementCanister, ProdManagementCanister, RealNnsGovernanceClient,
+        RealSnsGovernanceClient, RealSnsRootClient,
     },
     logs::{ERROR, INFO, LOG_PREFIX},
+    memory::UPGRADES_MEMORY,
     pb::v1::{
         ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse,
         GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest, GetBuyersTotalResponse,
@@ -29,6 +29,7 @@ use ic_sns_swap::{
         Swap,
     },
 };
+use ic_stable_structures::{writer::Writer, Memory};
 use prost::Message;
 use std::{
     str::FromStr,
@@ -37,9 +38,6 @@ use std::{
 
 // TODO(NNS1-1589): Unhack.
 // use ic_sns_root::pb::v1::{SetDappControllersRequest, SetDappControllersResponse};
-
-/// Size of the buffer for stable memory reads and writes.
-const STABLE_MEM_BUFFER_SIZE: u32 = 1024 * 1024; // 1MiB
 
 // =============================================================================
 // ===               Global state of the canister                            ===
@@ -349,11 +347,25 @@ fn canister_init_(init_payload: Init) {
 #[export_name = "canister_pre_upgrade"]
 fn canister_pre_upgrade() {
     log!(INFO, "Executing pre upgrade");
-    let mut writer = BufferedStableMemWriter::new(STABLE_MEM_BUFFER_SIZE);
+
+    // serialize the state
+    let mut state_bytes = vec![];
     swap()
-        .encode(&mut writer)
+        .encode(&mut state_bytes)
         .expect("Error. Couldn't serialize canister pre-upgrade.");
-    writer.flush();
+
+    // Write the length of the serialized bytes to memory, followed by the
+    // by the bytes themselves.
+    UPGRADES_MEMORY.with(|um| {
+        let mut um = um.borrow_mut().to_owned();
+        let mut writer = Writer::new(&mut um, 0);
+        writer
+            .write(&(state_bytes.len() as u32).to_le_bytes())
+            .expect("Error. Couldn't write to stable memory");
+        writer
+            .write(&state_bytes)
+            .expect("Error. Couldn't write to stable memory");
+    })
 }
 
 /// Deserialize what has been written to stable memory in
@@ -361,24 +373,62 @@ fn canister_pre_upgrade() {
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
-    log!(INFO, "Executing post upgrade");
-    let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
-    match Swap::decode(reader) {
-        Err(err) => {
-            panic!(
-                "{}Error deserializing canister state post-upgrade. \
-		 CANISTER HAS BROKEN STATE!!!!. Error: {:?}",
-                LOG_PREFIX, err
-            );
-        }
-        Ok(proto) => unsafe {
+
+    fn set_state(proto: Swap) {
+        unsafe {
             assert!(
                 SWAP.is_none(),
                 "{}Trying to post-upgrade an already initialized canister!",
                 LOG_PREFIX
             );
             SWAP = Some(proto);
-        },
+        }
+    }
+
+    log!(INFO, "Executing post upgrade");
+
+    // This post_upgrade is done in two steps because of NNS1-2014:
+    //   1. First try to read the state as it was stored before NNS1-2014
+    //   2. If that fails then we try to read the state as it is stored since NNS1-2014
+
+    // First try to read the state using the same approach used before NNS1-2014
+
+    const STABLE_MEM_BUFFER_SIZE: u32 = 1024 * 1024; // 1MiB
+    let reader = BufferedStableMemReader::new(STABLE_MEM_BUFFER_SIZE);
+    match Swap::decode(reader) {
+        // if reading was successful then this canister was pre NNS1-2014,
+        // nothing else to do
+        Ok(proto) => set_state(proto),
+
+        // otherwise try to read the state using the approach implemented in NNS1-2014
+        Err(_) => {
+            // Read the length of the state bytes.
+            let serialized_swap_message_len = UPGRADES_MEMORY.with(|um| {
+                let mut serialized_swap_message_len_bytes = [0; 4];
+                um.borrow()
+                    .read(/* offset */ 0, &mut serialized_swap_message_len_bytes);
+                u32::from_le_bytes(serialized_swap_message_len_bytes) as usize
+            });
+
+            // Read the state bytes.
+            let decode_swap_result = UPGRADES_MEMORY.with(|um| {
+                let mut swap_bytes = vec![0; serialized_swap_message_len];
+                um.borrow().read(4, &mut swap_bytes);
+                Swap::decode(&swap_bytes[..])
+            });
+
+            // Deserialize and set the state
+            match decode_swap_result {
+                Err(err) => {
+                    panic!(
+                        "{}Error deserializing canister state post-upgrade. \
+                 CANISTER HAS BROKEN STATE!!!!. Error: {:?}",
+                        LOG_PREFIX, err
+                    );
+                }
+                Ok(proto) => set_state(proto),
+            }
+        }
     }
 }
 

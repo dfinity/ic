@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "//rs/sns/root",
     "//rs/sns/init",
     "//rs/sns/test_utils",
+    "//rs/test_utilities/load_wasm",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "//rs/types/types",
