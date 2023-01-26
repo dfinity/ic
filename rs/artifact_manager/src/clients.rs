@@ -95,7 +95,7 @@ pub(crate) trait ArtifactManagerBackend: Send + Sync {
 /// Implementation struct for `ArtifactManagerBackend`.
 pub(crate) struct ArtifactManagerBackendImpl<Artifact: ArtifactKind + 'static> {
     /// Reference to the artifact client.
-    pub client: Arc<dyn ArtifactClient<Artifact>>,
+    pub client: Box<dyn ArtifactClient<Artifact>>,
     /// The artifact processor front end.
     pub processor: ArtifactProcessorManager<Artifact>,
 }

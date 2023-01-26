@@ -38,7 +38,7 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
         replica_logger,
         metrics_registry,
     );
-    artifact_manager_maker.add_client(consensus_client, actor);
+    artifact_manager_maker.add_client(Box::new(consensus_client), actor);
     artifact_manager_maker.finish()
 }
 

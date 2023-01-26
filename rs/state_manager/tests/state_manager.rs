@@ -1,11 +1,8 @@
 use ic_base_types::NumBytes;
 use ic_config::state_manager::Config;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree};
-use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactProcessor},
-    artifact_pool::UnvalidatedArtifact,
-    certification::Verifier,
-};
+use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor};
+use ic_interfaces::{artifact_pool::UnvalidatedArtifact, certification::Verifier};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_state_manager::*;
 use ic_logger::replica_logger::no_op_logger;
@@ -80,26 +77,26 @@ fn label<T: Into<Label>>(t: T) -> Label {
 
 #[test]
 fn rejoining_node_doesnt_accumulate_states() {
-    state_manager_test(|src_metrics, src_state_manager| {
-        state_manager_test(|dst_metrics, dst_state_manager| {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             for i in 1..=3 {
                 let mut state = src_state_manager.take_tip().1;
                 insert_dummy_canister(&mut state, canister_test_id(100 + i));
                 src_state_manager.commit_and_certify(state, height(i), CertificationScope::Full);
                 let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
-                let hash = wait_for_checkpoint(&src_state_manager, height(i));
+                let hash = wait_for_checkpoint(&*src_state_manager, height(i));
                 let id = StateSyncArtifactId {
                     height: height(i),
                     hash,
                 };
-                let msg = src_state_manager
+                let msg = src_state_sync
                     .get_validated_by_identifier(&id)
                     .expect("failed to get state sync messages");
 
-                let chunkable = dst_state_manager.create_chunkable_state(&id);
+                let chunkable = dst_state_sync.create_chunkable_state(&id);
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_manager.process_changes(
+                dst_state_sync.process_changes(
                     time_source.as_ref(),
                     vec![UnvalidatedArtifact {
                         message: dst_msg,
@@ -1483,25 +1480,25 @@ fn encode_stream_index_is_checked() {
 
 #[test]
 fn delivers_state_adverts_once() {
-    state_manager_test(|_metrics, state_manager| {
+    state_manager_test_with_state_sync(|_metrics, state_manager, state_sync| {
         let (_height, state) = state_manager.take_tip();
         let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-        let hash = wait_for_checkpoint(&state_manager, height(1));
+        let hash = wait_for_checkpoint(&*state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
             hash,
         };
 
-        let (adverts, _) = state_manager.process_changes(time_source.as_ref(), Default::default());
+        let (adverts, _) = state_sync.process_changes(time_source.as_ref(), Default::default());
         assert_eq!(adverts.len(), 1);
         assert_eq!(adverts[0].advert.id, id);
-        assert!(state_manager.has_artifact(&id));
+        assert!(state_sync.has_artifact(&id));
 
-        let (adverts, _) = state_manager.process_changes(time_source.as_ref(), Default::default());
+        let (adverts, _) = state_sync.process_changes(time_source.as_ref(), Default::default());
         assert_eq!(adverts.len(), 0);
-        assert!(state_manager.has_artifact(&id));
+        assert!(state_sync.has_artifact(&id));
     });
 }
 
@@ -1524,17 +1521,17 @@ fn recomputes_metadata_on_restart_if_missing() {
 
 #[test]
 fn state_sync_message_contains_manifest() {
-    state_manager_test(|_metrics, state_manager| {
+    state_manager_test_with_state_sync(|_metrics, state_manager, state_sync| {
         let (_height, state) = state_manager.take_tip();
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-        let hash = wait_for_checkpoint(&state_manager, height(1));
+        let hash = wait_for_checkpoint(&*state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
             hash,
         };
 
-        let msg = state_manager
+        let msg = state_sync
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
@@ -1562,7 +1559,7 @@ fn state_sync_message_contains_manifest() {
 
 #[test]
 fn state_sync_priority_fn_respects_states_to_fetch() {
-    state_manager_test(|_metrics, state_manager| {
+    state_manager_test_with_state_sync(|_metrics, state_manager, state_sync| {
         fn hash(n: u8) -> CryptoHashOfState {
             CryptoHashOfState::from(CryptoHash(vec![n; 32]))
         }
@@ -1573,7 +1570,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
 
-        let priority_fn = state_manager
+        let priority_fn = state_sync
             .get_priority_function()
             .expect("state manager returned no priority function");
 
@@ -1601,7 +1598,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
 
         // Request fetching of state 3.
         state_manager.fetch_state(height(3), hash(3), Height::new(99));
-        let priority_fn = state_manager
+        let priority_fn = state_sync
             .get_priority_function()
             .expect("state manager returned no priority function");
         // Good hash
@@ -1635,7 +1632,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
 
         // Request fetching of newer state 4.
         state_manager.fetch_state(height(4), hash(4), Height::new(99));
-        let priority_fn = state_manager
+        let priority_fn = state_sync
             .get_priority_function()
             .expect("state manager returned no priority function");
         assert_eq!(
@@ -1686,13 +1683,13 @@ fn assert_no_remaining_chunks(metrics: &MetricsRegistry) {
 
 #[test]
 fn can_do_simple_state_sync_transfer() {
-    state_manager_test(|src_metrics, src_state_manager| {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-        let hash = wait_for_checkpoint(&src_state_manager, height(1));
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
             hash,
@@ -1700,17 +1697,17 @@ fn can_do_simple_state_sync_transfer() {
 
         let state = src_state_manager.get_latest_state().take();
 
-        let msg = src_state_manager
+        let msg = src_state_sync
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
 
-        state_manager_test(|dst_metrics, dst_state_manager| {
-            let chunkable = dst_state_manager.create_chunkable_state(&id);
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            let chunkable = dst_state_sync.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager.process_changes(
+            dst_state_sync.process_changes(
                 time_source.as_ref(),
                 vec![UnvalidatedArtifact {
                     message: dst_msg,
@@ -1731,7 +1728,7 @@ fn can_do_simple_state_sync_transfer() {
             // Because `take_tip()` modifies the `prev_state_hash`, we change it back to compare the rest of state.
             tip.metadata.prev_state_hash = state.metadata.prev_state_hash.clone();
             assert_eq!(*state.as_ref(), tip);
-            assert_eq!(vec![height(1)], heights_to_certify(&dst_state_manager));
+            assert_eq!(vec![height(1)], heights_to_certify(&*dst_state_manager));
 
             assert_error_counters(dst_metrics);
             assert_no_remaining_chunks(dst_metrics);
@@ -1741,14 +1738,14 @@ fn can_do_simple_state_sync_transfer() {
 
 #[test]
 fn can_state_sync_from_cache() {
-    state_manager_test(|src_metrics, src_state_manager| {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         insert_dummy_canister(&mut state, canister_test_id(200));
         let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-        let hash = wait_for_checkpoint(&src_state_manager, height(1));
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
             hash: hash.clone(),
@@ -1756,19 +1753,19 @@ fn can_state_sync_from_cache() {
 
         let state = src_state_manager.get_latest_state().take();
 
-        let msg = src_state_manager
+        let msg = src_state_sync
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
 
-        state_manager_test(|dst_metrics, dst_state_manager| {
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let omit: HashSet<ChunkId> =
                 maplit::hashset! {ChunkId::new(1), ChunkId::new(FILE_GROUP_CHUNK_ID_OFFSET)};
 
             // First state sync is destroyed before completion
             {
-                let mut chunkable = dst_state_manager.create_chunkable_state(&id);
+                let mut chunkable = dst_state_sync.create_chunkable_state(&id);
 
                 // First fetch chunk 0 (the manifest), and then ask for all chunks afterwards,
                 // but never receive 1 and FILE_GROUP_CHUNK_ID_OFFSET
@@ -1784,7 +1781,7 @@ fn can_state_sync_from_cache() {
                     hash: hash.clone(),
                 };
 
-                let mut chunkable = dst_state_manager.create_chunkable_state(&id);
+                let mut chunkable = dst_state_sync.create_chunkable_state(&id);
 
                 let result = pipe_manifest(&msg, &mut *chunkable);
                 assert!(result.is_none());
@@ -1804,7 +1801,7 @@ fn can_state_sync_from_cache() {
 
                 // Download chunk 1
                 let dst_msg = pipe_state_sync(msg.clone(), chunkable);
-                dst_state_manager.process_changes(
+                dst_state_sync.process_changes(
                     time_source.as_ref(),
                     vec![UnvalidatedArtifact {
                         message: dst_msg,
@@ -1824,7 +1821,7 @@ fn can_state_sync_from_cache() {
                     *state.as_ref(),
                     *dst_state_manager.get_latest_state().take()
                 );
-                assert_eq!(vec![height(2)], heights_to_certify(&dst_state_manager));
+                assert_eq!(vec![height(2)], heights_to_certify(&*dst_state_manager));
             }
             assert_no_remaining_chunks(dst_metrics);
             // Third state sync can copy all chunks immediately
@@ -1835,12 +1832,12 @@ fn can_state_sync_from_cache() {
                     hash,
                 };
 
-                let mut chunkable = dst_state_manager.create_chunkable_state(&id);
+                let mut chunkable = dst_state_sync.create_chunkable_state(&id);
 
                 // The manifest alone is enough to complete the sync
                 let dst_msg = pipe_manifest(&msg, &mut *chunkable).unwrap();
 
-                dst_state_manager.process_changes(
+                dst_state_sync.process_changes(
                     time_source.as_ref(),
                     vec![UnvalidatedArtifact {
                         message: dst_msg,
@@ -1862,7 +1859,7 @@ fn can_state_sync_from_cache() {
                 );
                 assert_eq!(
                     vec![height(2), height(3)],
-                    heights_to_certify(&dst_state_manager)
+                    heights_to_certify(&*dst_state_manager)
                 );
             }
 
@@ -1874,26 +1871,26 @@ fn can_state_sync_from_cache() {
 
 #[test]
 fn can_state_sync_into_existing_checkpoint() {
-    state_manager_test(|src_metrics, src_state_manager| {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state.clone(), height(1), CertificationScope::Full);
-        let hash = wait_for_checkpoint(&src_state_manager, height(1));
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
             hash,
         };
 
-        let msg = src_state_manager
+        let msg = src_state_sync
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
 
-        state_manager_test(|dst_metrics, dst_state_manager| {
-            let chunkable = dst_state_manager.create_chunkable_state(&id);
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            let chunkable = dst_state_sync.create_chunkable_state(&id);
 
             dst_state_manager.take_tip();
             dst_state_manager.commit_and_certify(
@@ -1903,7 +1900,7 @@ fn can_state_sync_into_existing_checkpoint() {
             );
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager.process_changes(
+            dst_state_sync.process_changes(
                 time_source.as_ref(),
                 vec![UnvalidatedArtifact {
                     message: dst_msg,
@@ -1920,7 +1917,7 @@ fn can_state_sync_into_existing_checkpoint() {
 
 #[test]
 fn can_group_small_files_in_state_sync() {
-    state_manager_test(|src_metrics, src_state_manager| {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         let num_canisters = 200;
         let time_source = ic_test_utilities::FastForwardTimeSource::new();
@@ -1937,7 +1934,7 @@ fn can_group_small_files_in_state_sync() {
         );
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-        let hash = wait_for_checkpoint(&src_state_manager, height(1));
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
             hash,
@@ -1945,7 +1942,7 @@ fn can_group_small_files_in_state_sync() {
 
         let state = src_state_manager.get_latest_state().take();
 
-        let msg = src_state_manager
+        let msg = src_state_sync
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
@@ -1968,8 +1965,8 @@ fn can_group_small_files_in_state_sync() {
 
         assert_error_counters(src_metrics);
 
-        state_manager_test(|dst_metrics, dst_state_manager| {
-            let mut chunkable = dst_state_manager.create_chunkable_state(&id);
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            let mut chunkable = dst_state_sync.create_chunkable_state(&id);
 
             let result = pipe_manifest(&msg, &mut *chunkable);
             assert!(result.is_none());
@@ -1980,7 +1977,7 @@ fn can_group_small_files_in_state_sync() {
 
             let dst_msg = pipe_state_sync(msg, chunkable);
 
-            dst_state_manager.process_changes(
+            dst_state_sync.process_changes(
                 time_source.as_ref(),
                 vec![UnvalidatedArtifact {
                     message: dst_msg,
@@ -2005,7 +2002,7 @@ fn can_group_small_files_in_state_sync() {
 
 #[test]
 fn can_commit_after_prev_state_is_gone() {
-    state_manager_test(|src_metrics, src_state_manager| {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut tip) = src_state_manager.take_tip();
         insert_dummy_canister(&mut tip, canister_test_id(100));
         src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
@@ -2017,28 +2014,28 @@ fn can_commit_after_prev_state_is_gone() {
         let (_height, tip) = src_state_manager.take_tip();
         src_state_manager.commit_and_certify(tip, height(3), CertificationScope::Full);
 
-        let hash = wait_for_checkpoint(&src_state_manager, height(3));
+        let hash = wait_for_checkpoint(&*src_state_manager, height(3));
         let id = StateSyncArtifactId {
             height: height(3),
             hash,
         };
 
-        let msg = src_state_manager
+        let msg = src_state_sync
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
 
-        state_manager_test(|dst_metrics, dst_state_manager| {
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let (_height, mut tip) = dst_state_manager.take_tip();
             insert_dummy_canister(&mut tip, canister_test_id(100));
             dst_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
 
             let (_height, tip) = dst_state_manager.take_tip();
 
-            let chunkable = dst_state_manager.create_chunkable_state(&id);
+            let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager.process_changes(
+            dst_state_sync.process_changes(
                 time_source.as_ref(),
                 vec![UnvalidatedArtifact {
                     message: dst_msg,
@@ -2070,7 +2067,7 @@ fn can_commit_after_prev_state_is_gone() {
 
 #[test]
 fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height() {
-    state_manager_test(|src_metrics, src_state_manager| {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut tip) = src_state_manager.take_tip();
         insert_dummy_canister(&mut tip, canister_test_id(100));
         src_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
@@ -2082,26 +2079,26 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
         let (_height, tip) = src_state_manager.take_tip();
         src_state_manager.commit_and_certify(tip, height(3), CertificationScope::Full);
 
-        let hash = wait_for_checkpoint(&src_state_manager, height(3));
+        let hash = wait_for_checkpoint(&*src_state_manager, height(3));
         let id = StateSyncArtifactId {
             height: height(3),
             hash,
         };
 
-        let msg = src_state_manager
+        let msg = src_state_sync
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
 
-        state_manager_test(|dst_metrics, dst_state_manager| {
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let (_height, mut tip) = dst_state_manager.take_tip();
             insert_dummy_canister(&mut tip, canister_test_id(100));
             dst_state_manager.commit_and_certify(tip, height(1), CertificationScope::Metadata);
 
-            let chunkable = dst_state_manager.create_chunkable_state(&id);
+            let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager.process_changes(
+            dst_state_sync.process_changes(
                 time_source.as_ref(),
                 vec![UnvalidatedArtifact {
                     message: dst_msg,
@@ -2123,7 +2120,7 @@ fn can_commit_without_prev_hash_mismatch_after_taking_tip_at_the_synced_height()
 
 #[test]
 fn can_state_sync_based_on_old_checkpoint() {
-    state_manager_test(|src_metrics, src_state_manager| {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
@@ -2133,28 +2130,28 @@ fn can_state_sync_based_on_old_checkpoint() {
         insert_dummy_canister(&mut state, canister_test_id(200));
         src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
-        let hash = wait_for_checkpoint(&src_state_manager, height(2));
+        let hash = wait_for_checkpoint(&*src_state_manager, height(2));
         let id = StateSyncArtifactId {
             height: height(2),
             hash,
         };
-        let msg = src_state_manager
+        let msg = src_state_sync
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync message");
 
         assert_error_counters(src_metrics);
 
-        state_manager_test(|dst_metrics, dst_state_manager| {
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let (_height, mut state) = dst_state_manager.take_tip();
             insert_dummy_canister(&mut state, canister_test_id(100));
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
-            wait_for_checkpoint(&dst_state_manager, height(1));
+            wait_for_checkpoint(&*dst_state_manager, height(1));
 
-            let chunkable = dst_state_manager.create_chunkable_state(&id);
+            let chunkable = dst_state_sync.create_chunkable_state(&id);
 
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager.process_changes(
+            dst_state_sync.process_changes(
                 time_source.as_ref(),
                 vec![UnvalidatedArtifact {
                     message: dst_msg,
@@ -2223,14 +2220,14 @@ fn can_recover_from_corruption_on_state_sync() {
         ]);
     };
 
-    state_manager_test(|src_metrics, src_state_manager| {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         // Create initial state with a single canister.
         let (_height, mut state) = src_state_manager.take_tip();
         populate_original_state(&mut state);
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
-        let hash_1 = wait_for_checkpoint(&src_state_manager, height(1));
+        let hash_1 = wait_for_checkpoint(&*src_state_manager, height(1));
 
         // Create another state with an extra canister.
         let (_height, mut state) = src_state_manager.take_tip();
@@ -2264,23 +2261,23 @@ fn can_recover_from_corruption_on_state_sync() {
 
         src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
-        let hash_2 = wait_for_checkpoint(&src_state_manager, height(2));
+        let hash_2 = wait_for_checkpoint(&*src_state_manager, height(2));
         let id = StateSyncArtifactId {
             height: height(2),
             hash: hash_2,
         };
-        let msg = src_state_manager
+        let msg = src_state_sync
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync message");
 
         assert_error_counters(src_metrics);
 
-        state_manager_test(|dst_metrics, dst_state_manager| {
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let (_height, mut state) = dst_state_manager.take_tip();
             populate_original_state(&mut state);
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
-            let hash_dst_1 = wait_for_checkpoint(&dst_state_manager, height(1));
+            let hash_dst_1 = wait_for_checkpoint(&*dst_state_manager, height(1));
             assert_eq!(hash_1, hash_dst_1);
 
             // Corrupt some files in the destination checkpoint.
@@ -2341,9 +2338,9 @@ fn can_recover_from_corruption_on_state_sync() {
             make_mutable(&canister_100_raw_pb).unwrap();
             std::fs::write(&canister_100_raw_pb, b"Garbage").unwrap();
 
-            let chunkable = dst_state_manager.create_chunkable_state(&id);
+            let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager.process_changes(
+            dst_state_sync.process_changes(
                 time_source.as_ref(),
                 vec![UnvalidatedArtifact {
                     message: dst_msg,
@@ -2370,7 +2367,7 @@ fn can_recover_from_corruption_on_state_sync() {
 
 #[test]
 fn can_commit_below_state_sync() {
-    state_manager_test(|src_metrics, src_state_manager| {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         let time_source = ic_test_utilities::FastForwardTimeSource::new();
@@ -2379,24 +2376,24 @@ fn can_commit_below_state_sync() {
         let (_height, state) = src_state_manager.take_tip();
         src_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
 
-        let hash = wait_for_checkpoint(&src_state_manager, height(2));
+        let hash = wait_for_checkpoint(&*src_state_manager, height(2));
         let id = StateSyncArtifactId {
             height: height(2),
             hash,
         };
 
-        let msg = src_state_manager
+        let msg = src_state_sync
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
 
-        state_manager_test(|dst_metrics, dst_state_manager| {
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let (tip_height, state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(0));
-            let chunkable = dst_state_manager.create_chunkable_state(&id);
+            let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager.process_changes(
+            dst_state_sync.process_changes(
                 time_source.as_ref(),
                 vec![UnvalidatedArtifact {
                     message: dst_msg,
@@ -2406,7 +2403,7 @@ fn can_commit_below_state_sync() {
             );
             // Check committing an old state doesn't panic
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-            wait_for_checkpoint(&dst_state_manager, height(1));
+            wait_for_checkpoint(&*dst_state_manager, height(1));
 
             // take_tip should update the tip to the synced checkpoint
             let (tip_height, _state) = dst_state_manager.take_tip();
@@ -2422,40 +2419,40 @@ fn can_commit_below_state_sync() {
 
 #[test]
 fn can_state_sync_below_commit() {
-    state_manager_test(|src_metrics, src_state_manager| {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state.clone(), height(1), CertificationScope::Full);
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
 
-        let hash = wait_for_checkpoint(&src_state_manager, height(1));
         let id = StateSyncArtifactId {
             height: height(1),
             hash,
         };
 
-        let msg = src_state_manager
+        let msg = src_state_sync
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
         assert_error_counters(src_metrics);
 
-        state_manager_test(|dst_metrics, dst_state_manager| {
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let (tip_height, state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(0));
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
             let (_height, state) = dst_state_manager.take_tip();
             dst_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
-            wait_for_checkpoint(&dst_state_manager, height(2));
+            wait_for_checkpoint(&*dst_state_manager, height(2));
 
             let (_height, state) = dst_state_manager.take_tip();
             dst_state_manager.remove_states_below(height(2));
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(2)]);
-            let chunkable = dst_state_manager.create_chunkable_state(&id);
+            let chunkable = dst_state_sync.create_chunkable_state(&id);
             let dst_msg = pipe_state_sync(msg, chunkable);
-            dst_state_manager.process_changes(
+            dst_state_sync.process_changes(
                 time_source.as_ref(),
                 vec![UnvalidatedArtifact {
                     message: dst_msg,
@@ -2468,7 +2465,7 @@ fn can_state_sync_below_commit() {
                 vec![height(1), height(2)]
             );
             dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
-            wait_for_checkpoint(&dst_state_manager, height(3));
+            wait_for_checkpoint(&*dst_state_manager, height(3));
 
             let (tip_height, _state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(3));
