@@ -98,8 +98,8 @@ use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
 use ic_sns_wasm::pb::v1::{
-    AddWasmRequest, SnsCanisterType, SnsWasm, UpdateAllowedPrincipalsRequest,
-    UpdateSnsSubnetListRequest,
+    AddWasmRequest, InsertUpgradePathEntriesRequest, PrettySnsVersion, SnsCanisterType, SnsUpgrade,
+    SnsVersion, SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
 };
 use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
@@ -130,7 +130,7 @@ use registry_canister::mutations::{
     prepare_canister_migration::PrepareCanisterMigrationPayload,
     reroute_canister_ranges::RerouteCanisterRangesPayload,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -398,6 +398,8 @@ enum SubCommand {
     /// Submits a proposal to add an SNS wasm (e.g. Governance, Ledger, etc) to the SNS-WASM NNS
     /// canister.
     ProposeToAddWasmToSnsWasm(ProposeToAddWasmToSnsWasmCmd),
+    // Submits a proposal to add custom upgrade path entries
+    ProposeToInsertSnsWasmUpgradePathEntries(ProposeToInsertSnsWasmUpgradePathEntriesCmd),
     /// Get the ECDSA key ids and their signing subnets
     GetEcdsaSigningSubnets,
     /// Propose to update the list of SNS Subnet IDs that SNS-WASM deploys SNS instances to
@@ -2099,6 +2101,201 @@ impl ProposalTitleAndPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
     }
 }
 
+/// A struct to make command line representations of the version easier, which expects
+/// a hex-encoded sha256 sum of wasms.
+#[derive(Clone, Serialize, Deserialize)]
+struct JsonSnsVersion {
+    pub root_wasm_hash: Option<String>,
+    pub governance_wasm_hash: Option<String>,
+    pub ledger_wasm_hash: Option<String>,
+    pub swap_wasm_hash: Option<String>,
+    pub archive_wasm_hash: Option<String>,
+    pub index_wasm_hash: Option<String>,
+}
+
+impl JsonSnsVersion {
+    /// Applies all Some fields to create a new JsonSnsVersion (leaving the original fields as they are)
+    fn modify_with(&self, other_version: &JsonSnsVersion) -> JsonSnsVersion {
+        JsonSnsVersion {
+            root_wasm_hash: other_version
+                .root_wasm_hash
+                .clone()
+                .or_else(|| self.root_wasm_hash.clone()),
+            governance_wasm_hash: other_version
+                .governance_wasm_hash
+                .clone()
+                .or_else(|| self.governance_wasm_hash.clone()),
+            ledger_wasm_hash: other_version
+                .ledger_wasm_hash
+                .clone()
+                .or_else(|| self.ledger_wasm_hash.clone()),
+            swap_wasm_hash: other_version
+                .swap_wasm_hash
+                .clone()
+                .or_else(|| self.swap_wasm_hash.clone()),
+            archive_wasm_hash: other_version
+                .archive_wasm_hash
+                .clone()
+                .or_else(|| self.archive_wasm_hash.clone()),
+            index_wasm_hash: other_version
+                .index_wasm_hash
+                .clone()
+                .or_else(|| self.index_wasm_hash.clone()),
+        }
+    }
+}
+
+impl FromStr for JsonSnsVersion {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        serde_json::from_str(s).map_err(|e| format!("{}", e))
+    }
+}
+
+impl TryFrom<JsonSnsVersion> for SnsVersion {
+    type Error = String;
+
+    fn try_from(json_version: JsonSnsVersion) -> Result<Self, Self::Error> {
+        Ok(SnsVersion {
+            root_wasm_hash: hex::decode(json_version.root_wasm_hash.ok_or("Missing root")?)
+                .map_err(|e| format!("{}", e))?,
+            governance_wasm_hash: hex::decode(
+                json_version
+                    .governance_wasm_hash
+                    .ok_or("Missing governance")?,
+            )
+            .map_err(|e| format!("{}", e))?,
+            ledger_wasm_hash: hex::decode(json_version.ledger_wasm_hash.ok_or("Missing ledger")?)
+                .map_err(|e| format!("{}", e))?,
+            swap_wasm_hash: hex::decode(json_version.swap_wasm_hash.ok_or("Missing swap")?)
+                .map_err(|e| format!("{}", e))?,
+            archive_wasm_hash: hex::decode(
+                json_version.archive_wasm_hash.ok_or("Missing archive")?,
+            )
+            .map_err(|e| format!("{}", e))?,
+            index_wasm_hash: hex::decode(json_version.index_wasm_hash.ok_or("Missing index")?)
+                .map_err(|e| format!("{}", e))?,
+        })
+    }
+}
+
+/// Proposal to insert SNS-W Upgrade Path Entries
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToInsertSnsWasmUpgradePathEntriesCmd {
+    /// The sns_governance_canister_id that will get a custom response for the entries in the upgrade
+    /// path
+    #[clap(long)]
+    pub sns_governance_canister_id: Option<CanisterId>,
+    /// If missing sns_governance_canister_id, this is required to ensure proposer understands
+    /// they are modifying the default upgrade path for all SNSes
+    #[clap(long)]
+    pub force_upgrade_main_upgrade_path: Option<bool>,
+
+    /// Format is a JSON string with all version entries for the first, and at least one entry for each subsequent one.
+    /// Subsequent entries are copied over the first entry to create the sequence of upgrades
+    /// Example:
+    /// propose-to-insert-sns-wasm-upgrade-path entries \
+    ///     '{"archive":"archive-A","governance":"gov-A","index":"index-A","ledger":"ledger-A","root":"root-A","swap":"swap-A"}' \
+    ///     '{"archive":"archive-B"}' '{"governance": "gov-C"}'
+    ///
+    /// In this example, there will be three versions like the following, as there was a single initial version and two
+    ///  partial versions (treated as deltas):
+    ///     '{"archive":"archive-A","governance":"gov-A","index":"index-A","ledger":"ledger-A","root":"root-A","swap":"swap-A"}'
+    ///     '{"archive":"archive-B","governance":"gov-A","index":"index-A","ledger":"ledger-A","root":"root-A","swap":"swap-A"}'
+    ///     '{"archive":"archive-B","governance":"gov-C","index":"index-A","ledger":"ledger-A","root":"root-A","swap":"swap-A"}'
+    ///  and the path will be two step entries from the first to the second, then the second to the third.
+    #[clap(required(true), multiple_values(true))]
+    pub versions: Vec<JsonSnsVersion>,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<InsertUpgradePathEntriesRequest>
+    for ProposeToInsertSnsWasmUpgradePathEntriesCmd
+{
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => "Insert custom upgrade paths into SNS-W".to_string(),
+        }
+    }
+
+    async fn payload(&self, _: Url) -> InsertUpgradePathEntriesRequest {
+        let force_upgrade_main_upgrade_path = self.force_upgrade_main_upgrade_path.unwrap_or(false);
+
+        let sns_governance_canister_id = self.sns_governance_canister_id.map(|c| c.into());
+
+        if sns_governance_canister_id.is_none() && !force_upgrade_main_upgrade_path {
+            panic!("You must provide --force-upgrade-main-upgrade-path option if not specifying --sns-governance-canister-id option");
+        }
+
+        // Note, we are filling in the JsonSnsVersions (b/c they can be optional) so that
+        // the usage can be to supply the initial version, and then the deltas one-by-one.
+        // This usage makes it easier to avoid errors from copy/pasting.
+        let sns_versions: Vec<SnsVersion> = self
+            .versions
+            .iter()
+            .fold(vec![], |list: Vec<JsonSnsVersion>, json_version| {
+                let mut list = list;
+                let last_version = list.last();
+                let version = match last_version {
+                    Some(last_version) => last_version.modify_with(json_version),
+                    None => json_version.clone(),
+                };
+                list.push(version);
+                list
+            })
+            .into_iter()
+            .map(|j_version| j_version.try_into().unwrap())
+            .collect();
+
+        let upgrade_path = sns_versions
+            .iter()
+            .zip(sns_versions.iter().skip(1))
+            .map(|(from, to)| SnsUpgrade {
+                current_version: Some(from.clone()),
+                next_version: Some(to.clone()),
+            })
+            .collect();
+
+        InsertUpgradePathEntriesRequest {
+            upgrade_path,
+            sns_governance_canister_id,
+        }
+    }
+}
+
+fn print_insert_sns_wasm_upgrade_path_entries_payload(payload: InsertUpgradePathEntriesRequest) {
+    // TODO how do we format this in a nice way?
+    let formatted_upgrade_path = payload
+        .upgrade_path
+        .into_iter()
+        .map(|upgrade| {
+            let pretty_to: PrettySnsVersion = upgrade.next_version.unwrap().into();
+            let pretty_from: PrettySnsVersion = upgrade.current_version.unwrap().into();
+            format!(
+                r"SnsUpgrade {{
+    current_version: 
+            {:#?},
+    next_version:    
+            {:#?}
+}}",
+                pretty_from, pretty_to
+            )
+        })
+        .collect::<Vec<String>>()
+        .join(",\n");
+
+    println!(
+        r"InsertUpgradePathEntriesRequest {{ 
+    sns_governance_canister_id: {:?},
+    upgrade_path: {}
+}}",
+        payload.sns_governance_canister_id, formatted_upgrade_path
+    );
+}
+
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToUpdateSnsSubnetIdsInSnsWasmCmd {
@@ -3317,6 +3514,7 @@ async fn main() {
             SubCommand::ProposeToUpdateSnsSubnetIdsInSnsWasm(_) => (),
             SubCommand::ProposeToUpdateSnsDeployWhitelist(_) => (),
             SubCommand::ProposeToOpenSnsTokenSwap(_) => (),
+            SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -4331,6 +4529,31 @@ async fn main() {
                 proposer,
             )
             .await;
+        }
+        SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(cmd) => {
+            let (proposer, sender) =
+                get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
+
+            let agent = make_canister_client(
+                opts.nns_url,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file,
+                sender,
+            );
+            // Custom rendering to make it easier to debug your command
+            if cmd.is_dry_run() {
+                let payload = cmd.payload(agent.url.clone()).await;
+                print_insert_sns_wasm_upgrade_path_entries_payload(payload);
+                return;
+            }
+
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::InsertSnsWasmUpgradePathEntries,
+                agent,
+                proposer,
+            )
+            .await
         }
     }
 }
