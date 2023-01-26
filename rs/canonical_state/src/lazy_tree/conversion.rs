@@ -39,7 +39,7 @@ impl<'a> FiniteMap<'a> {
     pub fn with<B, T>(mut self, blob: B, func: T) -> Self
     where
         B: AsRef<[u8]>,
-        T: Fn() -> LazyTree<'a> + 'a,
+        T: Fn() -> LazyTree<'a> + 'a + Send + Sync,
     {
         self.0.insert(Label::from(blob), Lazy::Func(Arc::new(func)));
         self
@@ -166,8 +166,9 @@ where
 
 impl<'a, K, V, F> LazyFork<'a> for MapTransformFork<'a, K, V, F>
 where
-    K: Ord + LabelLike + Clone,
-    F: Fn(K, &'a V, CertificationVersion) -> LazyTree<'a>,
+    K: Ord + LabelLike + Clone + Send + Sync,
+    F: Fn(K, &'a V, CertificationVersion) -> LazyTree<'a> + Send + Sync,
+    V: Send + Sync,
 {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         let k = K::from_label(label.as_bytes())?;
@@ -196,13 +197,16 @@ where
 
 /// A special type of fork that describes a stream-indexed queue.
 #[derive(Clone)]
-struct StreamQueueFork<'a, T> {
+struct StreamQueueFork<'a, T>
+where
+    T: Send + Sync,
+{
     queue: &'a StreamIndexedQueue<T>,
     certification_version: CertificationVersion,
     mk_tree: fn(StreamIndex, &'a T, CertificationVersion) -> LazyTree<'a>,
 }
 
-impl<'a, T> LazyFork<'a> for StreamQueueFork<'a, T> {
+impl<'a, T: Send + Sync> LazyFork<'a> for StreamQueueFork<'a, T> {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         let idx = StreamIndex::from_label(label.as_bytes())?;
         self.queue

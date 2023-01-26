@@ -1,9 +1,18 @@
 use super::*;
 use crate::lazy_tree::LazyFork;
+use ic_base_types::NumBytes;
 use ic_crypto_tree_hash::{
     flatmap, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
     Witness, WitnessGenerator, WitnessGeneratorImpl,
 };
+use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::ReplicatedState;
+use ic_test_utilities::{
+    mock_time,
+    state::insert_dummy_canister,
+    types::ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
+};
+use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use proptest::prelude::*;
 use std::sync::Arc;
 
@@ -14,13 +23,13 @@ fn arbitrary_leaf() -> impl Strategy<Value = LabeledTree<Vec<u8>>> {
 fn arbitrary_labeled_tree() -> impl Strategy<Value = LabeledTree<Vec<u8>>> {
     arbitrary_leaf().prop_recursive(
         /* depth= */ 4,
-        /* max_size= */ 256,
-        /* items_per_collection= */ 10,
+        /* max_size= */ 1000,
+        /* items_per_collection= */ 130,
         |inner| {
             prop::collection::btree_map(
                 prop::collection::vec(any::<u8>(), 1..15).prop_map(Label::from),
                 inner,
-                0..10,
+                0..130,
             )
             .prop_map(|children| {
                 LabeledTree::SubTree(FlatMap::from_key_values(children.into_iter().collect()))
@@ -119,6 +128,21 @@ fn assert_same_witness(ht: &HashTree, wg: &WitnessGeneratorImpl, data: &LabeledT
     )
 }
 
+/// Check that for each leaf, the witness looks the same as with the
+/// old way of generating witnesses
+/// Also check that the new and old way of computing hash trees are equivalent
+fn test_tree(t: &LabeledTree<Vec<u8>>) {
+    let hash_tree = hash_lazy_tree(&as_lazy(t));
+    let witness_gen = build_witness_gen(t);
+    enumerate_leaves(t, |subtree| {
+        assert_same_witness(&hash_tree, &witness_gen, &subtree);
+    });
+
+    let crypto_tree = crypto_hash_lazy_tree(&as_lazy(t));
+
+    assert_eq!(hash_tree, crypto_tree);
+}
+
 #[test]
 fn test_one_level_tree() {
     let t = LabeledTree::SubTree(flatmap! {
@@ -126,9 +150,8 @@ fn test_one_level_tree() {
             Label::from([0]) => LabeledTree::Leaf(vec![0]),
         })
     });
-    let hash_tree = hash_lazy_tree(&as_lazy(&t));
-    let witness_gen = build_witness_gen(&t);
-    assert_same_witness(&hash_tree, &witness_gen, &t);
+
+    test_tree(&t);
 }
 
 #[test]
@@ -143,11 +166,22 @@ fn test_simple_tree() {
         }),
     });
 
-    let hash_tree = hash_lazy_tree(&as_lazy(&t));
-    let witness_gen = build_witness_gen(&t);
-    enumerate_leaves(&t, |subtree| {
-        assert_same_witness(&hash_tree, &witness_gen, &subtree);
-    })
+    test_tree(&t);
+}
+
+#[test]
+fn test_many_children() {
+    let vec: Vec<(Label, LabeledTree<_>)> = (1..1000)
+        .map(|i| Label::from(i.to_string()))
+        .zip(std::iter::repeat(LabeledTree::Leaf(b"abcde".to_vec())))
+        .collect::<Vec<_>>();
+    let large_flatmap = FlatMap::from_key_values(vec);
+    let t = LabeledTree::SubTree(flatmap! {
+        Label::from("a") => LabeledTree::SubTree(large_flatmap.clone()),
+        Label::from("c") => LabeledTree::SubTree(large_flatmap),
+    });
+
+    test_tree(&t);
 }
 
 #[test]
@@ -233,10 +267,75 @@ fn test_non_existence_proof() {
 proptest! {
     #[test]
     fn same_witness_on_all_leaves(t in arbitrary_labeled_tree()) {
-        let hash_tree = hash_lazy_tree(&as_lazy(&t));
-        let witness_gen = build_witness_gen(&t);
-        enumerate_leaves(&t, |subtree| {
-            assert_same_witness(&hash_tree, &witness_gen, &subtree);
-        });
+        test_tree(&t);
     }
+}
+
+#[test]
+fn simple_state_old_vs_new_hashing() {
+    let state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+
+    let hash_tree = hash_lazy_tree(&LazyTree::from(&state));
+    let crypto_hash_tree = crypto_hash_lazy_tree(&LazyTree::from(&state));
+
+    assert_eq!(hash_tree, crypto_hash_tree);
+}
+
+#[test]
+fn many_canister_state_old_vs_new_hashing() {
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    for i in 1..1000 {
+        insert_dummy_canister(&mut state, canister_test_id(i), user_test_id(24).get());
+    }
+
+    let hash_tree = hash_lazy_tree(&LazyTree::from(&state));
+    let crypto_hash_tree = crypto_hash_lazy_tree(&LazyTree::from(&state));
+
+    assert_eq!(hash_tree, crypto_hash_tree);
+}
+
+#[test]
+fn large_history_state_old_vs_new_hashing() {
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    for i in 1..1000 {
+        state.set_ingress_status(
+            message_test_id(i),
+            IngressStatus::Known {
+                receiver: canister_test_id(i).get(),
+                user_id: user_test_id(i),
+                time: mock_time(),
+                state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
+            },
+            NumBytes::from(u64::MAX),
+        );
+    }
+
+    let hash_tree = hash_lazy_tree(&LazyTree::from(&state));
+    let crypto_hash_tree = crypto_hash_lazy_tree(&LazyTree::from(&state));
+
+    assert_eq!(hash_tree, crypto_hash_tree);
+}
+
+#[test]
+fn large_history_and_canisters_state_old_vs_new_hashing() {
+    let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);
+    for i in 1..1000 {
+        insert_dummy_canister(&mut state, canister_test_id(i), user_test_id(24).get());
+
+        state.set_ingress_status(
+            message_test_id(i),
+            IngressStatus::Known {
+                receiver: canister_test_id(i).get(),
+                user_id: user_test_id(i),
+                time: mock_time(),
+                state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
+            },
+            NumBytes::from(u64::MAX),
+        );
+    }
+
+    let hash_tree = hash_lazy_tree(&LazyTree::from(&state));
+    let crypto_hash_tree = crypto_hash_lazy_tree(&LazyTree::from(&state));
+
+    assert_eq!(hash_tree, crypto_hash_tree);
 }
