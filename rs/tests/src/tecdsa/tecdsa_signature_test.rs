@@ -18,7 +18,7 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
+use crate::driver::test_env::{SshKeyGen, TestEnv};
 use crate::driver::test_env_api::HasPublicApiUrl;
 use crate::driver::test_env_api::HasTopologySnapshot;
 use crate::driver::test_env_api::IcNodeContainer;
@@ -66,6 +66,8 @@ pub(crate) const DKG_INTERVAL: u64 = 19;
 const USE_COST_SCALING_FLAG: bool = true;
 const NUMBER_OF_NODES: usize = 4;
 
+const ECDSA_KEY_TRANSCRIPT_CREATED: &str = "consensus_ecdsa_key_transcript_created";
+
 pub(crate) fn make_key(name: &str) -> EcdsaKeyId {
     EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
@@ -112,6 +114,8 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
 /// with ECDSA enabled.
 pub fn config_without_ecdsa_on_nns(test_env: TestEnv) {
     use crate::driver::test_env_api::*;
+    test_env.ensure_group_setup_created();
+    test_env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -475,7 +479,7 @@ pub fn test_threshold_ecdsa_signature_same_subnet(env: TestEnv) {
         .unwrap();
     let nns_node = nns_subnet.nodes().next().unwrap();
     let app_node = app_subnet.nodes().next().unwrap();
-    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+    let app_agent = app_node.build_default_agent();
     block_on(async move {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
@@ -514,8 +518,7 @@ pub fn test_threshold_ecdsa_signature_from_other_subnet(env: TestEnv) {
         .unwrap();
     let nns_node = nns_subnet.nodes().next().unwrap();
     let node_from_app_subnet_1 = app_subnet_1.nodes().next().unwrap();
-    let agent_for_app_subnet_1 =
-        node_from_app_subnet_1.with_default_agent(|agent| async move { agent });
+    let agent_for_app_subnet_1 = node_from_app_subnet_1.build_default_agent();
     block_on(async move {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
@@ -554,7 +557,7 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(env: TestEnv) {
         .unwrap();
     let nns_node = nns_subnet.nodes().next().unwrap();
     let app_node = app_subnet.nodes().next().unwrap();
-    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+    let app_agent = app_node.build_default_agent();
     block_on(async move {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
@@ -604,7 +607,7 @@ pub fn test_threshold_ecdsa_signature_from_nns_without_cycles(env: TestEnv) {
         .find(|s| s.subnet_type() == SubnetType::Application)
         .unwrap();
     let nns_node = nns_subnet.nodes().next().unwrap();
-    let nns_agent = nns_node.with_default_agent(|agent| async move { agent });
+    let nns_agent = nns_node.build_default_agent();
     block_on(async move {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
@@ -635,7 +638,7 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
         .find(|s| s.subnet_type() == SubnetType::Application)
         .expect("Could not find application subnet.");
     let nns_node = topology_snapshot.root_subnet().nodes().next().unwrap();
-    let nns_agent = nns_node.with_default_agent(|agent| async move { agent });
+    let nns_agent = nns_node.build_default_agent();
     block_on(async move {
         let msg_can = MessageCanister::new(&nns_agent, nns_node.effective_canister_id()).await;
 
@@ -821,7 +824,7 @@ pub fn test_threshold_ecdsa_signature_timeout(env: TestEnv) {
         .unwrap();
     let nns_node = nns_subnet.nodes().next().unwrap();
     let app_node = app_subnet.nodes().next().unwrap();
-    let app_agent = app_node.with_default_agent(|agent| async move { agent });
+    let app_agent = app_node.build_default_agent();
     block_on(async move {
         let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
@@ -854,5 +857,69 @@ pub fn test_threshold_ecdsa_signature_timeout(env: TestEnv) {
                 reject_message: "Signature request expired".to_string()
             }
         )
+    });
+}
+
+/// Tests whether ECDSA key transcript is correctly reshared when crypto keys are rotated
+/// using the test settings below:
+/// - DKG interval is set to 19, which roughly takes 20 or so seconds.
+/// - Keys are rotated every 50 seconds, which should take more than 2 DKG intervals.
+pub fn test_threshold_ecdsa_key_rotation(test_env: TestEnv) {
+    let log = test_env.logger();
+    let topology = test_env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
+    let app_subnet = topology
+        .subnets()
+        .find(|s| s.subnet_type() == SubnetType::Application)
+        .unwrap();
+    let nns_node = nns_subnet.nodes().next().unwrap();
+    let app_node = app_subnet.nodes().next().unwrap();
+    let app_agent = app_node.build_default_agent();
+
+    block_on(async move {
+        let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+        let governance = Canister::new(&nns, GOVERNANCE_CANISTER_ID);
+        enable_ecdsa_signing_with_timeout_and_rotation_period(
+            &governance,
+            app_subnet.subnet_id,
+            make_key(KEY_ID1),
+            None,
+            Some(Duration::from_secs(50)),
+        )
+        .await;
+        let msg_can = MessageCanister::new(&app_agent, app_node.effective_canister_id()).await;
+        // Get the public key first to make sure ECDSA is working
+        let _public_key = get_public_key_with_logger(make_key(KEY_ID1), &msg_can, &log)
+            .await
+            .unwrap();
+
+        let mut count = 0;
+        let mut created = 0;
+        let metrics = MetricsFetcher::new(
+            app_subnet.nodes(),
+            vec![ECDSA_KEY_TRANSCRIPT_CREATED.to_string()],
+        );
+        loop {
+            match metrics.fetch().await {
+                Ok(val) => {
+                    created = val[ECDSA_KEY_TRANSCRIPT_CREATED][0];
+                    if created > 1 {
+                        break;
+                    }
+                }
+                Err(err) => {
+                    info!(log, "Could not connect to metrics yet {:?}", err);
+                }
+            }
+            count += 1;
+            // Break after 200 tries
+            if count > 200 {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        }
+        if created <= 1 {
+            panic!("Failed to observe key transcript being reshared more than once");
+        }
     });
 }
