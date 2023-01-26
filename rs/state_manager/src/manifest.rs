@@ -525,7 +525,7 @@ fn build_chunk_table_sequential(
                 let chunk_info = ChunkInfo {
                     file_index: file_index as u32,
                     size_bytes: chunk_size as u32,
-                    offset: offset as u64,
+                    offset,
                     hash: chunk_hash,
                 };
 

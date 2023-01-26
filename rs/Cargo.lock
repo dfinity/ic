@@ -7976,6 +7976,7 @@ dependencies = [
 name = "ic-replicated-state"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "bitcoin",
  "criterion",
  "criterion-time",
