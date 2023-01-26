@@ -117,7 +117,7 @@ class Storage<StorageDB extends DBSchema | unknown = unknown> {
     }
 
     const defaultStore =
-      stores?.default ?? (idb.objectStoreNames[0] as typeof stores.default);
+      stores?.default ?? (idb.objectStoreNames[0] as StoreName<StorageDB>);
     const storage = new Storage<StorageDB>(idb, defaultStore);
 
     await storage.removeOutdatedRecords();
@@ -158,12 +158,26 @@ class Storage<StorageDB extends DBSchema | unknown = unknown> {
       StoreName<StorageDB>
     > = await this.idb.get(store, key);
 
-    if (value?.expireAt && Date.now() >= value?.expireAt) {
+    if (value?.expireAt && Date.now() >= value.expireAt) {
       await this.idb.delete(store, key);
-      return undefined;
+      return;
     }
 
     return value?.body;
+  }
+
+  /**
+   * Deletes the value for a given key from indexed db store if available.
+   *
+   * @param key Key to fetch from the indexed db
+   * @param storeName Optional store name, defaults to initial store
+   */
+  async delete(
+    key: IDBKey,
+    opts?: { storeName?: StoreName<StorageDB> }
+  ): Promise<void> {
+    const store = opts?.storeName ?? this.defaultStore;
+    await this.idb.delete(store, key);
   }
 
   /**

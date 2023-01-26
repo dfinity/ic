@@ -29,7 +29,7 @@ the agent and, for security reasons, should not be fetched by the agent.
 Generate the binding:
 
 ```shell
-didc bind ./src/http-interface/canister_http_interface.did --target js > ./src/http-interface/canister_http_interface.js
+didc bind ./src/http-interface/canister_http_interface.did --target js > ./src/http-interface/canister_http_interface.ts
 ```
 
 Then move the `StreamingCallbackHttpResponse` variable outside of the `idlFactory` function, rename to `streamingCallbackHttpResponseType` and then export it.
@@ -38,13 +38,21 @@ Then move the `StreamingCallbackHttpResponse` variable outside of the `idlFactor
 export const streamingCallbackHttpResponseType = // ...
 ```
 
-and then add the `import { IDL } from '@dfinity/candid';` import, move the `Token` variable outside of the `idlFactory` function, and set its value to be `IDL.Unknown`.
+then add the `import { IDL } from '@dfinity/candid';` import, move the `Token` variable outside of the `idlFactory` function, and set its value to be `IDL.Unknown`.
 
 ```typescript
 import { IDL } from '@dfinity/candid';
 
 const Token = IDL.Unknown;
 ```
+
+then add the type `IDL.InterfaceFactory` to the idlFactory export.
+
+```typescript
+export const idlFactory: IDL.InterfaceFactory = // ...
+```
+
+and finally remove the unused init method `export const init`.
 
 ### TypeScript binding
 

@@ -29,6 +29,7 @@
     "@typescript-eslint/eslint-plugin": "^5.16.0",
     "@typescript-eslint/parser": "^5.16.0",
     "assert": "^2.0.0",
+    "browser-cache-mock": "^0.1.7",
     "eslint": "^8.11.0",
     "fake-indexeddb": "^4.0.1",
     "html-webpack-plugin": "^5.5.0",

@@ -7,7 +7,7 @@ export const streamingCallbackHttpResponseType = IDL.Record({
   body: IDL.Vec(IDL.Nat8),
 });
 
-export const idlFactory = ({ IDL }) => {
+export const idlFactory: IDL.InterfaceFactory = ({ IDL }) => {
   const HeaderField = IDL.Tuple(IDL.Text, IDL.Text);
   const HttpRequest = IDL.Record({
     url: IDL.Text,
@@ -36,7 +36,4 @@ export const idlFactory = ({ IDL }) => {
     http_request: IDL.Func([HttpRequest], [HttpResponse], ['query']),
     http_request_update: IDL.Func([HttpRequest], [HttpResponse], []),
   });
-};
-export const init = ({ IDL }) => {
-  return [];
 };

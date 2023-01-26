@@ -232,4 +232,19 @@ describe('Storage persist to indexed db', () => {
     expect(hasOneEntry.length).toEqual(1);
     expect(hasNoEntry.length).toEqual(0);
   });
+
+  it('should delete based on key', async () => {
+    const key = 'identity.ic0.app';
+    await storage.put(key, {
+      gateway: 'ic0.app',
+      canister: 'rdmx6-jaaaa-aaaaa-aaadq-cai',
+    });
+
+    const entry = await storage.get(key);
+    await storage.delete(key);
+    const undefinedEntry = await storage.get(key);
+
+    expect(entry).not.toBeUndefined();
+    expect(undefinedEntry).toBeUndefined();
+  });
 });
