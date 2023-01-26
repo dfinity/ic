@@ -37,7 +37,7 @@ export class ResolverMapper {
     try {
       return Principal.fromText(canisterId);
     } catch (err) {
-      const error: Error = err;
+      const error = err as Error;
       throw new MalformedCanisterError(error.message);
     }
   }
@@ -49,7 +49,7 @@ export class ResolverMapper {
     try {
       return new URL(protocol + '//' + hostname);
     } catch (err) {
-      const error: Error = err;
+      const error = err as Error;
       throw new MalformedHostnameError(error.message);
     }
   }

@@ -1,5 +1,3 @@
-import { handleRequest } from './http_request';
-import fetch from 'jest-fetch-mock';
 import * as Agent from '@dfinity/agent';
 import {
   CallRequest,
@@ -9,11 +7,13 @@ import {
   ReadStateResponse,
   UnSigned,
 } from '@dfinity/agent';
-import { IDL } from '@dfinity/candid';
 import { fromHex } from '@dfinity/agent/lib/cjs/utils/buffer';
+import { IDL } from '@dfinity/candid';
 import { Principal } from '@dfinity/principal';
-import { HttpRequest } from '../http-interface/canister_http_interface_types';
-import { CanisterResolver } from './domains';
+import fetch from 'jest-fetch-mock';
+import { HttpRequest } from '../../http-interface/canister_http_interface_types';
+import { CanisterResolver } from '../domains';
+import { RequestProcessor } from './index';
 
 const CANISTER_ID = 'qoctq-giaaa-aaaaa-aaaea-cai';
 const CERT_MAX_TIME_OFFSET = 300_000; // 5 Minutes
@@ -39,7 +39,7 @@ interface AllTestFixtures {
   query_call_with_invalid_witness: QueryCallTestFixture;
   update_call: UpdateCallTestFixture;
 }
-const TEST_DATA: AllTestFixtures = require('../../test_utils/fixtures.json');
+const TEST_DATA: AllTestFixtures = require('../../../test_utils/fixtures.json');
 
 const HeaderFieldType = IDL.Tuple(IDL.Text, IDL.Text);
 const HttpRequestType = IDL.Record({
@@ -58,9 +58,10 @@ afterEach(() => {
 it('should not set content-type: application/cbor and x-content-type-options: nosniff on non-ic calls to /api', async () => {
   fetch.mockResponse('test response');
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request('https://example.com/api/foo')
   );
+  const response = await requestProcessor.perform();
 
   expect(response.headers.get('x-content-type-options')).not.toEqual('nosniff');
   expect(response.headers.get('content-type')).not.toEqual('application/cbor');
@@ -78,7 +79,8 @@ it.each([
   async (url) => {
     fetch.mockResponse('test response');
 
-    const response = await handleRequest(new Request(url));
+    const requestProcessor = new RequestProcessor(new Request(url));
+    const response = await requestProcessor.perform();
 
     expect(response.headers.get('x-content-type-options')).toEqual('nosniff');
     expect(response.headers.get('content-type')).toEqual('application/cbor');
@@ -101,7 +103,8 @@ it.each([
   async ({ requestUrl, responseUrl }) => {
     fetch.mockResponse('test response');
 
-    const response = await handleRequest(new Request(requestUrl));
+    const requestProcessor = new RequestProcessor(new Request(requestUrl));
+    const response = await requestProcessor.perform();
 
     expect(response.headers.get('x-content-type-options')).toEqual('nosniff');
     expect(response.headers.get('content-type')).toEqual('application/cbor');
@@ -126,9 +129,10 @@ it('should reject invalid certification (body hash mismatch)', async () => {
     query: queryHttpPayload,
   });
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(500);
   expect(await response.text()).toEqual('Body does not pass verification');
@@ -148,9 +152,10 @@ it('should reject invalid certification (invalid root key)', async () => {
   );
   mockFetchResponses(INVALID_ROOT_KEY, { query: queryHttpPayload });
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(500);
   expect(await response.text()).toEqual('Body does not pass verification');
@@ -172,9 +177,10 @@ it('should accept valid certification without callbacks', async () => {
     query: queryHttpPayload,
   });
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(200);
   expect(await response.text()).toEqual(TEST_DATA.query_call.body);
@@ -204,7 +210,10 @@ it('should use hostnameCanisterIdMap to resolve canister id', async () => {
     query: queryHttpPayload,
   });
 
-  const response = await handleRequest(new Request(`https://nns.ic0.app/`));
+  const requestProcessor = new RequestProcessor(
+    new Request(`https://nns.ic0.app/`)
+  );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(200);
   expect(fetch.mock.calls).toHaveLength(2);
@@ -226,7 +235,10 @@ it('should send canister calls to https://ic0.app for any mapped domain in hostn
     query: queryHttpPayload,
   });
 
-  const response = await handleRequest(new Request(`https://dscvr.one`));
+  const requestProcessor = new RequestProcessor(
+    new Request(`https://dscvr.one`)
+  );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(200);
   expect(fetch.mock.calls).toHaveLength(2);
@@ -252,7 +264,8 @@ it('should drop if-none-match request header', async () => {
   let request = new Request(`https://nns.ic0.app/`);
   request.headers.append('If-None-Match', '"some etag"');
   request.headers.append('If-None-Match2', '"some etag"');
-  const response = await handleRequest(request);
+  const requestProcessor = new RequestProcessor(request);
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(200);
   expect(fetch.mock.calls).toHaveLength(2);
@@ -274,9 +287,10 @@ it('should accept valid certification for index.html fallback', async () => {
     query: queryHttpPayload,
   });
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(200);
 });
@@ -294,9 +308,10 @@ it('should accept almost (but not yet) expired certificate', async () => {
     query: queryHttpPayload,
   });
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(200);
 });
@@ -314,9 +329,10 @@ it('should reject expired certificate', async () => {
     query: queryHttpPayload,
   });
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(500);
 });
@@ -334,9 +350,10 @@ it('should reject certificate for other canister', async () => {
     query: queryHttpPayload,
   });
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(500);
 });
@@ -354,9 +371,10 @@ it('should reject certificate with invalid witness', async () => {
     query: queryHttpPayload,
   });
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(500);
 });
@@ -372,9 +390,10 @@ it('should reject certificate for different asset', async () => {
     query: queryHttpPayload,
   });
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/not-found`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(500);
 });
@@ -392,9 +411,10 @@ it('should accept certificate time almost (but not quite) too far in the future'
     query: queryHttpPayload,
   });
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(200);
 });
@@ -412,9 +432,10 @@ it('should reject certificate with time too far in the future', async () => {
     query: queryHttpPayload,
   });
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(500);
 });
@@ -446,9 +467,10 @@ it('should accept valid certification using callbacks with primitive tokens', as
     { query: callbackPayload }
   );
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(200);
   expect(await response.text()).toEqual(TEST_DATA.query_call.body);
@@ -520,9 +542,10 @@ it('should accept valid certification using multiple callbacks with structured t
     { query: callbackPayload2 }
   );
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(200);
   expect(await response.text()).toEqual(TEST_DATA.query_call.body);
@@ -562,9 +585,10 @@ it('should do update call on upgrade flag', async () => {
     update: createHttpUpdateResponsePayload(TEST_DATA.update_call.certificate),
   });
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(200);
   expect(await response.text()).toEqual('hello world!');
@@ -609,9 +633,10 @@ it('should reject redirects', async () => {
     query: queryHttpPayload,
   });
 
-  const response = await handleRequest(
+  const requestProcessor = new RequestProcessor(
     new Request(`https://${CANISTER_ID}.ic0.app/`)
   );
+  const response = await requestProcessor.perform();
 
   expect(response.status).toEqual(500);
   expect(await response.text()).toEqual(

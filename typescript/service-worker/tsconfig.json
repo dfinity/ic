@@ -1,5 +1,7 @@
 {
   "compilerOptions": {
+    "strict": true,
+    "allowJs": false,
     "target": "es2017",
     // Required for buffer-pipe
     "esModuleInterop": true,

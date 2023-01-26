@@ -224,7 +224,7 @@ describe('Canister resolver lookups', () => {
         new URL(`${self.location.protocol}//anydomain.com`)
       );
     } catch (err) {
-      error = err;
+      error = err as Error;
     }
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
@@ -253,7 +253,7 @@ describe('Canister resolver lookups', () => {
     try {
       await resolver.lookup(new URL(`${self.location.protocol}//domain.com`));
     } catch (err) {
-      error = err;
+      error = err as Error;
     }
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);

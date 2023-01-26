@@ -1,6 +1,6 @@
 import { ServiceWorkerEvents } from '../typings';
 import { CanisterResolver } from './domains';
-import { handleRequest } from './http_request';
+import { RequestProcessor } from './requests';
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -19,8 +19,8 @@ self.addEventListener('activate', (event) => {
 // Intercept and proxy all fetch requests made by the browser or DOM on this scope.
 self.addEventListener('fetch', (event) => {
   try {
-    const response = handleRequest(event.request);
-    event.respondWith(response);
+    const request = new RequestProcessor(event.request);
+    event.respondWith(request.perform());
   } catch (e) {
     const error_message = String(e);
     console.error(error_message);

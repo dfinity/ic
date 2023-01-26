@@ -3,6 +3,7 @@
 //
 // We sometimes need to do this because our target browsers are expected to have
 // a feature that Node.js doesn't.
+import { mockBrowserCacheAPI } from './src/mocks/browser-cache';
 
 global.TextEncoder = require('text-encoding').TextEncoder;
 global.TextDecoder = require('text-encoding').TextDecoder;
@@ -22,4 +23,10 @@ Object.defineProperty(global.self, 'crypto', {
     subtle: require('crypto').webcrypto.subtle,
   },
 });
+
 require('jest-fetch-mock').enableMocks();
+
+Object.defineProperty(global.self, 'caches', {
+  value: mockBrowserCacheAPI(),
+  writable: true,
+});

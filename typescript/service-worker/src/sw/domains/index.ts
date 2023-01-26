@@ -73,8 +73,9 @@ export class CanisterResolver {
 
   resolveLookupFromUrl(domain: URL): DomainLookup | null {
     // maybe resolve from hardcoded mappings to avoid uncessary network round trips
-    if (hostnameCanisterIdMap.has(domain.hostname)) {
-      return hostnameCanisterIdMap.get(domain.hostname);
+    const staticMapping = hostnameCanisterIdMap.get(domain.hostname);
+    if (staticMapping) {
+      return staticMapping;
     }
 
     // handle raw domain as a web2 request
@@ -219,8 +220,8 @@ export class CanisterResolver {
         headers.has(domainLookupHeaders.canisterId) &&
         headers.has(domainLookupHeaders.gateway)
       ) {
-        const canisterId = headers.get(domainLookupHeaders.canisterId);
-        const gateway = headers.get(domainLookupHeaders.gateway);
+        const canisterId = headers.get(domainLookupHeaders.canisterId) ?? '';
+        const gateway = headers.get(domainLookupHeaders.gateway) ?? '';
         lookup.canister = {
           principal: ResolverMapper.getPrincipalFromText(canisterId),
           gateway: ResolverMapper.getURLFromHostname(gateway),
