@@ -1,6 +1,0 @@
-[workspace]
-
-members = [
-  "ic-vulnerable1",
-  "ic-vulnerable2",
-]
