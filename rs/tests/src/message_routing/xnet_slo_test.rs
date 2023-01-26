@@ -33,11 +33,12 @@ use crate::driver::test_env_api::{
 use crate::util::{block_on, runtime_from_url};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid;
+use futures::future::join_all;
+use futures::Future;
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
 use std::fmt::Display;
 use std::time::Duration;
-use tokio::time::sleep;
 use xnet_test::{CanisterId, Metrics};
 
 // Constants for all xnet tests.
@@ -132,8 +133,12 @@ fn setup(env: TestEnv, config: Config) {
     });
 }
 
-// Generic test
 pub fn test(env: TestEnv, config: Config) {
+    block_on(test_async(env, config));
+}
+
+// Generic test
+pub async fn test_async(env: TestEnv, config: Config) {
     let logger = env.logger();
     info!(logger, "Config for the test: {:?}", config);
     let topology = env.topology_snapshot();
@@ -167,7 +172,8 @@ pub fn test(env: TestEnv, config: Config) {
         &endpoints_runtime,
         config.subnets,
         config.canisters_per_subnet,
-    );
+    )
+    .await;
     let canisters_count = canisters.iter().map(Vec::len).sum::<usize>();
     assert_eq!(
         canisters_count,
@@ -183,7 +189,8 @@ pub fn test(env: TestEnv, config: Config) {
         &canisters,
         config.payload_size_bytes,
         config.canister_to_subnet_rate as u64,
-    );
+    )
+    .await;
     let msgs_per_round =
         config.canister_to_subnet_rate * config.canisters_per_subnet * (config.subnets - 1);
     info!(
@@ -199,15 +206,15 @@ pub fn test(env: TestEnv, config: Config) {
         "Sending messages for {} secs...",
         config.runtime.as_secs()
     );
-    block_on(async {
-        sleep(Duration::from_secs(config.runtime.as_secs())).await;
-    });
+
+    tokio::time::sleep(Duration::from_secs(config.runtime.as_secs())).await;
+
     // Step 4: Stop all canisters (via update `stop` call).
     info!(logger, "Stopping all canisters...");
-    stop_all_canister(&canisters);
+    stop_all_canister(&canisters).await;
     // Step 5: Collect metrics from all canisters (via query `metrics` call).
     info!(logger, "Collecting metrics from all canisters...");
-    let metrics = collect_metrics(&canisters);
+    let metrics = collect_metrics(&canisters).await;
     // Step 6: Aggregate metrics for each subnet (over its canisters).
     info!(logger, "Aggregating metrics for each subnet...");
     let mut aggregated_metrics = Vec::<Metrics>::new();
@@ -334,21 +341,38 @@ pub fn test(env: TestEnv, config: Config) {
             );
         }
     }
-    // Step 8: Stop/delete all canisters.
     info!(logger, "Stop/delete all canisters...");
-    block_on(async {
-        for canister in canisters.iter().flatten() {
+    // Step 8: Stop all canisters.
+    let _: Vec<_> = parallel_async(
+        canisters.iter().flatten(),
+        |canister| {
             info!(logger, "Stopping canister {} ...", canister.canister_id());
-            canister.stop().await.expect("Stopping canister failed.");
+            canister.stop()
+        },
+        |_, res| {
+            res.expect("Stopping canister failed.");
+        },
+    )
+    .await;
+
+    // Step 9: Delete all canisters.
+    let _: Vec<_> = parallel_async(
+        canisters.iter().flatten(),
+        |canister| {
             info!(logger, "Deleting canister {} ...", canister.canister_id());
-            canister.delete().await.expect("Deleting canister failed.");
-        }
-    });
+            canister.delete()
+        },
+        |_, res| {
+            res.expect("Deleting canister failed.");
+        },
+    )
+    .await;
+
     assert!(success, "Test failed.");
 }
 
-pub fn start_all_canisters(
-    canisters: &[Vec<Canister>],
+pub async fn start_all_canisters(
+    canisters: &[Vec<Canister<'_>>],
     payload_size_bytes: u64,
     canister_to_subnet_rate: u64,
 ) {
@@ -356,33 +380,36 @@ pub fn start_all_canisters(
         .iter()
         .map(|x| x.iter().map(|y| y.canister_id_vec8()).collect())
         .collect();
-    block_on(async {
-        for (subnet_idx, canister_idx, canister) in canisters
-            .iter()
-            .enumerate()
-            .flat_map(|(x, v)| v.iter().enumerate().map(move |(y, v)| (x, y, v)))
-        {
-            let input = (&topology, canister_to_subnet_rate, payload_size_bytes);
+    let mut futures = vec![];
+    for (subnet_idx, canister_idx, canister) in canisters
+        .iter()
+        .enumerate()
+        .flat_map(|(x, v)| v.iter().enumerate().map(move |(y, v)| (x, y, v)))
+    {
+        let input = (&topology, canister_to_subnet_rate, payload_size_bytes);
+        futures.push(async move {
             let _: String = canister
                 .update_("start", candid, input)
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
-                        "Starting canister_idx={} on subnet_idx={} failed.",
+                        "Starting canister_idx={} on subnet_idx={}",
                         canister_idx, subnet_idx
                     )
                 });
-        }
-    });
+        });
+    }
+    futures::future::join_all(futures).await;
 }
 
-pub fn stop_all_canister(canisters: &[Vec<Canister>]) {
-    block_on(async {
-        for (subnet_idx, canister_idx, canister) in canisters
-            .iter()
-            .enumerate()
-            .flat_map(|(x, v)| v.iter().enumerate().map(move |(y, v)| (x, y, v)))
-        {
+pub async fn stop_all_canister(canisters: &[Vec<Canister<'_>>]) {
+    let mut futures = vec![];
+    for (subnet_idx, canister_idx, canister) in canisters
+        .iter()
+        .enumerate()
+        .flat_map(|(x, v)| v.iter().enumerate().map(move |(y, v)| (x, y, v)))
+    {
+        futures.push(async move {
             let _: String = canister
                 .update_("stop", candid, ())
                 .await
@@ -392,22 +419,23 @@ pub fn stop_all_canister(canisters: &[Vec<Canister>]) {
                         canister_idx, subnet_idx
                     )
                 });
-        }
-    });
+        });
+    }
+    futures::future::join_all(futures).await;
 }
 
-pub fn collect_metrics(canisters: &[Vec<Canister>]) -> Vec<Vec<Metrics>> {
-    let mut metrics: Vec<Vec<Metrics>> = Vec::new();
-    block_on(async {
-        for (subnet_idx, canister_idx, canister) in canisters
-            .iter()
-            .enumerate()
-            .flat_map(|(x, v)| v.iter().enumerate().map(move |(y, v)| (x, y, v)))
-        {
-            if canister_idx == 0 {
-                metrics.push(vec![]);
-            }
-            let result = canister
+pub async fn collect_metrics(canisters: &[Vec<Canister<'_>>]) -> Vec<Vec<Metrics>> {
+    let mut futures: Vec<Vec<_>> = Vec::new();
+    for (subnet_idx, canister_idx, canister) in canisters
+        .iter()
+        .enumerate()
+        .flat_map(|(x, v)| v.iter().enumerate().map(move |(y, v)| (x, y, v)))
+    {
+        if canister_idx == 0 {
+            futures.push(vec![]);
+        }
+        futures[subnet_idx].push(async move {
+            canister
                 .query_("metrics", candid, ())
                 .await
                 .unwrap_or_else(|_| {
@@ -415,14 +443,13 @@ pub fn collect_metrics(canisters: &[Vec<Canister>]) -> Vec<Vec<Metrics>> {
                         "Collecting metrics for canister_idx={} on subnet_idx={} failed.",
                         canister_idx, subnet_idx
                     )
-                });
-            metrics[subnet_idx].push(result);
-        }
-    });
-    metrics
+                })
+        });
+    }
+    join_all(futures.into_iter().map(|x| async { join_all(x).await })).await
 }
 
-pub fn install_canisters(
+pub async fn install_canisters(
     env: TestEnv,
     endpoints_runtime: &[Runtime],
     subnets: usize,
@@ -432,12 +459,14 @@ pub fn install_canisters(
     let wasm = Wasm::from_file(
         env.get_dependency_path("rs/rust_canisters/xnet_test/xnet-test-canister.wasm"),
     );
-    let mut canisters: Vec<Vec<Canister>> = Vec::new();
-    block_on(async {
-        for subnet_idx in 0..subnets {
-            canisters.push(vec![]);
-            for canister_idx in 0..canisters_per_subnet {
-                let canister = wasm
+    let mut futures: Vec<Vec<_>> = Vec::new();
+    for subnet_idx in 0..subnets {
+        futures.push(vec![]);
+        for canister_idx in 0..canisters_per_subnet {
+            let new_wasm = wasm.clone();
+            let new_logger = logger.clone();
+            futures[subnet_idx].push(async move {
+                let canister = new_wasm
                     .clone()
                     .install_(&endpoints_runtime[subnet_idx], vec![])
                     .await
@@ -448,15 +477,34 @@ pub fn install_canisters(
                         )
                     });
                 info!(
-                    logger,
+                    new_logger,
                     "Installed canister (#{:?}) {} on subnet #{:?}",
                     canister_idx,
                     canister.canister_id(),
                     subnet_idx
                 );
-                canisters[subnet_idx].push(canister);
-            }
+                canister
+            });
         }
-    });
-    canisters
+    }
+    join_all(futures.into_iter().map(|x| async { join_all(x).await })).await
+}
+
+/// Concurrently executes the `call` async closure for every item in `targets`,
+/// postprocessing each result with `post` and collecting them.
+pub async fn parallel_async<I, F, Pre, Post, P, O>(targets: I, call: Pre, post: Post) -> O
+where
+    I: IntoIterator,
+    F: Future,
+    Pre: Fn(I::Item) -> F,
+    Post: Fn(usize, F::Output) -> P,
+    O: FromIterator<P>,
+{
+    let futures = targets.into_iter().map(call);
+    join_all(futures)
+        .await
+        .into_iter()
+        .enumerate()
+        .map(|(i, res)| post(i, res))
+        .collect()
 }
