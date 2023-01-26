@@ -7,6 +7,13 @@
     <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <link rel="stylesheet" href="templates/style.css">
+    <style>
+      pre {
+        background-color: #efefef;
+        font-family: monospace;
+        font-size: small;
+      }
+    </style>
     <script>
       function display_times() {
           let timestamps = document.getElementsByClassName("timestamp");
@@ -46,6 +53,10 @@
       We measure the maximum throughput of successful requests at various input request rates.
       If the failure rate and the p90 latency becomes inacceptable, we stop to increase the load further.
     </p>
+
+    <div id="canister_code">
+      <span>Canister code:</span> <a href="https://gitlab.com/dfinity-lab/public/ic/-/blob/master/rs/workload_generator/src/counter.wat">counter.wat</a>
+    </div>
 
     <h3>Query call maximum capacity</h3>
 
@@ -106,6 +117,10 @@
       We expect a much lower request rate in this benchmark.
     </p>
 
+    <div id="canister_code">
+      <span>Canister code:</span> <a href="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/rs/rust_canisters/memory_test">memory_test canister</a>
+    </div>    
+
     <h3>Update</h3>
 
     <p>When executing the memory load benchmark with update calls,
@@ -139,6 +154,10 @@
       issuing a lot of updates to the state sync test canister.
     </p>
 
+    <div id="canister_code">
+      <span>Canister code:</span> <a href="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/rs/rust_canisters/statesync_test">statesync test canister</a>
+    </div>
+
     <div id="plot-statesync" class="plot"></div>
     <script>
       const plot_statesync_links = new Map();
@@ -169,6 +188,10 @@
       The total number of such calls is cruicial for scaling up the IC.
     </p>
 
+    <div id="canister_code">
+      <span>Canister code:</span> <a href="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/rs/rust_canisters/xnet_test">Xnet test canister</a>
+    </div>
+
     <div style="background-color: orange;">
       This benchmark is currently broken. We leave it here so that we do not forget about it and put some pressure to fix it.
     </div>
@@ -195,11 +218,22 @@
 
 
     <h2>Motoko QR code performance</h2>
+    <a name="motoko_qr" />
 
     <p>
-      Purpose: Motoko's QR benchmark from: <a href="https://github.com/dfinity/motoko/blob/master/test/perf/qr.mo">github</a>.
+      Purpose: Motoko's QR benchmark<br />
+      The benchmark code is rather naively written: Because of the awaits in a loop, there will be quite a few context switches and those might be flooding the canisiter with overlapping requests 
     </p>
 
+   <div id="canister_code">
+      <span>Canister code:</span> <a href="https://github.com/dfinity/motoko/blob/master/test/perf/qr.mo">qr.mo</a>
+    </div>
+
+    <div style="background-color: orange;">
+      Note that the canister wasm needs to be manually updated in the ic repo to reflect changes in Motoko.
+    </div>    
+
+    <h3>Failure rate</h1>
     <div id="plot_qr" class="plot"></div>
     <script>
       const plot_qr_links = new Map();
@@ -220,12 +254,43 @@
       }, false);
     </script>
 
+    <h3>Latency [ms]</h1>
+
+    <div id="plot_qr_latency" class="plot"></div>
+    <script>
+      const plot_qr_latency_links = new Map();
+      {{#each plot_qr_latency.data}}
+        plot_qr_latency_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_qr_latency');
+          Plotly.newPlot( plot, {{{ plot_qr_latency.plot }}},  {{{plot_qr_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_qr_latency_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+
+      }, false);
+    </script>    
+
     <h2>Motoko sha256 performance</h2>
 
     <p>
-      Purpose: Motoko's sha256 benchmark from: <a href="https://github.com/dfinity/motoko/blob/master/test/perf/sha256.mo">github</a>.
+      Purpose: Motoko's sha256 benchmark
     </p>
 
+   <div id="canister_code">
+      <span>Canister code:</span> <a href="https://github.com/dfinity/motoko/blob/master/test/perf/sha256.mo">sha256.mo</a>
+    </div>
+
+    <div style="background-color: orange;">
+      Note that the canister wasm needs to be manually updated in the ic repo to reflect changes in Motoko.
+    </div>        
+
+    <h3>Failure rate</h1>
     <div id="plot_sha256" class="plot"></div>
     <script>
       const plot_sha256_links = new Map();
@@ -246,13 +311,34 @@
       }, false);
     </script>
 
+    <h3>Latency [ms]</h1>
+    <div id="plot_sha256_latency" class="plot"></div>
+    <script>
+      const plot_sha256_latency_links = new Map();
+      {{#each plot_sha256_latency.data}}
+        plot_sha256_latency_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_sha256_latency');
+          Plotly.newPlot( plot, {{{ plot_sha256_latency.plot }}},  {{{plot_sha256_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_sha256_latency_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+
+      }, false);
+    </script>    
+
     <h2>HTTP outcall feature benchmark</h2>
 
     <p>
       Stress HTTP outcall feature from multiple canister.
     </p>
     <p>
-      A total of 8 HTTP outcall canisters are benchmarked, 4 of which executed <pre>send_request</pre> using with payload <pre>4449444c066c02cfbe93a404018daacd9408786c06efd6e40271e1edeb4a02a2f5ed880471ecdaccac0403abd5bc96067fc6a4a19806046b019681ba027f6b0198d6caa201716d056c02f1fee18d0371cbe4fdc7047101001768747470733a2f2f7777772e6578616d706c652e636f6d000000095472616e73666f726d0103646566036162630088526a74000000</pre>, which is:
+      A total of 8 HTTP outcall canisters are benchmarked, 4 of which executed <pre>send_request</pre> using with payload <pre>4449444c066c02cfbe93a404018daacd9408786c06efd6e40271e1edeb4a02a2f5ed880471ecdaccac0403abd5bc96067fc6a4a19806046b019681ba027f6b0198d6caa201716d056c02f1fee18d0371cbe4fdc7047101001768747470733a2f2f7777772e6578616d706c652e636f6d000000095472616e73666f726d0103646566036162630088526a74000000</pre> which is:
       <pre>
 '(
     record {
@@ -268,11 +354,17 @@
     }
 )'
       </pre><br />
-      The other 4 call <pre>check_response</pre> using with payload <pre>4449444c0001711768747470733a2f2f7777772e6578616d706c652e6f7267</pre>, whitch is:
+      The other 4 call <pre>check_response</pre> using with payload <pre>4449444c0001711768747470733a2f2f7777772e6578616d706c652e6f7267</pre> whitch is:
       <pre>
 '( "https://www.example.com" )'
       </pre>
+    </p>
 
+    <div id="canister_code">
+      <span>Canister code:</span> <a href="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/rs/rust_canisters/proxy_canister">proxy canister</a>
+    </div>
+
+    <h3>Failure rate</h1>
     <div id="plot_http_outcall" class="plot"></div>
     <script>
       const plot_http_outcall_links = new Map();
@@ -292,6 +384,27 @@
 
       }, false);
     </script>
+
+    <h3>Latency [ms]</h1>
+    <div id="plot_http_outcall_latency" class="plot"></div>
+    <script>
+      const plot_http_outcall_latency_links = new Map();
+      {{#each plot_http_outcall_latency.data}}
+        plot_http_outcall_latency_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_http_outcall_latency');
+          Plotly.newPlot( plot, {{{ plot_http_outcall_latency.plot }}},  {{{plot_http_outcall_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_http_outcall_latency_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+
+      }, false);
+    </script>    
     
     <h2>Mixed update query workload</h2>
 
@@ -299,6 +412,11 @@
       Purpose: Run a mixed update/query workload on the counter canister.</a>.
     </p>
 
+    <div id="canister_code">
+      <span>Canister code:</span> <a href="https://gitlab.com/dfinity-lab/public/ic/-/blob/master/rs/workload_generator/src/counter.wat">counter.wat</a>
+    </div>
+
+    <h3>Failure rate</h1>
     <div id="plot_mixed_counter" class="plot"></div>
     <script>
       const plot_mixed_counter_links = new Map();
@@ -318,6 +436,27 @@
 
       }, false);
     </script>
+
+    <h3>Latency [ms]</h1>
+    <div id="plot_mixed_counter_latency" class="plot"></div>
+    <script>
+      const plot_mixed_counter_latency_links = new Map();
+      {{#each plot_mixed_counter_latency.data}}
+        plot_mixed_counter_latency_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_mixed_counter_latency');
+          Plotly.newPlot( plot, {{{ plot_mixed_counter_latency.plot }}},  {{{plot_mixed_counter_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_mixed_counter_latency_links.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+
+      }, false);
+    </script>    
 
 
   </div> <!-- Container //-->
