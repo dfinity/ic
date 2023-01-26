@@ -11,6 +11,7 @@ anyhow = "1.0.66"
 async-trait = "0.1.58"
 axum = { version = "0.6.1", features = ["json"] }
 candid = "0.8.4"
+cfg-if = "1.0.0"
 chacha20poly1305 = "0.10.0"
 chrono = { version = "0.4.19", default-features = false, features = ["clock"] }
 clap = { version = "4.0.18", features = ["derive"] }
@@ -22,6 +23,7 @@ hyper-rustls = "0.23.0"
 ic-agent = "0.22.0"
 ic-utils = { version = "0.22.0", features = ["raw"] }
 instant-acme = "0.1.0"
+mockall = "0.11.3"
 opentelemetry = "0.18.0"
 opentelemetry-prometheus = "0.11.0"
 pem = "1.1.0"

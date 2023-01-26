@@ -8,11 +8,12 @@ use futures::{stream, StreamExt, TryStreamExt};
 use garcon::Delay;
 use ic_agent::Agent;
 use ifc::EncryptedPair;
+use mockall::automock;
 use serde::Serialize;
 
 use crate::encode::{Decode, Encode};
 
-#[derive(Serialize)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct Pair(
     pub Vec<u8>, // Private Key
     pub Vec<u8>, // Certificate Chain
@@ -26,6 +27,7 @@ pub enum UploadError {
     UnexpectedError(#[from] anyhow::Error),
 }
 
+#[automock]
 #[async_trait]
 pub trait Upload: Sync + Send {
     async fn upload(&self, id: &str, pair: Pair) -> Result<(), UploadError>;

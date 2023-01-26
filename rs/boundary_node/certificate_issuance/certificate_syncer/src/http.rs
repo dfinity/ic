@@ -2,11 +2,13 @@ use std::time::Instant;
 
 use async_trait::async_trait;
 use hyper::{client::connect::Connect, Body, Request, Response};
+use mockall::automock;
 use opentelemetry::{Context, KeyValue};
 use tracing::info;
 
 use crate::metrics::{MetricParams, WithMetrics};
 
+#[automock]
 #[async_trait]
 pub trait HttpClient: Send + Sync {
     async fn request(&self, req: Request<Body>) -> Result<Response<Body>, hyper::Error>;

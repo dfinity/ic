@@ -12,12 +12,14 @@ clap = { version = "4.0.29", features = ["derive"] }
 futures = "0.3.25"
 hyper = { version = "0.14.23", features = ["full"] }
 hyper-rustls = "0.23.2"
+mockall = "0.11.3"
 nix = { version = "0.26.1", features = ["signal"] }
 opentelemetry = "0.18.0"
 opentelemetry-prometheus = "0.11.0"
 prometheus = "0.13.3"
 serde = { version = "1.0.150", features = ["serde_derive"] }
 serde_json = "1.0.89"
+tempfile = "3.3.0"
 thiserror = "1.0.37"
 tokio = { version = "1.23.0", features = ["full"] }
 tracing = "0.1.37"

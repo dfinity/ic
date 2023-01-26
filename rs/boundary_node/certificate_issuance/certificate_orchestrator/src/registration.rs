@@ -3,9 +3,17 @@ use std::cmp::Reverse;
 use anyhow::anyhow;
 use candid::Principal;
 use certificate_orchestrator_interface::{Id, Name, NameError, Registration, State};
-use ic_cdk::{api::time, caller};
+use ic_cdk::caller;
 use ic_stable_structures::StableBTreeMap;
 use priority_queue::PriorityQueue;
+
+cfg_if::cfg_if! {
+    if #[cfg(test)] {
+        use tests::time;
+    } else {
+        use ic_cdk::api::time;
+    }
+}
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
@@ -308,5 +316,126 @@ impl Expire for Expirer {
 
             Ok(())
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Error;
+
+    use super::*;
+    use crate::{EXPIRATIONS, ID_GENERATOR, NAMES, REGISTRATIONS, RETRIES};
+
+    pub fn time() -> u64 {
+        0
+    }
+
+    #[test]
+    fn get_empty() {
+        let getter = Getter::new(&REGISTRATIONS);
+
+        match getter.get(&String::from("id")) {
+            Err(GetError::NotFound) => {}
+            other => panic!("expected NotFound but got {other:?}"),
+        };
+    }
+
+    #[test]
+    fn get_ok() -> Result<(), Error> {
+        let reg = Registration {
+            name: Name::try_from("name")?,
+            canister: Principal::from_text("aaaaa-aa")?,
+            state: State::Available,
+        };
+
+        REGISTRATIONS.with(|regs| {
+            regs.borrow_mut().insert("id".into(), reg.clone()).unwrap();
+        });
+
+        let getter = Getter::new(&REGISTRATIONS);
+
+        let out = match getter.get(&String::from("id")) {
+            Ok(reg) => reg,
+            other => panic!("expected registration but got {other:?}"),
+        };
+
+        assert_eq!(out, reg);
+
+        Ok(())
+    }
+
+    #[test]
+    fn create_ok() -> Result<(), Error> {
+        crate::ID_SEED.with(|s| {
+            s.borrow_mut()
+                .insert((), 0)
+                .expect("failed to insert id seed")
+        });
+
+        let creator = Creator::new(&ID_GENERATOR, &REGISTRATIONS, &NAMES, &EXPIRATIONS);
+
+        let id = creator.create(
+            "name",                             // name
+            &Principal::from_text("aaaaa-aa")?, // canister
+        )?;
+
+        // Check regsitration
+        let reg = REGISTRATIONS
+            .with(|regs| regs.borrow().get(&id))
+            .expect("expected registration to exist but none found");
+
+        assert_eq!(
+            reg,
+            Registration {
+                name: Name::try_from("name")?,
+                canister: Principal::from_text("aaaaa-aa")?,
+                state: State::PendingOrder,
+            }
+        );
+
+        // Check name
+        let iid = NAMES
+            .with(|names| {
+                names
+                    .borrow()
+                    .get(&Name::try_from("name").expect("failed to create name"))
+            })
+            .expect("expected name mapping to exist but none found");
+
+        assert_eq!(id, iid, "expected ids to match");
+
+        Ok(())
+    }
+
+    #[test]
+    fn update_ok() -> Result<(), Error> {
+        let reg = Registration {
+            name: Name::try_from("name")?,
+            canister: Principal::from_text("aaaaa-aa")?,
+            state: State::PendingOrder,
+        };
+
+        REGISTRATIONS
+            .with(|regs| regs.borrow_mut().insert("id".into(), reg))
+            .expect("failed to insert");
+
+        Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES)
+            .update("id".into(), State::PendingChallengeResponse)?;
+
+        // Check registration
+        let reg = REGISTRATIONS
+            .with(|regs| regs.borrow().get(&String::from("id")))
+            .expect("expected registration to exist but none found");
+
+        assert_eq!(
+            reg,
+            Registration {
+                name: Name::try_from("name")?,
+                canister: Principal::from_text("aaaaa-aa")?,
+                state: State::PendingChallengeResponse,
+            }
+        );
+
+        Ok(())
     }
 }

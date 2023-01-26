@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use crate::metrics::{MetricParams, WithMetrics};
 
-#[derive(Serialize)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct Context<'a> {
     pub name: &'a str,
     pub ssl_certificate_key_path: &'a str,
@@ -61,5 +61,25 @@ impl<T: Render> Render for WithMetrics<T> {
         recorder.record(&cx, duration, labels);
 
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_render() {
+        let r = Renderer::new("{name}|{ssl_certificate_key_path}|{ssl_certificate_path}");
+
+        let out = r
+            .render(&Context {
+                name: "1",
+                ssl_certificate_key_path: "2",
+                ssl_certificate_path: "3",
+            })
+            .expect("failed to render");
+
+        assert_eq!(out, "1|2|3");
     }
 }

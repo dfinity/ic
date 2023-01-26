@@ -24,7 +24,7 @@ impl Storable for EncryptedPair {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Name(String);
 
 pub const NAME_MAX_LEN: u32 = 64;
@@ -73,7 +73,7 @@ impl Storable for Name {
     }
 }
 
-#[derive(Debug, CandidType, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, CandidType, Clone, PartialEq, Deserialize)]
 pub enum State {
     #[serde(rename = "failed")]
     Failed(String),
@@ -101,7 +101,7 @@ impl Storable for State {
     }
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(Debug, CandidType, Clone, PartialEq, Deserialize)]
 pub struct Registration {
     pub name: Name,
     pub canister: Principal,

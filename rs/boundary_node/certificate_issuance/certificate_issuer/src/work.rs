@@ -349,3 +349,220 @@ impl Process for Processor {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use anyhow::Error;
+    use mockall::predicate;
+    use trust_dns_resolver::{
+        lookup::Lookup,
+        proto::{op::Query, rr::Record as TrustRecord},
+        Name,
+    };
+
+    use crate::{
+        acme::{MockFinalize, MockOrder, MockReady},
+        certificate::MockUpload,
+        dns::{MockCreate, MockDelete, MockResolve, Record},
+    };
+
+    #[tokio::test]
+    async fn test_process_order() -> Result<(), Error> {
+        let id: String = "id".into();
+
+        let task = Task {
+            name: "name".into(),
+            action: Action::Order,
+        };
+
+        let mut resolver = MockResolve::new();
+        resolver.expect_lookup().never();
+
+        let mut acme_order = MockOrder::new();
+        acme_order
+            .expect_order()
+            .times(1)
+            .with(predicate::eq("name"))
+            .returning(|_| Ok("token".into()));
+
+        let mut acme_ready = MockReady::new();
+        acme_ready.expect_ready().never();
+
+        let mut acme_finalize = MockFinalize::new();
+        acme_finalize.expect_finalize().never();
+
+        let mut dns_creator = MockCreate::new();
+        dns_creator
+            .expect_create()
+            .times(1)
+            .with(
+                predicate::eq("delegation"),
+                predicate::eq("_acme-challenge.name"),
+                predicate::eq(Record::Txt("token".into())),
+            )
+            .returning(|_, _, _| Ok(()));
+
+        let mut dns_deleter = MockDelete::new();
+        dns_deleter.expect_delete().never();
+
+        let mut certificate_uploader = MockUpload::new();
+        certificate_uploader.expect_upload().never();
+
+        let processor = Processor::new(
+            "delegation".into(),            // delegation_domain
+            Box::new(resolver),             // resolver
+            Box::new(acme_order),           // acme_order
+            Box::new(acme_ready),           // acme_ready
+            Box::new(acme_finalize),        // acme_finalize
+            Box::new(dns_creator),          // dns_creator
+            Box::new(dns_deleter),          // dns_deleter
+            Box::new(certificate_uploader), // certificate_uploader
+        );
+
+        match processor.process(&id, &task).await {
+            Err(ProcessError::AwaitingDnsPropogation) => Ok(()),
+            other => Err(anyhow!(
+                "expected AwaitingDnsPropogation but got {:?}",
+                other
+            )),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_process_ready() -> Result<(), Error> {
+        let id: String = "id".into();
+
+        let task = Task {
+            name: "name".into(),
+            action: Action::Ready,
+        };
+
+        let mut resolver = MockResolve::new();
+        resolver
+            .expect_lookup()
+            .times(1)
+            .with(
+                predicate::eq("_acme-challenge.name.delegation"),
+                predicate::eq(RecordType::TXT),
+            )
+            .returning(|_, _| {
+                Ok({
+                    let q = Query::new();
+
+                    let mut r = TrustRecord::new();
+                    r.set_name(Name::from_utf8("token")?);
+                    r.set_record_type(RecordType::TXT);
+
+                    Lookup::new_with_max_ttl(q, Arc::new([r]))
+                })
+            });
+
+        let mut acme_order = MockOrder::new();
+        acme_order.expect_order().never();
+
+        let mut acme_ready = MockReady::new();
+        acme_ready
+            .expect_ready()
+            .times(1)
+            .with(predicate::eq("name"))
+            .returning(|_| Ok(()));
+
+        let mut acme_finalize = MockFinalize::new();
+        acme_finalize.expect_finalize().never();
+
+        let mut dns_creator = MockCreate::new();
+        dns_creator.expect_create().never();
+
+        let mut dns_deleter = MockDelete::new();
+        dns_deleter.expect_delete().never();
+
+        let mut certificate_uploader = MockUpload::new();
+        certificate_uploader.expect_upload().never();
+
+        let processor = Processor::new(
+            "delegation".into(),            // delegation_domain
+            Box::new(resolver),             // resolver
+            Box::new(acme_order),           // acme_order
+            Box::new(acme_ready),           // acme_ready
+            Box::new(acme_finalize),        // acme_finalize
+            Box::new(dns_creator),          // dns_creator
+            Box::new(dns_deleter),          // dns_deleter
+            Box::new(certificate_uploader), // certificate_uploader
+        );
+
+        match processor.process(&id, &task).await {
+            Err(ProcessError::AwaitingAcmeOrderReady) => Ok(()),
+            other => Err(anyhow!(
+                "expected AwaitingAcmeOrderReady but got {:?}",
+                other
+            )),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_process_certificate() -> Result<(), Error> {
+        let id: String = "id".into();
+
+        let task = Task {
+            name: "name".into(),
+            action: Action::Certificate,
+        };
+
+        let mut resolver = MockResolve::new();
+        resolver.expect_lookup().never();
+
+        let mut acme_order = MockOrder::new();
+        acme_order.expect_order().never();
+
+        let mut acme_ready = MockReady::new();
+        acme_ready.expect_ready().never();
+
+        let mut acme_finalize = MockFinalize::new();
+        acme_finalize
+            .expect_finalize()
+            .times(1)
+            .with(predicate::eq("name"))
+            .returning(|_| Ok(("cert".into(), "key".into())));
+
+        let mut dns_creator = MockCreate::new();
+        dns_creator.expect_create().never();
+
+        let mut dns_deleter = MockDelete::new();
+        dns_deleter
+            .expect_delete()
+            .times(1)
+            .with(
+                predicate::eq("delegation"),
+                predicate::eq("_acme-challenge.name"),
+            )
+            .returning(|_, _| Ok(()));
+
+        let mut certificate_uploader = MockUpload::new();
+        certificate_uploader
+            .expect_upload()
+            .times(1)
+            .with(
+                predicate::eq("id"),
+                predicate::eq(Pair("key".into(), "cert".into())),
+            )
+            .returning(|_, _| Ok(()));
+
+        let processor = Processor::new(
+            "delegation".into(),            // delegation_domain
+            Box::new(resolver),             // resolver
+            Box::new(acme_order),           // acme_order
+            Box::new(acme_ready),           // acme_ready
+            Box::new(acme_finalize),        // acme_finalize
+            Box::new(dns_creator),          // dns_creator
+            Box::new(dns_deleter),          // dns_deleter
+            Box::new(certificate_uploader), // certificate_uploader
+        );
+
+        match processor.process(&id, &task).await {
+            Ok(()) => Ok(()),
+            other => Err(anyhow!("expected Ok(()) but got {:?}", other)),
+        }
+    }
+}

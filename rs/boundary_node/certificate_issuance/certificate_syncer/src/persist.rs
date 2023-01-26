@@ -18,6 +18,7 @@ use crate::{
     render::{Context, Render},
 };
 
+#[derive(Debug, PartialEq)]
 pub enum PersistStatus {
     Completed,
     SkippedUnchanged,
@@ -230,5 +231,75 @@ impl<T: Persist> Persist for WithEmpty<T> {
             return Ok(PersistStatus::SkippedEmpty);
         }
         self.0.persist(pkgs).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use candid::Principal;
+    use std::sync::Arc;
+
+    use crate::import::Pair;
+    use crate::render::Renderer;
+
+    #[tokio::test]
+    async fn test_persist() -> Result<(), Error> {
+        use tempfile::tempdir;
+
+        let tmp_dir = tempdir()?;
+
+        let renderer = Renderer::new("{name}|{ssl_certificate_key_path}|{ssl_certificate_path}");
+
+        let persister = Persister::new(
+            Arc::new(renderer),              // renderer
+            tmp_dir.path().join("certs"),    // certificates_path
+            tmp_dir.path().join("conf"),     // configuration_path
+            tmp_dir.path().join("mappings"), // domain_mappings_path
+        );
+
+        // Run persister
+        let out = persister
+            .persist(&[Package {
+                name: "test".into(),
+                canister: Principal::from_text("aaaaa-aa")?,
+                pair: Pair(
+                    "key".to_string().into_bytes(),
+                    "cert".to_string().into_bytes(),
+                ),
+            }])
+            .await?;
+
+        assert_eq!(out, PersistStatus::Completed);
+
+        // Check certs
+        assert_eq!(
+            std::fs::read_to_string(tmp_dir.path().join("certs/test-key.pem"))?,
+            "key"
+        );
+
+        assert_eq!(
+            std::fs::read_to_string(tmp_dir.path().join("certs/test.pem"))?,
+            "cert"
+        );
+
+        // Check config
+        assert_eq!(
+            std::fs::read_to_string(tmp_dir.path().join("conf"))?,
+            format!(
+                "test|{}|{}",
+                tmp_dir.path().join("certs/test-key.pem").display(),
+                tmp_dir.path().join("certs/test.pem").display(),
+            )
+        );
+
+        // Check mappings
+        assert_eq!(
+            std::fs::read_to_string(tmp_dir.path().join("mappings"))?,
+            "let domain_mappings = {\"test\":\"aaaaa-aa\"}; export default domain_mappings;",
+        );
+
+        Ok(())
     }
 }

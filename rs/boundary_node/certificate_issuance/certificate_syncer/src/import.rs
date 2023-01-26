@@ -19,13 +19,13 @@ pub enum ImportError {
     UnexpectedError(#[from] anyhow::Error),
 }
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Pair(
     pub Vec<u8>, // Private Key
     pub Vec<u8>, // Certificate Chain
 );
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Package {
     pub name: String,
     pub canister: Principal,
@@ -111,5 +111,60 @@ impl<T: Import> Import for WithMetrics<T> {
         info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
 
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use anyhow::Error;
+    use hyper::Response;
+    use mockall::predicate;
+    use std::{str::FromStr, sync::Arc};
+
+    use crate::http::MockHttpClient;
+
+    #[tokio::test]
+    async fn test_import() -> Result<(), Error> {
+        let mut http_client = MockHttpClient::new();
+        http_client
+            .expect_request()
+            .times(1)
+            .with(predicate::function(|req: &Request<Body>| {
+                req.method().eq("GET") && req.uri().to_string().eq("http://certificates/")
+            }))
+            .returning(|_| {
+                Ok(Response::new(Body::from(
+                    r#"[
+                {
+                    "name": "name",
+                    "canister": "aaaaa-aa",
+                    "pair": [
+                        [1, 2, 3],
+                        [4, 5, 6]
+                    ]
+                }
+            ]"#,
+                )))
+            });
+
+        let importer = CertificatesImporter::new(
+            Arc::new(http_client),                 // http_client
+            Uri::from_str("http://certificates")?, // exporter_uri
+        );
+
+        let out = importer.import().await?;
+
+        assert_eq!(
+            out,
+            vec![Package {
+                name: "name".into(),
+                canister: Principal::from_text("aaaaa-aa")?,
+                pair: Pair(vec![1, 2, 3], vec![4, 5, 6]),
+            }],
+        );
+
+        Ok(())
     }
 }
