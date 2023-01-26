@@ -1,6 +1,7 @@
 use std::{
     cmp::min,
     fs::{self},
+    io::BufRead,
     net::SocketAddr,
     path::PathBuf,
     sync::{Arc, Mutex, RwLock},
@@ -21,6 +22,7 @@ use clap::Parser;
 use dashmap::{DashMap, DashSet};
 use futures::{future::TryFutureExt, stream::FuturesUnordered};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
+use lazy_static::lazy_static;
 use nix::{
     sys::signal::{kill as send_signal, Signal},
     unistd::Pid,
@@ -39,6 +41,7 @@ use opentelemetry::{
 use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
 use persist::{Persist, PersistStatus};
 use prometheus::{Encoder as PrometheusEncoder, TextEncoder};
+use regex::Regex;
 use registry::{RoutingTable, Subnet};
 use tokio::{sync::Semaphore, task};
 use tracing::info;
@@ -64,6 +67,11 @@ const SERVICE_NAME: &str = "control-plane";
 
 const SECOND: Duration = Duration::from_secs(1);
 const MINUTE: Duration = Duration::from_secs(60);
+
+lazy_static! {
+    static ref RE_NODE_ID: Regex = Regex::new(r#"\{.*node_id="([a-zA-Z0-9\\-]*)".*}"#).unwrap();
+    static ref RE_SUBNET_ID: Regex = Regex::new(r#"\{.*subnet_id="([a-zA-Z0-9\\-]*)".*}"#).unwrap();
+}
 
 #[derive(Parser)]
 #[clap(name = SERVICE_NAME)]
@@ -124,11 +132,21 @@ async fn main() -> Result<(), Error> {
     )
     .init();
 
+    // Setup Checks
+    let checks: DashMap<(String, String), u8> = DashMap::new();
+    let checks = Arc::new(checks);
+
+    // Metrics
     let meter = global::meter(SERVICE_NAME);
 
-    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs { exporter }));
+    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs {
+        exporter,
+        checks: Arc::clone(&checks),
+    }));
+
     let metrics_router = Router::new().route("/metrics", get(metrics_handler));
 
+    // Control-Plane
     let routing_table: Arc<Mutex<Option<RoutingTable>>> = Arc::new(Mutex::new(None));
 
     let http_client = reqwest::Client::builder().timeout(10 * SECOND).build()?;
@@ -213,6 +231,7 @@ async fn main() -> Result<(), Error> {
     // Runner
     let check_persist_runner = CheckPersistRunner::new(
         Arc::clone(&routing_table), // routing_table
+        Arc::clone(&checks),        // checks
         checker,                    // checker
         persister,                  // persister
         cli.min_ok_count,           // min_ok_count
@@ -258,10 +277,11 @@ async fn main() -> Result<(), Error> {
 #[derive(Clone)]
 struct MetricsHandlerArgs {
     exporter: PrometheusExporter,
+    checks: Arc<DashMap<(String, String), u8>>,
 }
 
 async fn metrics_handler(
-    Extension(MetricsHandlerArgs { exporter }): Extension<MetricsHandlerArgs>,
+    Extension(MetricsHandlerArgs { exporter, checks }): Extension<MetricsHandlerArgs>,
     _: Request<Body>,
 ) -> Response<Body> {
     let metric_families = exporter.registry().gather();
@@ -276,10 +296,68 @@ async fn metrics_handler(
             .unwrap();
     };
 
+    // Remove lines with status of stale replicas
+    //
+    // When replicas are removed from the registry we no longer run health checks for them.
+    // When that happens, the last gauge value for those replicas never changes.
+    // This pollutes our metrics with stale data. Therefore we remove metric lines corresponding
+    // to replicas that are no longer being actively health-checked.
+    let metrics_text = remove_stale(checks, &metrics_text);
+
     Response::builder()
         .status(200)
         .body(metrics_text.into())
         .unwrap()
+}
+
+fn remove_stale(checks: Arc<DashMap<(String, String), u8>>, metrics_text: &[u8]) -> Vec<u8> {
+    metrics_text
+        .lines()
+        .flat_map(|ln| match ln {
+            Ok(ln) => {
+                // Skip lines that arent gauges
+                if !ln.starts_with("control_plane_check_status{") {
+                    return Vec::from(format!("{ln}\n"));
+                }
+
+                // The gauge line should have both subnet and node ID labels
+                let k = match extract_ids(&ln) {
+                    Some((subnet_id, node_id)) => (subnet_id, node_id),
+                    None => {
+                        return Vec::from(format!("{ln}\n"));
+                    }
+                };
+
+                // Checks should only contain active replicas
+                match checks.get(&k) {
+                    Some(_) => Vec::from(format!("{ln}\n")),
+
+                    // Stale
+                    None => vec![],
+                }
+            }
+            _ => vec![],
+        })
+        .collect()
+}
+
+fn extract_ids(s: &str) -> Option<(String, String)> {
+    // Capture node ID
+    if let Some(cptr) = RE_NODE_ID.captures(s) {
+        if let Some(node_id) = cptr.get(1) {
+            // Capture subnet ID
+            if let Some(cptr) = RE_SUBNET_ID.captures(s) {
+                if let Some(subnet_id) = cptr.get(1) {
+                    return Some((
+                        subnet_id.as_str().into(), // subnet_id
+                        node_id.as_str().into(),   // node_id
+                    ));
+                }
+            }
+        }
+    };
+
+    None
 }
 
 #[async_trait]
@@ -415,13 +493,14 @@ struct CheckPersistRunner<C: Check, P: Persist> {
 impl<C: Check, P: Persist> CheckPersistRunner<C, P> {
     fn new(
         routing_table: Arc<Mutex<Option<RoutingTable>>>,
+        checks: Arc<DashMap<(String, String), u8>>,
         checker: C,
         persister: P,
         min_ok_count: u8,
     ) -> Self {
         Self {
             routing_table,
-            checks: Arc::new(DashMap::new()),
+            checks,
             checker: Arc::new(checker),
             persister,
             min_ok_count,
@@ -601,5 +680,70 @@ impl<T: Check> Check for WithSemaphore<T> {
     async fn check(&self, addr: &str) -> Result<(), Error> {
         let _permit = self.1.acquire().await?;
         self.0.check(addr).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn removes_stale() {
+        let checks: DashMap<(String, String), u8> = DashMap::new();
+
+        checks.insert(
+            (
+                "5kdm2-62fc6-fwnja-hutkz-ycsnm-4z33i-woh43-4cenu-ev7mi-gii6t-4ae".into(),
+                "kywkz-eopg4-nn6md-cjb24-5ri6y-aq6au-vt57i-kg7gk-ch5pw-7er3w-7qe".into(),
+            ),
+            0,
+        );
+
+        checks.insert(
+            (
+                "w4asl-4nmyj-qnr7c-6cqq4-tkwmt-o26di-iupkq-vx4kt-asbrx-jzuxh-4ae".into(),
+                "ze4ou-bfvbt-c5onv-3sxls-vqa4d-gwmt2-fr3zy-svzdq-ge2yd-oehb3-wqe".into(),
+            ),
+            0,
+        );
+
+        // middle line is stale
+        let txt = [
+            r#"control_plane_check_status{addr="[::1]:8080",node_id="kywkz-eopg4-nn6md-cjb24-5ri6y-aq6au-vt57i-kg7gk-ch5pw-7er3w-7qe",service="control-plane",subnet_id="5kdm2-62fc6-fwnja-hutkz-ycsnm-4z33i-woh43-4cenu-ev7mi-gii6t-4ae"} 1"#,
+            r#"control_plane_check_status{addr="[::1]:8080",node_id="q6bis-oxwxg-eh76l-5i47b-nmcm7-wibd3-q5alp-j6hxy-puzh2-qgequ-bae",service="control-plane",subnet_id="x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae"} 1"#,
+            r#"control_plane_check_status{addr="[::1]:8080",node_id="ze4ou-bfvbt-c5onv-3sxls-vqa4d-gwmt2-fr3zy-svzdq-ge2yd-oehb3-wqe",service="control-plane",subnet_id="w4asl-4nmyj-qnr7c-6cqq4-tkwmt-o26di-iupkq-vx4kt-asbrx-jzuxh-4ae"} 1"#,
+        ].join("\n");
+
+        let out = remove_stale(
+            Arc::new(checks), // checks
+            txt.as_bytes(),   // metrics_text
+        );
+
+        let out = String::from_utf8(out).expect("failed to convert output to string");
+
+        let txt = [
+            r#"control_plane_check_status{addr="[::1]:8080",node_id="kywkz-eopg4-nn6md-cjb24-5ri6y-aq6au-vt57i-kg7gk-ch5pw-7er3w-7qe",service="control-plane",subnet_id="5kdm2-62fc6-fwnja-hutkz-ycsnm-4z33i-woh43-4cenu-ev7mi-gii6t-4ae"} 1"#,
+            r#"control_plane_check_status{addr="[::1]:8080",node_id="ze4ou-bfvbt-c5onv-3sxls-vqa4d-gwmt2-fr3zy-svzdq-ge2yd-oehb3-wqe",service="control-plane",subnet_id="w4asl-4nmyj-qnr7c-6cqq4-tkwmt-o26di-iupkq-vx4kt-asbrx-jzuxh-4ae"} 1"#,
+        ].join("\n");
+
+        assert_eq!(out, txt + "\n");
+    }
+
+    #[test]
+    fn extracts_ids_empty() {
+        assert_eq!(extract_ids(""), None);
+    }
+
+    #[test]
+    fn extracts_ids_ok() {
+        assert_eq!(
+            extract_ids(r#"{subnet_id="subnet-1",node_id="node-1"}"#),
+            Some((String::from("subnet-1"), String::from("node-1"))),
+        );
+    }
+
+    #[test]
+    fn extracts_ids_invalid() {
+        assert_eq!(extract_ids(r#"{subnet_id="subnet-1"}"#), None);
     }
 }
