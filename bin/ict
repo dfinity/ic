@@ -10,11 +10,11 @@ BAZEL_ICT_TARGET="//rs/tests/ict:ict"
 
 # Check if Bazel server is already running. If not print a message for user and start Bazel.
 pgrep -fi bazel >/dev/null >&1
-CODE=$?
+CODE="$?"
 if [ "${CODE}" != "0" ]; then
     echo -e "${BOLD}${GREEN}Starting Bazel server ...${NC}"
     bazel >/dev/null 2>&1
-    CODE=$?
+    CODE="$?"
     if [ "${CODE}" != "0" ]; then
         echo -e "${BOLD}${RED}Failed to start Bazel server${NC}"
         echo "Try starting Bazel manually: $ bazel"
@@ -24,11 +24,11 @@ fi
 # Check whether ict binary is exists/up-to-date. If not compile/recompile + handle errors.
 echo -e "${BOLD}${GREEN}Checking ict is up-to-date ...${NC}"
 bazel build ${BAZEL_ICT_TARGET} --config=local --check_up_to_date >/dev/null 2>&1
-CODE=$?
+CODE="$?"
 if [ "${CODE}" != "0" ]; then
     echo -e "${BOLD}${GREEN}Compiling ict ...${NC}"
     bazel build $BAZEL_ICT_TARGET --config=local >/dev/null 2>&1
-    CODE=$?
+    CODE="$?"
     if [ "${CODE}" != "0" ]; then
         echo -e "${BOLD}${RED}ict compilation failed with code=${CODE}${NC}"
         echo "Try running the build manually: bazel build ${BAZEL_ICT_TARGET}"

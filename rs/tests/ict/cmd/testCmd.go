@@ -28,8 +28,6 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 				return err_match
 			} else if len(closest_matches) == 0 {
 				return fmt.Errorf("No test target `%s` was found", target)
-			} else if cfg.useFuzzyMatchedTarget {
-				target = closest_matches[0]
 			} else {
 				return fmt.Errorf("No test target `%s` was found: \nDid you mean any of:\n%s", target, strings.Join(closest_matches, "\n"))
 			}
@@ -68,7 +66,6 @@ func NewTestCmd() *cobra.Command {
 		Args:    cobra.ExactArgs(1),
 		RunE:    TestCommandWithConfig(&cfg),
 	}
-	testCmd.Flags().BoolVarP(&cfg.useFuzzyMatchedTarget, "use-fuzzy-match", "f", false, "If test target is not found, use the closest fuzzy matched one.")
 	testCmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked.")
 	testCmd.Flags().BoolVarP(&cfg.useCachedTestResult, "cache_test_results", "c", false, "Bazel's cache_test_results, see --cache_test_results tag in Bazel docs.")
 	testCmd.PersistentFlags().StringVarP(&cfg.testTmpDir, "test_tmpdir", "t", "", "Dir for storing test results, see --test-tmpdir tag in Bazel docs.")
