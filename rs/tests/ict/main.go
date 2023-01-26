@@ -11,8 +11,9 @@ import (
 
 func AssembleAllCmds() *cobra.Command {
 	var rootCmd = cmd.NewRootCmd()
-	rootCmd.AddCommand(cmd.NewTestCmd())
-	rootCmd.AddCommand(cmd.NewListCmd())
+	var testCmd = cmd.NewTestCmd()
+	testCmd.AddCommand(cmd.NewListCmd())
+	rootCmd.AddCommand(testCmd)
 	return rootCmd
 }
 
