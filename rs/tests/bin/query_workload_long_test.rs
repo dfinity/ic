@@ -12,7 +12,6 @@ use ic_tests::systest;
 
 // Test parameters
 const RPS: usize = 1000;
-const MIN_SUCCESS_RATIO: f64 = 0.95;
 const USE_BOUNDARY_NODE: bool = false;
 const WORKLOAD_RUNTIME: Duration = Duration::from_secs(30 * 60);
 // Timeout parameters
@@ -30,7 +29,7 @@ fn main() -> Result<()> {
             USE_BOUNDARY_NODE,
         )
     };
-    let test = |env| test(env, RPS, WORKLOAD_RUNTIME, MIN_SUCCESS_RATIO);
+    let test = |env| test(env, RPS, WORKLOAD_RUNTIME);
     SystemTestGroup::new()
         .with_setup(config)
         .add_test(systest!(test))

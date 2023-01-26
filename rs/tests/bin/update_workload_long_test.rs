@@ -11,7 +11,6 @@ use ic_tests::systest;
 // Test parameters
 const RPS: usize = 100;
 const PAYLOAD_SIZE_BYTES: usize = 1000;
-const MIN_SUCCESS_RATIO: f64 = 0.90;
 const USE_BOUNDARY_NODE: bool = false;
 const WORKLOAD_RUNTIME: Duration = Duration::from_secs(2 * 60 * 60);
 // Timeout parameters
@@ -36,7 +35,6 @@ fn main() -> Result<()> {
             PAYLOAD_SIZE_BYTES,
             WORKLOAD_RUNTIME,
             USE_BOUNDARY_NODE,
-            MIN_SUCCESS_RATIO,
         )
     };
     SystemTestGroup::new()
