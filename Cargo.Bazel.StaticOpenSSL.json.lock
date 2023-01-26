@@ -1,5 +1,5 @@
 {
-  "checksum": "5352156c717ccfca189edfa1e30c8d51c374bb5dda2e7d608af9d4ae095a9ad1",
+  "checksum": "d498740dbbff5e172f42aff4ffcfb583c158fa736c0f223ca8b041c62c1b7716",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12565,7 +12565,7 @@
               "target": "libflate"
             },
             {
-              "id": "libfuzzer-sys 0.4.5",
+              "id": "libfuzzer-sys 0.4.6",
               "target": "libfuzzer_sys"
             },
             {
@@ -23209,13 +23209,13 @@
       },
       "license": "MIT"
     },
-    "libfuzzer-sys 0.4.5": {
+    "libfuzzer-sys 0.4.6": {
       "name": "libfuzzer-sys",
-      "version": "0.4.5",
+      "version": "0.4.6",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/libfuzzer-sys/0.4.5/download",
-          "sha256": "c8fff891139ee62800da71b7fd5b508d570b9ad95e614a53c6f453ca08366038"
+          "url": "https://crates.io/api/v1/crates/libfuzzer-sys/0.4.6/download",
+          "sha256": "beb09950ae85a0a94b27676cccf37da5ff13f27076aa1adbc6545dd0d0e1bd4e"
         }
       },
       "targets": [
@@ -23256,7 +23256,7 @@
               "target": "arbitrary"
             },
             {
-              "id": "libfuzzer-sys 0.4.5",
+              "id": "libfuzzer-sys 0.4.6",
               "target": "build_script_build"
             },
             {
@@ -23267,7 +23267,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.4.5"
+        "version": "0.4.6"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -48375,6 +48375,18 @@
         },
         {
           "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -48389,18 +48401,6 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
