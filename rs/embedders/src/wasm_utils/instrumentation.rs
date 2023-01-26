@@ -103,6 +103,7 @@
 //! Two additional memories are inserted for stable memory. One is the actual
 //! stable memory and the other is a bytemap to track dirty pages in the stable
 //! memory.
+//! Index of stable memory bytemap = index of stable memory + 1
 //! ```wasm
 //! (memory (export "stable_memory") i64 (i64.const 0) (i64.const MAX_STABLE_MEMORY_SIZE))
 //! (memory (export "stable_memory_bytemap") i32 (i64.const STABLE_BYTEMAP_SIZE) (i64.const STABLE_BYTEMAP_SIZE))
@@ -1117,6 +1118,7 @@ fn update_memories(
         module.exports.push(Export {
             name: STABLE_BYTEMAP_MEMORY_NAME,
             kind: ExternalKind::Memory,
+            // Bytemap for a memory needs to be placed at the next index after the memory
             index: stable_index + 1,
         })
     }
