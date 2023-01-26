@@ -43,6 +43,7 @@ DEV_DEPENDENCIES = [
     "//rs/bitcoin/test-utils",
     "//rs/criterion_time",
     "//rs/test_utilities",
+    "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:proptest",
     "@crate_index//:prost",

@@ -711,18 +711,16 @@ impl SystemState {
     ///
     /// On failure, returns the provided message along with a `StateError`:
     ///  * `QueueFull` if either the input queue or the matching output queue is
-    ///    full when pushing a `Request` message.
+    ///    full when pushing a `Request`; or when pushing a `Response` when none
+    ///    is expected.
     ///  * `CanisterOutOfCycles` if the canister does not have enough cycles.
     ///  * `OutOfMemory` if the necessary memory reservation is larger than the
     ///    canister or subnet available memory.
     ///  * `CanisterStopping` if the canister is stopping and inducting a
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
-    ///
-    /// # Panics
-    ///
-    /// Panics if a `Response` message is pushed onto a queue that does not
-    /// already exist or does not have a reserved slot.
+    ///  * `NonMatchingResponse` if the callback is not found or the respondent
+    ///    does not match.
     pub(crate) fn push_input(
         &mut self,
         msg: RequestOrResponse,
@@ -934,7 +932,7 @@ impl SystemState {
     /// Times out requests in the `OutputQueues` of `self.queues`. Returns the number of requests
     /// that were timed out.
     ///
-    /// See `CanisterQueues::time_out_requests` for further details.
+    /// See [`CanisterQueues::time_out_requests`] for further details.
     pub fn time_out_requests(
         &mut self,
         current_time: Time,
@@ -943,6 +941,20 @@ impl SystemState {
     ) -> u64 {
         self.queues
             .time_out_requests(current_time, own_canister_id, local_canisters)
+    }
+
+    /// Re-partitions the local and remote input schedules of `self.queues`
+    /// following a canister migration, based on the updated set of local canisters.
+    ///
+    /// See [`CanisterQueues::split_input_schedules`] for further details.
+    #[allow(dead_code)]
+    pub(crate) fn split_input_schedules(
+        &mut self,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    ) {
+        self.queues
+            .split_input_schedules(own_canister_id, local_canisters);
     }
 }
 

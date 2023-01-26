@@ -85,14 +85,24 @@ pub struct CanisterQueues {
     /// Per remote canister input and output queues.
     canister_queues: BTreeMap<CanisterId, (InputQueue, OutputQueue)>,
 
-    /// FIFO queue of Local Subnet sender canister IDs ensuring round-robin
+    /// FIFO queue of local subnet sender canister IDs ensuring round-robin
     /// consumption of input messages. Only senders with non-empty queues
     /// are scheduled.
+    ///
+    /// We rely on `ReplicatedState::canister_states` to decide whether a canister
+    /// is local or not. This test is subject to race conditions (e.g. if the sender
+    /// has just been deleted), meaning that the separation into local and remote
+    /// senders is best effort.
     local_subnet_input_schedule: VecDeque<CanisterId>,
 
-    /// FIFO queue of Remote Subnet sender canister IDs ensuring round-robin
+    /// FIFO queue of remote subnet sender canister IDs ensuring round-robin
     /// consumption of input messages. Only senders with non-empty queues
     /// are scheduled.
+    ///
+    /// We rely on `ReplicatedState::canister_states` to decide whether a canister
+    /// is local or not. This test is subject to race conditions (e.g. if the sender
+    /// has just been deleted), meaning that the separation into local and remote
+    /// senders is best effort.
     remote_subnet_input_schedule: VecDeque<CanisterId>,
 
     /// Running `input_queues` stats.
@@ -906,6 +916,7 @@ impl CanisterQueues {
             (local_canister_ids, &self.local_subnet_input_schedule),
             (remote_canister_ids, &self.remote_subnet_input_schedule),
         ] {
+            // Ensure that there are no duplicate entries in `schedule`.
             assert_eq!(canister_ids.len(), schedule.len());
             assert_eq!(canister_ids, schedule.iter().collect::<HashSet<_>>());
         }
@@ -1040,6 +1051,36 @@ impl CanisterQueues {
         debug_assert!(self.schedules_ok(own_canister_id, local_canisters));
 
         timed_out_requests_count
+    }
+
+    /// Re-partitions `self.local_subnet_input_schedule` and
+    /// `self.remote_subnet_input_schedule` based on the set of all local canisters
+    /// plus `own_canister_id` (since Rust's ownership rules would prevent us from
+    /// mutating `self` if it was still under `local_canisters`).
+    ///
+    /// For use after a subnet split or other kind of canister migration. While an
+    /// input queue that finds itself in the wrong schedule would get removed from
+    /// said schedule as soon as it became empty (and would then get enqueued into
+    /// the correct schedule), there is no guarantee that a given queue will ever
+    /// become empty. Because of that, we explicitly re-partition schedules during
+    /// canister migrations.
+    pub(crate) fn split_input_schedules(
+        &mut self,
+        own_canister_id: &CanisterId,
+        local_canisters: &BTreeMap<CanisterId, CanisterState>,
+    ) {
+        let local_schedule = std::mem::take(&mut self.local_subnet_input_schedule);
+        let remote_schedule = std::mem::take(&mut self.remote_subnet_input_schedule);
+
+        for canister_id in local_schedule.into_iter().chain(remote_schedule) {
+            if &canister_id == own_canister_id || local_canisters.contains_key(&canister_id) {
+                self.local_subnet_input_schedule.push_back(canister_id);
+            } else {
+                self.remote_subnet_input_schedule.push_back(canister_id);
+            }
+        }
+
+        debug_assert!(self.schedules_ok(own_canister_id, local_canisters))
     }
 }
 

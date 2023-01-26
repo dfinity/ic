@@ -1,8 +1,10 @@
 use super::{
     testing::{new_canister_queues_for_test, CanisterQueuesTesting},
+    InputQueueType::*,
     DEFAULT_QUEUE_CAPACITY, *,
 };
 use crate::{CanisterState, SchedulerState, SystemState};
+use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_interfaces::messages::CanisterMessage;
 use ic_test_utilities::{
@@ -15,6 +17,7 @@ use ic_test_utilities::{
     },
 };
 use ic_types::{messages::CallbackId, time::current_time_and_expiry_time};
+use maplit::btreemap;
 use proptest::prelude::*;
 use std::convert::TryInto;
 
@@ -328,6 +331,89 @@ fn test_message_picking_ingress_only() {
     assert!(queues.pop_input().is_none());
 }
 
+/// Wrapper for `CanisterQueues` for tests using requests/responses to/from
+/// arbitrary remote canisters.
+struct CanisterQueuesMultiFixture {
+    pub queues: CanisterQueues,
+    pub this: CanisterId,
+}
+
+impl CanisterQueuesMultiFixture {
+    fn new() -> CanisterQueuesMultiFixture {
+        CanisterQueuesMultiFixture {
+            queues: CanisterQueues::default(),
+            this: canister_test_id(13),
+        }
+    }
+
+    fn push_input_request(
+        &mut self,
+        other: CanisterId,
+        input_queue_type: InputQueueType,
+    ) -> Result<(), (StateError, RequestOrResponse)> {
+        self.queues.push_input(
+            RequestBuilder::default()
+                .sender(other)
+                .receiver(self.this)
+                .build()
+                .into(),
+            input_queue_type,
+        )
+    }
+
+    fn push_input_response(
+        &mut self,
+        other: CanisterId,
+        input_queue_type: InputQueueType,
+    ) -> Result<(), (StateError, RequestOrResponse)> {
+        self.queues.push_input(
+            ResponseBuilder::default()
+                .originator(self.this)
+                .respondent(other)
+                .build()
+                .into(),
+            input_queue_type,
+        )
+    }
+
+    fn push_ingress(&mut self, msg: Ingress) {
+        self.queues.push_ingress(msg)
+    }
+
+    fn pop_input(&mut self) -> Option<CanisterMessage> {
+        self.queues.pop_input()
+    }
+
+    fn has_input(&mut self) -> bool {
+        self.queues.has_input()
+    }
+
+    fn push_output_request(&mut self, other: CanisterId) -> Result<(), (StateError, Arc<Request>)> {
+        self.queues.push_output_request(
+            Arc::new(
+                RequestBuilder::default()
+                    .sender(self.this)
+                    .receiver(other)
+                    .build(),
+            ),
+            mock_time(),
+        )
+    }
+
+    fn pop_output(&mut self, other: CanisterId) -> Option<(QueueId, RequestOrResponse)> {
+        let mut iter = self.queues.output_into_iter(other);
+        iter.pop()
+    }
+
+    fn local_schedule(&self) -> Vec<CanisterId> {
+        self.queues.local_subnet_input_schedule.clone().into()
+    }
+
+    fn remote_schedule(&self) -> Vec<CanisterId> {
+        self.queues.remote_subnet_input_schedule.clone().into()
+    }
+}
+
 /// Enqueues 3 requests and 1 response, then pops them and verifies the
 /// expected order.
 #[test]
@@ -337,59 +423,25 @@ fn test_message_picking_round_robin() {
     let other_2 = canister_test_id(2);
     let other_3 = canister_test_id(3);
 
-    let mut queues = CanisterQueues::default();
-    assert!(queues.pop_input().is_none());
+    let mut queues = CanisterQueuesMultiFixture::new();
+    assert!(!queues.has_input());
 
+    // 3 remote requests from 2 canisters.
     for id in &[other_1, other_1, other_3] {
         queues
-            .push_input(
-                RequestBuilder::default()
-                    .sender(*id)
-                    .receiver(this)
-                    .build()
-                    .into(),
-                InputQueueType::RemoteSubnet,
-            )
+            .push_input_request(*id, RemoteSubnet)
             .expect("could not push");
     }
 
-    // Push a request to other_2 to the output queue to get a reserved slot
-    // for a response, then pop the request.
-    queues
-        .push_output_request(
-            RequestBuilder::default()
-                .sender(this)
-                .receiver(other_2)
-                .build()
-                .into(),
-            mock_time(),
-        )
-        .unwrap();
-    let mut output_iter = queues.output_into_iter(other_2);
-    output_iter.pop().unwrap();
+    // Local response from `other_2`.
+    // First push then pop a request to `other_2`, in order to get a reservation.
+    queues.push_output_request(other_2).unwrap();
+    queues.pop_output(other_2).unwrap();
+    queues.push_input_response(other_2, LocalSubnet).unwrap();
 
-    // Push a response to other_2.
+    // Local request from `other_2`.
     queues
-        .push_input(
-            ResponseBuilder::default()
-                .respondent(other_2)
-                .originator(this)
-                .build()
-                .into(),
-            InputQueueType::LocalSubnet,
-        )
-        .expect("could not push");
-
-    // Another high-priority request
-    queues
-        .push_input(
-            RequestBuilder::default()
-                .sender(other_2)
-                .receiver(this)
-                .build()
-                .into(),
-            InputQueueType::LocalSubnet,
-        )
+        .push_input_request(other_2, LocalSubnet)
         .expect("could not push");
 
     queues.push_ingress(Ingress {
@@ -402,51 +454,46 @@ fn test_message_picking_round_robin() {
         expiry_time: current_time_and_expiry_time().1,
     });
 
-    /* POPPING */
-    // Due to the round-robin across Local, Ingress, and Remote Subnet messages,
+    // POPPING
+    // Due to the round-robin across Local, Ingress, and Remote subnet messages;
+    // and round-robin across input queues within Local and Remote input schedules;
     // the popping order should be:
+
     // 1. Local Subnet response (other_2)
-    // 3. Ingress message
-    // 2. Remote Subnet request (other_1)
-    // 1. Local Subnet request (other_2)
-    // 4. Remote Subnet request (other_3)
-    // 2. Remote Subnet request (other_1)
+    assert_matches!(
+        queues.pop_input(),
+        Some(CanisterMessage::Response(msg)) if msg.respondent == other_2
+    );
 
-    // Pop response from other_2
-    match queues.pop_input().expect("could not pop a message") {
-        CanisterMessage::Response(msg) => assert_eq!(msg.respondent, other_2),
-        msg => panic!("unexpected message popped: {:?}", msg),
-    }
+    // 2. Ingress message
+    assert_matches!(
+        queues.pop_input(),
+        Some(CanisterMessage::Ingress(msg)) if msg.source == user_test_id(77)
+    );
 
-    // Pop ingress
-    match queues.pop_input().expect("could not pop a message") {
-        CanisterMessage::Ingress(msg) => assert_eq!(msg.source, user_test_id(77)),
-        msg => panic!("unexpected message popped: {:?}", msg),
-    }
+    // 3. Remote Subnet request (other_1)
+    assert_matches!(
+        queues.pop_input(),
+        Some(CanisterMessage::Request(msg)) if msg.sender == other_1
+    );
 
-    // Pop request from other_1
-    match queues.pop_input().expect("could not pop a message") {
-        CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_1),
-        msg => panic!("unexpected message popped: {:?}", msg),
-    }
+    // 4. Local Subnet request (other_2)
+    assert_matches!(
+        queues.pop_input(),
+        Some(CanisterMessage::Request(msg)) if msg.sender == other_2
+    );
 
-    // Pop request from other_1
-    match queues.pop_input().expect("could not pop a message") {
-        CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_2),
-        msg => panic!("unexpected message popped: {:?}", msg),
-    }
+    // 5. Remote Subnet request (other_3)
+    assert_matches!(
+        queues.pop_input(),
+        Some(CanisterMessage::Request(msg)) if msg.sender == other_3
+    );
 
-    // Pop request from other_3
-    match queues.pop_input().expect("could not pop a message") {
-        CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_3),
-        msg => panic!("unexpected message popped: {:?}", msg),
-    }
-
-    // Pop request from other_1
-    match queues.pop_input().expect("could not pop a message") {
-        CanisterMessage::Request(msg) => assert_eq!(msg.sender, other_1),
-        msg => panic!("unexpected message popped: {:?}", msg),
-    }
+    // 6. Remote Subnet request (other_1)
+    assert_matches!(
+        queues.pop_input(),
+        Some(CanisterMessage::Request(msg)) if msg.sender == other_1
+    );
 
     assert!(!queues.has_input());
     assert!(queues.pop_input().is_none());
@@ -456,62 +503,95 @@ fn test_message_picking_round_robin() {
 /// correct round-robin scheduling.
 #[test]
 fn test_input_scheduling() {
-    let this = canister_test_id(13);
     let other_1 = canister_test_id(1);
     let other_2 = canister_test_id(2);
     let other_3 = canister_test_id(3);
 
-    let mut queues = CanisterQueues::default();
+    let mut queues = CanisterQueuesMultiFixture::new();
     assert!(!queues.has_input());
 
-    let push_input_from = |queues: &mut CanisterQueues, sender: &CanisterId| {
+    let push_input_from = |queues: &mut CanisterQueuesMultiFixture, sender: CanisterId| {
         queues
-            .push_input(
-                RequestBuilder::default()
-                    .sender(*sender)
-                    .receiver(this)
-                    .build()
-                    .into(),
-                InputQueueType::RemoteSubnet,
-            )
+            .push_input_request(sender, RemoteSubnet)
             .expect("could not push");
     };
 
-    let assert_schedule = |queues: &CanisterQueues, expected_schedule: &[&CanisterId]| {
-        let schedule: Vec<&CanisterId> = queues.remote_subnet_input_schedule.iter().collect();
-        assert_eq!(expected_schedule, schedule.as_slice());
-    };
-
-    let assert_sender = |sender: &CanisterId, message: CanisterMessage| match message {
-        CanisterMessage::Request(req) => assert_eq!(*sender, req.sender),
+    let assert_sender = |sender: CanisterId, message: CanisterMessage| match message {
+        CanisterMessage::Request(req) => assert_eq!(sender, req.sender),
         _ => unreachable!(),
     };
 
-    push_input_from(&mut queues, &other_1);
-    assert_schedule(&queues, &[&other_1]);
+    push_input_from(&mut queues, other_1);
+    assert_eq!(vec![other_1], queues.remote_schedule());
 
-    push_input_from(&mut queues, &other_2);
-    assert_schedule(&queues, &[&other_1, &other_2]);
+    push_input_from(&mut queues, other_2);
+    assert_eq!(vec![other_1, other_2], queues.remote_schedule());
 
-    push_input_from(&mut queues, &other_1);
-    assert_schedule(&queues, &[&other_1, &other_2]);
+    push_input_from(&mut queues, other_1);
+    assert_eq!(vec![other_1, other_2], queues.remote_schedule());
 
-    push_input_from(&mut queues, &other_3);
-    assert_schedule(&queues, &[&other_1, &other_2, &other_3]);
+    push_input_from(&mut queues, other_3);
+    assert_eq!(vec![other_1, other_2, other_3], queues.remote_schedule());
 
-    assert_sender(&other_1, queues.pop_input().unwrap());
-    assert_schedule(&queues, &[&other_2, &other_3, &other_1]);
+    assert_sender(other_1, queues.pop_input().unwrap());
+    assert_eq!(vec![other_2, other_3, other_1], queues.remote_schedule());
 
-    assert_sender(&other_2, queues.pop_input().unwrap());
-    assert_schedule(&queues, &[&other_3, &other_1]);
+    assert_sender(other_2, queues.pop_input().unwrap());
+    assert_eq!(vec![other_3, other_1], queues.remote_schedule());
 
-    assert_sender(&other_3, queues.pop_input().unwrap());
-    assert_schedule(&queues, &[&other_1]);
+    assert_sender(other_3, queues.pop_input().unwrap());
+    assert_eq!(vec![other_1], queues.remote_schedule());
 
-    assert_sender(&other_1, queues.pop_input().unwrap());
-    assert_schedule(&queues, &[]);
+    assert_sender(other_1, queues.pop_input().unwrap());
+    assert!(queues.remote_schedule().is_empty());
 
     assert!(!queues.has_input());
+}
+
+#[test]
+fn test_split_input_schedules() {
+    let other_1 = canister_test_id(1);
+    let other_2 = canister_test_id(2);
+    let other_3 = canister_test_id(3);
+    let other_4 = canister_test_id(4);
+    let other_5 = canister_test_id(5);
+
+    let mut queues = CanisterQueuesMultiFixture::new();
+    let this = queues.this;
+
+    // 4 local input queues (`other_1`, `other_2`, `this`, `other_3`) and 2 remote
+    // ones (`other_4`, `other_5`).
+    queues.push_input_request(other_1, LocalSubnet).unwrap();
+    queues.push_input_request(other_2, LocalSubnet).unwrap();
+    queues.push_input_request(this, LocalSubnet).unwrap();
+    queues.push_input_request(other_3, LocalSubnet).unwrap();
+    queues.push_input_request(other_4, RemoteSubnet).unwrap();
+    queues.push_input_request(other_5, RemoteSubnet).unwrap();
+
+    // Schedules before.
+    assert_eq!(
+        vec![other_1, other_2, this, other_3],
+        queues.local_schedule()
+    );
+    assert_eq!(vec![other_4, other_5], queues.remote_schedule());
+
+    // After the split we only have `other_1` (and `this`) on the subnet.
+    let system_state = SystemState::new_running(other_1, other_1.get(), Cycles::zero(), 0.into());
+    let scheduler_state = SchedulerState::new(mock_time());
+    let local_canisters = btreemap! {
+        other_1 => CanisterState::new(system_state, None, scheduler_state)
+    };
+
+    // Act.
+    queues.queues.split_input_schedules(&this, &local_canisters);
+
+    // Schedules after: `other_2` and `other_3` have moved to the head of the remote
+    // input schedule. Ordering is otherwise retained.
+    assert_eq!(vec![other_1, this], queues.local_schedule());
+    assert_eq!(
+        vec![other_2, other_3, other_4, other_5],
+        queues.remote_schedule()
+    );
 }
 
 #[test]
