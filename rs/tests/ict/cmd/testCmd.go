@@ -9,10 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var RED = "\033[1;31m"
-var GREEN = "\033[1;32m"
-var CYAN = "\033[0;36m"
-var NC = "\033[0m"
 var FUZZY_MATCHES_COUNT = 7
 
 type Config struct {
@@ -76,5 +72,6 @@ func NewTestCmd() *cobra.Command {
 	testCmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked.")
 	testCmd.Flags().BoolVarP(&cfg.useCachedTestResult, "cache_test_results", "c", false, "Bazel's cache_test_results, see --cache_test_results tag in Bazel docs.")
 	testCmd.PersistentFlags().StringVarP(&cfg.testTmpDir, "test_tmpdir", "t", "", "Dir for storing test results, see --test-tmpdir tag in Bazel docs.")
+	testCmd.SetOut(os.Stdout)
 	return testCmd
 }

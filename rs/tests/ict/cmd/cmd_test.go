@@ -58,3 +58,30 @@ func Test_TestCmdWithHelpArg(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Contains(t, actual.String(), expected)
 }
+
+func Test_ListCmdWithHelpArg(t *testing.T) {
+	expected := "List all system_test targets with Bazel"
+	actual := new(bytes.Buffer)
+	var command = cmd.NewListCmd()
+	command.SetArgs([]string{"-h"})
+	command.SetOut(actual)
+
+	err := command.Execute()
+
+	assert.Nil(t, err)
+	assert.Contains(t, actual.String(), expected)
+}
+
+func Test_ListCmdWithOneArg(t *testing.T) {
+	expected := "Error: accepts 0 arg(s), received 1"
+	actual := new(bytes.Buffer)
+	var command = cmd.NewListCmd()
+	command.SetArgs([]string{"arg"})
+	command.SetOut(actual)
+	command.SetErr(actual)
+
+	err := command.Execute()
+
+	assert.NotNil(t, err)
+	assert.Contains(t, actual.String(), expected)
+}

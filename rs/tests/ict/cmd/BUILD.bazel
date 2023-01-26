@@ -4,6 +4,7 @@ go_library(
     name = "cmd",
     srcs = [
         "helpers.go",
+        "listCmd.go",
         "root.go",
         "testCmd.go",
     ],
