@@ -97,7 +97,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
 
     def init(self):
         """More init."""
-        self.target_nodes = self.get_mainnet_targets() if self.testnet == "mercury" else self.__get_targets()
+        self.target_nodes = self.__get_targets()
 
         # Determine which machines run workload generators.
         # For that, we need to query the NNS of the workload generator subnetwork
@@ -248,6 +248,9 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         """Get list of targets when running against a testnet."""
         if len(FLAGS.targets) > 0:
             return FLAGS.targets.split(",")
+
+        if self.testnet == "mercury":
+            return self.get_mainnet_targets()
 
         node_ips = self.get_hostnames(FLAGS.subnet)
 
