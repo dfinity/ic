@@ -75,7 +75,9 @@ def rust_bench(name, env = {}, data = [], **kwargs):
     rust_binary(name = binary_name, **kwargs)
     native.sh_binary(
         srcs = ["//bazel:generic_rust_bench.sh"],
+        # Allow benchmark targets to use test-only libraries.
         name = name,
+        testonly = kwargs.get("testonly", False),
         env = dict(env.items() + {"BAZEL_DEFS_BENCH_BIN": "$(location :%s)" % binary_name}.items()),
         data = data + [":" + binary_name],
     )
