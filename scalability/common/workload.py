@@ -123,7 +123,14 @@ class Workload(threading.Thread):
         if len(rps_per_machine) < 0:
             raise Exception("Not using any workload generators, aborting")
 
-        target_list = ",".join(f"http://[{target}]:8080" for target in self.target_machines)
+        if (
+            self.target_machines == ["https://ic0.app"]
+            or self.target_machines == ["https://ic0.dev"]
+            or self.target_machines == ["https://icp0.io"]
+        ):
+            target_list = ",".join(self.target_machines)
+        else:
+            target_list = ",".join(f"http://[{target}]:8080" for target in self.target_machines)
         cmd = f'./ic-workload-generator "{target_list}"' f" -n {self.workload.duration} --no-status-check "
         cmd += " " + " ".join(self.workload.arguments)
         cmd += " --query-timeout-secs " + str(self.query_timeout_secs)

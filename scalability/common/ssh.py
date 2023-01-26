@@ -71,18 +71,23 @@ def scp_in_parallel(sources, destinations):
     return rc
 
 
+def __get_machine_label(machine):
+    return machine.replace("/", "_")
+
+
 def spawn_ssh_in_parallel(machines, command, f_stdout=None, f_stderr=None):
     """Run the given command in parallel on all given machines and return Popen objects for further processing."""
     ps = []
     for machine in machines:
+        m = __get_machine_label(machine)
         ps.append(
             (
                 machine,
                 run_ssh(
                     machine,
                     command,
-                    str(f_stdout.format(machine + str(uuid.uuid4()))) if f_stdout is not None else None,
-                    str(f_stderr.format(machine + str(uuid.uuid4()))) if f_stderr is not None else None,
+                    str(f_stdout.format(m + str(uuid.uuid4()))) if f_stdout is not None else None,
+                    str(f_stderr.format(m + str(uuid.uuid4()))) if f_stderr is not None else None,
                 ),
             )
         )
@@ -105,8 +110,9 @@ def run_all_ssh_in_parallel(
     """Run the given command in parallel on all given machines and wait for completion."""
     ps = []  # Array of type: [(str, str, subprocess.Popen)]
     for command, machine in zip(commands, machines):
-        this_f_stdout = f_stdout.format(machine + str(uuid.uuid4())) if f_stdout is not None else None
-        this_f_stderr = f_stderr.format(machine + str(uuid.uuid4())) if f_stderr is not None else None
+        m = __get_machine_label(machine)
+        this_f_stdout = f_stdout.format(m + str(uuid.uuid4())) if f_stdout is not None else None
+        this_f_stderr = f_stderr.format(m + str(uuid.uuid4())) if f_stderr is not None else None
         ps.append(
             (
                 machine,

@@ -37,7 +37,7 @@ The code is as follows:
 - `ssh.py`: Helpers to execute commands remotely via SSH
 - `experiment.py`: Base class for experiments. Implements common functionality like installing canisters or running the workload generator.
    - `workload_experiment.py`, `base_experiment.py` and `icpy_stress_experiment.py`: A set of different experiment classes to specialize on (see section on base experiments)
-   - `run_*_experiment.py`: Each of those implement a single benchmark as descrobed in IC-562
+   - `run_*_experiment.py`: Each of those implement a single benchmark
    - `max_capacity_*.py`: Maximum capacity variants of the experiments - increases loads iteratively until the system starts to fail.
  - `report.py` and `generate_report.py`: Scripts to generate HTML reports out of collected measurements from experiment executions.
    - `templates/`: folder for storing templates to generate HTML reports. There is one main`experiment.html.hb` is the main experiment report template, with `experiment_*.html.hb` defining the template for the experiment-specific part of the report. The name of the template file has to match what's given as first argument to `write_summary_file`.
@@ -89,11 +89,7 @@ A clean way of managing dependencies for a python project, is via isolated virtu
 - Configure your local virtual environment and install the dependencies:
   ```
   $ cd ic/scalability
-  ``` 
-  ```
   $ pipenv --python 3
-  ```
-  ```
   $ pipenv install -r requirements.txt
   ```
 
@@ -162,7 +158,7 @@ The latter is a coma separated list of canister that have to be pre-installed on
 There is also a flag `--no_instrument=True` to disable instrumenting the target machine (for which we don't have SSH access on mainnet). 
 The suite will then not get a flamegraph and hardware information, but the benchmarks itself will work as usual.
 
-# Stress-testing mainnet.
+## Stress-testing mainnet.
 
  1. Reserve all `large0x` testnets, possibly more. Each of those has 4 subnetworks. The number of subnetworks of all the machines you book has to be larger than the number of subnetworks you want to stress in mainnet (e.g. all for `large0x` subnets together have 16 subnetworks, which allows you to stress 16 subnetworks in mainnet concurrently).
  2. Boot (any) IC OS on all of those (just a usual deployment via `icos_deploy`).
@@ -175,6 +171,13 @@ The suite will then not get a flamegraph and hardware information, but the bench
  Observe the dashboards
 
 # Adding new experiment
+
+Many benchmarks come with a custom canister to run requests against. There are multiple places the workload generator searches for those benchmarks:
+
+ 1. `scalability/canisters` with `$NAME.wasm` and `$NAME.wasm.gz`
+ 2. The IC's canister artifacts. Those are downloaded automatically by the suite. To trigger a new download, make sure to `rm ../artifacts`
+
+The latter is prefered if the canisters source code is part of the IC repo to avoid redundancy. Option 1 might still make sense during development, as it results in a faster development cycle.
 
 In order to add a new experiment:
 

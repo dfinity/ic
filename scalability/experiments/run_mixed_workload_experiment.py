@@ -15,6 +15,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import common.misc as misc  # noqa
 import common.workload_experiment as workload_experiment  # noqa
 import common.workload as workload  # noqa
+import common.report as report  # noqa
 from workloads.hooks.workload_hooks import WorkloadHooks  # noqa
 
 FLAGS = gflags.FLAGS
@@ -110,8 +111,11 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
 
         for thread in threads:
             thread: workload.Workload = thread
+            workload_description = thread.workload
             thread.join()
-            thread.fetch_results()
+            destinations = thread.fetch_results()
+            print(f"Evaluating results from {workload_description} machines")
+            report.evaluate_summaries(destinations)
 
     def run_iterations(self, iterations=None):
         """Exercise the experiment with specified iterations."""

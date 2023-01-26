@@ -15,6 +15,7 @@ WorkloadExperiment inherits BaseExperiment to follow similar workflow of initiat
 import itertools
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -34,6 +35,8 @@ from termcolor import colored
 
 
 NNS_SUBNET_INDEX = 0  # Subnet index of the NNS subnetwork
+MAINNET_NNS_SUBNET_ID = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
+MAINNET_NNS_URL = "https://ic0.app"
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_string("testnet", None, 'Testnet to use. Use "mercury" to run against mainnet.')
@@ -95,6 +98,18 @@ class BaseExperiment:
 
         self.base_experiment_initialized = False
         self.cache = None
+
+        # Determine if boundary nodes are used in benchmark.
+        if (
+            FLAGS.targets == "https://ic0.app"
+            or FLAGS.targets == "https://ic0.dev"
+            or FLAGS.targets == "https://icp0.io"
+        ):
+            print(colored("Benchmarking boundary nodes .. reduced function scope", "red"))
+            self.benchmark_boundary_nodes = True
+        else:
+            self.benchmark_boundary_nodes = False
+
         if self.has_cache():
             try:
                 with open(FLAGS.cache_path) as f:
@@ -106,6 +121,9 @@ class BaseExperiment:
 
     def get_ic_version(self, m):
         """Retrieve the IC version from the given machine m."""
+        if self.benchmark_boundary_nodes:
+            return "not-available"
+
         sys.path.insert(1, "../ic-os/guestos/tests")
         import ictools
 
@@ -379,13 +397,18 @@ class BaseExperiment:
         subnet_info = [info for (_, info) in topo["topology"]["subnets"].items()]
         return subnet_info[subnet_index]["records"][0]["value"]["membership"]
 
-    def get_mainnet_nns_url():
-        """Get NNS url for mainnet."""
-        return "2001:920:401a:1710:5000:d7ff:fe6f:fde7"
+    def get_mainnet_nns_ip(self):
+        """Get NNS IP address on mainnet."""
+        topology = self.__get_topology(nns_url=MAINNET_NNS_URL)
+        for subnet, info in topology["topology"]["subnets"].items():
+            if subnet == MAINNET_NNS_SUBNET_ID:
+                node_id = random.choice(info["records"][0]["value"]["membership"])
+                return self.get_node_ip_address(node_id, nns_url=MAINNET_NNS_URL)
+        raise Exception(f"Failed to get the mainnet NNS url from {MAINNET_NNS_URL}")
 
     def _get_nns_ip(self):
         if FLAGS.testnet == "mercury":
-            return BaseExperiment.get_mainnet_nns_url()
+            return self.get_mainnet_nns_ip()
         else:
             return ansible.get_ansible_hostnames_for_subnet(FLAGS.testnet, NNS_SUBNET_INDEX, sort=False)[0]
 
