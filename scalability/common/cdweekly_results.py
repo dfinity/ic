@@ -1,6 +1,7 @@
 #!/bin/python
 import glob
 import json
+import math
 import os
 import shlex
 import shutil
@@ -28,6 +29,7 @@ gflags.DEFINE_boolean("regenerate", False, "Regenerate all reports")
 TEMPLATE_BASEDIR = "templates"
 TEMPLATE_PATH = TEMPLATE_BASEDIR + "/cd-overview.html.hb"
 
+# Exclude the following experiments from plotting (e.g. for outliers or failed benchmakrs)
 BLACKLIST = [
     ("0b2e60bb5af556c401c4253e763c13d23e2947be", "1639340737"),
     ("7424ea8c83b86cd7867c0686eaeb2c0285450b12", "1649055686"),
@@ -43,6 +45,7 @@ BLACKLIST = [
 
 
 def convert_date(ts: int):
+    """Conver the given data to a format plotly understands."""
     # Also works in plotly: https://plotly.com/javascript/time-series/
     return datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -96,6 +99,7 @@ def ensure_report_generated(githash, timestamp):
 
 
 def copy_results(git_revision: str, timestamp: str):
+    """Copy results for an individual experiment to the asset canister."""
     if len(FLAGS.asset_root) > 0:
 
         source_dir = os.path.join(FLAGS.experiment_data, git_revision, timestamp)
@@ -111,16 +115,65 @@ def copy_results(git_revision: str, timestamp: str):
             shutil.copy(svg, svg_target_dir)
 
 
-def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_data, raw_data, f, f_label=None):
+def default_label_formatter_from_workload_description(
+    workload_command_summary_map, experiment_file, workload_id, githash
+):
+    """Determines the label to be used for plotting from the given data."""
+    if workload_id not in workload_command_summary_map.keys():
+        print(
+            colored(
+                f"Cannot find workload {workload_id} in {workload_command_summary_map} for {githash}",
+                "red",
+            )
+        )
+        return
+    data = json.loads(workload_command_summary_map[workload_id]["workload_description"])
 
+    if data[1] is None:
+        # If the request type isn't set directly via "method" in the toml file, try to set it
+        # based on whether "-u" has been given
+        request_type = (
+            "Update"
+            if True in ["-u" in w["command"] for w in workload_command_summary_map[workload_id]["load_generators"]]
+            else "Query"
+        )
+    else:
+        request_type = str(data[1])
+
+    label = ",".join(data[0]) + " - req type: " + request_type + " - " + str(data[3]) + " rps"
+    if data[5] is not None:
+        label = label + " - payload: " + str(data[5])
+
+    # Attempt to replace the canister ID with canister names
+    for canister_name, canister_ids in experiment_file.canister_id.items():
+        for idx, canister_id in enumerate(canister_ids):
+            label = label.replace(canister_id, f"{canister_name}_{idx}")
+
+    # Shorten labels that are too long
+    if len(label) > 60:
+        label = label[:58] + ".."
+
+    return label
+
+
+def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_data, raw_data, f, f_label=None):
+    """
+    Parse an experiment that increases the request rate in each iteration.
+
+    Experiments are given by the experiment file, the githash and the timestamp.
+
+    Data to be rendered is being stored in meta_data and raw_data.
+
+    Functions f is used to extract data from the benchmarks and function f_label is used to generate a plot label
+    for that experiment.
+    """
     added = False
 
     base_dir = os.path.join(FLAGS.experiment_data, githash, timestamp)
     assert os.path.exists(base_dir)
 
     experiment_file = report.parse_experiment_file(data)
-    timestamp = experiment_file.t_experiment_start
-    xvalue = timestamp
+    xvalue = experiment_file.t_experiment_start
 
     for iteration, workloads in report.find_experiment_summaries(base_dir).items():
 
@@ -133,40 +186,8 @@ def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_d
                 if os.path.exists(path):
                     with open(path, "r") as summary_map_f:
                         workload_command_summary_map = json.loads(summary_map_f.read())
-                        print(colored(workload_command_summary_map, "blue"))
-                        print("SKOUTPUT", colored(data, "blue"))
-                        if workload_id not in workload_command_summary_map.keys():
-                            print(
-                                colored(
-                                    f"Cannot find workload {workload_id} in {workload_command_summary_map} for {data}/{githash}",
-                                    "red",
-                                )
-                            )
-                            return
-                        data = json.loads(workload_command_summary_map[workload_id]["workload_description"])
-                        print(colored(data[0], "blue"))
-                        print(colored(data[1], "blue"))
-                        print(colored(data[3], "blue"))
-                        print(colored(data[5], "blue"))
-                        label = (
-                            ",".join(data[0])
-                            + " - "
-                            + str(data[1])
-                            + " - "
-                            + str(data[3])
-                            + "rps - payload: "
-                            + str(data[5])
-                        )
+                        label = f_label(workload_command_summary_map, experiment_file, workload_id, githash)
 
-                        # Attempt to replace the canister ID with canister names
-                        for canister_name, canister_ids in experiment_file.canister_id.items():
-                            for idx, canister_id in enumerate(canister_ids):
-                                label = label.replace(canister_id, f"{canister_name}_{idx}")
-
-                        if len(label) > 60:
-                            label = label[:58] + ".."
-
-                        print(colored(label, "blue"))
                 else:
                     # No workload summary mapping file, so we cannot look up anything useful as label
                     label = f"workload - {workload_id}"
@@ -176,18 +197,19 @@ def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_d
             evaluated_summaries = report.evaluate_summaries(summary_files)
             yvalue = float(f(evaluated_summaries))
 
-            meta_data.append(
-                {
-                    "timestamp": timestamp,
-                    "date": convert_date(int(timestamp)),
-                    "githash": githash,
-                    "yvalue": yvalue,
-                    "xvalue": xvalue,
-                }
-            )
+            if not math.isnan(yvalue):
+                meta_data.append(
+                    {
+                        "timestamp": timestamp,
+                        "date": convert_date(int(timestamp)),
+                        "githash": githash,
+                        "yvalue": yvalue,
+                        "xvalue": xvalue,
+                    }
+                )
 
-            raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue)]
-            added = True
+                raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue)]
+                added = True
 
     return added
 
@@ -210,6 +232,11 @@ def parse_rps_experiment_latency(data, githash, timestamp, meta_data, raw_data):
 
 
 def parse_rps_experiment_max_capacity(data, githash, experiment_timestamp, meta_data, raw_data):
+    """
+    Parse results from a max capacity experiment.
+
+    The maximum capacity is calculated from raw data of that experiment.
+    """
     added = False
 
     base_dir = os.path.join(FLAGS.experiment_data, githash, experiment_timestamp)
@@ -318,26 +345,15 @@ def parse_statesync_experiment(data, githash, timestamp, meta_data, raw_data):
         return False
 
 
-def parse_qr_experiment(data, githash, experiment_timestamp, meta_data, raw_data):
-    parse_mixed_workload_experiment(data, githash, experiment_timestamp, meta_data, raw_data, "qr.toml")
-
-
-def parse_sha256_experiment(data, githash, experiment_timestamp, meta_data, raw_data):
-    parse_mixed_workload_experiment(data, githash, experiment_timestamp, meta_data, raw_data, "sha256.toml")
-
-
-def parse_http_outcall_experiment(data, githash, experiment_timestamp, meta_data, raw_data):
-    parse_mixed_workload_experiment(
-        data, githash, experiment_timestamp, meta_data, raw_data, "canister-http-benchmark.toml"
-    )
-
-
-def parse_mixed_counter_experiment(data, githash, experiment_timestamp, meta_data, raw_data):
-    parse_mixed_workload_experiment(data, githash, experiment_timestamp, meta_data, raw_data, "mixed-query-update.toml")
-
-
-def parse_mixed_workload_experiment(data, githash, experiment_timestamp, meta_data, raw_data, workload_file):
+def parse_mixed_workload_experiment(
+    data, githash, experiment_timestamp, meta_data, raw_data, workload_file, eval_function=None
+):
     """Parse a mixed workload experiment."""
+    if eval_function is None:
+
+        def eval_function(evaluated_summaries):
+            return evaluated_summaries.get_median_failure_rate()
+
     base_dir = os.path.join(FLAGS.experiment_data, githash, experiment_timestamp)
     print(colored(f"Parsing: {base_dir}", "grey", attrs=["bold"]))
     assert os.path.exists(base_dir)
@@ -352,8 +368,8 @@ def parse_mixed_workload_experiment(data, githash, experiment_timestamp, meta_da
                 experiment_timestamp,
                 meta_data,
                 raw_data,
-                lambda evaluated_summaries: evaluated_summaries.get_median_failure_rate(),
-                f_label=42,  # Replace with actual function later
+                eval_function,
+                f_label=default_label_formatter_from_workload_description,
             )
         except (report.WorkloadGeneratorSummaryUnmatched, FileNotFoundError):
             print(colored(traceback.format_exc(), "red"))
@@ -374,7 +390,7 @@ class ExperimentResultDirectory:
 def find_results(
     experiment_names: [str],
     experiment_type: [str],
-    testnet: str,
+    testnets: [str],
     time_start: int,
 ):
     """Find experiment results matching the given data and return a list of results."""
@@ -384,7 +400,7 @@ def find_results(
             try:
                 data = json.loads(resultfile.read())
                 # Match testnet name, experiment name and experiment type in order to decide whether to include results
-                if data["testnet"] == testnet and data["type"] in experiment_type:
+                if data["testnet"] in testnets and data["type"] in experiment_type:
 
                     include = False
                     for experiment in experiment_names:
@@ -408,20 +424,44 @@ def find_results(
     return results
 
 
+def render_mixed_workload_experiment(data: dict, plot_name, toml_file):
+    """Generate json data for plotting failure rate and p90 latency for single mixed workload plot."""
+    data[f"plot_{plot_name}"] = render_results(
+        ["run_mixed_workload_experiment"],
+        ["mixed"],
+        parse_mixed_workload_experiment,
+        None,
+        yaxis_title="Failure rate",
+        workload_file=toml_file,
+        eval_function=lambda evaluated_summaries: evaluated_summaries.get_median_failure_rate(),
+    )
+
+    data[f"plot_{plot_name}_latency"] = render_results(
+        ["run_mixed_workload_experiment"],
+        ["mixed"],
+        parse_mixed_workload_experiment,
+        None,
+        yaxis_title="Latency [ms]",
+        workload_file=toml_file,
+        eval_function=lambda evaluated_summaries: evaluated_summaries.percentiles[90],
+    )
+
+
 def render_results(
     experiment_names,
     experiment_type,
     parser,
     threshold: [str],
-    testnet="cdslo",
+    testnets: [str] = ["cdslo", "cdmax"],
     time_start=None,
     yaxis_title="maximum rate [requests / s]",
+    **kwargs,
 ):
     """Find and collect data from all experiments for the given testnet and experiment type."""
     meta_data = []
     raw_data = {}
 
-    for result in find_results(experiment_names, experiment_type, testnet, time_start):
+    for result in find_results(experiment_names, experiment_type, testnets, time_start):
 
         resultfile = result.result_file_path
         githash = result.githash
@@ -430,11 +470,11 @@ def render_results(
 
         print("Result file content: ", result.result_file_content)
 
-        if parser(data, githash, timestamp, meta_data, raw_data):
+        if parser(data, githash, timestamp, meta_data, raw_data, **kwargs):
             ensure_report_generated(githash, timestamp)
 
     if len(raw_data) < 1:
-        raise Exception(f"Could not find any data for: {testnet} {experiment_names} {experiment_type}")
+        raise Exception(f"Could not find any data for: {testnets} {experiment_names} {experiment_type}")
 
     meta_data = sorted(meta_data, key=lambda x: x["timestamp"])
 
@@ -459,25 +499,27 @@ def render_results(
             }
         )
 
+    layout = {
+        "yaxis": {"title": yaxis_title, "range": [0, 1.2 * max(all_ydata)]},
+        "xaxis": {"title": "benchmark execution date [s]"},
+    }
     if threshold is not None:
-        layout = {
-            "yaxis": {"title": yaxis_title, "range": [0, 1.2 * max(all_ydata)]},
-            "xaxis": {"title": "benchmark execution date [s]"},
-            "shapes": [
-                {
-                    "type": "line",
-                    "x0": convert_date(min(all_xdata)),
-                    "y0": threshold,
-                    "x1": convert_date(max(all_xdata)),
-                    "y1": threshold,
-                    "line": {
-                        "color": "red",
-                    },
-                }
-            ],
-        }
-    else:
-        layout = {}
+        layout.update(
+            {
+                "shapes": [
+                    {
+                        "type": "line",
+                        "x0": convert_date(min(all_xdata)),
+                        "y0": threshold,
+                        "x1": convert_date(max(all_xdata)),
+                        "y1": threshold,
+                        "line": {
+                            "color": "red",
+                        },
+                    }
+                ],
+            }
+        )
 
     return {"plot": plots, "layout": layout, "data": meta_data}
 
@@ -527,37 +569,10 @@ if __name__ == "__main__":
 
         data["plot_xnet"] = render_results(["run_xnet_experiment"], ["query"], parse_xnet_experiment, 5500)
 
-        data["plot_qr"] = render_results(
-            ["run_mixed_workload_experiment"],
-            ["mixed"],
-            parse_qr_experiment,
-            None,
-            yaxis_title="Failure rate",
-        )
-
-        data["plot_sha256"] = render_results(
-            ["run_mixed_workload_experiment"],
-            ["mixed"],
-            parse_sha256_experiment,
-            None,
-            yaxis_title="Failure rate",
-        )
-
-        data["plot_http_outcall"] = render_results(
-            ["run_mixed_workload_experiment"],
-            ["mixed"],
-            parse_http_outcall_experiment,
-            None,
-            yaxis_title="Failure rate",
-        )
-
-        data["plot_mixed_counter"] = render_results(
-            ["run_mixed_workload_experiment"],
-            ["mixed"],
-            parse_mixed_counter_experiment,
-            None,
-            yaxis_title="Failure rate",
-        )
+        render_mixed_workload_experiment(data, "qr", "qr.toml")
+        render_mixed_workload_experiment(data, "sha256", "sha256.toml")
+        render_mixed_workload_experiment(data, "http_outcall", "canister-http-benchmark.toml")
+        render_mixed_workload_experiment(data, "mixed_counter", "mixed-query-update.toml")
 
         # Render the internal CD overview
         with open(f"{FLAGS.experiment_data}/cd-overview.html", "w") as outfile:
