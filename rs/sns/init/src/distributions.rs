@@ -20,9 +20,6 @@ use ic_sns_governance::types::ONE_MONTH_SECONDS;
 use maplit::btreemap;
 use std::collections::BTreeMap;
 
-/// The static MEMO used when calculating subaccounts of neurons available at genesis.
-pub const DEFAULT_NEURON_STAKING_NONCE: u64 = 0;
-
 /// The static MEMO used when calculating the subaccount of future token swaps.
 pub const SWAP_SUBACCOUNT_NONCE: u64 = 1;
 
@@ -343,6 +340,7 @@ impl FractionalDeveloperVotingPower {
                 &sns_canister_ids.governance,
                 &principal_id,
                 neuron_distribution.stake_e8s,
+                neuron_distribution.memo,
             );
             accounts.insert(account, tokens);
         }
@@ -411,6 +409,7 @@ impl FractionalDeveloperVotingPower {
                 &sns_canister_ids.governance,
                 &principal_id,
                 neuron_distribution.stake_e8s,
+                neuron_distribution.memo,
             );
             accounts.insert(account, tokens);
         }
@@ -441,9 +440,9 @@ impl FractionalDeveloperVotingPower {
         governance_canister: &PrincipalId,
         claimer: &PrincipalId,
         amount_e8s: u64,
+        memo: u64,
     ) -> (Account, Tokens) {
-        let subaccount =
-            compute_neuron_staking_subaccount_bytes(*claimer, DEFAULT_NEURON_STAKING_NONCE);
+        let subaccount = compute_neuron_staking_subaccount_bytes(*claimer, memo);
         let account = Account {
             owner: *governance_canister,
             subaccount: Some(subaccount),

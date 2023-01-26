@@ -833,15 +833,21 @@ impl SnsInitPayload {
 
 #[cfg(test)]
 mod test {
-    use crate::pb::v1::FractionalDeveloperVotingPower as FractionalDVP;
+    use crate::pb::v1::{
+        AirdropDistribution, DeveloperDistribution,
+        FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution,
+    };
     use crate::{
         FractionalDeveloperVotingPower, SnsCanisterIds, SnsInitPayload, MAX_TOKEN_NAME_LENGTH,
         MAX_TOKEN_SYMBOL_LENGTH,
     };
-    use ic_base_types::CanisterId;
+    use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1::Account;
     use ic_sns_governance::governance::ValidGovernanceProto;
     use ic_sns_governance::pb::v1::governance::SnsMetadata;
+    use ic_sns_governance::types::ONE_MONTH_SECONDS;
+    use std::collections::BTreeMap;
+    use std::convert::TryInto;
 
     fn create_canister_ids() -> SnsCanisterIds {
         SnsCanisterIds {
@@ -1155,5 +1161,92 @@ mod test {
             voting_rewards_parameters.reward_rate_transition_duration_seconds,
             test_payload.reward_rate_transition_duration_seconds
         );
+    }
+
+    // Create an initial SNS payload that includes Governance and Ledger init payloads. Then
+    // iterate over each neuron in the Governance init payload and assert that each neuron's
+    // account is present in the Ledger init payload's `initial_balances`.
+    #[test]
+    fn test_build_canister_payloads_creates_neurons_with_correct_ledger_accounts() {
+        let controller1 = PrincipalId::new_user_test_id(2209);
+        let airdrop_neuron1 = NeuronDistribution {
+            controller: Some(controller1),
+            stake_e8s: 100_000_000,
+            memo: 5,
+            dissolve_delay_seconds: 0,
+            vesting_period_seconds: None,
+        };
+        let controller2 = PrincipalId::new_user_test_id(7184);
+        let airdrop_neuron2 = NeuronDistribution {
+            controller: Some(controller2),
+            stake_e8s: 770_000_000,
+            memo: 1644,
+            dissolve_delay_seconds: 9053,
+            vesting_period_seconds: None,
+        };
+        let airdrop_neurons = AirdropDistribution {
+            airdrop_neurons: vec![airdrop_neuron1, airdrop_neuron2],
+        };
+        let controller3 = PrincipalId::new_user_test_id(3209);
+        let developer_neuron1 = NeuronDistribution {
+            controller: Some(controller3),
+            stake_e8s: 330_000_000,
+            memo: 8721,
+            dissolve_delay_seconds: ONE_MONTH_SECONDS * 6,
+            vesting_period_seconds: None,
+        };
+        let developer_neurons = DeveloperDistribution {
+            developer_neurons: vec![developer_neuron1],
+        };
+
+        let mut fdvp = FractionalDVP::with_valid_values_for_testing();
+        fdvp.airdrop_distribution = Some(airdrop_neurons);
+        fdvp.developer_distribution = Some(developer_neurons);
+
+        // Build an sns_init_payload with defaults for non-governance related configuration.
+        let sns_init_payload = SnsInitPayload {
+            token_name: Some("ServiceNervousSystem Coin".to_string()),
+            token_symbol: Some("SNS".to_string()),
+            initial_token_distribution: Some(FractionalDeveloperVotingPower(fdvp)),
+            proposal_reject_cost_e8s: Some(10_000),
+            neuron_minimum_stake_e8s: Some(100_000_000),
+            ..SnsInitPayload::with_valid_values_for_testing()
+        };
+
+        // Assert that this payload is valid in the view of the library
+        sns_init_payload
+            .validate()
+            .expect("Init payload must be valid");
+
+        // Create valid CanisterIds
+        let sns_canister_ids = create_canister_ids();
+
+        // Build the SnsCanisterInitPayloads including SNS Governance
+        let canister_payloads = sns_init_payload
+            .build_canister_payloads(&sns_canister_ids, None)
+            .expect("Expected SnsInitPayload to be a valid payload");
+
+        let governance = canister_payloads.governance;
+        let init_accounts: BTreeMap<Account, u64> = canister_payloads
+            .ledger
+            .initial_balances
+            .into_iter()
+            .collect();
+
+        // Assert that the Governance canister would accept this init payload
+        assert!(ValidGovernanceProto::try_from(governance.clone()).is_ok());
+
+        // For each neuron, assert that its account exists on the Ledger
+        for neuron in governance.neurons.values() {
+            let subaccount = neuron.id.clone().unwrap().id;
+            let account = Account {
+                owner: sns_canister_ids.governance,
+                subaccount: Some(subaccount.as_slice().try_into().unwrap()),
+            };
+            let account_balance = *init_accounts
+                .get(&account)
+                .expect("Neuron must have an account on the Ledger");
+            assert_eq!(account_balance, neuron.cached_neuron_stake_e8s);
+        }
     }
 }
