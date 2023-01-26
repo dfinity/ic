@@ -42,8 +42,6 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{error::LayoutError, AccessPolicy, CheckpointLayout, ReadOnly, StateLayout};
 use ic_types::{
-    artifact::StateSyncArtifactId,
-    chunkable::Chunkable,
     consensus::certification::Certification,
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
@@ -634,7 +632,6 @@ pub struct StateManagerImpl {
     // requested quite often and this causes high contention on the lock.
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
-    state_sync_refs: StateSyncRefs,
     _state_hasher_handle: JoinOnDrop<()>,
     _deallocation_handle: JoinOnDrop<()>,
     persist_metadata_guard: Arc<Mutex<()>>,
@@ -1474,7 +1471,7 @@ impl StateManagerImpl {
         report_last_diverged_state(&log, &metrics, &state_layout);
 
         Self {
-            log: log.clone(),
+            log,
             metrics,
             state_layout,
             states,
@@ -1485,7 +1482,6 @@ impl StateManagerImpl {
             deallocation_sender,
             latest_state_height,
             latest_certified_height,
-            state_sync_refs: StateSyncRefs::new(log),
             _state_hasher_handle,
             _deallocation_handle,
             persist_metadata_guard,
@@ -1499,29 +1495,6 @@ impl StateManagerImpl {
     /// StateManager.
     pub fn state_layout(&self) -> &StateLayout {
         &self.state_layout
-    }
-
-    /// Returns requested state as a Chunkable artifact for StateSync.
-    pub fn create_chunkable_state(
-        &self,
-        id: &StateSyncArtifactId,
-    ) -> Box<dyn Chunkable + Send + Sync> {
-        info!(self.log, "Starting state sync @{}", id.height);
-
-        Box::new(crate::state_sync::chunkable::IncompleteState::new(
-            self.log.clone(),
-            id.height,
-            id.hash.clone(),
-            self.state_layout.clone(),
-            self.latest_manifest(),
-            self.metrics.clone(),
-            self.own_subnet_type,
-            Arc::new(Mutex::new(scoped_threadpool::Pool::new(
-                NUMBER_OF_CHECKPOINT_THREADS,
-            ))),
-            self.state_sync_refs.clone(),
-            self.malicious_flags.clone(),
-        ))
     }
 
     /// Reads states metadata file, returning an empty one if any errors occurs.

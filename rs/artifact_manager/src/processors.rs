@@ -41,29 +41,6 @@ enum AdvertSource {
     Relayed,
 }
 
-/// A client may be either wrapped in `Box` or `Arc`.
-pub enum BoxOrArcClient<Artifact: ArtifactKind> {
-    /// The client wrapped in `Box`.
-    BoxClient(Box<dyn ArtifactProcessor<Artifact>>),
-    /// The client wrapped in `Arc`.
-    ArcClient(Arc<dyn ArtifactProcessor<Artifact> + Sync + 'static>),
-}
-
-impl<Artifact: ArtifactKind> BoxOrArcClient<Artifact> {
-    /// The method calls the corresponding client's `process_changes` with the
-    /// given time source and artifacts.
-    fn process_changes(
-        &self,
-        time_source: &dyn TimeSource,
-        artifacts: Vec<UnvalidatedArtifact<Artifact::Message>>,
-    ) -> (Vec<AdvertSendRequest<Artifact>>, ProcessingResult) {
-        match self {
-            BoxOrArcClient::BoxClient(client) => client.process_changes(time_source, artifacts),
-            BoxOrArcClient::ArcClient(client) => client.process_changes(time_source, artifacts),
-        }
-    }
-}
-
 /// Metrics for a client artifact processor.
 struct ArtifactProcessorMetrics {
     /// The processing time histogram.
@@ -140,7 +117,7 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
     pub fn new<S: Fn(AdvertSendRequest<Artifact>) + Send + 'static>(
         time_source: Arc<SysTimeSource>,
         metrics_registry: MetricsRegistry,
-        client: BoxOrArcClient<Artifact>,
+        client: Box<dyn ArtifactProcessor<Artifact>>,
         send_advert: S,
     ) -> Self
     where
@@ -191,7 +168,7 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
     fn process_messages<S: Fn(AdvertSendRequest<Artifact>) + Send + 'static>(
         pending_artifacts: Arc<Mutex<Vec<UnvalidatedArtifact<Artifact::Message>>>>,
         time_source: Arc<SysTimeSource>,
-        client: BoxOrArcClient<Artifact>,
+        client: Box<dyn ArtifactProcessor<Artifact>>,
         send_advert: Box<S>,
         sender: Sender<ProcessRequest>,
         receiver: Receiver<ProcessRequest>,
@@ -291,7 +268,7 @@ impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
         let manager = ArtifactProcessorManager::new(
             time_source,
             metrics_registry,
-            BoxOrArcClient::BoxClient(Box::new(client)),
+            Box::new(client),
             send_advert,
         );
         (
@@ -433,7 +410,7 @@ impl<Pool: MutableIngressPool + Send + Sync + 'static> IngressProcessor<Pool> {
         let manager = ArtifactProcessorManager::new(
             time_source.clone(),
             metrics_registry,
-            BoxOrArcClient::BoxClient(Box::new(client)),
+            Box::new(client),
             send_advert,
         );
         (
@@ -559,7 +536,7 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
         let manager = ArtifactProcessorManager::new(
             time_source,
             metrics_registry,
-            BoxOrArcClient::BoxClient(Box::new(client)),
+            Box::new(client),
             send_advert,
         );
         (
@@ -678,7 +655,7 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> DkgProcessor<PoolDkg> {
         let manager = ArtifactProcessorManager::new(
             time_source,
             metrics_registry,
-            BoxOrArcClient::BoxClient(Box::new(client)),
+            Box::new(client),
             send_advert,
         );
         (clients::DkgClient::new(dkg_pool, dkg_gossip), manager)
@@ -780,7 +757,7 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
         let manager = ArtifactProcessorManager::new(
             time_source,
             metrics_registry,
-            BoxOrArcClient::BoxClient(Box::new(client)),
+            Box::new(client),
             send_advert,
         );
         (clients::EcdsaClient::new(ecdsa_pool, ecdsa_gossip), manager)
@@ -900,7 +877,7 @@ impl<
         let manager = ArtifactProcessorManager::new(
             time_source,
             metrics_registry,
-            BoxOrArcClient::BoxClient(Box::new(client)),
+            Box::new(client),
             send_advert,
         );
         (

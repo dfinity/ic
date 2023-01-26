@@ -236,7 +236,7 @@ fn execute_test_chunking_pool(
         let fake_crypto = CryptoReturningOk::default();
         let fake_crypto = Arc::new(fake_crypto);
         let node_pool_dir = test_synchronizer.get_test_group_directory();
-        let state_sync_client = Arc::new(ArtifactChunkingTestImpl::new(node_pool_dir, node_id));
+        let state_sync_client = Box::new(ArtifactChunkingTestImpl::new(node_pool_dir, node_id));
         let state_sync_client =
             P2PStateSyncClient::TestChunkingPool(state_sync_client.clone(), state_sync_client);
         let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::System);

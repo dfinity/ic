@@ -185,11 +185,11 @@ impl ArtifactManagerMaker {
             clients: HashMap::new(),
         }
     }
-    /// The method adds a new `ArtifactClient` (that is already wrapped in
-    /// `Arc`) to be managed.
-    pub fn add_arc_client<Artifact: ArtifactKind + 'static>(
+
+    /// The method adds a new `ArtifactClient` to be managed.
+    pub fn add_client<Artifact: ArtifactKind + 'static>(
         &mut self,
-        client: Arc<dyn ArtifactClient<Artifact>>,
+        client: Box<dyn ArtifactClient<Artifact>>,
         processor: ArtifactProcessorManager<Artifact>,
     ) where
         Artifact::Message:
@@ -207,34 +207,6 @@ impl ArtifactManagerMaker {
         self.clients.insert(
             tag,
             Box::new(ArtifactManagerBackendImpl { client, processor }),
-        );
-    }
-
-    /// The method adds a new `ArtifactClient` to be managed.
-    pub fn add_client<Artifact: ArtifactKind + 'static, Client: 'static>(
-        &mut self,
-        client: Client,
-        processor: ArtifactProcessorManager<Artifact>,
-    ) where
-        Client: ArtifactClient<Artifact>,
-        Artifact::Message:
-            ChunkableArtifact + Send + TryFrom<artifact::Artifact, Error = artifact::Artifact>,
-        Advert<Artifact>:
-            Into<p2p::GossipAdvert> + TryFrom<p2p::GossipAdvert, Error = p2p::GossipAdvert> + Eq,
-        for<'b> &'b Artifact::Id:
-            TryFrom<&'b artifact::ArtifactId, Error = &'b artifact::ArtifactId>,
-        artifact::ArtifactFilter: AsMut<Artifact::Filter> + AsRef<Artifact::Filter>,
-        for<'b> &'b Artifact::Attribute:
-            TryFrom<&'b artifact::ArtifactAttribute, Error = &'b artifact::ArtifactAttribute>,
-        Artifact::Attribute: 'static,
-    {
-        let tag = Artifact::TAG;
-        self.clients.insert(
-            tag,
-            Box::new(ArtifactManagerBackendImpl {
-                client: Arc::new(client) as Arc<_>,
-                processor,
-            }),
         );
     }
 

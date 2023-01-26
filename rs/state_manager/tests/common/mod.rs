@@ -11,7 +11,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::{testing::ReplicatedStateTesting, ReplicatedState, Stream};
-use ic_state_manager::{stream_encoding, StateManagerImpl};
+use ic_state_manager::{state_sync::StateSync, stream_encoding, StateManagerImpl};
 use ic_test_utilities::{
     consensus::fake::{Fake, FakeVerifier},
     state::{initial_execution_state, new_canister_state},
@@ -480,8 +480,47 @@ pub fn state_manager_test_with_verifier_result<F: FnOnce(&MetricsRegistry, State
     })
 }
 
+fn state_manager_test_with_state_sync_and_verifier_result<
+    F: FnOnce(&MetricsRegistry, Arc<StateManagerImpl>, StateSync),
+>(
+    should_pass_verification: bool,
+    f: F,
+) {
+    let tmp = tmpdir("sm");
+    let config = Config::new(tmp.path().into());
+    let metrics_registry = MetricsRegistry::new();
+    let own_subnet = subnet_test_id(42);
+    let verifier: Arc<dyn Verifier> = if should_pass_verification {
+        Arc::new(FakeVerifier::new())
+    } else {
+        Arc::new(RejectingVerifier::default())
+    };
+
+    with_test_replica_logger(|log| {
+        let sm = Arc::new(StateManagerImpl::new(
+            verifier,
+            own_subnet,
+            SubnetType::Application,
+            log.clone(),
+            &metrics_registry,
+            &config,
+            None,
+            ic_types::malicious_flags::MaliciousFlags::default(),
+        ));
+        f(&metrics_registry, sm.clone(), StateSync::new(sm, log));
+    })
+}
+
 pub fn state_manager_test<F: FnOnce(&MetricsRegistry, StateManagerImpl)>(f: F) {
     state_manager_test_with_verifier_result(true, f)
+}
+
+pub fn state_manager_test_with_state_sync<
+    F: FnOnce(&MetricsRegistry, Arc<StateManagerImpl>, StateSync),
+>(
+    f: F,
+) {
+    state_manager_test_with_state_sync_and_verifier_result(true, f)
 }
 
 pub fn state_manager_restart_test_deleting_metadata<Test>(test: Test)

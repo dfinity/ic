@@ -22,7 +22,7 @@ use ic_replica_setup_ic_network::{
     create_networking_stack, init_artifact_pools, P2PStateSyncClient,
 };
 use ic_replicated_state::ReplicatedState;
-use ic_state_manager::StateManagerImpl;
+use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
 use ic_types::{consensus::catchup::CUPWithOriginalProtobuf, NodeId, SubnetId};
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
@@ -233,6 +233,8 @@ pub fn construct_ic_stack(
         replica_logger.clone(),
     );
 
+    let state_sync = StateSync::new(state_manager.clone(), replica_logger.clone());
+
     let (ingress_ingestion_service, p2p_runner) = create_networking_stack(
         metrics_registry,
         replica_logger,
@@ -245,7 +247,7 @@ pub fn construct_ic_stack(
         None,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
-        P2PStateSyncClient::Client(Arc::clone(&state_manager) as Arc<_>),
+        P2PStateSyncClient::Client(state_sync),
         xnet_payload_builder as Arc<_>,
         self_validating_payload_builder as Arc<_>,
         message_router as Arc<_>,

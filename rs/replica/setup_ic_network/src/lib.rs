@@ -40,7 +40,7 @@ use ic_metrics::MetricsRegistry;
 use ic_p2p::{start_p2p, AdvertBroadcaster, P2PThreadJoiner};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_state_manager::StateManagerImpl;
+use ic_state_manager::state_sync::StateSync;
 use ic_transport::transport::create_transport;
 use ic_types::{
     artifact::{Advert, ArtifactKind, ArtifactTag, FileTreeSyncAttribute},
@@ -55,16 +55,15 @@ use ic_types::{
 use std::sync::{Arc, Mutex, RwLock};
 
 /// The P2P state sync client.
-#[derive(Clone)]
 pub enum P2PStateSyncClient {
     /// The main client variant.
-    Client(Arc<StateManagerImpl>),
+    Client(StateSync),
     /// The test client variant.
     TestClient(),
     /// The test chunking pool variant.
     TestChunkingPool(
-        Arc<dyn ArtifactClient<TestArtifact>>,
-        Arc<dyn ArtifactProcessor<TestArtifact> + Sync + 'static>,
+        Box<dyn ArtifactClient<TestArtifact>>,
+        Box<dyn ArtifactProcessor<TestArtifact> + Sync + 'static>,
     ),
 }
 
@@ -234,10 +233,10 @@ fn setup_artifact_manager(
         let addr = processors::ArtifactProcessorManager::new(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry,
-            processors::BoxOrArcClient::ArcClient(client_on_state_change),
+            client_on_state_change,
             move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
         );
-        artifact_manager_maker.add_arc_client(client, addr);
+        artifact_manager_maker.add_client(client, addr);
         return Ok(artifact_manager_maker.finish());
     }
     if let P2PStateSyncClient::Client(state_sync_client) = state_sync_client {
@@ -245,10 +244,10 @@ fn setup_artifact_manager(
         let addr = processors::ArtifactProcessorManager::new(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry.clone(),
-            processors::BoxOrArcClient::ArcClient(Arc::clone(&state_sync_client) as Arc<_>),
+            Box::new(state_sync_client.clone()) as Box<_>,
             move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
         );
-        artifact_manager_maker.add_arc_client(state_sync_client, addr);
+        artifact_manager_maker.add_client(Box::new(state_sync_client), addr);
     }
 
     let consensus_replica_config = ReplicaConfig { node_id, subnet_id };
@@ -332,7 +331,7 @@ fn setup_artifact_manager(
             replica_logger.clone(),
             metrics_registry.clone(),
         );
-        artifact_manager_maker.add_client(consensus_client, actor);
+        artifact_manager_maker.add_client(Box::new(consensus_client), actor);
     }
 
     {
@@ -348,7 +347,7 @@ fn setup_artifact_manager(
             node_id,
             malicious_flags.clone(),
         );
-        artifact_manager_maker.add_client(ingress_client, actor);
+        artifact_manager_maker.add_client(Box::new(ingress_client), actor);
     }
 
     {
@@ -372,7 +371,7 @@ fn setup_artifact_manager(
             replica_logger.clone(),
             metrics_registry.clone(),
         );
-        artifact_manager_maker.add_client(certification_client, actor);
+        artifact_manager_maker.add_client(Box::new(certification_client), actor);
     }
 
     {
@@ -398,7 +397,7 @@ fn setup_artifact_manager(
             replica_logger.clone(),
             metrics_registry.clone(),
         );
-        artifact_manager_maker.add_client(dkg_client, actor);
+        artifact_manager_maker.add_client(Box::new(dkg_client), actor);
     }
 
     {
@@ -441,7 +440,7 @@ fn setup_artifact_manager(
             metrics_registry.clone(),
             replica_logger.clone(),
         );
-        artifact_manager_maker.add_client(ecdsa_client, actor);
+        artifact_manager_maker.add_client(Box::new(ecdsa_client), actor);
     }
 
     {
@@ -472,7 +471,7 @@ fn setup_artifact_manager(
             replica_logger.clone(),
             metrics_registry.clone(),
         );
-        artifact_manager_maker.add_client(canister_http_client, actor);
+        artifact_manager_maker.add_client(Box::new(canister_http_client), actor);
     }
 
     Ok(artifact_manager_maker.finish())

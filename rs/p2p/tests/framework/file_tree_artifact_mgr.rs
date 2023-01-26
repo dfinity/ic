@@ -19,7 +19,7 @@ use ic_types::NodeId;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 const NODE_PREFIX: &str = "NODE";
 const POOL: &str = "POOL";
@@ -29,13 +29,14 @@ const MAX_CHUNKS: u32 = 5;
 
 type FileTreeSyncInMemoryPool = HashMap<TestArtifactId, FileTreeSyncArtifact>;
 
+#[derive(Clone)]
 pub struct ArtifactChunkingTestImpl {
     node_pool_dir: PathBuf, // Path to on disk pool
     node_id: NodeId,
-    file_tree_sync_unvalidated_pool: Mutex<FileTreeSyncInMemoryPool>, /* In memory representaion
-                                                                       * on on-disk
-                                                                       * pool */
-    file_tree_sync_validated_pool: Mutex<FileTreeSyncInMemoryPool>,
+    file_tree_sync_unvalidated_pool: Arc<Mutex<FileTreeSyncInMemoryPool>>, /* In memory representaion
+                                                                            * on on-disk
+                                                                            * pool */
+    file_tree_sync_validated_pool: Arc<Mutex<FileTreeSyncInMemoryPool>>,
 }
 
 impl ArtifactProcessor<TestArtifact> for ArtifactChunkingTestImpl {
@@ -132,8 +133,8 @@ impl ArtifactChunkingTestImpl {
         ArtifactChunkingTestImpl {
             node_pool_dir: on_disk_pool_path,
             node_id,
-            file_tree_sync_unvalidated_pool: Mutex::new(mem_pool),
-            file_tree_sync_validated_pool: Mutex::new(HashMap::new()),
+            file_tree_sync_unvalidated_pool: Arc::new(Mutex::new(mem_pool)),
+            file_tree_sync_validated_pool: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
