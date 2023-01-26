@@ -7,10 +7,13 @@ use candid::{Decode, Encode, Nat};
 use canister_test::Wasm;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::{CanisterInstallMode, CanisterSettingsArgs, UpdateSettingsArgs};
+use ic_ic00_types::{
+    CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2, UpdateSettingsArgs,
+};
 use ic_icrc1::endpoints::{TransferArg, TransferError};
 use ic_icrc1::Account;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
+use ic_nervous_system_root::CanisterIdRecord;
 use ic_nns_constants::{
     memory_allocation_of, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID,
@@ -186,7 +189,7 @@ pub fn query_with_sender(
     query_impl(machine, canister, method_name, payload, Some(sender))
 }
 
-/// Set controllers for a canister.  Because we have no verification in StateMachine tests
+/// Set controllers for a canister. Because we have no verification in StateMachine tests
 /// this can be used if you know the current controller PrincipalId
 pub fn set_controllers(
     machine: &StateMachine,
@@ -206,6 +209,24 @@ pub fn set_controllers(
         sender,
     )
     .unwrap()
+}
+
+/// Gets controllers for a canister.
+pub fn get_controllers(
+    machine: &StateMachine,
+    sender: PrincipalId,
+    target: CanisterId,
+) -> Vec<PrincipalId> {
+    let result: CanisterStatusResultV2 = update_with_sender(
+        machine,
+        CanisterId::ic_00(),
+        "canister_status",
+        candid_one,
+        &CanisterIdRecord::from(target),
+        sender,
+    )
+    .unwrap();
+    result.controllers()
 }
 
 /// Compiles the universal canister, builds it's initial payload and installs it with cycles

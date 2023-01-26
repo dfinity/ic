@@ -276,8 +276,11 @@ fn change_canister() {
 ///
 /// The canisters must not be one of the distinguished SNS canisters
 /// (i.e. root, governance, ledger). Furthermore, the canisters must be
-/// exclusively be controlled by this canister (i.e. SNS root). Otherwise,
-/// the request will be rejected.
+/// controlled by this canister (i.e. SNS root). Otherwise, the request will be
+/// rejected.
+///
+/// If there are any controllers on the canister besides root, they will be
+/// removed.
 ///
 /// Registered dapp canisters are used by at least two methods:
 ///   1. get_sns_canisters_summary
