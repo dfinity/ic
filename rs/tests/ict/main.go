@@ -12,6 +12,7 @@ import (
 func AssembleAllCmds() *cobra.Command {
 	var rootCmd = cmd.NewRootCmd()
 	rootCmd.AddCommand(cmd.NewTestCmd())
+	rootCmd.AddCommand(cmd.NewListCmd())
 	return rootCmd
 }
 
