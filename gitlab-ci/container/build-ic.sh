@@ -48,10 +48,16 @@ done
 shift "$(($OPTIND - 1))"
 
 export ROOT_DIR="$(git rev-parse --show-toplevel)"
-export VERSION="${VERSION:-$(git rev-parse HEAD)}"
+export VERSION="$(git rev-parse HEAD)"
 export IC_VERSION_RC_ONLY="0000000000000000000000000000000000000000"
-if [ "${CI_COMMIT_REF_PROTECTED:-}" = "true" ]; then
-    IC_VERSION_RC_ONLY="${VERSION}"
+
+# fetch all protected branches
+git fetch origin 'refs/heads/master:refs/remotes/origin/master'
+git fetch origin 'refs/heads/rc--*:refs/remotes/origin/rc--*'
+# check if $VERSION is in any protected branch
+BRANCHES_REGEX='(origin/master|origin/rc--20)'
+if git branch -r --contains $VERSION | grep -qE "$BRANCHES_REGEX"; then
+    IC_VERSION_RC_ONLY="$VERSION"
 fi
 
 export BINARIES_DIR=artifacts/release
