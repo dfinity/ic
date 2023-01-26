@@ -1,6 +1,7 @@
 use crate::wasm_utils::instrumentation::InjectedImports;
 use crate::InternalErrorCode;
 use ic_interfaces::execution_environment::StableMemoryApi;
+use ic_sys::PAGE_SIZE;
 use wasmparser::{BlockType, FuncType, Operator, Type, ValType};
 
 use super::{wasm_transform::Body, SystemApiFunc};
@@ -11,6 +12,8 @@ pub(super) fn replacement_functions(
     stable_memory_index: u32,
 ) -> Vec<(SystemApiFunc, (Type, Body<'static>))> {
     use Operator::*;
+    let page_size_shift = PAGE_SIZE.trailing_zeros() as i32;
+    let stable_memory_bytemap_index = stable_memory_index + 1;
     vec![
         (
             SystemApiFunc::StableSize,
@@ -308,6 +311,56 @@ pub(super) fn replacement_functions(
                             function_index: InjectedImports::InternalTrap as u32,
                         },
                         End,
+                        // mark writes in the bytemap
+
+                        // if size is 0 we return
+                        // (correctness of the code that follows depends on the size being > 0)
+                        // note that we won't return errors if addresses are out of bounds
+                        // in this case
+                        LocalGet { local_index: 2 },
+                        I32Const { value: 0 },
+                        I32Eq,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        Return,
+                        End,
+                        // dst
+                        LocalGet { local_index: 0 },
+                        I32Const {
+                            value: page_size_shift,
+                        },
+                        I32ShrU,
+                        // value to fill with
+                        I32Const { value: 1 },
+                        // calculate b_size
+                        // b_end = (dst + size - 1) / PAGE_SIZE + 1
+                        // b_len = b_end - b_start
+
+                        // b_end
+                        LocalGet { local_index: 0 },
+                        LocalGet { local_index: 2 },
+                        I32Add,
+                        I32Const { value: 1 },
+                        I32Sub,
+                        I32Const {
+                            value: page_size_shift,
+                        },
+                        I32ShrU,
+                        I32Const { value: 1 },
+                        I32Add,
+                        // b_start
+                        LocalGet { local_index: 0 },
+                        I32Const {
+                            value: page_size_shift,
+                        },
+                        I32ShrU,
+                        // b_end - b_start
+                        I32Sub,
+                        MemoryFill {
+                            mem: stable_memory_bytemap_index,
+                        },
+                        // copy memory contents
                         LocalGet { local_index: 0 },
                         I64ExtendI32U,
                         LocalGet { local_index: 1 },
@@ -364,6 +417,56 @@ pub(super) fn replacement_functions(
                             function_index: InjectedImports::InternalTrap as u32,
                         },
                         End,
+                        // if size is 0 we return
+                        // (correctness of the code that follows depends on the size being > 0)
+                        // note that we won't return errors if addresses are out of bounds
+                        // in this case
+                        LocalGet { local_index: 2 },
+                        I64Const { value: 0 },
+                        I64Eq,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        Return,
+                        End,
+                        // dst
+                        LocalGet { local_index: 0 },
+                        I64Const {
+                            value: page_size_shift as i64,
+                        },
+                        I64ShrU,
+                        I32WrapI64,
+                        // value to fill with
+                        I32Const { value: 1 },
+                        // calculate b_size
+                        // b_end = (dst + size - 1) / PAGE_SIZE + 1
+                        // b_len = b_end - b_start
+
+                        // b_end
+                        LocalGet { local_index: 0 },
+                        LocalGet { local_index: 2 },
+                        I64Add,
+                        I64Const { value: 1 },
+                        I64Sub,
+                        I64Const {
+                            value: page_size_shift as i64,
+                        },
+                        I64ShrU,
+                        I64Const { value: 1 },
+                        I64Add,
+                        // b_start
+                        LocalGet { local_index: 0 },
+                        I64Const {
+                            value: page_size_shift as i64,
+                        },
+                        I64ShrU,
+                        // b_end - b_start
+                        I64Sub,
+                        I32WrapI64,
+                        MemoryFill {
+                            mem: stable_memory_bytemap_index,
+                        },
+                        // copy memory contents
                         LocalGet { local_index: 0 },
                         LocalGet { local_index: 1 },
                         I32WrapI64,
