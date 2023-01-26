@@ -358,8 +358,9 @@ message UpgradeSnsToNextVersion {}
 // A proposal to register a list of dapps in the root canister.
 message RegisterDappCanisters {
   // The canister IDs to be registered (i.e. under the management of the SNS).
-  // The canisters must be already exclusively controlled by the SNS root 
-  // canister before making this proposal.
+  // The canisters must be already controlled by the SNS root canister before 
+  // making this proposal. Any controllers besides the root canister will be 
+  // removed when the proposal is executed.
   // At least one canister ID is required.
   repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
 }

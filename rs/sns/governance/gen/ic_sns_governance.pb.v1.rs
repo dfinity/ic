@@ -456,8 +456,9 @@ pub struct UpgradeSnsToNextVersion {}
 )]
 pub struct RegisterDappCanisters {
     /// The canister IDs to be registered (i.e. under the management of the SNS).
-    /// The canisters must be already exclusively controlled by the SNS root
-    /// canister before making this proposal.
+    /// The canisters must be already controlled by the SNS root canister before
+    /// making this proposal. Any controllers besides the root canister will be
+    /// removed when the proposal is executed.
     /// At least one canister ID is required.
     #[prost(message, repeated, tag = "1")]
     pub canister_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
