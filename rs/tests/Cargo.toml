@@ -178,6 +178,10 @@ name = "ic-systest-tecdsa-add-nodes"
 path = "bin/tecdsa_add_nodes_test.rs"
 
 [[bin]]
+name = "ic-systest-tecdsa-key-rotation"
+path = "bin/tecdsa_key_rotation_test.rs"
+
+[[bin]]
 name = "ic-systest-btc-get-balance"
 path = "bin/btc_get_balance_test.rs"
 
