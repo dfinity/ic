@@ -6,6 +6,9 @@
 
 .bazel-rules-pipeline-no-merge-train:
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
+      variables:
+        BAZEL_EXTRA_ARGS_RULES: "--test_timeout_filters=short,moderate"
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
@@ -64,7 +67,7 @@ bazel-test-all:
     - .bazel-test-all
     - .bazel-rules-pipeline-no-merge-train
   variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going $BAZEL_EXTRA_ARGS_RULES"
     BAZEL_TARGETS: "//..."
 
 linux-openssl-static-binaries:
