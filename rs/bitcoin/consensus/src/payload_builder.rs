@@ -1,5 +1,5 @@
 use crate::metrics::BitcoinPayloadBuilderMetrics;
-use ic_btc_types::{Network, NetworkSnakeCase};
+use ic_btc_types::NetworkSnakeCase;
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
 };
@@ -13,12 +13,10 @@ use ic_interfaces_state_manager::{StateManagerError, StateReader};
 use ic_logger::{log, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{SelfValidatingPayload, ValidationContext},
     messages::CallbackId,
-    registry::RegistryClientError,
     CountBytes, Height, NumBytes, SubnetId,
 };
 use std::{collections::BTreeSet, sync::Arc, time::Duration};
@@ -35,9 +33,6 @@ const INVALID_SELF_VALIDATING_PAYLOAD: &str = "InvalidSelfValidatingPayload";
 enum GetPayloadError {
     #[error("Error retrieving state at height {0}: {1}")]
     GetStateFailed(Height, StateManagerError),
-
-    #[error("Error retrieving registry {0}")]
-    GetRegistryFailed(RegistryClientError),
 }
 
 impl GetPayloadError {
@@ -45,7 +40,6 @@ impl GetPayloadError {
     fn log_level(&self) -> slog::Level {
         match self {
             Self::GetStateFailed(..) => slog::Level::Warning,
-            Self::GetRegistryFailed(..) => slog::Level::Warning,
         }
     }
 
@@ -53,7 +47,6 @@ impl GetPayloadError {
     fn to_label_value(&self) -> &str {
         match self {
             Self::GetStateFailed(..) => "GetStateFailed",
-            Self::GetRegistryFailed(..) => "GetRegistryFailed",
         }
     }
 }
@@ -102,107 +95,11 @@ impl BitcoinPayloadBuilder {
             .map_err(|e| GetPayloadError::GetStateFailed(validation_context.certified_height, e))?
             .take();
 
-        // If there are requests from the bitcoin wasm canister, then process those.
-        if bitcoin_requests_iter(&state).next().is_some() {
-            return Ok(self.build_canister_payload(state, past_payloads, byte_limit));
-        }
-
-        let bitcoin_feature = self
-            .registry
-            .get_features(self.subnet_id, validation_context.registry_version)
-            .map_err(GetPayloadError::GetRegistryFailed)?
-            .unwrap_or_default()
-            .bitcoin();
-
-        // We should only send requests to the adapter if the bitcoin feature
-        // is enabled or syncing, otherwise return an empty payload.
-        match bitcoin_feature.status {
-            BitcoinFeatureStatus::Disabled | BitcoinFeatureStatus::Paused => {
-                Ok(SelfValidatingPayload::default())
-            }
-            BitcoinFeatureStatus::Enabled | BitcoinFeatureStatus::Syncing => {
-                let adapter_client = match bitcoin_feature.network {
-                    Network::Mainnet => &self.bitcoin_mainnet_adapter_client,
-                    Network::Testnet | Network::Regtest => &self.bitcoin_testnet_adapter_client,
-                };
-
-                let past_callback_ids: std::collections::HashSet<u64> = past_payloads
-                    .iter()
-                    .flat_map(|x| x.get())
-                    .map(|x| x.callback_id)
-                    .collect();
-
-                let mut responses = vec![];
-                let mut current_payload_size: u64 = 0;
-                for (callback_id, request) in state.bitcoin().adapter_requests_iter() {
-                    // We have already created a payload with the response for
-                    // this callback id, so skip it.
-                    if past_callback_ids.contains(callback_id) {
-                        continue;
-                    }
-
-                    // If we've reached the byte_limit, stop sending more requests.
-                    if current_payload_size >= byte_limit.get() {
-                        break;
-                    }
-
-                    let timer = Timer::start();
-                    let result = adapter_client.send_request(
-                        request.request.clone(),
-                        Options {
-                            timeout: Duration::from_millis(50),
-                        },
-                    );
-                    match result {
-                        Ok(response_wrapper) => {
-                            self.metrics.observe_adapter_request_duration(
-                                ADAPTER_REQUEST_STATUS_SUCCESS,
-                                request.request.to_request_type_label(),
-                                timer,
-                            );
-                            if let BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) =
-                                &response_wrapper
-                            {
-                                self.metrics
-                                    .observe_blocks_per_get_successors_response(r.blocks.len());
-                            }
-                            let response = BitcoinAdapterResponse {
-                                response: response_wrapper,
-                                callback_id: *callback_id,
-                            };
-                            let response_size = response.count_bytes() as u64;
-                            self.metrics.observe_adapter_response_size(response_size);
-
-                            if response_size + current_payload_size > byte_limit.get() {
-                                break;
-                            }
-                            current_payload_size += response_size;
-                            responses.push(response);
-                        }
-                        Err(err) => {
-                            self.metrics.observe_adapter_request_duration(
-                                ADAPTER_REQUEST_STATUS_FAILURE,
-                                request.request.to_request_type_label(),
-                                timer,
-                            );
-                            log!(
-                                self.log,
-                                slog::Level::Error,
-                                "Sending the request with callback id {} to the adapter failed with {:?}",
-                                callback_id, err
-                            );
-                        }
-                    }
-                }
-                Ok(SelfValidatingPayload::new(responses))
-            }
-        }
+        Ok(self.build_payload(state, past_payloads, byte_limit))
     }
 
     // Builds a payload for requests from the Bitcoin Wasm canister.
-    // Support for the bitcoin replica requests will be removed from this file once the transition
-    // to the bitcoin canister is complete (EXC-1239).
-    fn build_canister_payload(
+    fn build_payload(
         &self,
         state: Arc<ReplicatedState>,
         past_payloads: &[&SelfValidatingPayload],
