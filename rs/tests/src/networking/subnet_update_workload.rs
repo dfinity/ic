@@ -14,10 +14,10 @@ Runbook::
    If the boundary node option is used, all requests are dispatched to the subnets via the boundary node,
    otherwise requests are directly dispatched to all the nodes of the subnets in a round-robin fashion.
 4. Collect metrics from both workloads and assert:
-   - Ratio of requests with duration below DURATION_THRESHOLD should exceed MIN_REQUESTS_RATIO_BELOW_THRESHOLD.
-   - Ratio of successful requests should exceed the min_success_ratio threshold.
+   - All requests should complete with DURATION_THRESHOLD.
+   - All requests should be successful.
 5. Perform assertions on the counter canisters (via query `read` call)
-   - Counter value on the canister should exceed the threshold = min_success_ratio * total_requests_count.
+   - Counter value on the canister should be equal to total_requests_count.
 
 end::catalog[] */
 
@@ -56,8 +56,6 @@ const CANISTER_METHOD: &str = "write";
 // Duration of each request is placed into one of the two categories - below or above this threshold.
 const APP_DURATION_THRESHOLD: Duration = Duration::from_secs(3);
 const NNS_DURATION_THRESHOLD: Duration = Duration::from_secs(2);
-// Ratio of requests with duration < DURATION_THRESHOLD should exceed this parameter.
-const MIN_REQUESTS_RATIO_BELOW_THRESHOLD: f64 = 0.9;
 // Parameters related to reading/asserting counter values of the canisters.
 const MAX_CANISTER_READ_RETRIES: u32 = 4;
 const CANISTER_READ_RETRY_WAIT: Duration = Duration::from_secs(10);
@@ -205,7 +203,6 @@ pub fn large_subnet_test(env: TestEnv) {
         1000, //payload size bytes
         Duration::from_secs(2 * 60 * 60),
         false, //do not use boundary nodes
-        0.95,  //min_success_ratio
     );
 }
 
@@ -217,7 +214,6 @@ pub fn boundary_test(env: TestEnv) {
         1000, //payload size bytes
         Duration::from_secs(5 * 60),
         true, //use boundary nodes
-        0.95, //min_success_ratio
     );
 }
 
@@ -231,7 +227,6 @@ pub fn test(
     payload_size_bytes: usize,
     duration: Duration,
     use_boundary_node: bool,
-    min_success_ratio: f64,
 ) {
     let log = env.logger();
     info!(
@@ -352,31 +347,29 @@ pub fn test(
     );
     info!(
         &log,
-        "Minimum expected success ratio is {}\n. Actual values on the subnets: System={}, Application={}",
-        min_success_ratio,
-        nns_metrics.success_ratio(),
-        app_metrics.success_ratio()
+        "Success/failure calls\n. Actual values on the subnets: System={}/{}, Application={}/{}",
+        nns_metrics.success_calls(),
+        nns_metrics.failure_calls(),
+        app_metrics.success_calls(),
+        app_metrics.failure_calls(),
     );
-    assert!(
-        nns_metrics.success_ratio() > min_success_ratio,
+    assert_eq!(
+        nns_metrics.failure_calls(),
+        0,
         "Too many requests failed on the System subnet."
     );
-    assert!(
-        app_metrics.success_ratio() > min_success_ratio,
+    assert_eq!(
+        app_metrics.failure_calls(),
+        0,
         "Too many requests failed on the Application subnet."
     );
-    assert!(
-        nns_duration_bucket.requests_ratio_below_threshold() > MIN_REQUESTS_RATIO_BELOW_THRESHOLD
-    );
-    assert!(
-        app_duration_bucket.requests_ratio_below_threshold() > MIN_REQUESTS_RATIO_BELOW_THRESHOLD
-    );
+    assert_eq!(nns_duration_bucket.requests_count_above_threshold(), 0);
+    assert_eq!(app_duration_bucket.requests_count_above_threshold(), 0);
     let total_requests_count = rps * duration.as_secs() as usize;
-    let min_expected_counter = (min_success_ratio * total_requests_count as f64) as usize;
     info!(
         &log,
         "Step 5: Assert min counter value={} on the canisters has been reached ... ",
-        min_expected_counter
+        total_requests_count
     );
     let nns_agent = nns_subnet
         .nodes()
@@ -394,7 +387,7 @@ pub fn test(
             &nns_agent,
             &nns_canister,
             payload.clone(),
-            min_expected_counter,
+            total_requests_count,
             MAX_CANISTER_READ_RETRIES,
             CANISTER_READ_RETRY_WAIT,
         )
@@ -406,7 +399,7 @@ pub fn test(
             &app_agent,
             &app_canister,
             payload.clone(),
-            min_expected_counter,
+            total_requests_count,
             MAX_CANISTER_READ_RETRIES,
             CANISTER_READ_RETRY_WAIT,
         )
