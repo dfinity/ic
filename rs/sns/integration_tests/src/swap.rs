@@ -1,4 +1,4 @@
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Principal};
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Account;
@@ -48,7 +48,7 @@ use ic_sns_init::pb::v1::{
 use ic_sns_swap::pb::v1::{
     self as swap_pb, error_refund_icp_response, params::NeuronBasketConstructionParameters,
     set_dapp_controllers_call_result, ErrorRefundIcpRequest, ErrorRefundIcpResponse,
-    SetDappControllersCallResult, SetDappControllersResponse,
+    GetStateRequest, GetStateResponse, SetDappControllersCallResult, SetDappControllersResponse,
 };
 use ic_sns_test_utils::state_test_helpers::{
     canister_status, participate_in_swap, send_participation_funds, sns_governance_list_neurons,
@@ -2542,4 +2542,47 @@ fn swap_load_test() {
         // Prepare for the next iteration of this loop.
         direct_participant_count *= 2;
     }
+}
+
+#[test]
+fn test_upgrade() {
+    use ic_sns_swap::pb::v1::Init;
+
+    let env = StateMachine::new();
+
+    // install the swap canister
+    let wasm = ic_test_utilities_load_wasm::load_wasm("../swap", "sns-swap-canister", &[]);
+    let args = Encode!(&Init {
+        nns_governance_canister_id: Principal::anonymous().to_string(),
+        sns_governance_canister_id: Principal::anonymous().to_string(),
+        sns_ledger_canister_id: Principal::anonymous().to_string(),
+        icp_ledger_canister_id: Principal::anonymous().to_string(),
+        sns_root_canister_id: Principal::anonymous().to_string(),
+        fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
+        transaction_fee_e8s: Some(10_000),
+        neuron_minimum_stake_e8s: Some(1_000_000),
+    })
+    .unwrap();
+    let canister_id = env
+        .install_canister(wasm.clone(), args, None)
+        .expect("Unable to install the Swap canister");
+
+    // get the state before upgrading
+    let args = Encode!(&GetStateRequest {}).unwrap();
+    let state_before_upgrade = env
+        .execute_ingress(canister_id, "get_state", args)
+        .expect("Unable to call get_state on the Swap canister");
+    let state_before_upgrade = Decode!(&state_before_upgrade.bytes(), GetStateResponse).unwrap();
+
+    // upgrade the canister
+    env.upgrade_canister(canister_id, wasm, Encode!(&()).unwrap())
+        .expect("Swap pre_upgrade or post_upgrade failed");
+
+    // get the state after upgrading and verify it
+    let args = Encode!(&GetStateRequest {}).unwrap();
+    let state_after_upgrade = env
+        .execute_ingress(canister_id, "get_state", args)
+        .expect("Unable to call get_state on the Swap canister");
+    let state_after_upgrade = Decode!(&state_after_upgrade.bytes(), GetStateResponse).unwrap();
+    assert_eq!(state_before_upgrade, state_after_upgrade);
 }
