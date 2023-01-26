@@ -3,7 +3,7 @@ use crate::{
     types::{
         arbitrary,
         ids::{canister_test_id, message_test_id, subnet_test_id, user_test_id},
-        messages::SignedIngressBuilder,
+        messages::{RequestBuilder, SignedIngressBuilder},
     },
 };
 use ic_base_types::NumSeconds;
@@ -17,6 +17,9 @@ use ic_replicated_state::{
     canister_state::{
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         testing::new_canister_queues_for_test,
+    },
+    metadata_state::subnet_call_context_manager::{
+        BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext,
     },
     metadata_state::Stream,
     page_map::PageMap,
@@ -121,7 +124,32 @@ impl ReplicatedStateBuilder {
         state.put_bitcoin_state(self.bitcoin_state);
 
         for request in self.bitcoin_adapter_requests.into_iter() {
-            state.push_request_bitcoin(request).unwrap();
+            match request {
+                BitcoinAdapterRequestWrapper::GetSuccessorsRequest(_)
+                | BitcoinAdapterRequestWrapper::SendTransactionRequest(_) => unreachable!(),
+                BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(payload) => {
+                    state
+                        .metadata
+                        .subnet_call_context_manager
+                        .push_bitcoin_get_successors_request(BitcoinGetSuccessorsContext {
+                            request: RequestBuilder::default().build(),
+                            payload,
+                            time: mock_time(),
+                        });
+                }
+                BitcoinAdapterRequestWrapper::CanisterSendTransactionRequest(payload) => {
+                    state
+                        .metadata
+                        .subnet_call_context_manager
+                        .push_bitcoin_send_transaction_internal_request(
+                            BitcoinSendTransactionInternalContext {
+                                request: RequestBuilder::default().build(),
+                                payload,
+                                time: mock_time(),
+                            },
+                        );
+                }
+            }
         }
 
         state
