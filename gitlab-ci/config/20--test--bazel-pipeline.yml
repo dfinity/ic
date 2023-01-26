@@ -53,13 +53,17 @@
     - |
       set +e # Do not fail in the after_script, try to do as much as possible instead.
       echo -e "\033[0;31m"
-      echo -e "*************************************************************"
-      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel **"
-      echo -e "*************************************************************"
+      echo -e "************************************************************************"
+      echo -e "*** NEED BAZEL HELP? See go/bazel-guide and #project-bazel           ***"
+      echo -e "*** (NEW) To regenerate Cargo Bazel lockfiles run ./bin/bazel-pin.sh ***"
+      echo -e "************************************************************************"
       echo -e "\033[0m"
     - cp -R "$(realpath bazel-testlogs)" bazel-testlogs-gitlab
     - gzip bazel-build-log*.json
-    - bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
+    - |
+      echo -e "\e[0Ksection_start:`date +%s`:bazel_exporter_logs[collapsed=true]\r\e[0KClick to see Bazel exporter logs"
+      bazel run //bazel/exporter:exporter --build_event_binary_file= -- -f "$(pwd)/bazel-bep.pb"
+      echo -e "\e[0Ksection_end:`date +%s`:bazel_exporter_logs\r\e[0K"v<v
     - !reference [after_script]
 
 bazel-test-all:
