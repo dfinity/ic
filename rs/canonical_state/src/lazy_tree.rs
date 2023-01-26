@@ -12,7 +12,7 @@ use ic_crypto_tree_hash::Label;
 use std::sync::Arc;
 
 /// A type alias for a ref-counted stateless function.
-pub type ArcFn<'a, T> = Arc<dyn Fn() -> T + 'a>;
+pub type ArcFn<'a, T> = Arc<dyn Fn() -> T + 'a + Send + Sync>;
 
 /// Lazy is either a computed value or a function that knows how to compute one.
 #[derive(Clone)]
@@ -31,7 +31,7 @@ impl<'a, T: Clone> Lazy<'a, T> {
 }
 
 /// The trait representing interface of a fork in the lazy tree.
-pub trait LazyFork<'a> {
+pub trait LazyFork<'a>: Send + Sync {
     /// Retrieves a subtree with the specified `label`.
     ///
     /// ∀ l ∈ self.labels : self.edge(&l).is_some() == true
@@ -67,7 +67,7 @@ pub enum LazyTree<'a> {
 
     // suspended tree
     LazyBlob(ArcFn<'a, Vec<u8>>),
-    LazyFork(Arc<dyn LazyFork<'a> + 'a>),
+    LazyFork(Arc<dyn LazyFork<'a> + 'a + Send + Sync>),
 }
 
 /// A helper function to construct a fork of a lazy tree.
@@ -76,7 +76,7 @@ pub fn fork<'a>(f: impl LazyFork<'a> + 'a) -> LazyTree<'a> {
 }
 
 /// A helper function that constructs a leaf with a lazy blob.
-pub fn blob<'a>(f: impl Fn() -> Vec<u8> + 'a) -> LazyTree<'a> {
+pub fn blob<'a>(f: impl Fn() -> Vec<u8> + 'a + Send + Sync) -> LazyTree<'a> {
     LazyTree::LazyBlob(Arc::new(f))
 }
 
