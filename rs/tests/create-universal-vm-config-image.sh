@@ -71,7 +71,7 @@ finalize() {
 trap finalize EXIT
 
 size=$(du --bytes -s "$INPUT_DIR" | awk '{print $1}')
-size=$((size + 1048576))
+size=$((2 * size + 1048576))
 echo "image size: $size"
 truncate -s $size "$tmp"
 mkfs.vfat -n "$LABEL" "$tmp"

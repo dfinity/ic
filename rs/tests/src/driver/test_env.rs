@@ -100,6 +100,27 @@ impl TestEnv {
 
     // Even fs_extra does not provide a good way to copy directories with
     // symlinks. That is why we resort to `cp`.
+    pub fn shell_copy_with_deref<PS: AsRef<Path>, PT: AsRef<Path>>(
+        source_dir: PS,
+        target_dir: PT,
+    ) -> std::io::Result<()> {
+        let source_path = source_dir.as_ref().join(".");
+        std::fs::create_dir_all(&target_dir)?;
+
+        let _out = std::process::Command::new("cp")
+            .arg("-L")
+            .arg("-R")
+            .arg(source_path)
+            .arg(target_dir.as_ref())
+            .output();
+
+        // println!("{:?}", out);
+
+        Ok(())
+    }
+
+    // Even fs_extra does not provide a good way to copy directories with
+    // symlinks. That is why we resort to `cp`.
     pub fn shell_copy<PS: AsRef<Path>, PT: AsRef<Path>>(
         source_dir: PS,
         target_dir: PT,

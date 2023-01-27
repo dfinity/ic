@@ -9,7 +9,7 @@ use anyhow::Result;
 use reqwest::Url;
 use serde::Serialize;
 use serde_json::json;
-use slog::info;
+use slog::{debug, info};
 
 use super::{
     farm::HostFeature,
@@ -23,7 +23,7 @@ use super::{
     test_setup::GroupSetup,
     universal_vm::{UniversalVm, UniversalVms},
 };
-use crate::driver::test_env::TestEnvAttribute;
+use crate::driver::{test_env::TestEnvAttribute, test_env_api::HasDependencies};
 
 const PROMETHEUS_VM_NAME: &str = "prometheus";
 
@@ -82,7 +82,7 @@ impl PrometheusVm {
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(100)),
                 })
                 .disable_ipv4(),
-            scrape_interval: Duration::from_secs(60),
+            scrape_interval: Duration::from_secs(10),
         }
     }
 
@@ -131,6 +131,10 @@ chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
                 ),
             )
             .unwrap();
+        let grafana_dashboards_src = env.get_dependency_path("rs/tests/dashboards");
+        let grafana_dashboards_dst = config_dir.join("grafana").join("dashboards");
+        debug!(log, "Copying Grafana dashboards from {grafana_dashboards_src:?} to {grafana_dashboards_dst:?} ...");
+        TestEnv::shell_copy_with_deref(grafana_dashboards_src, grafana_dashboards_dst).unwrap();
         write_prometheus_config_dir(config_dir.clone(), self.scrape_interval).unwrap();
 
         self.universal_vm
