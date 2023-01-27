@@ -39,7 +39,7 @@ checks that the DNS entries of the domain have been properly configured:
 
 In addition, the boundary node also checks that the owner of the domain actually
 controls the canister by checking for the existence of a file containing the custom domain
-under `/.well-known/custom-domains` inside the canister.
+under `/.well-known/ic-domains` inside the canister.
 
 If any of the checks fail, the boundary node will reject the request with an
 appropriate error (e.g., "missing dns cname").
