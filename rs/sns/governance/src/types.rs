@@ -1483,6 +1483,9 @@ pub trait Environment: Send + Sync {
 
     /// Returns the PrincipalId of the canister implementing the Environment trait.
     fn canister_id(&self) -> CanisterId;
+
+    /// Returns the canister version of the canister implementing the Environment trait.
+    fn canister_version(&self) -> Option<u64>;
 }
 
 /// Rough buckets for how much the heap can still grow.
@@ -1965,6 +1968,10 @@ pub mod test_helpers {
             }
 
             unimplemented!();
+        }
+
+        fn canister_version(&self) -> Option<u64> {
+            None
         }
     }
 }

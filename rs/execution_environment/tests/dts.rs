@@ -265,7 +265,7 @@ fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
     // These numbers were obtained by running the test and printing the costs.
     // They need to be adjusted if we change fees or the Wasm source code.
     let install_code_ingress_cost = Cycles::new(1948000);
-    let normal_ingress_cost = Cycles::new(1224000);
+    let normal_ingress_cost = Cycles::new(1242000);
     let max_execution_cost = Cycles::new(990000);
     let actual_execution_cost = Cycles::new(818012);
 
@@ -305,8 +305,8 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
     // They need to be adjusted if we change fees or the Wasm source code.
     let install_code_ingress_cost = Cycles::new(1948000);
     let normal_ingress_cost = Cycles::new(1224000);
-    let max_execution_cost = Cycles::new(990000);
-    let actual_execution_cost = Cycles::new(818012);
+    let max_execution_cost = Cycles::new(1008000);
+    let actual_execution_cost = Cycles::new(836012);
 
     // The initial balance is not sufficient for both execution and concurrent ingress message.
     let initial_balance = install_code_ingress_cost + normal_ingress_cost.max(max_execution_cost);
@@ -356,8 +356,8 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
     // They need to be adjusted if we change fees or the Wasm source code.
     let install_code_ingress_cost = Cycles::new(1948000);
     let normal_ingress_cost = Cycles::new(1224000);
-    let max_execution_cost = Cycles::new(990000);
-    let actual_execution_cost = Cycles::new(818012);
+    let max_execution_cost = Cycles::new(1008000);
+    let actual_execution_cost = Cycles::new(836012);
     let freezing_threshold = Cycles::new(10000000);
 
     // The initial balance is not sufficient for both execution and concurrent ingress message.

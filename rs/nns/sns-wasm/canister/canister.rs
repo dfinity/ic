@@ -69,6 +69,7 @@ impl CanisterApi for CanisterApiImpl {
                     None,
                     None,
                 )),
+                sender_canister_version: Some(dfn_core::api::canister_version()),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
         )
@@ -117,6 +118,7 @@ impl CanisterApi for CanisterApiImpl {
             compute_allocation: None,
             memory_allocation: None,
             query_allocation: None,
+            sender_canister_version: Some(dfn_core::api::canister_version()),
         };
         let install_res: Result<(), (Option<i32>, String)> = dfn_core::call(
             CanisterId::ic_00(),
@@ -140,6 +142,7 @@ impl CanisterApi for CanisterApiImpl {
         let args = UpdateSettingsArgs {
             canister_id: canister.get(),
             settings: CanisterSettingsArgs::new(Some(controllers), None, None, None),
+            sender_canister_version: Some(dfn_core::api::canister_version()),
         };
 
         let result: Result<(), (Option<i32>, String)> =

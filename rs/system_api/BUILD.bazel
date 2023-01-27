@@ -54,6 +54,7 @@ INTEGRATION_TEST_DEPS = [
     "//rs/test_utilities",
     "//rs/types/base_types",
     "//rs/types/error_types",
+    "//rs/types/ic00_types",
     "//rs/types/types",
     "//rs/nns/constants",
     "//rs/cycles_account_manager",

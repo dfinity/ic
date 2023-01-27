@@ -95,6 +95,7 @@ pub mod ic0 {
         pub fn data_certificate_size() -> u32;
         pub fn data_certificate_copy(dst: u32, offset: u32, size: u32);
         pub fn canister_status() -> u32;
+        pub fn canister_version() -> u64;
         pub fn mint_cycles(amount: u64) -> u64;
     }
 }
@@ -306,6 +307,10 @@ pub mod ic0 {
 
     pub unsafe fn canister_status() -> u32 {
         wrong_arch("canister_status")
+    }
+
+    pub unsafe fn canister_version() -> u64 {
+        wrong_arch("canister_version")
     }
 
     pub unsafe fn mint_cycles(_amount: u64) -> u64 {
@@ -888,6 +893,10 @@ pub fn canister_status() -> CanisterStatus {
         3 => CanisterStatus::Stopped,
         other => panic!("Weird canister status: {}", other),
     }
+}
+
+pub fn canister_version() -> u64 {
+    unsafe { ic0::canister_version() }
 }
 
 pub fn mint_cycles(amount: u64) -> u64 {

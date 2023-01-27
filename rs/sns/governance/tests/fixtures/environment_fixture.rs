@@ -192,4 +192,8 @@ impl Environment for EnvironmentFixture {
             .unwrap()
             .canister_id
     }
+
+    fn canister_version(&self) -> Option<u64> {
+        None
+    }
 }

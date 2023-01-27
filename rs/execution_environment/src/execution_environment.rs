@@ -29,7 +29,8 @@ use ic_ic00_types::{
     ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
     ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallCodeArgs, Method as Ic00Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UpdateSettingsArgs, IC_00,
+    SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, IC_00,
 };
 use ic_interfaces::{
     execution_environment::{
@@ -539,7 +540,7 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::UninstallCode) => {
-                let res = match CanisterIdRecord::decode(payload) {
+                let res = match UninstallCodeArgs::decode(payload) {
                     Err(err) => Err(candid_error_to_user_error(err)),
                     Ok(args) => self
                         .canister_manager

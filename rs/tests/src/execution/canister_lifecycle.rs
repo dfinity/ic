@@ -1099,6 +1099,7 @@ pub fn create_canister_with_empty_settings(env: TestEnv) {
     let settings = CanisterSettingsArgs::default();
     let records = CreateCanisterArgs {
         settings: Some(settings),
+        sender_canister_version: None,
     };
     let payload = records.encode();
     create_canister_test(env, payload);
@@ -1109,6 +1110,7 @@ pub fn create_canister_with_settings(env: TestEnv) {
     let settings = CanisterSettingsArgs::new(None, Some(50_u64), None, None);
     let records = CreateCanisterArgs {
         settings: Some(settings),
+        sender_canister_version: None,
     };
     let payload = records.encode();
     create_canister_test(env, payload);
@@ -1157,6 +1159,7 @@ pub fn create_canister_with_freezing_threshold(env: TestEnv) {
                                 None,
                                 Some(*valid_value),
                             )),
+                            sender_canister_version: None,
                         }
                         .encode(),
                         Cycles::from(2_000_000_000_000u64),

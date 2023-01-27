@@ -391,6 +391,7 @@ impl SchedulerTest {
             compute_allocation: None,
             memory_allocation: None,
             query_allocation: None,
+            sender_canister_version: None,
         };
 
         let caller = self.xnet_canister_id();

@@ -177,6 +177,11 @@ impl Environment for CanisterEnv {
     fn canister_id(&self) -> CanisterId {
         id()
     }
+
+    /// Return the canister version.
+    fn canister_version(&self) -> Option<u64> {
+        Some(dfn_core::api::canister_version())
+    }
 }
 
 #[export_name = "canister_init"]

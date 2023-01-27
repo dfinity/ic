@@ -95,6 +95,33 @@ impl From<CanisterId> for CanisterIdRecord {
     }
 }
 
+/// Struct used for encoding/decoding `(record {canister_id: canister_id, sender_canister_version: opt nat64})`.
+#[derive(CandidType, Serialize, Deserialize, Debug)]
+pub struct UninstallCodeArgs {
+    canister_id: PrincipalId,
+    sender_canister_version: Option<u64>,
+}
+
+impl UninstallCodeArgs {
+    pub fn new(canister_id: CanisterId, sender_canister_version: Option<u64>) -> Self {
+        Self {
+            canister_id: canister_id.into(),
+            sender_canister_version,
+        }
+    }
+
+    pub fn get_canister_id(&self) -> CanisterId {
+        // Safe as this was converted from CanisterId when Self was constructed.
+        CanisterId::new(self.canister_id).unwrap()
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
+    }
+}
+
+impl Payload<'_> for UninstallCodeArgs {}
+
 /// Struct used for encoding/decoding
 /// `(record {
 ///     controller : principal;
@@ -398,6 +425,7 @@ pub struct InstallCodeArgs {
     pub compute_allocation: Option<candid::Nat>,
     pub memory_allocation: Option<candid::Nat>,
     pub query_allocation: Option<candid::Nat>,
+    pub sender_canister_version: Option<u64>,
 }
 
 impl std::fmt::Display for InstallCodeArgs {
@@ -455,12 +483,17 @@ impl InstallCodeArgs {
             compute_allocation: compute_allocation.map(candid::Nat::from),
             memory_allocation: memory_allocation.map(candid::Nat::from),
             query_allocation: query_allocation.map(candid::Nat::from),
+            sender_canister_version: None,
         }
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
         // Safe as this was converted from CanisterId when Self was constructed.
         CanisterId::new(self.canister_id).unwrap()
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
     }
 }
 
@@ -487,6 +520,7 @@ impl<'a> Payload<'a> for EmptyBlob {
 pub struct UpdateSettingsArgs {
     pub canister_id: PrincipalId,
     pub settings: CanisterSettingsArgs,
+    pub sender_canister_version: Option<u64>,
 }
 
 impl UpdateSettingsArgs {
@@ -494,12 +528,17 @@ impl UpdateSettingsArgs {
         Self {
             canister_id: canister_id.into(),
             settings,
+            sender_canister_version: None,
         }
     }
 
     pub fn get_canister_id(&self) -> CanisterId {
         // Safe as this was converted from CanisterId when Self was constructed.
         CanisterId::new(self.canister_id).unwrap()
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
     }
 }
 
@@ -552,6 +591,7 @@ impl CanisterSettingsArgs {
 #[derive(Default, Clone, CandidType, Deserialize)]
 pub struct CreateCanisterArgs {
     pub settings: Option<CanisterSettingsArgs>,
+    pub sender_canister_version: Option<u64>,
 }
 
 impl CreateCanisterArgs {
@@ -572,6 +612,10 @@ impl CreateCanisterArgs {
             Ok(settings) => Ok(settings),
         }
     }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
+    }
 }
 
 /// This API is deprecated and should not be used in new code.
@@ -584,6 +628,7 @@ impl CreateCanisterArgs {
 pub struct SetControllerArgs {
     canister_id: PrincipalId,
     new_controller: PrincipalId,
+    sender_canister_version: Option<u64>,
 }
 
 impl SetControllerArgs {
@@ -594,6 +639,10 @@ impl SetControllerArgs {
 
     pub fn get_new_controller(&self) -> PrincipalId {
         self.new_controller
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
     }
 }
 

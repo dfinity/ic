@@ -545,7 +545,13 @@ fn simulate_create_canister_cost(subnet_type: SubnetType, subnet_size: usize) ->
         .call_with_cycles(
             ic00::IC_00,
             ic00::Method::CreateCanister,
-            call_args().other_side(Encode!(&ic00::CreateCanisterArgs { settings: None }).unwrap()),
+            call_args().other_side(
+                Encode!(&ic00::CreateCanisterArgs {
+                    settings: None,
+                    sender_canister_version: None
+                })
+                .unwrap(),
+            ),
             canister_b_initial_balance.into_parts(),
         )
         .build();
