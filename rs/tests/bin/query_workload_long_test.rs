@@ -11,6 +11,9 @@ use ic_tests::networking::subnet_update_workload::config;
 use ic_tests::systest;
 
 // Test parameters
+// This value should more or less equal to
+// config.query_execution_threads * (1 sec / <avg latency in secs for executing a single query to the counter canister>)
+// The avg. latency in seconds for a query to the counter canister is 1 ms, according to latest data from execution.
 const RPS: usize = 1000;
 const USE_BOUNDARY_NODE: bool = false;
 const WORKLOAD_RUNTIME: Duration = Duration::from_secs(30 * 60);
