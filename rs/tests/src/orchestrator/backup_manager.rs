@@ -135,6 +135,7 @@ pub fn test(env: TestEnv) {
         sync_period_secs: 30,
         replay_period_secs: 30,
         thread_id: 0,
+        disable_cold_storage: false,
     };
 
     let cold_storage = Some(ColdStorage {

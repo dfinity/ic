@@ -39,7 +39,8 @@ use tokio::task::spawn_blocking;
 //         "nodes_syncing": 5,
 //         "sync_period_secs": 1800,
 //         "replay_period_secs": 7200,
-//         "thread_id": 0
+//         "thread_id": 0,
+//         "disable_cold_storage": false
 //       },
 //       {
 //         "subnet_id": "qwzvq-hye2n-7o7ey-gllix-3bgyy-lfopp-q22hm-oaoez-yqtyi-qz64d-vqe",
@@ -47,7 +48,8 @@ use tokio::task::spawn_blocking;
 //         "nodes_syncing": 5,
 //         "sync_period_secs": 3600,
 //         "replay_period_secs": 7200,
-//         "thread_id": 1
+//         "thread_id": 1,
+//         "disable_cold_storage": true
 //       }
 //     ]
 // }

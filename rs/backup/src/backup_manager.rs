@@ -119,6 +119,7 @@ impl BackupManager {
             let daily_replays: usize = SECONDS_IN_DAY
                 .checked_div(s.replay_period_secs)
                 .unwrap_or(0) as usize;
+            let do_cold_storage = !s.disable_cold_storage;
             let backup_helper = BackupHelper {
                 subnet_id: s.subnet_id,
                 initial_replica_version: s.initial_replica_version,
@@ -133,6 +134,7 @@ impl BackupManager {
                 versions_hot,
                 artifacts_guard: Mutex::new(true),
                 daily_replays,
+                do_cold_storage,
                 log: log.clone(),
             };
             let sync_period = std::time::Duration::from_secs(s.sync_period_secs);
@@ -157,18 +159,11 @@ impl BackupManager {
     }
 
     pub fn upgrade(log: Logger, config_file: PathBuf) {
-        let mut config =
-            Config::load_config(config_file.clone()).expect("Config file can't be loaded");
-        if config.version < 10 {
-            let size = config.subnets.len();
-            for i in 0..size {
-                config.subnets[i].thread_id = i as u32;
-            }
-        }
+        let config = Config::load_config(config_file.clone()).expect("Config file can't be loaded");
         config
             .save_config(config_file)
             .expect("Config file couldn't be saved");
-        info!(log, "Configuration updated with thread_ids");
+        info!(log, "Configuration updated with disable_cold_storage flag");
     }
 
     pub fn init(log: Logger, config_file: PathBuf) {
@@ -257,6 +252,7 @@ impl BackupManager {
                 sync_period_secs,
                 replay_period_secs,
                 thread_id,
+                disable_cold_storage: false,
             })
         }
 
@@ -389,6 +385,11 @@ fn sync_subnet(m: Arc<BackupManager>, i: usize) {
     let mut sync_last_time = Instant::now() - b.sync_period;
     loop {
         if sync_last_time.elapsed() > b.sync_period {
+            // announce the current version of the ic-backup on each sync
+            b.backup_helper
+                .notification_client
+                .push_metrics_version(m.version);
+
             match b.backup_helper.collect_nodes(b.nodes_syncing) {
                 Ok(nodes) => {
                     sync_last_time = Instant::now();
@@ -432,11 +433,6 @@ fn cold_store(m: Arc<BackupManager>) {
     loop {
         for i in 0..size {
             let b = &m.subnet_backups[i];
-
-            // announce the current version of the ic-backup here, once per day for each subnet
-            b.backup_helper
-                .notification_client
-                .push_metrics_version(m.version);
 
             let subnet_id = &b.backup_helper.subnet_id;
             match b.backup_helper.need_cold_storage_move() {
