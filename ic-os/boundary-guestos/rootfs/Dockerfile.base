@@ -88,13 +88,23 @@ RUN \
 
 # Download libnginx-mod-http-ndk.deb
 RUN \
-   curl -L -O https://github.com/dfinity/nginx-module-cbor-input/releases/download/v0.0.9/libnginx-mod-http-ndk_0.3.1_amd64.deb && \
-   echo "6a496d8c7f3357fda9e5adeb7a729e76c453f32c6d67bc0ec563b0f71e2a0aca  libnginx-mod-http-ndk_0.3.1_amd64.deb" | shasum -c
+   curl -L -O https://github.com/dfinity/nginx-modules/releases/download/v0.0.10/libnginx-mod-http-ndk_0.3.1_amd64.deb && \
+   echo "74826f983c224f19f73da9710fa41b2eb0af6c6cc66f4d1f53657c90dab1eab2  libnginx-mod-http-ndk_0.3.1_amd64.deb" | shasum -c
 
 # Download libnginx-mod-http-cbor-input.deb
 RUN \
-   curl -L -O https://github.com/dfinity/nginx-module-cbor-input/releases/download/v0.0.9/libnginx-mod-http-cbor-input_0.0.9_amd64.deb && \
-   echo "8dca8fb93a6645c4aee23f601e9d9f62a00638ff29f95ceafcd10f422a3126f0  libnginx-mod-http-cbor-input_0.0.9_amd64.deb" | shasum -c
+   curl -L -O https://github.com/dfinity/nginx-modules/releases/download/v0.0.10/libnginx-mod-http-cbor-input_0.0.10_amd64.deb && \
+   echo "8461c9cfab5c944807f98e6517088bf14966edbc11228638e396cb8d1cd02ca0  libnginx-mod-http-cbor-input_0.0.10_amd64.deb" | shasum -c
+
+# Download libnginx-mod-http-cbor-req-ic.deb
+RUN \
+   curl -L -O https://github.com/dfinity/nginx-modules/releases/download/v0.0.10/libnginx-mod-http-cbor-req-ic_0.0.10_amd64.deb && \
+   echo "b3ef2ec3f73c8076c34ecb9b0f2710c0ed280b6ccfaad7fea80e524cf9f08868  libnginx-mod-http-cbor-req-ic_0.0.10_amd64.deb" | shasum -c
+
+# Download libnginx-mod-http-cbor-resp-ic.deb
+RUN \
+   curl -L -O https://github.com/dfinity/nginx-modules/releases/download/v0.0.10/libnginx-mod-http-cbor-resp-ic_0.0.10_amd64.deb && \
+   echo "7d40c0587539f7b7da3667f21d4b79f0e58d5874551a3526e831162d237618ec  libnginx-mod-http-cbor-resp-ic_0.0.10_amd64.deb" | shasum -c
 
 # Download and build sev-guest tool
 RUN \
@@ -312,10 +322,22 @@ RUN \
     rm libnginx-mod-http-ndk_0.3.1_amd64.deb
 
 # Install libnginx-mod-http-cbor-input
-COPY --from=download /tmp/libnginx-mod-http-cbor-input_0.0.9_amd64.deb .
+COPY --from=download /tmp/libnginx-mod-http-cbor-input_0.0.10_amd64.deb .
 RUN \
-    dpkg -i libnginx-mod-http-cbor-input_0.0.9_amd64.deb && \
-    rm libnginx-mod-http-cbor-input_0.0.9_amd64.deb
+    dpkg -i libnginx-mod-http-cbor-input_0.0.10_amd64.deb && \
+    rm libnginx-mod-http-cbor-input_0.0.10_amd64.deb
+
+# Install libnginx-mod-http-cbor-req-ic
+COPY --from=download /tmp/libnginx-mod-http-cbor-req-ic_0.0.10_amd64.deb .
+RUN \
+    dpkg -i libnginx-mod-http-cbor-req-ic_0.0.10_amd64.deb && \
+    rm libnginx-mod-http-cbor-req-ic_0.0.10_amd64.deb
+
+# Install libnginx-mod-http-cbor-resp-ic
+COPY --from=download /tmp/libnginx-mod-http-cbor-resp-ic_0.0.10_amd64.deb .
+RUN \
+    dpkg -i libnginx-mod-http-cbor-resp-ic_0.0.10_amd64.deb && \
+    rm libnginx-mod-http-cbor-resp-ic_0.0.10_amd64.deb
 
 # Install ngx_http_geoip2
 COPY --from=ngx_http_geoip2_module \
