@@ -167,7 +167,7 @@ if "$BUILD_IMG"; then
     echo_green "##### IC-OS SHA256SUMS #####"
     pushd "$DISK_DIR_FULL"
     # shellcheck disable=SC2035
-    sha256sum -b *.gz | tee SHA256SUMS
+    sha256sum -b *.tar.* | tee SHA256SUMS
     popd
 fi
 

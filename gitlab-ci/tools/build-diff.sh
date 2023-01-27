@@ -127,6 +127,9 @@ diff -u "$SHA256SUMS0" "$SHA256SUMS1" || true
 # TODO(IDX-2542)
 sed -i -e '/panics.wasm/d' -e '/ic-rosetta-api/d' -e '/system-tests/d' -e'/prod-test-driver/d' -e'/sns-test-dapp-canister/d' $SHA256SUMS0 $SHA256SUMS1
 
+# build-ic produces guest and update img so we need to filter guest img out
+sed -i -e '/disk-img/d' $SHA256SUMS0 $SHA256SUMS1
+
 if ! diff -u $SHA256SUMS0 $SHA256SUMS1; then
     set +x
     echo -e "\nThis script compares artifacts built from separate CI jobs"
