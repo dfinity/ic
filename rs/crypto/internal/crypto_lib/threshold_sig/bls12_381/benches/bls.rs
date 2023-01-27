@@ -3,7 +3,7 @@ use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_internal_threshold_sig_bls12381::{api::*, types::*};
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use rand::{CryptoRng, Rng, RngCore, SeedableRng};
+use rand::{CryptoRng, Rng, RngCore};
 
 const DOMAIN_HASH_MSG_TO_G1_BLS12381_SIG: &[u8; 43] =
     b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
@@ -28,14 +28,6 @@ fn valid_bls_12_381_signature<R: RngCore + CryptoRng>(
     (msg, signature, public_key)
 }
 
-// Return random signatures from a small set to more easily simulate cache hits
-fn valid_bls_12_381_signature_small_set<R: RngCore + CryptoRng>(
-    rng: &mut R,
-) -> (Vec<u8>, CombinedSignatureBytes, PublicKeyBytes) {
-    let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(rng.gen::<u64>() % 2000);
-    valid_bls_12_381_signature(&mut rng)
-}
-
 fn invalid_bls_12_381_signature<R: RngCore + CryptoRng>(
     rng: &mut R,
 ) -> (Vec<u8>, CombinedSignatureBytes, PublicKeyBytes) {
@@ -49,52 +41,44 @@ fn bls_verification(c: &mut Criterion) {
 
     let mut rng = reproducible_rng();
 
-    group.bench_function("verify_combined_signature_valid", |b| {
-        b.iter_batched_ref(
+    // Benchmark uncached verification
+    group.bench_function("verify_combined_signature_nocache", |b| {
+        b.iter_batched(
             || valid_bls_12_381_signature(&mut rng),
-            |(msg, sig, pk)| assert!(verify_combined_signature(msg, *sig, *pk).is_ok()),
+            |(msg, sig, pk)| assert!(verify_combined_signature(&msg, sig, pk).is_ok()),
             BatchSize::SmallInput,
         )
     });
 
-    group.bench_function("verify_combined_signature_with_cache_valid", |b| {
-        b.iter_batched_ref(
-            || valid_bls_12_381_signature_small_set(&mut rng),
-            |(msg, sig, pk)| assert!(verify_combined_signature_with_cache(msg, *sig, *pk).is_ok()),
+    // A new signature is generated for each test, which tests cost
+    // of a cache miss (eg verification plus cache management).
+    // The overhead of the cache can be estimated by subtracting
+    // the result of verify_combined_signature_nocache from this result.
+    group.bench_function("verify_combined_signature_miss", |b| {
+        b.iter_batched(
+            || valid_bls_12_381_signature(&mut rng),
+            |(msg, sig, pk)| assert!(verify_combined_signature_with_cache(&msg, sig, pk).is_ok()),
             BatchSize::SmallInput,
         )
     });
 
     println!("{:?}", bls_signature_cache_statistics());
 
-    group.bench_function(
-        "verify_combined_signature_with_cache_valid_all_in_cache",
-        |b| {
-            b.iter_batched_ref(
-                || valid_bls_12_381_signature_small_set(&mut rng),
-                |(msg, sig, pk)| {
-                    assert!(verify_combined_signature_with_cache(msg, *sig, *pk).is_ok())
-                },
-                BatchSize::SmallInput,
-            )
-        },
-    );
-
-    println!("{:?}", bls_signature_cache_statistics());
-
-    let (msg, sig, pk) = valid_bls_12_381_signature(&mut rng);
-
-    group.bench_function(
-        "verify_combined_signature_with_cache_valid_repeated_same_item",
-        |b| {
-            b.iter(|| {
+    group.bench_function("verify_combined_signature_hit", |b| {
+        b.iter_batched(
+            || {
+                let (msg, sig, pk) = valid_bls_12_381_signature(&mut rng);
                 assert!(verify_combined_signature_with_cache(&msg, sig, pk).is_ok());
-            })
-        },
-    );
+                (msg, sig, pk)
+            },
+            |(msg, sig, pk)| assert!(verify_combined_signature_with_cache(&msg, sig, pk).is_ok()),
+            BatchSize::SmallInput,
+        )
+    });
 
     println!("{:?}", bls_signature_cache_statistics());
 
+    // These are always slow because invalid signatures are not cached
     group.bench_function("verify_combined_signature_invalid", |b| {
         b.iter_batched_ref(
             || invalid_bls_12_381_signature(&mut rng),
@@ -103,13 +87,7 @@ fn bls_verification(c: &mut Criterion) {
         )
     });
 
-    group.bench_function("verify_combined_signature_with_cache_invalid", |b| {
-        b.iter_batched_ref(
-            || invalid_bls_12_381_signature(&mut rng),
-            |(msg, sig, pk)| assert!(verify_combined_signature_with_cache(msg, *sig, *pk).is_err()),
-            BatchSize::SmallInput,
-        )
-    });
+    println!("{:?}", bls_signature_cache_statistics());
 }
 
 criterion_group!(benches, bls_verification);
