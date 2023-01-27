@@ -543,7 +543,9 @@ impl SystemTestGroup {
         let setup_plan = {
             let logger = group_ctx.logger().clone();
             let group_ctx = group_ctx.clone();
-            let setup_fn = self.setup.unwrap();
+            let setup_fn = self
+                .setup
+                .unwrap_or_else(|| panic!("setup function not specified for SystemTestGroup."));
             let setup_task = subproc(
                 TaskId::Test(String::from(SETUP_TASK_NAME)),
                 move || {

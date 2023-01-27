@@ -338,6 +338,10 @@ name = "ic-systest-backup-manager"
 path = "bin/backup_manager_test.rs"
 
 [[bin]]
+name = "ic-systest-mainnet"
+path = "bin/mainnet_test.rs"
+
+[[bin]]
 name = "ic-systest-replicable-mock-test"
 path = "bin/replicable_mock_test.rs"
 
@@ -346,12 +350,12 @@ name = "ic-systest-remote-replicable-mock-test"
 path = "bin/remote_replicable_mock_test.rs"
 
 [[bin]]
-name = "ic-systest-mainnet"
-path = "bin/mainnet_test.rs"
-
-[[bin]]
 name = "ic-systest-network-reliability"
 path = "bin/network_reliability_test.rs"
+
+[[bin]]
+name = "ic-systest-distributed"
+path = "bin/distributed_test.rs"
 
 [[bin]]
 name = "ic-systest-sns-deployment"

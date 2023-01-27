@@ -6,6 +6,7 @@ pub mod btc_integration;
 pub mod canister_http;
 pub mod ckbtc;
 pub mod consensus;
+pub mod distributed_tests;
 pub mod driver;
 pub mod execution;
 pub mod icrc1_agent_test;

@@ -49,3 +49,12 @@ container_run_and_commit(
     target_compatible_with = ["@platforms//os:linux"],  # requires invoking docker that we avoid on Mac OS
     visibility = ["//visibility:public"],
 )
+
+# For e2e testing of the NNS and SNS
+
+container_image(
+    name = "nns_dapp_specs_image",
+    base = "@nns-dapp-specs//image",
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+    visibility = ["//visibility:public"],
+)

@@ -37,7 +37,7 @@ DEFAULT_NUM_VCPUS = 2
 #
 # Please also keep this in sync with the DEFAULT_PROMETHEUS_VM_IMG_SHA256 constant in:
 # rs/tests/src/driver/prometheus_vm.rs
-PROMETHEUS_VM_DISK_IMG_SHA256 = "bdacb195917b68ee9b785822c4c42e155853ed27481c52e3ceb16953f7411bff"
+PROMETHEUS_VM_DISK_IMG_SHA256 = "c8ec611778a36a3926cedc100f4bcbf058ce5540347e299da54e221c8a19bdaf"
 PROMETHEUS_VM_DISK_IMG_URL = (
     f"{DOWNLOAD_BASE_URL}/farm/prometheus-vm/{PROMETHEUS_VM_DISK_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst"
 )

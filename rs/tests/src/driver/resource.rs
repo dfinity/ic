@@ -172,7 +172,7 @@ pub fn get_resource_request(
 /// The latest hash can be retrieved by downloading the SHA256SUMS file from:
 /// https://hydra.dfinity.systems/job/dfinity-ci-build/farm/universal-vm.img.x86_64-linux/latest
 const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
-    "1aefa68e98f49234f5ba6c7929f4da8d13accf0f8e24680c1a15f74141f891d1";
+    "d7720f8a518aeeef65970d2f087756f86b00b928ccc41986db15fcb5bc8847f3";
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,

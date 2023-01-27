@@ -338,6 +338,7 @@ pub enum HostFeature {
     DC(String),
     Host(String),
     AmdSevSnp,
+    SnsLoadTest,
 }
 
 impl Serialize for HostFeature {
@@ -357,11 +358,13 @@ impl Serialize for HostFeature {
                 serializer.serialize_str(&host_feature)
             }
             HostFeature::AmdSevSnp => serializer.serialize_str(AMD_SEV_SNP),
+            HostFeature::SnsLoadTest => serializer.serialize_str(SNS_LOAD_TEST),
         }
     }
 }
 
 const AMD_SEV_SNP: &str = "AMD-SEV-SNP";
+const SNS_LOAD_TEST: &str = "SNS-load-test";
 
 impl<'de> Deserialize<'de> for HostFeature {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -375,10 +378,17 @@ impl<'de> Deserialize<'de> for HostFeature {
             Ok(HostFeature::Host(host.to_owned()))
         } else if input == AMD_SEV_SNP {
             Ok(HostFeature::AmdSevSnp)
+        } else if input == SNS_LOAD_TEST {
+            Ok(HostFeature::SnsLoadTest)
         } else {
             Err(Error::unknown_variant(
                 &input,
-                &["dc=<dc-name>", "host=<host-name>"],
+                &[
+                    "dc=<dc-name>",
+                    "host=<host-name>",
+                    AMD_SEV_SNP,
+                    SNS_LOAD_TEST,
+                ],
             ))
         }
     }
