@@ -39,6 +39,7 @@ pub struct BackupHelper {
     pub versions_hot: usize,
     pub artifacts_guard: Mutex<bool>,
     pub daily_replays: usize,
+    pub do_cold_storage: bool,
     pub log: Logger,
 }
 
@@ -675,39 +676,41 @@ impl BackupHelper {
         // we have moved all the artifacts from the spool directory, so don't need the mutex guard anymore
         drop(guard);
 
-        // process moved artifact dirs
-        let cold_storage_artifacts_dir = self.cold_storage_artifacts_dir();
-        let work_dir_str = work_dir
-            .clone()
-            .into_os_string()
-            .into_string()
-            .expect("work directory is missing or invalid");
-        let pack_dirs = collect_only_dirs(&work_dir)?;
-        for pack_dir in pack_dirs {
-            let replica_version = pack_dir
-                .file_name()
+        if self.do_cold_storage {
+            // process moved artifact dirs
+            let cold_storage_artifacts_dir = self.cold_storage_artifacts_dir();
+            let work_dir_str = work_dir
+                .clone()
+                .into_os_string()
                 .into_string()
-                .expect("replica version entry in work directory is missing or invalid");
-            info!(self.log, "Packing artifacts of {}", replica_version);
-            let timestamp = Utc::now().timestamp();
-            let (top_height, _) = fetch_top_height(&pack_dir);
-            let packed_file = format!(
-                "{}/{:010}_{:012}_{}.tgz",
-                work_dir_str, timestamp, top_height, replica_version
-            );
-            let mut cmd = Command::new("tar");
-            cmd.arg("czvf");
-            cmd.arg(&packed_file);
-            cmd.arg("-C").arg(&work_dir);
-            cmd.arg(&replica_version);
-            info!(self.log, "Will execute: {:?}", cmd);
-            exec_cmd(&mut cmd).map_err(|err| format!("Error packing artifacts: {:?}", err))?;
+                .expect("work directory is missing or invalid");
+            let pack_dirs = collect_only_dirs(&work_dir)?;
+            for pack_dir in pack_dirs {
+                let replica_version = pack_dir
+                    .file_name()
+                    .into_string()
+                    .expect("replica version entry in work directory is missing or invalid");
+                info!(self.log, "Packing artifacts of {}", replica_version);
+                let timestamp = Utc::now().timestamp();
+                let (top_height, _) = fetch_top_height(&pack_dir);
+                let packed_file = format!(
+                    "{}/{:010}_{:012}_{}.tgz",
+                    work_dir_str, timestamp, top_height, replica_version
+                );
+                let mut cmd = Command::new("tar");
+                cmd.arg("czvf");
+                cmd.arg(&packed_file);
+                cmd.arg("-C").arg(&work_dir);
+                cmd.arg(&replica_version);
+                info!(self.log, "Will execute: {:?}", cmd);
+                exec_cmd(&mut cmd).map_err(|err| format!("Error packing artifacts: {:?}", err))?;
 
-            info!(self.log, "Copy packed file of {}", replica_version);
-            let mut cmd2 = Command::new("cp");
-            cmd2.arg(packed_file).arg(&cold_storage_artifacts_dir);
-            info!(self.log, "Will execute: {:?}", cmd2);
-            exec_cmd(&mut cmd2).map_err(|err| format!("Error copying artifacts: {:?}", err))?;
+                info!(self.log, "Copy packed file of {}", replica_version);
+                let mut cmd2 = Command::new("cp");
+                cmd2.arg(packed_file).arg(&cold_storage_artifacts_dir);
+                info!(self.log, "Will execute: {:?}", cmd2);
+                exec_cmd(&mut cmd2).map_err(|err| format!("Error copying artifacts: {:?}", err))?;
+            }
         }
 
         info!(
@@ -732,18 +735,20 @@ impl BackupHelper {
             }
         });
 
-        let mut reversed = old_state_dirs.iter().rev();
-        while let Some(dir) = reversed.next() {
-            info!(self.log, "Will copy to cold storage: {:?}", dir.1);
-            let mut cmd = Command::new("rsync");
-            cmd.arg("-a");
-            cmd.arg(dir.1).arg(self.cold_storage_states_dir());
-            info!(self.log, "Will execute: {:?}", cmd);
-            exec_cmd(&mut cmd).map_err(|err| format!("Error copying states: {:?}", err))?;
-            // skip some of the states if we replay more than one per day
-            if self.daily_replays > 1 {
-                // one element is consumed in the next() call above, and one in the nth(), hence the substract 2
-                reversed.nth(self.daily_replays - 2);
+        if self.do_cold_storage {
+            let mut reversed = old_state_dirs.iter().rev();
+            while let Some(dir) = reversed.next() {
+                info!(self.log, "Will copy to cold storage: {:?}", dir.1);
+                let mut cmd = Command::new("rsync");
+                cmd.arg("-a");
+                cmd.arg(dir.1).arg(self.cold_storage_states_dir());
+                info!(self.log, "Will execute: {:?}", cmd);
+                exec_cmd(&mut cmd).map_err(|err| format!("Error copying states: {:?}", err))?;
+                // skip some of the states if we replay more than one per day
+                if self.daily_replays > 1 {
+                    // one element is consumed in the next() call above, and one in the nth(), hence the substract 2
+                    reversed.nth(self.daily_replays - 2);
+                }
             }
         }
 
@@ -761,9 +766,14 @@ impl BackupHelper {
         let new_space = self.get_disk_stats(DiskStats::Space)? as i32; // i32 to calculate negative difference bellow
         let new_inodes = self.get_disk_stats(DiskStats::Inodes)? as i32;
 
+        let action_text = if self.do_cold_storage {
+            "Moved to cold storage"
+        } else {
+            "Cleaned up"
+        };
         self.notification_client.message_slack(format!(
-            "✅ Moved to cold storage artifacts of subnet {:?} and states up to height *{}*, saved {}% of space and {}% of inodes.",
-            self.subnet_id, max_height, old_space - new_space, old_inodes - new_inodes
+            "✅ {} artifacts of subnet {:?} and states up to height *{}*, saved {}% of space and {}% of inodes.",
+            action_text, self.subnet_id, max_height, old_space - new_space, old_inodes - new_inodes
         ));
         info!(
             self.log,
