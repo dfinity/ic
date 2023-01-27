@@ -225,8 +225,17 @@ exports_files([
     "create-universal-vm-config-image.sh",
 ])
 
+filegroup(
+    name = "grafana_dashboards",
+    srcs = glob(["dashboards/**/*"]),
+)
+
 UNIVERSAL_VM_RUNTIME_DEPS = [
     ":create-universal-vm-config-image.sh",
+]
+
+GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
+    ":grafana_dashboards",
 ]
 
 sh_binary(
@@ -335,7 +344,7 @@ system_test(
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -346,7 +355,7 @@ system_test(
         "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -451,7 +460,7 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 
