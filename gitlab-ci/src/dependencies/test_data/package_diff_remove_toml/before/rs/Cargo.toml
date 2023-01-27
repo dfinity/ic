@@ -1,6 +1,0 @@
-[workspace]
-
-members = [
-  "ic-fake1",
-  "ic-fake2",
-]
