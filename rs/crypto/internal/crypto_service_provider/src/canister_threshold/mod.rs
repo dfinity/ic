@@ -35,7 +35,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use ic_types::{NodeIndex, NumberOfNodes, Randomness, RegistryVersion};
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -278,6 +278,14 @@ impl CspIDkgProtocol for Csp {
 
         self.csp_vault
             .idkg_retain_active_keys(active_key_ids, oldest_public_key)
+    }
+
+    fn idkg_observe_minimum_registry_version_in_active_idkg_transcripts(
+        &self,
+        registry_version: RegistryVersion,
+    ) {
+        self.metrics
+            .observe_minimum_registry_version_in_active_idkg_transcripts(registry_version.get());
     }
 }
 

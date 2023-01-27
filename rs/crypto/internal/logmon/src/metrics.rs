@@ -5,7 +5,7 @@ mod bls12_381_sig_cache;
 use convert_case::{Case, Casing};
 use core::fmt;
 use ic_metrics::MetricsRegistry;
-use prometheus::{HistogramVec, IntCounterVec, IntGaugeVec};
+use prometheus::{Gauge, HistogramVec, IntCounterVec, IntGaugeVec};
 use std::fmt::{Display, Formatter};
 use std::time;
 use std::time::Instant;
@@ -194,6 +194,18 @@ impl CryptoMetrics {
             let prev_misses = m.cache_misses.get();
             debug_assert!(prev_misses <= misses);
             m.cache_misses.inc_by(misses - prev_misses);
+        }
+    }
+
+    /// Observes the minimum registry version in active iDKG transcripts.
+    pub fn observe_minimum_registry_version_in_active_idkg_transcripts(
+        &self,
+        registry_version: u64,
+    ) {
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .observe_minimum_registry_version_in_active_idkg_transcripts
+                .set(registry_version as f64);
         }
     }
 }
@@ -389,6 +401,9 @@ struct Metrics {
 
     /// Metrics for the cache of successfully verified BLS12-381 threshold signatures.
     pub crypto_bls12_381_sig_cache_metrics: bls12_381_sig_cache::Metrics,
+
+    /// Gauge for the minimum registry version in active iDKG transcripts.
+    observe_minimum_registry_version_in_active_idkg_transcripts: Gauge,
 }
 
 impl Display for MetricsDomain {
@@ -515,7 +530,11 @@ impl Metrics {
                 cache_misses: r.int_counter(
                     "crypto_bls12_381_sig_cache_misses",
                 "Number of cache misses for successfully verified BLS12-381 threshold signatures"), 
-            }
+            },
+            observe_minimum_registry_version_in_active_idkg_transcripts: r.gauge(
+                "crypto_minimum_registry_version_in_active_idkg_transcripts",
+                "Minimum registry version in active iDKG transcripts"
+            )
         }
     }
 }

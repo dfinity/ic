@@ -1,9 +1,11 @@
+use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
 use crate::sign::canister_threshold_sig::idkg::retain_active_keys::oldest_public_key;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
+use mockall::predicate;
 use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 
@@ -33,7 +35,8 @@ mod oldest_public_key {
     #[test]
     fn should_be_none_when_no_transcripts_and_should_not_query_registry() {
         let registry = Arc::new(registry_returning_transient_error()) as Arc<_>;
-        let result = oldest_public_key(&node_id(), &registry, &HashSet::new());
+        let mock_csp = MockAllCryptoServiceProvider::new();
+        let result = oldest_public_key(&mock_csp, &node_id(), &registry, &HashSet::new());
         assert!(result.is_none());
     }
 
@@ -45,8 +48,9 @@ mod oldest_public_key {
             RegistryVersion::new(2),
         ));
         let registry = Arc::new(registry_returning_transient_error()) as Arc<_>;
+        let mock_csp = MockAllCryptoServiceProvider::new();
 
-        let result = oldest_public_key(&node_id(), &registry, &transcripts);
+        let result = oldest_public_key(&mock_csp, &node_id(), &registry, &transcripts);
 
         assert_matches!(
             result,
@@ -63,8 +67,9 @@ mod oldest_public_key {
             RegistryVersion::new(2),
         ));
         let registry = Arc::new(registry_returning_reproducible_error()) as Arc<_>;
+        let mock_csp = MockAllCryptoServiceProvider::new();
 
-        let result = oldest_public_key(&node_id(), &registry, &transcripts);
+        let result = oldest_public_key(&mock_csp, &node_id(), &registry, &transcripts);
 
         assert_matches!(
             result,
@@ -91,8 +96,14 @@ mod oldest_public_key {
             data_provider,
         );
         registry_client.update_to_latest_version();
+        let mock_csp = MockAllCryptoServiceProvider::new();
 
-        let result = oldest_public_key(&node_id(), &(registry_client as Arc<_>), &transcripts);
+        let result = oldest_public_key(
+            &mock_csp,
+            &node_id(),
+            &(registry_client as Arc<_>),
+            &transcripts,
+        );
 
         assert_matches!(
             result,
@@ -122,9 +133,19 @@ mod oldest_public_key {
         }
         registry_client.update_to_latest_version();
 
-        let result = oldest_public_key(&node_id(), &(registry_client as Arc<_>), &transcripts)
-            .expect("missing result")
-            .expect("missing IDKG public key");
+        let mut mock_csp = MockAllCryptoServiceProvider::new();
+        mock_csp
+            .expect_idkg_observe_minimum_registry_version_in_active_idkg_transcripts()
+            .return_const(());
+
+        let result = oldest_public_key(
+            &mock_csp,
+            &node_id(),
+            &(registry_client as Arc<_>),
+            &transcripts,
+        )
+        .expect("missing result")
+        .expect("missing IDKG public key");
 
         assert_eq!(
             result,
@@ -133,6 +154,42 @@ mod oldest_public_key {
                 .expect("missing oldest public key")
                 .clone()
         );
+    }
+
+    #[test]
+    fn should_observe_metrics_when_computing_oldest_idkg_dealing_encryption_key() {
+        let registry_versions = vec![2, 4, 1, 10];
+        let oldest_registry_version =
+            RegistryVersion::new(*registry_versions.iter().min().expect("empty versions"));
+        let idkg_public_keys = generate_unique_idkg_public_keys(&registry_versions);
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
+        let mut transcripts = HashSet::new();
+        for (version, idkg_public_key) in &idkg_public_keys {
+            transcripts.insert(idkg_transcript_with_registry_version(node_id(), *version));
+            register_idkg_public_key(
+                node_id(),
+                idkg_dealing_encryption_pk_to_proto(idkg_public_key.clone()),
+                *version,
+                data_provider.clone(),
+            );
+        }
+        registry_client.update_to_latest_version();
+        let mut mock_csp = MockAllCryptoServiceProvider::new();
+        mock_csp
+            .expect_idkg_observe_minimum_registry_version_in_active_idkg_transcripts()
+            .with(predicate::eq(oldest_registry_version))
+            .times(1)
+            .return_const(());
+
+        let _result = oldest_public_key(
+            &mock_csp,
+            &node_id(),
+            &(registry_client as Arc<_>),
+            &transcripts,
+        )
+        .expect("missing result")
+        .expect("missing IDKG public key");
     }
 
     fn registry_returning_transient_error() -> impl RegistryClient {
