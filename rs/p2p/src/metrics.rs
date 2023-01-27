@@ -17,13 +17,9 @@ impl GossipMetrics {
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             op_duration: metrics_registry.histogram_vec(
-                "p2p_gossip_op_duration",
-                "The time it took to execute the given op, in milliseconds",
-                vec![
-                    1.0, 2.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 300.0, 400.0, 500.0, 600.0,
-                    700.0, 800.0, 900.0, 1000.0, 1200.0, 1400.0, 1600.0, 1800.0, 2000.0, 2500.0,
-                    3000.0, 4000.0, 5000.0, 7000.0, 10000.0, 20000.0,
-                ],
+                "p2p_gossip_op_duration_seconds",
+                "The time it took to execute the given op, in seconds",
+                decimal_buckets(-3, 0),
                 &["op"],
             ),
             requested_chunks_not_found: metrics_registry.int_counter(

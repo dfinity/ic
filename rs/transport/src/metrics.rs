@@ -7,7 +7,8 @@ pub(crate) const STATUS_SUCCESS: &str = "success";
 pub(crate) const STATUS_ERROR: &str = "error";
 pub(crate) const LABEL_DETAIL: &str = "detail";
 pub(crate) const LABEL_CHANNEL_ID: &str = "channel_id";
-pub(crate) const TRANSPORT_API: &str = "transport_api";
+pub(crate) const LABEL_PEER_ID: &str = "peer_id";
+pub(crate) const LABEL_STATUS: &str = "status";
 
 /// This is intended to be used as RAII type that will increment the gauge
 /// at construction and decrease the gauge on Drop.
@@ -43,7 +44,7 @@ impl ControlPlaneMetrics {
             connection_state: metrics_registry.int_gauge_vec(
                 "transport_connection_state",
                 "Current state of the connection.",
-                &["peer_id"],
+                &[LABEL_PEER_ID],
             ),
             async_tasks: metrics_registry.int_gauge_vec(
                 "transport_async_tasks",
@@ -59,22 +60,22 @@ impl ControlPlaneMetrics {
             tcp_accepts: metrics_registry.int_counter_vec(
                 "transport_tcp_accepts_total",
                 "Total incoming TcpStream in server mode",
-                &["status"],
+                &[LABEL_STATUS],
             ),
             tcp_connects: metrics_registry.int_counter_vec(
                 "transport_tcp_connects_total",
                 "Total outgoing connects in client mode",
-                &["status"],
+                &[LABEL_STATUS],
             ),
             retry_connection: metrics_registry.int_counter_vec(
                 "transport_retry_connection",
                 "Connection retries to reconnect to a peer from Transport",
-                &["peer_id", "flow_tag", TRANSPORT_API],
+                &[LABEL_PEER_ID],
             ),
             tls_handshakes: metrics_registry.int_counter_vec(
                 "transport_tls_handshakes_total",
                 "TLS handshakes in Transport",
-                &["role", "status"],
+                &["role", LABEL_STATUS],
             ),
         }
     }
@@ -106,44 +107,44 @@ impl DataPlaneMetrics {
                 "transport_event_handler_message_duration_seconds",
                 "Time spent by the client callback processing a message event.",
                 decimal_buckets(-3, 1),
-                &[LABEL_CHANNEL_ID, TRANSPORT_API],
+                &[LABEL_CHANNEL_ID],
             ),
             read_message_duration: metrics_registry.histogram_vec(
                 "transport_read_message_duration_seconds",
                 "Time spent to parse a full message.",
                 decimal_buckets(-3, 1),
-                &[LABEL_CHANNEL_ID, LABEL_DETAIL, TRANSPORT_API],
+                &[LABEL_CHANNEL_ID, LABEL_DETAIL],
             ),
             write_bytes_total: metrics_registry.int_counter_vec(
                 "transport_write_bytes_total",
                 "Total bytes written at the application-level",
-                &[LABEL_CHANNEL_ID, TRANSPORT_API],
+                &[LABEL_CHANNEL_ID],
             ),
             send_message_duration: metrics_registry.histogram_vec(
                 "transport_send_message_duration_seconds",
                 "Time it takes for a single message to be flushed into the lower level transport",
                 decimal_buckets(-3, 1),
-                &[LABEL_CHANNEL_ID, TRANSPORT_API],
+                &[LABEL_CHANNEL_ID],
             ),
             read_bytes_total: metrics_registry.int_counter_vec(
                 "transport_read_bytes_total",
                 "Total bytes read at the application-level",
-                &[LABEL_CHANNEL_ID, TRANSPORT_API],
+                &[LABEL_CHANNEL_ID],
             ),
             message_read_errors_total: metrics_registry.int_counter_vec(
                 "transport_read_message_errors_total",
                 "Number of times reading a single message failed",
-                &[LABEL_CHANNEL_ID, LABEL_DETAIL, TRANSPORT_API],
+                &[LABEL_CHANNEL_ID, LABEL_DETAIL],
             ),
             heart_beats_received: metrics_registry.int_counter_vec(
                 "transport_heart_beats_received",
                 "Number of heart beats as seen by receiver",
-                &[LABEL_CHANNEL_ID, TRANSPORT_API],
+                &[LABEL_CHANNEL_ID],
             ),
             heart_beats_sent: metrics_registry.int_counter_vec(
                 "transport_heart_beats_sent",
                 "Number of heart beats sent by sender",
-                &[LABEL_CHANNEL_ID, TRANSPORT_API],
+                &[LABEL_CHANNEL_ID],
             ),
             write_tasks: metrics_registry
                 .int_gauge("transport_write_tasks", "Active data plane write tasks"),

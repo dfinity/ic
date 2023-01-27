@@ -146,7 +146,7 @@ fn spawn_write_task(
                 arc_self
                     .data_plane_metrics
                     .heart_beats_sent
-                    .with_label_values(&[&channel_id_str, arc_self.transport_api_label()])
+                    .with_label_values(&[&channel_id_str])
                     .inc();
             } else {
                 for mut payload in dequeued {
@@ -174,12 +174,12 @@ fn spawn_write_task(
             arc_self
                 .data_plane_metrics
                 .send_message_duration
-                .with_label_values(&[&channel_id_str,  arc_self.transport_api_label()])
+                .with_label_values(&[&channel_id_str])
                 .observe(start_time.elapsed().as_secs_f64());
             arc_self
                 .data_plane_metrics
                 .write_bytes_total
-                .with_label_values(&[&channel_id_str, arc_self.transport_api_label()])
+                .with_label_values(&[&channel_id_str])
                 .inc_by(message_len as u64);
         }
     })
@@ -237,12 +237,12 @@ fn spawn_read_task(
                     );
                     arc_self.data_plane_metrics
                         .read_message_duration
-                        .with_label_values(&[&channel_id_str, READ_RESULT_ERROR, arc_self.transport_api_label()])
+                        .with_label_values(&[&channel_id_str, READ_RESULT_ERROR])
                         .observe(read_message_start.elapsed().as_secs_f64());
 
                     arc_self.data_plane_metrics
                         .message_read_errors_total
-                        .with_label_values(&[&channel_id_str, err.into(), arc_self.transport_api_label()])
+                        .with_label_values(&[&channel_id_str, err.into()])
                         .inc();
                     arc_self.on_disconnect(peer_id, channel_id).await;
                     return;
@@ -252,17 +252,17 @@ fn spawn_read_task(
                         // It's an empty heartbeat message -- do nothing
                         arc_self.data_plane_metrics
                             .heart_beats_received
-                            .with_label_values(&[&channel_id_str, arc_self.transport_api_label()])
+                            .with_label_values(&[&channel_id_str])
                             .inc();
                         arc_self.data_plane_metrics
                             .read_message_duration
-                            .with_label_values(&[&channel_id_str, READ_RESULT_HEARTBEAT, arc_self.transport_api_label()])
+                            .with_label_values(&[&channel_id_str, READ_RESULT_HEARTBEAT])
                             .observe(read_message_start.elapsed().as_secs_f64());
                         continue;
                     }
                     arc_self.data_plane_metrics
                         .read_message_duration
-                        .with_label_values(&[&channel_id_str, READ_RESULT_MESSAGE, arc_self.transport_api_label()])
+                        .with_label_values(&[&channel_id_str, READ_RESULT_MESSAGE])
                         .observe(read_message_start.elapsed().as_secs_f64());
 
                     // Pass up the received message.
@@ -270,11 +270,11 @@ fn spawn_read_task(
                     // shutdowns.
                     arc_self.data_plane_metrics
                         .read_bytes_total
-                        .with_label_values(&[&channel_id_str, arc_self.transport_api_label()])
+                        .with_label_values(&[&channel_id_str])
                         .inc_by(payload.0.len() as u64);
                     let _callback_start_time = arc_self.data_plane_metrics
                         .event_handler_message_duration
-                        .with_label_values(&[&channel_id_str, arc_self.transport_api_label()]).start_timer();
+                        .with_label_values(&[&channel_id_str]).start_timer();
                     event_handler
                         .call(TransportEvent::Message(TransportMessage {
                             peer_id,
