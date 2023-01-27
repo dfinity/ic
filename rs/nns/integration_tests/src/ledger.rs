@@ -122,8 +122,8 @@ fn test_rosetta1_92() {
             .minting_account(GOVERNANCE_CANISTER_ID.into())
             .initial_values(ledger_init_state)
             .archive_options(ArchiveOptions {
-                node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
-                max_message_size_bytes: Some(max_message_size_bytes),
+                node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
+                max_message_size_bytes: Some(max_message_size_bytes as u64),
                 controller_id: ROOT_CANISTER_ID.into(),
                 trigger_threshold: blocks_per_archive_node,
                 num_blocks_to_archive: blocks_per_archive_call,

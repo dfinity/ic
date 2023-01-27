@@ -4817,7 +4817,7 @@ dependencies = [
  "ic-icrc1-ledger",
  "ic-ledger-core",
  "ic-metrics-encoder",
- "ic-stable-structures 0.1.2",
+ "ic-stable-structures 0.5.0",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "icp-ledger",
@@ -6248,7 +6248,7 @@ dependencies = [
  "ic-icrc1",
  "ic-ledger-core",
  "ic-metrics-encoder",
- "ic-stable-structures 0.1.2",
+ "ic-stable-structures 0.5.0",
  "serde",
 ]
 
@@ -8458,7 +8458,7 @@ dependencies = [
  "ic-protobuf",
  "ic-sns-governance",
  "ic-sns-swap-protobuf-generator",
- "ic-stable-structures 0.4.0",
+ "ic-stable-structures 0.5.0",
  "ic-test-utilities-compare-dirs",
  "ic-types",
  "icp-ledger",
@@ -8592,21 +8592,15 @@ dependencies = [
 
 [[package]]
 name = "ic-stable-structures"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c8ded18fe296ff693ba8d8fd9890189ea28df4fc75d8b009523e15918452d8b"
-
-[[package]]
-name = "ic-stable-structures"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c382288c7a02396b792e081a5e84727bf65c283d1484c93a39f43097e0854ac"
 
 [[package]]
 name = "ic-stable-structures"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3651c56bc615fdf7de4b52ad34de94da393b8b0032488834a4801a40fd7bc940"
+checksum = "ead0e23ad5be0cad9f062a0a4e6777cd6f4d9bafa77a2cd06168f216943d67a1"
 
 [[package]]
 name = "ic-starter"

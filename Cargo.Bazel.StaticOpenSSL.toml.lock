@@ -2362,7 +2362,8 @@ dependencies = [
  "ic-identity-hsm",
  "ic-ledger-types",
  "ic-metrics-encoder",
- "ic-stable-structures",
+ "ic-stable-structures 0.2.0",
+ "ic-stable-structures 0.5.0",
  "ic-test-state-machine-client",
  "ic-utils",
  "ic-wasm",
@@ -2666,9 +2667,9 @@ dependencies = [
 
 [[package]]
 name = "either"
-version = "1.8.0"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90e5c1c8368803113bf0c9584fc495a58b86dc8a29edbf8fe877d21d9507e797"
+checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
 
 [[package]]
 name = "elliptic-curve"
@@ -3750,9 +3751,15 @@ checksum = "8aef00d455eba8b8244a415f073a43042e57da6d09c294485a2b2ebc858c9da2"
 
 [[package]]
 name = "ic-stable-structures"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c8ded18fe296ff693ba8d8fd9890189ea28df4fc75d8b009523e15918452d8b"
+checksum = "7c382288c7a02396b792e081a5e84727bf65c283d1484c93a39f43097e0854ac"
+
+[[package]]
+name = "ic-stable-structures"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ead0e23ad5be0cad9f062a0a4e6777cd6f4d9bafa77a2cd06168f216943d67a1"
 
 [[package]]
 name = "ic-test-state-machine-client"
@@ -8509,9 +8516,9 @@ checksum = "4553f467ac8e3d374bc9a177a26801e5d0f9b211aa1673fb137a403afd1c9cf5"
 
 [[package]]
 name = "toml_edit"
-version = "0.18.0"
+version = "0.18.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "729bfd096e40da9c001f778f5cdecbd2957929a24e10e5883d9392220a751581"
+checksum = "56c59d8dd7d0dcbc6428bf7aa2f0e823e26e43b3c9aca15bbc9475d23e5fa12b"
 dependencies = [
  "indexmap",
  "nom8",

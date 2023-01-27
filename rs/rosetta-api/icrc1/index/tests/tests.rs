@@ -23,7 +23,7 @@ use std::time::Duration;
 const FEE: u64 = 10_000;
 const ARCHIVE_TRIGGER_THRESHOLD: u64 = 10;
 const NUM_BLOCKS_TO_ARCHIVE: usize = 5;
-const MINT_BLOCKS_PER_ARCHIVE: usize = 5;
+const MINT_BLOCKS_PER_ARCHIVE: u64 = 5;
 
 const MINTER: Account = Account {
     owner: PrincipalId::new(0, [0u8; 29]),
@@ -447,18 +447,20 @@ fn test_index_archived_txs() {
 
     // we want to create two archives. Each archive holds MINT_BLOCKS_PER_ARCHIVE mint blocks
     // and the trigger threshold is ARCHIVE_TRIGGER_THRESHOLD
-    let num_txs = ARCHIVE_TRIGGER_THRESHOLD as usize + MINT_BLOCKS_PER_ARCHIVE;
+    let num_txs = ARCHIVE_TRIGGER_THRESHOLD + MINT_BLOCKS_PER_ARCHIVE;
 
     // install the ledger and add enough transactions to create an archive
     let ledger_id = install_ledger(
         &env,
         vec![],
         ArchiveOptions {
-            node_max_memory_size_bytes: Some(MINT_BLOCKS_PER_ARCHIVE * mint_block().size_bytes()),
+            node_max_memory_size_bytes: Some(
+                MINT_BLOCKS_PER_ARCHIVE * mint_block().size_bytes() as u64,
+            ),
             ..default_archive_options()
         },
     );
-    for idx in 0..(num_txs as u64) {
+    for idx in 0..num_txs {
         mint(&env, ledger_id, account(1), idx);
     }
     assert_eq!(2, archives(&env, ledger_id).len());
@@ -468,15 +470,12 @@ fn test_index_archived_txs() {
     env.run_until_completion(10_000);
     let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
     let txs = txs.transactions;
-    assert_eq!(num_txs, txs.len());
-    for idx in 0..(num_txs as u64) {
+    assert_eq!(num_txs, txs.len() as u64);
+    for idx in 0..num_txs {
         assert_eq!(
             Nat::from(idx),
-            txs.get(num_txs - idx as usize - 1)
-                .unwrap_or_else(|| panic!(
-                    "Transaction {} not found in index!",
-                    num_txs - idx as usize - 1
-                ))
+            txs.get((num_txs - idx - 1) as usize)
+                .unwrap_or_else(|| panic!("Transaction {} not found in index!", num_txs - idx - 1))
                 .id
         );
     }
@@ -486,7 +485,7 @@ fn test_index_archived_txs() {
 fn test_index_archived_txs_paging() {
     // The archive node does paging when there are too many transactions.
     // This test verifies that the Index canister respects the paging.
-    const MAX_TXS_PER_GET_TRANSACTIONS_RESPONSE: usize = 1;
+    const MAX_TXS_PER_GET_TRANSACTIONS_RESPONSE: u64 = 1;
     const NUM_ARCHIVED_TXS: usize = 2;
 
     let env = StateMachine::new();

@@ -358,7 +358,7 @@ fn select_accounts_to_trim<L: LedgerData>(ledger: &L) -> Vec<(Tokens, L::Account
 ///
 /// NOTE: only one archiving task can run at each point in time.
 /// If archiving is already in process, this function returns immediately.
-pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_message_size: usize) {
+pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_message_size: u64) {
     use crate::archive::{
         send_blocks_to_archive, ArchivingGuard, ArchivingGuardError, FailedToArchiveBlocks,
     };

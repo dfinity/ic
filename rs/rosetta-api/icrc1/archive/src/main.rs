@@ -17,22 +17,22 @@ use std::cell::RefCell;
 
 const WASM_PAGE_SIZE: u64 = 65536;
 
-const GIB: usize = 1024 * 1024 * 1024;
+const GIB: u64 = 1024 * 1024 * 1024;
 
 /// How much memory do we want to allocate for raw blocks.
-const DEFAULT_MEMORY_LIMIT: usize = 3 * GIB;
+const DEFAULT_MEMORY_LIMIT: u64 = 3 * GIB;
 
 /// The maximum number of blocks to return in a single get_transactions request.
-const DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE: usize = 2000;
+const DEFAULT_MAX_TRANSACTIONS_PER_GET_TRANSACTION_RESPONSE: u64 = 2000;
 
 /// The maximum number of Wasm pages that we allow to use for the stable storage.
-const NUM_WASM_PAGES: u64 = 4 * (GIB as u64) / WASM_PAGE_SIZE;
+const NUM_WASM_PAGES: u64 = 4 * GIB / WASM_PAGE_SIZE;
 
 const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(0);
 const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(1);
 
 type Memory = RestrictedMemory<DefaultMemoryImpl>;
-type BlockLog = StableLog<VirtualMemory<Memory>, VirtualMemory<Memory>>;
+type BlockLog = StableLog<Vec<u8>, VirtualMemory<Memory>, VirtualMemory<Memory>>;
 type ConfigCell = StableCell<ArchiveConfig, Memory>;
 
 /// Creates a memory region for the configuration stable cell.
@@ -65,14 +65,14 @@ thread_local! {
 #[derive(Serialize, Deserialize)]
 struct ArchiveConfig {
     /// The maximum number of bytes archive can use to store encoded blocks.
-    max_memory_size_bytes: usize,
+    max_memory_size_bytes: u64,
     /// The index of the first block in the archive.
     block_index_offset: u64,
     /// The principal of the ledger canister that created this archive.
     /// The archive will accept blocks only from this principal.
     ledger_id: Principal,
     /// The maximum number of transactions returned by [get_transactions].
-    max_transactions_per_response: usize,
+    max_transactions_per_response: u64,
 }
 
 // NOTE: the default configuration is dysfunctional, but it's convenient to have
@@ -95,7 +95,7 @@ impl Storable for ArchiveConfig {
         Cow::Owned(buf)
     }
 
-    fn from_bytes(bytes: Vec<u8>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         ciborium::de::from_reader(&bytes[..]).expect("failed to decode archive options")
     }
 }
@@ -126,8 +126,8 @@ fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
 fn init(
     ledger_id: Principal,
     block_index_offset: u64,
-    max_memory_size_bytes: Option<usize>,
-    max_transactions_per_response: Option<usize>,
+    max_memory_size_bytes: Option<u64>,
+    max_transactions_per_response: Option<u64>,
 ) {
     CONFIG.with(|cell| {
         let max_memory_size_bytes = max_memory_size_bytes
@@ -182,13 +182,13 @@ fn append_blocks(new_blocks: Vec<EncodedBlock>) {
     });
 
     with_blocks(|blocks| {
-        let bytes: usize = new_blocks.iter().map(|b| b.size_bytes()).sum();
+        let bytes: u64 = new_blocks.iter().map(|b| b.size_bytes() as u64).sum();
         if max_memory_size_bytes < blocks.log_size_bytes().saturating_add(bytes) {
             ic_cdk::api::trap("no space left");
         }
         for block in new_blocks {
             blocks
-                .append(block.as_slice())
+                .append(&block.into_vec())
                 .unwrap_or_else(|_| ic_cdk::api::trap("no space left"));
         }
     })
@@ -196,7 +196,7 @@ fn append_blocks(new_blocks: Vec<EncodedBlock>) {
 
 #[query]
 #[candid_method(query)]
-fn remaining_capacity() -> usize {
+fn remaining_capacity() -> u64 {
     let total_block_size = with_blocks(|blocks| blocks.log_size_bytes());
     with_archive_opts(|opts| {
         opts.max_memory_size_bytes
@@ -209,7 +209,7 @@ fn remaining_capacity() -> usize {
 #[candid_method(query)]
 fn get_transaction(index: BlockIndex) -> Option<Transaction> {
     let idx_offset = with_archive_opts(|opts| opts.block_index_offset);
-    let relative_idx = (idx_offset <= index).then_some((index - idx_offset) as usize)?;
+    let relative_idx = (idx_offset <= index).then_some(index - idx_offset)?;
 
     let block = with_blocks(|blocks| blocks.get(relative_idx))?;
     Some(decode_transaction(index, block))
@@ -229,14 +229,14 @@ fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
                 start, opts.block_index_offset
             ));
         }
-        (start - opts.block_index_offset) as usize
+        start - opts.block_index_offset
     });
 
     let length = length.min(with_archive_opts(|opts| opts.max_transactions_per_response));
     let transactions = with_blocks(|blocks| {
         let limit = blocks.len().min(offset.saturating_add(length));
         (offset..limit)
-            .map(|i| decode_transaction(start + i as u64, blocks.get(i).unwrap()))
+            .map(|i| decode_transaction(start + i, blocks.get(i).unwrap()))
             .collect()
     });
     TransactionRange { transactions }

@@ -274,7 +274,7 @@ fn archive_blocks_small_test() {
         // time
         let max_message_size_bytes = 192;
         let node_max_memory_size_bytes =
-            example_block().encode().size_bytes() * blocks_per_archive_node;
+            example_block().encode().size_bytes() as u64 * blocks_per_archive_node;
         let archive_options = ArchiveOptions {
             trigger_threshold: 12,
             num_blocks_to_archive: 12,
@@ -296,7 +296,7 @@ fn archive_blocks_small_test() {
                 )
                 .initial_values(accounts)
                 .archive_options(archive_options)
-                .max_message_size_bytes(max_message_size_bytes)
+                .max_message_size_bytes(max_message_size_bytes as usize)
                 .build()
                 .unwrap();
             let mut install = proj.cargo_bin("ledger-canister", &[]).install(&r);
@@ -411,8 +411,8 @@ fn archive_blocks_large_test() {
         let archive_options = ArchiveOptions {
             trigger_threshold: 64 * 64,
             num_blocks_to_archive: 64 * 64,
-            node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
-            max_message_size_bytes: Some(max_message_size_bytes),
+            node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
+            max_message_size_bytes: Some(max_message_size_bytes as u64),
             controller_id: CanisterId::from_u64(876).into(),
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
@@ -577,8 +577,8 @@ fn archived_blocks_ranges() {
         let archive_options = ArchiveOptions {
             trigger_threshold: 12,
             num_blocks_to_archive: 10,
-            node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
-            max_message_size_bytes: Some(max_message_size_bytes),
+            node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
+            max_message_size_bytes: Some(max_message_size_bytes as u64),
             controller_id: CanisterId::from_u64(876).into(),
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
@@ -738,8 +738,8 @@ fn notify_test() {
         };
 
         let archive_options = ArchiveOptions {
-            node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
-            max_message_size_bytes: Some(max_message_size_bytes),
+            node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
+            max_message_size_bytes: Some(max_message_size_bytes as u64),
             controller_id: CanisterId::from_u64(876).into(),
             trigger_threshold: 8,
             num_blocks_to_archive: 3,
@@ -935,8 +935,8 @@ fn notify_disabled_test() {
         };
 
         let archive_options = ArchiveOptions {
-            node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
-            max_message_size_bytes: Some(max_message_size_bytes),
+            node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
+            max_message_size_bytes: Some(max_message_size_bytes as u64),
             controller_id: CanisterId::from_u64(876).into(),
             trigger_threshold: 8,
             num_blocks_to_archive: 3,
@@ -1407,8 +1407,8 @@ fn get_block_test() {
         let archive_init_args = ArchiveOptions {
             trigger_threshold: 32,
             num_blocks_to_archive: 32,
-            node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
-            max_message_size_bytes: Some(max_message_size_bytes),
+            node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
+            max_message_size_bytes: Some(max_message_size_bytes as u64),
             controller_id: CanisterId::from_u64(876).into(),
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
@@ -1567,8 +1567,8 @@ fn get_multiple_blocks_test() {
         let archive_options = ArchiveOptions {
             trigger_threshold: num_blocks as usize,
             num_blocks_to_archive: num_blocks as usize,
-            node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
-            max_message_size_bytes: Some(max_message_size_bytes),
+            node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
+            max_message_size_bytes: Some(max_message_size_bytes as u64),
             controller_id: CanisterId::from_u64(876).into(),
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
@@ -1745,8 +1745,8 @@ fn only_ledger_can_append_blocks_to_archive_nodes() {
         let archive_options = ArchiveOptions {
             trigger_threshold: num_blocks as usize,
             num_blocks_to_archive: num_blocks as usize,
-            node_max_memory_size_bytes: Some(node_max_memory_size_bytes),
-            max_message_size_bytes: Some(max_message_size_bytes),
+            node_max_memory_size_bytes: Some(node_max_memory_size_bytes as u64),
+            max_message_size_bytes: Some(max_message_size_bytes as u64),
             controller_id: CanisterId::from_u64(876).into(),
             cycles_for_archive_creation: Some(0),
             max_transactions_per_response: None,
