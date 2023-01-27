@@ -146,6 +146,7 @@ type GovernanceCachedMetrics = record {
   community_fund_total_maturity_e8s_equivalent : nat64;
   total_staked_e8s : nat64;
   not_dissolving_neurons_count : nat64;
+  total_locked_e8s : nat64;
   dissolved_neurons_e8s : nat64;
   neurons_with_less_than_6_months_dissolve_delay_e8s : nat64;
   dissolving_neurons_count_buckets : vec record { nat64; nat64 };
@@ -344,10 +345,11 @@ type RemoveHotKey = record { hot_key_to_remove : opt principal };
 type Result = variant { Ok; Err : GovernanceError };
 type Result_1 = variant { Error : GovernanceError; NeuronId : NeuronId };
 type Result_2 = variant { Ok : Neuron; Err : GovernanceError };
-type Result_3 = variant { Ok : RewardNodeProviders; Err : GovernanceError };
-type Result_4 = variant { Ok : NeuronInfo; Err : GovernanceError };
-type Result_5 = variant { Ok : NodeProvider; Err : GovernanceError };
-type Result_6 = variant { Committed : Committed; Aborted : record {} };
+type Result_3 = variant { Ok : GovernanceCachedMetrics; Err : GovernanceError };
+type Result_4 = variant { Ok : RewardNodeProviders; Err : GovernanceError };
+type Result_5 = variant { Ok : NeuronInfo; Err : GovernanceError };
+type Result_6 = variant { Ok : NodeProvider; Err : GovernanceError };
+type Result_7 = variant { Committed : Committed; Aborted : record {} };
 type RewardEvent = record {
   day_after_genesis : nat64;
   actual_timestamp_seconds : nat64;
@@ -379,7 +381,7 @@ type SetSnsTokenSwapOpenTimeWindow = record {
   swap_canister_id : opt principal;
 };
 type SettleCommunityFundParticipation = record {
-  result : opt Result_6;
+  result : opt Result_7;
   open_sns_token_swap_proposal_id : opt nat64;
 };
 type Spawn = record {
@@ -426,17 +428,18 @@ service : (Governance) -> {
   get_full_neuron_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (
       Result_2,
     ) query;
-  get_monthly_node_provider_rewards : () -> (Result_3);
+  get_metrics : () -> (Result_3) query;
+  get_monthly_node_provider_rewards : () -> (Result_4);
   get_most_recent_monthly_node_provider_rewards : () -> (
       opt MostRecentMonthlyNodeProviderRewards,
     ) query;
   get_network_economics_parameters : () -> (NetworkEconomics) query;
   get_neuron_ids : () -> (vec nat64) query;
-  get_neuron_info : (nat64) -> (Result_4) query;
+  get_neuron_info : (nat64) -> (Result_5) query;
   get_neuron_info_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (
-      Result_4,
+      Result_5,
     ) query;
-  get_node_provider_by_caller : (null) -> (Result_5) query;
+  get_node_provider_by_caller : (null) -> (Result_6) query;
   get_pending_proposals : () -> (vec ProposalInfo) query;
   get_proposal_info : (nat64) -> (opt ProposalInfo) query;
   list_known_neurons : () -> (ListKnownNeuronsResponse) query;

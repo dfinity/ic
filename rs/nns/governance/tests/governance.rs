@@ -298,6 +298,7 @@ fn test_single_neuron_proposal_new() {
                             0, 1
                         )),
                         GovernanceCachedMetricsChange::TotalStakedE8S(U64Change(0, 1)),
+                        GovernanceCachedMetricsChange::TotalLockedE8S(U64Change(0, 1)),
                     ]),
                 )),
                 GovernanceChange::CachedDailyMaturityModulationBasisPoints(
@@ -8906,6 +8907,7 @@ fn test_compute_cached_metrics() {
         neurons_with_less_than_6_months_dissolve_delay_e8s: 5870000100,
         community_fund_total_staked_e8s: 234_000_000,
         community_fund_total_maturity_e8s_equivalent: 450_988_012,
+        total_locked_e8s: 34_124_000_100,
     };
 
     assert_eq!(expected_metrics, actual_metrics);
@@ -9795,7 +9797,7 @@ fn test_wfq_majority_reached_no_delay() {
     );
 }
 
-/// Simulates a situation in wich most of the voting is done at the beginning of
+/// Simulates a situation in which most of the voting is done at the beginning of
 /// the interval and there is no controversy. In such situation there should be
 /// no effect on the deadline.
 #[test]
@@ -11809,4 +11811,153 @@ async fn test_proposal_url_not_on_list_fails() {
     )
     .await
     .unwrap();
+}
+
+#[tokio::test]
+async fn test_metrics() {
+    let now = 100;
+    let mut neurons = HashMap::<u64, Neuron>::new();
+
+    // Not Dissolving neurons: 100m + 200m.
+    neurons.insert(
+        1,
+        Neuron {
+            cached_neuron_stake_e8s: 100_000_000,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
+            ..Default::default()
+        },
+    );
+
+    neurons.insert(
+        2,
+        Neuron {
+            cached_neuron_stake_e8s: 200_000_000,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
+            ..Default::default()
+        },
+    );
+
+    // Dissolving neurons: 300m.
+    neurons.insert(
+        3,
+        Neuron {
+            cached_neuron_stake_e8s: 300_000_000,
+            dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                now + ONE_YEAR_SECONDS * 3,
+            )),
+            ..Default::default()
+        },
+    );
+
+    // Dissolved neurons: 400m.
+    neurons.insert(
+        4,
+        Neuron {
+            cached_neuron_stake_e8s: 400_000_000,
+            ..Default::default()
+        },
+    );
+
+    let economics = NetworkEconomics {
+        neuron_minimum_stake_e8s: 100_000_000,
+        ..Default::default()
+    };
+
+    let gov = GovernanceProto {
+        economics: Some(economics),
+        neurons,
+        ..Default::default()
+    };
+
+    let expected_metrics = GovernanceCachedMetrics {
+        timestamp_seconds: 100,
+        total_supply_icp: 0,
+        dissolving_neurons_count: 1,
+        dissolving_neurons_e8s_buckets: [(3, 300000000.0)].iter().cloned().collect(),
+        dissolving_neurons_count_buckets: [(3, 1)].iter().cloned().collect(),
+        not_dissolving_neurons_count: 2,
+        not_dissolving_neurons_e8s_buckets: [(1, 200000000.0), (0, 100000000.0)]
+            .iter()
+            .cloned()
+            .collect(),
+        not_dissolving_neurons_count_buckets: [(0, 1), (1, 1)].iter().cloned().collect(),
+        dissolved_neurons_count: 1,
+        dissolved_neurons_e8s: 400000000,
+        garbage_collectable_neurons_count: 0,
+        neurons_with_invalid_stake_count: 0,
+        total_staked_e8s: 1000000000,
+        neurons_with_less_than_6_months_dissolve_delay_count: 2,
+        neurons_with_less_than_6_months_dissolve_delay_e8s: 500000000,
+        community_fund_total_staked_e8s: 0,
+        community_fund_total_maturity_e8s_equivalent: 0,
+        total_locked_e8s: 600_000_000,
+    };
+    let actual_metrics = gov.compute_cached_metrics(now, Tokens::new(0, 0).unwrap());
+    assert_eq!(
+        expected_metrics, actual_metrics,
+        "Cached metrics don't match expected metrics."
+    );
+
+    let driver = fake::FakeDriver::default().at(60 * 60 * 24 * 30);
+    let mut gov = Governance::new(
+        gov,
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+    gov.run_periodic_tasks().now_or_never();
+
+    // Check again after periodic task.
+    let actual_metrics = gov
+        .proto
+        .compute_cached_metrics(now, Tokens::new(0, 0).unwrap());
+    assert_eq!(
+        expected_metrics, actual_metrics,
+        "Invalid metrics after period tasks execution."
+    );
+
+    // Check result of query.
+    let expected_metrics = GovernanceCachedMetrics {
+        timestamp_seconds: 60 * 60 * 24 * 30,
+        total_supply_icp: 0,
+        dissolving_neurons_count: 1,
+        dissolving_neurons_e8s_buckets: [(2, 300000000.0)].iter().cloned().collect(),
+        dissolving_neurons_count_buckets: [(2, 1)].iter().cloned().collect(),
+        not_dissolving_neurons_count: 2,
+        not_dissolving_neurons_e8s_buckets: [(1, 200000000.0), (0, 100000000.0)]
+            .iter()
+            .cloned()
+            .collect(),
+        not_dissolving_neurons_count_buckets: [(0, 1), (1, 1)].iter().cloned().collect(),
+        dissolved_neurons_count: 1,
+        dissolved_neurons_e8s: 400000000,
+        garbage_collectable_neurons_count: 0,
+        neurons_with_invalid_stake_count: 0,
+        total_staked_e8s: 1000000000,
+        neurons_with_less_than_6_months_dissolve_delay_count: 2,
+        neurons_with_less_than_6_months_dissolve_delay_e8s: 500000000,
+        community_fund_total_staked_e8s: 0,
+        community_fund_total_maturity_e8s_equivalent: 0,
+        total_locked_e8s: 600_000_000,
+    };
+    let metrics = gov.get_metrics().expect("Error while querying metrics.");
+    assert_eq!(
+        expected_metrics, metrics,
+        "Queried metrics don't match expected metrics."
+    );
+
+    // Ensure that metrics match our set of neurons.
+    assert_eq!(
+        1000000000, metrics.total_staked_e8s,
+        "Invalid total staked e8s"
+    );
+    assert_eq!(
+        400000000, metrics.dissolved_neurons_e8s,
+        "Invalid dissolved e8s"
+    );
+    assert_eq!(
+        600000000,
+        metrics.total_staked_e8s - metrics.dissolved_neurons_e8s,
+        "Invalid locked verification"
+    );
 }

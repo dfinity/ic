@@ -2243,6 +2243,8 @@ pub mod governance {
         pub community_fund_total_staked_e8s: u64,
         #[prost(uint64, tag = "17")]
         pub community_fund_total_maturity_e8s_equivalent: u64,
+        #[prost(uint64, tag = "18")]
+        pub total_locked_e8s: u64,
     }
 }
 /// Proposals with restricted voting are not included unless the caller
