@@ -2767,8 +2767,12 @@ impl StateManager for StateManagerImpl {
             base_height: Height,
         }
 
-        let mut previous_checkpoint_info: Option<PreviousCheckpointInfo> = None;
-        let (cp_layout, checkpointed_state) = match scope {
+        let mut state_metadata_and_compute_manifest_request: Option<(
+            StateMetadata,
+            ComputeManifestRequest,
+        )> = None;
+
+        let checkpointed_state = match scope {
             CertificationScope::Full => {
                 let start = Instant::now();
                 {
@@ -2785,7 +2789,7 @@ impl StateManager for StateManagerImpl {
                     recv.recv()
                         .expect("failed to wait for ComputeManifest thread");
                 }
-                previous_checkpoint_info = {
+                let previous_checkpoint_info = {
                     let states = self.states.read();
                     states
                         .states_metadata
@@ -2875,9 +2879,42 @@ impl StateManager for StateManagerImpl {
                     ),
                 };
                 switch_to_checkpoint(&mut state, &checkpointed_state);
-                (Some(cp_layout), checkpointed_state)
+                // On the NNS subnet we never allow incremental manifest computation
+                let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
+
+                let manifest_delta = if is_nns {
+                    None
+                } else {
+                    previous_checkpoint_info.map(
+                        |PreviousCheckpointInfo {
+                             dirty_pages,
+                             base_manifest,
+                             base_height,
+                         }| {
+                            manifest::ManifestDelta {
+                                base_manifest,
+                                base_height,
+                                target_height: height,
+                                dirty_memory_pages: dirty_pages,
+                            }
+                        },
+                    )
+                };
+
+                state_metadata_and_compute_manifest_request = Some((
+                    StateMetadata {
+                        checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
+                        bundled_manifest: None,
+                        state_sync_file_group: None,
+                    },
+                    ComputeManifestRequest::Compute {
+                        checkpoint_layout: cp_layout,
+                        manifest_delta: if is_nns { None } else { manifest_delta },
+                    },
+                ));
+                checkpointed_state
             }
-            CertificationScope::Metadata => (None, state.clone()),
+            CertificationScope::Metadata => state.clone(),
         };
 
         let certification_metadata =
@@ -2930,39 +2967,12 @@ impl StateManager for StateManagerImpl {
                 .certifications_metadata
                 .insert(height, certification_metadata);
 
-            if scope == CertificationScope::Full {
-                let manifest_delta = previous_checkpoint_info.map(
-                    |PreviousCheckpointInfo {
-                         dirty_pages,
-                         base_manifest,
-                         base_height,
-                     }| {
-                        manifest::ManifestDelta {
-                            base_manifest,
-                            base_height,
-                            target_height: height,
-                            dirty_memory_pages: dirty_pages,
-                        }
-                    },
-                );
-
-                states.states_metadata.insert(
-                    height,
-                    StateMetadata {
-                        checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
-                        bundled_manifest: None,
-                        state_sync_file_group: None,
-                    },
-                );
-
-                // On the NNS subnet we never allow incremental manifest computation
-                let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
-
+            if let Some((state_metadata, compute_manifest_request)) =
+                state_metadata_and_compute_manifest_request
+            {
+                states.states_metadata.insert(height, state_metadata);
                 self.compute_manifest_request_sender
-                    .send(ComputeManifestRequest::Compute {
-                        checkpoint_layout: cp_layout.unwrap(),
-                        manifest_delta: if is_nns { None } else { manifest_delta },
-                    })
+                    .send(compute_manifest_request)
                     .expect("failed to send ComputeManifestRequest message");
             }
 
