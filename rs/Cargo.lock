@@ -8356,6 +8356,7 @@ dependencies = [
  "ic-sns-wasm",
  "ic-state-machine-tests",
  "ic-types",
+ "ic-universal-canister",
  "icp-ledger",
  "itertools",
  "lazy_static",

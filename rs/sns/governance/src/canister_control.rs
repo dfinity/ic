@@ -43,6 +43,7 @@ pub async fn upgrade_canister_directly(
     env: &dyn Environment,
     canister_id: CanisterId,
     wasm: Vec<u8>,
+    arg: Vec<u8>,
 ) -> Result<(), GovernanceError> {
     log!(
         INFO,
@@ -59,7 +60,7 @@ pub async fn upgrade_canister_directly(
         log_prefix(),
         canister_id
     );
-    let install_result = install_code(env, canister_id, wasm)
+    let install_result = install_code(env, canister_id, wasm, arg)
         // No question mark operator here, because we always want to re-start
         // the canister after attempting install_code, even if install_code
         // fails.
@@ -93,6 +94,7 @@ pub async fn install_code(
     env: &dyn Environment,
     canister_id: CanisterId,
     wasm: Vec<u8>,
+    arg: Vec<u8>,
 ) -> Result<(), GovernanceError> {
     const MEMORY_ALLOCATION_BYTES: u64 = 1_u64 << 30;
 
@@ -100,7 +102,7 @@ pub async fn install_code(
         mode: ic_ic00_types::CanisterInstallMode::Upgrade,
         canister_id: canister_id.get(),
         wasm_module: wasm,
-        arg: vec![],
+        arg,
         compute_allocation: None,
         memory_allocation: Some(candid::Nat::from(MEMORY_ALLOCATION_BYTES)),
         query_allocation: None,

@@ -2352,14 +2352,21 @@ impl Governance {
             ));
         }
 
-        self.upgrade_non_root_canister(target_canister_id, upgrade.new_canister_wasm)
-            .await
+        self.upgrade_non_root_canister(
+            target_canister_id,
+            upgrade.new_canister_wasm,
+            upgrade
+                .canister_upgrade_arg
+                .unwrap_or_else(|| Encode!().unwrap()),
+        )
+        .await
     }
 
     async fn upgrade_non_root_canister(
         &mut self,
         target_canister_id: CanisterId,
         wasm: Vec<u8>,
+        arg: Vec<u8>,
     ) -> Result<(), GovernanceError> {
         // Serialize upgrade.
         let payload = {
@@ -2377,7 +2384,8 @@ impl Governance {
 
             let change_canister_arg =
                 ChangeCanisterProposal::new(stop_before_installing, mode, target_canister_id)
-                    .with_wasm(wasm);
+                    .with_wasm(wasm)
+                    .with_arg(arg);
 
             candid::Encode!(&change_canister_arg).unwrap()
         };
@@ -2446,11 +2454,21 @@ impl Governance {
         let target_is_root = canister_ids_to_upgrade.contains(&root_canister_id);
 
         if target_is_root {
-            upgrade_canister_directly(&*self.env, root_canister_id, target_wasm).await?;
+            upgrade_canister_directly(
+                &*self.env,
+                root_canister_id,
+                target_wasm,
+                Encode!().unwrap(),
+            )
+            .await?;
         } else {
             for target_canister_id in canister_ids_to_upgrade {
-                self.upgrade_non_root_canister(target_canister_id, target_wasm.clone())
-                    .await?;
+                self.upgrade_non_root_canister(
+                    target_canister_id,
+                    target_wasm.clone(),
+                    Encode!().unwrap(),
+                )
+                .await?;
             }
         }
 
@@ -6285,7 +6303,8 @@ mod tests {
                         CanisterInstallMode::Upgrade,
                         canister_id
                     )
-                    .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2]))
+                    .with_wasm(vec![9, 8, 7, 6, 5, 4, 3, 2])
+                    .with_arg(Encode!().unwrap()))
                     .unwrap(),
                     // We don't actually look at the response from this call anywhere
                     Some(Ok(Encode!().unwrap())),
@@ -6325,7 +6344,7 @@ mod tests {
                         mode: ic_ic00_types::CanisterInstallMode::Upgrade,
                         canister_id: canister_id.get(),
                         wasm_module: vec![9, 8, 7, 6, 5, 4, 3, 2],
-                        arg: vec![],
+                        arg: Encode!().unwrap(),
                         compute_allocation: None,
                         memory_allocation: Some(candid::Nat::from(1_u64 << 30)), // local const in install_code()
                         query_allocation: None,
@@ -6896,6 +6915,7 @@ mod tests {
                 canister_id: Some(canister_id.get()),
                 // small valid wasm
                 new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 2, 0, 0, 0],
+                canister_upgrade_arg: None,
             });
 
             // Upgrade Proposal

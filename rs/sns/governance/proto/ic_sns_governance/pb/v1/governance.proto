@@ -308,6 +308,8 @@ message UpgradeSnsControlledCanister {
   ic_base_types.pb.v1.PrincipalId canister_id = 1;
   // The new wasm module that the canister is upgraded to.
   bytes new_canister_wasm = 2;
+  // Arguments passed to the post-upgrade method of the new wasm module.
+  optional bytes canister_upgrade_arg = 3;
 }
 
 
