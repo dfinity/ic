@@ -400,7 +400,7 @@ impl DirectSnsDeployerForTests {
         let sns_canisters = lookup_or_else_create_canisters(&args);
         // TODO - add version hash to test upgrade path locally?  Where would we find that?
         let sns_canister_payloads =
-            match sns_init_payload.build_canister_payloads(&sns_canisters, None) {
+            match sns_init_payload.build_canister_payloads(&sns_canisters, None, testflight) {
                 Ok(payload) => payload,
                 Err(e) => panic!("Could not build canister init payloads: {}", e),
             };

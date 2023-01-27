@@ -148,12 +148,13 @@ impl SnsInitPayload {
         &self,
         sns_canister_ids: &SnsCanisterIds,
         deployed_version: Option<Version>,
+        testflight: bool,
     ) -> anyhow::Result<SnsCanisterInitPayloads> {
         self.validate()?;
         Ok(SnsCanisterInitPayloads {
             governance: self.governance_init_args(sns_canister_ids, deployed_version)?,
             ledger: self.ledger_init_args(sns_canister_ids)?,
-            root: self.root_init_args(sns_canister_ids),
+            root: self.root_init_args(sns_canister_ids, testflight),
             swap: self.swap_init_args(sns_canister_ids),
             index: self.index_init_args(sns_canister_ids),
         })
@@ -270,7 +271,11 @@ impl SnsInitPayload {
     }
 
     /// Construct the params used to initialize a SNS Root canister.
-    fn root_init_args(&self, sns_canister_ids: &SnsCanisterIds) -> SnsRootCanister {
+    fn root_init_args(
+        &self,
+        sns_canister_ids: &SnsCanisterIds,
+        testflight: bool,
+    ) -> SnsRootCanister {
         SnsRootCanister {
             governance_canister_id: Some(sns_canister_ids.governance),
             ledger_canister_id: Some(sns_canister_ids.ledger),
@@ -279,7 +284,7 @@ impl SnsInitPayload {
             archive_canister_ids: vec![],
             latest_ledger_archive_poll_timestamp_seconds: None,
             index_canister_id: Some(sns_canister_ids.index),
-            testflight: false,
+            testflight,
         }
     }
 
@@ -951,7 +956,7 @@ mod test {
         let sns_canister_ids = create_canister_ids();
 
         // Build all SNS canister's initialization payloads and verify the payload was.
-        let build_result = sns_init_payload.build_canister_payloads(&sns_canister_ids, None);
+        let build_result = sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false);
         let sns_canisters_init_payloads = match build_result {
             Ok(payloads) => payloads,
             Err(e) => panic!("Could not build canister init payloads: {}", e),
@@ -1014,7 +1019,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Governance
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None)
+            .build_canister_payloads(&sns_canister_ids, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let governance = canister_payloads.governance;
@@ -1040,7 +1045,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Root
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None)
+            .build_canister_payloads(&sns_canister_ids, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let root = canister_payloads.root;
@@ -1067,7 +1072,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Swap
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None)
+            .build_canister_payloads(&sns_canister_ids, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let swap = canister_payloads.swap;
@@ -1098,7 +1103,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Ledger
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None)
+            .build_canister_payloads(&sns_canister_ids, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let ledger = canister_payloads.ledger;
@@ -1224,7 +1229,7 @@ mod test {
 
         // Build the SnsCanisterInitPayloads including SNS Governance
         let canister_payloads = sns_init_payload
-            .build_canister_payloads(&sns_canister_ids, None)
+            .build_canister_payloads(&sns_canister_ids, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let governance = canister_payloads.governance;

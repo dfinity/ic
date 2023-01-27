@@ -411,6 +411,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
             .try_into()
             .unwrap(),
             Some(old_version),
+            false,
         )
         .unwrap();
 
@@ -688,6 +689,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
             .try_into()
             .unwrap(),
             Some(old_version.clone()),
+            false,
         )
         .unwrap();
 

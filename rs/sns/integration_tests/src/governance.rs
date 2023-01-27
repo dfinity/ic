@@ -66,6 +66,7 @@ fn test_get_init_config_file() {
                     index: PrincipalId::new_user_test_id(5),
                 },
                 None,
+                false,
             )
             .unwrap();
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_canisters_init_payload).await;

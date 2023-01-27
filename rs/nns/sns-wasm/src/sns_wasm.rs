@@ -560,6 +560,7 @@ where
                     archive_wasm_hash: latest_version.archive_wasm_hash,
                     index_wasm_hash: latest_version.index_wasm_hash,
                 }),
+                false,
             )
             // NOTE: This error path is not under test, because validate(), called above, should
             // ensure this can never be triggered where validate() would succeed.
@@ -3020,6 +3021,7 @@ mod test {
                     archive_wasm_hash: deployed_version.archive_wasm_hash,
                     index_wasm_hash: deployed_version.index_wasm_hash,
                 }),
+                false,
             )
             .unwrap();
 
