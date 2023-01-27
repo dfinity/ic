@@ -133,30 +133,7 @@ impl Orchestrator {
         .await
         .unwrap();
 
-        let mut registration = NodeRegistration::new(
-            logger.clone(),
-            config.clone(),
-            Arc::clone(&registry_client),
-            node_id,
-            Arc::clone(&crypto) as Arc<dyn CryptoComponentForNonReplicaProcess>,
-            registry_local_store.clone(),
-        );
-
         let slog_logger = logger.inner_logger.root.clone();
-        let replica_process = Arc::new(Mutex::new(ReplicaProcess::new(slog_logger.clone())));
-        let ic_binary_directory = args
-            .ic_binary_directory
-            .as_ref()
-            .unwrap_or(&PathBuf::from("/tmp"))
-            .clone();
-
-        let cup_provider = Arc::new(CatchUpPackageProvider::new(
-            Arc::clone(&registry),
-            args.cup_dir.clone(),
-            crypto.clone(),
-            logger.clone(),
-        ));
-
         let (metrics, _metrics_runtime) = Self::get_metrics(
             metrics_addr,
             &slog_logger,
@@ -170,6 +147,30 @@ impl Orchestrator {
             .orchestrator_info
             .with_label_values(&[replica_version.as_ref()])
             .set(1);
+
+        let mut registration = NodeRegistration::new(
+            logger.clone(),
+            config.clone(),
+            Arc::clone(&registry_client),
+            Arc::clone(&metrics),
+            node_id,
+            Arc::clone(&crypto) as Arc<dyn CryptoComponentForNonReplicaProcess>,
+            registry_local_store.clone(),
+        );
+
+        let replica_process = Arc::new(Mutex::new(ReplicaProcess::new(slog_logger.clone())));
+        let ic_binary_directory = args
+            .ic_binary_directory
+            .as_ref()
+            .unwrap_or(&PathBuf::from("/tmp"))
+            .clone();
+
+        let cup_provider = Arc::new(CatchUpPackageProvider::new(
+            Arc::clone(&registry),
+            args.cup_dir.clone(),
+            crypto.clone(),
+            logger.clone(),
+        ));
 
         if args.enable_provisional_registration {
             // will not return until the node is registered

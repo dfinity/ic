@@ -1,4 +1,6 @@
 use prometheus::{IntCounter, IntGauge, IntGaugeVec};
+use strum::IntoEnumIterator;
+use strum_macros::{EnumIter, IntoStaticStr};
 
 pub const PROMETHEUS_HTTP_PORT: u16 = 9091;
 
@@ -12,6 +14,30 @@ pub struct OrchestratorMetrics {
     pub firewall_registry_version: IntGauge,
     pub reboot_duration: IntGauge,
     pub orchestrator_info: IntGaugeVec,
+    pub key_rotation_status: IntGaugeVec,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
+pub enum KeyRotationStatus {
+    Disabled,
+    TooRecent,
+    Rotating,
+    Registering,
+    Registered,
+    Error,
+}
+
+impl KeyRotationStatus {
+    fn is_transient(self) -> bool {
+        matches!(
+            self,
+            KeyRotationStatus::Registering | KeyRotationStatus::Rotating
+        )
+    }
+
+    fn is_error(self) -> bool {
+        matches!(self, KeyRotationStatus::Error)
+    }
 }
 
 impl OrchestratorMetrics {
@@ -46,6 +72,31 @@ impl OrchestratorMetrics {
                 "version info for the internet computer orchestrator running.",
                 &["ic_active_version"],
             ),
+            key_rotation_status: metrics_registry.int_gauge_vec(
+                "orchestrator_key_rotation_status",
+                "The current key rotation status.",
+                &["status"],
+            ),
         }
+    }
+
+    /// Set the current key rotation status to the given status and clear all other states.
+    /// If the given status is a transient state, do not clear the error status.
+    pub fn observe_key_rotation_status(&self, status: KeyRotationStatus) {
+        // don't clear error status when going through transient states
+        KeyRotationStatus::iter()
+            .filter(|s| !status.is_transient() || !s.is_error())
+            .for_each(|s| {
+                self.key_rotation_status
+                    .with_label_values(&[s.into()])
+                    .set((s == status) as i64);
+            });
+    }
+
+    /// Set the error status to '1'.
+    pub fn observe_key_rotation_error(&self) {
+        self.key_rotation_status
+            .with_label_values(&[KeyRotationStatus::Error.into()])
+            .set(1);
     }
 }
