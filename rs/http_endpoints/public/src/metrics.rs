@@ -53,12 +53,8 @@ impl HttpHandlerMetrics {
                 // traffic). In addition, the buckets are extended by one more
                 // value - 15s, needed for the scenario testcases.
 
-                // NOTE: If you ever change this, consult and update scenario
-                // tests in testnet/tests/scenario_tests These tests assume there
-                // MUST be a bucket at 15s, AND one bucket above it, that is not
-                // +Inf.
-                add_bucket(15.0, decimal_buckets(-3, 1)),
-                // 1ms, 2ms, 5ms, 10ms, 20ms, ..., 10s, 15s, 20s, 50s
+                decimal_buckets(-3, 1),
+                // 1ms, 2ms, 5ms, 10ms, 20ms, ..., 10s, 20s, 50s
                 &REQUESTS_LABEL_NAMES,
             ),
             requests_body_size_bytes: metrics_registry.histogram_vec(

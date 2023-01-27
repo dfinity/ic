@@ -377,11 +377,7 @@ impl TransportImpl {
         };
         self.control_plane_metrics
             .retry_connection
-            .with_label_values(&[
-                &peer_id.to_string(),
-                &channel_id.to_string(),
-                self.transport_api_label(),
-            ])
+            .with_label_values(&[&peer_id.to_string()])
             .inc();
 
         let socket_addr = connected.peer_addr;
@@ -479,13 +475,6 @@ impl TransportImpl {
         let accept_task = self.spawn_accept_task(channel_id, tcp_listener);
         *self.accept_port.blocking_lock() = Some(ServerPortState { accept_task });
         *self.event_handler.blocking_lock() = Some(event_handler);
-    }
-
-    pub(crate) fn transport_api_label(&self) -> &'static str {
-        match self.use_h2 {
-            true => "h2",
-            false => "legacy",
-        }
     }
 }
 
