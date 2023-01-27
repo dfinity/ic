@@ -33,6 +33,7 @@ fn test_get_status() {
                 archive_canister_ids: vec![],
                 latest_ledger_archive_poll_timestamp_seconds: None,
                 index_canister_id: Some(PrincipalId::new_user_test_id(45)),
+                testflight: false,
             },
         )
         .await;
