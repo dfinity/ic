@@ -13,8 +13,8 @@ use crate::request::Request;
 use crate::request_types::{
     ChangeAutoStakeMaturityMetadata, DisburseMetadata, FollowMetadata, KeyMetadata,
     MergeMaturityMetadata, NeuronIdentifierMetadata, NeuronInfoMetadata, PublicKeyOrPrincipal,
-    RequestResultMetadata, SetDissolveTimestampMetadata, SpawnMetadata, StakeMaturityMetadata,
-    Status, STATUS_COMPLETED,
+    RegisterVoteMetadata, RequestResultMetadata, SetDissolveTimestampMetadata, SpawnMetadata,
+    StakeMaturityMetadata, Status, STATUS_COMPLETED,
 };
 use crate::transaction_id::TransactionIdentifier;
 use crate::{convert, errors};
@@ -217,6 +217,15 @@ pub fn operations_to_requests(
                 } = o.metadata.clone().try_into()?;
                 validate_neuron_management_op()?;
                 state.merge_maturity(account, neuron_index, percentage_to_merge)?;
+            }
+            OperationType::RegisterVote => {
+                let RegisterVoteMetadata {
+                    neuron_index,
+                    proposal,
+                    vote,
+                } = o.metadata.clone().try_into()?;
+                validate_neuron_management_op()?;
+                state.register_vote(account, neuron_index, proposal, vote)?;
             }
             OperationType::StakeMaturity => {
                 let StakeMaturityMetadata {

@@ -60,7 +60,7 @@ pub fn setup(
         governance_id,
         node.get_public_url(),
     );
-    create_rosetta_client(env, vm, port, ledger_id)
+    create_rosetta_client(env, vm, port, ledger_id, governance_id)
 }
 
 /// Create an Internet Computer for Rosetta tests.
@@ -364,9 +364,10 @@ fn create_rosetta_client(
     vm: AllocatedVm,
     port: u32,
     ledger_id: CanisterId,
+    governance_id: CanisterId,
 ) -> RosettaApiClient {
     let logger = env.logger();
-    let client = RosettaApiClient::new(vm, port, ledger_id, &logger);
+    let client = RosettaApiClient::new(vm, port, ledger_id, governance_id, &logger);
     block_on(async {
         client.wait_for_startup().await;
     });

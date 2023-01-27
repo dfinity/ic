@@ -9,3 +9,4 @@ pub mod neuron_info;
 pub mod neuron_maturity;
 pub mod neuron_spawn;
 pub mod neuron_staking;
+pub mod neuron_voting;

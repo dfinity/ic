@@ -4,6 +4,7 @@ mod handle_disburse;
 mod handle_follow;
 mod handle_merge_maturity;
 mod handle_neuron_info;
+mod handle_register_vote;
 mod handle_remove_hotkey;
 mod handle_send;
 mod handle_set_dissolve_timestamp;
@@ -47,10 +48,11 @@ use crate::ledger_client::{
     handle_change_auto_stake_maturity::handle_change_auto_stake_maturity,
     handle_disburse::handle_disburse, handle_follow::handle_follow,
     handle_merge_maturity::handle_merge_maturity, handle_neuron_info::handle_neuron_info,
-    handle_remove_hotkey::handle_remove_hotkey, handle_send::handle_send,
-    handle_set_dissolve_timestamp::handle_set_dissolve_timestamp, handle_spawn::handle_spawn,
-    handle_stake::handle_stake, handle_stake_maturity::handle_stake_maturity,
-    handle_start_dissolve::handle_start_dissolve, handle_stop_dissolve::handle_stop_dissolve,
+    handle_register_vote::handle_register_vote, handle_remove_hotkey::handle_remove_hotkey,
+    handle_send::handle_send, handle_set_dissolve_timestamp::handle_set_dissolve_timestamp,
+    handle_spawn::handle_spawn, handle_stake::handle_stake,
+    handle_stake_maturity::handle_stake_maturity, handle_start_dissolve::handle_start_dissolve,
+    handle_stop_dissolve::handle_stop_dissolve,
 };
 use crate::models::{EnvelopePair, Object, SignedTransaction};
 use crate::request::request_result::RequestResult;
@@ -671,6 +673,7 @@ impl LedgerClient {
             RequestType::Disburse { .. } => handle_disburse(bytes),
             RequestType::Follow { .. } => handle_follow(bytes),
             RequestType::MergeMaturity { .. } => handle_merge_maturity(bytes),
+            RequestType::RegisterVote { .. } => handle_register_vote(bytes),
             RequestType::StakeMaturity { .. } => handle_stake_maturity(bytes),
             RequestType::NeuronInfo { .. } => handle_neuron_info(bytes),
             RequestType::RemoveHotKey { .. } => handle_remove_hotkey(bytes),

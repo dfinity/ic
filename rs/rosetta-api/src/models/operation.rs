@@ -158,6 +158,9 @@ pub enum OperationType {
     #[serde(rename = "MERGE_MATURITY")]
     #[strum(serialize = "MERGE_MATURITY")]
     MergeMaturity,
+    #[serde(rename = "REGISTER_VOTE")]
+    #[strum(serialize = "REGISTER_VOTE")]
+    RegisterVote,
     #[serde(rename = "STAKE_MATURITY")]
     #[strum(serialize = "STAKE_MATURITY")]
     StakeMaturity,
