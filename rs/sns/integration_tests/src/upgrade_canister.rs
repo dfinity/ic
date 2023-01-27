@@ -1,6 +1,7 @@
 use candid::Encode;
 use canister_test::{Canister, Project, Runtime, Wasm};
 use dfn_candid::candid_one;
+use dfn_core::bytes;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_ic00_types::CanisterInstallMode;
@@ -18,6 +19,7 @@ use ic_sns_test_utils::itest_helpers::{
     install_swap_canister, local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,
     UserInfo,
 };
+use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use itertools::Itertools;
 use lazy_static::lazy_static;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -100,8 +102,7 @@ fn test_upgrade_canister_proposal_is_successful() {
 
         // Assert that original_dapp_wasm_hash differs from the hash of
         // the wasm that we're about to install.
-        let new_dapp_wasm =
-            Wasm::from_wat("(module (import \"ic0\" \"msg_reply\" (func $msg_reply)))").bytes();
+        let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes();
         let new_dapp_wasm_hash = &ic_crypto_sha::Sha256::hash(&new_dapp_wasm);
         assert_ne!(new_dapp_wasm_hash[..], original_dapp_wasm_hash[..]);
 
@@ -113,6 +114,7 @@ fn test_upgrade_canister_proposal_is_successful() {
                 UpgradeSnsControlledCanister {
                     canister_id: Some(dapp_canister.canister_id().get()),
                     new_canister_wasm: new_dapp_wasm,
+                    canister_upgrade_arg: Some(wasm().set_global_data(&[42]).build()),
                 },
             )),
             ..Default::default()
@@ -158,6 +160,16 @@ fn test_upgrade_canister_proposal_is_successful() {
             "status: {:?}",
             status
         );
+        // Check that arg to post-upgrade method was passed to the new wasm module.
+        let res: Vec<u8> = dapp_canister
+            .update_(
+                "update",
+                bytes,
+                wasm().get_global_data().append_and_reply().build(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res, vec![42]);
 
         Ok(())
     })
@@ -254,6 +266,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
                 UpgradeSnsControlledCanister {
                     canister_id: Some(dapp_canister.canister_id().get()),
                     new_canister_wasm: new_dapp_wasm,
+                    canister_upgrade_arg: None,
                 },
             )),
             ..Default::default()
@@ -267,10 +280,11 @@ fn test_upgrade_canister_proposal_execution_fail() {
 
         // Step 3.a: Assert that the proposal was approved, but did not execute successfully.
         let mut proposal = sns_canisters.get_proposal(proposal_id).await;
-        // Clear wasm field to avoid giant debug output.
+        // Clear wasm and arg fields to avoid giant debug output.
         match proposal.proposal.as_mut().unwrap().action.as_mut().unwrap() {
             Action::UpgradeSnsControlledCanister(upgrade) => {
                 upgrade.new_canister_wasm = vec![];
+                upgrade.canister_upgrade_arg = None;
             }
             action => panic!(
                 "Proposal action was not UpgradeSnsControlledCanister: {:?}",
@@ -441,6 +455,7 @@ fn test_upgrade_after_state_shrink() {
                 UpgradeSnsControlledCanister {
                     canister_id: Some(sns_canisters.governance.canister_id().into()),
                     new_canister_wasm: governance_wasm,
+                    canister_upgrade_arg: None,
                 },
             )),
             ..Default::default()

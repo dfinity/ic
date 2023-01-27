@@ -1340,6 +1340,7 @@ mod tests {
         let upgrade = UpgradeSnsControlledCanister {
             canister_id: Some(basic_principal_id()),
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
+            canister_upgrade_arg: None,
         };
         assert_is_ok(validate_and_render_upgrade_sns_controlled_canister(
             &upgrade,

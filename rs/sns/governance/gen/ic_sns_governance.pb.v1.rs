@@ -357,6 +357,9 @@ pub struct UpgradeSnsControlledCanister {
     /// The new wasm module that the canister is upgraded to.
     #[prost(bytes = "vec", tag = "2")]
     pub new_canister_wasm: ::prost::alloc::vec::Vec<u8>,
+    /// Arguments passed to the post-upgrade method of the new wasm module.
+    #[prost(bytes = "vec", optional, tag = "3")]
+    pub canister_upgrade_arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.

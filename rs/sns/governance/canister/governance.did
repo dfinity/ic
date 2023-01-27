@@ -378,6 +378,7 @@ type UpgradeInProgress = record {
 type UpgradeSnsControlledCanister = record {
   new_canister_wasm : vec nat8;
   canister_id : opt principal;
+  canister_upgrade_arg : opt vec nat8;
 };
 type Version = record {
   archive_wasm_hash : vec nat8;
