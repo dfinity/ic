@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
+    metrics::{KeyRotationStatus, OrchestratorMetrics},
     signer::{Hsm, Signer, TestSigner},
 };
 use candid::Encode;
@@ -44,6 +45,7 @@ pub(crate) struct NodeRegistration {
     log: ReplicaLogger,
     node_config: Config,
     registry_client: Arc<dyn RegistryClient>,
+    metrics: Arc<OrchestratorMetrics>,
     node_id: NodeId,
     key_handler: Arc<dyn CryptoComponentForNonReplicaProcess>,
     local_store: Arc<dyn LocalStore>,
@@ -55,6 +57,7 @@ impl NodeRegistration {
         log: ReplicaLogger,
         node_config: Config,
         registry_client: Arc<dyn RegistryClient>,
+        metrics: Arc<OrchestratorMetrics>,
         node_id: NodeId,
         key_handler: Arc<dyn CryptoComponentForNonReplicaProcess>,
         local_store: Arc<dyn LocalStore>,
@@ -74,6 +77,7 @@ impl NodeRegistration {
             log,
             node_config,
             registry_client,
+            metrics,
             node_id,
             key_handler,
             local_store,
@@ -190,9 +194,22 @@ impl NodeRegistration {
     /// to generate or register keys are retried.
     pub async fn check_all_keys_registered_otherwise_register(&self, subnet_id: SubnetId) {
         let registry_version = self.registry_client.get_latest_version();
-        if !self.is_tecdsa_and_time_to_rotate(registry_version, subnet_id) {
+        // If there is no ECDSA config or no key_ids, ECDSA is disabled.
+        // Delta is the key rotation period of a single node, if it is None, key rotation is disabled.
+        let delta = match self.get_key_rotation_period(registry_version, subnet_id) {
+            Some(delta) => delta,
+            None => {
+                self.metrics
+                    .observe_key_rotation_status(KeyRotationStatus::Disabled);
+                return;
+            }
+        };
+        if !self.is_time_to_rotate(registry_version, subnet_id, delta) {
+            self.metrics
+                .observe_key_rotation_status(KeyRotationStatus::TooRecent);
             return;
         }
+
         let key_handler = self.key_handler.clone();
         match tokio::task::spawn_blocking(move || {
             key_handler.check_keys_with_registry(registry_version)
@@ -202,52 +219,74 @@ impl NodeRegistration {
         {
             Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(key)) => {
                 // Try to register a key that was previously rotated but is not yet registered.
-                self.try_to_register_key(registry_version, key).await
+                self.register_key(registry_version, key).await;
             }
             Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys) => {
                 // Call cypto to rotate the keys and try to register the new key.
                 // In case registration of the new key fails, we will enter the branch above
                 // during the next call and retry registration.
                 let key_handler = self.key_handler.clone();
+                self.metrics
+                    .observe_key_rotation_status(KeyRotationStatus::Rotating);
                 match tokio::task::spawn_blocking(move || {
                     key_handler.rotate_idkg_dealing_encryption_keys(registry_version)
                 })
                 .await
                 .unwrap()
                 {
-                    Ok(key) => self.try_to_register_key(registry_version, key).await,
-                    Err(e) => warn!(self.log, "Key rotation error: {:?}", e),
+                    Ok(key) => self.register_key(registry_version, key).await,
+                    Err(e) => {
+                        self.metrics.observe_key_rotation_error();
+                        warn!(self.log, "Key rotation error: {e:?}");
+                    }
                 }
             }
             Ok(PublicKeyRegistrationStatus::AllKeysRegistered) => {}
             Err(e) => {
-                warn!(self.log, "Registry error: {:?}", e);
+                self.metrics.observe_key_rotation_error();
+                warn!(self.log, "Failed to check keys with registry: {e:?}");
             }
         }
     }
 
-    fn is_tecdsa_and_time_to_rotate(
+    async fn register_key(&self, registry_version: RegistryVersion, idkg_pk: PublicKey) {
+        self.metrics
+            .observe_key_rotation_status(KeyRotationStatus::Registering);
+        match self.try_to_register_key(registry_version, idkg_pk).await {
+            Ok(()) => {
+                self.metrics
+                    .observe_key_rotation_status(KeyRotationStatus::Registered);
+                info!(self.log, "Registration attempt finished successfully.");
+            }
+            Err(e) => {
+                self.metrics.observe_key_rotation_error();
+                warn!(self.log, "Failed to register key: {e:?}");
+            }
+        }
+    }
+
+    fn get_key_rotation_period(
         &self,
         registry_version: RegistryVersion,
         subnet_id: SubnetId,
-    ) -> bool {
-        // If there is no ECDSA config or no key_ids, ECDSA is disabled.
-        // Delta is the key rotation period of a single node, if it is None, key rotation is disabled.
-        let delta = match self
+    ) -> Option<Duration> {
+        match self
             .registry_client
             .get_ecdsa_config(subnet_id, registry_version)
         {
-            Ok(Some(config)) if !config.key_ids.is_empty() => {
-                match config.idkg_key_rotation_period_ms {
-                    Some(ms) => Duration::from_millis(ms),
-                    None => return false,
-                }
-            }
-            _ => {
-                return false;
-            }
-        };
+            Ok(Some(config)) if !config.key_ids.is_empty() => config
+                .idkg_key_rotation_period_ms
+                .map(Duration::from_millis),
+            _ => None,
+        }
+    }
 
+    fn is_time_to_rotate(
+        &self,
+        registry_version: RegistryVersion,
+        subnet_id: SubnetId,
+        delta: Duration,
+    ) -> bool {
         let own_key_timestamp = self
             .registry_client
             .get_crypto_key_for_node(
@@ -287,14 +326,14 @@ impl NodeRegistration {
             .map(|ts| SystemTime::UNIX_EPOCH + Duration::from_millis(ts))
             .collect();
 
-        if !is_time_to_rotate(delta, subnet_size, node_key_timestamps) {
-            return false;
-        }
-
-        true
+        is_time_to_rotate_in_subnet(delta, subnet_size, node_key_timestamps)
     }
 
-    async fn try_to_register_key(&self, registry_version: RegistryVersion, idkg_pk: PublicKey) {
+    async fn try_to_register_key(
+        &self,
+        registry_version: RegistryVersion,
+        idkg_pk: PublicKey,
+    ) -> Result<(), String> {
         info!(self.log, "Trying to register rotated idkg key...");
 
         let node_id = self.node_id;
@@ -303,7 +342,7 @@ impl NodeRegistration {
             .or_else(|| self.get_random_nns_url_from_config())
         {
             Some(url) => url,
-            None => return,
+            None => return Err("Failed to get random NNS URL.".into()),
         };
         let key_handler = self.key_handler.clone();
         let node_pub_key_opt = tokio::task::spawn_blocking(move || {
@@ -317,12 +356,10 @@ impl NodeRegistration {
         let node_pub_key = match node_pub_key_opt {
             Ok(Some(pk)) => pk,
             Ok(None) => {
-                warn!(self.log, "Missing node signing key.");
-                return;
+                return Err("Missing node signing key.".into());
             }
             Err(e) => {
-                warn!(self.log, "Failed to retrieve current node public keys: {e}");
-                return;
+                return Err(format!("Failed to retrieve current node public keys: {e}"));
             }
         };
 
@@ -346,7 +383,7 @@ impl NodeRegistration {
             idkg_dealing_encryption_pk: Some(protobuf_to_vec(idkg_pk)),
         };
 
-        if let Err(e) = agent
+        agent
             .execute_update(
                 &REGISTRY_CANISTER_ID,
                 &REGISTRY_CANISTER_ID,
@@ -356,12 +393,9 @@ impl NodeRegistration {
                 generate_nonce(),
             )
             .await
-        {
-            warn!(
-                self.log,
-                "Error when sending register additional key request: {:?}", e
-            );
-        }
+            .map_err(|e| format!("Error when sending register additional key request: {e}"))?;
+
+        Ok(())
     }
 
     // Returns one random NNS url from the node config.
@@ -467,21 +501,13 @@ impl NodeRegistration {
             }
         }
     }
-
-    pub(crate) fn is_tecdsa_subnet(&self, subnet_id: SubnetId) -> bool {
-        let version = self.registry_client.get_latest_version();
-        match self.registry_client.get_ecdsa_config(subnet_id, version) {
-            Ok(Some(config)) => !config.key_ids.is_empty(),
-            _ => false,
-        }
-    }
 }
 
 /// Given Δ (= key rotation period of a single node), calculates Ɣ = Δ/subnet_size * delay_compensation
 /// (= key rotation period of the subnet as a whole). Then determines if at least Ɣ time has passed
 /// since all of the given timestamps. Iff so, return true to indicate that the subnet is ready to accept
 /// a new key rotation.
-pub(crate) fn is_time_to_rotate(
+pub(crate) fn is_time_to_rotate_in_subnet(
     delta: Duration,
     subnet_size: usize,
     timestamps: Vec<SystemTime>,
@@ -662,9 +688,9 @@ mod tests {
         let in_future = vec![now - hours(25), now - hours(36), now + hours(1)];
         let delta = Duration::from_secs(14 * 24 * 60 * 60); //2 weeks
 
-        assert!(is_time_to_rotate(delta, subnet_size, empty));
-        assert!(is_time_to_rotate(delta, subnet_size, valid));
-        assert!(!is_time_to_rotate(delta, subnet_size, too_recent));
-        assert!(!is_time_to_rotate(delta, subnet_size, in_future));
+        assert!(is_time_to_rotate_in_subnet(delta, subnet_size, empty));
+        assert!(is_time_to_rotate_in_subnet(delta, subnet_size, valid));
+        assert!(!is_time_to_rotate_in_subnet(delta, subnet_size, too_recent));
+        assert!(!is_time_to_rotate_in_subnet(delta, subnet_size, in_future));
     }
 }

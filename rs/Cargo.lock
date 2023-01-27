@@ -11419,6 +11419,8 @@ dependencies = [
  "signal-hook 0.1.17",
  "slog",
  "slog-async",
+ "strum 0.23.0",
+ "strum_macros 0.23.1",
  "tar",
  "tempfile",
  "tokio",

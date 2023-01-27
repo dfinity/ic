@@ -11,6 +11,7 @@ rust_library(
     crate_name = "orchestrator",
     proc_macro_deps = [
         "@crate_index//:async-trait",
+        "@crate_index//:strum_macros",
     ],
     version = "0.8.0",
     deps = [
@@ -58,6 +59,7 @@ rust_library(
         "@crate_index//:signal-hook",
         "@crate_index//:slog",
         "@crate_index//:slog-async",
+        "@crate_index//:strum",
         "@crate_index//:tar",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
