@@ -16,7 +16,7 @@ use ic_interfaces::{
     ingress_pool::{IngressPoolObject, IngressPoolSelect, SelectResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_registry_client_helpers::subnet::{IngressMessageSettings, SubnetRegistry};
@@ -119,7 +119,7 @@ pub struct IngressManager {
 
     /// Remember last purge time to control purge frequency.
     pub(crate) last_purge_time: RwLock<Time>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     cycles_account_manager: Arc<CyclesAccountManager>,
     malicious_flags: MaliciousFlags,
 }
@@ -136,7 +136,7 @@ impl IngressManager {
         metrics_registry: MetricsRegistry,
         subnet_id: SubnetId,
         log: ReplicaLogger,
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         cycles_account_manager: Arc<CyclesAccountManager>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
@@ -152,7 +152,7 @@ impl IngressManager {
             log,
             last_purge_time: RwLock::new(UNIX_EPOCH),
             messages_to_purge: RwLock::new(Vec::new()),
-            state_manager,
+            state_reader,
             cycles_account_manager,
             malicious_flags,
         }

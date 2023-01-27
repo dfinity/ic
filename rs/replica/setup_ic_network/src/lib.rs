@@ -33,7 +33,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_p2p::IngressIngestionService;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::{StateManager, StateReader};
 use ic_interfaces_transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -100,6 +100,7 @@ pub fn create_networking_stack(
     transport: Option<Arc<dyn Transport>>,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     state_sync_client: P2PStateSyncClient,
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
@@ -132,6 +133,7 @@ pub fn create_networking_stack(
         metrics_registry.clone(),
         Arc::clone(&registry_client),
         state_manager,
+        state_reader,
         state_sync_client,
         xnet_payload_builder,
         self_validating_payload_builder,
@@ -203,6 +205,7 @@ fn setup_artifact_manager(
     metrics_registry: MetricsRegistry,
     registry_client: Arc<dyn RegistryClient>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     state_sync_client: P2PStateSyncClient,
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
@@ -267,7 +270,7 @@ fn setup_artifact_manager(
         metrics_registry.clone(),
         subnet_id,
         replica_logger.clone(),
-        Arc::clone(&state_manager) as Arc<_>,
+        Arc::clone(&state_reader) as Arc<_>,
         cycles_account_manager,
         malicious_flags.clone(),
     );
