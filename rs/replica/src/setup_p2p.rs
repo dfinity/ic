@@ -247,6 +247,7 @@ pub fn construct_ic_stack(
         None,
         Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
+        Arc::clone(&state_manager) as Arc<_>,
         P2PStateSyncClient::Client(state_sync),
         xnet_payload_builder as Arc<_>,
         self_validating_payload_builder as Arc<_>,

@@ -54,7 +54,7 @@ impl IngressSelector for IngressManager {
             }
         };
 
-        let state = match self.state_manager.get_state_at(certified_height) {
+        let state = match self.state_reader.get_state_at(certified_height) {
             Ok(state) => state,
             Err(err) => {
                 warn!(
@@ -177,7 +177,7 @@ impl IngressSelector for IngressManager {
             }
         };
 
-        let state = match self.state_manager.get_state_at(certified_height) {
+        let state = match self.state_reader.get_state_at(certified_height) {
             Ok(state) => state.take(),
             Err(err) => {
                 warn!(
