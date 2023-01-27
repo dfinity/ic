@@ -24,6 +24,7 @@ use crate::{
         StreamReadError, StreamState, TransportHeader, TransportImpl, H2_FRAME_SIZE,
         H2_WINDOW_SIZE, TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
     },
+    utils::get_peer_label,
 };
 use ic_base_types::NodeId;
 use ic_crypto_tls_interfaces::TlsStream;
@@ -485,7 +486,12 @@ pub(crate) async fn create_connected_state_for_h2_client(
         peer_id,
         channel_id,
         send_queue_reader,
-        ChannelWriter::new_with_h2_send_stream(send_stream),
+        ChannelWriter::new_with_h2_send_stream(
+            send_stream,
+            channel_id,
+            get_peer_label(&peer_addr.ip().to_string(), &peer_id),
+            data_plane_metrics.clone(),
+        ),
         data_plane_metrics.clone(),
         weak_self.clone(),
         rt_handle.clone(),
@@ -495,7 +501,12 @@ pub(crate) async fn create_connected_state_for_h2_client(
         peer_id,
         channel_id,
         event_handler,
-        ChannelReader::new_with_h2_recv_stream(recv_stream),
+        ChannelReader::new_with_h2_recv_stream(
+            recv_stream,
+            channel_id,
+            get_peer_label(&peer_addr.ip().to_string(), &peer_id),
+            data_plane_metrics.clone(),
+        ),
         data_plane_metrics,
         weak_self,
         rt_handle.clone(),
@@ -545,7 +556,12 @@ pub(crate) async fn create_connected_state_for_h2_server(
         peer_id,
         channel_id,
         send_queue_reader,
-        ChannelWriter::new_with_h2_send_stream(send_stream),
+        ChannelWriter::new_with_h2_send_stream(
+            send_stream,
+            channel_id,
+            get_peer_label(&peer_addr.ip().to_string(), &peer_id),
+            data_plane_metrics.clone(),
+        ),
         data_plane_metrics.clone(),
         weak_self.clone(),
         rt_handle.clone(),
@@ -555,7 +571,12 @@ pub(crate) async fn create_connected_state_for_h2_server(
         peer_id,
         channel_id,
         event_handler,
-        ChannelReader::new_with_h2_recv_stream(recv_stream),
+        ChannelReader::new_with_h2_recv_stream(
+            recv_stream,
+            channel_id,
+            get_peer_label(&peer_addr.ip().to_string(), &peer_id),
+            data_plane_metrics.clone(),
+        ),
         data_plane_metrics,
         weak_self,
         rt_handle,

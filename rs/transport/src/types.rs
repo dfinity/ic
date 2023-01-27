@@ -80,8 +80,13 @@ impl ChannelReader {
         ChannelReader::Legacy(tls_reader)
     }
 
-    pub fn new_with_h2_recv_stream(recv_stream: RecvStream) -> Self {
-        ChannelReader::H2RecvStream(H2Reader::new(recv_stream))
+    pub fn new_with_h2_recv_stream(
+        recv_stream: RecvStream,
+        channel_id: TransportChannelId,
+        peer_label: String,
+        metrics: DataPlaneMetrics,
+    ) -> Self {
+        ChannelReader::H2RecvStream(H2Reader::new(recv_stream, channel_id, peer_label, metrics))
     }
 }
 
@@ -95,8 +100,13 @@ impl ChannelWriter {
         ChannelWriter::Legacy(tls_writer)
     }
 
-    pub fn new_with_h2_send_stream(send_stream: SendStream<Bytes>) -> Self {
-        ChannelWriter::H2SendStream(H2Writer::new(send_stream))
+    pub fn new_with_h2_send_stream(
+        send_stream: SendStream<Bytes>,
+        channel_id: TransportChannelId,
+        peer_label: String,
+        metrics: DataPlaneMetrics,
+    ) -> Self {
+        ChannelWriter::H2SendStream(H2Writer::new(send_stream, channel_id, peer_label, metrics))
     }
 }
 
@@ -156,24 +166,45 @@ pub enum StreamReadError {
 // since send stream uses an unbounded buffer to handle data.
 pub(crate) struct H2Writer {
     send_stream: SendStream<Bytes>,
+    channel_id_label: String,
+    peer_label: String,
+    metrics: DataPlaneMetrics,
 }
 
 impl H2Writer {
-    pub fn new(send_stream: SendStream<Bytes>) -> Self {
-        Self { send_stream }
+    pub fn new(
+        send_stream: SendStream<Bytes>,
+        channel_id: TransportChannelId,
+        peer_label: String,
+        metrics: DataPlaneMetrics,
+    ) -> Self {
+        Self {
+            send_stream,
+            channel_id_label: channel_id.to_string(),
+            peer_label,
+            metrics,
+        }
     }
 
     // This is invoked to send data via sendstream. As a prerequisite, it checks available capacity
     // and waits until non-zero capacity is available before calling send to avoid overloading memory
     pub async fn send_data(&mut self, mut data: Bytes) -> Result<(), std::io::Error> {
+        let mut send_invocations = 0;
+        self.metrics
+            .h2_write_capacity
+            .with_label_values(&[&self.peer_label, &self.channel_id_label])
+            .set(self.send_stream.capacity() as i64);
+
         while !data.is_empty() {
             let len = data.len();
             self.send_stream.reserve_capacity(len);
 
             match poll_fn(|cx| self.send_stream.poll_capacity(cx)).await {
                 None | Some(Err(_)) => {
-                    let e = std::io::Error::new(std::io::ErrorKind::Other, "poll capacity failure");
-                    return Err(e);
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "poll capacity failure",
+                    ));
                 }
                 Some(Ok(0)) => continue,
                 Some(Ok(cap)) => {
@@ -185,7 +216,12 @@ impl H2Writer {
                     })?;
                 }
             }
+            send_invocations += 1;
         }
+        self.metrics
+            .h2_write_send_invocations
+            .with_label_values(&[&self.peer_label, &self.channel_id_label])
+            .observe(send_invocations.into());
         Ok(())
     }
 }
@@ -193,13 +229,24 @@ impl H2Writer {
 pub(crate) struct H2Reader {
     receive_stream: RecvStream,
     buffer: Vec<u8>,
+    channel_id_label: String,
+    peer_label: String,
+    metrics: DataPlaneMetrics,
 }
 
 impl H2Reader {
-    pub fn new(receive_stream: RecvStream) -> Self {
+    pub fn new(
+        receive_stream: RecvStream,
+        channel_id: TransportChannelId,
+        peer_label: String,
+        metrics: DataPlaneMetrics,
+    ) -> Self {
         Self {
             receive_stream,
             buffer: vec![],
+            channel_id_label: channel_id.to_string(),
+            peer_label,
+            metrics,
         }
     }
 
@@ -213,6 +260,15 @@ impl H2Reader {
         msg_type: String,
         timeout: Duration,
     ) -> Result<Vec<u8>, StreamReadError> {
+        self.metrics
+            .h2_read_used_capacity
+            .with_label_values(&[&self.peer_label, &self.channel_id_label])
+            .set(self.receive_stream.flow_control().used_capacity() as i64);
+        self.metrics
+            .h2_read_available_capacity
+            .with_label_values(&[&self.peer_label, &self.channel_id_label])
+            .set(self.receive_stream.flow_control().available_capacity() as i64);
+
         while self.buffer.len() < target_len {
             let read_future = self.receive_stream.data();
             match tokio::time::timeout(timeout, read_future).await {
