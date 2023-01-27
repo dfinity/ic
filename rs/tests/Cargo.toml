@@ -364,3 +364,11 @@ path = "bin/sns_init_sale_scalability_experiment.rs"
 [[bin]]
 name = "ic-systest-query-workload-long-test"
 path = "bin/query_workload_long_test.rs"
+
+[[bin]]
+name = "ic-systest-update-workload-long-test"
+path = "bin/update_workload_long_test.rs"
+
+[[bin]]
+name = "ic-systest-update-workload-large-payload"
+path = "bin/update_workload_large_payload.rs"
