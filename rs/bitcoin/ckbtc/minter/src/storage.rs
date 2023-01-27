@@ -10,7 +10,7 @@ const LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(0);
 const LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(1);
 
 type VMem = VirtualMemory<DefaultMemoryImpl>;
-type EventLog = StableLog<VMem, VMem>;
+type EventLog = StableLog<Vec<u8>, VMem, VMem>;
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
@@ -31,7 +31,7 @@ thread_local! {
 
 pub struct EventIterator {
     buf: Vec<u8>,
-    pos: usize,
+    pos: u64,
 }
 
 impl Iterator for EventIterator {
@@ -52,7 +52,7 @@ impl Iterator for EventIterator {
     }
 
     fn nth(&mut self, n: usize) -> Option<Event> {
-        self.pos = self.pos.saturating_add(n);
+        self.pos = self.pos.saturating_add(n as u64);
         self.next()
     }
 }
@@ -80,7 +80,7 @@ pub fn events() -> impl Iterator<Item = Event> {
 }
 
 /// Returns the current number of events in the log.
-pub fn count_events() -> usize {
+pub fn count_events() -> u64 {
     EVENTS.with(|events| events.borrow().len())
 }
 

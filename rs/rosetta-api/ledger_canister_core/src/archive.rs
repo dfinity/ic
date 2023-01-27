@@ -22,15 +22,15 @@ pub struct ArchiveOptions {
     pub trigger_threshold: usize,
     /// The number of blocks to archive when trigger threshold is exceeded
     pub num_blocks_to_archive: usize,
-    pub node_max_memory_size_bytes: Option<usize>,
-    pub max_message_size_bytes: Option<usize>,
+    pub node_max_memory_size_bytes: Option<u64>,
+    pub max_message_size_bytes: Option<u64>,
     pub controller_id: PrincipalId,
     // cycles to use for the call to create a new archive canister
     #[serde(default)]
     pub cycles_for_archive_creation: Option<u64>,
     // Max transactions returned by the [get_transactions] endpoint
     #[serde(default)]
-    pub max_transactions_per_response: Option<usize>,
+    pub max_transactions_per_response: Option<u64>,
 }
 
 /// A scope guard for block archiving.
@@ -104,10 +104,10 @@ pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
     nodes_block_ranges: Vec<(u64, u64)>,
 
     // Maximum amount of data that can be stored in an Archive Node canister
-    node_max_memory_size_bytes: usize,
+    node_max_memory_size_bytes: u64,
 
     // Maximum inter-canister message size in bytes
-    max_message_size_bytes: usize,
+    max_message_size_bytes: u64,
 
     /// How many blocks have been sent to the archive
     num_archived_blocks: u64,
@@ -123,7 +123,7 @@ pub struct Archive<Rt: Runtime, Wasm: ArchiveCanisterWasm> {
 
     // The maximum number of transactions returned by the [get_transactions] archive endpoint
     #[serde(default)]
-    pub max_transactions_per_response: Option<usize>,
+    pub max_transactions_per_response: Option<u64>,
 
     /// Whether there are outstanding calls to the archive at the moment.
     // We do not need to persist this flag because we cannot have any oustanding calls
@@ -197,7 +197,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
     log_sink: impl Sink + Clone,
     archive: Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
     mut blocks: VecDeque<EncodedBlock>,
-    max_ledger_msg_size_bytes: usize,
+    max_ledger_msg_size_bytes: u64,
 ) -> Result<usize, (usize, FailedToArchiveBlocks)> {
     log!(log_sink, "[archive] send_blocks_to_archive(): start");
 
@@ -218,7 +218,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
         // Get the CanisterId and remaining capacity of the node that can
         // accept at least the first block
         let (node_canister_id, node_index, remaining_capacity) =
-            node_and_capacity(log_sink.clone(), &archive, blocks[0].size_bytes())
+            node_and_capacity(log_sink.clone(), &archive, blocks[0].size_bytes() as u64)
                 .await
                 .map_err(|e| (num_sent_blocks, e))?;
 
@@ -297,7 +297,7 @@ pub async fn send_blocks_to_archive<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
 async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
     log_sink: impl Sink,
     archive: &Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
-) -> Result<(CanisterId, usize, usize), FailedToArchiveBlocks> {
+) -> Result<(CanisterId, usize, u64), FailedToArchiveBlocks> {
     log!(log_sink, "[archive] calling create_canister()");
 
     let (
@@ -378,7 +378,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         archive.last_node_index()
     });
 
-    let (remaining_capacity,): (usize,) = Rt::call(node_canister_id, "remaining_capacity", 0, ())
+    let (remaining_capacity,): (u64,) = Rt::call(node_canister_id, "remaining_capacity", 0, ())
         .await
         .map_err(|(_, msg)| FailedToArchiveBlocks(msg))?;
 
@@ -390,8 +390,8 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
 async fn node_and_capacity<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
     log_sink: impl Sink + Clone,
     archive: &Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
-    needed: usize,
-) -> Result<(CanisterId, usize, usize), FailedToArchiveBlocks> {
+    needed: u64,
+) -> Result<(CanisterId, usize, u64), FailedToArchiveBlocks> {
     let last_node_canister_id: Option<CanisterId> =
         inspect_archive(archive, |archive| archive.nodes.last().copied());
 
@@ -413,7 +413,7 @@ async fn node_and_capacity<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
         // Some archive node exists. Use it, or, if already full, create a
         // new node.
         Some(last_node_canister_id) => {
-            let (remaining_capacity,): (usize,) =
+            let (remaining_capacity,): (u64,) =
                 Rt::call(last_node_canister_id, "remaining_capacity", 0, ())
                     .await
                     .map_err(|(_, msg)| FailedToArchiveBlocks(msg))?;
@@ -448,13 +448,13 @@ async fn node_and_capacity<Rt: Runtime, Wasm: ArchiveCanisterWasm>(
 }
 
 /// Extract longest prefix from `blocks` which fits in `max_size`
-fn take_prefix(blocks: &mut VecDeque<EncodedBlock>, mut max_size: usize) -> Vec<EncodedBlock> {
+fn take_prefix(blocks: &mut VecDeque<EncodedBlock>, mut max_size: u64) -> Vec<EncodedBlock> {
     let mut result = vec![];
     while let Some(next) = blocks.front() {
-        if next.size_bytes() > max_size {
+        if next.size_bytes() as u64 > max_size {
             break;
         }
-        max_size -= next.size_bytes();
+        max_size -= next.size_bytes() as u64;
         result.push(blocks.pop_front().unwrap());
     }
     result

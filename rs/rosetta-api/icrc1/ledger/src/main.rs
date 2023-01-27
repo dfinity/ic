@@ -20,7 +20,7 @@ use ic_ledger_core::{timestamp::TimeStamp, tokens::Tokens};
 use num_traits::ToPrimitive;
 use std::cell::RefCell;
 
-const MAX_MESSAGE_SIZE: usize = 1024 * 1024;
+const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
 
 thread_local! {
     static LEDGER: RefCell<Option<Ledger>> = RefCell::new(None);
@@ -352,7 +352,7 @@ fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
     let (start, length) = req
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
-    Access::with_ledger(|ledger| ledger.get_transactions(start, length))
+    Access::with_ledger(|ledger| ledger.get_transactions(start, length as usize))
 }
 
 candid::export_service!();

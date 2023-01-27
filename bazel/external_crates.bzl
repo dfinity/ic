@@ -456,7 +456,11 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.0.0",
             ),
             "ic-stable-structures": crate.spec(
-                version = "^0.1.0",
+                version = "^0.5.0",
+            ),
+            "ic-stable-structures-0_2_0": crate.spec(
+                package = "ic-stable-structures",
+                version = "^0.2.0",
             ),
             "ic-test-state-machine-client": crate.spec(
                 version = "^1.0.0",

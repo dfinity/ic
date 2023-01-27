@@ -218,7 +218,7 @@ async fn send(
     // endpoint. If something did panic the payment would appear to fail, but would
     // actually succeed on chain.
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
-    archive_blocks::<Access>(DebugOutSink, max_msg_size).await;
+    archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
     Ok(height)
 }
 
@@ -299,7 +299,7 @@ async fn icrc1_send(
     };
 
     let max_msg_size = *MAX_MESSAGE_SIZE_BYTES.read().unwrap();
-    archive_blocks::<Access>(DebugOutSink, max_msg_size).await;
+    archive_blocks::<Access>(DebugOutSink, max_msg_size as u64).await;
     Ok(block_index)
 }
 

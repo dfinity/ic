@@ -145,7 +145,7 @@ pub struct GetTransactionsRequest {
 }
 
 impl GetTransactionsRequest {
-    pub fn as_start_and_length(&self) -> Result<(u64, usize), String> {
+    pub fn as_start_and_length(&self) -> Result<(u64, u64), String> {
         use num_traits::cast::ToPrimitive;
 
         let start = self.start.0.to_u64().ok_or_else(|| {
@@ -162,7 +162,7 @@ impl GetTransactionsRequest {
                 u64::MAX
             )
         })?;
-        Ok((start, length as usize))
+        Ok((start, length))
     }
 }
 
