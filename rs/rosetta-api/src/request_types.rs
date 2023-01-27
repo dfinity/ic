@@ -32,6 +32,7 @@ pub const ADD_HOT_KEY: &str = "ADD_HOT_KEY";
 pub const REMOVE_HOTKEY: &str = "REMOVE_HOTKEY";
 pub const SPAWN: &str = "SPAWN";
 pub const MERGE_MATURITY: &str = "MERGE_MATURITY";
+pub const REGISTER_VOTE: &str = "REGISTER_VOTE";
 pub const STAKE_MATURITY: &str = "STAKE_MATURITY";
 pub const NEURON_INFO: &str = "NEURON_INFO";
 pub const FOLLOW: &str = "FOLLOW";
@@ -78,6 +79,9 @@ pub enum RequestType {
     #[serde(rename = "STAKE_MATURITY")]
     #[serde(alias = "StakeMaturity")]
     StakeMaturity { neuron_index: u64 },
+    #[serde(rename = "REGISTER_VOTE")]
+    #[serde(alias = "RegisterVote")]
+    RegisterVote { neuron_index: u64 },
     #[serde(rename = "NEURON_INFO")]
     #[serde(alias = "NeuronInfo")]
     NeuronInfo {
@@ -106,6 +110,7 @@ impl RequestType {
             RequestType::RemoveHotKey { .. } => REMOVE_HOTKEY,
             RequestType::Spawn { .. } => SPAWN,
             RequestType::MergeMaturity { .. } => MERGE_MATURITY,
+            RequestType::RegisterVote { .. } => REGISTER_VOTE,
             RequestType::StakeMaturity { .. } => STAKE_MATURITY,
             RequestType::NeuronInfo { .. } => NEURON_INFO,
             RequestType::Follow { .. } => FOLLOW,
@@ -129,6 +134,7 @@ impl RequestType {
                 | RequestType::RemoveHotKey { .. }
                 | RequestType::Spawn { .. }
                 | RequestType::MergeMaturity { .. }
+                | RequestType::RegisterVote { .. }
                 | RequestType::StakeMaturity { .. }
                 | RequestType::NeuronInfo { .. }
                 | RequestType::Follow { .. }
@@ -286,6 +292,15 @@ pub struct Spawn {
 pub struct MergeMaturity {
     pub account: icp_ledger::AccountIdentifier,
     pub percentage_to_merge: u32,
+    #[serde(default)]
+    pub neuron_index: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct RegisterVote {
+    pub account: icp_ledger::AccountIdentifier,
+    pub proposal: Option<u64>,
+    pub vote: i32,
     #[serde(default)]
     pub neuron_index: u64,
 }
@@ -574,6 +589,35 @@ impl TryFrom<Option<Object>> for SpawnMetadata {
 
 impl From<SpawnMetadata> for Object {
     fn from(m: SpawnMetadata) -> Self {
+        match serde_json::to_value(m) {
+            Ok(Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+pub struct RegisterVoteMetadata {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proposal: Option<u64>,
+    pub vote: i32,
+    pub neuron_index: u64,
+}
+
+impl TryFrom<Option<Object>> for RegisterVoteMetadata {
+    type Error = ApiError;
+    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse REGISTER_VOTE operation metadata from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+impl From<RegisterVoteMetadata> for Object {
+    fn from(m: RegisterVoteMetadata) -> Self {
         match serde_json::to_value(m) {
             Ok(Value::Object(o)) => o,
             _ => unreachable!(),
@@ -1061,6 +1105,33 @@ impl TransactionBuilder {
                     neuron_index: *neuron_index,
                     percentage_to_spawn: *percentage_to_spawn,
                     spawned_neuron_index: *spawned_neuron_index,
+                }
+                .into(),
+            ),
+        });
+    }
+
+    pub fn register_vote(&mut self, register_vote: &RegisterVote) {
+        let RegisterVote {
+            account,
+            proposal,
+            vote,
+            neuron_index,
+        } = register_vote;
+        let operation_identifier = self.allocate_op_id();
+        self.ops.push(Operation {
+            operation_identifier,
+            _type: OperationType::RegisterVote,
+            status: None,
+            account: Some(to_model_account_identifier(account)),
+            amount: None,
+            related_operations: None,
+            coin_change: None,
+            metadata: Some(
+                RegisterVoteMetadata {
+                    proposal: *proposal,
+                    vote: *vote,
+                    neuron_index: *neuron_index,
                 }
                 .into(),
             ),

@@ -1,3 +1,4 @@
+mod governance_client;
 pub mod ledger_client;
 pub mod lib;
 pub mod rosetta_client;

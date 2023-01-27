@@ -48,6 +48,8 @@ pub enum Request {
     RemoveHotKey(RemoveHotKey),
     #[serde(rename = "SPAWN")]
     Spawn(Spawn),
+    #[serde(rename = "REGISTER_VOTE")]
+    RegisterVote(RegisterVote),
     #[serde(rename = "MERGE_MATURITY")]
     MergeMaturity(MergeMaturity),
     #[serde(rename = "STAKE_MATURITY")]
@@ -114,6 +116,11 @@ impl Request {
             Request::Spawn(Spawn { neuron_index, .. }) => Ok(RequestType::Spawn {
                 neuron_index: *neuron_index,
             }),
+            Request::RegisterVote(RegisterVote { neuron_index, .. }) => {
+                Ok(RequestType::RegisterVote {
+                    neuron_index: *neuron_index,
+                })
+            }
             Request::MergeMaturity(MergeMaturity { neuron_index, .. }) => {
                 Ok(RequestType::MergeMaturity {
                     neuron_index: *neuron_index,
@@ -165,6 +172,7 @@ impl Request {
                 Request::RemoveHotKey(o) => builder.remove_hotkey(o),
                 Request::Spawn(o) => builder.spawn(o),
                 Request::MergeMaturity(o) => builder.merge_maturity(o),
+                Request::RegisterVote(o) => builder.register_vote(o),
                 Request::StakeMaturity(o) => builder.stake_maturity(o),
                 Request::NeuronInfo(o) => builder.neuron_info(o),
                 Request::Follow(o) => builder.follow(o),
@@ -189,6 +197,7 @@ impl Request {
                 | Request::AddHotKey(_)
                 | Request::RemoveHotKey(_)
                 | Request::Spawn(_)
+                | Request::RegisterVote(_)
                 | Request::MergeMaturity(_)
                 | Request::StakeMaturity(_)
                 | Request::NeuronInfo(_) // not neuron management but we need it signed.
@@ -387,6 +396,20 @@ impl TryFrom<&models::Request> for Request {
                     }
                 } else {
                     Err(ApiError::invalid_request("Invalid spawn request."))
+                }
+            }
+            RequestType::RegisterVote { neuron_index } => {
+                if let Some(Command::RegisterVote(manage_neuron::RegisterVote { proposal, vote })) =
+                    manage_neuron()?
+                {
+                    Ok(Request::RegisterVote(RegisterVote {
+                        account,
+                        proposal: proposal.map(|p| p.id),
+                        vote,
+                        neuron_index: *neuron_index,
+                    }))
+                } else {
+                    Err(ApiError::invalid_request("Invalid register vote request."))
                 }
             }
             RequestType::MergeMaturity { neuron_index } => {

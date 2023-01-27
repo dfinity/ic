@@ -4,8 +4,8 @@ use crate::models::{ConstructionParseRequest, ConstructionParseResponse, ParsedT
 use crate::request_handler::{verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
     AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo,
-    PublicKeyOrPrincipal, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn, Stake,
-    StakeMaturity, StartDissolve, StopDissolve,
+    PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn,
+    Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
 
 use ic_nns_governance::pb::v1::{
@@ -80,6 +80,9 @@ impl RosettaRequestHandler {
                 }
                 RequestType::Spawn { neuron_index } => {
                     spawn(&mut requests, arg, from, neuron_index)?
+                }
+                RequestType::RegisterVote { neuron_index } => {
+                    register_vote(&mut requests, arg, from, neuron_index)?
                 }
                 RequestType::MergeMaturity { neuron_index } => {
                     merge_maturity(&mut requests, arg, from, neuron_index)?
@@ -392,6 +395,32 @@ fn spawn(
                 "Incompatible manage_neuron command (spawned neuron index is required).",
             ));
         }
+    } else {
+        return Err(ApiError::internal_error(
+            "Incompatible manage_neuron command".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn register_vote(
+    requests: &mut Vec<Request>,
+    arg: Blob,
+    from: AccountIdentifier,
+    neuron_index: u64,
+) -> Result<(), ApiError> {
+    let manage: ManageNeuron = candid::decode_one(arg.0.as_ref()).map_err(|e| {
+        ApiError::internal_error(format!("Could not decode ManageNeuron argument: {:?}", e))
+    })?;
+    if let Some(Command::RegisterVote(manage_neuron::RegisterVote { proposal, vote })) =
+        manage.command
+    {
+        requests.push(Request::RegisterVote(RegisterVote {
+            account: from,
+            proposal: proposal.map(|p| p.id),
+            vote,
+            neuron_index,
+        }));
     } else {
         return Err(ApiError::internal_error(
             "Incompatible manage_neuron command".to_string(),

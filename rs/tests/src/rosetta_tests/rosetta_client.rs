@@ -30,7 +30,7 @@ pub struct RosettaApiClient {
     /// The Rosetta API base url (including http prefix).
     api_url: String,
     ledger_canister_id: CanisterId,
-    // governance_canister_id: CanisterId,
+    governance_canister_id: CanisterId,
     logger: Logger,
 }
 
@@ -61,7 +61,7 @@ impl RosettaApiClient {
         vm: AllocatedVm, // the Rosetta API VM.
         port: u32,
         ledger_canister_id: CanisterId,
-        // governance_canister_id: CanisterId,
+        governance_canister_id: CanisterId,
         logger: &Logger,
     ) -> RosettaApiClient {
         let api_url = format!("http://[{}]:{}", vm.ipv6, port);
@@ -71,12 +71,17 @@ impl RosettaApiClient {
             http_client,
             api_url,
             ledger_canister_id,
+            governance_canister_id,
             logger: logger.clone(),
         }
     }
 
     pub fn get_ledger_canister_id(&self) -> CanisterId {
         self.ledger_canister_id
+    }
+
+    pub fn get_governance_canister_id(&self) -> CanisterId {
+        self.governance_canister_id
     }
 
     /// Returns the identifier of the ICP network.

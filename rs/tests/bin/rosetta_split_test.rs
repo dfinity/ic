@@ -22,7 +22,8 @@ fn main() -> Result<()> {
                 .add_test(systest!(tests::neuron_staking::test))
                 .add_test(systest!(tests::neuron_follow::test))
                 .add_test(systest!(tests::neuron_info::test))
-                .add_test(systest!(tests::neuron_maturity::test)),
+                .add_test(systest!(tests::neuron_maturity::test))
+                .add_test(systest!(tests::neuron_voting::test)),
         )
         .execute_from_args()?;
     Ok(())

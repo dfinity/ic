@@ -25,8 +25,8 @@ use crate::request::Request;
 use crate::request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler};
 use crate::request_types::{
     AddHotKey, ChangeAutoStakeMaturity, Disburse, Follow, MergeMaturity, NeuronInfo,
-    PublicKeyOrPrincipal, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn, Stake,
-    StakeMaturity, StartDissolve, StopDissolve,
+    PublicKeyOrPrincipal, RegisterVote, RemoveHotKey, RequestType, SetDissolveTimestamp, Spawn,
+    Stake, StakeMaturity, StartDissolve, StopDissolve,
 };
 use crate::{convert, models};
 
@@ -175,6 +175,13 @@ impl RosettaRequestHandler {
                     &ingress_expiries,
                 )?,
                 Request::Spawn(req) => handle_spawn(
+                    req,
+                    &mut payloads,
+                    &mut updates,
+                    &pks_map,
+                    &ingress_expiries,
+                )?,
+                Request::RegisterVote(req) => handle_register_vote(
                     req,
                     &mut payloads,
                     &mut updates,
@@ -656,6 +663,35 @@ fn handle_spawn(
     add_neuron_management_payload(
         RequestType::Spawn { neuron_index },
         req.account,
+        None,
+        neuron_index,
+        command,
+        payloads,
+        updates,
+        pks_map,
+        ingress_expiries,
+    )?;
+    Ok(())
+}
+
+//Handle REGISTER_VOTE
+fn handle_register_vote(
+    req: RegisterVote,
+    payloads: &mut Vec<SigningPayload>,
+    updates: &mut Vec<(RequestType, HttpCanisterUpdate)>,
+    pks_map: &HashMap<icp_ledger::AccountIdentifier, &PublicKey>,
+    ingress_expiries: &[u64],
+) -> Result<(), ApiError> {
+    let account = req.account;
+    let neuron_index = req.neuron_index;
+    let vote = req.vote;
+    let proposal = req
+        .proposal
+        .map(|p| ic_nns_common::pb::v1::ProposalId { id: p });
+    let command = Command::RegisterVote(manage_neuron::RegisterVote { proposal, vote });
+    add_neuron_management_payload(
+        RequestType::RegisterVote { neuron_index },
+        account,
         None,
         neuron_index,
         command,

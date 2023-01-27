@@ -100,4 +100,5 @@ service: (LedgerCanisterInitPayload) -> {
   send_dfx : (SendArgs) -> (BlockIndex);
   notify_dfx: (NotifyCanisterArgs) -> ();
   account_balance_dfx : (AccountBalanceArgs) -> (Tokens) query;
+  notify_pb: () -> ();
 }

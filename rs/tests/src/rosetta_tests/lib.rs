@@ -29,6 +29,7 @@ use ic_rosetta_api::request::transaction_operation_results::TransactionOperation
 use ic_rosetta_api::request::transaction_results::TransactionResults;
 use ic_rosetta_api::request::Request;
 use ic_rosetta_api::request_types::ChangeAutoStakeMaturity;
+use ic_rosetta_api::request_types::RegisterVote;
 use ic_rosetta_api::request_types::{
     AddHotKey, Disburse, Follow, MergeMaturity, NeuronInfo, RemoveHotKey, SetDissolveTimestamp,
     Spawn, Stake, StakeMaturity, StartDissolve, StopDissolve,
@@ -45,6 +46,8 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use super::governance_client::GovernanceClient;
 
 pub(crate) fn make_user(seed: u64) -> (AccountIdentifier, EdKeypair, PublicKey, PrincipalId) {
     make_user_ed25519(seed)
@@ -353,6 +356,7 @@ where
             | Request::RemoveHotKey(RemoveHotKey { account, .. })
             | Request::Disburse(Disburse { account, .. })
             | Request::Spawn(Spawn { account, .. })
+            | Request::RegisterVote(RegisterVote { account, .. })
             | Request::MergeMaturity(MergeMaturity { account, .. })
             | Request::StakeMaturity(StakeMaturity { account, .. })
             | Request::NeuronInfo(NeuronInfo { account, .. })
@@ -576,6 +580,12 @@ pub fn create_ledger_client(env: &TestEnv, client: &RosettaApiClient) -> LedgerC
     let ledger_canister_id = client.get_ledger_canister_id();
     let ledger_principal = Principal::from(ledger_canister_id.get());
     LedgerClient::new(env, ledger_principal)
+}
+
+pub fn create_governance_client(env: &TestEnv, client: &RosettaApiClient) -> GovernanceClient {
+    let governance_canister_id = client.get_governance_canister_id();
+    let governance_principal = Principal::from(governance_canister_id.get());
+    GovernanceClient::new(env, governance_principal)
 }
 
 pub fn create_neuron(
