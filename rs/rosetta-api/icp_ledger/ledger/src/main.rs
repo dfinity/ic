@@ -33,6 +33,7 @@ use icp_ledger::{
 };
 use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES};
 use num_traits::cast::ToPrimitive;
+use std::cell::RefCell;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
@@ -302,6 +303,10 @@ async fn icrc1_send(
     Ok(block_index)
 }
 
+thread_local! {
+    static NOTIFY_METHOD_CALLS: RefCell<u64> = RefCell::new(0);
+}
+
 /// You can notify a canister that you have made a payment to it. The
 /// payment must have been made to the account of a canister and from the
 /// callers account. You cannot notify a canister about a transaction it has
@@ -330,6 +335,8 @@ pub async fn notify(
     use dfn_core::api::{call_bytes_with_cleanup, call_with_cleanup, Funds};
     use dfn_protobuf::ProtoBuf;
     use on_wire::IntoWire;
+
+    NOTIFY_METHOD_CALLS.with(|n| *n.borrow_mut() += 1);
 
     let caller_principal_id = caller();
 
@@ -1140,6 +1147,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "ledger_most_recent_block_time_seconds",
         ledger.blockchain.last_timestamp.as_nanos_since_unix_epoch() as f64 / 1_000_000_000.0,
         "IC timestamp of the most recent block.",
+    )?;
+    w.encode_gauge(
+        "ledger_notify_method_calls",
+        NOTIFY_METHOD_CALLS.with(|n| *n.borrow()) as f64,
+        "Total number of calls to the notify-method method.",
     )?;
     Ok(())
 }

@@ -4,6 +4,7 @@ use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_protobuf::protobuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_client_sender::Sender;
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::{
     block::{BlockIndex, BlockType, EncodedBlock},
@@ -19,6 +20,7 @@ use icp_ledger::{
 };
 use on_wire::IntoWire;
 use serde::Deserialize;
+use serde_bytes::ByteBuf;
 use std::convert::TryFrom;
 use std::time::{Duration, SystemTime};
 use std::{
@@ -167,6 +169,20 @@ async fn fetch_candid_interface(canister: &Canister<'_>) -> Result<String, Strin
 
 async fn get_archives(canister: &Canister<'_>) -> Result<Archives, String> {
     canister.query_("archives", candid_one, ()).await
+}
+
+async fn get_metrics(canister: &Canister<'_>) -> String {
+    let http_request = HttpRequest {
+        headers: Vec::new(),
+        method: "".to_string(),
+        url: "/metrics".to_string(),
+        body: ByteBuf::from(Vec::new()),
+    };
+    let HttpResponse { body, .. } = canister
+        .query_("http_request", candid_one, http_request)
+        .await
+        .expect("failed to get the metrics");
+    body.escape_ascii().to_string()
 }
 
 fn assert_same_blocks(pb: &[EncodedBlock], candid: &[CandidBlock]) {
@@ -794,17 +810,33 @@ fn notify_test() {
             to_subaccount: None,
         };
 
+        assert!(get_metrics(&ledger_canister)
+            .await
+            .contains("ledger_notify_method_calls 0"));
+
         let r1: Result<(), String> = ledger_canister
             .update_from_sender("notify_pb", protobuf, notify.clone(), &sender)
             .await;
+
+        assert!(get_metrics(&ledger_canister)
+            .await
+            .contains("ledger_notify_method_calls 1"));
 
         let r2: Result<(), String> = ledger_canister
             .update_from_sender("notify_dfx", candid_one, notify.clone(), &sender)
             .await;
 
+        assert!(get_metrics(&ledger_canister)
+            .await
+            .contains("ledger_notify_method_calls 2"));
+
         let r3: Result<(), String> = ledger_canister
             .update_from_sender("notify_pb", protobuf, notify.clone(), &sender)
             .await;
+
+        assert!(get_metrics(&ledger_canister)
+            .await
+            .contains("ledger_notify_method_calls 3"));
 
         let count: u32 = test_canister.query_("check_counter", candid, ()).await?;
 
@@ -854,6 +886,11 @@ fn notify_test() {
         let r4: Result<(), String> = ledger_canister
             .update_from_sender("notify_pb", protobuf, notify_not_whitelisted, &sender)
             .await;
+
+        // The nofity method failed - the counter was not increased.
+        assert!(get_metrics(&ledger_canister)
+            .await
+            .contains("ledger_notify_method_calls 3"));
 
         assert!(r4
             .unwrap_err()
