@@ -154,7 +154,7 @@ impl Check for Checker {
 
         let canister = HttpRequestCanister::create(self.agent.as_ref(), canister_id);
         let (response,) = canister
-            .http_request("GET", "/.well-known/custom-domains", vec![], vec![])
+            .http_request("GET", "/.well-known/ic-domains", vec![], vec![])
             .call()
             .await
             .unwrap();

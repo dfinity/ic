@@ -37,5 +37,5 @@ The `/registration` endpoint needs to be publicly accessible. To this end, the
 
 ### 0.1.1
 
-* Use `ic-agent` to perform the check for the `.well-known/custom-domains` file
+* Use `ic-agent` to perform the check for the `.well-known/ic-domains` file
   instead of making a http request to the canister.

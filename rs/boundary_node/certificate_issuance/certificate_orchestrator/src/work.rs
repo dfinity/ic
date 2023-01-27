@@ -189,13 +189,13 @@ pub trait Retry {
 }
 
 pub struct Retrier {
-    tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+    tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
 }
 
 impl Retrier {
     pub fn new(
-        tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+        tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
         retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     ) -> Self {
         Self { tasks, retries }
