@@ -439,6 +439,28 @@ mod idkg_dealing_encryption_public_key_validation {
         if error == "invalid I-DKG dealing encryption key: verification failed: InvalidPublicKey"
         );
     }
+
+    #[test]
+    fn should_fail_on_default_public_key() {
+        let result = ValidIDkgDealingEncryptionPublicKey::try_from(PublicKey::default());
+
+        assert_matches!(result, Err(KeyValidationError {error}) 
+            if error == "invalid I-DKG dealing encryption key: unsupported algorithm: Some(Unspecified)");
+    }
+
+    #[test]
+    fn should_fail_on_empty_key_value() {
+        let mut idkg_de_key = valid_node_keys()
+            .idkg_dealing_encryption_public_key
+            .expect("missing iDKG dealing encryption key");
+        idkg_de_key.key_value = Vec::new();
+
+        let result = ValidIDkgDealingEncryptionPublicKey::try_from(idkg_de_key);
+
+        assert_matches!(result, Err(KeyValidationError { error })
+        if error == "invalid I-DKG dealing encryption key: verification failed: InvalidPublicKey"
+        );
+    }
 }
 
 fn invalidate_valid_ed25519_pubkey(
