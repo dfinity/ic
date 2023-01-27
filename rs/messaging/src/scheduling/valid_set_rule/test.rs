@@ -803,6 +803,7 @@ fn management_message_update_setting_is_inducted_but_not_charged() {
     let payload = UpdateSettingsArgs {
         canister_id: canister_id.get(),
         settings: CanisterSettingsArgs::new(None, None, None, Some(1 << 20)),
+        sender_canister_version: None,
     }
     .encode();
     let ingress = SignedIngressBuilder::new()

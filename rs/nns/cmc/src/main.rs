@@ -1528,6 +1528,7 @@ async fn create_canister(
                     None,
                     None,
                 )),
+                sender_canister_version: Some(dfn_core::api::canister_version()),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
         )

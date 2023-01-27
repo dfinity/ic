@@ -599,7 +599,8 @@ impl CanisterQueues {
     /// input queue without ever putting the `Request` on an output queue. This
     /// can only be used for `IC00` requests and requests to subnet IDs.
     ///
-    /// This is expected to be used in cases of `IC00` routing where no
+    /// This is expected to be used in cases of invalid sender canister version
+    /// in management canister calls and `IC00` routing where no
     /// destination subnet is found that the `Request` could be routed to
     /// or if the canister directly includes subnet IDs in the request.
     /// Hence, an immediate (reject) `Response` is added to the relevant

@@ -918,10 +918,7 @@ fn subnet_canister_request_unknown_method() {
         .build();
     assert_eq!(
         test.ingress(canister, "update", run).unwrap(),
-        WasmResult::Reject(
-            "Unable to route management canister request unknown: MethodNotFound(\"unknown\")"
-                .to_string()
-        )
+        WasmResult::Reject("IC0302: Management canister has no method 'unknown'".to_string())
     );
 }
 
@@ -944,7 +941,7 @@ fn subnet_canister_request_bad_candid_payload() {
     let err = test
         .subnet_message(Method::InstallCode, vec![1, 2, 3])
         .unwrap_err();
-    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
+    assert_eq!(ErrorCode::InvalidManagementPayload, err.code());
     assert_eq!(
         "Error decoding candid: Cannot parse header 010203",
         err.description()
@@ -1144,7 +1141,7 @@ fn metrics_are_observed_for_subnet_messages() {
                 &[
                     ("method_name", "ic00_install_code"),
                     ("outcome", "error"),
-                    ("status", "CanisterContractViolation"),
+                    ("status", "InvalidManagementPayload"),
                 ],
                 1
             ),
@@ -1152,7 +1149,7 @@ fn metrics_are_observed_for_subnet_messages() {
                 &[
                     ("method_name", "ic00_set_controller"),
                     ("outcome", "error"),
-                    ("status", "CanisterContractViolation"),
+                    ("status", "InvalidManagementPayload"),
                 ],
                 1
             ),
@@ -1160,7 +1157,7 @@ fn metrics_are_observed_for_subnet_messages() {
                 &[
                     ("method_name", "ic00_start_canister"),
                     ("outcome", "error"),
-                    ("status", "CanisterContractViolation"),
+                    ("status", "InvalidManagementPayload"),
                 ],
                 1
             ),
@@ -1168,7 +1165,7 @@ fn metrics_are_observed_for_subnet_messages() {
                 &[
                     ("method_name", "ic00_stop_canister"),
                     ("outcome", "error"),
-                    ("status", "CanisterContractViolation"),
+                    ("status", "InvalidManagementPayload"),
                 ],
                 1
             ),
@@ -1176,7 +1173,7 @@ fn metrics_are_observed_for_subnet_messages() {
                 &[
                     ("method_name", "ic00_delete_canister"),
                     ("outcome", "error"),
-                    ("status", "CanisterContractViolation"),
+                    ("status", "InvalidManagementPayload"),
                 ],
                 1
             ),

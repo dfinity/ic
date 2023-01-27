@@ -297,7 +297,7 @@ fn bitcoin_send_transaction_internal_invalid_request() {
                 .unwrap();
 
             // Expect request to be rejected.
-            utils::assert_reject(Ok(response), RejectCode::CanisterError);
+            utils::assert_reject(Ok(response), RejectCode::CanisterReject);
         },
     );
 }

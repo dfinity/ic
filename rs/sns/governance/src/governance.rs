@@ -5593,6 +5593,10 @@ mod tests {
             fn canister_id(&self) -> CanisterId {
                 CanisterId::from_u64(318680)
             }
+
+            fn canister_version(&self) -> Option<u64> {
+                None
+            }
         }
 
         // Step 1: Prepare the world.
@@ -6333,6 +6337,7 @@ mod tests {
                         compute_allocation: None,
                         memory_allocation: Some(candid::Nat::from(1_u64 << 30)), // local const in install_code()
                         query_allocation: None,
+                        sender_canister_version: None,
                     })
                     .unwrap(),
                     Some(Ok(vec![])),

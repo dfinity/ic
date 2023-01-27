@@ -27,6 +27,7 @@ async fn create_canisters_in_batch(
                     None,
                     None,
                 )),
+                sender_canister_version: Some(dfn_core::api::canister_version()),
             }
             .encode(),
             dfn_core::api::Funds::new(INITIAL_CYCLES_BALANCE),

@@ -111,7 +111,7 @@ pub fn process_stopping_canisters(
 
 pub fn candid_error_to_user_error(error: candid::Error) -> UserError {
     UserError::new(
-        ErrorCode::CanisterContractViolation,
+        ErrorCode::InvalidManagementPayload,
         format!("Error decoding candid: {}", error),
     )
 }

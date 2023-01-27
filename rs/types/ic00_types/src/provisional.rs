@@ -9,6 +9,7 @@ pub struct ProvisionalCreateCanisterWithCyclesArgs {
     pub amount: Option<candid::Nat>,
     pub settings: Option<CanisterSettingsArgs>,
     pub specified_id: Option<PrincipalId>,
+    pub sender_canister_version: Option<u64>,
 }
 
 impl ProvisionalCreateCanisterWithCyclesArgs {
@@ -17,6 +18,7 @@ impl ProvisionalCreateCanisterWithCyclesArgs {
             amount: amount.map(candid::Nat::from),
             settings: None,
             specified_id,
+            sender_canister_version: None,
         }
     }
 
@@ -25,6 +27,10 @@ impl ProvisionalCreateCanisterWithCyclesArgs {
             Some(amount) => amount.0.to_u128(),
             None => None,
         }
+    }
+
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
     }
 }
 

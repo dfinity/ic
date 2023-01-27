@@ -712,6 +712,7 @@ impl<'a> Canister<'a> {
                 (UpdateSettingsArgs {
                     canister_id: self.canister_id.into(),
                     settings: CanisterSettingsArgs::new(Some(controllers), None, None, None),
+                    sender_canister_version: None,
                 },),
             )
             .await

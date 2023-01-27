@@ -90,6 +90,7 @@ fn dts_resume_works_in_install_code() {
         compute_allocation: None,
         memory_allocation: None,
         query_allocation: None,
+        sender_canister_version: None,
     };
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     let original_execution_cost = test.canister_execution_cost(canister_id);
@@ -139,6 +140,7 @@ fn dts_abort_works_in_install_code() {
         compute_allocation: None,
         memory_allocation: None,
         query_allocation: None,
+        sender_canister_version: None,
     };
     let original_system_state = test.canister_state(canister_id).system_state.clone();
     let original_execution_cost = test.canister_execution_cost(canister_id);
@@ -216,6 +218,7 @@ fn install_code_validate_input_compute_allocation() {
         compute_allocation: Some(candid::Nat::from(90u64)),
         memory_allocation: None,
         query_allocation: None,
+        sender_canister_version: None,
     };
 
     let message_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
@@ -265,6 +268,7 @@ fn install_code_validate_input_memory_allocation() {
         compute_allocation: None,
         memory_allocation: Some(candid::Nat::from(260 * mib)),
         query_allocation: None,
+        sender_canister_version: None,
     };
 
     let message_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
@@ -304,6 +308,7 @@ fn install_code_validate_input_controller() {
         compute_allocation: None,
         memory_allocation: None,
         query_allocation: None,
+        sender_canister_version: None,
     };
 
     // Install code from a non-controller.
@@ -343,6 +348,7 @@ fn install_code_validates_execution_state() {
         compute_allocation: None,
         memory_allocation: None,
         query_allocation: None,
+        sender_canister_version: None,
     };
 
     // Install code on empty canister.
@@ -380,6 +386,7 @@ fn execute_install_code_message_dts_helper(
         compute_allocation: None,
         memory_allocation: None,
         query_allocation: None,
+        sender_canister_version: None,
     };
 
     // Send install code message.
@@ -495,6 +502,7 @@ fn start_install_code_dts(
         compute_allocation: None,
         memory_allocation: None,
         query_allocation: None,
+        sender_canister_version: None,
     };
 
     // Send install code message.
@@ -612,6 +620,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         compute_allocation: None,
         memory_allocation: None,
         query_allocation: None,
+        sender_canister_version: None,
     };
     let original_balance = test.canister_state(canister_id).system_state.balance();
     let message_id = test.dts_install_code(payload);
@@ -660,6 +669,7 @@ fn install_code_running_out_of_instructions() {
         compute_allocation: None,
         memory_allocation: None,
         query_allocation: None,
+        sender_canister_version: None,
     };
 
     // Send install code message and start execution.

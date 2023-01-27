@@ -4,8 +4,12 @@ use crate::routing::ResolveDestinationError;
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_constants::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_cycles_account_manager::{CyclesAccountManager, CyclesAccountManagerError};
-use ic_error_types::RejectCode;
-use ic_ic00_types::IC_00;
+use ic_error_types::{ErrorCode, RejectCode, UserError};
+use ic_ic00_types::{
+    CreateCanisterArgs, InstallCodeArgs, Method as Ic00Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, SetControllerArgs, UninstallCodeArgs,
+    UpdateSettingsArgs, IC_00,
+};
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_logger::{info, ReplicaLogger};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -22,6 +26,7 @@ use ic_types::{
 };
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 
 use crate::{cycles_balance_change::CyclesBalanceChange, routing, CERTIFIED_DATA_MAX_LENGTH};
 
@@ -113,7 +118,7 @@ impl SystemStateChanges {
         ))
     }
 
-    fn reject_subnet_message(
+    fn reject_subnet_message_routing(
         system_state: &mut SystemState,
         subnet_ids: &[PrincipalId],
         msg: Request,
@@ -133,6 +138,31 @@ impl SystemStateChanges {
                 "Unable to route management canister request {}: {:?}",
                 msg.method_name, err
             ),
+        };
+        system_state
+            .reject_subnet_output_request(msg, reject_context, subnet_ids)
+            .map_err(|e| Self::error(format!("Failed to push IC00 reject response: {:?}", e)))?;
+        Ok(())
+    }
+
+    fn reject_subnet_message_user_error(
+        system_state: &mut SystemState,
+        subnet_ids: &[PrincipalId],
+        msg: Request,
+        err: UserError,
+        logger: &ReplicaLogger,
+    ) -> HypervisorResult<()> {
+        info!(
+            logger,
+            "Error validating IC00 message: sender id {}, method_name {}, error: {}.",
+            msg.sender,
+            msg.method_name,
+            err
+        );
+
+        let reject_context = RejectContext {
+            code: RejectCode::CanisterError,
+            message: err.to_string(),
         };
         system_state
             .reject_subnet_output_request(msg, reject_context, subnet_ids)
@@ -161,6 +191,80 @@ impl SystemStateChanges {
             );
         }
         Ok(())
+    }
+
+    fn candid_error_to_user_error(error: candid::Error) -> UserError {
+        UserError::new(
+            ErrorCode::InvalidManagementPayload,
+            format!("Error decoding candid: {}", error),
+        )
+    }
+
+    fn get_sender_canister_version(msg: &Request) -> Result<Option<u64>, UserError> {
+        let method = Ic00Method::from_str(&msg.method_name);
+        let payload = msg.method_payload();
+        match method {
+            Ok(Ic00Method::InstallCode) => InstallCodeArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version())
+                .map_err(|err| Self::candid_error_to_user_error(err)),
+            Ok(Ic00Method::CreateCanister) => CreateCanisterArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version()),
+            Ok(Ic00Method::UpdateSettings) => UpdateSettingsArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version())
+                .map_err(|err| Self::candid_error_to_user_error(err)),
+            Ok(Ic00Method::SetController) => SetControllerArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version())
+                .map_err(|err| Self::candid_error_to_user_error(err)),
+            Ok(Ic00Method::UninstallCode) => UninstallCodeArgs::decode(payload)
+                .map(|record| record.get_sender_canister_version())
+                .map_err(|err| Self::candid_error_to_user_error(err)),
+            Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
+                ProvisionalCreateCanisterWithCyclesArgs::decode(payload)
+                    .map(|record| record.get_sender_canister_version())
+                    .map_err(|err| Self::candid_error_to_user_error(err))
+            }
+            Ok(Ic00Method::SignWithECDSA)
+            | Ok(Ic00Method::CanisterStatus)
+            | Ok(Ic00Method::StartCanister)
+            | Ok(Ic00Method::StopCanister)
+            | Ok(Ic00Method::DeleteCanister)
+            | Ok(Ic00Method::RawRand)
+            | Ok(Ic00Method::DepositCycles)
+            | Ok(Ic00Method::HttpRequest)
+            | Ok(Ic00Method::SetupInitialDKG)
+            | Ok(Ic00Method::ECDSAPublicKey)
+            | Ok(Ic00Method::ComputeInitialEcdsaDealings)
+            | Ok(Ic00Method::ProvisionalTopUpCanister)
+            | Ok(Ic00Method::BitcoinSendTransactionInternal)
+            | Ok(Ic00Method::BitcoinGetSuccessors)
+            | Ok(Ic00Method::BitcoinGetBalance)
+            | Ok(Ic00Method::BitcoinGetUtxos)
+            | Ok(Ic00Method::BitcoinSendTransaction)
+            | Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => Ok(None),
+            Err(_) => Err(UserError::new(
+                ErrorCode::CanisterMethodNotFound,
+                format!("Management canister has no method '{}'", msg.method_name),
+            )),
+        }
+    }
+
+    fn validate_sender_canister_version(
+        msg: &Request,
+        canister_version_from_system: u64,
+    ) -> Result<(), UserError> {
+        match Self::get_sender_canister_version(msg)? {
+            None => Ok(()),
+            Some(sender_canister_version) => {
+                if sender_canister_version == canister_version_from_system {
+                    Ok(())
+                } else {
+                    Err(UserError::new(
+                      ErrorCode::CanisterContractViolation,
+                      format!("Management canister call payload includes sender canister version {:?} that does not match the actual sender canister version {}.", sender_canister_version, canister_version_from_system))
+                    )
+                }
+            }
+        }
     }
 
     /// Verify that the changes to the system state are sound and apply them to
@@ -223,30 +327,73 @@ impl SystemStateChanges {
             network_topology.subnets.keys().map(|s| s.get()).collect();
         for mut msg in self.requests {
             if msg.receiver == IC_00 {
-                // This is a request to ic:00. Update the receiver to be the appropriate
-                // subnet and also update the corresponding callback.
-                match routing::resolve_destination(
-                    network_topology,
-                    msg.method_name.as_str(),
-                    msg.method_payload.as_slice(),
-                    own_subnet_id,
-                )
-                .map(|id| CanisterId::new(id).unwrap())
-                {
-                    Ok(destination_subnet) => {
-                        msg.receiver = destination_subnet;
-                        callback_changes.insert(msg.sender_reply_callback, destination_subnet);
-                        Self::push_message(system_state, time, msg, logger)?;
+                match Self::validate_sender_canister_version(&msg, system_state.canister_version) {
+                    Ok(()) => {
+                        // This is a request to ic:00. Update the receiver to be the appropriate
+                        // subnet and also update the corresponding callback.
+                        match routing::resolve_destination(
+                            network_topology,
+                            msg.method_name.as_str(),
+                            msg.method_payload.as_slice(),
+                            own_subnet_id,
+                        )
+                        .map(|id| CanisterId::new(id).unwrap())
+                        {
+                            Ok(destination_subnet) => {
+                                msg.receiver = destination_subnet;
+                                callback_changes
+                                    .insert(msg.sender_reply_callback, destination_subnet);
+                                Self::push_message(system_state, time, msg, logger)?;
+                            }
+                            Err(err) => {
+                                Self::reject_subnet_message_routing(
+                                    system_state,
+                                    &subnet_ids,
+                                    msg,
+                                    err,
+                                    logger,
+                                )?;
+                            }
+                        }
                     }
                     Err(err) => {
-                        Self::reject_subnet_message(system_state, &subnet_ids, msg, err, logger)?;
+                        Self::reject_subnet_message_user_error(
+                            system_state,
+                            &subnet_ids,
+                            msg,
+                            err,
+                            logger,
+                        )?;
                     }
                 }
-            } else if own_subnet_id != nns_subnet_id && subnet_ids.contains(&msg.receiver.get()) {
-                // This is a management canister call providing the target subnet ID
-                // directly in the request. This is only allowed for NNS canisters.
-                let err = ResolveDestinationError::AlreadyResolved(msg.receiver.get());
-                Self::reject_subnet_message(system_state, &subnet_ids, msg, err, logger)?;
+            } else if subnet_ids.contains(&msg.receiver.get()) {
+                match Self::validate_sender_canister_version(&msg, system_state.canister_version) {
+                    Ok(()) => {
+                        if own_subnet_id != nns_subnet_id {
+                            // This is a management canister call providing the target subnet ID
+                            // directly in the request. This is only allowed for NNS canisters.
+                            let err = ResolveDestinationError::AlreadyResolved(msg.receiver.get());
+                            Self::reject_subnet_message_routing(
+                                system_state,
+                                &subnet_ids,
+                                msg,
+                                err,
+                                logger,
+                            )?;
+                        } else {
+                            Self::push_message(system_state, time, msg, logger)?;
+                        }
+                    }
+                    Err(err) => {
+                        Self::reject_subnet_message_user_error(
+                            system_state,
+                            &subnet_ids,
+                            msg,
+                            err,
+                            logger,
+                        )?;
+                    }
+                }
             } else {
                 Self::push_message(system_state, time, msg, logger)?;
             }

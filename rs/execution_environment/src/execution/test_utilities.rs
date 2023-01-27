@@ -421,6 +421,7 @@ impl ExecutionTest {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
             settings: CanisterSettingsArgs::new(None, compute_allocation, memory_allocation, None),
+            sender_canister_version: None,
         }
         .encode();
         self.subnet_message(Method::UpdateSettings, payload)
@@ -486,6 +487,7 @@ impl ExecutionTest {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
             settings: CanisterSettingsArgs::new(None, None, None, Some(freezing_threshold.get())),
+            sender_canister_version: None,
         }
         .encode();
         self.subnet_message(Method::UpdateSettings, payload)
@@ -500,6 +502,7 @@ impl ExecutionTest {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
             settings: CanisterSettingsArgs::new(Some(vec![controller]), None, None, None),
+            sender_canister_version: None,
         }
         .encode();
         self.subnet_message(Method::UpdateSettings, payload)

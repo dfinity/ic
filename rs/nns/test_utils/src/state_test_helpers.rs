@@ -205,6 +205,7 @@ pub fn set_controllers(
         UpdateSettingsArgs {
             canister_id: target.into(),
             settings: CanisterSettingsArgs::new(Some(controllers), None, None, None),
+            sender_canister_version: None,
         },
         sender,
     )

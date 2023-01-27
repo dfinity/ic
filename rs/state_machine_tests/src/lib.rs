@@ -921,6 +921,7 @@ impl StateMachine {
                     amount: Some(candid::Nat::from(cycles.get())),
                     settings,
                     specified_id: None,
+                    sender_canister_version: None,
                 }
                 .encode(),
             )
@@ -1051,6 +1052,7 @@ impl StateMachine {
             UpdateSettingsArgs {
                 canister_id: canister_id.get(),
                 settings,
+                sender_canister_version: None,
             }
             .encode(),
         )
