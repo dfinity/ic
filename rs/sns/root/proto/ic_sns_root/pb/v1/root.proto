@@ -41,6 +41,10 @@ message SnsRootCanister {
   //
   // The SNS Index canister ID
   ic_base_types.pb.v1.PrincipalId index_canister_id = 7;
+
+  // True if the SNS is running in testflight mode. Then additional
+  // controllers beyond SNS root are allowed when registering a dapp.
+  bool testflight = 8;
 }
 
 message RegisterDappCanisterRequest {

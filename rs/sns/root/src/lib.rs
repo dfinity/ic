@@ -534,6 +534,7 @@ impl SnsRootCanister {
             let s = s.borrow();
             s.list_sns_canisters(root_canister_id)
         });
+        let testflight = self_ref.with(|s| s.borrow().testflight);
         let sns_canister_ids: Vec<PrincipalId> = vec![
             root.unwrap(),
             governance.unwrap(),
@@ -587,7 +588,7 @@ impl SnsRootCanister {
                 is not controlled by this SNS root canister.",
             );
             // Make sure we are the only controller.
-            if canister_status.controllers() != vec![root_canister_id.into()] {
+            if canister_status.controllers() != vec![root_canister_id.into()] && !testflight {
                 // Remove all controllers except for root.
                 management_canister_client
                     .update_settings(&UpdateSettingsArgs {
@@ -1169,7 +1170,29 @@ mod tests {
         }
     }
 
-    fn build_test_sns_root_canister() -> SnsRootCanister {
+    /// Get a dummy value for CanisterStatusResultV2 in testflight.
+    fn canister_status_result_v2_for_testflight(
+        controller: PrincipalId,
+        other_controller: PrincipalId,
+    ) -> CanisterStatusResultV2 {
+        use std::str::FromStr;
+        let default_principal_multiple_controllers =
+            PrincipalId::from_str("ifxlm-aqaaa-multi-pleco-ntrol-lersa-h3ae").unwrap();
+        CanisterStatusResultV2::new(
+            CanisterStatusType::Running,
+            None,                                   // module_hash
+            default_principal_multiple_controllers, // controller
+            vec![controller, other_controller],     // controllers
+            NumBytes::new(42),                      // memory_size
+            43,                                     // cycles
+            44,                                     // compute_allocation
+            None,                                   // memory_allocation
+            45,                                     // freezing_threshold
+            46,                                     // idle_cycles_burned_per_day
+        )
+    }
+
+    fn build_test_sns_root_canister(testflight: bool) -> SnsRootCanister {
         SnsRootCanister {
             governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
             ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
@@ -1178,6 +1201,7 @@ mod tests {
             archive_canister_ids: vec![],
             latest_ledger_archive_poll_timestamp_seconds: None,
             index_canister_id: Some(PrincipalId::new_user_test_id(4)),
+            testflight,
         }
     }
 
@@ -1202,10 +1226,74 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn register_dapp_canister_testflight() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(true));
+        }
+        let original_sns_root_canister = SNS_ROOT_CANISTER.with(|r| r.borrow().clone());
+        let sns_root_canister_id = PrincipalId::new_user_test_id(4);
+        let dapp_canister_id_1 = PrincipalId::new_user_test_id(5);
+        let dapp_canister_id_2 = PrincipalId::new_user_test_id(6);
+        let user_id = PrincipalId::new_user_test_id(7);
+
+        let mut management_canister_client = MockManagementCanisterClient {
+            calls: vec![
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: dapp_canister_id_1,
+                    result: Ok(canister_status_result_v2_for_testflight(
+                        sns_root_canister_id,
+                        user_id,
+                    )),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: dapp_canister_id_2,
+                    result: Ok(canister_status_result_v2_for_testflight(
+                        sns_root_canister_id,
+                        user_id,
+                    )),
+                },
+            ]
+            .into(),
+        };
+
+        // Step 2: Call the code under test.
+        let result = SnsRootCanister::register_dapp_canisters(
+            &SNS_ROOT_CANISTER,
+            &mut management_canister_client,
+            sns_root_canister_id.try_into().unwrap(),
+            RegisterDappCanistersRequest {
+                canister_ids: vec![dapp_canister_id_1, dapp_canister_id_2],
+            },
+        )
+        .await;
+
+        // Step 3: Inspect results.
+        assert_eq!(result, RegisterDappCanistersResponse {}, "{result:#?}");
+        assert_eq!(
+            management_canister_client.calls.len(),
+            0,
+            "{management_canister_client:#?}"
+        );
+        SNS_ROOT_CANISTER.with(|r| {
+            assert_eq!(
+                *r.borrow(),
+                SnsRootCanister {
+                    // Most importantly, root became aware that it controls the
+                    // dapp, since that is the whole point of calling notify_*,
+                    // the code under test.
+                    dapp_canister_ids: vec![dapp_canister_id_1, dapp_canister_id_2],
+                    ..original_sns_root_canister
+                }
+            );
+        });
+    }
+
+    #[tokio::test]
     async fn register_dapp_canisters_happy() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
         let original_sns_root_canister = SNS_ROOT_CANISTER.with(|r| r.borrow().clone());
         let sns_root_canister_id = PrincipalId::new_user_test_id(4);
@@ -1265,7 +1353,7 @@ mod tests {
     async fn register_dapp_canisters_duplicate() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
         let original_sns_root_canister = SNS_ROOT_CANISTER.with(|r| r.borrow().clone());
         let sns_root_canister_id = PrincipalId::new_user_test_id(4);
@@ -1316,7 +1404,7 @@ mod tests {
     async fn register_dapp_canisters_idempotent() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
         let original_sns_root_canister = SNS_ROOT_CANISTER.with(|r| r.borrow().clone());
         let sns_root_canister_id = PrincipalId::new_user_test_id(4);
@@ -1370,7 +1458,7 @@ mod tests {
     fn register_dapp_canisters_in_forbidden_list() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
         let (governance_canister_id, ledger_canister_id, swap_canister_id, index_canister_id) =
             SNS_ROOT_CANISTER.with(|c| {
@@ -1429,7 +1517,7 @@ mod tests {
     async fn register_dapp_canisters_sad_root_not_controller() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
         let user_id = PrincipalId::new_user_test_id(50);
         let sns_root_canister_id = PrincipalId::new_user_test_id(4);
@@ -1464,7 +1552,7 @@ mod tests {
     async fn register_dapp_canisters_sad_root_canister_status_error() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
         let sns_root_canister_id = PrincipalId::new_user_test_id(4);
         let dapp_canister_id = PrincipalId::new_user_test_id(5);
@@ -1503,7 +1591,7 @@ mod tests {
     async fn register_dapp_canisters_sad_root_not_controller_for_some() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
         let user_id = PrincipalId::new_user_test_id(50);
         let sns_root_canister_id = PrincipalId::new_user_test_id(4);
@@ -1554,7 +1642,7 @@ mod tests {
     async fn register_dapp_canisters_sad_no_controllers() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
         let user_id = PrincipalId::new_user_test_id(50);
         let sns_root_canister_id = PrincipalId::new_user_test_id(4);
@@ -1596,7 +1684,7 @@ mod tests {
     async fn register_dapp_canisters_happy_multiple() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
         let original_sns_root_canister = SNS_ROOT_CANISTER.with(|r| r.borrow().clone());
 
@@ -2266,7 +2354,7 @@ mod tests {
     async fn poll_for_archives_single_archive() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
 
         let expected_archive_canister_id = CanisterId::from_u64(99);
@@ -2303,7 +2391,7 @@ mod tests {
     async fn poll_for_archives_multiple_archives() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
 
         let expected_archive_canister_ids =
@@ -2352,7 +2440,7 @@ mod tests {
     async fn poll_for_archives_multiple_polls() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
 
         let expected_archive_canister_ids =
@@ -2423,7 +2511,7 @@ mod tests {
     async fn poll_for_archives_multiple_polls_with_call_errors() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
 
         let expected_archive_canister_ids = vec![
@@ -2515,7 +2603,7 @@ mod tests {
     async fn poll_for_archives_multiple_polls_missing_canisters() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
 
         let expected_archive_canister_ids =
@@ -2662,7 +2750,7 @@ mod tests {
     async fn test_run_periodic_tasks() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
 
         let expected_archive_canister_ids =
@@ -2746,7 +2834,7 @@ mod tests {
     async fn list_of_canisters_updates_when_update_canister_list_is_true() {
         // Step 1: Prepare the world.
         thread_local! {
-            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister());
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(build_test_sns_root_canister(false));
         }
 
         let root_canister_id = CanisterId::from_u64(1000);
@@ -2982,6 +3070,7 @@ mod tests {
                 archive_canister_ids: vec![],
                 latest_ledger_archive_poll_timestamp_seconds: None,
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
+                testflight: false,
             });
         }
 
@@ -3200,6 +3289,7 @@ mod tests {
                 archive_canister_ids: EXPECTED_ARCHIVE_CANISTERS_PRINCIPAL_IDS.with(|i| i.clone()),
                 latest_ledger_archive_poll_timestamp_seconds: None,
                 index_canister_id: Some(PrincipalId::new_user_test_id(4)),
+                testflight: false,
             });
         }
 

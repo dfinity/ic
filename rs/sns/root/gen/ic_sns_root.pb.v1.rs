@@ -44,6 +44,10 @@ pub struct SnsRootCanister {
     /// The SNS Index canister ID
     #[prost(message, optional, tag = "7")]
     pub index_canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// True if the SNS is running in testflight mode. Then additional
+    /// controllers beyond SNS root are allowed when registering a dapp.
+    #[prost(bool, tag = "8")]
+    pub testflight: bool,
 }
 #[derive(
     candid::CandidType,
