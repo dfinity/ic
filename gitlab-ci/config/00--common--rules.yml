@@ -20,7 +20,6 @@
 .rules-dependency-scan-release-cut:
   rules :
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
-      when: manual
 
 .cargo-rules-autorun-on-trigger:
   # References (anchors) do not work for 'rules' (yet), so we need to copy the `.cargo-rules`
