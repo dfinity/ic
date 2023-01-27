@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -33,4 +34,14 @@ rust_test(
     name = "certification_test",
     crate = ":certification",
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "certification_bench",
+    srcs = ["benches/certification.rs"],
+    crate_root = "benches/certification.rs",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES + [
+        "@crate_index//:criterion",
+        ":certification",
+    ],
 )
