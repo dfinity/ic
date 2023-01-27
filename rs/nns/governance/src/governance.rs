@@ -1944,6 +1944,11 @@ impl GovernanceProto {
             }
         }
 
+        // Compute total amount of locked ICP.
+        metrics.total_locked_e8s = metrics
+            .total_staked_e8s
+            .saturating_sub(metrics.dissolved_neurons_e8s);
+
         metrics
     }
 }
@@ -7238,6 +7243,19 @@ impl Governance {
         }
 
         Ok(rewards)
+    }
+
+    /// Return the cached governance metrics.
+    /// Governance metrics are updated once a day.
+    pub fn get_metrics(&self) -> Result<GovernanceCachedMetrics, GovernanceError> {
+        let metrics = &self.proto.metrics;
+        match metrics {
+            None => Err(GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                "Metrics not available",
+            )),
+            Some(m) => Ok(m.clone()),
+        }
     }
 }
 

@@ -36,6 +36,7 @@ use ic_nns_common::{
     types::{NeuronId, ProposalId},
 };
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, TimeWarp, CMC},
     pb::v1::{
@@ -608,6 +609,17 @@ fn list_neurons_(req: ListNeurons) -> ListNeuronsResponse {
     governance().list_neurons_by_principal(&req, &caller())
 }
 
+#[export_name = "canister_query get_metrics"]
+fn get_metrics() {
+    println!("{}get_metrics", LOG_PREFIX);
+    over(candid, |()| get_metrics_())
+}
+
+#[candid_method(query, rename = "get_metrics")]
+fn get_metrics_() -> Result<GovernanceCachedMetrics, GovernanceError> {
+    governance().get_metrics()
+}
+
 #[export_name = "canister_update get_monthly_node_provider_rewards"]
 fn get_monthly_node_provider_rewards() {
     println!("{}get_monthly_node_provider_rewards", LOG_PREFIX);
@@ -868,6 +880,16 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "governance_last_rewards_event_e8s",
         governance.latest_reward_event().distributed_e8s_equivalent as f64,
         "Total number of e8s distributed in the latest reward event.",
+    )?;
+    w.encode_gauge(
+        "governance_total_locked_e8s",
+        governance
+            .proto
+            .metrics
+            .as_ref()
+            .map(|m| m.total_locked_e8s)
+            .unwrap_or(0) as f64,
+        "Total number of e8s locked in non-dissolved neurons..",
     )?;
 
     let total_voting_power = match governance.proto.proposals.iter().next_back() {
