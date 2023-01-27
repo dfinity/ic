@@ -88,6 +88,25 @@ impl CryptoMetrics {
         }
     }
 
+    /// Observes a crypto method duration, measuring the the full duration,
+    /// which includes actual cryptographic computation and the potential RPC overhead.
+    /// `method_name` indicates the method's name, such as `BasicSignature::sign`.
+    ///
+    /// It observes the duration only if metrics are enabled, `start_time` is `Some`,
+    /// and the metrics for `domain` are defined.
+    pub fn observe_iccsa_verification_duration_seconds(
+        &self,
+        result: MetricsResult,
+        start_time: Option<Instant>,
+    ) {
+        if let (Some(metrics), Some(start_time)) = (&self.metrics, start_time) {
+            metrics
+                .crypto_iccsa_verification_duration_seconds
+                .with_label_values(&[&format!("{}", result)])
+                .observe(start_time.elapsed().as_secs_f64());
+        }
+    }
+
     /// Observes the key counts of a node. For more information about the types of keys contained
     /// in the `key_counts` parameter, see the [`KeyCounts`] documentation.
     pub fn observe_node_key_counts(&self, key_counts: KeyCounts) {
@@ -227,7 +246,6 @@ pub enum MetricsDomain {
     TlsHandshake,
     IdkgProtocol,
     ThresholdEcdsa,
-    IcCanisterSignature,
     PublicSeed,
     KeyManagement,
 }
@@ -360,6 +378,11 @@ struct Metrics {
     /// The 'scope' label indicates the scope of the call, either `Full` or `Local`.
     /// The 'domain' label indicates the domain, e.g., `MetricsDomain::BasicSignature`.
     pub crypto_duration_seconds: HistogramVec,
+
+    /// Histograms of canister signature verification call time.
+    ///
+    /// The 'result' label indicates if the result of the operation was an `Ok(_)`
+    pub crypto_iccsa_verification_duration_seconds: HistogramVec,
 
     /// A gauge vector for the different types of keys and certificates of a node. The keys and
     /// certificates that are kept track of are:
@@ -498,6 +521,25 @@ impl Metrics {
                 &["name", "access"],
             ),
             crypto_duration_seconds: durations,
+            crypto_iccsa_verification_duration_seconds: r.histogram_vec(
+                "crypto_iccsa_verification_duration_seconds",
+                "Histogram of a canister signature verification call durations in seconds",
+                 {
+                    // In the experiments, lower bound that has not been reached was 0.00001 and the upper bound was 0.2.
+                    // Generate an exponential progression as `start * factor.pow(i)`, s.t. the biggest value is minimally
+                    // larger than `threshold`.
+                    let start = 0.00001f64;
+                    let factor = 2.0f64;
+                    let threshold = 0.2f64;
+                    let count = 1 + (threshold / start).log(factor).ceil() as usize;
+                    let buckets = ic_metrics::buckets::exponential_buckets(start, factor, count);
+                    debug_assert_eq!(buckets[0], start);
+                    debug_assert_eq!(buckets[buckets.len() - 1], start * factor.powi(count as i32 - 1));
+                    debug_assert!((buckets[buckets.len() - 1] / factor) < threshold);
+                    buckets
+                },
+                &["result"],
+            ),
             crypto_key_counts: key_counts,
             crypto_key_rotation_results: rotation_results,
             crypto_boolean_results: boolean_results,

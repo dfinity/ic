@@ -692,13 +692,8 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
         self.metrics
             .observe_bls12_381_sig_cache_stats(stats.size, stats.hits, stats.misses);
 
-        self.metrics.observe_duration_seconds(
-            MetricsDomain::IcCanisterSignature,
-            MetricsScope::Full,
-            "verify_canister_sig",
-            MetricsResult::from(&result),
-            start_time,
-        );
+        self.metrics
+            .observe_iccsa_verification_duration_seconds(MetricsResult::from(&result), start_time);
         debug!(logger;
             crypto.description => "end",
             crypto.is_ok => result.is_ok(),
