@@ -22,7 +22,7 @@ pub fn retain_keys_for_transcripts<C: CspIDkgProtocol>(
     if active_transcripts.is_empty() {
         return Ok(());
     }
-    let oldest_public_key = oldest_public_key(node_id, registry, active_transcripts)
+    let oldest_public_key = oldest_public_key(csp_client, node_id, registry, active_transcripts)
         .expect("at least one public key since there is at least one transcript")?;
 
     let internal_transcripts: Result<BTreeSet<_>, _> = active_transcripts
@@ -38,14 +38,20 @@ pub fn retain_keys_for_transcripts<C: CspIDkgProtocol>(
     csp_client.idkg_retain_active_keys(&internal_transcripts?, oldest_public_key)
 }
 
-fn oldest_public_key(
+fn oldest_public_key<C: CspIDkgProtocol>(
+    csp_client: &C,
     node_id: &NodeId,
     registry: &Arc<dyn RegistryClient>,
     transcripts: &HashSet<IDkgTranscript>,
 ) -> Option<Result<MEGaPublicKey, IDkgRetainKeysError>> {
     minimum_registry_version(transcripts).map(|version| {
-        get_mega_pubkey(node_id, registry.as_ref(), version).map_err(|err| {
-            if err.is_reproducible() {
+        match get_mega_pubkey(node_id, registry.as_ref(), version) {
+            Ok(oldest_public_key) => {
+                csp_client
+                    .idkg_observe_minimum_registry_version_in_active_idkg_transcripts(version);
+                Ok(oldest_public_key)
+            }
+            Err(err) => Err(if err.is_reproducible() {
                 IDkgRetainKeysError::InternalError {
                     internal_error: format!(
                         "Internal error while searching for iDKG public key: {:?}",
@@ -59,8 +65,8 @@ fn oldest_public_key(
                         err
                     ),
                 }
-            }
-        })
+            }),
+        }
     })
 }
 

@@ -4,6 +4,7 @@
 #![allow(clippy::ptr_arg)]
 #![allow(clippy::too_many_arguments)]
 
+use ic_base_types::RegistryVersion;
 use ic_crypto_internal_csp::api::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker,
     CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
@@ -359,6 +360,11 @@ mock! {
             opener_index: NodeIndex,
             opening: CommitmentOpening,
         ) -> Result<(), IDkgVerifyOpeningError>;
+
+        fn idkg_observe_minimum_registry_version_in_active_idkg_transcripts(
+            &self,
+            registry_version: RegistryVersion,
+        );
     }
 
     pub trait CspThresholdEcdsaSigner {

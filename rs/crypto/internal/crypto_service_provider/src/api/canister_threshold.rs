@@ -14,7 +14,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
 };
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::AlgorithmId;
-use ic_types::{NodeIndex, NumberOfNodes, Randomness};
+use ic_types::{NodeIndex, NumberOfNodes, Randomness, RegistryVersion};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub mod errors;
@@ -156,6 +156,12 @@ pub trait CspIDkgProtocol {
         active_transcripts: &BTreeSet<IDkgTranscriptInternal>,
         oldest_public_key: MEGaPublicKey,
     ) -> Result<(), IDkgRetainKeysError>;
+
+    /// Make a metrics observation of the minimum registry version in active iDKG transcripts.
+    fn idkg_observe_minimum_registry_version_in_active_idkg_transcripts(
+        &self,
+        registry_version: RegistryVersion,
+    );
 }
 
 /// Crypto service provider (CSP) client for threshold ECDSA signature share
