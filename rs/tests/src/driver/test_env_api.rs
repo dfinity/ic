@@ -136,6 +136,7 @@ use super::cli::{
 };
 use super::config::NODES_INFO;
 use super::driver_setup::{DEFAULT_FARM_BASE_URL, SSH_AUTHORIZED_PRIV_KEYS_DIR};
+use super::farm::DnsRecord;
 use super::test_setup::GroupSetup;
 use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::new::constants::{self, kibana_link};
@@ -1616,4 +1617,27 @@ pub fn finalize_group(group_setup: &GroupSetup, logger: Logger) -> Result<()> {
     let farm = Farm::new(farm_base_url, logger);
 
     Ok(farm.delete_group(&group_setup.farm_group_name)?)
+}
+
+pub trait CreateDnsRecords {
+    /// Creates DNS records under the suffix: `.<group-name>.farm.dfinity.systems`.
+    /// The records will be garbage collected some time after the group has expired.
+    /// The suffix will be returned from this function such that the FQDNs can be constructed.
+    fn create_dns_records(&self, dns_records: Vec<DnsRecord>) -> String;
+}
+
+impl<T> CreateDnsRecords for T
+where
+    T: HasTestEnv,
+{
+    fn create_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
+        let env = self.test_env();
+        let log = env.logger();
+        let farm_base_url = env.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, log);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let group_name = group_setup.farm_group_name;
+        farm.create_dns_records(&group_name, dns_records)
+            .expect("Failed to create DNS records")
+    }
 }

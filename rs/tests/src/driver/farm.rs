@@ -173,6 +173,21 @@ impl Farm {
         Ok(())
     }
 
+    /// Creates DNS records under the suffix: `.<group-name>.farm.dfinity.systems`.
+    /// The records will be garbage collected some time after the group has expired.
+    /// The suffix will be returned from this function such that the FQDNs can be constructed.
+    pub fn create_dns_records(
+        &self,
+        group_name: &str,
+        dns_records: Vec<DnsRecord>,
+    ) -> FarmResult<String> {
+        let path = format!("group/{}/dns", group_name);
+        let rb = Self::json(self.post(&path), &dns_records);
+        let resp = self.retry_until_success_long(rb)?;
+        let create_dns_records_result = resp.json::<CreateDnsRecordsResult>()?;
+        Ok(create_dns_records_result.suffix)
+    }
+
     pub fn set_group_ttl(&self, group_name: &str, duration: Duration) -> FarmResult<()> {
         let path = format!("group/{}/ttl/{}", group_name, duration.as_secs());
         let rb = self.put(&path);
@@ -493,4 +508,33 @@ impl AttachImageSpec {
             id,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DnsRecord {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub record_type: DnsRecordType,
+    pub records: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DnsRecordType {
+    A,
+    AAAA,
+    CAA,
+    CNAME,
+    MX,
+    NS,
+    NAPTR,
+    PTR,
+    SOA,
+    SPF,
+    SRV,
+    TXT,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct CreateDnsRecordsResult {
+    suffix: String,
 }
