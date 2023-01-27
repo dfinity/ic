@@ -26,8 +26,7 @@ use ic_sns_governance::{
                 RemoveNeuronPermissions, Split, StakeMaturity,
             },
             manage_neuron_response::{
-                Command as CommandResponse, DisburseMaturityResponse, MergeMaturityResponse,
-                StakeMaturityResponse,
+                Command as CommandResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             proposal::Action,
             Account as AccountProto, DeregisterDappCanisters, Empty, GovernanceError,
@@ -209,6 +208,33 @@ fn setup_test_environment_with_one_neuron_with_maturity(
     }
 }
 
+// TODO(NNS1-2021): remove this test
+#[test]
+fn test_disburse_maturity_fails_while_disabled() {
+    let earned_maturity_e8s = 12345678;
+    let mut env = setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![]);
+
+    // Disburse maturity.
+    let command_response = env
+        .gov_fixture
+        .manage_neuron(
+            &env.neuron_id,
+            manage_neuron::Command::DisburseMaturity(DisburseMaturity {
+                percentage_to_disburse: 100,
+                to_account: None,
+            }),
+            &env.controller,
+        )
+        .command
+        .expect("missing response from manage_neuron operation");
+    assert_matches!(
+        command_response,
+        CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
+            if code == ErrorType::Unavailable as i32 && msg.to_lowercase().contains("disabled"));
+}
+
+// TODO(NNS1-2021): re-enable
+#[ignore]
 #[test]
 fn test_disburse_maturity_succeeds_to_self() {
     let earned_maturity_e8s = 12345678;
@@ -302,6 +328,8 @@ fn test_disburse_maturity_succeeds_to_self() {
     assert_eq!(account_balance, expected_account_balance_after_disbursal);
 }
 
+// TODO(NNS1-2021): re-enable
+#[ignore]
 #[test]
 fn test_disburse_maturity_succeeds_to_other() {
     let earned_maturity_e8s = 12345678;
@@ -414,6 +442,8 @@ fn test_disburse_maturity_succeeds_to_other() {
     );
 }
 
+// TODO(NNS1-2021): re-enable
+#[ignore]
 #[test]
 fn test_disburse_maturity_succeeds_with_multiple_operations() {
     let earned_maturity_e8s = 1000000;
@@ -504,6 +534,8 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
     }
 }
 
+// TODO(NNS1-2021): re-enable
+#[ignore]
 #[test]
 fn test_disburse_maturity_fails_if_maturity_too_low() {
     let earned_maturity_e8s = 123;
@@ -528,6 +560,8 @@ fn test_disburse_maturity_fails_if_maturity_too_low() {
             if code == ErrorType::PreconditionFailed as i32 && msg.to_lowercase().contains("can't merge an amount less than"));
 }
 
+// TODO(NNS1-2021): re-enable
+#[ignore]
 #[test]
 fn test_disburse_maturity_fails_if_not_authorized() {
     let earned_maturity_e8s = 1234567;
@@ -552,6 +586,8 @@ fn test_disburse_maturity_fails_if_not_authorized() {
             if code == ErrorType::NotAuthorized as i32);
 }
 
+// TODO(NNS1-2021): re-enable
+#[ignore]
 #[test]
 fn test_disburse_maturity_fails_on_non_existing_neuron() {
     let earned_maturity_e8s = 12345767;
@@ -577,6 +613,8 @@ fn test_disburse_maturity_fails_on_non_existing_neuron() {
             if code == ErrorType::NotFound as i32 && msg.to_lowercase().contains("neuron not found"));
 }
 
+// TODO(NNS1-2021): re-enable
+#[ignore]
 #[test]
 fn test_disburse_maturity_fails_if_invalid_percentage_to_disburse() {
     let earned_maturity_e8s = 12345767;
@@ -668,22 +706,27 @@ fn test_vesting_neuron_manage_neuron_operations() {
         by: Some(claim_or_refresh::By::NeuronId(Empty {})),
     };
 
-    let disburse_maturity = DisburseMaturity {
-        percentage_to_disburse: 10,
-        to_account: None,
-    };
+    // TODO(NNS1-2021): uncomment the lines below.
+    // let disburse_maturity = DisburseMaturity {
+    //     percentage_to_disburse: 10,
+    //     to_account: None,
+    // };
 
-    let disburse_maturity_response = DisburseMaturityResponse {
-        amount_disbursed_e8s: 100000,
-    };
+    // TODO(NNS1-2021): uncomment the lines below.
+    // let disburse_maturity_response = DisburseMaturityResponse {
+    //     amount_disbursed_e8s: 100000,
+    // };
 
     let merge_maturity = MergeMaturity {
         percentage_to_merge: 10,
     };
 
     let merge_maturity_response = MergeMaturityResponse {
-        merged_maturity_e8s: 90000,
-        new_stake_e8s: 100090000,
+        // TODO(NNS1-2021): restore the original values.
+        // merged_maturity_e8s: 90000,
+        // new_stake_e8s: 100090000,
+        merged_maturity_e8s: 100000,
+        new_stake_e8s: 100100000,
     };
 
     let stake_maturity = StakeMaturity {
@@ -691,8 +734,11 @@ fn test_vesting_neuron_manage_neuron_operations() {
     };
 
     let stake_maturity_response = StakeMaturityResponse {
-        maturity_e8s: 729000,
-        staked_maturity_e8s: 81000,
+        // TODO(NNS1-2021): restore the original values.
+        // maturity_e8s: 729000,
+        // staked_maturity_e8s: 81000,
+        maturity_e8s: 810000,
+        staked_maturity_e8s: 90000,
     };
 
     let add_neuron_permissions = AddNeuronPermissions {
@@ -743,10 +789,11 @@ fn test_vesting_neuron_manage_neuron_operations() {
             Command::ClaimOrRefresh(claim_or_refresh),
             ManageNeuronResponse::claim_or_refresh_neuron_response(neuron_id1.clone()),
         ),
-        (
-            Command::DisburseMaturity(disburse_maturity),
-            ManageNeuronResponse::disburse_maturity_response(disburse_maturity_response),
-        ),
+        // TODO(NNS1-2021): uncomment the lines below.
+        // (
+        //     Command::DisburseMaturity(disburse_maturity),
+        //     ManageNeuronResponse::disburse_maturity_response(disburse_maturity_response),
+        // ),
         (
             Command::MergeMaturity(merge_maturity),
             ManageNeuronResponse::merge_maturity_response(merge_maturity_response),

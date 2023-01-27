@@ -3760,9 +3760,13 @@ impl Governance {
             C::StakeMaturity(m) => self
                 .stake_maturity_of_neuron(&neuron_id, caller, m)
                 .map(ManageNeuronResponse::stake_maturity_response),
-            C::DisburseMaturity(d) => self
-                .disburse_maturity(&neuron_id, caller, d)
-                .map(ManageNeuronResponse::disburse_maturity_response),
+            C::DisburseMaturity(_d) => Err(GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                "disburse_maturity is currently disabled",
+            )),
+            // TODO(NNS1-2021): re-enable disburse_maturity
+            // self.disburse_maturity(&neuron_id, caller, d)
+            //     .map(ManageNeuronResponse::disburse_maturity_response),
             C::Split(s) => self
                 .split_neuron(&neuron_id, caller, s)
                 .await

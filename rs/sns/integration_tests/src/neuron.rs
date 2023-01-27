@@ -605,6 +605,48 @@ fn get_sns_canisters_now_seconds() -> i64 {
         + 1
 }
 
+// TODO(NNS1-2021): remove this test
+#[test]
+fn test_disburse_maturity_fails_as_unavailable() {
+    local_test_on_sns_subnet(|runtime| async move {
+        // 1. Setup test environment.
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let (sns_canisters, neuron_id, subaccount) =
+            create_sns_canisters_with_staked_neuron_and_maturity(&runtime, &user).await;
+
+        let neuron = sns_canisters.get_neuron(&neuron_id).await;
+        let earned_maturity_e8s = neuron.maturity_e8s_equivalent;
+        assert!(earned_maturity_e8s > 0);
+
+        // 2. Disburse all of the neuron's rewards aka maturity.
+        let manage_neuron_response: ManageNeuronResponse = sns_canisters
+            .governance
+            .update_from_sender(
+                "manage_neuron",
+                candid_one,
+                ManageNeuron {
+                    subaccount: subaccount.to_vec(),
+                    command: Some(Command::DisburseMaturity(DisburseMaturity {
+                        percentage_to_disburse: 100,
+                        to_account: None,
+                    })),
+                },
+                &user,
+            )
+            .await
+            .expect("Error calling the manage_neuron API.");
+
+        // 3. Inspect the command response.
+        assert_matches!(
+        manage_neuron_response.command.expect("Missing command response"),
+        CommandResponse::Error(GovernanceError{error_type: code, error_message: msg})
+            if code == ErrorType::Unavailable as i32 && msg.to_lowercase().contains("disabled"));
+        Ok(())
+    });
+}
+
+// TODO(NNS1-2021): re-enable
+#[ignore]
 #[test]
 fn test_disburse_maturity_succeeds_to_self() {
     local_test_on_sns_subnet(|runtime| async move {
@@ -673,6 +715,8 @@ fn test_disburse_maturity_succeeds_to_self() {
     });
 }
 
+// TODO(NNS1-2021): re-enable
+#[ignore]
 #[test]
 fn test_disburse_maturity_succeeds_to_other_account() {
     local_test_on_sns_subnet(|runtime| async move {
@@ -754,6 +798,8 @@ fn test_disburse_maturity_succeeds_to_other_account() {
     });
 }
 
+// TODO(NNS1-2021): re-enable
+#[ignore]
 #[test]
 fn test_disburse_maturity_fails_if_no_maturity() {
     local_test_on_sns_subnet(|runtime| async move {
