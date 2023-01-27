@@ -47,7 +47,6 @@ rust_library(
         "//rs/types/types",
         "//rs/utils",
         "@crate_index//:base64",
-        "@crate_index//:futures",
         "@crate_index//:hex",
         "@crate_index//:openssl",
         "@crate_index//:parking_lot",

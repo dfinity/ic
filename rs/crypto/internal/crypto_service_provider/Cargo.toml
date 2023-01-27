@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 async-trait = "0.1.41"
 base64 = "0.11"
-futures = "0.3.6"
 hex = "0.4.2"
 ic-config = { path = "../../../config" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../crypto_lib/basic_sig/der_utils" }

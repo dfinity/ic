@@ -5242,7 +5242,6 @@ dependencies = [
  "assert_matches",
  "async-trait",
  "base64 0.11.0",
- "futures",
  "hex",
  "ic-config",
  "ic-crypto-internal-basic-sig-cose",
