@@ -257,9 +257,24 @@ fn point_double_vs_addition(c: &mut Criterion) {
     }
 }
 
+fn point_mul(c: &mut Criterion) {
+    for curve_type in EccCurveType::all() {
+        let mut group = c.benchmark_group(format!("crypto_point_multiplication_{}", curve_type));
+
+        group.bench_function(BenchmarkId::new("multiply", 0), move |b| {
+            b.iter_with_setup(
+                || (random_point(curve_type), random_scalar(curve_type)),
+                |(p, s)| p.scalar_mul(&s),
+            )
+        });
+
+        group.finish();
+    }
+}
+
 criterion_group! {
 name = group_ops;
 config = Criterion::default().measurement_time(Duration::from_secs(30));
-targets = point_multiexp_constant_time, point_multiexp_vartime_total, point_multiexp_vartime_online, point_double_vs_addition
+targets = point_multiexp_constant_time, point_multiexp_vartime_total, point_multiexp_vartime_online, point_mul, point_double_vs_addition
 }
 criterion_main!(group_ops);
