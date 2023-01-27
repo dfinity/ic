@@ -332,7 +332,7 @@ system_test(
     name = "catch_up_possible_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "system_test_pre_master",
+        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
@@ -343,7 +343,7 @@ system_test(
     name = "catch_up_impossible_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "system_test_pre_master",
+        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
