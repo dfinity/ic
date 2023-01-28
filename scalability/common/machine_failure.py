@@ -22,7 +22,13 @@ class MachineFailure(threading.Thread):
 
     def get_services():
         # Doesn't seem like the order of those things matters
-        return ["ic-replica", "ic-btc-adapter", "ic-canister-http-adapter", "ic-crypto-csp"]
+        return [
+            "ic-replica",
+            "ic-btc-adapter",
+            "ic-canister-http-adapter",
+            "ic-crypto-csp",
+            "ic-monitoring-canister-adapter",
+        ]
 
     def kill_nodes(machines: [str]):
         # The order in which services are killed shouldn't matter (any order can happen in reality).

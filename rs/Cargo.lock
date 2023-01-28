@@ -6772,6 +6772,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8aef00d455eba8b8244a415f073a43042e57da6d09c294485a2b2ebc858c9da2"
 
 [[package]]
+name = "ic-monitoring-canister-adapter"
+version = "0.1.0"
+dependencies = [
+ "clap 3.2.23",
+ "ic-async-utils",
+ "ic-config",
+ "ic-logger",
+ "serde",
+ "serde_json",
+ "slog",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "ic-nervous-system-common"
 version = "0.8.0"
 dependencies = [

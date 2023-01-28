@@ -11,6 +11,7 @@ NO_STRIP = [
     "canister_sandbox",
     "ic-btc-adapter",
     "ic-canister-http-adapter",
+    "ic-monitoring-canister-adapter",
     "replica",
 ]
 
@@ -31,6 +32,7 @@ BINARIES = {
     "ic-canister-http-adapter": "//rs/canister_http/adapter:ic-canister-http-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
     "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
+    "ic-monitoring-canister-adapter": "//rs/monitoring/onchain_observability/adapter:ic-monitoring-canister-adapter",
     "ic-nns-init": "//rs/nns/init:ic-nns-init",
     "ic-p8s-sd": "//rs/ic_p8s_service_discovery:ic-p8s-sd",
     "ic-p8s-service-discovery": "//rs/ic_p8s_service_discovery:ic-p8s-service-discovery",

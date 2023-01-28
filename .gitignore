@@ -95,6 +95,7 @@ prestorecon.o
 **/bin/ic-consensus-pool-util
 **/bin/ic-crypto-csp
 **/bin/ic-regedit
+**/bin/ic-monitoring-canister-adapter
 **/bin/orchestrator
 **/bin/replica
 **/bin/state-tool
