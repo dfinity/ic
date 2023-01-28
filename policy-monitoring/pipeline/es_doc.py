@@ -135,6 +135,7 @@ class EsDoc:
             "ic-btc-adapter",
             "ic-crypto-csp",
             "ic-canister-http-adapter",
+            "ic-monitoring-canister-adapter",
             # TODO: all components that use the ReplicaLogger library
         ]
     )

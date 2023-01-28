@@ -14,6 +14,9 @@ type ic_canister_sandbox_exec_t;
 type ic_http_adapter_t;
 type ic_http_adapter_exec_t;
 
+type ic_monitoring_canister_adapter_t;
+type ic_monitoring_canister_adapter_exec_t;
+
 # On-disk state types.
 type ic_crypto_store_t;
 type ic_data_t;
@@ -389,3 +392,7 @@ dontaudit ic_canister_sandbox_t cert_t : file { read };
 # ic-canister-http-adapter
 
 application_domain(ic_http_adapter_t, ic_http_adapter_exec_t)
+
+# monitoring-canister-adapter
+
+application_domain(ic_monitoring_canister_adapter_t, ic_monitoring_canister_adapter_exec_t)
