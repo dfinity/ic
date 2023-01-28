@@ -404,7 +404,7 @@ fn canister_post_upgrade() {
         Err(_) => {
             // Read the length of the state bytes.
             let serialized_swap_message_len = UPGRADES_MEMORY.with(|um| {
-                let mut serialized_swap_message_len_bytes = [0; 4];
+                let mut serialized_swap_message_len_bytes = [0; std::mem::size_of::<u32>()];
                 um.borrow()
                     .read(/* offset */ 0, &mut serialized_swap_message_len_bytes);
                 u32::from_le_bytes(serialized_swap_message_len_bytes) as usize
@@ -413,7 +413,10 @@ fn canister_post_upgrade() {
             // Read the state bytes.
             let decode_swap_result = UPGRADES_MEMORY.with(|um| {
                 let mut swap_bytes = vec![0; serialized_swap_message_len];
-                um.borrow().read(4, &mut swap_bytes);
+                um.borrow().read(
+                    /* offset */ std::mem::size_of::<u32>() as u64,
+                    &mut swap_bytes,
+                );
                 Swap::decode(&swap_bytes[..])
             });
 
