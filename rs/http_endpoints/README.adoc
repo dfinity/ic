@@ -3,7 +3,7 @@
  
 == Introduction ==
  
-The directory contains replica components that open active sockets, so NNS managed nodes can 
+The directory contains replica components that open active network sockets, so NNS managed nodes can 
 communicate with each other.
  
 
@@ -32,10 +32,10 @@ Each component uses the ReplicaOS defaults for https://tldp.org/HOWTO/TCP-Keepal
 == Thread-per-request ==
  
 Components in scope listen on a socket, parse the corresponding request and execute the requested API
-call by calling a downstream component(s) that may block the running thread. Since async code needs to be
+call by calling an upstream component(s) that may block the running thread. Since async code needs to be
 https://docs.rs/tokio/latest/tokio/task/index.html[non-blocking], the components use 
 https://sre.google/sre-book/addressing-cascading-failures/#xref_cascading-failure_queue-management[thread-per-request]
-pattern for executing the corresponding downstream API calls. More specifically, there is a
+pattern for executing the corresponding upstream API calls. More specifically, there is a
 queue in front of each thread pool that handles requests. Requests come in, they sit in a bounded-size queue, and then
 threads pick requests off the queue and perform the actual work (whatever actions are required by the replica).
 The caller is responsible for correctly handling the case when the queue is full.
@@ -43,21 +43,20 @@ The caller is responsible for correctly handling the case when the queue is full
 If a request is cancelled before it is picked up from a thread, then the request is not executed.
 
 This design pattern is implemented using a https://docs.rs/tower/latest/tower/limit/concurrency/index.html[limit on number of requests being concurrently processed],
-https://docs.rs/threadpool/latest/threadpool/[threadpool] per downstream service and https://docs.rs/tokio/latest/tokio/sync/oneshot/index.html[Tokio oneshot channel].
+https://docs.rs/threadpool/latest/threadpool/[threadpool] per upstream service and https://docs.rs/tokio/latest/tokio/sync/oneshot/index.html[Tokio oneshot channel].
 
-== Request timeout (504) ==
+== Request timeout ==
 
-We want to detect if any downstream service is stuck and and takes longer than it should to process a request.
-There is a https://docs.rs/tower/latest/tower/timeout/index.html[timeout] set for each received request. If a request is not completed within the timeout then 
-the endpoint responds with `+504 Gateway Timeout+`.
+In order to guard against stuck upstream services, a https://docs.rs/tower/latest/tower/timeout/index.html[timeout] is set for each received request. 
+If a request is not completed within the timeout then the endpoint responds with `+504 Gateway Timeout+`.
 
-Setting a timeout on requests guards against closing idle connections due to stuck downstream 
-services. For example, let's say a user uses HTTP1 over a single connection. If there is a downstream service
-that takes longer than it should, then the user is unable to send new requests until the last one completed.
+Setting a timeout on requests also guards against closing an idle connection due to stuck upstream service.
+For example, if a user uses HTTP1 over a connection and there is a upstream service that takes longer
+than it should, then the user is unable to send new requests until the last one completed.
 Hence, this may result in dropping the connection because no new bytes are read by the replica on that
 connection. 
 
-== Preventing Server Overload (429) ==
+== Preventing Server Overload ==
  
 Servers should protect themselves from becoming overloaded and crashing. When overloaded at either the frontend or
 backend layers, fail early and cheaply. For details, see 
@@ -77,10 +76,10 @@ If a http request does not complete within the specified timeout it will be abor
 
 == Fairness ==
 
-Fairness implies that the rate at which requests from different connections are processed is more or less the same.
+Fairness implies that the rate at which requests from different connections are picked up is more or less the same.
 
 Currently boundary nodes use https://www.nginx.com/[nginx] as reverse proxy. Thus, the boundary nodes
 can only use https://mailman.nginx.org/pipermail/nginx/2015-December/049445.html[HTTP1] for communicating with replicas.
-Hence, there can be at most one in-flight request in the replica from each connection. Given we use https://tokio.rs/blog/2019-10-scheduler[Tokio's fair schedule]
-and we have a dedicated Tokio task for serving each connection this is sufficient for request processing fairness accross connections.
+Hence, there can be at most one in-flight request in the replica from each connection. Given we use https://tokio.rs/blog/2019-10-scheduler[Tokio's fair scheduler]
+and we have a dedicated Tokio task for serving each connection this is sufficient for request accross connections.
 
