@@ -316,7 +316,7 @@ class DfinityGitLabConfig:
 
         # Validate a gitlab CI configuration with a namespace.
         result = self._gl.http_post(
-            f"{self.gitlab_url}/api/v4/projects/{self.proj_id}/ci/lint",
+            f"{self.gitlab_url}/api/v4/ci/lint",
             post_data=data,
         )
 

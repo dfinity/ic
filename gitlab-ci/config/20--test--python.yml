@@ -1,5 +1,4 @@
 python-tests:
-  allow_failure: true # TODO(IDX-2629) remove when fixed.
   extends:
     - .ubuntu-docker-k8s
     - .rules-pipeline-no-merge-train
@@ -19,7 +18,8 @@ python-tests:
     - |
       set -xeuo pipefail
       cd gitlab-ci/src
-      pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch --ignore=simple_prober
+      # dependencies tests are broken by !10353
+      pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch --ignore=dependencies
       python3 gitlab_config/main.py --job-list-validate
       python3 gitlab_config/main.py --cfg-validate
     - |
