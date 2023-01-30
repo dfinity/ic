@@ -38,13 +38,13 @@ type FailedUpdate = record {
   dapp_canister_id : opt principal;
 };
 type FinalizeSwapResponse = record {
+  set_dapp_controllers_call_result : opt SetDappControllersCallResult;
   settle_community_fund_participation_result : opt SettleCommunityFundParticipationResult;
   error_message : opt text;
-  set_dapp_controllers_result : opt SetDappControllersCallResult;
-  sns_governance_normal_mode_enabled : opt SetModeCallResult;
-  sweep_icp : opt SweepResult;
-  sweep_sns : opt SweepResult;
-  create_neuron : opt SweepResult;
+  set_mode_call_result : opt SetModeCallResult;
+  sweep_icp_result : opt SweepResult;
+  claim_neuron_result : opt SweepResult;
+  sweep_sns_result : opt SweepResult;
 };
 type GetBuyerStateRequest = record { principal_id : opt principal };
 type GetBuyerStateResponse = record { buyer_state : opt BuyerState };
@@ -92,12 +92,12 @@ type Params = record {
   max_participant_icp_e8s : nat64;
   min_icp_e8s : nat64;
 };
-type Possibility = variant { Ok : Response; Err : CanisterCallError };
-type Possibility_1 = variant {
+type Possibility = variant {
   Ok : SetDappControllersResponse;
   Err : CanisterCallError;
 };
-type Possibility_2 = variant { Err : CanisterCallError };
+type Possibility_1 = variant { Ok : Response; Err : CanisterCallError };
+type Possibility_2 = variant { Ok : record {}; Err : CanisterCallError };
 type RefreshBuyerTokensRequest = record { buyer : text };
 type RefreshBuyerTokensResponse = record {
   icp_accepted_participation_e8s : nat64;
@@ -105,14 +105,15 @@ type RefreshBuyerTokensResponse = record {
 };
 type Response = record { governance_error : opt GovernanceError };
 type Result = variant { Ok : Ok; Err : Err };
-type SetDappControllersCallResult = record { possibility : opt Possibility_1 };
+type SetDappControllersCallResult = record { possibility : opt Possibility };
 type SetDappControllersResponse = record { failed_updates : vec FailedUpdate };
 type SetModeCallResult = record { possibility : opt Possibility_2 };
 type SettleCommunityFundParticipationResult = record {
-  possibility : opt Possibility;
+  possibility : opt Possibility_1;
 };
 type SnsNeuronRecipe = record {
   sns : opt TransferableAmount;
+  claimed_status : opt int32;
   neuron_attributes : opt NeuronAttributes;
   investor : opt Investor;
 };
@@ -126,7 +127,13 @@ type Swap = record {
   params : opt Params;
   open_sns_token_swap_proposal_id : opt nat64;
 };
-type SweepResult = record { failure : nat32; skipped : nat32; success : nat32 };
+type SweepResult = record {
+  failure : nat32;
+  skipped : nat32;
+  invalid : nat32;
+  success : nat32;
+  global_failures : nat32;
+};
 type TransferableAmount = record {
   transfer_start_timestamp_seconds : nat64;
   amount_e8s : nat64;

@@ -469,6 +469,10 @@ pub struct SnsNeuronRecipe {
     /// Attributes of the Neuron to be created from the SnsNeuronRecipe
     #[prost(message, optional, tag = "4")]
     pub neuron_attributes: ::core::option::Option<sns_neuron_recipe::NeuronAttributes>,
+    /// The status of the SnsNeuronRecipe's creation within SNS Governance. This field is
+    /// used as a journal between calls of finalize().
+    #[prost(enumeration = "sns_neuron_recipe::ClaimedStatus", optional, tag = "5")]
+    pub claimed_status: ::core::option::Option<i32>,
     #[prost(oneof = "sns_neuron_recipe::Investor", tags = "2, 3")]
     pub investor: ::core::option::Option<sns_neuron_recipe::Investor>,
 }
@@ -496,6 +500,52 @@ pub mod sns_neuron_recipe {
         /// The dissolve delay in seconds that the Neuron will be created with.
         #[prost(uint64, tag = "2")]
         pub dissolve_delay_seconds: u64,
+    }
+    /// The various statuses of creation that a SnsNeuronRecipe can have in an SNS.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
+    #[repr(i32)]
+    pub enum ClaimedStatus {
+        /// Unused, here for PB lint purposes.
+        Unspecified = 0,
+        /// The Neuron is pending creation and can be claimed in SNS Governance.
+        Pending = 1,
+        /// The Neuron has been created successfully in SNS Governance.
+        Success = 2,
+        /// The Neuron has previously failed to be created in SNS Governance, but can
+        /// be retried in the future.
+        Failed = 3,
+        /// The Neuron is invalid and was not created in SNS Governance. This neuron
+        /// cannot be retried without manual intervention to update its NeuronParameters.
+        Invalid = 4,
+    }
+    impl ClaimedStatus {
+        /// String value of the enum field names used in the ProtoBuf definition.
+        ///
+        /// The values are not transformed in any way and thus are considered stable
+        /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+        pub fn as_str_name(&self) -> &'static str {
+            match self {
+                ClaimedStatus::Unspecified => "CLAIMED_STATUS_UNSPECIFIED",
+                ClaimedStatus::Pending => "CLAIMED_STATUS_PENDING",
+                ClaimedStatus::Success => "CLAIMED_STATUS_SUCCESS",
+                ClaimedStatus::Failed => "CLAIMED_STATUS_FAILED",
+                ClaimedStatus::Invalid => "CLAIMED_STATUS_INVALID",
+            }
+        }
     }
     #[derive(
         candid::CandidType,
@@ -723,9 +773,6 @@ pub struct RefreshBuyerTokensResponse {
 )]
 pub struct FinalizeSwapRequest {}
 /// Response from the `finalize_swap` canister API.
-///
-/// TODO NNS1-1715 - Add diagnostic information that would maximize the chances
-/// that an operator would be able to figure out what corrective action(s) to take
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -737,15 +784,15 @@ pub struct FinalizeSwapRequest {}
 )]
 pub struct FinalizeSwapResponse {
     #[prost(message, optional, tag = "1")]
-    pub sweep_icp: ::core::option::Option<SweepResult>,
+    pub sweep_icp_result: ::core::option::Option<SweepResult>,
     #[prost(message, optional, tag = "2")]
-    pub sweep_sns: ::core::option::Option<SweepResult>,
+    pub sweep_sns_result: ::core::option::Option<SweepResult>,
     #[prost(message, optional, tag = "3")]
-    pub create_neuron: ::core::option::Option<SweepResult>,
+    pub claim_neuron_result: ::core::option::Option<SweepResult>,
     #[prost(message, optional, tag = "4")]
-    pub sns_governance_normal_mode_enabled: ::core::option::Option<SetModeCallResult>,
+    pub set_mode_call_result: ::core::option::Option<SetModeCallResult>,
     #[prost(message, optional, tag = "5")]
-    pub set_dapp_controllers_result: ::core::option::Option<SetDappControllersCallResult>,
+    pub set_dapp_controllers_call_result: ::core::option::Option<SetDappControllersCallResult>,
     #[prost(message, optional, tag = "6")]
     pub settle_community_fund_participation_result:
         ::core::option::Option<SettleCommunityFundParticipationResult>,
@@ -763,12 +810,27 @@ pub struct FinalizeSwapResponse {
     ::prost::Message,
 )]
 pub struct SweepResult {
+    /// Success means that on this call to finalize, the item in the
+    /// sweep succeeded.
     #[prost(uint32, tag = "1")]
     pub success: u32,
+    /// Failure means that on this call to finalize, the item in the
+    /// sweep failed but may be successful in the future.
     #[prost(uint32, tag = "2")]
     pub failure: u32,
+    /// Skipped means that on a previous call to finalize, the item
+    /// in the sweep was successful.
     #[prost(uint32, tag = "3")]
     pub skipped: u32,
+    /// Invalid means that on this call and all future calls to finalize,
+    /// this item will not be successful, and will need intervention to
+    /// succeed.
+    #[prost(uint32, tag = "4")]
+    pub invalid: u32,
+    /// Global_failures does not map to individual items in the sweep, but
+    /// number of global failures encountered in the sweep.
+    #[prost(uint32, tag = "5")]
+    pub global_failures: u32,
 }
 /// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
 #[derive(
@@ -781,7 +843,7 @@ pub struct SweepResult {
     ::prost::Message,
 )]
 pub struct SetModeCallResult {
-    #[prost(oneof = "set_mode_call_result::Possibility", tags = "2")]
+    #[prost(oneof = "set_mode_call_result::Possibility", tags = "1, 2")]
     pub possibility: ::core::option::Option<set_mode_call_result::Possibility>,
 }
 /// Nested message and enum types in `SetModeCallResult`.
@@ -793,10 +855,21 @@ pub mod set_mode_call_result {
         comparable::Comparable,
         Clone,
         PartialEq,
+        ::prost::Message,
+    )]
+    pub struct SetModeResult {}
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
         ::prost::Oneof,
     )]
     pub enum Possibility {
-        /// TODO ic_sns_governance.pb.v1.SetModeResponse ok = 1;
+        #[prost(message, tag = "1")]
+        Ok(SetModeResult),
         #[prost(message, tag = "2")]
         Err(super::CanisterCallError),
     }
@@ -813,7 +886,7 @@ pub mod set_mode_call_result {
 )]
 pub struct RestoreDappControllersRequest {}
 /// Response of the method restore_dapp_controllers.
-/// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
+/// Analogous to Rust type Result<SetDappControllersResponse, CanisterCallError>.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -850,7 +923,7 @@ pub mod restore_dapp_controllers_response {
         Err(super::CanisterCallError),
     }
 }
-/// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
+/// Analogous to Rust type Result<SetDappControllersResponse, CanisterCallError>.
 #[derive(
     candid::CandidType,
     candid::Deserialize,

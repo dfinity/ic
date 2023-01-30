@@ -704,6 +704,13 @@ impl GovernanceCanisterFixture {
             get_proposal_response::Result::Proposal(proposal_data) => proposal_data,
         }
     }
+
+    pub fn get_sale_canister_id(&self) -> PrincipalId {
+        self.governance
+            .proto
+            .swap_canister_id
+            .expect("Expected the swap_canister_id to be set in the GovernanceCanisterFixture")
+    }
 }
 
 pub type LedgerTransform = Box<dyn FnOnce(Box<dyn ICRC1Ledger>) -> Box<dyn ICRC1Ledger>>;

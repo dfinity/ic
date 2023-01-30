@@ -47,8 +47,9 @@ use ic_sns_init::pb::v1::{
 };
 use ic_sns_swap::pb::v1::{
     self as swap_pb, error_refund_icp_response, params::NeuronBasketConstructionParameters,
-    set_dapp_controllers_call_result, ErrorRefundIcpRequest, ErrorRefundIcpResponse,
-    GetStateRequest, GetStateResponse, SetDappControllersCallResult, SetDappControllersResponse,
+    set_dapp_controllers_call_result, set_mode_call_result, ErrorRefundIcpRequest,
+    ErrorRefundIcpResponse, GetStateRequest, GetStateResponse, SetDappControllersCallResult,
+    SetDappControllersResponse,
 };
 use ic_sns_test_utils::state_test_helpers::{
     canister_status, participate_in_swap, send_participation_funds, sns_governance_list_neurons,
@@ -1715,25 +1716,33 @@ fn assert_successful_swap_finalizes_correctly(
         assert_eq!(
             finalize_swap_response,
             swap_pb::FinalizeSwapResponse {
-                sweep_icp: Some(swap_pb::SweepResult {
+                sweep_icp_result: Some(swap_pb::SweepResult {
                     success: direct_participant_count as u32,
                     failure: 0,
                     skipped: 0,
+                    invalid: 0,
+                    global_failures: 0,
                 }),
-                sweep_sns: Some(swap_pb::SweepResult {
+                sweep_sns_result: Some(swap_pb::SweepResult {
                     success: expected_neuron_count,
                     failure: 0,
                     skipped: 0,
+                    invalid: 0,
+                    global_failures: 0,
                 }),
-                create_neuron: Some(swap_pb::SweepResult {
+                claim_neuron_result: Some(swap_pb::SweepResult {
                     success: expected_neuron_count,
                     failure: 0,
                     skipped: 0,
+                    invalid: 0,
+                    global_failures: 0,
                 }),
-                sns_governance_normal_mode_enabled: Some(swap_pb::SetModeCallResult {
-                    possibility: None
+                set_mode_call_result: Some(swap_pb::SetModeCallResult {
+                    possibility: Some(set_mode_call_result::Possibility::Ok(
+                        set_mode_call_result::SetModeResult {}
+                    ))
                 }),
-                set_dapp_controllers_result: None,
+                set_dapp_controllers_call_result: None,
                 settle_community_fund_participation_result: Some(
                     swap_pb::SettleCommunityFundParticipationResult {
                         possibility: Some(Possibility::Ok(Response {
@@ -2298,15 +2307,17 @@ fn swap_lifecycle_sad() {
         assert_eq!(
             finalize_swap_response,
             swap_pb::FinalizeSwapResponse {
-                sweep_icp: Some(swap_pb::SweepResult {
+                sweep_icp_result: Some(swap_pb::SweepResult {
                     success: 1,
                     failure: 0,
                     skipped: 0,
+                    invalid: 0,
+                    global_failures: 0,
                 }),
-                sweep_sns: None,
-                create_neuron: None,
-                sns_governance_normal_mode_enabled: None,
-                set_dapp_controllers_result: Some(SetDappControllersCallResult {
+                sweep_sns_result: None,
+                claim_neuron_result: None,
+                set_mode_call_result: None,
+                set_dapp_controllers_call_result: Some(SetDappControllersCallResult {
                     possibility: Some(set_dapp_controllers_call_result::Possibility::Ok(
                         SetDappControllersResponse {
                             failed_updates: vec![],

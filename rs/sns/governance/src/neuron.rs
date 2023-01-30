@@ -714,6 +714,16 @@ impl NeuronId {
             )),
         }
     }
+
+    /// A test method to help generate NeuronId's where the subaccount does not matter.
+    /// This should only be used in tests.
+    pub fn new_test_neuron_id(id: u64) -> NeuronId {
+        let mut subaccount = [0; std::mem::size_of::<Subaccount>()];
+        let id = &id.to_be_bytes();
+        subaccount[0] = id.len().try_into().unwrap();
+        subaccount[1..1 + id.len()].copy_from_slice(id);
+        NeuronId::from(subaccount)
+    }
 }
 
 impl From<Subaccount> for NeuronId {

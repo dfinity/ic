@@ -7,6 +7,7 @@ use crate::{
     },
     pb::v1::{
         claim_swap_neurons_request::NeuronParameters,
+        claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
         get_neuron_response,
         governance::{
             self, neuron_in_flight_command, neuron_in_flight_command::SyncCommand, SnsMetadata,
@@ -17,11 +18,12 @@ use crate::{
         manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse},
         nervous_system_function::FunctionType,
         proposal::Action,
-        DefaultFollowees, DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction,
-        GovernanceError, ManageNeuronResponse, Motion, NervousSystemFunction,
-        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-        NeuronPermissionType, ProposalId, RegisterDappCanisters, RewardEvent,
-        TransferSnsTreasuryFunds, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+        ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
+        DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction, GovernanceError,
+        ManageNeuronResponse, Motion, NervousSystemFunction, NervousSystemParameters, Neuron,
+        NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
+        RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds, UpgradeSnsToNextVersion,
+        Vote, VotingRewardsParameters,
     },
     proposal::ValidGenericNervousSystemFunction,
 };
@@ -1527,12 +1529,25 @@ impl NeuronParameters {
     pub(crate) fn validate(&self, neuron_minimum_stake_e8s: u64) -> Result<(), String> {
         let mut defects = vec![];
 
-        if self.controller.is_none() {
+        let Self {
+            neuron_id,
+            controller,
+            stake_e8s,
+            dissolve_delay_seconds,
+            hotkey: _,
+            source_nns_neuron_id: _,
+        } = self;
+
+        if neuron_id.is_none() {
+            defects.push("Missing neuron_id".to_string());
+        }
+
+        if controller.is_none() {
             defects.push("Missing controller".to_string());
         }
 
-        if let Some(stake_e8s) = self.stake_e8s {
-            if stake_e8s < neuron_minimum_stake_e8s {
+        if let Some(stake_e8s) = stake_e8s {
+            if *stake_e8s < neuron_minimum_stake_e8s {
                 defects.push(format!(
                     "Provided stake_e8s ({}) is less than the required neuron_minimum_stake_e8s({})",
                     stake_e8s, neuron_minimum_stake_e8s
@@ -1542,19 +1557,15 @@ impl NeuronParameters {
             defects.push("Missing stake_e8s".to_string());
         }
 
-        if self.memo.is_none() {
-            defects.push("Missing memo".to_string());
-        }
-
-        if self.dissolve_delay_seconds.is_none() {
+        if dissolve_delay_seconds.is_none() {
             defects.push("Missing dissolve_delay_seconds".to_string());
         }
 
         if !defects.is_empty() {
             Err(format!(
-                "Could not claim neuron for controller {:?} with memo {:?} due to: {}",
-                self.controller,
-                self.memo,
+                "Could not claim neuron for controller {:?} with NeuronId {:?} due to: {}",
+                controller,
+                neuron_id,
                 defects.join("\n"),
             ))
         } else {
@@ -1562,28 +1573,31 @@ impl NeuronParameters {
         }
     }
 
-    pub(crate) fn get_controller(&self) -> &PrincipalId {
-        self.controller
+    pub(crate) fn get_controller_or_panic(&self) -> PrincipalId {
+        *self
+            .controller
             .as_ref()
-            .expect("Expected the controller to be present")
+            .expect("Expected the controller to be present in NeuronParameters")
     }
 
-    pub(crate) fn get_memo(&self) -> u64 {
-        *self.memo.as_ref().expect("Expected the memo to be present")
-    }
-
-    pub(crate) fn get_dissolve_delay_seconds(&self) -> u64 {
+    pub(crate) fn get_dissolve_delay_seconds_or_panic(&self) -> u64 {
         *self
             .dissolve_delay_seconds
             .as_ref()
-            .expect("Expected the dissolve_delay_seconds to be present")
+            .expect("Expected the dissolve_delay_seconds to be present in NeuronParameters")
     }
 
-    pub(crate) fn get_stake_e8s(&self) -> u64 {
+    pub(crate) fn get_stake_e8s_or_panic(&self) -> u64 {
         *self
             .stake_e8s
             .as_ref()
-            .expect("Expected the stake_e8s to be present")
+            .expect("Expected the stake_e8s to be present in NeuronParameters")
+    }
+
+    pub(crate) fn get_neuron_id_or_panic(&self) -> &NeuronId {
+        self.neuron_id
+            .as_ref()
+            .expect("Expected NeuronId to be present in NeuronParameters")
     }
 
     pub(crate) fn construct_permissions(
@@ -1591,10 +1605,10 @@ impl NeuronParameters {
         neuron_claimer_permissions: NeuronPermissionList,
     ) -> Vec<NeuronPermission> {
         let mut permissions = vec![];
-        let controller = self.get_controller();
+        let controller = self.get_controller_or_panic();
 
         permissions.push(NeuronPermission::new(
-            controller,
+            &controller,
             neuron_claimer_permissions.permissions,
         ));
 
@@ -1610,6 +1624,34 @@ impl NeuronParameters {
         }
 
         permissions
+    }
+}
+
+impl ClaimSwapNeuronsResponse {
+    pub(crate) fn new_with_error(error: ClaimSwapNeuronsError) -> Self {
+        ClaimSwapNeuronsResponse {
+            claim_swap_neurons_result: Some(ClaimSwapNeuronsResult::Err(error as i32)),
+        }
+    }
+
+    pub(crate) fn new(swap_neurons: Vec<SwapNeuron>) -> Self {
+        ClaimSwapNeuronsResponse {
+            claim_swap_neurons_result: Some(ClaimSwapNeuronsResult::Ok(ClaimedSwapNeurons {
+                swap_neurons,
+            })),
+        }
+    }
+}
+
+impl SwapNeuron {
+    pub(crate) fn from_neuron_parameters(
+        neuron_parameters: NeuronParameters,
+        claimed_swap_neuron_status: ClaimedSwapNeuronStatus,
+    ) -> Self {
+        SwapNeuron {
+            id: neuron_parameters.neuron_id,
+            status: claimed_swap_neuron_status as i32,
+        }
     }
 }
 
@@ -2661,40 +2703,42 @@ pub(crate) mod tests {
 
     #[test]
     fn test_neuron_parameters_validate() {
-        let valid_default = NeuronParameters {
-            controller: Some(*TEST_USER1_PRINCIPAL),
-            hotkey: Some(*TEST_USER2_PRINCIPAL),
-            stake_e8s: Some(E8S_PER_TOKEN),
-            memo: Some(0),
-            dissolve_delay_seconds: Some(3 * ONE_MONTH_SECONDS),
-            source_nns_neuron_id: None,
+        let valid_default = || -> NeuronParameters {
+            NeuronParameters {
+                controller: Some(*TEST_USER1_PRINCIPAL),
+                hotkey: Some(*TEST_USER2_PRINCIPAL),
+                stake_e8s: Some(E8S_PER_TOKEN),
+                dissolve_delay_seconds: Some(3 * ONE_MONTH_SECONDS),
+                source_nns_neuron_id: None,
+                neuron_id: Some(NeuronId::new_test_neuron_id(0)),
+            }
         };
 
         let neuron_minimum_stake_e8s = E8S_PER_TOKEN;
 
         // Assert that the default is valid
-        assert!(valid_default.validate(neuron_minimum_stake_e8s).is_ok());
+        assert!(valid_default().validate(neuron_minimum_stake_e8s).is_ok());
 
         let invalid_neuron_parameters = vec![
             NeuronParameters {
                 controller: None, // No controller specified
-                ..valid_default
+                ..valid_default()
             },
             NeuronParameters {
                 stake_e8s: None, // No stake specified
-                ..valid_default
+                ..valid_default()
             },
             NeuronParameters {
                 stake_e8s: Some(0), // Stake is less than neuron_minimum_stake_e8s
-                ..valid_default
+                ..valid_default()
             },
             NeuronParameters {
-                memo: None, // No memo specified
-                ..valid_default
+                neuron_id: None, // No memo specified
+                ..valid_default()
             },
             NeuronParameters {
                 dissolve_delay_seconds: None, // No dissolve_delay_seconds specified
-                ..valid_default
+                ..valid_default()
             },
         ];
 
@@ -2706,11 +2750,11 @@ pub(crate) mod tests {
         let valid_neuron_parameters = vec![
             NeuronParameters {
                 hotkey: None, // Hotkey can be unspecified
-                ..valid_default
+                ..valid_default()
             },
             NeuronParameters {
                 dissolve_delay_seconds: Some(0), // Dissolve delay can be 0
-                ..valid_default
+                ..valid_default()
             },
         ];
 

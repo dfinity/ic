@@ -63,6 +63,26 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );
     config.type_attribute(
+        "ic_sns_governance.pb.v1.ClaimSwapNeuronsError",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ClaimSwapNeuronStatus",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ClaimSwapNeuronsResponse.ClaimedSwapNeurons",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ClaimSwapNeuronsResponse.SwapNeuron",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
+        "ic_sns_governance.pb.v1.ClaimSwapNeuronsResponse.claim_swap_neurons_result",
+        "#[derive(candid::CandidType, candid::Deserialize)]",
+    );
+    config.type_attribute(
         "ic_sns_governance.pb.v1.ClaimSwapNeuronsRequest.NeuronParameters",
         "#[derive(candid::CandidType, candid::Deserialize)]",
     );

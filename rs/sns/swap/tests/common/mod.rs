@@ -1,14 +1,35 @@
 use crate::common::doubles::{LedgerExpect, MockLedger};
+use crate::NNS_GOVERNANCE_CANISTER_ID;
 use candid::Principal;
 use ic_base_types::PrincipalId;
-use ic_sns_swap::pb::v1::{
-    settle_community_fund_participation_result,
-    sns_neuron_recipe::{Investor::Direct, NeuronAttributes},
-    CanisterCallError, DirectInvestment, RestoreDappControllersResponse,
-    SetDappControllersCallResult, SetDappControllersResponse,
-    SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, TransferableAmount,
+use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
+use ic_nervous_system_common::E8;
+use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
+use ic_sns_governance::{
+    pb::v1::{
+        claim_swap_neurons_request::NeuronParameters,
+        claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
+        ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, NeuronId,
+    },
+    types::ONE_MONTH_SECONDS,
 };
-use std::sync::{Arc, Mutex};
+use ic_sns_swap::{
+    pb::v1::{
+        set_mode_call_result::SetModeResult,
+        settle_community_fund_participation_result,
+        sns_neuron_recipe::{ClaimedStatus, Investor},
+        sns_neuron_recipe::{Investor::Direct, NeuronAttributes},
+        CanisterCallError, DirectInvestment, RestoreDappControllersResponse,
+        SetDappControllersCallResult, SetDappControllersResponse, SetModeCallResult,
+        SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, TransferableAmount,
+    },
+    swap::CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES,
+};
+use std::{
+    mem,
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
 
 pub mod doubles;
 
@@ -57,7 +78,7 @@ pub fn verify_participant_balances(
     let total_neuron_recipe_sns_e8s_for_principal: u64 =
         select_direct_investment_neurons(&swap.neuron_recipes, &buyer_principal.to_string())
             .iter()
-            .map(|neuron_recipe| neuron_recipe.amount_e8s())
+            .map(|neuron_recipe| neuron_recipe.sns.as_ref().unwrap().amount_e8s)
             .sum();
     assert_eq!(total_neuron_recipe_sns_e8s_for_principal, sns_balance_e8s);
 }
@@ -78,6 +99,7 @@ pub fn create_single_neuron_recipe(amount_e8s: u64, buyer_principal: String) -> 
             dissolve_delay_seconds: 0,
         }),
         investor: Some(Direct(DirectInvestment { buyer_principal })),
+        claimed_status: Some(ClaimedStatus::Pending as i32),
     }
 }
 
@@ -138,4 +160,101 @@ pub fn successful_set_dapp_controllers_call_result() -> SetDappControllersCallRe
             failed_updates: vec![],
         })),
     }
+}
+
+/// Helper method for constructing a successful response in tests
+pub fn successful_set_mode_call_result() -> SetModeCallResult {
+    use ic_sns_swap::pb::v1::set_mode_call_result::Possibility;
+
+    SetModeCallResult {
+        possibility: Some(Possibility::Ok(SetModeResult {})),
+    }
+}
+
+/// Helper method for constructing a successful response in tests
+pub fn compute_single_successful_claim_swap_neurons_response(
+    neuron_recipes: &[SnsNeuronRecipe],
+) -> ClaimSwapNeuronsResponse {
+    let swap_neurons = neuron_recipes
+        .iter()
+        .map(|recipe| {
+            let controller = match recipe.investor.as_ref().unwrap() {
+                Direct(direct) => PrincipalId::from_str(&direct.buyer_principal).unwrap(),
+                Investor::CommunityFund(_) => NNS_GOVERNANCE_CANISTER_ID.get(),
+            };
+
+            NeuronId::from(compute_neuron_staking_subaccount_bytes(
+                controller,
+                recipe.neuron_attributes.as_ref().unwrap().memo,
+            ))
+        })
+        .map(|nid| SwapNeuron {
+            id: Some(nid),
+            status: ClaimedSwapNeuronStatus::Success as i32,
+        })
+        .collect();
+
+    ClaimSwapNeuronsResponse {
+        claim_swap_neurons_result: Some(ClaimSwapNeuronsResult::Ok(ClaimedSwapNeurons {
+            swap_neurons,
+        })),
+    }
+}
+
+/// Helper method for constructing a successful response in tests
+pub fn compute_multiple_successful_claim_swap_neurons_response(
+    neuron_recipes: &[SnsNeuronRecipe],
+) -> Vec<ClaimSwapNeuronsResponse> {
+    let neuron_parameters_size = mem::size_of::<NeuronParameters>();
+    let current_batch_limit =
+        CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES.saturating_div(neuron_parameters_size);
+
+    let swap_neurons: Vec<SwapNeuron> = neuron_recipes
+        .iter()
+        .map(|recipe| {
+            let controller = match recipe.investor.as_ref().unwrap() {
+                Direct(direct) => PrincipalId::from_str(&direct.buyer_principal).unwrap(),
+                Investor::CommunityFund(_) => NNS_GOVERNANCE_CANISTER_ID.get(),
+            };
+
+            NeuronId::from(compute_neuron_staking_subaccount_bytes(
+                controller,
+                recipe.neuron_attributes.as_ref().unwrap().memo,
+            ))
+        })
+        .map(|nid| SwapNeuron {
+            id: Some(nid),
+            status: ClaimedSwapNeuronStatus::Success as i32,
+        })
+        .collect();
+
+    swap_neurons
+        .chunks(current_batch_limit)
+        .map(|chunk| ClaimSwapNeuronsResponse {
+            claim_swap_neurons_result: Some(ClaimSwapNeuronsResult::Ok(ClaimedSwapNeurons {
+                swap_neurons: chunk.to_vec(),
+            })),
+        })
+        .collect()
+}
+
+/// Helper method to create `count` SnsNeuronRecipes. To prevent collisions,
+/// iterate over count and use the value as the memo.
+pub fn create_generic_sns_neuron_recipes(count: u64) -> Vec<SnsNeuronRecipe> {
+    (0..count)
+        .map(|memo| SnsNeuronRecipe {
+            sns: Some(TransferableAmount {
+                amount_e8s: E8,
+                ..Default::default()
+            }),
+            neuron_attributes: Some(NeuronAttributes {
+                memo,
+                dissolve_delay_seconds: ONE_MONTH_SECONDS,
+            }),
+            investor: Some(Direct(DirectInvestment {
+                buyer_principal: (*TEST_USER1_PRINCIPAL).to_string(),
+            })),
+            claimed_status: Some(ClaimedStatus::Pending as i32),
+        })
+        .collect()
 }
