@@ -484,7 +484,9 @@ where
         deploy_new_sns_payload: DeployNewSnsRequest,
         caller: PrincipalId,
     ) -> DeployNewSnsResponse {
-        if !thread_safe_sns.with(|sns_wasm| sns_wasm.borrow().allowed_to_deploy_sns(caller)) {
+        if !thread_safe_sns
+            .with(|sns_wasm| sns_wasm.borrow_mut().consume_caller_from_whitelist(&caller))
+        {
             return validation_deploy_error(
                 "Caller is not in allowed principals list. Cannot deploy an sns.".to_string(),
             )
@@ -507,6 +509,24 @@ where
 
     pub fn allowed_to_deploy_sns(&self, caller: PrincipalId) -> bool {
         self.allowed_principals.contains(&caller)
+    }
+
+    /// If the given caller exists in the `allowed_principals` whitelist, remove the controller
+    /// from the whitelist and return `true`. Otherwise return `false`.
+    ///
+    /// Deploying an SNS is a resource intensive operation, so removing the caller ensures that the
+    /// caller cannot repeated call `deploy_new_sns` and exhaust NNS resources.
+    pub fn consume_caller_from_whitelist(&mut self, caller: &PrincipalId) -> bool {
+        if let Some(index) = self
+            .allowed_principals
+            .iter()
+            .position(|principal| principal == caller)
+        {
+            self.allowed_principals.remove(index);
+            true
+        } else {
+            false
+        }
     }
 
     async fn do_deploy_new_sns(
@@ -3163,6 +3183,17 @@ mod test {
         .await
         .canisters
         .unwrap();
+
+        // Each SNS deploy consumes an ID from the whitelist, so we re-add the ID here
+        CANISTER_WRAPPER.with(|sns_wasm| {
+            sns_wasm.borrow_mut().update_allowed_principals(
+                UpdateAllowedPrincipalsRequest {
+                    added_principals: vec![PrincipalId::new_user_test_id(1)],
+                    removed_principals: vec![],
+                },
+                GOVERNANCE_CANISTER_ID.into(),
+            )
+        });
 
         // Add more cycles so our second call works
         canister_api.cycles_found_in_request = Arc::new(Mutex::new(SNS_CREATION_FEE));
