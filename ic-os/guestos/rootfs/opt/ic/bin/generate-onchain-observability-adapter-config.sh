@@ -3,11 +3,11 @@
 function usage() {
     cat <<EOF
 Usage:
-  generate-monitoring-canister-adapter-config -o ic-monitoring-canister-adapter.json
+  generate-onchain-observability-adapter-config -o ic-onchain-observability-adapter.json
 
   Generate the monitoring canister adapter config.
 
-  -o outfile: output ic-monitoring-canister-adapter.json file
+  -o outfile: output ic-onchain-observability-adapter.json file
 EOF
 }
 

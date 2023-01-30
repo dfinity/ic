@@ -1,12 +1,12 @@
 /// This binary is managed by systemd and added to the replica image.
 /// The replica communicates with the HTTP adapter over unix domain sockets.
 /// Relevant configuration files:
-/// systemd service ic-os/guestos/rootfs/etc/systemd/system/ic-monitoring-canister-adapter.service
-/// systemd socket ic-os/guestos/rootfs/etc/systemd/system/ic-monitoring-canister-adapter.socket
+/// systemd service ic-os/guestos/rootfs/etc/systemd/system/ic-onchain-observability-adapter.service
+/// systemd socket ic-os/guestos/rootfs/etc/systemd/system/ic-onchain-observability-adapter.socket
 use clap::Parser;
 use ic_async_utils::abort_on_panic;
 use ic_logger::{info, new_replica_logger_from_config};
-use ic_monitoring_canister_adapter::Cli;
+use ic_onchain_observability_adapter::Cli;
 use serde_json::to_string_pretty;
 
 #[tokio::main]
@@ -29,7 +29,7 @@ pub async fn main() {
 
     info!(
         logger,
-        "Starting the monitoring canister adapter with config: {}",
+        "Starting the onchain observability adapter with config: {}",
         to_string_pretty(&config).unwrap()
     );
 }
