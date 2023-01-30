@@ -202,7 +202,7 @@ pub fn build_metadata() -> String {
                         <td>{}</td>
                     </tr>
                     <tr>
-                        <th>Main address</th>
+                        <th>Main address (do not send BTC here)</th>
                         <td><code>{}</code></td>
                     </tr>
                     <tr>
