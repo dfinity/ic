@@ -20,10 +20,12 @@ end::catalog[] */
 use super::utils::rw_message::install_nns_and_check_progress;
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::test_env::SshKeyGen;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
     can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
 };
+use crate::orchestrator::utils::subnet_recovery::set_sandbox_env_vars;
 use crate::util::block_on;
 use ic_recovery::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
 use ic_recovery::{file_sync_helper, get_node_metrics, RecoveryArgs};
@@ -36,6 +38,8 @@ const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 3;
 
 pub fn setup(env: TestEnv) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -107,10 +111,12 @@ pub fn test(env: TestEnv) {
     let pub_key = file_sync_helper::read_file(&ssh_authorized_pub_keys_dir.join(ADMIN))
         .expect("Couldn't read public key");
 
-    let tempdir = tempfile::tempdir().expect("Could not create a temp dir");
+    let recovery_dir = env.get_dependency_path("rs/tests");
+    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"))
+        .expect("Failed to set sandbox env vars");
 
     let recovery_args = RecoveryArgs {
-        dir: tempdir.path().to_path_buf(),
+        dir: recovery_dir,
         nns_url: upload_node.get_public_url(),
         replica_version: Some(ic_version),
         key_file: Some(ssh_authorized_priv_keys_dir.join(ADMIN)),

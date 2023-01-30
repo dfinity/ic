@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::orchestrator::utils::rw_message::{
@@ -32,6 +33,14 @@ use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
 use url::Url;
+
+pub(crate) fn set_sandbox_env_vars(dir: PathBuf) -> std::io::Result<()> {
+    let path = std::fs::read_link(dir.join("canister_sandbox"))?;
+    std::env::set_var("SANDBOX_BINARY", path);
+    let path = std::fs::read_link(dir.join("sandbox_launcher"))?;
+    std::env::set_var("LAUNCHER_BINARY", path);
+    Ok(())
+}
 
 /// break a subnet by breaking the replica binary on f+1 = (subnet_size - 1) / 3 +1
 /// nodes taken from the given iterator.
