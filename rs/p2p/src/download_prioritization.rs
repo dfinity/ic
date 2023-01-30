@@ -69,14 +69,14 @@ pub(crate) trait DownloadPrioritizer: Send + Sync {
         &self,
         id: &ArtifactId,
         integrity_hash: &CryptoHash,
-        peer_id: NodeId,
+        peer_id: &NodeId,
         final_action: AdvertTrackerFinalAction,
     ) -> Result<(), DownloadPrioritizerError>;
 
     /// Clears all adverts for a specific peer.
     fn clear_peer_adverts(
         &self,
-        peer_id: NodeId,
+        peer_id: &NodeId,
         final_action: AdvertTrackerFinalAction,
     ) -> Result<(), DownloadPrioritizerError>;
 
@@ -320,8 +320,8 @@ impl AdvertTracker {
     }
 
     /// Removes a peer
-    fn remove_peer(&mut self, node_id: NodeId) {
-        self.peers.retain(|x| (*x).get() != node_id.get());
+    fn remove_peer(&mut self, node_id: &NodeId) {
+        self.peers.retain(|x| x.get() != node_id.get());
     }
 
     /// Returns the DownloadAttemptTracker for a chunk
@@ -695,7 +695,7 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
         &self,
         id: &ArtifactId,
         integrity_hash: &CryptoHash,
-        peer_id: NodeId,
+        peer_id: &NodeId,
         _final_action: AdvertTrackerFinalAction,
     ) -> Result<(), DownloadPrioritizerError> {
         let mut guard = self.replica_map.write().unwrap();
@@ -711,7 +711,7 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
         // Remove from peer map
         let len = {
             let mut advert_tracker = advert_tracker.write().unwrap();
-            if let Some(peer_advert_map) = peer_map.get_mut(&peer_id) {
+            if let Some(peer_advert_map) = peer_map.get_mut(peer_id) {
                 let mut peer_advert_map = peer_advert_map.write().unwrap();
                 peer_advert_map[advert_tracker.priority]
                     .remove(&advert_tracker.advert.integrity_hash);
@@ -747,14 +747,14 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
 
     fn clear_peer_adverts(
         &self,
-        peer_id: NodeId,
+        peer_id: &NodeId,
         _final_action: AdvertTrackerFinalAction,
     ) -> Result<(), DownloadPrioritizerError> {
         let mut guard = self.replica_map.write().unwrap();
         let (client_advert_map, peer_map) = guard.deref_mut();
 
         let mut peer_advert_map = peer_map
-            .get_mut(&peer_id)
+            .get_mut(peer_id)
             .ok_or(DownloadPrioritizerError::NotFound)?
             .write()
             .unwrap();
@@ -1364,7 +1364,7 @@ pub(crate) mod test {
             let ret = download_prioritizer.delete_advert_from_peer(
                 i,
                 hash,
-                node_test_id(*p),
+                &node_test_id(*p),
                 AdvertTrackerFinalAction::Abort,
             );
             assert!(ret.is_ok());
@@ -1411,7 +1411,7 @@ pub(crate) mod test {
         for node in 0..2 {
             assert_eq!(
                 download_prioritizer
-                    .clear_peer_adverts(node_test_id(node), AdvertTrackerFinalAction::Abort),
+                    .clear_peer_adverts(&node_test_id(node), AdvertTrackerFinalAction::Abort),
                 Ok(())
             );
         }

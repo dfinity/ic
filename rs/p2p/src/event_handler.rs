@@ -740,7 +740,7 @@ pub mod tests {
 
     /// Test the addition of nodes to the event handler.
     #[tokio::test(flavor = "multi_thread")]
-    async fn event_handler_add_remove_nodes() {
+    async fn event_handler_add_remove_peers() {
         let node_id = node_test_id(0);
         let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_id));
         let mut handler = new_test_event_handler(1, node_id, gossip_arc).0;

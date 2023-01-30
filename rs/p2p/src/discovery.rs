@@ -1,6 +1,6 @@
 //! The module is responsible for watching for topology changes by polling the registry.
 //! If nodes are added or removed from the subnet of the current node, then the appropriate
-//! 'add_node' and 'remove_node' calls are executed.
+//! 'add_peer' and 'remove_peer' calls are executed.
 
 use crate::gossip_protocol::GossipImpl;
 use ic_logger::error;
@@ -28,7 +28,7 @@ impl GossipImpl {
         // If self is not in the subnet, remove all peers.
         for peer_id in self.get_current_peer_ids().iter() {
             if !subnet_nodes.contains_key(peer_id) || self_not_in_subnet {
-                self.remove_node(*peer_id);
+                self.remove_peer(peer_id);
             }
         }
         // If self is not subnet, exit early to avoid adding nodes to the list of peers.
@@ -43,9 +43,9 @@ impl GossipImpl {
                     error!(self.log, "Invalid socket addr: node_id = {:?}", *node_id);
                     // If getting the peer socket fails, remove the node. This removal makes it possible
                     // to attempt a re-addition on the next refresh cycle.
-                    self.remove_node(*node_id)
+                    self.remove_peer(node_id)
                 }
-                Some(peer_addr) => self.add_node(*node_id, peer_addr, latest_registry_version),
+                Some(peer_addr) => self.add_peer(*node_id, peer_addr, latest_registry_version),
             }
         }
     }

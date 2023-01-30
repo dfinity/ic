@@ -89,6 +89,7 @@ use ic_types::{
     NodeId, RegistryVersion,
 };
 use std::{
+    collections::hash_map::Entry,
     error::Error,
     net::SocketAddr,
     ops::DerefMut,
@@ -222,7 +223,7 @@ impl GossipImpl {
                 // advert from the context for this peer to prevent it from
                 // being requested again from this peer.
                 self.delete_advert_from_peer(
-                    peer_id,
+                    &peer_id,
                     &gossip_chunk.request.artifact_id,
                     &gossip_chunk.request.integrity_hash,
                     self.artifacts_under_construction.write().deref_mut(),
@@ -251,7 +252,7 @@ impl GossipImpl {
             let _ = self.prioritizer.delete_advert_from_peer(
                 &gossip_chunk.request.artifact_id,
                 &gossip_chunk.request.integrity_hash,
-                peer_id,
+                &peer_id,
                 AdvertTrackerFinalAction::Abort,
             );
             self.metrics.chunks_redundant_residue.inc();
@@ -273,7 +274,7 @@ impl GossipImpl {
                     "Chunk verification failed for artifact{:?} chunk {:?} from peer {:?}",
                     gossip_chunk.request.artifact_id,
                     gossip_chunk.request.chunk_id,
-                    peer_id
+                    &peer_id
                 );
                 self.metrics.chunks_verification_failed.inc();
                 None
@@ -344,7 +345,7 @@ impl GossipImpl {
             let _ = self.prioritizer.delete_advert_from_peer(
                 &gossip_chunk.request.artifact_id,
                 &gossip_chunk.request.integrity_hash,
-                peer_id,
+                &peer_id,
                 AdvertTrackerFinalAction::Abort,
             );
             return;
@@ -579,38 +580,33 @@ impl GossipImpl {
             .collect()
     }
 
-    /// The method adds the given peer to the list of current peers.
-    pub(crate) fn add_node(
+    /// Adds a new peer for the node (initialize data structs, start connection, etc.).
+    /// This method is called from the 'discovery' module. This method signals intent.
+    /// Not to be confused with 'on_peer_up' method which is called when the connection is established.
+    pub(crate) fn add_peer(
         &self,
-        node_id: NodeId,
+        peer_id: NodeId,
         peer_addr: SocketAddr,
         registry_version: RegistryVersion,
     ) {
         // Only add other peers to the peer list.
-        if node_id == self.node_id {
+        if peer_id == self.node_id {
             return;
         }
-
-        // Add the peer to the list of current peers and the event handler, and drop the
-        // lock before calling into transport.
-        {
-            let mut current_peers = self.current_peers.lock();
-
-            if current_peers.contains_key(&node_id) {
-                return;
+        match self.current_peers.lock().entry(peer_id) {
+            Entry::Occupied(_) => (),
+            Entry::Vacant(v) => {
+                info!(self.log, "Peer {:0} added.", peer_id);
+                // Hold the lock for the duration of all operations.
+                v.insert(PeerContext::new());
+                self.transport
+                    .start_connection(&peer_id, peer_addr, registry_version);
+                self.receive_check_caches.write().insert(
+                    peer_id,
+                    ReceiveCheckCache::new(self.gossip_config.receive_check_cache_size as usize),
+                );
             }
-            current_peers
-                .entry(node_id)
-                .or_insert_with(PeerContext::new);
-            info!(self.log, "Nodes {:0} added", node_id);
         }
-
-        self.transport
-            .start_connection(&node_id, peer_addr, registry_version);
-        self.receive_check_caches.write().insert(
-            node_id,
-            ReceiveCheckCache::new(self.gossip_config.receive_check_cache_size as usize),
-        );
     }
 
     /// This helper method returns a list of tasks to be performed by this timer
@@ -658,27 +654,31 @@ impl GossipImpl {
         )
     }
 
-    /// This method removes the given node from peer manager and clears adverts.
-    pub(crate) fn remove_node(&self, node_id: NodeId) {
-        {
-            let mut current_peers = self.current_peers.lock();
-            self.transport.stop_connection(&node_id);
-            // Remove the peer irrespective of the result of the stop_connection() call.
-            current_peers.remove(&node_id);
+    /// Removes the peer for the node (delete data structs, stop connection, etc.).
+    /// This method is called from the 'discovery' module. This method signals intent.
+    /// Not to be confused with 'on_peer_down' method which is called when the connection
+    /// is down, which is transient state.
+    pub(crate) fn remove_peer(&self, peer_id: &NodeId) {
+        match self.current_peers.lock().remove(peer_id) {
+            None => (),
+            Some(_) => {
+                self.metrics.nodes_removed.inc();
+                info!(self.log, "Peer {:0} removed.", peer_id);
+                // Hold the lock for the duration of all operations.
+                self.transport.stop_connection(peer_id);
+                self.receive_check_caches.write().remove(peer_id);
+                self.prioritizer
+                    .clear_peer_adverts(peer_id, AdvertTrackerFinalAction::Abort)
+                    .unwrap_or_else(|e| {
+                        info!(
+                            self.log,
+                            "Failed to clear peer adverts when removing peer {:?} with error {:?}",
+                            peer_id,
+                            e
+                        )
+                    });
+            }
         }
-        self.metrics.nodes_removed.inc();
-        info!(self.log, "Nodes {:0} removed", node_id);
-        self.receive_check_caches.write().remove(&node_id);
-        self.prioritizer
-            .clear_peer_adverts(node_id, AdvertTrackerFinalAction::Abort)
-            .unwrap_or_else(|e| {
-                info!(
-                    self.log,
-                    "Failed to clear peer adverts when removing peer {:?} with error {:?}",
-                    node_id,
-                    e
-                )
-            });
     }
 
     /// The method sends the given message over transport to the given peer.
@@ -854,7 +854,7 @@ impl GossipImpl {
     /// entry in the under-construction list is cleaned up as well.
     fn delete_advert_from_peer(
         &self,
-        peer_id: NodeId,
+        peer_id: &NodeId,
         artifact_id: &ArtifactId,
         integrity_hash: &CryptoHash,
         artifacts_under_construction: &mut dyn ArtifactDownloadList,
