@@ -48,10 +48,10 @@ type ClaimSwapNeuronsRequest = record {
   neuron_parameters : vec NeuronParameters;
 };
 type ClaimSwapNeuronsResponse = record {
-  skipped_claims : nat32;
-  successful_claims : nat32;
-  failed_claims : nat32;
+  claim_swap_neurons_result : opt ClaimSwapNeuronsResult;
 };
+type ClaimSwapNeuronsResult = variant { Ok : ClaimedSwapNeurons; Err : int32 };
+type ClaimedSwapNeurons = record { swap_neurons : vec SwapNeuron };
 type Command = variant {
   Split : Split;
   Follow : Follow;
@@ -288,10 +288,10 @@ type NeuronInFlightCommand = record {
 type NeuronParameters = record {
   controller : opt principal;
   dissolve_delay_seconds : opt nat64;
-  memo : opt nat64;
   source_nns_neuron_id : opt nat64;
   stake_e8s : opt nat64;
   hotkey : opt principal;
+  neuron_id : opt NeuronId;
 };
 type NeuronPermission = record {
   "principal" : opt principal;
@@ -356,6 +356,7 @@ type StakeMaturityResponse = record {
   staked_maturity_e8s : nat64;
 };
 type Subaccount = record { subaccount : vec nat8 };
+type SwapNeuron = record { id : opt NeuronId; status : int32 };
 type Tally = record {
   no : nat64;
   yes : nat64;

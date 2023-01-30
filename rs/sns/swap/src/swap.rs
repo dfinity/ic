@@ -2,8 +2,8 @@ use crate::clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient};
 use crate::logs::{ERROR, INFO};
 use crate::pb::v1::{
     restore_dapp_controllers_response, set_dapp_controllers_call_result, set_mode_call_result,
-    settle_community_fund_participation_result, sns_neuron_recipe::Investor,
-    sns_neuron_recipe::NeuronAttributes, BuyerState, CanisterCallError, CfInvestment, DerivedState,
+    set_mode_call_result::SetModeResult, settle_community_fund_participation_result,
+    sns_neuron_recipe::Investor, BuyerState, CanisterCallError, CfInvestment, DerivedState,
     DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
     GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse,
     GetLifecycleRequest, GetLifecycleResponse, Init, Lifecycle, OpenRequest, OpenResponse,
@@ -23,25 +23,36 @@ use ic_nervous_system_common::{i2d, ledger::compute_neuron_staking_subaccount_by
 use ic_sns_governance::{
     ledger::ICRC1Ledger,
     pb::v1::{
-        claim_swap_neurons_request::NeuronParameters, governance, ClaimSwapNeuronsRequest, SetMode,
-        SetModeResponse,
+        claim_swap_neurons_request::NeuronParameters,
+        claim_swap_neurons_response::ClaimSwapNeuronsResult,
+        claim_swap_neurons_response::SwapNeuron, governance, ClaimSwapNeuronsError,
+        ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId, SetMode, SetModeResponse,
     },
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use itertools::{Either, Itertools};
+use maplit::btreemap;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use rust_decimal::prelude::ToPrimitive;
+use std::collections::BTreeMap;
 use std::{
+    mem,
     num::{NonZeroU128, NonZeroU64},
     ops::Div,
     str::FromStr,
 };
 // TODO(NNS1-1589): Get these from the canonical location.
+use crate::pb::v1::sns_neuron_recipe::{ClaimedStatus, NeuronAttributes};
 use crate::pb::v1::{
     settle_community_fund_participation, GovernanceError, SetDappControllersRequest,
     SetDappControllersResponse, SettleCommunityFundParticipation,
 };
+
+// The number of bytes that the contents of a ClaimSwapNeuronsRequest can safely consume. This
+// is configured to be 75% of a Xnet message size, or roughly 1.5MB. This is equivalent to
+// (1024 * 1024) * 1.5
+pub const CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES: usize = 1572864_usize;
 
 impl From<(Option<i32>, String)> for CanisterCallError {
     fn from((code, description): (Option<i32>, String)) -> Self {
@@ -52,7 +63,7 @@ impl From<(Option<i32>, String)> for CanisterCallError {
 impl From<Result<SetModeResponse, CanisterCallError>> for SetModeCallResult {
     fn from(native_result: Result<SetModeResponse, CanisterCallError>) -> Self {
         let possibility = match native_result {
-            Ok(_ok) => None,
+            Ok(_ok) => Some(set_mode_call_result::Possibility::Ok(SetModeResult {})),
             Err(err) => Some(set_mode_call_result::Possibility::Err(err)),
         };
 
@@ -152,6 +163,13 @@ impl Swap {
         self.init
             .as_ref()
             .ok_or_else(|| "The Init field is not populated in the Sale canister state".to_string())
+    }
+
+    pub fn init_and_validate(&self) -> Result<&Init, String> {
+        match &self.init {
+            None => Err("Missing Init in the Sale canister state".to_string()),
+            Some(init) => init.validate().map(|_| init),
+        }
     }
 
     /// A Result with the number of SNS tokens for sale, or an Err if the sale hasn't
@@ -330,7 +348,7 @@ impl Swap {
     ///
     /// Postcondition: lifecycle == COMMITTED
     fn commit(&mut self, now_seconds: u64) {
-        assert!(self.lifecycle() == Lifecycle::Open);
+        assert_eq!(self.lifecycle(), Lifecycle::Open);
         assert!(self.sufficient_participation());
         assert!(self.swap_due(now_seconds) || self.icp_target_reached());
         // Safe as `params` must be specified in call to `open`.
@@ -393,6 +411,7 @@ impl Swap {
                         memo: memo as u64,
                         dissolve_delay_seconds: scheduled_vesting_event.dissolve_delay_seconds,
                     }),
+                    claimed_status: Some(ClaimedStatus::Pending as i32),
                 });
                 total_sns_tokens_sold = total_sns_tokens_sold
                     .checked_add(scheduled_vesting_event.amount_e8s)
@@ -433,6 +452,7 @@ impl Swap {
                             memo: global_cf_memo,
                             dissolve_delay_seconds: scheduled_vesting_event.dissolve_delay_seconds,
                         }),
+                        claimed_status: Some(ClaimedStatus::Pending as i32),
                     });
                     total_sns_tokens_sold = total_sns_tokens_sold
                         .checked_add(scheduled_vesting_event.amount_e8s)
@@ -459,7 +479,7 @@ impl Swap {
     ///
     /// Postcondition: lifecycle == ABORTED
     fn abort(&mut self, now_seconds: u64) {
-        assert!(self.lifecycle() == Lifecycle::Open);
+        assert_eq!(self.lifecycle(), Lifecycle::Open);
         assert!(self.swap_due(now_seconds));
         assert!(!self.sufficient_participation());
         self.set_lifecycle(Lifecycle::Aborted);
@@ -715,6 +735,22 @@ impl Swap {
             .await)
     }
 
+    /// Call set_dapp_controllers() and handle errors for finalize
+    async fn set_dapp_controllers_for_finalize(
+        &self,
+        sns_root_client: &mut impl SnsRootClient,
+    ) -> SetDappControllersCallResult {
+        let result = self.set_dapp_controllers(sns_root_client).await;
+
+        match result {
+            Ok(result) => result.into(),
+            Err(err_message) => {
+                log!(ERROR, "Halting set_dapp_controllers(), {:?}", err_message);
+                SetDappControllersCallResult { possibility: None }
+            }
+        }
+    }
+
     /// Acquire the lock on `finalize_swap`.
     pub fn lock_finalize_swap(&mut self) -> Result<(), String> {
         match self.is_finalize_swap_locked() {
@@ -833,119 +869,112 @@ impl Swap {
         }
 
         // Transfer the ICP tokens from the Sale canister.
-        match self.sweep_icp(now_fn, icp_ledger).await {
-            Ok(sweep_result) => finalize_swap_response.set_sweep_icp(sweep_result),
-            Err(error_message) => {
-                finalize_swap_response.set_error_message(error_message);
-                return finalize_swap_response;
-            }
-        };
+        finalize_swap_response.set_sweep_icp_result(self.sweep_icp(now_fn, icp_ledger).await);
+        if finalize_swap_response.has_error_message() {
+            return finalize_swap_response;
+        }
 
         // Settle the CommunityFund's participation in the Sale (if any).
-        match self
-            .settle_community_fund_participation(nns_governance_client)
-            .await
-        {
-            Ok(result) => {
-                finalize_swap_response.set_settle_community_fund_participation_result(result)
-            }
-            Err(error_message) => {
-                finalize_swap_response.set_error_message(error_message);
-                return finalize_swap_response;
-            }
-        };
+        finalize_swap_response.set_settle_community_fund_participation_result(
+            self.settle_community_fund_participation(nns_governance_client)
+                .await,
+        );
+        if finalize_swap_response.has_error_message() {
+            return finalize_swap_response;
+        }
 
         if self.should_restore_dapp_control() {
             // Restore controllers of dapp canisters to their original
             // owners (i.e. self.init.fallback_controller_principal_ids).
-            match self.set_dapp_controllers(sns_root_client).await {
-                Ok(result) => finalize_swap_response.set_set_dapp_controllers_result(result.into()),
-                Err(error_message) => finalize_swap_response.set_error_message(error_message),
-            };
+            finalize_swap_response.set_set_dapp_controllers_result(
+                self.set_dapp_controllers_for_finalize(sns_root_client)
+                    .await,
+            );
 
             // In the case of returning control of the dapp(s) to the fallback
             // controllers, finalize() need not do any more work, so always return
-            // and end execution of finalize().
+            // and end execution.
             return finalize_swap_response;
         }
 
         // Transfer the SNS tokens from the Sale canister.
-        match self.sweep_sns(now_fn, sns_ledger).await {
-            Ok(sweep_result) => finalize_swap_response.set_sweep_sns(sweep_result),
-            Err(error_message) => {
-                finalize_swap_response.set_error_message(error_message);
-                return finalize_swap_response;
-            }
-        };
+        finalize_swap_response.set_sweep_sns_result(self.sweep_sns(now_fn, sns_ledger).await);
+        if finalize_swap_response.has_error_message() {
+            return finalize_swap_response;
+        }
 
         // Once SNS tokens have been distributed to the correct accounts, claim
         // them as neurons on behalf of the Sale participants.
-        match self.claim_neurons(sns_governance_client).await {
-            Ok(create_neuron_result) => {
-                finalize_swap_response.set_create_neuron(create_neuron_result)
-            }
-            Err(error_message) => {
-                finalize_swap_response.set_error_message(error_message);
-                return finalize_swap_response;
-            }
-        };
-
-        // TODO NNS1-1715: Allow for should_set_sns_governance_to_normal_mode to succeed if
-        // all non-terminally broken neurons have been claimed
-        if Self::should_set_sns_governance_to_normal_mode(&finalize_swap_response) {
-            let set_mode_call_result =
-                Self::set_sns_governance_to_normal_mode(sns_governance_client).await;
-            finalize_swap_response.set_sns_governance_normal_mode_enabled(set_mode_call_result);
+        finalize_swap_response
+            .set_claim_neuron_result(self.claim_swap_neurons(sns_governance_client).await);
+        if finalize_swap_response.has_error_message() {
+            return finalize_swap_response;
         }
+
+        finalize_swap_response.set_set_mode_call_result(
+            Self::set_sns_governance_to_normal_mode(sns_governance_client).await,
+        );
 
         finalize_swap_response
     }
 
-    async fn claim_neurons(
-        &self,
+    /// In state COMMITTED. Claim SNS Neurons on behalf of participants.
+    ///
+    /// Returns the following values:
+    /// - the number of skipped neurons because of previous claims
+    /// - the number of successful claims
+    /// - the number of failed claims
+    /// - the number of invalid claims due to corrupted neuron recipe state
+    /// - the number of global failures due to corrupted Sale state or inconsistent API responses
+    pub async fn claim_swap_neurons(
+        &mut self,
         sns_governance_client: &mut impl SnsGovernanceClient,
-    ) -> Result<SweepResult, String> {
+    ) -> SweepResult {
         if self.lifecycle() != Lifecycle::Committed {
-            return Err(format!(
-                "SNS Tokens cannot be distributed if Lifecycle \
-                is not COMMITTED. Current Lifecycle: {:?}",
+            log!(
+                ERROR,
+                "Halting claim_neurons(). SNS Neurons cannot be distributed if \
+                Lifecycle is not COMMITTED. Current Lifecycle: {:?}",
                 self.lifecycle()
-            ));
+            );
+            return SweepResult::new_with_global_failures(1);
         }
 
-        let init = self.init()?;
-        let nns_governance = init.nns_governance()?;
-        let sns_transaction_fee_e8s = match init.transaction_fee_e8s {
-            None => {
-                // This case should not be hit as the canister_init method guarantees the
-                // field is populated. If through some bug or upgrade issue, this field is
-                // indeed unpopulated, a post-upgrade hook can be used to repopulate this
-                // field and retry finalization.
-                return Err(
-                    "Cannot claim SNS Neurons, SNS Ledger Transaction Fee is unknown".to_string(),
+        let init = match self.init_and_validate() {
+            Ok(init) => init,
+            Err(error_message) => {
+                log!(
+                    ERROR,
+                    "Halting claim_neurons(). State is missing or corrupted: {:?}",
+                    error_message
                 );
+                return SweepResult::new_with_global_failures(1);
             }
-            Some(transaction_fee_e8s) => transaction_fee_e8s,
         };
 
-        let (skipped, sns_neuron_recipes) = self.neuron_recipes_for_create_neuron();
-        let mut result = SweepResult {
-            success: 0,
-            failure: 0,
-            skipped,
-        };
+        // The following methods are safe to call since we validated Init in the above block
+        let nns_governance = init.nns_governance_or_panic();
+        let sns_transaction_fee_e8s = init.transaction_fee_e8s_or_panic();
 
-        let mut claim_swap_neuron_requests = ClaimSwapNeuronsRequest {
-            neuron_parameters: vec![],
-        };
+        let mut sweep_result = SweepResult::default();
 
-        for recipe in &sns_neuron_recipes {
+        // Create an index of NeuronId -> &mut SnsNeuronRecipe such that the SnsNeuronRecipe can
+        // be accessed in O(1) time.
+        let mut claimable_neurons_index = btreemap! {};
+
+        // The NeuronParameters that will be used to create neurons.
+        let mut neuron_parameters = vec![];
+
+        for recipe in &mut self.neuron_recipes {
             let (hotkey, controller, source_nns_neuron_id) = match recipe.investor.as_ref() {
                 Some(Investor::Direct(DirectInvestment { buyer_principal })) => {
                     let parsed_buyer_principal = match string_to_principal(buyer_principal) {
                         Some(p) => p,
+                        // principal_str should always be parseable as a PrincipalId as that is enforced
+                        // in `refresh_buyer_tokens`. In the case of a bug due to programmer error, increment
+                        // the invalid field. This will require a manual intervention via an upgrade to correct
                         None => {
-                            result.failure += 1;
+                            sweep_result.invalid += 1;
                             continue;
                         }
                     };
@@ -958,8 +987,11 @@ impl Swap {
                 })) => {
                     let parsed_hotkey_principal = match string_to_principal(hotkey_principal) {
                         Some(p) => p,
+                        // principal_str should always be parseable as a PrincipalId as that is enforced
+                        // in `refresh_buyer_tokens`. In the case of a bug due to programmer error, increment
+                        // the invalid field. This will require a manual intervention via an upgrade to correct
                         None => {
-                            result.failure += 1;
+                            sweep_result.invalid += 1;
                             continue;
                         }
                     };
@@ -970,13 +1002,16 @@ impl Swap {
                         Some(*nns_neuron_id),
                     )
                 }
+                // SnsNeuronRecipe.investor should always be present as it is set in `commit`.
+                // In the case of a bug due to programmer error, increment the invalid field.
+                // This will require a manual intervention via an upgrade to correct
                 None => {
                     log!(
                         ERROR,
                         "Missing investor information for neuron recipe {:?}",
                         recipe,
                     );
-                    result.failure += 1;
+                    sweep_result.invalid += 1;
                     continue;
                 }
             };
@@ -986,68 +1021,253 @@ impl Swap {
                     neuron_attribute.dissolve_delay_seconds,
                     neuron_attribute.memo,
                 ),
+                // SnsNeuronRecipe.neuron_attributes should always be present as it is set in `commit`.
+                // In the case of a bug due to programmer error, increment the invalid field.
+                // This will require a manual intervention via an upgrade to correct
                 None => {
                     log!(
                         ERROR,
                         "Missing neuron_attributes information for neuron recipe {:?}",
                         recipe,
                     );
-                    result.failure += 1;
+                    sweep_result.invalid += 1;
                     continue;
                 }
             };
 
-            claim_swap_neuron_requests
-                .neuron_parameters
-                .push(NeuronParameters {
-                    controller: Some(controller),
-                    hotkey,
-                    // Since claim_swap_neurons is  a permission-ed API on governance, account
-                    // for the transfer_fee that is applied with the sns ledger transfer
-                    stake_e8s: Some(recipe.amount_e8s() - sns_transaction_fee_e8s),
-                    memo: Some(memo),
-                    dissolve_delay_seconds: Some(dissolve_delay_seconds),
-                    source_nns_neuron_id,
-                });
+            let amount_e8s = match recipe.sns.as_ref() {
+                Some(transferable_amount) => transferable_amount.amount_e8s,
+                // SnsNeuronRecipe.sns should always be present as it is set in `commit`.
+                // In the case of a bug due to programmer error, increment the invalid field.
+                // This will require a manual intervention via an upgrade to correct
+                None => {
+                    log!(
+                        ERROR,
+                        "Missing transfer information for neuron recipe {:?}",
+                        recipe,
+                    );
+                    sweep_result.invalid += 1;
+                    continue;
+                }
+            };
+
+            if recipe.claimed_status == Some(ClaimedStatus::Success as i32) {
+                log!(
+                    INFO,
+                    "Recipe {:?} was claimed in previous invocation of claim_swap_neurons(). Skipping",
+                    recipe,
+                );
+                sweep_result.skipped += 1;
+                continue;
+            }
+
+            if recipe.claimed_status == Some(ClaimedStatus::Invalid as i32) {
+                // If the Recipe is marked as invalid, intervention is needed to make valid again.
+                // As part of that intervention, the recipe must be marked as ClaimedStatus::Pending
+                // to attempt again.
+                log!(INFO, "Recipe {:?} was invalid in a previous invocation of claim_swap_neurons(). Skipping", recipe);
+                sweep_result.invalid += 1;
+                continue;
+            }
+
+            let neuron_id =
+                NeuronId::from(compute_neuron_staking_subaccount_bytes(controller, memo));
+
+            neuron_parameters.push(NeuronParameters {
+                neuron_id: Some(neuron_id.clone()),
+                controller: Some(controller),
+                hotkey,
+                // Since claim_swap_neurons is  a permission-ed API on governance, account
+                // for the transfer_fee that is applied with the sns ledger transfer
+                stake_e8s: Some(amount_e8s.saturating_sub(sns_transaction_fee_e8s)),
+                dissolve_delay_seconds: Some(dissolve_delay_seconds),
+                source_nns_neuron_id,
+            });
+
+            claimable_neurons_index.insert(neuron_id, recipe);
         }
 
-        // Try to batch claim SNS neurons that were just funded.
-        // The SnsGovernanceClient ensures that all errors are transformed
-        // into a CanisterCallError and do not cause a panic.
-        let response = sns_governance_client
-            .claim_swap_neurons(claim_swap_neuron_requests)
-            .await;
+        // If neuron_parameters is empty, all recipes are either Invalid or Skipped and there
+        // is no work to do.
+        if neuron_parameters.is_empty() {
+            return sweep_result;
+        }
 
-        if let Ok(claim_swap_neurons_response) = response {
-            result.failure += claim_swap_neurons_response.failed_claims;
-            result.skipped += claim_swap_neurons_response.skipped_claims;
-            result.success += claim_swap_neurons_response.successful_claims;
+        sweep_result.consume(
+            Self::batch_claim_swap_neurons(
+                sns_governance_client,
+                &mut neuron_parameters,
+                &mut claimable_neurons_index,
+            )
+            .await,
+        );
+
+        sweep_result
+    }
+
+    /// A helper to batch claim the sale neurons, and process the results from SNS Governance.
+    async fn batch_claim_swap_neurons(
+        sns_governance_client: &mut impl SnsGovernanceClient,
+        neuron_parameters: &mut Vec<NeuronParameters>,
+        claimable_neurons_index: &mut BTreeMap<NeuronId, &mut SnsNeuronRecipe>,
+    ) -> SweepResult {
+        // Compute the number of NeuronParameters that can be packed into a xnet message.
+        // In this version, the message size is 75% of its maximum size to make room for
+        // any additional overhead is associated with the Request object.
+        let neuron_parameters_size = mem::size_of::<NeuronParameters>();
+        let batch_limit =
+            CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES.saturating_div(neuron_parameters_size);
+
+        log!(
+            INFO,
+            "Attempting to claim {} Neurons in SNS Governance. Batch size is {}",
+            neuron_parameters.len(),
+            batch_limit
+        );
+
+        let mut sweep_result = SweepResult::default();
+
+        while !neuron_parameters.is_empty() {
+            let current_batch_limit = std::cmp::min(batch_limit, neuron_parameters.len());
+
+            let batch: Vec<NeuronParameters> =
+                neuron_parameters.drain(0..current_batch_limit).collect();
+            // Used for various operations
+            let batch_count = batch.len();
+
             log!(
                 INFO,
-                "Successfully claimed swap neurons {:#?}",
-                claim_swap_neurons_response,
+                "Attempting to claim a batch of {} Neurons in SNS Governance.",
+                batch_count,
             );
-        } else {
-            log!(ERROR, "Failed to call claim_swap_neurons: {:#?}", response,);
-            result.failure += sns_neuron_recipes.len() as u32;
-        }
 
-        Ok(result)
+            let reply = sns_governance_client
+                .claim_swap_neurons(ClaimSwapNeuronsRequest {
+                    neuron_parameters: batch,
+                })
+                .await;
+
+            let response = match reply {
+                Ok(response) => response,
+                Err(canister_call_error) => {
+                    // The canister_call_error indicates a trap in the callback function, which
+                    // could be the result of an unexpected panic in SNS Governance or an issue
+                    // with the underlying Canister or Replica. As it is a CanisterCallError
+                    // we hope that the canister being called rolls back to the appropriate checkpoint.
+                    // The sale canister will mark the current batch and remaining neurons as failed
+                    // and return. Calling finalize again will result in another attempt to
+                    // claim those neurons.
+                    log!(
+                        ERROR,
+                        "Encountered a CanisterCallError when claiming a batch of neurons. Err: {:?}",
+                        canister_call_error,
+                    );
+                    sweep_result.global_failures += 1;
+                    return sweep_result;
+                }
+            };
+
+            let claimed_neurons = match response.claim_swap_neurons_result {
+                Some(ClaimSwapNeuronsResult::Err(err_code)) => {
+                    log!(
+                        ERROR,
+                        "claim_swap_neurons returned an error when claiming a batch of neurons. Err: {:?}",
+                        ClaimSwapNeuronsError::from_i32(err_code)
+                    );
+                    sweep_result.global_failures += 1;
+                    return sweep_result;
+                }
+                Some(ClaimSwapNeuronsResult::Ok(claimed_neurons)) => claimed_neurons.swap_neurons,
+                None => {
+                    // This should not happen as it means the `claim_swap_neurons` is returning malformed
+                    // input or there is a decoding problem in the Sale canister.
+                    log!(
+                        ERROR,
+                        "ClaimSwapNeuronsResponse missing a ClaimSwapNeuronsResult. Response: {:?}",
+                        response,
+                    );
+                    sweep_result.global_failures += 1;
+                    return sweep_result;
+                }
+            };
+
+            if claimed_neurons.len() != batch_count {
+                log!(
+                    ERROR,
+                    "ClaimSwapNeuronsResponse's count of claimed_neurons is different than the count provided in the request. \
+                    Request count {}. Response count {}.",
+                    claimed_neurons.len(), batch_count,
+                );
+                sweep_result.global_failures += 1;
+            }
+
+            // Now process the actual statuses of the created neurons. Update the journal of the
+            // NeuronRecipe and aggregate some stats
+            for swap_neuron in claimed_neurons {
+                sweep_result.consume(Self::process_swap_neuron(
+                    swap_neuron,
+                    claimable_neurons_index,
+                ));
+            }
+
+            log!(
+                INFO,
+                "Successfully claimed a batch of {} Neurons in SNS Governance. Current SweepResult progress {:?}",
+                batch_count, sweep_result,
+            );
+        }
+        sweep_result
     }
 
-    fn should_set_sns_governance_to_normal_mode(
-        finalize_swap_response: &FinalizeSwapResponse,
-    ) -> bool {
-        if let Some(create_neurons) = finalize_swap_response.create_neuron.as_ref() {
-            if create_neurons.failure == 0 {
-                return true;
+    /// Given a SwapNeuron and an index, update the correct SnsNeuronRecipe with the
+    /// status of the SwapNeuron. Return a SweepResult to be consumed by claim_swap_neurons
+    fn process_swap_neuron(
+        swap_neuron: SwapNeuron,
+        claimable_neurons_index: &mut BTreeMap<NeuronId, &mut SnsNeuronRecipe>,
+    ) -> SweepResult {
+        let mut sweep_result = SweepResult::default();
+
+        if let Some(neuron_id) = swap_neuron.id.as_ref() {
+            if let Some(claimed_swap_neuron_status) =
+                ClaimedSwapNeuronStatus::from_i32(swap_neuron.status)
+            {
+                if let Some(recipe) = claimable_neurons_index.get_mut(neuron_id) {
+                    let claim_status = ClaimedStatus::from(claimed_swap_neuron_status);
+
+                    match claim_status {
+                        ClaimedStatus::Success => sweep_result.success += 1,
+                        ClaimedStatus::Failed => sweep_result.failure += 1,
+                        ClaimedStatus::Invalid => sweep_result.invalid += 1,
+                        ClaimedStatus::Pending | ClaimedStatus::Unspecified => {
+                            log!(
+                                ERROR,
+                                "Unexpected ClaimedStatus ({:?}) resulting from \
+                                ClaimedSwapNeuronStatus ({:?}) for NeuronId {}",
+                                claim_status,
+                                claimed_swap_neuron_status,
+                                neuron_id
+                            );
+                            // Increment the SweepResult's invalid field, but the claiming could be attempted again
+                            sweep_result.invalid += 1;
+                        }
+                    }
+
+                    recipe.claimed_status = Some(claim_status as i32);
+                    return sweep_result;
+                }
             }
         }
-
-        false
+        log!(
+            ERROR,
+            "Unable to parse some part of the SwapNeuron and therefore could not update a ClaimStatus. \
+            ({:?})",
+            swap_neuron,
+        );
+        sweep_result.global_failures += 1;
+        sweep_result
     }
 
-    async fn set_sns_governance_to_normal_mode(
+    pub async fn set_sns_governance_to_normal_mode(
         sns_governance_client: &mut impl SnsGovernanceClient,
     ) -> SetModeCallResult {
         // The SnsGovernanceClient Trait converts any errors to Err(CanisterCallError)
@@ -1195,9 +1415,11 @@ impl Swap {
     /// canister if COMMITTED or back to the buyer if ABORTED.
     ///
     /// Returns the following values:
-    /// - the number of skipped buyers due balance less than fee or operation already in progress
+    /// - the number of skipped buyers due operation already in progress
     /// - the number of successful transfers
-    /// - the number of errors
+    /// - the number of failed transfers
+    /// - the number of invalid buyers due to corrupted buyer state or invalid balances
+    /// - the number of global failures across the sweep such as corrupted sale state
     ///
     /// Pre-conditions:
     /// - The Sale canister's `Lifecycle` is either ABORTED or COMMITTED
@@ -1205,19 +1427,34 @@ impl Swap {
         &mut self,
         now_fn: fn(bool) -> u64,
         icp_ledger: &dyn ICRC1Ledger,
-    ) -> Result<SweepResult, String> {
+    ) -> SweepResult {
         let lifecycle = self.lifecycle();
-        let sns_governance = self.init()?.sns_governance()?;
 
-        let mut skipped: u32 = 0;
-        let mut success: u32 = 0;
-        let mut failure: u32 = 0;
+        let init = match self.init_and_validate() {
+            Ok(init) => init,
+            Err(error_message) => {
+                log!(
+                    ERROR,
+                    "Halting sweep_icp(). State is missing or corrupted: {:?}",
+                    error_message
+                );
+                return SweepResult::new_with_global_failures(1);
+            }
+        };
+
+        // The following methods are safe to call since we validated Init in the above block
+        let sns_governance = init.sns_governance_or_panic();
+
+        let mut sweep_result = SweepResult::default();
 
         for (principal_str, buyer_state) in self.buyers.iter_mut() {
+            // principal_str should always be parseable as a PrincipalId as that is enforced
+            // in `refresh_buyer_tokens`. In the case of a bug due to programmer error, increment
+            // the invalid field. This will require a manual intervention via an upgrade to correct
             let principal = match string_to_principal(principal_str) {
                 Some(p) => p,
                 None => {
-                    failure += 1;
+                    sweep_result.invalid += 1;
                     continue;
                 }
             };
@@ -1238,6 +1475,9 @@ impl Swap {
 
             let icp_transferable_amount = match buyer_state.icp.as_mut() {
                 Some(transferable_amount) => transferable_amount,
+                // BuyerState.icp should always be present as it is set in `refresh_buyer_tokens`.
+                // In the case of a bug due to programmer error, increment the invalid field.
+                // This will require a manual intervention via an upgrade to correct
                 None => {
                     log!(
                         ERROR,
@@ -1245,7 +1485,7 @@ impl Swap {
                         principal,
                         buyer_state
                     );
-                    failure += 1;
+                    sweep_result.invalid += 1;
                     continue;
                 }
             };
@@ -1260,22 +1500,26 @@ impl Swap {
                 )
                 .await;
             match result {
-                TransferResult::AmountTooSmall | TransferResult::AlreadyStarted => {
-                    skipped += 1;
+                // AmountToSmall should never happen as the amount contributed is checked in
+                // `refresh_buyer_tokens`. In the case of a bug due to programmer error,
+                // increment the invalid field. This will require a manual intervention
+                // via an upgrade to correct
+                TransferResult::AmountTooSmall => {
+                    sweep_result.invalid += 1;
+                }
+                TransferResult::AlreadyStarted => {
+                    sweep_result.skipped += 1;
                 }
                 TransferResult::Success(_) => {
-                    success += 1;
+                    sweep_result.success += 1;
                 }
                 TransferResult::Failure(_) => {
-                    failure += 1;
+                    sweep_result.failure += 1;
                 }
             }
         }
-        Ok(SweepResult {
-            success,
-            failure,
-            skipped,
-        })
+
+        sweep_result
     }
 
     /// In state COMMITTED. Transfer SNS tokens from the swap
@@ -1285,51 +1529,68 @@ impl Swap {
     /// - the number of skipped buyers due balance less than fee or operation already in progress
     /// - the number of successful transfers
     /// - the number of errors
+    /// - the number of invalid neuron recipes due to corrupted neuron recipe state or invalid balances
+    /// - the number of global failures due to corrupted Sale state
     pub async fn sweep_sns(
         &mut self,
         now_fn: fn(bool) -> u64,
         sns_ledger: &dyn ICRC1Ledger,
-    ) -> Result<SweepResult, String> {
+    ) -> SweepResult {
         if self.lifecycle() != Lifecycle::Committed {
-            return Err(format!("SNS Tokens cannot be distributed if Lifecycle is not COMMITTED. Current Lifecycle: {:?}", self.lifecycle()));
+            log!(
+                ERROR,
+                "Halting sweep_sns(). SNS Tokens cannot be distributed if \
+                Lifecycle is not COMMITTED. Current Lifecycle: {:?}",
+                self.lifecycle()
+            );
+            return SweepResult::new_with_global_failures(1);
         }
 
-        let init = self.init()?;
-        let sns_governance = init.sns_governance()?;
-        let nns_governance = init.nns_governance()?;
-        let sns_transaction_fee_tokens = match init.transaction_fee_e8s {
-            None => {
-                return Err(
-                    "Cannot Transfer SNS Tokens, SNS Ledger Transaction Fee is unknown".to_string(),
-                )
+        let init = match self.init_and_validate() {
+            Ok(init) => init,
+            Err(error_message) => {
+                log!(
+                    ERROR,
+                    "Halting sweep_sns(). State is missing or corrupted: {:?}",
+                    error_message
+                );
+                return SweepResult::new_with_global_failures(1);
             }
-            Some(transaction_fee_e8s) => Tokens::from_e8s(transaction_fee_e8s),
         };
 
-        let mut skipped: u32 = 0;
-        let mut success: u32 = 0;
-        let mut failure: u32 = 0;
+        // The following methods are safe to call since we validated Init in the above block
+        let sns_governance = init.sns_governance_or_panic();
+        let nns_governance = init.nns_governance_or_panic();
+        let sns_transaction_fee_tokens = Tokens::from_e8s(init.transaction_fee_e8s_or_panic());
+
+        let mut sweep_result = SweepResult::default();
 
         for recipe in self.neuron_recipes.iter_mut() {
             let neuron_memo = match recipe.neuron_attributes.as_ref() {
+                Some(neuron_attributes) => neuron_attributes.memo,
+                // SnsNeuronRecipe.neuron_attributes should always be present as it is set in `commit`.
+                // In the case of a bug due to programmer error, increment the invalid field.
+                // This will require a manual intervention via an upgrade to correct
                 None => {
                     log!(
                         ERROR,
                         "Missing neuron attributes information for neuron recipe {:?}",
                         recipe
                     );
-                    failure += 1;
+                    sweep_result.invalid += 1;
                     continue;
                 }
-                Some(neuron_attributes) => neuron_attributes.memo,
             };
 
             let dst_subaccount = match &recipe.investor {
                 Some(Investor::Direct(DirectInvestment { buyer_principal })) => {
                     match string_to_principal(buyer_principal) {
                         Some(p) => compute_neuron_staking_subaccount_bytes(p, neuron_memo),
+                        // principal_str should always be parseable as a PrincipalId as that is enforced
+                        // in `refresh_buyer_tokens`. In the case of a bug due to programmer error, increment
+                        // the invalid field. This will require a manual intervention via an upgrade to correct
                         None => {
-                            failure += 1;
+                            sweep_result.invalid += 1;
                             continue;
                         }
                     }
@@ -1338,13 +1599,16 @@ impl Swap {
                     hotkey_principal: _,
                     nns_neuron_id: _,
                 })) => compute_neuron_staking_subaccount_bytes(nns_governance.into(), neuron_memo),
+                // SnsNeuronRecipe.investor should always be present as it is set in `commit`.
+                // In the case of a bug due to programmer error, increment the invalid field.
+                // This will require a manual intervention via an upgrade to correct
                 None => {
                     log!(
                         ERROR,
                         "Missing investor information for neuron recipe {:?}",
                         recipe,
                     );
-                    failure += 1;
+                    sweep_result.invalid += 1;
                     continue;
                 }
             };
@@ -1355,13 +1619,16 @@ impl Swap {
 
             let sns_transferable_amount = match recipe.sns.as_mut() {
                 Some(transferable_amount) => transferable_amount,
+                // SnsNeuronRecipe.sns should always be present as it is set in `commit`.
+                // In the case of a bug due to programmer error, increment the invalid field.
+                // This will require a manual intervention via an upgrade to correct
                 None => {
                     log!(
                         ERROR,
                         "Missing transfer information for neuron recipe {:?}",
                         recipe,
                     );
-                    failure += 1;
+                    sweep_result.invalid += 1;
                     continue;
                 }
             };
@@ -1376,54 +1643,26 @@ impl Swap {
                 )
                 .await;
             match result {
-                TransferResult::AmountTooSmall | TransferResult::AlreadyStarted => {
-                    skipped += 1;
+                // AmountToSmall should never happen as the sns token amount is checked in
+                // `commit`. In the case of a bug due to programmer error,
+                // increment the invalid field. This will require a manual intervention
+                // via an upgrade to correct
+                TransferResult::AmountTooSmall => {
+                    sweep_result.invalid += 1;
+                }
+                TransferResult::AlreadyStarted => {
+                    sweep_result.skipped += 1;
                 }
                 TransferResult::Success(_) => {
-                    success += 1;
+                    sweep_result.success += 1;
                 }
                 TransferResult::Failure(_) => {
-                    failure += 1;
+                    sweep_result.failure += 1;
                 }
             }
         }
-        Ok(SweepResult {
-            success,
-            failure,
-            skipped,
-        })
-    }
 
-    /// Returns list of neuron recipes for which an SNS neuron may need to
-    /// be created (direct investment and community fund) together
-    /// with the number of investors skipped.
-    ///
-    /// If the swap is not committed, this results in an empty vector,
-    /// i.e., all investors are skipped. If the swap is committed, it
-    /// returns all investors for which the SNS tokens have been
-    /// disbursed.
-    ///
-    /// The swap does not keep track of which neurons that actually
-    /// have been created; instead it relies on neuron creation being
-    /// idempotent.
-    pub fn neuron_recipes_for_create_neuron(&self) -> (u32, Vec<SnsNeuronRecipe>) {
-        if self.lifecycle() != Lifecycle::Committed {
-            return (self.neuron_recipes.len() as u32, vec![]);
-        }
-        let mut recipes = Vec::new();
-        let mut skipped = 0;
-        for recipe in self.neuron_recipes.iter() {
-            if let Some(sns) = &recipe.sns {
-                if sns.transfer_success_timestamp_seconds > 0 {
-                    recipes.push(recipe.clone());
-                    continue;
-                }
-            } else {
-                log!(ERROR, "Missing field 'sns'");
-            }
-            skipped += 1;
-        }
-        (skipped, recipes)
+        sweep_result
     }
 
     /// Requests the NNS Governance canister to settle the CommunityFund
@@ -1433,10 +1672,24 @@ impl Swap {
     pub async fn settle_community_fund_participation(
         &self,
         nns_governance_client: &mut impl NnsGovernanceClient,
-    ) -> Result<SettleCommunityFundParticipationResult, String> {
+    ) -> SettleCommunityFundParticipationResult {
         use settle_community_fund_participation::{Aborted, Committed, Result};
 
-        let sns_governance = self.init()?.sns_governance()?;
+        let init = match self.init_and_validate() {
+            Ok(init) => init,
+            Err(error_message) => {
+                log!(
+                    ERROR,
+                    "Halting settle_community_fund_participation(). State is missing or corrupted: {:?}",
+                    error_message
+                );
+                return SettleCommunityFundParticipationResult { possibility: None };
+            }
+        };
+
+        // The following methods are safe to call since we validated Init in the above block
+        let sns_governance = init.sns_governance_or_panic();
+
         let result = if self.lifecycle() == Lifecycle::Committed {
             Result::Committed(Committed {
                 sns_governance_canister_id: Some(sns_governance.get()),
@@ -1445,13 +1698,13 @@ impl Swap {
             Result::Aborted(Aborted {})
         };
 
-        Ok(nns_governance_client
+        nns_governance_client
             .settle_community_fund_participation(SettleCommunityFundParticipation {
                 open_sns_token_swap_proposal_id: self.open_sns_token_swap_proposal_id,
                 result: Some(result),
             })
             .await
-            .into())
+            .into()
     }
 
     //
@@ -1663,5 +1916,130 @@ mod tests {
         let response: GetDerivedStateResponse = derived_state.into();
         assert_eq!(response.sns_tokens_per_icp, Some(2.5f64));
         assert_eq!(response.buyer_total_icp_e8s, Some(400_000_000));
+    }
+
+    #[test]
+    fn test_process_swap_neuron_global_failures() {
+        let result = Swap::process_swap_neuron(
+            SwapNeuron {
+                id: None, // No id to map to the index
+                ..Default::default()
+            },
+            &mut btreemap! {},
+        );
+
+        assert_eq!(
+            result,
+            SweepResult {
+                global_failures: 1,
+                ..Default::default()
+            }
+        );
+
+        let result = Swap::process_swap_neuron(
+            SwapNeuron {
+                id: Some(NeuronId::new_test_neuron_id(1)),
+                status: 1000, // A status that is not interpretable
+            },
+            &mut btreemap! {},
+        );
+
+        assert_eq!(
+            result,
+            SweepResult {
+                global_failures: 1,
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn test_process_swap_neuron_successful_cases() {
+        let mut successful_recipe = SnsNeuronRecipe {
+            claimed_status: Some(ClaimedStatus::Pending as i32),
+            ..Default::default()
+        };
+        let mut failed_recipe = SnsNeuronRecipe {
+            claimed_status: Some(ClaimedStatus::Pending as i32),
+            ..Default::default()
+        };
+        let mut invalid_recipe = SnsNeuronRecipe {
+            claimed_status: Some(ClaimedStatus::Pending as i32),
+            ..Default::default()
+        };
+
+        let mut index = btreemap! {
+            NeuronId::new_test_neuron_id(1) => &mut successful_recipe,
+            NeuronId::new_test_neuron_id(2) => &mut failed_recipe,
+            NeuronId::new_test_neuron_id(3) => &mut invalid_recipe,
+        };
+
+        // Process first to satisfy the borrow checker
+
+        // Successful case
+        let successful_sweep_result = Swap::process_swap_neuron(
+            SwapNeuron {
+                id: Some(NeuronId::new_test_neuron_id(1)),
+                status: ClaimedSwapNeuronStatus::Success as i32,
+            },
+            &mut index,
+        );
+
+        // Failure case
+        let failed_sweep_result = Swap::process_swap_neuron(
+            SwapNeuron {
+                id: Some(NeuronId::new_test_neuron_id(2)),
+                status: ClaimedSwapNeuronStatus::MemoryExhausted as i32,
+            },
+            &mut index,
+        );
+
+        // Invalid case
+        let invalid_sweep_result = Swap::process_swap_neuron(
+            SwapNeuron {
+                id: Some(NeuronId::new_test_neuron_id(3)),
+                status: ClaimedSwapNeuronStatus::AlreadyExists as i32,
+            },
+            &mut index,
+        );
+
+        // Success case
+        assert_eq!(
+            successful_sweep_result,
+            SweepResult {
+                success: 1,
+                ..Default::default()
+            }
+        );
+        assert_eq!(
+            successful_recipe.claimed_status,
+            Some(ClaimedStatus::Success as i32)
+        );
+
+        // Failure case
+        assert_eq!(
+            failed_sweep_result,
+            SweepResult {
+                failure: 1,
+                ..Default::default()
+            }
+        );
+        assert_eq!(
+            failed_recipe.claimed_status,
+            Some(ClaimedStatus::Failed as i32)
+        );
+
+        // Invalid case
+        assert_eq!(
+            invalid_sweep_result,
+            SweepResult {
+                invalid: 1,
+                ..Default::default()
+            }
+        );
+        assert_eq!(
+            invalid_recipe.claimed_status,
+            Some(ClaimedStatus::Invalid as i32)
+        );
     }
 }

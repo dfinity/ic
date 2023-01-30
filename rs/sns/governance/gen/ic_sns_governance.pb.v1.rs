@@ -2471,13 +2471,6 @@ pub mod claim_swap_neurons_request {
         /// created with. This field is required.
         #[prost(uint64, optional, tag = "3")]
         pub stake_e8s: ::core::option::Option<u64>,
-        /// The memo used when creating the Subaccount of the neuron. The subaccount also
-        /// doubles as the NeuronId and is calculated by hashing the controller field
-        /// with the memo field. An implementation of this algorithm can be found at
-        /// `nervous_system_common::compute_neuron_staking_subaccount`. This field is
-        /// required.
-        #[prost(uint64, optional, tag = "4")]
-        pub memo: ::core::option::Option<u64>,
         /// The duration in seconds that the neuron's dissolve delay will be set to. Neurons
         /// that are for Community Fund investors will be automatically set to dissolving,
         /// while direct investors will be automatically set to non-dissolving.
@@ -2487,22 +2480,59 @@ pub mod claim_swap_neurons_request {
         /// creation of this SNS neuron.
         #[prost(uint64, optional, tag = "6")]
         pub source_nns_neuron_id: ::core::option::Option<u64>,
+        /// The ID of the SNS Neuron to be created for the participant. If a Neuron with
+        /// this NeuronId already exists in SNS Governance, the `ClaimSwapNeuronsResponse`
+        /// will return a`ClaimedSwapNeuronStatus::AlreadyExists` for this NeuronId.
+        /// This field is required.
+        #[prost(message, optional, tag = "7")]
+        pub neuron_id: ::core::option::Option<super::NeuronId>,
     }
 }
-/// The response for the `claim_swap_neurons` method. The sum of all fields
-/// should equal the number of `NeuronParameters` in `ClaimSwapNeuronsRequest`.
+/// The response for the `claim_swap_neurons` method.
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
 pub struct ClaimSwapNeuronsResponse {
-    /// This field reports the number of successfully created neurons.
-    #[prost(uint32, tag = "1")]
-    pub successful_claims: u32,
-    /// This field reports the number of neurons skipped due to this method
-    /// being idempotent, i.e. the neuron has already been created.
-    #[prost(uint32, tag = "2")]
-    pub skipped_claims: u32,
-    /// This field reports the number of neurons that failed to be created.
-    #[prost(uint32, tag = "3")]
-    pub failed_claims: u32,
+    /// ClaimSwapNeurons will either return an error, in which
+    /// no requested neurons were claimed, or a vector with
+    /// various neuron statuses for the requested neuron ids.
+    #[prost(
+        oneof = "claim_swap_neurons_response::ClaimSwapNeuronsResult",
+        tags = "4, 5"
+    )]
+    pub claim_swap_neurons_result:
+        ::core::option::Option<claim_swap_neurons_response::ClaimSwapNeuronsResult>,
+}
+/// Nested message and enum types in `ClaimSwapNeuronsResponse`.
+pub mod claim_swap_neurons_response {
+    /// The ok result from `claim_swap_neurons. For every requested neuron,
+    /// a SwapNeuron message is returned, and should equal the count of
+    /// `ClaimSwapNeuronsRequest.neuron_parameters`.
+    #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+    pub struct ClaimedSwapNeurons {
+        #[prost(message, repeated, tag = "1")]
+        pub swap_neurons: ::prost::alloc::vec::Vec<SwapNeuron>,
+    }
+    /// SwapNeuron associates the status of a neuron attempting to be
+    /// claimed with a NeuronId. The `id` field will correspond with a
+    /// `ClaimSwapNeuronsRequest.neuron_parameters.neuron_id` field in
+    /// the request object used in `claim_swap_neurons`.
+    #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+    pub struct SwapNeuron {
+        #[prost(message, optional, tag = "1")]
+        pub id: ::core::option::Option<super::NeuronId>,
+        /// The status of claiming of a requested Sale neuron.
+        #[prost(enumeration = "super::ClaimedSwapNeuronStatus", tag = "2")]
+        pub status: i32,
+    }
+    /// ClaimSwapNeurons will either return an error, in which
+    /// no requested neurons were claimed, or a vector with
+    /// various neuron statuses for the requested neuron ids.
+    #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    pub enum ClaimSwapNeuronsResult {
+        #[prost(message, tag = "4")]
+        Ok(ClaimedSwapNeurons),
+        #[prost(enumeration = "super::ClaimSwapNeuronsError", tag = "5")]
+        Err(i32),
+    }
 }
 /// A Ledger subaccount.
 #[derive(
@@ -2737,6 +2767,87 @@ impl ProposalRewardStatus {
             ProposalRewardStatus::AcceptVotes => "PROPOSAL_REWARD_STATUS_ACCEPT_VOTES",
             ProposalRewardStatus::ReadyToSettle => "PROPOSAL_REWARD_STATUS_READY_TO_SETTLE",
             ProposalRewardStatus::Settled => "PROPOSAL_REWARD_STATUS_SETTLED",
+        }
+    }
+}
+/// An enum for representing the various statuses a Neuron being claimed by the
+/// `claim_swap_neurons` API may have. The status is reported back to callers of
+/// the API (mainly the SNS Sale canister) to indicate the success of the
+/// operation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum ClaimedSwapNeuronStatus {
+    /// Unspecified represents the default value for unknown enum values when deserializing.
+    /// This value is unused.
+    Unspecified = 0,
+    /// The Neuron was successfully created and added to Governance. Future
+    /// attempts to claim the same Neuron will result in
+    /// `ClaimedSwapNeuronStatus::AlreadyExists`.
+    Success = 1,
+    /// The Neuron could not be created because one or more of its
+    /// construction parameters are invalid, i.e. its stake was not
+    /// above the required minimum neuron stake. Additional retries will
+    /// result in the same status.
+    Invalid = 2,
+    /// The Neuron could not be created because it already existed
+    /// within SNS Governance. Additional retries will result in
+    /// the same status.
+    AlreadyExists = 3,
+    /// The Neuron could not be created because Governance has
+    /// reached its configured memory limits. A retry is
+    /// possible if more memory becomes available to the canister.
+    MemoryExhausted = 4,
+}
+impl ClaimedSwapNeuronStatus {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            ClaimedSwapNeuronStatus::Unspecified => "CLAIMED_SWAP_NEURON_STATUS_UNSPECIFIED",
+            ClaimedSwapNeuronStatus::Success => "CLAIMED_SWAP_NEURON_STATUS_SUCCESS",
+            ClaimedSwapNeuronStatus::Invalid => "CLAIMED_SWAP_NEURON_STATUS_INVALID",
+            ClaimedSwapNeuronStatus::AlreadyExists => "CLAIMED_SWAP_NEURON_STATUS_ALREADY_EXISTS",
+            ClaimedSwapNeuronStatus::MemoryExhausted => {
+                "CLAIMED_SWAP_NEURON_STATUS_MEMORY_EXHAUSTED"
+            }
+        }
+    }
+}
+/// An enum representing the errors that the `claim_swap_neurons` API may
+/// return.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
+#[repr(i32)]
+pub enum ClaimSwapNeuronsError {
+    /// Unspecified represents the default value for unknown enum values when deserializing.
+    /// This value is unused.
+    Unspecified = 0,
+    /// The caller of `claim_swap_neurons` was unauthorized. No
+    /// requested neurons were claimed if this error is returned.
+    Unauthorized = 1,
+}
+impl ClaimSwapNeuronsError {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            ClaimSwapNeuronsError::Unspecified => "CLAIM_SWAP_NEURONS_ERROR_UNSPECIFIED",
+            ClaimSwapNeuronsError::Unauthorized => "CLAIM_SWAP_NEURONS_ERROR_UNAUTHORIZED",
         }
     }
 }

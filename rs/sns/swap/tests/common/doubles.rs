@@ -15,6 +15,7 @@ use ic_sns_swap::{
         SettleCommunityFundParticipation,
     },
 };
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
 /// Expect that no SNS root calls will be made. Explode otherwise.
@@ -95,7 +96,7 @@ impl SnsRootClientReply {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum SnsGovernanceClientCall {
     ClaimSwapNeurons(ClaimSwapNeuronsRequest),
     ManageNeuron(ManageNeuron),
@@ -115,26 +116,23 @@ pub enum SnsGovernanceClientReply {
 #[derive(Default, Debug)]
 pub struct SpySnsGovernanceClient {
     pub calls: Vec<SnsGovernanceClientCall>,
-    pub replies: Vec<SnsGovernanceClientReply>,
+    pub replies: VecDeque<SnsGovernanceClientReply>,
 }
 
 impl SpySnsGovernanceClient {
     pub fn new(replies: Vec<SnsGovernanceClientReply>) -> Self {
         SpySnsGovernanceClient {
             calls: vec![],
-            replies,
+            replies: VecDeque::from(replies),
         }
     }
 
-    /// Use this method if the replies are irrelevant
-    pub fn with_dummy_replies() -> Self {
-        SpySnsGovernanceClient {
-            calls: vec![],
-            replies: vec![
-                SnsGovernanceClientReply::ClaimSwapNeurons(ClaimSwapNeuronsResponse::default()),
-                SnsGovernanceClientReply::ClaimSwapNeurons(ClaimSwapNeuronsResponse::default()),
-            ],
-        }
+    pub fn push_reply(&mut self, reply: SnsGovernanceClientReply) {
+        self.replies.push_back(reply)
+    }
+
+    pub fn get_calls_snapshot(&self) -> Vec<SnsGovernanceClientCall> {
+        self.calls.clone()
     }
 }
 
@@ -156,7 +154,18 @@ impl SnsGovernanceClient for SpySnsGovernanceClient {
     }
     async fn set_mode(&mut self, request: SetMode) -> Result<SetModeResponse, CanisterCallError> {
         self.calls.push(SnsGovernanceClientCall::SetMode(request));
-        Ok(SetModeResponse {})
+        match self
+            .replies
+            .pop_front()
+            .expect("Expected there to be a reply in the SnsGovernanceClientCall queue")
+        {
+            SnsGovernanceClientReply::SetMode(reply) => Ok(reply),
+            SnsGovernanceClientReply::CanisterCallError(error) => Err(error),
+            unexpected_reply => panic!(
+                "Unexpected reply in the SnsGovernanceClientCall queue. Expected SetMode | CanisterCallError: {:?}",
+                unexpected_reply
+            ),
+        }
     }
 
     async fn claim_swap_neurons(
@@ -165,10 +174,17 @@ impl SnsGovernanceClient for SpySnsGovernanceClient {
     ) -> Result<ClaimSwapNeuronsResponse, CanisterCallError> {
         self.calls
             .push(SnsGovernanceClientCall::ClaimSwapNeurons(request));
-        match self.replies.pop().unwrap() {
+        match self
+            .replies
+            .pop_front()
+            .expect("Expected there to be a reply in the SnsGovernanceClientCall queue")
+        {
             SnsGovernanceClientReply::ClaimSwapNeurons(reply) => Ok(reply),
             SnsGovernanceClientReply::CanisterCallError(error) => Err(error),
-            unexpected_reply => panic!("Unexpected reply on the stack: {:?}", unexpected_reply),
+            unexpected_reply => panic!(
+                "Unexpected reply in the SnsGovernanceClientCall queue: {:?}",
+                unexpected_reply
+            ),
         }
     }
 }
@@ -179,10 +195,35 @@ pub enum NnsGovernanceClientCall {
     SettleCommunityFundParticipation(SettleCommunityFundParticipation),
 }
 
+#[derive(Debug, PartialEq)]
+pub enum NnsGovernanceClientReply {
+    SettleCommunityFundParticipation(Result<(), GovernanceError>),
+    CanisterCallError(CanisterCallError),
+}
+
 /// NnsGovernanceClient that allows tests to spy on the calls made
 #[derive(Default, Debug)]
 pub struct SpyNnsGovernanceClient {
     pub calls: Vec<NnsGovernanceClientCall>,
+    pub replies: Vec<NnsGovernanceClientReply>,
+}
+
+impl SpyNnsGovernanceClient {
+    pub fn new(replies: Vec<NnsGovernanceClientReply>) -> Self {
+        SpyNnsGovernanceClient {
+            calls: vec![],
+            replies,
+        }
+    }
+
+    pub fn with_successful_replies() -> Self {
+        SpyNnsGovernanceClient {
+            calls: vec![],
+            replies: vec![NnsGovernanceClientReply::SettleCommunityFundParticipation(
+                Ok(()),
+            )],
+        }
+    }
 }
 
 #[async_trait]
@@ -195,7 +236,15 @@ impl NnsGovernanceClient for SpyNnsGovernanceClient {
             .push(NnsGovernanceClientCall::SettleCommunityFundParticipation(
                 request,
             ));
-        Ok(Ok(()))
+
+        match self
+            .replies
+            .pop()
+            .expect("Expected there to be a reply in the NnsGovernanceClient queue")
+        {
+            NnsGovernanceClientReply::SettleCommunityFundParticipation(reply) => Ok(reply),
+            NnsGovernanceClientReply::CanisterCallError(err) => Err(err),
+        }
     }
 }
 

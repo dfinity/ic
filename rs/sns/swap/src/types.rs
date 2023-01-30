@@ -1,8 +1,10 @@
 use crate::logs::{ERROR, INFO};
 use crate::pb::v1::{
-    error_refund_icp_response, sns_neuron_recipe::Investor, BuyerState, CfInvestment, CfNeuron,
-    CfParticipant, DirectInvestment, ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle,
-    OpenRequest, Params, SetDappControllersCallResult, SetModeCallResult,
+    error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
+    set_mode_call_result::SetModeResult, settle_community_fund_participation_result,
+    sns_neuron_recipe::ClaimedStatus, sns_neuron_recipe::Investor, BuyerState, CfInvestment,
+    CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpResponse, FinalizeSwapResponse, Init,
+    Lifecycle, OpenRequest, Params, SetDappControllersCallResult, SetModeCallResult,
     SettleCommunityFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
 };
 use crate::swap::is_valid_principal;
@@ -12,6 +14,7 @@ use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::ICRC1Ledger;
 use ic_nervous_system_common::SECONDS_PER_DAY;
+use ic_sns_governance::pb::v1::ClaimedSwapNeuronStatus;
 use std::str::FromStr;
 
 pub fn validate_principal(p: &str) -> Result<(), String> {
@@ -118,6 +121,10 @@ impl Init {
 
     pub fn icp_ledger_or_panic(&self) -> CanisterId {
         CanisterId::new(PrincipalId::from_str(&self.icp_ledger_canister_id).unwrap()).unwrap()
+    }
+
+    pub fn transaction_fee_e8s_or_panic(&self) -> u64 {
+        self.transaction_fee_e8s.unwrap()
     }
 
     pub fn validate(&self) -> Result<(), String> {
@@ -477,13 +484,6 @@ impl CfInvestment {
 }
 
 impl SnsNeuronRecipe {
-    pub fn amount_e8s(&self) -> u64 {
-        if let Some(sns) = &self.sns {
-            return sns.amount_e8s;
-        }
-        0
-    }
-
     pub fn validate(&self) -> Result<(), String> {
         if let Some(sns) = &self.sns {
             sns.validate()?;
@@ -552,49 +552,6 @@ impl Lifecycle {
     }
 }
 
-impl FinalizeSwapResponse {
-    pub fn with_error(error_message: String) -> Self {
-        FinalizeSwapResponse {
-            error_message: Some(error_message),
-            ..Default::default()
-        }
-    }
-
-    pub fn set_error_message(&mut self, error_message: String) {
-        self.error_message = Some(error_message)
-    }
-
-    pub fn set_sweep_icp(&mut self, sweep_icp: SweepResult) {
-        self.sweep_icp = Some(sweep_icp)
-    }
-
-    pub fn set_settle_community_fund_participation_result(
-        &mut self,
-        result: SettleCommunityFundParticipationResult,
-    ) {
-        self.settle_community_fund_participation_result = Some(result)
-    }
-
-    pub fn set_set_dapp_controllers_result(&mut self, result: SetDappControllersCallResult) {
-        self.set_dapp_controllers_result = Some(result)
-    }
-
-    pub fn set_sweep_sns(&mut self, sweep_sns: SweepResult) {
-        self.sweep_sns = Some(sweep_sns)
-    }
-
-    pub fn set_create_neuron(&mut self, create_neuron: SweepResult) {
-        self.create_neuron = Some(create_neuron)
-    }
-
-    pub fn set_sns_governance_normal_mode_enabled(
-        &mut self,
-        set_mode_call_result: SetModeCallResult,
-    ) {
-        self.sns_governance_normal_mode_enabled = Some(set_mode_call_result)
-    }
-}
-
 /// Result of a token transfer (commit or abort) on a ledger (ICP or
 /// SNS) for a single buyer.
 pub enum TransferResult {
@@ -614,6 +571,163 @@ pub(crate) struct ScheduledVestingEvent {
     pub(crate) dissolve_delay_seconds: u64,
     /// The amount of tokens in e8s
     pub(crate) amount_e8s: u64,
+}
+
+impl FinalizeSwapResponse {
+    pub fn with_error(error_message: String) -> Self {
+        FinalizeSwapResponse {
+            error_message: Some(error_message),
+            ..Default::default()
+        }
+    }
+
+    pub fn set_error_message(&mut self, error_message: String) {
+        self.error_message = Some(error_message)
+    }
+
+    pub fn set_sweep_icp_result(&mut self, sweep_icp_result: SweepResult) {
+        if !sweep_icp_result.is_successful_sweep() {
+            self.set_error_message(
+                "Transferring ICP did not complete fully, some transfers were invalid or failed. Halting sale finalization".to_string()
+            );
+        }
+        self.sweep_icp_result = Some(sweep_icp_result);
+    }
+
+    pub fn set_settle_community_fund_participation_result(
+        &mut self,
+        result: SettleCommunityFundParticipationResult,
+    ) {
+        if !result.is_successful_settlement() {
+            self.set_error_message(
+                "Settling the CommunityFund participation did not succeed. Halting sale finalization".to_string());
+        }
+        self.settle_community_fund_participation_result = Some(result);
+    }
+
+    pub fn set_set_dapp_controllers_result(&mut self, result: SetDappControllersCallResult) {
+        if !result.is_successful_set_dapp_controllers() {
+            self.set_error_message(
+                "Restoring the dapp canisters controllers did not succeed. Halting sale finalization".to_string());
+        }
+        self.set_dapp_controllers_call_result = Some(result);
+    }
+
+    pub fn set_sweep_sns_result(&mut self, sweep_sns_result: SweepResult) {
+        if !sweep_sns_result.is_successful_sweep() {
+            self.set_error_message(
+                "Transferring SNS tokens did not complete fully, some transfers were invalid or failed. Halting sale finalization".to_string()
+            );
+        }
+        self.sweep_sns_result = Some(sweep_sns_result);
+    }
+
+    pub fn set_claim_neuron_result(&mut self, claim_neuron_result: SweepResult) {
+        if !claim_neuron_result.is_successful_sweep() {
+            self.set_error_message(
+                "Claiming SNS Neurons did not complete fully, some claims were invalid or failed. Halting sale finalization".to_string()
+            );
+        }
+        self.claim_neuron_result = Some(claim_neuron_result);
+    }
+
+    pub fn set_set_mode_call_result(&mut self, set_mode_call_result: SetModeCallResult) {
+        if !set_mode_call_result.is_successful_set_mode_call() {
+            self.set_error_message(
+                "Setting the SNS Governance mode to normal did not complete fully. Halting sale finalization".to_string()
+            );
+        }
+        self.set_mode_call_result = Some(set_mode_call_result);
+    }
+
+    pub fn has_error_message(&self) -> bool {
+        self.error_message.is_some()
+    }
+}
+
+impl SweepResult {
+    fn is_successful_sweep(&self) -> bool {
+        let SweepResult {
+            failure,
+            invalid,
+            success: _,
+            skipped: _,
+            global_failures,
+        } = self;
+        *failure == 0 && *invalid == 0 && *global_failures == 0
+    }
+
+    pub(crate) fn new_with_global_failures(global_failures: u32) -> Self {
+        SweepResult {
+            global_failures,
+            ..Default::default()
+        }
+    }
+
+    pub(crate) fn consume(&mut self, consumable: SweepResult) {
+        let SweepResult {
+            failure,
+            invalid,
+            success,
+            skipped,
+            global_failures,
+        } = consumable;
+
+        self.failure += failure;
+        self.invalid += invalid;
+        self.success += success;
+        self.skipped += skipped;
+        self.global_failures += global_failures;
+    }
+}
+
+impl SettleCommunityFundParticipationResult {
+    fn is_successful_settlement(&self) -> bool {
+        use settle_community_fund_participation_result::Response;
+        matches!(
+            &self.possibility,
+            Some(settle_community_fund_participation_result::Possibility::Ok(
+                Response {
+                    governance_error: None,
+                }
+            ))
+        )
+    }
+}
+
+impl SetDappControllersCallResult {
+    fn is_successful_set_dapp_controllers(&self) -> bool {
+        match &self.possibility {
+            Some(set_dapp_controllers_call_result::Possibility::Ok(response)) => {
+                response.failed_updates.is_empty()
+            }
+            _ => false,
+        }
+    }
+}
+
+impl SetModeCallResult {
+    pub fn is_successful_set_mode_call(&self) -> bool {
+        matches!(
+            &self.possibility,
+            Some(set_mode_call_result::Possibility::Ok(SetModeResult {}))
+        )
+    }
+}
+
+/// The mapping of ClaimedSwapNeuronStatus to ClaimedStatus
+impl From<ClaimedSwapNeuronStatus> for ClaimedStatus {
+    fn from(claimed_swap_neuron_status: ClaimedSwapNeuronStatus) -> Self {
+        match claimed_swap_neuron_status {
+            ClaimedSwapNeuronStatus::Success => ClaimedStatus::Success,
+            ClaimedSwapNeuronStatus::Unspecified => ClaimedStatus::Failed,
+            ClaimedSwapNeuronStatus::MemoryExhausted => ClaimedStatus::Failed,
+            ClaimedSwapNeuronStatus::Invalid => ClaimedStatus::Invalid,
+            // TODO NNS1-2017 - Neuron collisions are possible and should be
+            // treated as a failure.
+            ClaimedSwapNeuronStatus::AlreadyExists => ClaimedStatus::Invalid,
+        }
+    }
 }
 
 #[cfg(test)]

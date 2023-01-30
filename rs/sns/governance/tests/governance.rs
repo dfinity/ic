@@ -8,6 +8,15 @@ use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
+use ic_sns_governance::pb::v1::claim_swap_neurons_request::NeuronParameters;
+use ic_sns_governance::pb::v1::claim_swap_neurons_response::{
+    ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron,
+};
+use ic_sns_governance::pb::v1::neuron::DissolveState;
+use ic_sns_governance::pb::v1::{
+    ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
+    ClaimedSwapNeuronStatus,
+};
 use ic_sns_governance::{
     account_to_proto,
     neuron::NeuronState,
@@ -36,7 +45,6 @@ use ic_sns_governance::{
     },
     types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
 };
-
 use std::collections::HashSet;
 use strum::IntoEnumIterator;
 
@@ -1663,4 +1671,274 @@ fn test_validate_and_execute_register_dapp_proposal_fails_when_no_canisters_pass
 
     // Proposal should not have failed execution
     assert!(error_message.contains("must specify at least one canister id"));
+}
+
+#[test]
+fn test_claim_swap_neurons_rejects_unauthorized_access() {
+    // Set up the test environment with the default sale canister id
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    // Build the request, but leave it empty as it is not relevant to the test
+    let request = ClaimSwapNeuronsRequest {
+        neuron_parameters: vec![],
+    };
+
+    // Generate a principal id that should not be authorized to call claim_swap_neurons
+    let unauthorized_principal = PrincipalId::new_user_test_id(1000);
+
+    // Call the method with the unauthorized principal and assert the response is correct
+    let response = canister_fixture
+        .governance
+        .claim_swap_neurons(request.clone(), unauthorized_principal);
+
+    assert_eq!(
+        response,
+        ClaimSwapNeuronsResponse {
+            claim_swap_neurons_result: Some(ClaimSwapNeuronsResult::Err(
+                ClaimSwapNeuronsError::Unauthorized as i32
+            )),
+        }
+    );
+
+    // Get the configured sale canister id created by the test environment
+    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+
+    // Call the method with the authorized principal and assert the response is correct
+    let response = canister_fixture
+        .governance
+        .claim_swap_neurons(request, authorized_sale_principal);
+
+    assert_eq!(
+        response,
+        ClaimSwapNeuronsResponse {
+            claim_swap_neurons_result: Some(ClaimSwapNeuronsResult::Ok(ClaimedSwapNeurons {
+                swap_neurons: vec![],
+            })),
+        }
+    );
+}
+
+#[test]
+fn test_claim_swap_neurons_reports_invalid_neuron_parameters() {
+    // Set up the test environment with default sale canister id
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    // Create a neuron id so the test can identify the correct item in the response
+    let test_neuron_id = NeuronId::new_test_neuron_id(1);
+
+    // Create a request with an invalid NeuronParameter
+    let request = ClaimSwapNeuronsRequest {
+        neuron_parameters: vec![NeuronParameters {
+            neuron_id: Some(test_neuron_id.clone()),
+            ..Default::default() // The rest of the fields are unset and will fail validation
+        }],
+    };
+
+    // Call the method
+    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let response = canister_fixture
+        .governance
+        .claim_swap_neurons(request, authorized_sale_principal);
+
+    // Assert that the invalid neuron parameter results in a SwapNeuron with an invalid status
+    assert_eq!(
+        response,
+        ClaimSwapNeuronsResponse {
+            claim_swap_neurons_result: Some(ClaimSwapNeuronsResult::Ok(ClaimedSwapNeurons {
+                swap_neurons: vec![SwapNeuron {
+                    id: Some(test_neuron_id),
+                    status: ClaimedSwapNeuronStatus::Invalid as i32,
+                }],
+            })),
+        }
+    );
+}
+
+#[test]
+fn test_claim_swap_neurons_reports_already_existing_neurons() {
+    // Create a valid neuron that will be inserted into the test environment
+    let user_principal = PrincipalId::new_user_test_id(1000);
+    let neuron_id = neuron_id(user_principal, /*memo*/ 0);
+
+    // Set up the test environment with a single neuron
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(NeuronBuilder::new(
+            neuron_id.clone(),
+            E8,
+            NeuronPermission::all(&user_principal),
+        ))
+        .create();
+
+    // Create a request with a neuron id that should collide with the neuron already inserted into
+    // Governance
+    let request = ClaimSwapNeuronsRequest {
+        neuron_parameters: vec![NeuronParameters {
+            neuron_id: Some(neuron_id.clone()),
+            controller: Some(user_principal),
+            stake_e8s: Some(E8),
+            dissolve_delay_seconds: Some(0),
+            ..Default::default() // The rest of the parameters are not required for this test
+        }],
+    };
+
+    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let response = canister_fixture
+        .governance
+        .claim_swap_neurons(request, authorized_sale_principal);
+
+    assert_eq!(
+        response,
+        ClaimSwapNeuronsResponse {
+            claim_swap_neurons_result: Some(ClaimSwapNeuronsResult::Ok(ClaimedSwapNeurons {
+                swap_neurons: vec![SwapNeuron {
+                    id: Some(neuron_id),
+                    status: ClaimedSwapNeuronStatus::AlreadyExists as i32,
+                }],
+            })),
+        }
+    );
+}
+
+#[test]
+fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
+    // Set up the test environment with default sale canister id.
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    // To cause a failure, set the nervous_system_parameters::max_number_of_neurons to 0
+    canister_fixture
+        .governance
+        .proto
+        .parameters
+        .as_mut()
+        .unwrap()
+        .max_number_of_neurons = Some(0);
+
+    // Create a neuron id so the test can identify the correct item in the response
+    let test_neuron_id = NeuronId::new_test_neuron_id(1);
+
+    // Create a request with a NeuronParameter should succeed
+    let request = ClaimSwapNeuronsRequest {
+        neuron_parameters: vec![NeuronParameters {
+            neuron_id: Some(test_neuron_id.clone()),
+            controller: Some(PrincipalId::new_user_test_id(1000)),
+            stake_e8s: Some(E8),
+            dissolve_delay_seconds: Some(0),
+            ..Default::default() // The rest of the parameters are not required for this test
+        }],
+    };
+
+    // Call the method
+    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let response = canister_fixture
+        .governance
+        .claim_swap_neurons(request, authorized_sale_principal);
+
+    // Assert that the invalid neuron parameter results in a SwapNeuron with an invalid status
+    assert_eq!(
+        response,
+        ClaimSwapNeuronsResponse {
+            claim_swap_neurons_result: Some(ClaimSwapNeuronsResult::Ok(ClaimedSwapNeurons {
+                swap_neurons: vec![SwapNeuron {
+                    id: Some(test_neuron_id),
+                    status: ClaimedSwapNeuronStatus::MemoryExhausted as i32,
+                }],
+            })),
+        }
+    );
+}
+
+#[test]
+fn test_claim_swap_neurons_succeeds() {
+    // Set up the test environment with default sale canister id.
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
+
+    let neuron_parameters_1 = NeuronParameters {
+        neuron_id: Some(NeuronId::new_test_neuron_id(1)),
+        controller: Some(PrincipalId::new_user_test_id(1000)),
+        stake_e8s: Some(E8),
+        dissolve_delay_seconds: Some(0),
+        ..Default::default() // The rest of the parameters are not required for this test
+    };
+
+    let neuron_parameters_2 = NeuronParameters {
+        neuron_id: Some(NeuronId::new_test_neuron_id(2)),
+        controller: Some(PrincipalId::new_user_test_id(1001)),
+        hotkey: Some(PrincipalId::new_user_test_id(1002)),
+        stake_e8s: Some(2 * E8),
+        dissolve_delay_seconds: Some(ONE_MONTH_SECONDS),
+        source_nns_neuron_id: Some(2),
+    };
+
+    let request = ClaimSwapNeuronsRequest {
+        neuron_parameters: vec![neuron_parameters_1.clone(), neuron_parameters_2.clone()],
+    };
+
+    // Call the method
+    let authorized_sale_principal = canister_fixture.get_sale_canister_id();
+    let response = canister_fixture
+        .governance
+        .claim_swap_neurons(request, authorized_sale_principal);
+
+    // Parse the result from the response
+    let swap_neurons = match response.claim_swap_neurons_result.unwrap() {
+        ClaimSwapNeuronsResult::Ok(result) => result.swap_neurons,
+        ClaimSwapNeuronsResult::Err(err) => panic!(
+            "Unexpected response from claim_swap_neurons. Was expected Ok(result). Err {}",
+            err
+        ),
+    };
+
+    // Assert that each NeuronParameter has a response and that it has the correct status
+    let swap_neuron_1 = swap_neurons
+        .iter()
+        .find(|s| s.id == neuron_parameters_1.neuron_id)
+        .unwrap();
+    assert_eq!(
+        swap_neuron_1.status,
+        ClaimedSwapNeuronStatus::Success as i32
+    );
+
+    let swap_neuron_2 = swap_neurons
+        .iter()
+        .find(|s| s.id == neuron_parameters_2.neuron_id)
+        .unwrap();
+    assert_eq!(
+        swap_neuron_2.status,
+        ClaimedSwapNeuronStatus::Success as i32
+    );
+
+    let neuron_1 = canister_fixture.get_neuron(neuron_parameters_1.neuron_id.as_ref().unwrap());
+    assert_eq!(neuron_1.id, neuron_parameters_1.neuron_id);
+    assert_eq!(
+        neuron_1.cached_neuron_stake_e8s,
+        neuron_parameters_1.stake_e8s()
+    );
+    assert_eq!(
+        neuron_1.dissolve_state,
+        Some(DissolveState::DissolveDelaySeconds(
+            neuron_parameters_1.dissolve_delay_seconds()
+        ))
+    );
+    assert_eq!(neuron_1.source_nns_neuron_id, None);
+    assert_eq!(neuron_1.maturity_e8s_equivalent, 0);
+    assert_eq!(neuron_1.neuron_fees_e8s, 0);
+
+    let neuron_2 = canister_fixture.get_neuron(neuron_parameters_2.neuron_id.as_ref().unwrap());
+    assert_eq!(neuron_2.id, neuron_parameters_2.neuron_id);
+    assert_eq!(
+        neuron_2.cached_neuron_stake_e8s,
+        neuron_parameters_2.stake_e8s()
+    );
+    assert_eq!(
+        neuron_2.dissolve_state,
+        Some(DissolveState::DissolveDelaySeconds(
+            neuron_parameters_2.dissolve_delay_seconds()
+        ))
+    );
+    assert_eq!(
+        neuron_2.source_nns_neuron_id,
+        neuron_parameters_2.source_nns_neuron_id
+    );
+    assert_eq!(neuron_2.maturity_e8s_equivalent, 0);
+    assert_eq!(neuron_2.neuron_fees_e8s, 0);
 }

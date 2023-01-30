@@ -14,17 +14,18 @@ use crate::pb::v1::{
         ClaimOrRefresh,
     },
     neuron::{DissolveState, Followees},
-    proposal, Account as AccountProto, Ballot, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-    DefaultFollowees, DeregisterDappCanisters, DisburseMaturityInProgress, Empty,
-    GetMetadataRequest, GetMetadataResponse, GetMode, GetModeResponse, GetNeuron,
-    GetNeuronResponse, GetProposal, GetProposalResponse, GetSnsInitializationParametersRequest,
-    GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
-    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
-    NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-    NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
-    ProposalRewardStatus, RegisterDappCanisters, RewardEvent, Tally, TransferSnsTreasuryFunds,
-    UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
+    proposal, Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
+    ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
+    DisburseMaturityInProgress, Empty, GetMetadataRequest, GetMetadataResponse, GetMode,
+    GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+    GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+    Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
+    ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
+    ManageNeuronResponse, ManageSnsMetadata, NervousSystemParameters, Neuron, NeuronId,
+    NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
+    ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters, RewardEvent,
+    Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+    VotingRewardsParameters,
 };
 use crate::{account_from_proto, account_to_proto};
 use ic_base_types::PrincipalId;
@@ -69,6 +70,7 @@ use crate::pb::sns_root_types::{
     RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
     SetDappControllersResponse,
 };
+use crate::pb::v1::claim_swap_neurons_response::SwapNeuron;
 use crate::pb::v1::governance::{
     neuron_in_flight_command, SnsMetadata, UpgradeInProgress, Version,
 };
@@ -3414,21 +3416,22 @@ impl Governance {
         }
     }
 
-    /// Attempts to claim a batch of new neurons allocated by the SNS Swap canister.
+    /// Attempts to claim a batch of new neurons allocated by the SNS Sale canister.
     ///
     /// Preconditions:
-    /// - The caller must be the Swap canister deployed along with this SNS Governance
+    /// - The caller must be the Sale canister deployed along with this SNS Governance
     ///   canister.
     /// - Each NeuronParameters' `stake_e8s` is at least neuron_minimum_stake_e8s
     ///   as defined in the `NervousSystemParameters`
     /// - There is available memory in the Governance canister for the newly created
     ///   Neuron.
+    /// - The Neuron being claimed must not already exist in Governance.
     ///
     /// Claiming Neurons via this method differs from the primary
     /// `ManageNeuron::ClaimOrRefresh` way of creating neurons for governance. This
-    /// method is only callable by the SNS Swap canister associated with this SNS
+    /// method is only callable by the SNS Sale canister associated with this SNS
     /// Governance canister, and claims a batch of neurons instead of just one.
-    /// as this is requested by the swap canister which ensures the correct
+    /// As this is requested by the Sale canister which ensures the correct
     /// transfer of the tokens, this method does not check in the ledger. Additionally,
     /// the dissolve delay is set as part of the neuron creation process, while typically
     /// that is a separate command.
@@ -3440,42 +3443,38 @@ impl Governance {
         let now = self.env.now();
 
         if !self.is_swap_canister(caller_principal_id) {
-            panic!("Caller must be the Swap canister");
+            return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Unauthorized);
         }
-
-        let mut response = ClaimSwapNeuronsResponse {
-            successful_claims: 0,
-            skipped_claims: 0,
-            failed_claims: 0,
-        };
 
         let neuron_minimum_stake_e8s = self
             .nervous_system_parameters()
             .neuron_minimum_stake_e8s
             .expect("NervousSystemParameters must have neuron_minimum_stake_e8s");
 
+        let mut swap_neurons = vec![];
+
         for neuron_parameter in request.neuron_parameters {
             match neuron_parameter.validate(neuron_minimum_stake_e8s) {
                 Ok(_) => (),
                 Err(err) => {
-                    log!(
-                        ERROR,
-                        "ERROR claim_swap_neurons. Failed to claim Neuron due to {}",
-                        err
-                    );
-                    response.failed_claims += 1;
+                    log!(ERROR, "Failed to claim Sale Neuron due to {:?}", err);
+                    swap_neurons.push(SwapNeuron::from_neuron_parameters(
+                        neuron_parameter,
+                        ClaimedSwapNeuronStatus::Invalid,
+                    ));
                     continue;
                 }
             }
 
-            let neuron_id = NeuronId::from(ledger::compute_neuron_staking_subaccount_bytes(
-                *neuron_parameter.get_controller(),
-                neuron_parameter.get_memo(),
-            ));
+            // Its safe to get all fields in NeuronParameters because of the previous validation.
+            let neuron_id = neuron_parameter.get_neuron_id_or_panic();
 
             // This neuron was claimed previously.
             if self.proto.neurons.contains_key(&neuron_id.to_string()) {
-                response.skipped_claims += 1;
+                swap_neurons.push(SwapNeuron::from_neuron_parameters(
+                    neuron_parameter,
+                    ClaimedSwapNeuronStatus::AlreadyExists,
+                ));
                 continue;
             }
 
@@ -3483,7 +3482,7 @@ impl Governance {
                 id: Some(neuron_id.clone()),
                 permissions: neuron_parameter
                     .construct_permissions(self.neuron_claimer_permissions()),
-                cached_neuron_stake_e8s: neuron_parameter.get_stake_e8s(),
+                cached_neuron_stake_e8s: neuron_parameter.get_stake_e8s_or_panic(),
                 neuron_fees_e8s: 0,
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
@@ -3492,7 +3491,7 @@ impl Governance {
                 maturity_e8s_equivalent: 0,
                 // TODO NNS1-1720 - CF Neurons should be automatically dissolving
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                    neuron_parameter.get_dissolve_delay_seconds(),
+                    neuron_parameter.get_dissolve_delay_seconds_or_panic(),
                 )),
                 voting_power_percentage_multiplier: DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
                 source_nns_neuron_id: neuron_parameter.source_nns_neuron_id,
@@ -3502,22 +3501,26 @@ impl Governance {
                 disburse_maturity_in_progress: vec![],
             };
 
-            // This also verifies that there are not too many neurons already. This is a best effort
-            // claim process, but since the method is idempotent additional retries are possible.
+            // Add the neuron to the various data structures and indexes to support neurons. This
+            // method may fail if the memory limits of Governance have been reached, which is a
+            // recoverable error. The sale canister can retry claiming after GC or manual upgrades
+            // of SNS Governance.
             match self.add_neuron(neuron) {
-                Ok(_) => response.successful_claims += 1,
+                Ok(()) => swap_neurons.push(SwapNeuron::from_neuron_parameters(
+                    neuron_parameter,
+                    ClaimedSwapNeuronStatus::Success,
+                )),
                 Err(err) => {
-                    log!(
-                        ERROR,
-                        "ERROR claim_swap_neurons. Failed to claim Neuron due to {:?}",
-                        err
-                    );
-                    response.failed_claims += 1;
+                    log!(ERROR, "Failed to claim Sale Neuron due to {:?}", err);
+                    swap_neurons.push(SwapNeuron::from_neuron_parameters(
+                        neuron_parameter,
+                        ClaimedSwapNeuronStatus::MemoryExhausted,
+                    ))
                 }
             }
         }
 
-        response
+        ClaimSwapNeuronsResponse::new(swap_neurons)
     }
 
     /// Adds a `NeuronPermission` to an already existing Neuron for the given PrincipalId.

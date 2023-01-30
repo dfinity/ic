@@ -415,6 +415,30 @@ message SnsNeuronRecipe {
     // The dissolve delay in seconds that the Neuron will be created with.
     uint64 dissolve_delay_seconds = 2;
   }
+
+  // The status of the SnsNeuronRecipe's creation within SNS Governance. This field is
+  // used as a journal between calls of finalize().
+  optional ClaimedStatus claimed_status = 5;
+
+  // The various statuses of creation that a SnsNeuronRecipe can have in an SNS.
+  enum ClaimedStatus {
+    // Unused, here for PB lint purposes.
+    CLAIMED_STATUS_UNSPECIFIED = 0;
+
+    // The Neuron is pending creation and can be claimed in SNS Governance.
+    CLAIMED_STATUS_PENDING = 1;
+
+    // The Neuron has been created successfully in SNS Governance.
+    CLAIMED_STATUS_SUCCESS = 2;
+
+    // The Neuron has previously failed to be created in SNS Governance, but can
+    // be retried in the future.
+    CLAIMED_STATUS_FAILED = 3;
+
+    // The Neuron is invalid and was not created in SNS Governance. This neuron
+    // cannot be retried without manual intervention to update its NeuronParameters.
+    CLAIMED_STATUS_INVALID = 4;
+  }
 }
 
 //
@@ -491,15 +515,17 @@ message RefreshBuyerTokensResponse {
 message FinalizeSwapRequest {}
 
 // Response from the `finalize_swap` canister API.
-//
-// TODO NNS1-1715 - Add diagnostic information that would maximize the chances
-// that an operator would be able to figure out what corrective action(s) to take
 message FinalizeSwapResponse {
-  SweepResult sweep_icp = 1;
-  SweepResult sweep_sns = 2;
-  SweepResult create_neuron = 3;
-  SetModeCallResult sns_governance_normal_mode_enabled = 4;
-  SetDappControllersCallResult set_dapp_controllers_result = 5;
+  SweepResult sweep_icp_result = 1;
+
+  SweepResult sweep_sns_result = 2;
+
+  SweepResult claim_neuron_result = 3;
+
+  SetModeCallResult set_mode_call_result = 4;
+
+  SetDappControllersCallResult set_dapp_controllers_call_result = 5;
+
   SettleCommunityFundParticipationResult settle_community_fund_participation_result = 6;
 
   // Explains what (if anything) went wrong.
@@ -507,26 +533,43 @@ message FinalizeSwapResponse {
 }
 
 message SweepResult {
+  // Success means that on this call to finalize, the item in the
+  // sweep succeeded.
   uint32 success = 1;
+
+  // Failure means that on this call to finalize, the item in the
+  // sweep failed but may be successful in the future.
   uint32 failure = 2;
+
+  // Skipped means that on a previous call to finalize, the item
+  // in the sweep was successful.
   uint32 skipped = 3;
+
+  // Invalid means that on this call and all future calls to finalize,
+  // this item will not be successful, and will need intervention to
+  // succeed.
+  uint32 invalid = 4;
+
+  // Global_failures does not map to individual items in the sweep, but
+  // number of global failures encountered in the sweep.
+  uint32 global_failures = 5;
 }
 
 // Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
 message SetModeCallResult {
-  reserved "ok";
-  reserved 1;
   oneof possibility {
-    // TODO ic_sns_governance.pb.v1.SetModeResponse ok = 1;
+    SetModeResult ok = 1;
     CanisterCallError err = 2;
   }
+
+  message SetModeResult {}
 }
 
 // Request struct for the method restore_dapp_controllers.
 message RestoreDappControllersRequest {}
 
 // Response of the method restore_dapp_controllers.
-// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
+// Analogous to Rust type Result<SetDappControllersResponse, CanisterCallError>.
 message RestoreDappControllersResponse {
   oneof possibility {
     // TODO(NNS1-1589): Uncomment.
@@ -537,7 +580,7 @@ message RestoreDappControllersResponse {
 }
 
 
-// Analogous to Rust type Result<SetModeResponse, CanisterCallError>.
+// Analogous to Rust type Result<SetDappControllersResponse, CanisterCallError>.
 message SetDappControllersCallResult {
   oneof possibility {
     // TODO(NNS1-1589): Uncomment.

@@ -2,7 +2,7 @@ use candid::candid_method;
 use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{
     api::{caller, id, now},
-    over, over_async, over_init, println, CanisterId,
+    over, over_async, over_init, CanisterId,
 };
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
@@ -17,7 +17,7 @@ use ic_sns_swap::{
         ManagementCanister, ProdManagementCanister, RealNnsGovernanceClient,
         RealSnsGovernanceClient, RealSnsRootClient,
     },
-    logs::{ERROR, INFO, LOG_PREFIX},
+    logs::{ERROR, INFO},
     memory::UPGRADES_MEMORY,
     pb::v1::{
         ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse,
@@ -94,7 +94,7 @@ fn get_buyer_state() {
 /// been successfully notified of a buyer's ICP transfer.
 #[candid_method(query, rename = "get_buyer_state")]
 fn get_buyer_state_(request: GetBuyerStateRequest) -> GetBuyerStateResponse {
-    println!("{}get_buyer_state", LOG_PREFIX);
+    log!(INFO, "get_buyer_state");
     swap().get_buyer_state(&request)
 }
 
@@ -134,7 +134,7 @@ fn refresh_buyer_tokens() {
 /// See `Swap.refresh_buyer_token_e8`.
 #[candid_method(update, rename = "refresh_buyer_tokens")]
 async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTokensResponse {
-    println!("{}refresh_buyer_tokens", LOG_PREFIX);
+    log!(INFO, "refresh_buyer_tokens");
     let p: PrincipalId = if arg.buyer.is_empty() {
         caller()
     } else {
@@ -254,7 +254,7 @@ fn get_lifecycle() {
 
 #[candid_method(query, rename = "get_lifecycle")]
 fn get_lifecycle_(request: GetLifecycleRequest) -> GetLifecycleResponse {
-    println!("{}get_lifecycle", LOG_PREFIX);
+    log!(INFO, "get_lifecycle");
     swap().get_lifecycle(&request)
 }
 
@@ -267,7 +267,7 @@ fn get_init() {
 /// Returns the initialization data of the canister
 #[candid_method(query, rename = "get_init")]
 async fn get_init_(_request: GetInitRequest) -> GetInitResponse {
-    println!("{}get_init", LOG_PREFIX);
+    log!(INFO, "get_init");
     GetInitResponse {
         init: swap().init.clone(),
     }
@@ -282,7 +282,7 @@ fn get_derived_state() {
 /// Return the current derived state of the Sale
 #[candid_method(query, rename = "get_derived_state")]
 async fn get_derived_state_(_request: GetDerivedStateRequest) -> GetDerivedStateResponse {
-    println!("{}get_derived_state", LOG_PREFIX);
+    log!(INFO, "get_derived_state");
     swap().derived_state().into()
 }
 
@@ -333,8 +333,7 @@ fn canister_init_(init_payload: Init) {
     unsafe {
         assert!(
             SWAP.is_none(),
-            "{}Trying to initialize an already initialized canister!",
-            LOG_PREFIX
+            "Trying to initialize an already initialized canister!",
         );
         SWAP = Some(swap);
     }
@@ -342,7 +341,7 @@ fn canister_init_(init_payload: Init) {
 }
 
 /// Serialize and write the state to stable memory so that it is
-/// preserved during the upgrade and can be deserialised again in
+/// preserved during the upgrade and can be deserialized again in
 /// `canister_post_upgrade`.
 #[export_name = "canister_pre_upgrade"]
 fn canister_pre_upgrade() {
@@ -373,13 +372,11 @@ fn canister_pre_upgrade() {
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
-
     fn set_state(proto: Swap) {
         unsafe {
             assert!(
                 SWAP.is_none(),
-                "{}Trying to post-upgrade an already initialized canister!",
-                LOG_PREFIX
+                "Trying to post-upgrade an already initialized canister!",
             );
             SWAP = Some(proto);
         }
@@ -424,9 +421,9 @@ fn canister_post_upgrade() {
             match decode_swap_result {
                 Err(err) => {
                     panic!(
-                        "{}Error deserializing canister state post-upgrade. \
+                        "Error deserializing canister state post-upgrade. \
                  CANISTER HAS BROKEN STATE!!!!. Error: {:?}",
-                        LOG_PREFIX, err
+                        err
                     );
                 }
                 Ok(proto) => set_state(proto),
