@@ -21,13 +21,14 @@ an Internet Computer instance, every node is instantiated as a virtual machine
 running the
 [ic-os](https://sourcegraph.com/github.com/dfinity/ic/-/tree/ic-os/guestos).
 
-### How can I run system tests in Bazel?
+### How can I write system tests in Bazel?
 T&V team is working actively on the
 [bazelification](https://docs.google.com/document/d/1RGyvOkRluFsqroDmyM9hfr37VG-nCrTOrutQnStJsco/edit#heading=h.fcajjuvgc2dn)
 of all system tests. When you want to write a new test or when you own system
 tests declared in `rs/tests/bin/prod_test_driver.rs`, take a look at the linked
 document.
 
+### How can I run system tests in Bazel?
 In order to run system tests, enter the build docker container:
 ```
 /ic$ ./gitlab-ci/container/container-run.sh
