@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use async_trait::async_trait;
 use candid::types::number::Nat;
+use candid::Encode;
 use canister_test::{Canister, Runtime};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
@@ -11,6 +12,9 @@ use ic_ledger_core::{tokens::TOKEN_SUBDIVIDABLE_BY, Tokens};
 use ic_nervous_system_common::{i2d, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
+};
+use ic_nns_test_utils::itest_helpers::{
+    forward_call_via_universal_canister, set_up_universal_canister,
 };
 use ic_sns_governance::{
     account_to_proto,
@@ -27,7 +31,7 @@ use ic_sns_governance::{
             IncreaseDissolveDelay, RemoveNeuronPermissions, StakeMaturity,
         },
         manage_neuron_response::Command as CommandResponse,
-        neuron::DissolveState,
+        neuron::DissolveState::{self, DissolveDelaySeconds},
         proposal::Action,
         Account as AccountProto, Ballot, Empty, Governance as GovernanceProto, GovernanceError,
         ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Motion,
@@ -45,6 +49,7 @@ use ic_sns_test_utils::now_seconds;
 use ic_types::PrincipalId;
 use maplit::btreemap;
 use rust_decimal_macros::dec;
+use std::time::SystemTime;
 use std::{
     collections::HashSet,
     convert::TryInto,
@@ -194,6 +199,118 @@ fn test_claim_neuron_with_default_permissions() {
         )];
 
         assert_eq!(neuron.permissions, expected);
+        Ok(())
+    });
+}
+
+// Validate that a canister can stake, claim and manage a neuron
+#[test]
+fn test_canister_can_claim_and_manage_neuron() {
+    local_test_on_sns_subnet(|runtime| async move {
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let universal_canister = set_up_universal_canister(&runtime).await;
+        let principal_id = universal_canister.canister_id().get();
+
+        let mut params = NervousSystemParameters::with_default_values();
+        params.neuron_claimer_permissions = Some(NeuronPermissionList {
+            permissions: NeuronPermissionType::all(),
+        });
+
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
+            .with_ledger_account(principal_id.into(), alloc)
+            .with_nervous_system_parameters(params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let to_subaccount = {
+            let mut state = Sha256::new();
+            state.write(&[0x0c]);
+            state.write(b"neuron-stake");
+            state.write(principal_id.as_slice());
+            state.write(&NONCE.to_be_bytes());
+            state.finish()
+        };
+
+        let stake = Tokens::from_tokens(100).unwrap();
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos() as u64;
+
+        let transfer_arg = TransferArg {
+            amount: Nat::from(stake.get_e8s()),
+            fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
+            from_subaccount: None,
+            to: Account {
+                owner: sns_canisters.governance.canister_id().get(),
+                subaccount: Some(to_subaccount),
+            },
+            memo: None,
+            created_at_time: Some(now),
+        };
+
+        assert!(
+            forward_call_via_universal_canister(
+                &universal_canister,
+                &sns_canisters.ledger,
+                "icrc1_transfer",
+                Encode!(&transfer_arg).unwrap()
+            )
+            .await
+        );
+
+        let claim_neuron_request = ManageNeuron {
+            subaccount: to_subaccount.to_vec(),
+            command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                by: Some(By::MemoAndController(MemoAndController {
+                    memo: NONCE,
+                    controller: None,
+                })),
+            })),
+        };
+
+        assert!(
+            forward_call_via_universal_canister(
+                &universal_canister,
+                &sns_canisters.governance,
+                "manage_neuron",
+                Encode!(&claim_neuron_request).unwrap()
+            )
+            .await
+        );
+
+        let neurons = sns_canisters.list_neurons(&user).await;
+        assert_eq!(neurons.len(), 1);
+        let neuron = &neurons[0];
+        assert_eq!(neuron.dissolve_state, Some(DissolveDelaySeconds(0)));
+
+        let increase_dissolve_delay_request = ManageNeuron {
+            subaccount: to_subaccount.to_vec(),
+            command: Some(Command::Configure(Configure {
+                operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
+                    additional_dissolve_delay_seconds: 100_000,
+                })),
+            })),
+        };
+
+        assert!(
+            forward_call_via_universal_canister(
+                &universal_canister,
+                &sns_canisters.governance,
+                "manage_neuron",
+                Encode!(&increase_dissolve_delay_request).unwrap()
+            )
+            .await
+        );
+
+        let neurons = sns_canisters.list_neurons(&user).await;
+        assert_eq!(neurons.len(), 1);
+        let neuron = &neurons[0];
+        assert_eq!(neuron.dissolve_state, Some(DissolveDelaySeconds(100_000)));
+
         Ok(())
     });
 }
