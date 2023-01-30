@@ -40,7 +40,7 @@ def _image_deps(mode, malicious = False):
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
             "//publish/binaries:ic-canister-http-adapter": "/opt/ic/bin/ic-canister-http-adapter:0755",
             "//publish/binaries:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",
-            "//publish/binaries:ic-monitoring-canister-adapter": "/opt/ic/bin/ic-monitoring-canister-adapter:0755",
+            "//publish/binaries:ic-onchain-observability-adapter": "/opt/ic/bin/ic-onchain-observability-adapter:0755",
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",
             "//publish/binaries:ic-recovery": "/opt/ic/bin/ic-recovery:0755",
             "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",

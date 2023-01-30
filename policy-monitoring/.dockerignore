@@ -11,6 +11,6 @@ artifacts/
 **/bin/ic-crypto-csp
 **/bin/ic-btc-adapter
 **/bin/ic-canister-http-adapter
-**/bin/ic-monitoring-canister-adapter
+**/bin/ic-onchain-observability-adapter
 **/bin/state-tool
 **/disk.img

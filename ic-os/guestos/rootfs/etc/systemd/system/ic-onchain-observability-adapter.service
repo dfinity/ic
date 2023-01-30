@@ -9,8 +9,8 @@ StartLimitIntervalSec=0
 [Service]
 User=ic-replica
 Environment=RUST_BACKTRACE=1
-ExecStartPre=+/opt/ic/bin/generate-monitoring-canister-adapter-config.sh -o /run/ic-node/config/ic-monitoring-canister-adapter.json
-ExecStart=/opt/ic/bin/ic-monitoring-canister-adapter /run/ic-node/config/ic-monitoring-canister-adapter.json
+ExecStartPre=+/opt/ic/bin/generate-onchain-observability-adapter-config.sh -o /run/ic-node/config/ic-onchain-observability-adapter.json
+ExecStart=/opt/ic/bin/ic-onchain-observability-adapter /run/ic-node/config/ic-onchain-observability-adapter.json
 NotifyAccess=main
 #TODO: once this service is complete, we can change to "always"
 Restart=on-failure 
