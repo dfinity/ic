@@ -2236,6 +2236,158 @@ impl StateManagerImpl {
 
         result
     }
+
+    // Creates a checkpoint and switches state to it.
+    fn create_checkpoint_and_switch(
+        &self,
+        state: &mut ReplicatedState,
+        height: Height,
+    ) -> (ReplicatedState, StateMetadata, ComputeManifestRequest) {
+        struct PreviousCheckpointInfo {
+            dirty_pages: DirtyPages,
+            base_manifest: Manifest,
+            base_height: Height,
+        }
+
+        let start = Instant::now();
+        {
+            let _timer = self
+                .metrics
+                .checkpoint_metrics
+                .make_checkpoint_step_duration
+                .with_label_values(&["wait_for_manifest"])
+                .start_timer();
+            let (sender, recv) = unbounded();
+            self.compute_manifest_request_sender
+                .send(ComputeManifestRequest::Wait { sender })
+                .expect("failed to send ComputeManifestRequest Wait message");
+            recv.recv()
+                .expect("failed to wait for ComputeManifest thread");
+        }
+        let previous_checkpoint_info = {
+            let states = self.states.read();
+            states
+                .states_metadata
+                .iter()
+                .rev()
+                .find_map(|(base_height, state_metadata)| {
+                    let base_manifest = state_metadata.manifest()?.clone();
+                    Some((base_manifest, *base_height))
+                })
+                .map(|(base_manifest, base_height)| {
+                    let base_snapshot: Option<&Snapshot> = states
+                        .snapshots
+                        .iter()
+                        .find(|snapshot| snapshot.height == base_height);
+                    PreviousCheckpointInfo {
+                        dirty_pages: get_dirty_pages(state, base_snapshot),
+                        base_manifest,
+                        base_height,
+                    }
+                })
+        };
+
+        // We don't need to persist the deltas to the tip because we
+        // flush deltas separately every round, see flush_page_maps.
+        strip_page_map_deltas(state);
+        let result = {
+            checkpoint::make_checkpoint(
+                state,
+                height,
+                &self.tip_channel,
+                &self.metrics.checkpoint_metrics,
+                &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
+            )
+        };
+
+        let elapsed = start.elapsed();
+        let (cp_layout, checkpointed_state) = match result {
+            Ok(checkpointed_state) => {
+                info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
+                self.metrics
+                    .checkpoint_op_duration
+                    .with_label_values(&["create"])
+                    .observe(elapsed.as_secs_f64());
+                checkpointed_state
+            }
+            Err(CheckpointError::AlreadyExists(_)) => {
+                warn!(
+                                self.log,
+                                "Failed to create checkpoint @{} because it already exists, re-loading the checkpoint from disk", height
+                            );
+
+                let checkpointed_state = self
+                    .state_layout
+                    .checkpoint(height)
+                    .map_err(|e| e.into())
+                    .and_then(|layout| {
+                        let _timer = self
+                            .metrics
+                            .checkpoint_op_duration
+                            .with_label_values(&["recover"])
+                            .start_timer();
+
+                        checkpoint::load_checkpoint_parallel(
+                            &layout,
+                            self.own_subnet_type,
+                            &self.metrics.checkpoint_metrics,
+                        )
+                    })
+                    .unwrap_or_else(|err| {
+                        fatal!(
+                            self.log,
+                            "Failed to load existing checkpoint @{}: {}",
+                            height,
+                            err
+                        )
+                    });
+                (
+                    self.state_layout.checkpoint(height).unwrap(),
+                    checkpointed_state,
+                )
+            }
+            Err(err) => fatal!(
+                self.log,
+                "Failed to make a checkpoint @{}: {:?}",
+                height,
+                err
+            ),
+        };
+        switch_to_checkpoint(state, &checkpointed_state);
+
+        // On the NNS subnet we never allow incremental manifest computation
+        let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
+        let manifest_delta = if is_nns {
+            None
+        } else {
+            previous_checkpoint_info.map(
+                |PreviousCheckpointInfo {
+                     dirty_pages,
+                     base_manifest,
+                     base_height,
+                 }| {
+                    manifest::ManifestDelta {
+                        base_manifest,
+                        base_height,
+                        target_height: height,
+                        dirty_memory_pages: dirty_pages,
+                    }
+                },
+            )
+        };
+
+        let state_metadata = StateMetadata {
+            checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
+            bundled_manifest: None,
+            state_sync_file_group: None,
+        };
+
+        let compute_manifest_request = ComputeManifestRequest::Compute {
+            checkpoint_layout: cp_layout,
+            manifest_delta: if is_nns { None } else { manifest_delta },
+        };
+        (checkpointed_state, state_metadata, compute_manifest_request)
+    }
 }
 
 fn initial_state(own_subnet_id: SubnetId, own_subnet_type: SubnetType) -> Labeled<ReplicatedState> {
@@ -2761,12 +2913,6 @@ impl StateManager for StateManagerImpl {
         self.populate_extra_metadata(&mut state, height);
         self.flush_page_maps(&mut state, height);
 
-        struct PreviousCheckpointInfo {
-            dirty_pages: DirtyPages,
-            base_manifest: Manifest,
-            base_height: Height,
-        }
-
         let mut state_metadata_and_compute_manifest_request: Option<(
             StateMetadata,
             ComputeManifestRequest,
@@ -2774,144 +2920,10 @@ impl StateManager for StateManagerImpl {
 
         let checkpointed_state = match scope {
             CertificationScope::Full => {
-                let start = Instant::now();
-                {
-                    let _timer = self
-                        .metrics
-                        .checkpoint_metrics
-                        .make_checkpoint_step_duration
-                        .with_label_values(&["wait_for_manifest"])
-                        .start_timer();
-                    let (sender, recv) = unbounded();
-                    self.compute_manifest_request_sender
-                        .send(ComputeManifestRequest::Wait { sender })
-                        .expect("failed to send ComputeManifestRequest Wait message");
-                    recv.recv()
-                        .expect("failed to wait for ComputeManifest thread");
-                }
-                let previous_checkpoint_info = {
-                    let states = self.states.read();
-                    states
-                        .states_metadata
-                        .iter()
-                        .rev()
-                        .find_map(|(base_height, state_metadata)| {
-                            let base_manifest = state_metadata.manifest()?.clone();
-                            Some((base_manifest, *base_height))
-                        })
-                        .map(|(base_manifest, base_height)| {
-                            let base_snapshot: Option<&Snapshot> = states
-                                .snapshots
-                                .iter()
-                                .find(|snapshot| snapshot.height == base_height);
-                            PreviousCheckpointInfo {
-                                dirty_pages: get_dirty_pages(&state, base_snapshot),
-                                base_manifest,
-                                base_height,
-                            }
-                        })
-                };
-
-                // We don't need to persist the deltas to the tip because we
-                // flush deltas separately every round, see flush_page_maps.
-                strip_page_map_deltas(&mut state);
-                let result = {
-                    checkpoint::make_checkpoint(
-                        &state,
-                        height,
-                        &self.tip_channel,
-                        &self.metrics.checkpoint_metrics,
-                        &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
-                    )
-                };
-
-                let elapsed = start.elapsed();
-                let (cp_layout, checkpointed_state) = match result {
-                    Ok(checkpointed_state) => {
-                        info!(self.log, "Created checkpoint @{} in {:?}", height, elapsed);
-                        self.metrics
-                            .checkpoint_op_duration
-                            .with_label_values(&["create"])
-                            .observe(elapsed.as_secs_f64());
-                        checkpointed_state
-                    }
-                    Err(CheckpointError::AlreadyExists(_)) => {
-                        warn!(
-                                self.log,
-                                "Failed to create checkpoint @{} because it already exists, re-loading the checkpoint from disk", height
-                            );
-
-                        let checkpointed_state = self
-                            .state_layout
-                            .checkpoint(height)
-                            .map_err(|e| e.into())
-                            .and_then(|layout| {
-                                let _timer = self
-                                    .metrics
-                                    .checkpoint_op_duration
-                                    .with_label_values(&["recover"])
-                                    .start_timer();
-
-                                checkpoint::load_checkpoint_parallel(
-                                    &layout,
-                                    self.own_subnet_type,
-                                    &self.metrics.checkpoint_metrics,
-                                )
-                            })
-                            .unwrap_or_else(|err| {
-                                fatal!(
-                                    self.log,
-                                    "Failed to load existing checkpoint @{}: {}",
-                                    height,
-                                    err
-                                )
-                            });
-                        (
-                            self.state_layout.checkpoint(height).unwrap(),
-                            checkpointed_state,
-                        )
-                    }
-                    Err(err) => fatal!(
-                        self.log,
-                        "Failed to make a checkpoint @{}: {:?}",
-                        height,
-                        err
-                    ),
-                };
-                switch_to_checkpoint(&mut state, &checkpointed_state);
-                // On the NNS subnet we never allow incremental manifest computation
-                let is_nns = self.own_subnet_id == state.metadata.network_topology.nns_subnet_id;
-
-                let manifest_delta = if is_nns {
-                    None
-                } else {
-                    previous_checkpoint_info.map(
-                        |PreviousCheckpointInfo {
-                             dirty_pages,
-                             base_manifest,
-                             base_height,
-                         }| {
-                            manifest::ManifestDelta {
-                                base_manifest,
-                                base_height,
-                                target_height: height,
-                                dirty_memory_pages: dirty_pages,
-                            }
-                        },
-                    )
-                };
-
-                state_metadata_and_compute_manifest_request = Some((
-                    StateMetadata {
-                        checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
-                        bundled_manifest: None,
-                        state_sync_file_group: None,
-                    },
-                    ComputeManifestRequest::Compute {
-                        checkpoint_layout: cp_layout,
-                        manifest_delta: if is_nns { None } else { manifest_delta },
-                    },
-                ));
+                let (checkpointed_state, state_metadata, compute_manifest_request) =
+                    self.create_checkpoint_and_switch(&mut state, height);
+                state_metadata_and_compute_manifest_request =
+                    Some((state_metadata, compute_manifest_request));
                 checkpointed_state
             }
             CertificationScope::Metadata => state.clone(),
@@ -2974,6 +2986,8 @@ impl StateManager for StateManagerImpl {
                 self.compute_manifest_request_sender
                     .send(compute_manifest_request)
                     .expect("failed to send ComputeManifestRequest message");
+            } else {
+                debug_assert!(scope != CertificationScope::Full);
             }
 
             let latest_height = update_latest_height(&self.latest_state_height, height);
