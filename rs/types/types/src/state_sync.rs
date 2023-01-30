@@ -235,6 +235,7 @@ impl fmt::Display for Manifest {
             .max()
             .unwrap_or(6);
 
+        writeln!(f, "MANIFEST VERSION: {}", self.version)?;
         writeln!(f, "FILE TABLE")?;
         write_header(
             f,

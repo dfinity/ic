@@ -182,9 +182,20 @@ fn canister_hash(
     canister_hash
 }
 
+fn extract_manifest_version(lines: &[String]) -> Option<u32> {
+    lines
+        .iter()
+        .find(|line| line.starts_with("MANIFEST VERSION: "))?
+        .replace("MANIFEST VERSION: ", "")
+        .parse::<u32>()
+        .ok()
+}
+
 fn extract_file_table(lines: &[String]) -> BTreeMap<u32, FileInfo> {
     lines
         .iter()
+        // Skip until the beginning of the file table is reached.
+        .skip_while(|line| !line.starts_with("FILE TABLE"))
         // Abort as soon as the header of the chunk table is hit.
         .take_while(|line| !line.starts_with("CHUNK TABLE"))
         // Skip the 3 header lines of the file table.
@@ -240,7 +251,14 @@ fn extract_root_hash(lines: &[String]) -> [u8; 32] {
     .unwrap()
 }
 
-fn parse_manifest(file: File) -> (BTreeMap<u32, FileInfo>, Vec<ChunkInfo>, [u8; 32]) {
+fn parse_manifest(
+    file: File,
+) -> (
+    Option<u32>,
+    BTreeMap<u32, FileInfo>,
+    Vec<ChunkInfo>,
+    [u8; 32],
+) {
     let manifest_lines: Vec<String> = BufReader::new(file)
         .lines()
         .into_iter()
@@ -248,15 +266,16 @@ fn parse_manifest(file: File) -> (BTreeMap<u32, FileInfo>, Vec<ChunkInfo>, [u8; 
         .filter(|line| !line.is_empty())
         .collect();
 
+    let manifest_version = extract_manifest_version(&manifest_lines);
     let file_table = extract_file_table(&manifest_lines);
     let chunk_table = extract_chunk_table(&manifest_lines);
 
     let root_hash = extract_root_hash(&manifest_lines);
 
-    (file_table, chunk_table, root_hash)
+    (manifest_version, file_table, chunk_table, root_hash)
 }
 
-fn verify_manifest(file: File, version: u32) -> Result<(), String> {
+fn verify_manifest(file: File, mut version: u32) -> Result<(), String> {
     if version > MAX_SUPPORTED_STATE_SYNC_VERSION {
         panic!(
             "Unsupported state sync version provided {}. Max supported version {}",
@@ -264,7 +283,19 @@ fn verify_manifest(file: File, version: u32) -> Result<(), String> {
         );
     }
 
-    let (file_table, chunk_table, root_hash) = parse_manifest(file);
+    let (manifest_version, file_table, chunk_table, root_hash) = parse_manifest(file);
+
+    // Use the manifest version in the file if present
+    if let Some(manifest_version) = manifest_version {
+        if version != manifest_version {
+            println!(
+                "WARNING: The manifest version {} provided in the arguments is overridden by the version {} in the file",
+                version,
+                manifest_version,
+            );
+            version = manifest_version;
+        }
+    }
     let root_hash_recomputed = compute_root_hash(file_table, chunk_table, version);
     assert_eq!(root_hash, root_hash_recomputed);
     println!(
@@ -282,7 +313,7 @@ fn verify_manifest(file: File, version: u32) -> Result<(), String> {
 /// canister hash of the same canister in two different states is the
 /// same.
 pub fn do_canister_hash(file: &Path, canister: &str) -> Result<(), String> {
-    let (file_table, chunk_table, _) = parse_manifest(File::open(file).unwrap());
+    let (_, file_table, chunk_table, _) = parse_manifest(File::open(file).unwrap());
     canister_hash(file_table, chunk_table, canister);
     Ok(())
 }
@@ -305,7 +336,7 @@ mod tests {
 
     use ic_state_manager::manifest::{
         hash::{chunk_hasher, file_hasher},
-        manifest_hash, CURRENT_STATE_SYNC_VERSION,
+        manifest_hash, CURRENT_STATE_SYNC_VERSION, STATE_SYNC_V1, STATE_SYNC_V2,
     };
     use ic_types::state_sync::{ChunkInfo, FileInfo, Manifest};
 
@@ -343,9 +374,9 @@ mod tests {
         )
     }
 
-    fn test_manifest(file_infos: &[(FileInfo, ChunkInfo)]) -> (Manifest, String) {
+    fn test_manifest(version: u32, file_infos: &[(FileInfo, ChunkInfo)]) -> (Manifest, String) {
         let manifest = Manifest::new(
-            CURRENT_STATE_SYNC_VERSION,
+            version,
             file_infos.iter().map(|info| info.0.clone()).collect(),
             file_infos.iter().map(|info| info.1.clone()).collect(),
         );
@@ -354,19 +385,36 @@ mod tests {
     }
 
     fn test_manifest_0() -> (Manifest, String) {
-        test_manifest(&[
-            test_manifest_entry(0, "root.bin", 0),
-            test_manifest_entry(1, "canister_states/canister_0/test.bin", 1),
-            test_manifest_entry(2, "canister_states/canister_1/test.bin", 2),
-        ])
+        test_manifest(
+            CURRENT_STATE_SYNC_VERSION,
+            &[
+                test_manifest_entry(0, "root.bin", 0),
+                test_manifest_entry(1, "canister_states/canister_0/test.bin", 1),
+                test_manifest_entry(2, "canister_states/canister_1/test.bin", 2),
+            ],
+        )
     }
 
     fn test_manifest_1() -> (Manifest, String) {
-        test_manifest(&[test_manifest_entry(
-            0,
-            "canister_states/canister_0/test.bin",
-            1,
-        )])
+        test_manifest(
+            CURRENT_STATE_SYNC_VERSION,
+            &[test_manifest_entry(
+                0,
+                "canister_states/canister_0/test.bin",
+                1,
+            )],
+        )
+    }
+
+    fn test_manifest_2() -> (Manifest, String) {
+        test_manifest(
+            STATE_SYNC_V2,
+            &[
+                test_manifest_entry(0, "root.bin", 0),
+                test_manifest_entry(1, "canister_states/canister_0/test.bin", 1),
+                test_manifest_entry(2, "canister_states/canister_1/test.bin", 2),
+            ],
+        )
     }
 
     #[test]
@@ -378,6 +426,18 @@ mod tests {
         tmp_file.seek(std::io::SeekFrom::Start(0)).unwrap();
 
         verify_manifest(tmp_file, CURRENT_STATE_SYNC_VERSION).unwrap();
+    }
+
+    #[test]
+    fn recompute_root_hash_using_version_from_file_succeeds() {
+        let (manifest, root_hash) = test_manifest_2();
+        let mut tmp_file = tempfile::tempfile().unwrap();
+        writeln!(&mut tmp_file, "{}", manifest).unwrap();
+        writeln!(&mut tmp_file, "ROOT HASH: {}", root_hash).unwrap();
+        tmp_file.seek(std::io::SeekFrom::Start(0)).unwrap();
+
+        // The manifest version is already written in the file and will override the one from the arguments.
+        verify_manifest(tmp_file, STATE_SYNC_V1).unwrap();
     }
 
     #[test]

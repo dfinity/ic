@@ -1642,7 +1642,8 @@ impl StateManagerImpl {
 
                 info!(
                     log,
-                    "Computed manifest of state @{} in {:?}",
+                    "Computed manifest version {} for state @{} in {:?}",
+                    manifest.version,
                     checkpoint_layout.height(),
                     elapsed
                 );
