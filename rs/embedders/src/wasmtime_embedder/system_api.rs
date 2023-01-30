@@ -1521,6 +1521,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                     InternalErrorCode::HeapOutOfBounds => {
                         HypervisorError::Trapped(TrapCode::HeapOutOfBounds)
                     }
+                    InternalErrorCode::StableMemoryOutOfBounds => {
+                        HypervisorError::Trapped(TrapCode::StableMemoryOutOfBounds)
+                    }
                     InternalErrorCode::StableMemoryTooBigFor32Bit => {
                         HypervisorError::Trapped(TrapCode::StableMemoryTooBigFor32Bit)
                     }

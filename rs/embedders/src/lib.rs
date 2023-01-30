@@ -61,13 +61,15 @@ impl CompilationResult {
 pub(crate) enum InternalErrorCode {
     Unknown = 0,
     HeapOutOfBounds = 1,
-    StableMemoryTooBigFor32Bit = 2,
+    StableMemoryOutOfBounds = 2,
+    StableMemoryTooBigFor32Bit = 3,
 }
 
 impl InternalErrorCode {
     fn from_i32(code: i32) -> Self {
         match code {
             code if code == Self::HeapOutOfBounds as i32 => Self::HeapOutOfBounds,
+            code if code == Self::StableMemoryOutOfBounds as i32 => Self::StableMemoryOutOfBounds,
             code if code == Self::StableMemoryTooBigFor32Bit as i32 => {
                 Self::StableMemoryTooBigFor32Bit
             }

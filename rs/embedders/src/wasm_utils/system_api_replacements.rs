@@ -3,6 +3,7 @@ use crate::InternalErrorCode;
 use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_sys::PAGE_SIZE;
 use wasmparser::{BlockType, FuncType, Operator, Type, ValType};
+use wasmtime_environ::WASM_PAGE_SIZE;
 
 use super::{wasm_transform::Body, SystemApiFunc};
 
@@ -211,6 +212,32 @@ pub(super) fn replacement_functions(
                             function_index: InjectedImports::InternalTrap as u32,
                         },
                         End,
+                        // check bounds on stable memory (fail if src + size > mem_size)
+                        LocalGet { local_index: 1 },
+                        I64ExtendI32U,
+                        LocalGet { local_index: 2 },
+                        I64ExtendI32U,
+                        I64Add,
+                        MemorySize {
+                            mem: stable_memory_index,
+                            mem_byte: 0, // This is ignored when serializing
+                        },
+                        I64Const {
+                            value: WASM_PAGE_SIZE as i64,
+                        },
+                        I64Mul,
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::StableMemoryOutOfBounds as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
+                        // perform the copy
                         LocalGet { local_index: 0 },
                         LocalGet { local_index: 1 },
                         I64ExtendI32U,
@@ -234,6 +261,57 @@ pub(super) fn replacement_functions(
                 Body {
                     locals: vec![],
                     instructions: vec![
+                        // if size is 0 we return
+                        // (correctness of the code that follows depends on the size being > 0)
+                        // note that we won't return errors if addresses are out of bounds
+                        // in this case
+                        LocalGet { local_index: 2 },
+                        I64Const { value: 0 },
+                        I64Eq,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        Return,
+                        End,
+                        // check bounds on stable memory (fail if dst + size > mem_size)
+                        LocalGet { local_index: 1 },
+                        LocalGet { local_index: 2 },
+                        I64Add,
+                        LocalGet { local_index: 1 },
+                        // overflow (size != 0 because we checked earlier)
+                        I64LeU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::StableMemoryOutOfBounds as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
+                        LocalGet { local_index: 1 },
+                        LocalGet { local_index: 2 },
+                        I64Add,
+                        MemorySize {
+                            mem: stable_memory_index,
+                            mem_byte: 0, // This is ignored when serializing
+                        },
+                        I64Const {
+                            value: WASM_PAGE_SIZE as i64,
+                        },
+                        I64Mul,
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::StableMemoryOutOfBounds as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
                         // check if these i64 hold valid i32 heap addresses
                         // check dst
                         LocalGet { local_index: 0 },
@@ -311,11 +389,36 @@ pub(super) fn replacement_functions(
                             function_index: InjectedImports::InternalTrap as u32,
                         },
                         End,
+                        // check bounds on stable memory (fail if dst + size > mem_size)
+                        LocalGet { local_index: 0 },
+                        I64ExtendI32U,
+                        LocalGet { local_index: 2 },
+                        I64ExtendI32U,
+                        I64Add,
+                        MemorySize {
+                            mem: stable_memory_index,
+                            mem_byte: 0, // This is ignored when serializing
+                        },
+                        I64Const {
+                            value: WASM_PAGE_SIZE as i64,
+                        },
+                        I64Mul,
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::StableMemoryOutOfBounds as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
                         // mark writes in the bytemap
 
                         // if size is 0 we return
                         // (correctness of the code that follows depends on the size being > 0)
-                        // note that we won't return errors if addresses are out of bounds
+                        // note that we won't return error if src address is out of bounds
                         // in this case
                         LocalGet { local_index: 2 },
                         I32Const { value: 0 },
@@ -384,6 +487,57 @@ pub(super) fn replacement_functions(
                 Body {
                     locals: vec![],
                     instructions: vec![
+                        // if size is 0 we return
+                        // (correctness of the code that follows depends on the size being > 0)
+                        // note that we won't return errors if addresses are out of bounds
+                        // in this case
+                        LocalGet { local_index: 2 },
+                        I64Const { value: 0 },
+                        I64Eq,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        Return,
+                        End,
+                        // check bounds on stable memory (fail if dst + size > mem_size)
+                        LocalGet { local_index: 0 },
+                        LocalGet { local_index: 2 },
+                        I64Add,
+                        LocalGet { local_index: 0 },
+                        // overflow (size != 0 because we checked earlier)
+                        I64LeU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::StableMemoryOutOfBounds as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
+                        LocalGet { local_index: 0 },
+                        LocalGet { local_index: 2 },
+                        I64Add,
+                        MemorySize {
+                            mem: stable_memory_index,
+                            mem_byte: 0, // This is ignored when serializing
+                        },
+                        I64Const {
+                            value: WASM_PAGE_SIZE as i64,
+                        },
+                        I64Mul,
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::StableMemoryOutOfBounds as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
                         // check if these i64 hold valid i32 heap addresses
                         // check src
                         LocalGet { local_index: 1 },
@@ -416,18 +570,6 @@ pub(super) fn replacement_functions(
                         Call {
                             function_index: InjectedImports::InternalTrap as u32,
                         },
-                        End,
-                        // if size is 0 we return
-                        // (correctness of the code that follows depends on the size being > 0)
-                        // note that we won't return errors if addresses are out of bounds
-                        // in this case
-                        LocalGet { local_index: 2 },
-                        I64Const { value: 0 },
-                        I64Eq,
-                        If {
-                            blockty: BlockType::Empty,
-                        },
-                        Return,
                         End,
                         // dst
                         LocalGet { local_index: 0 },

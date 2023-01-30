@@ -801,11 +801,23 @@ mod test {
                 ;; Reading into heap just after the second page should trap.
                 (call $stable_read (i32.const 131072) (i32.const 0) (i32.const 1))
             )
-            (func (export "canister_update test_len")
+            (func (export "canister_update test_len_heap")
                 ;; Grow stable memory by 1 page (64kb)
-                (drop (call $stable_grow (i32.const 1)))
-                ;; Reading into heap with dst_len after the second page should trap.
+                (drop (call $stable_grow (i32.const 2)))
+                ;; Reading into heap with dst + len after the second page should trap.
                 (call $stable_read (i32.const 65536) (i32.const 0) (i32.const 65537))
+            )
+            (func (export "canister_update test_len_stable")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 2)))
+                ;; Reading from stable mem with src + len after the second page should trap.
+                (call $stable_read (i32.const 0) (i32.const 65536) (i32.const 65537))
+            )
+            (func (export "canister_update test_len_both")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 2)))
+                ;; Reading with dst + len and src + len after the second page should trap.
+                (call $stable_read (i32.const 65536) (i32.const 65536) (i32.const 65537))
             )
             (memory 2 2)
         )"#;
@@ -817,25 +829,62 @@ mod test {
         let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
         let err = instance.run(func_ref("test_src")).unwrap_err();
         assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
         let err = instance.run(func_ref("test_dst")).unwrap_err();
         assert_eq!(err, Trapped(HeapOutOfBounds));
-        let err = instance.run(func_ref("test_len")).unwrap_err();
+
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_len_heap")).unwrap_err();
         assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_len_stable")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_len_both")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
 
         // native stable memory
         let mut config = ic_config::embedders::Config::default();
         config.feature_flags.wasm_native_stable_memory =
             ic_config::flag_status::FlagStatus::Enabled;
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_src")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_dst")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_len_heap")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_len_stable")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_wat(wat)
             .build();
-        let err = instance.run(func_ref("test_src")).unwrap_err();
-        assert_eq!(err, Trapped(HeapOutOfBounds));
-        let err = instance.run(func_ref("test_dst")).unwrap_err();
-        assert_eq!(err, Trapped(HeapOutOfBounds));
-        let err = instance.run(func_ref("test_len")).unwrap_err();
-        assert_eq!(err, Trapped(HeapOutOfBounds));
+        let err = instance.run(func_ref("test_len_both")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
     }
 
     #[test]
@@ -868,6 +917,24 @@ mod test {
                 ;; Reading into heap with len > u32::max should trap.
                 (call $stable64_read (i64.const 0) (i64.const 0) (i64.const 4294967296))
             )
+            (func (export "canister_update test_len_heap")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 2)))
+                ;; Reading into heap with dst + len after the second page should trap.
+                (call $stable64_read (i64.const 65536) (i64.const 0) (i64.const 65537))
+            )
+            (func (export "canister_update test_len_stable")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 2)))
+                ;; Reading from stable mem with src + len after the second page should trap.
+                (call $stable64_read (i64.const 0) (i64.const 65536) (i64.const 65537))
+            )
+            (func (export "canister_update test_len_both")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 2)))
+                ;; Reading with dst + len and src + len after the second page should trap.
+                (call $stable64_read (i64.const 65536) (i64.const 65536) (i64.const 65537))
+            )
             (memory 2 2)
         )"#;
 
@@ -876,33 +943,75 @@ mod test {
 
         // Host stable memory
         let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
-
         let err = instance.run(func_ref("test_src")).unwrap_err();
         assert_eq!(err, Trapped(StableMemoryOutOfBounds));
 
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
         let err = instance.run(func_ref("test_dst")).unwrap_err();
         assert_eq!(err, Trapped(HeapOutOfBounds));
 
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
         let err = instance.run(func_ref("test_len")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_len_heap")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_len_stable")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_len_both")).unwrap_err();
         assert_eq!(err, Trapped(StableMemoryOutOfBounds));
 
         // Native stable memory
         let mut config = ic_config::embedders::Config::default();
         config.feature_flags.wasm_native_stable_memory =
             ic_config::flag_status::FlagStatus::Enabled;
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_src")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_dst")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_len")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_len_heap")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_len_stable")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_wat(wat)
             .build();
-
-        let err = instance.run(func_ref("test_len")).unwrap_err();
-        assert_eq!(err, Trapped(HeapOutOfBounds));
-
-        let err = instance.run(func_ref("test_dst")).unwrap_err();
-        assert_eq!(err, Trapped(HeapOutOfBounds));
-
-        let err = instance.run(func_ref("test_len")).unwrap_err();
-        assert_eq!(err, Trapped(HeapOutOfBounds));
+        let err = instance.run(func_ref("test_len_both")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
     }
 
     #[test]
@@ -916,23 +1025,35 @@ mod test {
             (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
             (import "ic0" "stable_write"
                 (func $stable_write (param $offset i32) (param $src i32) (param $size i32)))
-            (func (export "canister_update test_src")
+            (func (export "canister_update test_dst")
                 ;; Grow stable memory by 1 page (64kb)
                 (drop (call $stable_grow (i32.const 1)))
                 ;; Writing to stable memory just after the page should trap.
                 (call $stable_write (i32.const 65536) (i32.const 0) (i32.const 1))
             )
-            (func (export "canister_update test_dst")
+            (func (export "canister_update test_src")
                 ;; Grow stable memory by 1 page (64kb)
                 (drop (call $stable_grow (i32.const 1)))
-                ;; Writing into heap just after the second page should trap.
+                ;; Reading from heap just after the second page should trap.
                 (call $stable_write (i32.const 0) (i32.const 131072) (i32.const 1))
             )
-            (func (export "canister_update test_len")
+            (func (export "canister_update test_len_heap")
                 ;; Grow stable memory by 1 page (64kb)
-                (drop (call $stable_grow (i32.const 1)))
-                ;; Writing into heap with dst_len after the second page should trap.
+                (drop (call $stable_grow (i32.const 2)))
+                ;; Writing to stable memory with src + len after the second page should trap.
                 (call $stable_write (i32.const 0) (i32.const 65537) (i32.const 65536))
+            )
+            (func (export "canister_update test_len_stable")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 2)))
+                ;; Writing to stable memory with dst + len after the second page should trap.
+                (call $stable_write (i32.const 65537) (i32.const 0) (i32.const 65536))
+            )
+            (func (export "canister_update test_len_both")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 2)))
+                ;; Writing to stable memory with dst + len and src + len after the second page should trap.
+                (call $stable_write (i32.const 65537) (i32.const 65537) (i32.const 65536))
             )
             (memory 2 2)
         )"#;
@@ -942,33 +1063,64 @@ mod test {
 
         // Host stable memory
         let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
-
         let err = instance.run(func_ref("test_src")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_dst")).unwrap_err();
         assert_eq!(err, Trapped(StableMemoryOutOfBounds));
 
-        let err = instance.run(func_ref("test_dst")).unwrap_err();
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_len_heap")).unwrap_err();
         assert_eq!(err, Trapped(HeapOutOfBounds));
 
-        let err = instance.run(func_ref("test_len")).unwrap_err();
-        assert_eq!(err, Trapped(HeapOutOfBounds));
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_len_stable")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_len_both")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
 
         // native stable memory
         let mut config = ic_config::embedders::Config::default();
         config.feature_flags.wasm_native_stable_memory =
             ic_config::flag_status::FlagStatus::Enabled;
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_src")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_dst")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_len_heap")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_len_stable")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_config(config)
             .with_wat(wat)
             .build();
-
-        let err = instance.run(func_ref("test_src")).unwrap_err();
-        assert_eq!(err, Trapped(HeapOutOfBounds));
-
-        let err = instance.run(func_ref("test_dst")).unwrap_err();
-        assert_eq!(err, Trapped(HeapOutOfBounds));
-
-        let err = instance.run(func_ref("test_len")).unwrap_err();
-        assert_eq!(err, Trapped(HeapOutOfBounds));
+        let err = instance.run(func_ref("test_len_both")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
     }
 
     #[test]
@@ -982,13 +1134,13 @@ mod test {
             (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
             (import "ic0" "stable64_write"
                 (func $stable64_write (param $offset i64) (param $src i64) (param $size i64)))
-            (func (export "canister_update test_src")
+            (func (export "canister_update test_dst")
                 ;; Grow stable memory by 1 page (64kb)
                 (drop (call $stable_grow (i32.const 1)))
                 ;; Writing to stable memory just after the page should trap.
                 (call $stable64_write (i64.const 65536) (i64.const 0) (i64.const 1))
             )
-            (func (export "canister_update test_dst")
+            (func (export "canister_update test_src")
                 ;; Grow stable memory by 1 page (64kb)
                 (drop (call $stable_grow (i32.const 1)))
                 ;; Writing into heap with src > i32::max should trap.
@@ -1000,6 +1152,24 @@ mod test {
                 ;; Writing into heap with len > u32::max should trap.
                 (call $stable64_write (i64.const 0) (i64.const 0) (i64.const 4294967296))
             )
+            (func (export "canister_update test_len_heap")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 2)))
+                ;; Writing to stable memory with src + len after the second page should trap.
+                (call $stable64_write (i64.const 0) (i64.const 65537) (i64.const 65536))
+            )
+            (func (export "canister_update test_len_stable")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 2)))
+                ;; Writing to stable memory with dst + len after the second page should trap.
+                (call $stable64_write (i64.const 65537) (i64.const 0) (i64.const 65536))
+            )
+            (func (export "canister_update test_len_both")
+                ;; Grow stable memory by 1 page (64kb)
+                (drop (call $stable_grow (i32.const 2)))
+                ;; Writing to stable memory with dst + len and src + len after the second page should trap.
+                (call $stable64_write (i64.const 65537) (i64.const 65537) (i64.const 65536))
+            )
 
             (memory 2 2)
         )"#;
@@ -1009,14 +1179,27 @@ mod test {
 
         // Host stable memory
         let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
-
         let err = instance.run(func_ref("test_src")).unwrap_err();
-        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
-
-        let err = instance.run(func_ref("test_dst")).unwrap_err();
         assert_eq!(err, Trapped(HeapOutOfBounds));
 
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_dst")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
         let err = instance.run(func_ref("test_len")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_len_heap")).unwrap_err();
+        assert_eq!(err, Trapped(HeapOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_len_stable")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new().with_wat(wat).build();
+        let err = instance.run(func_ref("test_len_both")).unwrap_err();
         assert_eq!(err, Trapped(StableMemoryOutOfBounds));
 
         // native stable memory
@@ -1024,17 +1207,45 @@ mod test {
         config.feature_flags.wasm_native_stable_memory =
             ic_config::flag_status::FlagStatus::Enabled;
         let mut instance = WasmtimeInstanceBuilder::new()
-            .with_config(config)
+            .with_config(config.clone())
             .with_wat(wat)
             .build();
-
         let err = instance.run(func_ref("test_src")).unwrap_err();
         assert_eq!(err, Trapped(HeapOutOfBounds));
 
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
         let err = instance.run(func_ref("test_dst")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_len")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_len_heap")).unwrap_err();
         assert_eq!(err, Trapped(HeapOutOfBounds));
 
-        let err = instance.run(func_ref("test_len")).unwrap_err();
-        assert_eq!(err, Trapped(HeapOutOfBounds));
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_len_stable")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config)
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("test_len_both")).unwrap_err();
+        assert_eq!(err, Trapped(StableMemoryOutOfBounds));
     }
 }
