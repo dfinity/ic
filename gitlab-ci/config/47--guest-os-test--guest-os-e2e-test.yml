@@ -88,11 +88,6 @@ boundary-nodes-sev-snp-pre-master:
   # See: https://dfinity.atlassian.net/browse/VER-1863
   allow_failure: true
 
-tecdsa-pre-master:
-  extends: .system-tests
-  variables:
-    SUITE_NAME: "tecdsa_pre_master"
-
 test-prod-test-driver-e2e:
   extends:
    - .system-tests

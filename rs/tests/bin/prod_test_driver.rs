@@ -299,39 +299,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
-    m.add_suite(
-        suite(
-            "tecdsa_pre_master",
-            vec![
-                pot_with_setup(
-                    "tecdsa_remove_nodes_pot",
-                    tecdsa::tecdsa_remove_nodes_test::config,
-                    par(vec![sys_t(
-                        "test_tecdsa_remove_nodes",
-                        tecdsa::tecdsa_remove_nodes_test::test,
-                    )]),
-                ),
-                pot_with_setup(
-                    "tecdsa_signature_life_cycle",
-                    tecdsa::tecdsa_signature_test::config_without_ecdsa_on_nns,
-                    seq(vec![sys_t(
-                        "test_threshold_ecdsa_life_cycle",
-                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_life_cycle,
-                    )]),
-                ),
-                pot_with_setup(
-                    "tecdsa_signature_timeout",
-                    tecdsa::tecdsa_signature_test::config_without_ecdsa_on_nns,
-                    seq(vec![sys_t(
-                        "test_threshold_ecdsa_signature_timeout",
-                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_timeout,
-                    )]),
-                ),
-            ],
-        )
-        .with_alert(ENG_CONSENSUS_CHANNEL),
-    );
-
     m.add_suite(suite(
         "pre_master",
         vec![
