@@ -8,7 +8,6 @@ host-os-diskimg:
   artifacts:
     paths:
       - ic-os/hostos/build-out/disk-img${BUILD_EXTRA_SUFFIX}/*
-    expire_in: 2 days
   variables:
       BUILD_EXTRA_ARGS: ""
       BUILD_EXTRA_SUFFIX: ""
