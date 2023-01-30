@@ -3,11 +3,17 @@
 .ic-build-image:
   image:
     name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:7082dec721da424cc898e21879dda15848e37e32c1b4f8616efdb71c24c60084"
+  artifacts:
+    expire_in: 1 day
 
 .ic-build-nix-image:
   image:
     name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:7082dec721da424cc898e21879dda15848e37e32c1b4f8616efdb71c24c60084"
+  artifacts:
+    expire_in: 1 day
 
 .ic-build-bazel-image:
   image:
     name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:7082dec721da424cc898e21879dda15848e37e32c1b4f8616efdb71c24c60084"
+  artifacts:
+    expire_in: 1 day
