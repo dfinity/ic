@@ -182,6 +182,18 @@ name = "ic-systest-tecdsa-key-rotation"
 path = "bin/tecdsa_key_rotation_test.rs"
 
 [[bin]]
+name = "ic-systest-tecdsa-remove-nodes"
+path = "bin/tecdsa_remove_nodes_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-signature-life-cycle"
+path = "bin/tecdsa_signature_life_cycle_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-signature-timeout"
+path = "bin/tecdsa_signature_timeout_test.rs"
+
+[[bin]]
 name = "ic-systest-btc-get-balance"
 path = "bin/btc_get_balance_test.rs"
 

@@ -19,7 +19,7 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationExt,
+    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationExt,
 };
 use crate::nns::remove_nodes_via_endpoint;
 use crate::tecdsa::tecdsa_signature_test::{
@@ -46,6 +46,7 @@ const REMOVE_NODES_COUNT: usize = (NODES_COUNT / 3) + 1;
 const RND_SEED: u64 = 42;
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
