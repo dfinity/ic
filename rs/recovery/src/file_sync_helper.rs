@@ -65,7 +65,7 @@ pub fn rsync(
     key_file: Option<&PathBuf>,
 ) -> RecoveryResult<Option<String>> {
     let mut rsync = Command::new("rsync");
-    rsync.arg("--delete").arg("-acP");
+    rsync.arg("--delete").arg("-acP").arg("--no-g");
     excludes
         .iter()
         .map(|e| format!("--exclude={}", e))

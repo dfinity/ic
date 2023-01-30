@@ -129,14 +129,6 @@ rosetta-pre-master:
       . "${CI_PROJECT_DIR}/rs/tests/prepare-rosetta-deps.sh"
     - *run-farm-based-test
 
-subnet-recovery-pre-master:
-  extends: .system-tests
-  variables:
-    SUITE_NAME: "subnet_recovery"
-  script:
-    - |
-    - *run-farm-based-test
-
 upgrade-compatibility-pre-master:
   extends: .system-tests
   needs:

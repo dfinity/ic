@@ -30,6 +30,7 @@ end::catalog[] */
 use super::utils::rw_message::install_nns_and_check_progress;
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::test_env::SshKeyGen;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message,
@@ -44,7 +45,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
 use slog::info;
 use std::convert::TryFrom;
-use std::env;
 
 const DKG_INTERVAL: u64 = 9;
 const APP_NODES: i32 = 3;
@@ -53,6 +53,8 @@ const UNASSIGNED_NODES: i32 = 3;
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
 pub fn setup(app_nodes: i32, unassigned_nodes: i32, env: TestEnv) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     let mut ic = InternetComputer::new()
         .add_subnet(
             Subnet::fast_single_node(SubnetType::System)
@@ -69,7 +71,6 @@ pub fn setup(app_nodes: i32, unassigned_nodes: i32, env: TestEnv) {
 
     ic.setup_and_start(&env)
         .expect("failed to setup IC under test");
-
     install_nns_and_check_progress(env.topology_snapshot());
 }
 
@@ -108,12 +109,8 @@ pub fn test_no_upgrade_without_tecdsa(env: TestEnv) {
 pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     let logger = env.logger();
 
-    let master_version = match env::var("IC_VERSION_ID") {
-        Ok(ver) => ver,
-        Err(_) => panic!("Environment variable $IC_VERSION_ID is not set!"),
-    };
-    info!(logger, "IC_VERSION_ID: {}", master_version);
-    let master_version = ReplicaVersion::try_from(master_version).unwrap();
+    let master_version = env.get_initial_replica_version().unwrap();
+    info!(logger, "IC_VERSION_ID: {master_version:?}");
     let topology_snapshot = env.topology_snapshot();
 
     // choose a node from the nns subnet
@@ -211,11 +208,12 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     let pub_key = file_sync_helper::read_file(&ssh_authorized_pub_keys_dir.join(ADMIN))
         .expect("Couldn't read public key");
 
+    let recovery_dir = env.get_dependency_path("rs/tests");
+    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"))
+        .expect("Failed to set sandbox env vars");
+
     let recovery_args = RecoveryArgs {
-        dir: tempfile::tempdir()
-            .expect("Could not create a temp dir")
-            .path()
-            .to_path_buf(),
+        dir: recovery_dir,
         nns_url: nns_node.get_public_url(),
         replica_version: Some(master_version.clone()),
         key_file: Some(ssh_authorized_priv_keys_dir.join(ADMIN)),
