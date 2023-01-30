@@ -7,6 +7,8 @@ import pytest
 from data_source.jira_finding_data_source import JiraFinding
 from model.dependency import Dependency
 from model.finding import Finding
+from model.repository import Project
+from model.repository import Repository
 from model.security_risk import SecurityRisk
 from model.user import User
 from model.vulnerability import Vulnerability
@@ -21,16 +23,17 @@ def jira_lib_mock():
 
 class FakeBazel(Bazel):
     def __init__(self, fake_type: int):
+        super().__init__()
         self.fake_type = fake_type
 
-    def get_findings(self, repository: str, scanner: str) -> typing.List[Finding]:
+    def get_findings(self, repository: Repository, scanner: str) -> typing.List[Finding]:
         if self.fake_type == 1:
             return []
 
         if self.fake_type == 2:
             return [
                 Finding(
-                    repository=repository,
+                    repository=repository.name,
                     scanner=scanner,
                     vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
                     vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
@@ -44,7 +47,7 @@ class FakeBazel(Bazel):
         if self.fake_type == 3:
             return [
                 Finding(
-                    repository=repository,
+                    repository=repository.name,
                     scanner=scanner,
                     vulnerable_dependency=Dependency(
                         "VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"], "VID2": ["1.1", "2.0"]}
@@ -91,7 +94,7 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
     scanner_job = BazelICScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     scanner = "BAZEL_IC"
-    repository = "ic"
+    repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
     finding = fake_bazel.get_findings(repository, scanner)[0]
     finding.risk_assessor = [User("mickey", "Mickey Mouse")]
 
@@ -112,9 +115,9 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
 def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     # one finding, present in JIRA
     scanner = "BAZEL_IC"
-    repository = "ic"
+    repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
     jira_finding = JiraFinding(
-        repository=repository,
+        repository=repository.name,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
         vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
