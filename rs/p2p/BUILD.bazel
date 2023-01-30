@@ -39,9 +39,9 @@ MACRO_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/artifact_manager",
-    "//rs/canister_http/client",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
+    "//rs/https_outcalls/client",
     "//rs/interfaces/transport/mocks",
     "//rs/registry/client",
     "//rs/registry/fake",
