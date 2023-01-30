@@ -22,7 +22,7 @@ use strum_macros::IntoStaticStr;
 pub use ic_ledger_core::{
     block::BlockIndex,
     timestamp::TimeStamp,
-    tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY},
+    tokens::{SignedTokens, Tokens, TOKEN_SUBDIVIDABLE_BY},
 };
 
 pub mod account_identifier;
@@ -92,7 +92,7 @@ pub enum Operation {
     Approve {
         from: AccountIdentifier,
         spender: AccountIdentifier,
-        allowance: Tokens,
+        allowance: SignedTokens,
         expires_at: Option<TimeStamp>,
         fee: Tokens,
     },
@@ -612,7 +612,7 @@ pub enum CandidOperation {
     Approve {
         from: AccountIdBlob,
         spender: AccountIdBlob,
-        allowance: Tokens,
+        allowance_e8s: i128,
         fee: Tokens,
         expires_at: Option<TimeStamp>,
     },
@@ -656,7 +656,7 @@ impl From<Operation> for CandidOperation {
             } => Self::Approve {
                 from: from.to_address(),
                 spender: spender.to_address(),
-                allowance,
+                allowance_e8s: allowance.to_i128(),
                 fee,
                 expires_at,
             },
