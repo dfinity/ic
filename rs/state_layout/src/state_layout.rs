@@ -1690,8 +1690,10 @@ impl TryFrom<pb_bitcoin::BitcoinStateBits> for BitcoinStateBits {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pb_bitcoin::BitcoinStateBits) -> Result<Self, Self::Error> {
+        // NOTE: The `unwrap_or_default` here is needed temporarily for backward compatibility.
         let adapter_queues: bitcoin_state::AdapterQueues =
-            try_from_option_field(value.adapter_queues, "BitcoinStateBits::adapter_queues")?;
+            try_from_option_field(value.adapter_queues, "BitcoinStateBits::adapter_queues")
+                .unwrap_or_default();
 
         // NOTE: The `unwrap_or_default` here is needed temporarily for backward compatibility.
         // TODO(EXC-1094): Replace the `unwrap_or_default` with an error once this change
@@ -2222,5 +2224,11 @@ mod test {
             state_layout.remove_checkpoint_when_unused(Height::new(1));
             std::mem::drop(cp1);
         });
+    }
+
+    #[test]
+    fn test_loading_default_bitcoin_state() {
+        let pb_bitcoin_state_bits = pb_bitcoin::BitcoinStateBits::default();
+        BitcoinStateBits::try_from(pb_bitcoin_state_bits).unwrap();
     }
 }
