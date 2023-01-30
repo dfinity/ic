@@ -1742,6 +1742,20 @@ fn can_state_sync_from_cache() {
         let (_height, mut state) = src_state_manager.take_tip();
         insert_dummy_canister(&mut state, canister_test_id(100));
         insert_dummy_canister(&mut state, canister_test_id(200));
+
+        // Modify the first canister to ensure that its chunks are not identical to the
+        // other canister
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .stable_memory
+            .page_map
+            .update(&[(PageIndex::new(0), &[1u8; PAGE_SIZE])]);
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(0), &[2u8; PAGE_SIZE])]);
+
         let time_source = ic_test_utilities::FastForwardTimeSource::new();
 
         src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
@@ -1760,8 +1774,11 @@ fn can_state_sync_from_cache() {
         assert_error_counters(src_metrics);
 
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            // Not all chunk ids to be omitted will work for the purpose of this test
+            // They have to be (1) not included in a file group chunk and (2) not identical
+            // to another chunk that is not omitted.
             let omit: HashSet<ChunkId> =
-                maplit::hashset! {ChunkId::new(1), ChunkId::new(FILE_GROUP_CHUNK_ID_OFFSET)};
+                maplit::hashset! {ChunkId::new(4), ChunkId::new(FILE_GROUP_CHUNK_ID_OFFSET)};
 
             // First state sync is destroyed before completion
             {
