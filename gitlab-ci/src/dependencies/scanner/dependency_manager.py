@@ -14,9 +14,12 @@ import parse
 from cvss import CVSS3
 from model.dependency import Dependency
 from model.finding import Finding
+from model.repository import Repository
 from model.vulnerability import Vulnerability
+from nested_lookup import nested_lookup
 from packaging import version
 from scanner.process_executor import ProcessExecutor
+from semver import satisfies
 
 import git_changes
 
@@ -25,6 +28,7 @@ PROJECT_ROOT = pathlib.Path(
 )
 RUSTSEC_URL = "https://rustsec.org/advisories/"
 CRATES_IO_URL = "https://crates.io/crates/"
+NPM_URL = "https://www.npmjs.com/package/"
 
 
 class DependencyManager(abc.ABC):
@@ -36,7 +40,7 @@ class DependencyManager(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def get_findings(self, repository: str, scanner: str) -> typing.List[Finding]:
+    def get_findings(self, repository: Repository, scanner: str) -> typing.List[Finding]:
         """Return list of vulnerable dependencies"""
         raise NotImplementedError
 
@@ -233,7 +237,7 @@ class Bazel(DependencyManager):
 
         return changed
 
-    def get_findings(self, repository: str, scanner: str) -> typing.List[Finding]:
+    def get_findings(self, repository: Repository, scanner: str) -> typing.List[Finding]:
         finding_builder: typing.List[Finding] = []
         # Unless cargo dependency is completely removed from the system,
         # set(cargo) - set(bazel) \neq 0
@@ -290,7 +294,7 @@ class Bazel(DependencyManager):
                     # Should be consumed by the scanner and updated accordingly.
                     finding_builder.append(
                         Finding(
-                            repository=repository,
+                            repository=repository.name,
                             scanner=scanner,
                             vulnerable_dependency=vulnerable_dependency,
                             vulnerabilities=[vulnerability],
@@ -371,3 +375,212 @@ class Bazel(DependencyManager):
 
         project_builder.discard("")
         return sorted(list(project_builder))
+
+
+class NPM(DependencyManager):
+    """Helper for NPM-related functions."""
+
+    def __init__(self, root=PROJECT_ROOT):
+        """Construct default object."""
+        self.root = root
+
+    def get_dependency_diff(self):
+        raise NotImplementedError
+
+    def get_modified_packages(self):
+        raise NotImplementedError
+
+    def has_dependencies_changed(self):
+        raise NotImplementedError
+
+    @staticmethod
+    def __clone_repository_from_url(url: str, path: pathlib.Path):
+        environment = {}
+        cwd = path
+        command = f"git clone {url}"
+        _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
+        return
+
+    @staticmethod
+    def __npm_audit_output(path: pathlib.Path) -> typing.Dict:
+        audit_out: typing.Dict = {}
+
+        environment = {}
+        cwd = path
+        command = "npm audit --json"
+
+        result = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
+        audit_out = json.loads(result)
+
+        return audit_out
+
+    @staticmethod
+    def __npm_list_output(path: pathlib.Path) -> typing.Dict:
+        list_out: typing.Dict = {}
+        environment = {}
+        cwd = path
+        command = "npm install"
+        _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
+
+        command = "npm list --all --json"
+
+        result = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
+        list_out = json.loads(result)
+        return list_out
+
+    @staticmethod
+    def __vulnerability_from_npm_audit(vulnerability: typing.Dict) -> Vulnerability:
+        score = -1
+
+        if "cvss" in vulnerability and "score" in vulnerability["cvss"] and vulnerability["cvss"]["score"]:
+            score = int(vulnerability["cvss"]["score"])
+
+        return Vulnerability(
+            id=vulnerability["url"],
+            name=vulnerability["url"].split("/")[-1],
+            description=vulnerability["title"],
+            score=score,
+        )
+
+    @staticmethod
+    def __get_first_level_dependencies_from_npm_list(
+        npm_list: typing.Dict, dependency: str, range_str: typing.List[str]
+    ) -> typing.List[Dependency]:
+        first_level_dependencies: typing.List[Dependency] = []
+
+        for dependency_name, dependenices in npm_list["dependencies"].items():
+            results = nested_lookup(dependency, dependenices)
+
+            # vulnerable dependency isn't used by this dependency
+            if not results:
+                continue
+
+            vulnerable_dependency_used = False
+            for result in results:
+                for ranges in range_str:
+                    if satisfies(result["version"], ranges):
+                        vulnerable_dependency_used = True
+
+            # vulnerable version of this dependency isn't used by this dependency
+            if not vulnerable_dependency_used:
+                continue
+
+            first_level_dependencies.append(
+                Dependency(
+                    id=f"{NPM_URL}{dependency_name}/v/{dependenices['version']}",
+                    name=dependency_name,
+                    version=dependenices["version"],
+                )
+            )
+        return first_level_dependencies
+
+    @staticmethod
+    def __get_vulnerable_dependency_from_npm_list(
+        npm_list: typing.Dict, dependency: str, range_str: str
+    ) -> typing.List[Dependency]:
+        results = nested_lookup(dependency, npm_list)
+        if not results:
+            raise RuntimeError(f"nested lookup failed for dependency {dependency} with error (no dependency)")
+
+        vulnerable_dependency: typing.List = []
+        for result in results:
+            if not satisfies(result["version"], range_str):
+                continue
+
+            if result["version"] in [dependency.version for dependency in vulnerable_dependency]:
+                continue
+            # TODO : How do we get fix version ?
+            # fixAvailable is either a bool or top level dependency.
+            # npm audit fix --dry-run --list doesn't give anything useful.
+            # npm audit fix && npm list --all might give the fix version but complicated
+            vulnerable_dependency.append(
+                Dependency(
+                    id=f"{NPM_URL}{dependency}/v/{result['version']}", name=dependency, version=result["version"]
+                )
+            )
+
+        if len(vulnerable_dependency) == 0:
+            raise RuntimeError(f"nested lookup failed for dependency {dependency} with error (no vulnerable versions)")
+
+        return vulnerable_dependency
+
+    def __findings_helper(
+        self, repository: str, scanner: str, path: pathlib.Path, project: str
+    ) -> typing.List[Finding]:
+        finding_builder: typing.List[Finding] = []
+
+        npm_audit_output = self.__npm_audit_output(path)
+
+        # no vulnerabilities
+        if "vulnerabilities" not in npm_audit_output or len(npm_audit_output["vulnerabilities"]) == 0:
+            return finding_builder
+
+        npm_list_output = self.__npm_list_output(path)
+
+        for dependency_key, dependency_value in npm_audit_output["vulnerabilities"].items():
+            vulnerable_dependencies = self.__get_vulnerable_dependency_from_npm_list(
+                npm_list_output, dependency_key, dependency_value["range"]
+            )
+
+            if not vulnerable_dependencies:
+                continue
+
+            for vulnerable_dependency in vulnerable_dependencies:
+                vulnerabilities: typing.List[Vulnerability] = []
+
+                ranges_to_check = []
+
+                if "via" in dependency_value and len(dependency_value["via"]) > 0:
+                    for vulnerability_value in dependency_value["via"]:
+                        # npm provides transitive dependency here
+                        if type(vulnerability_value) is not dict:
+                            continue
+
+                        if not satisfies(vulnerable_dependency.version, vulnerability_value["range"]):
+                            continue
+
+                        vulnerabilities.append(self.__vulnerability_from_npm_audit(vulnerability_value))
+
+                        if vulnerability_value["range"] not in ranges_to_check:
+                            ranges_to_check.append(vulnerability_value["range"])
+
+                # all vulnerabilites were via transitive dependency, so we skip
+                if len(vulnerabilities) == 0:
+                    continue
+
+                first_level_dependecies: typing.List[Dependency] = self.__get_first_level_dependencies_from_npm_list(
+                    npm_list_output, dependency_key, ranges_to_check
+                )
+                score = max(vulnerability.score for vulnerability in vulnerabilities)
+
+                finding_builder.append(
+                    Finding(
+                        repository=repository,
+                        scanner=scanner,
+                        vulnerable_dependency=vulnerable_dependency,
+                        vulnerabilities=vulnerabilities,
+                        first_level_dependencies=first_level_dependecies,
+                        projects=[project],
+                        risk_assessor=[],
+                        score=score,
+                    )
+                )
+        return finding_builder
+
+    def get_findings(self, repository: Repository, scanner: str) -> typing.List[Finding]:
+        finding_builder: typing.List[Finding] = []
+        if repository.name != "ic":
+            # we are cloning an external repository
+            top_level_path = self.root.parent / repository.name
+            if top_level_path.is_dir():
+                # git clone fails if the directory already exists
+                shutil.rmtree(top_level_path)
+            self.__clone_repository_from_url(repository.url, self.root.parent)
+
+        for project in repository.projects:
+            path = self.root.parent / project.path
+            if not path.is_dir():
+                raise RuntimeError(f"path {path} is invalid")
+            finding_builder.extend(self.__findings_helper(repository.name, scanner, path, project.name))
+
+        return finding_builder

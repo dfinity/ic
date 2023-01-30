@@ -8,7 +8,7 @@ python-tests:
     artifacts: false
   stage: test
   variables: 
-    PYTHONPATH : ${CI_PROJECT_DIR}/gitlab-ci/src
+    PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
   artifacts:
     reports:
       junit: test_report.xml
