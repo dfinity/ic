@@ -10,11 +10,11 @@ rust_library(
     deps = [
         "//rs/artifact_manager",
         "//rs/artifact_pool",
-        "//rs/canister_http/client",
         "//rs/config",
         "//rs/consensus",
         "//rs/crypto/tls_interfaces",
         "//rs/cycles_account_manager",
+        "//rs/https_outcalls/client",
         "//rs/ingress_manager",
         "//rs/interfaces",
         "//rs/interfaces/canister_http_adapter_client",

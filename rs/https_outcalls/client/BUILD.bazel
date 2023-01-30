@@ -7,8 +7,8 @@ package(default_visibility = [
 
 DEPENDENCIES = [
     "//rs/async_utils",
-    "//rs/canister_http/service",
     "//rs/config",
+    "//rs/https_outcalls/service",
     "//rs/interfaces",
     "//rs/interfaces/canister_http_adapter_client",
     "//rs/monitoring/adapter_metrics",

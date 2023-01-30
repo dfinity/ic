@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 ic-artifact-manager = { path = "../../artifact_manager" }
 ic-artifact-pool = { path = "../../artifact_pool" }
-ic-canister-http-adapter-client = { path = "../../canister_http/client" }
+ic-canister-http-adapter-client = { path = "../../https_outcalls/client" }
 ic-config = { path = "../../config" }
 ic-consensus = { path = "../../consensus" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
