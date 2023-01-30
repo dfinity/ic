@@ -33,7 +33,7 @@
     // ============================================
     artifact_pool: {
         consensus_pool_path: "/var/lib/ic/data/ic_consensus_pool",
-        ingress_pool_max_count: 5000,
+        ingress_pool_max_count: 10000,
         ingress_pool_max_bytes: 100000000,
         // Backup configuration
         backup: {
