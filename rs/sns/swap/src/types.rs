@@ -284,12 +284,10 @@ impl Params {
             ));
         }
 
-        // The maximum dissolve delay is one dissolve_delay_interval_seconds longer than count as
-        // the algorithm adds a random jitter in addition to the count * dissolve_delay_interval_seconds.
         let maximum_dissolve_delay = neuron_basket
             .count
-            .saturating_add(1)
-            .saturating_mul(neuron_basket.dissolve_delay_interval_seconds);
+            .saturating_mul(neuron_basket.dissolve_delay_interval_seconds)
+            .saturating_add(1);
 
         if maximum_dissolve_delay == u64::MAX {
             return Err(
@@ -566,6 +564,7 @@ pub enum TransferResult {
 }
 
 /// Intermediate struct used when generating the basket of neurons for investors.
+#[derive(PartialEq, Eq, Debug)]
 pub(crate) struct ScheduledVestingEvent {
     /// The dissolve_delay of the neuron
     pub(crate) dissolve_delay_seconds: u64,

@@ -41,8 +41,10 @@ use ic_sns_swap::{
         Lifecycle::{Aborted, Committed, Open, Pending, Unspecified},
         SetDappControllersRequest, SetDappControllersResponse, *,
     },
-    swap::principal_to_subaccount,
-    swap::CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES,
+    swap::{
+        apportion_approximately_equally, principal_to_subaccount,
+        CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES,
+    },
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use maplit::{btreemap, hashset};
@@ -880,7 +882,7 @@ fn test_scenario_happy() {
             .expect("Transaction fee not known.");
         let neuron_basket_transfer_fund_calls =
             |amount_sns_tokens_e8s: u64, count: u64, investor: TestInvestor| -> Vec<LedgerExpect> {
-                let split_amount = Swap::split(amount_sns_tokens_e8s, count);
+                let split_amount = apportion_approximately_equally(amount_sns_tokens_e8s, count);
 
                 let starting_memo = match investor {
                     TestInvestor::CommunityFund(starting_memo) => starting_memo,
@@ -1172,7 +1174,7 @@ async fn test_finalize_swap_ok() {
     let neuron_basket_transfer_fund_calls =
         |amount_sns_tokens_e8s: u64, count: u64, buyer: u64| -> Vec<LedgerCall> {
             let buyer_principal_id = PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap();
-            let split_amount = Swap::split(amount_sns_tokens_e8s, count);
+            let split_amount = apportion_approximately_equally(amount_sns_tokens_e8s, count);
             split_amount
                 .iter()
                 .enumerate()

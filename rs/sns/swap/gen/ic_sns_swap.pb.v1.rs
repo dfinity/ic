@@ -346,11 +346,7 @@ pub mod params {
         /// evenly distributed across the `count` neurons.
         #[prost(uint64, tag = "1")]
         pub count: u64,
-        /// The interval in seconds that the dissolve delay of each neuron in the
-        /// basket will be increased by. The 0th neuron created will have its dissolve
-        /// delay set to 0, and each subsequent neuron will have a dissolve delay
-        /// calculated by:
-        /// `(i * dissolve_delay_interval_seconds) + rand(0..dissolve_delay_interval_seconds)`
+        /// The amount of additional time it takes for the next neuron to dissolve.
         #[prost(uint64, tag = "2")]
         pub dissolve_delay_interval_seconds: u64,
     }
