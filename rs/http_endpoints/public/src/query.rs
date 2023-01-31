@@ -182,10 +182,13 @@ impl Service<Request<Vec<u8>>> for QueryService {
         let malicious_flags = self.malicious_flags.clone();
         let validator_executor = self.validator_executor.clone();
         Box::pin(async move {
-            match validator_executor
-                .get_authorized_canisters(&request, registry_client, &malicious_flags)
-                .await
-            {
+            let get_authorized_canisters_fut = validator_executor.get_authorized_canisters(
+                request.clone(),
+                registry_client,
+                malicious_flags,
+            );
+
+            match get_authorized_canisters_fut.await {
                 Ok(targets) => {
                     if !targets.contains(&request.content().receiver) {
                         let res = make_plaintext_response(StatusCode::FORBIDDEN, "".to_string());

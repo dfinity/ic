@@ -1,8 +1,9 @@
 // The valiadator executor provides non blocking access to the crypto services needed in the http handler.
 use crate::{common::validation_error_to_http_error, HttpError};
+use futures::FutureExt;
 use http::StatusCode;
 use ic_interfaces::crypto::IngressSigVerifier;
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::ReplicaLogger;
 use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::{HttpRequest, HttpRequestContent, SignedIngress},
@@ -10,7 +11,8 @@ use ic_types::{
     RegistryVersion,
 };
 use ic_validator::{get_authorized_canisters, validate_request, CanisterIdSet};
-use std::sync::{Arc, Mutex};
+use std::future::Future;
+use std::sync::Arc;
 use threadpool::ThreadPool;
 use tokio::sync::oneshot;
 
@@ -20,7 +22,7 @@ const VALIDATOR_EXECUTOR_THREADS: usize = 1;
 #[derive(Clone)]
 pub(crate) struct ValidatorExecutor {
     validator: Arc<dyn IngressSigVerifier + Send + Sync>,
-    threadpool: Arc<Mutex<ThreadPool>>,
+    threadpool: ThreadPool,
     logger: ReplicaLogger,
 }
 
@@ -31,78 +33,73 @@ impl ValidatorExecutor {
     ) -> Self {
         ValidatorExecutor {
             validator,
-            threadpool: Arc::new(Mutex::new(ThreadPool::new(VALIDATOR_EXECUTOR_THREADS))),
+            threadpool: ThreadPool::new(VALIDATOR_EXECUTOR_THREADS),
             logger,
         }
     }
 
-    pub async fn validate_signed_ingress(
+    pub fn validate_signed_ingress(
         &self,
-        request: &SignedIngress,
+        request: SignedIngress,
         registry_version: RegistryVersion,
-        malicious_flags: &MaliciousFlags,
-    ) -> Result<(), HttpError> {
+        malicious_flags: MaliciousFlags,
+    ) -> impl Future<Output = Result<(), HttpError>> {
         let (tx, rx) = oneshot::channel();
 
-        let r = request.clone();
-        let mf = malicious_flags.clone();
+        let message_id = request.id();
         let validator = self.validator.clone();
-        self.threadpool.lock().unwrap().execute(move || {
+        self.threadpool.execute(move || {
             if !tx.is_closed() {
                 let _ = tx.send(validate_request(
-                    r.as_ref(),
+                    request.as_ref(),
                     validator.as_ref(),
                     current_time(),
                     registry_version,
-                    &mf,
+                    &malicious_flags,
                 ));
             }
         });
-        rx.await
-            .map_err(|recv_err| HttpError {
+        let log = self.logger.clone();
+        rx.map(move |v| match v {
+            Err(recv_err) => Err(HttpError {
                 status: StatusCode::INTERNAL_SERVER_ERROR,
-                message: format!("Internal Error: {}.", recv_err),
-            })?
-            .map_err(|val_err| {
-                debug!(self.logger, "Failed to validate request: {}", val_err);
-                validation_error_to_http_error(request.id(), val_err, &self.logger)
-            })
+                message: format!("Internal Error: {:?}.", recv_err),
+            }),
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(val_err)) => Err(validation_error_to_http_error(message_id, val_err, &log)),
+        })
     }
 
-    pub async fn get_authorized_canisters<C: HttpRequestContent + Clone + Send + Sync + 'static>(
+    pub fn get_authorized_canisters<C: HttpRequestContent + Clone + Send + Sync + 'static>(
         &self,
-        request: &HttpRequest<C>,
+        request: HttpRequest<C>,
         registry_version: RegistryVersion,
-        #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
-    ) -> Result<CanisterIdSet, HttpError> {
+        #[allow(unused_variables)] malicious_flags: MaliciousFlags,
+    ) -> impl Future<Output = Result<CanisterIdSet, HttpError>> {
         let (tx, rx) = oneshot::channel();
 
-        let r = request.clone();
-        let mf = malicious_flags.clone();
+        let message_id = request.id();
         let validator = self.validator.clone();
-        self.threadpool.lock().unwrap().execute(move || {
+        self.threadpool.execute(move || {
             if !tx.is_closed() {
                 let _ = tx.send(get_authorized_canisters(
-                    &r,
+                    &request,
                     validator.as_ref(),
                     current_time(),
                     registry_version,
-                    &mf,
+                    &malicious_flags,
                 ));
             }
         });
-        rx.await
-            .map_err(|recv_err| HttpError {
+        let log = self.logger.clone();
+        rx.map(move |v| match v {
+            Err(recv_err) => Err(HttpError {
                 status: StatusCode::INTERNAL_SERVER_ERROR,
-                message: format!("Internal Error: {}.", recv_err),
-            })?
-            .map_err(|val_err| {
-                debug!(
-                    self.logger,
-                    "Failed to get authorized canister: {}", val_err
-                );
-                validation_error_to_http_error(request.id(), val_err, &self.logger)
-            })
+                message: format!("Internal Error: {:?}.", recv_err),
+            }),
+            Ok(Ok(canister_id_set)) => Ok(canister_id_set),
+            Ok(Err(val_err)) => Err(validation_error_to_http_error(message_id, val_err, &log)),
+        })
     }
 }
 
@@ -156,9 +153,9 @@ mod tests {
         assert_eq!(
             validator
                 .get_authorized_canisters(
-                    &request,
+                    request.clone(),
                     RegistryVersion::from(0),
-                    &MaliciousFlags::default()
+                    MaliciousFlags::default()
                 )
                 .await,
             get_authorized_canisters(
@@ -188,9 +185,9 @@ mod tests {
         assert_eq!(
             validator
                 .validate_signed_ingress(
-                    &request,
+                    request.clone(),
                     RegistryVersion::from(0),
-                    &MaliciousFlags::default()
+                    MaliciousFlags::default()
                 )
                 .await,
             validate_request(

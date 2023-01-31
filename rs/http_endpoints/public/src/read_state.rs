@@ -169,10 +169,13 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
         let validator_executor = self.validator_executor.clone();
         let metrics = self.metrics.clone();
         Box::pin(async move {
-            let targets = match validator_executor
-                .get_authorized_canisters(&request, registry_client, &malicious_flags)
-                .await
-            {
+            let targets_fut = validator_executor.get_authorized_canisters(
+                request.clone(),
+                registry_client,
+                malicious_flags,
+            );
+
+            let targets = match targets_fut.await {
                 Ok(targets) => targets,
                 Err(http_err) => {
                     let res = make_plaintext_response(http_err.status, http_err.message);
