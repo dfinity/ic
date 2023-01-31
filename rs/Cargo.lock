@@ -5227,6 +5227,7 @@ dependencies = [
  "ic-crypto-secrets-containers",
  "ic-crypto-sha",
  "ic-crypto-test-utils",
+ "ic-crypto-test-utils-local-csp-vault",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-time",
@@ -5637,6 +5638,20 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
  "ic-types",
+]
+
+[[package]]
+name = "ic-crypto-test-utils-local-csp-vault"
+version = "0.8.0"
+dependencies = [
+ "ic-crypto-internal-csp",
+ "ic-crypto-internal-seed",
+ "ic-crypto-internal-threshold-sig-bls12381",
+ "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-crypto-internal-types",
+ "ic-crypto-tls-interfaces",
+ "ic-types",
+ "mockall 0.7.2",
 ]
 
 [[package]]
