@@ -27,8 +27,6 @@ ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
-rand = "0.8.4"
-rand_chacha = "0.3.1"
 rust_decimal = "1.25"
 serde = { version = "1.0", features = ["derive"] }
 

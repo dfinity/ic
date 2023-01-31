@@ -1,15 +1,17 @@
 use crate::clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient};
 use crate::logs::{ERROR, INFO};
 use crate::pb::v1::{
+    params::NeuronBasketConstructionParameters,
     restore_dapp_controllers_response, set_dapp_controllers_call_result, set_mode_call_result,
-    set_mode_call_result::SetModeResult, settle_community_fund_participation_result,
-    sns_neuron_recipe::Investor, BuyerState, CanisterCallError, CfInvestment, DerivedState,
-    DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse,
-    GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse,
-    GetLifecycleRequest, GetLifecycleResponse, Init, Lifecycle, OpenRequest, OpenResponse,
-    RefreshBuyerTokensResponse, RestoreDappControllersResponse, SetDappControllersCallResult,
-    SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult,
-    TransferableAmount,
+    set_mode_call_result::SetModeResult,
+    settle_community_fund_participation_result,
+    sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
+    BuyerState, CanisterCallError, CfInvestment, DerivedState, DirectInvestment,
+    ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateRequest,
+    GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetLifecycleRequest,
+    GetLifecycleResponse, Init, Lifecycle, OpenRequest, OpenResponse, RefreshBuyerTokensResponse,
+    RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
+    SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
 };
 use crate::types::{ScheduledVestingEvent, TransferResult};
 #[cfg(target_arch = "wasm32")]
@@ -32,8 +34,6 @@ use ic_sns_governance::{
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use itertools::{Either, Itertools};
 use maplit::btreemap;
-use rand::SeedableRng;
-use rand_chacha::ChaCha20Rng;
 use rust_decimal::prelude::ToPrimitive;
 use std::collections::BTreeMap;
 use std::{
@@ -42,8 +42,8 @@ use std::{
     ops::Div,
     str::FromStr,
 };
+
 // TODO(NNS1-1589): Get these from the canonical location.
-use crate::pb::v1::sns_neuron_recipe::{ClaimedStatus, NeuronAttributes};
 use crate::pb::v1::{
     settle_community_fund_participation, GovernanceError, SetDappControllersRequest,
     SetDappControllersResponse, SettleCommunityFundParticipation,
@@ -127,6 +127,49 @@ impl From<DerivedState> for GetDerivedStateResponse {
             sns_tokens_per_icp: Some(state.sns_tokens_per_icp as f64),
         }
     }
+}
+
+impl NeuronBasketConstructionParameters {
+    /// Chops `total_amount_e8s` into `self.count` pieces. Each gets doled out
+    /// every `self.dissolve_delay_seconds`, starting from 0.
+    ///
+    /// # Arguments
+    /// * `total_amount_e8s` - The total amount of tokens (in e8s) to be chopped up.
+    fn generate_vesting_schedule(&self, total_amount_e8s: u64) -> Vec<ScheduledVestingEvent> {
+        let dissolve_delay_seconds_list = (0..(self.count))
+            .map(|i| i * self.dissolve_delay_interval_seconds)
+            .collect::<Vec<u64>>();
+
+        let chunks_e8s = apportion_approximately_equally(total_amount_e8s, self.count);
+
+        assert_eq!(dissolve_delay_seconds_list.len(), chunks_e8s.len());
+
+        dissolve_delay_seconds_list
+            .into_iter()
+            .zip(chunks_e8s.into_iter())
+            .map(
+                |(dissolve_delay_seconds, amount_e8s)| ScheduledVestingEvent {
+                    dissolve_delay_seconds,
+                    amount_e8s,
+                },
+            )
+            .collect()
+    }
+}
+
+/// Chops up `total` in to `len` pieces.
+///
+/// More precisely, result.len() == len. result.sum() == total. Each element of
+/// result is approximately equal to the others. However, unless len divides
+/// total evenly, the elements of result will inevitabley be not equal.
+pub fn apportion_approximately_equally(total: u64, len: u64) -> Vec<u64> {
+    let quotient = total.saturating_div(len);
+    let remainder = total % len;
+
+    let mut result = vec![quotient; len as usize];
+    *result.first_mut().unwrap() += remainder;
+
+    result
 }
 
 // High level documentation in the corresponding Protobuf message.
@@ -293,57 +336,6 @@ impl Swap {
         r as u64
     }
 
-    /// Creates a vector of token amounts where the `amount_tokens_e8s` is evenly distributed
-    /// among `count` elements. Since this is done in integer space, the remainder is added to the
-    /// last element in the vector.
-    pub fn split(amount_tokens_e8s: u64, count: u64) -> Vec<u64> {
-        let split_amount = amount_tokens_e8s.saturating_div(count);
-        let extra = amount_tokens_e8s % split_amount;
-        let mut amounts = vec![split_amount; count as usize];
-        *amounts.last_mut().unwrap() += extra;
-
-        amounts
-    }
-
-    /// Generates the vesting schedule for a given `amount_sns_tokens_e8s` based on the
-    /// `Params::neuron_basket_construction_parameters`.
-    fn generate_vesting_schedule(
-        &self,
-        amount_sns_tokens_e8s: u64,
-        rng: &mut ChaCha20Rng,
-    ) -> Vec<ScheduledVestingEvent> {
-        let params = self.params.as_ref().expect("Expected params to be set");
-        let neuron_basket = params
-            .neuron_basket_construction_parameters
-            .as_ref()
-            .expect("Expected neuron_basket_construction_parameters to be set");
-
-        let random_dissolve_delay_periods =
-            ic_nervous_system_common::generate_random_dissolve_delay_intervals(
-                neuron_basket.count,
-                neuron_basket.dissolve_delay_interval_seconds,
-                rng,
-            );
-
-        let split_amount_sns_tokens_e8s = Swap::split(amount_sns_tokens_e8s, neuron_basket.count);
-
-        assert_eq!(
-            random_dissolve_delay_periods.len(),
-            split_amount_sns_tokens_e8s.len()
-        );
-
-        random_dissolve_delay_periods
-            .into_iter()
-            .zip(split_amount_sns_tokens_e8s.into_iter())
-            .map(
-                |(dissolve_delay_seconds, amount_e8s)| ScheduledVestingEvent {
-                    dissolve_delay_seconds,
-                    amount_e8s,
-                },
-            )
-            .collect()
-    }
-
     /// Precondition: lifecycle == OPEN && sufficient_participation && (swap_due || icp_target_reached)
     ///
     /// Postcondition: lifecycle == COMMITTED
@@ -353,6 +345,12 @@ impl Swap {
         assert!(self.swap_due(now_seconds) || self.icp_target_reached());
         // Safe as `params` must be specified in call to `open`.
         let params = self.params.as_ref().expect("Expected params to be set");
+
+        let neuron_basket_construction_parameters = params
+            .neuron_basket_construction_parameters
+            .as_ref()
+            .expect("Expected neuron_basket_construction_parameters to be set");
+
         // We are selling SNS tokens for the base token (ICP), or, in
         // general, whatever token the ledger referred to as the ICP
         // ledger holds.
@@ -365,14 +363,6 @@ impl Swap {
         let total_participant_icp_e8s = NonZeroU64::try_from(self.participant_total_icp_e8s())
             .expect("participant_total_icp_e8s must be greater than 0");
 
-        let mut rng = {
-            let mut seed = [0u8; 32];
-            seed[..8].copy_from_slice(&now_seconds.to_be_bytes());
-            seed[8..16].copy_from_slice(&now_seconds.to_be_bytes());
-            seed[16..24].copy_from_slice(&now_seconds.to_be_bytes());
-            seed[24..32].copy_from_slice(&now_seconds.to_be_bytes());
-            ChaCha20Rng::from_seed(seed)
-        };
         // Keep track of SNS tokens sold just to check that the amount
         // is correct at the end.
         let mut total_sns_tokens_sold: u64 = 0;
@@ -393,8 +383,8 @@ impl Swap {
             // is a hash of PrincipalId and some unique memo. Since direct
             // investors in the swap use their own principal_id, there are no
             // neuron id collisions, and each basket can use memos starting at 0.
-            for (memo, scheduled_vesting_event) in self
-                .generate_vesting_schedule(amount_sns_e8s, &mut rng)
+            for (memo, scheduled_vesting_event) in neuron_basket_construction_parameters
+                .generate_vesting_schedule(amount_sns_e8s)
                 .into_iter()
                 .enumerate()
             {
@@ -434,9 +424,8 @@ impl Swap {
                     total_participant_icp_e8s,
                 );
 
-                for scheduled_vesting_event in self
-                    .generate_vesting_schedule(amount_sns_e8s, &mut rng)
-                    .into_iter()
+                for scheduled_vesting_event in
+                    neuron_basket_construction_parameters.generate_vesting_schedule(amount_sns_e8s)
                 {
                     neurons.push(SnsNeuronRecipe {
                         sns: Some(TransferableAmount {
@@ -1875,6 +1864,9 @@ fn string_to_principal(maybe_principal_id: &String) -> Option<PrincipalId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+    use pretty_assertions::assert_eq;
+    use proptest::prelude::proptest;
 
     #[test]
     fn test_get_lifecycle() {
@@ -2041,5 +2033,119 @@ mod tests {
             invalid_recipe.claimed_status,
             Some(ClaimedStatus::Invalid as i32)
         );
+    }
+
+    #[test]
+    fn test_generate_vesting_schedule() {
+        let neuron_basket_construction_parameters = NeuronBasketConstructionParameters {
+            count: 5,
+            dissolve_delay_interval_seconds: 100,
+        };
+
+        assert_eq!(
+            neuron_basket_construction_parameters
+                .generate_vesting_schedule(/* total_amount_e8s = */ 10),
+            vec![
+                ScheduledVestingEvent {
+                    amount_e8s: 2,
+                    dissolve_delay_seconds: 0,
+                },
+                ScheduledVestingEvent {
+                    amount_e8s: 2,
+                    dissolve_delay_seconds: 100,
+                },
+                ScheduledVestingEvent {
+                    amount_e8s: 2,
+                    dissolve_delay_seconds: 200,
+                },
+                ScheduledVestingEvent {
+                    amount_e8s: 2,
+                    dissolve_delay_seconds: 300,
+                },
+                ScheduledVestingEvent {
+                    amount_e8s: 2,
+                    dissolve_delay_seconds: 400,
+                },
+            ],
+        );
+
+        assert_eq!(
+            neuron_basket_construction_parameters
+                .generate_vesting_schedule(/* total_amount_e8s = */ 9),
+            vec![
+                ScheduledVestingEvent {
+                    amount_e8s: 5,
+                    dissolve_delay_seconds: 0,
+                },
+                ScheduledVestingEvent {
+                    amount_e8s: 1,
+                    dissolve_delay_seconds: 100,
+                },
+                ScheduledVestingEvent {
+                    amount_e8s: 1,
+                    dissolve_delay_seconds: 200,
+                },
+                ScheduledVestingEvent {
+                    amount_e8s: 1,
+                    dissolve_delay_seconds: 300,
+                },
+                ScheduledVestingEvent {
+                    amount_e8s: 1,
+                    dissolve_delay_seconds: 400,
+                },
+            ],
+        );
+    }
+
+    proptest! {
+        #[test]
+        fn test_generate_vesting_schedule_proptest(
+            count in 1..25_u64,
+            dissolve_delay_interval_seconds in 1..(90 * SECONDS_PER_DAY),
+            total_e8s in 1..(100 * E8),
+        ) {
+            let vesting_schedule = NeuronBasketConstructionParameters {
+                count,
+                dissolve_delay_interval_seconds,
+            }
+            .generate_vesting_schedule(total_e8s);
+
+            // Inspect overall size.
+            assert_eq!(
+                vesting_schedule.len() as u64,
+                count,
+                "{:#?}",
+                vesting_schedule,
+            );
+
+            // Inspect token amounts.
+            assert_eq!(
+                vesting_schedule
+                    .iter()
+                    .map(|scheduled_vesting_event| scheduled_vesting_event.amount_e8s)
+                    .sum::<u64>(),
+                total_e8s,
+            );
+            for i in 1..vesting_schedule.len() {
+                assert_eq!(
+                    vesting_schedule.get(i).unwrap().amount_e8s,
+                    total_e8s / count,
+                    "{:#?}",
+                    vesting_schedule,
+                );
+            }
+
+            // Inspect dissolve delays.
+            let mut expected_current_dissolve_delay_seconds = 0;
+            for scheduled_vesting_event in &vesting_schedule {
+                assert_eq!(
+                    scheduled_vesting_event.dissolve_delay_seconds,
+                    expected_current_dissolve_delay_seconds,
+                    "{:#?}",
+                    vesting_schedule,
+                );
+                expected_current_dissolve_delay_seconds += dissolve_delay_interval_seconds;
+            }
+        }
     }
 }
