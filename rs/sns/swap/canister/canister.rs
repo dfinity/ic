@@ -24,9 +24,10 @@ use ic_sns_swap::{
         GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest, GetBuyersTotalResponse,
         GetCanisterStatusRequest, GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest,
         GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetStateRequest,
-        GetStateResponse, Init, OpenRequest, OpenResponse, RefreshBuyerTokensRequest,
-        RefreshBuyerTokensResponse, RestoreDappControllersRequest, RestoreDappControllersResponse,
-        Swap,
+        GetStateResponse, Init, ListCommunityFundParticipantsRequest,
+        ListCommunityFundParticipantsResponse, OpenRequest, OpenResponse,
+        RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, RestoreDappControllersRequest,
+        RestoreDappControllersResponse, Swap,
     },
 };
 use ic_stable_structures::{writer::Writer, Memory};
@@ -96,6 +97,21 @@ fn get_buyer_state() {
 fn get_buyer_state_(request: GetBuyerStateRequest) -> GetBuyerStateResponse {
     log!(INFO, "get_buyer_state");
     swap().get_buyer_state(&request)
+}
+
+/// List Community Fund participants.
+#[export_name = "list_community_fund_participants"]
+fn list_community_fund_participants() {
+    over(candid_one, list_community_fund_participants_);
+}
+
+/// List Community Fund participants.
+#[candid_method(query, rename = "list_community_fund_participants")]
+fn list_community_fund_participants_(
+    request: ListCommunityFundParticipantsRequest,
+) -> ListCommunityFundParticipantsResponse {
+    log!(INFO, "list_community_fund_participants");
+    swap().list_community_fund_participants(&request)
 }
 
 /// Try to open the swap.
