@@ -172,6 +172,19 @@ pub enum UpdateRegistrationResponse {
 }
 
 #[derive(CandidType, Deserialize)]
+pub enum RemoveRegistrationError {
+    NotFound,
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(CandidType, Deserialize)]
+pub enum RemoveRegistrationResponse {
+    Ok(()),
+    Err(RemoveRegistrationError),
+}
+
+#[derive(CandidType, Deserialize)]
 pub enum UploadCertificateError {
     NotFound,
     Unauthorized,

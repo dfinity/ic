@@ -72,6 +72,17 @@ type UpdateRegistrationResponse = variant {
     Err: UpdateRegistrationError;
 };
 
+type RemoveRegistrationError = variant {
+    NotFound;
+    Unauthorized;
+    UnexpectedError: text;
+};
+
+type RemoveRegistrationResponse = variant {
+    Ok;
+    Err: RemoveRegistrationError;
+};
+
 type UploadCertificateError = variant {
     NotFound;
     Unauthorized;
@@ -140,6 +151,7 @@ service: (InitArg) -> {
     createRegistration: (Name, Canister) -> (CreateRegistrationResponse);
     getRegistration: (Id) -> (GetRegistrationResponse) query;
     updateRegistration: (Id, UpdateType) -> (UpdateRegistrationResponse);
+    removeRegistration: (Id) -> (RemoveRegistrationResponse);
 
     // Certificates
     uploadCertificate: (Id, EncryptedPair) -> (UploadCertificateResponse);

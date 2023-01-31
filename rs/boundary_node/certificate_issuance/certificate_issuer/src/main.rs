@@ -15,7 +15,7 @@ use axum::{
     http::{Request, Response, StatusCode, Uri},
     middleware::{self, Next},
     response::IntoResponse,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
     Extension, Router, Server,
 };
 use candid::Principal;
@@ -54,7 +54,7 @@ use crate::{
     dns::Resolver,
     encode::{Decoder, Encoder},
     metrics::{MetricParams, WithMetrics},
-    registration::{Create, Get, State, Update, UpdateType},
+    registration::{Create, Get, Remove, State, Update, UpdateType},
     work::{Dispense, DispenseError, Process, Queue},
 };
 
@@ -232,6 +232,14 @@ async fn main() -> Result<(), Error> {
     );
     let registration_updater = Arc::new(registration_updater);
 
+    let registration_remover =
+        registration::CanisterRemover(agent.clone(), cli.orchestrator_canister_id);
+    let registration_remover = WithMetrics(
+        registration_remover,
+        MetricParams::new(&meter, SERVICE_NAME, "remove_registration"),
+    );
+    let registration_remover = Arc::new(registration_remover);
+
     let registration_getter =
         registration::CanisterGetter(agent.clone(), cli.orchestrator_canister_id);
     let registration_getter = WithMetrics(
@@ -264,8 +272,8 @@ async fn main() -> Result<(), Error> {
     // API
     let create_registration_handler = api::create_handler.layer(Extension({
         let v: (Arc<dyn Check>, Arc<dyn Create>, Arc<dyn Queue>) = (
-            registration_checker.clone(), // registration_checker
-            registration_creator.clone(), // registration_creator
+            registration_checker.clone(), // checker
+            registration_creator.clone(), // creator
             queuer.clone(),               // queuer
         );
         v
@@ -278,9 +286,18 @@ async fn main() -> Result<(), Error> {
 
     let update_registration_handler = api::update_handler.layer(Extension({
         let v: (Arc<dyn Check>, Arc<dyn Get>, Arc<dyn Update>) = (
-            registration_checker.clone(), // registration_checker
-            registration_getter.clone(),  // registration_getter
-            registration_updater.clone(), // registration_updater
+            registration_checker.clone(), // checker
+            registration_getter.clone(),  // getter
+            registration_updater.clone(), // updater
+        );
+        v
+    }));
+
+    let remove_registration_handler = api::remove_handler.layer(Extension({
+        let v: (Arc<dyn Check>, Arc<dyn Get>, Arc<dyn Remove>) = (
+            registration_checker.clone(), // checker
+            registration_getter.clone(),  // getter
+            registration_remover.clone(), // remover
         );
         v
     }));
@@ -294,6 +311,7 @@ async fn main() -> Result<(), Error> {
         .route("/registrations", post(create_registration_handler))
         .route("/registrations/:id", get(get_registration_handler))
         .route("/registrations/:id", put(update_registration_handler))
+        .route("/registrations/:id", delete(remove_registration_handler))
         .route("/certificates", get(export_handler));
 
     // API (Instrument)

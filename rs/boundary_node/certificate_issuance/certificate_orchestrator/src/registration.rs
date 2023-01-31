@@ -5,6 +5,7 @@ use candid::Principal;
 use certificate_orchestrator_interface::{Id, Name, NameError, Registration, State, UpdateType};
 use ic_cdk::caller;
 use ic_stable_structures::StableBTreeMap;
+use mockall::automock;
 use priority_queue::PriorityQueue;
 
 cfg_if::cfg_if! {
@@ -131,7 +132,7 @@ pub enum GetError {
 }
 
 pub trait Get {
-    fn get(&self, id: &Id) -> Result<Registration, GetError>;
+    fn get(&self, id: &str) -> Result<Registration, GetError>;
 }
 
 pub struct Getter {
@@ -145,14 +146,14 @@ impl Getter {
 }
 
 impl Get for Getter {
-    fn get(&self, id: &Id) -> Result<Registration, GetError> {
+    fn get(&self, id: &str) -> Result<Registration, GetError> {
         self.registrations
-            .with(|regs| regs.borrow().get(id).ok_or(GetError::NotFound))
+            .with(|regs| regs.borrow().get(&id.into()).ok_or(GetError::NotFound))
     }
 }
 
 impl<T: Get, A: Authorize> Get for WithAuthorize<T, A> {
-    fn get(&self, id: &Id) -> Result<Registration, GetError> {
+    fn get(&self, id: &str) -> Result<Registration, GetError> {
         if let Err(err) = self.1.authorize(&caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => GetError::Unauthorized,
@@ -175,7 +176,7 @@ pub enum UpdateError {
 }
 
 pub trait Update {
-    fn update(&self, id: Id, typ: UpdateType) -> Result<(), UpdateError>;
+    fn update(&self, id: &str, typ: UpdateType) -> Result<(), UpdateError>;
 }
 
 pub struct Updater {
@@ -199,13 +200,13 @@ impl Updater {
 }
 
 impl Update for Updater {
-    fn update(&self, id: Id, typ: UpdateType) -> Result<(), UpdateError> {
+    fn update(&self, id: &str, typ: UpdateType) -> Result<(), UpdateError> {
         match typ {
             // Update canister ID
             UpdateType::Canister(canister) => {
                 self.registrations.with(|regs| {
                     let Registration { name, state, .. } =
-                        regs.borrow().get(&id).ok_or(UpdateError::NotFound)?;
+                        regs.borrow().get(&id.into()).ok_or(UpdateError::NotFound)?;
 
                     regs.borrow_mut()
                         .insert(
@@ -226,7 +227,7 @@ impl Update for Updater {
             UpdateType::State(state) => {
                 self.registrations.with(|regs| {
                     let Registration { name, canister, .. } =
-                        regs.borrow().get(&id).ok_or(UpdateError::NotFound)?;
+                        regs.borrow().get(&id.into()).ok_or(UpdateError::NotFound)?;
 
                     regs.borrow_mut()
                         .insert(
@@ -244,8 +245,11 @@ impl Update for Updater {
 
                 // Successful registrations should not be expired or retried
                 if state == State::Available {
-                    self.expirations.with(|exps| exps.borrow_mut().remove(&id));
-                    self.retries.with(|rets| rets.borrow_mut().remove(&id));
+                    self.expirations
+                        .with(|exps| exps.borrow_mut().remove(&id.to_string()));
+
+                    self.retries
+                        .with(|rets| rets.borrow_mut().remove(&id.to_string()));
                 }
             }
         }
@@ -255,7 +259,7 @@ impl Update for Updater {
 }
 
 impl<T: Update, A: Authorize> Update for WithAuthorize<T, A> {
-    fn update(&self, id: Id, typ: UpdateType) -> Result<(), UpdateError> {
+    fn update(&self, id: &str, typ: UpdateType) -> Result<(), UpdateError> {
         if let Err(err) = self.1.authorize(&caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => UpdateError::Unauthorized,
@@ -268,7 +272,84 @@ impl<T: Update, A: Authorize> Update for WithAuthorize<T, A> {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub enum RemoveError {
+    #[error("Not found")]
+    NotFound,
+    #[error("Unauthorized")]
+    Unauthorized,
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+#[automock]
+pub trait Remove {
+    fn remove(&self, id: &str) -> Result<(), RemoveError>;
+}
+
+pub struct Remover {
+    registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+    names: LocalRef<StableBTreeMap<Memory, Name, Id>>,
+    tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+    expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+    retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+}
+
+impl Remover {
+    pub fn new(
+        registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+        names: LocalRef<StableBTreeMap<Memory, Name, Id>>,
+        tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+        expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+        retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+    ) -> Self {
+        Self {
+            registrations,
+            names,
+            tasks,
+            expirations,
+            retries,
+        }
+    }
+}
+
+impl Remove for Remover {
+    fn remove(&self, id: &str) -> Result<(), RemoveError> {
+        let Registration { name, .. } = self
+            .registrations
+            .with(|regs| regs.borrow().get(&id.into()).ok_or(RemoveError::NotFound))?;
+
+        // remove registration
+        self.registrations
+            .with(|regs| regs.borrow_mut().remove(&id.to_string()));
+
+        // remove name mapping
+        self.names.with(|names| names.borrow_mut().remove(&name));
+
+        // remove task/retry/expiry if present
+        [self.tasks, self.retries, self.expirations]
+            .map(|pq| pq.with(|pq| pq.borrow_mut().remove(&id.to_string())));
+
+        Ok(())
+    }
+}
+
+impl<T: Remove, A: Authorize> Remove for WithAuthorize<T, A> {
+    fn remove(&self, id: &str) -> Result<(), RemoveError> {
+        if let Err(err) = self.1.authorize(&caller()) {
+            return Err(match err {
+                AuthorizeError::Unauthorized => RemoveError::Unauthorized,
+                AuthorizeError::UnexpectedError(err) => RemoveError::UnexpectedError(err),
+            });
+        };
+
+        self.0.remove(id)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum ExpireError {
+    #[error(transparent)]
+    RemoveError(#[from] RemoveError),
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 }
@@ -278,23 +359,17 @@ pub trait Expire {
 }
 
 pub struct Expirer {
-    registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
-    names: LocalRef<StableBTreeMap<Memory, Name, Id>>,
-    tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+    remover: LocalRef<Box<dyn Remove>>,
     expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
 }
 
 impl Expirer {
     pub fn new(
-        registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
-        names: LocalRef<StableBTreeMap<Memory, Name, Id>>,
-        tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+        remover: LocalRef<Box<dyn Remove>>,
         expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     ) -> Self {
         Self {
-            registrations,
-            names,
-            tasks,
+            remover,
             expirations,
         }
     }
@@ -322,21 +397,8 @@ impl Expire for Expirer {
                     None => break,
                 };
 
-                // Remove registration and name mapping
-                let name = self
-                    .registrations
-                    .with(|regs| match regs.borrow().get(&id) {
-                        Some(reg) => Ok(reg.name),
-                        None => Err(anyhow!("expired registration not found")),
-                    })?;
-
-                self.registrations
-                    .with(|regs| regs.borrow_mut().remove(&id));
-
-                self.names.with(|names| names.borrow_mut().remove(&name));
-
-                // Remove task
-                self.tasks.with(|tasks| tasks.borrow_mut().remove(&id));
+                // Remove registration
+                self.remover.with(|r| r.borrow().remove(&id))?;
             }
 
             Ok(())
@@ -346,10 +408,13 @@ impl Expire for Expirer {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::RefCell;
+
     use anyhow::Error;
+    use mockall::predicate;
 
     use super::*;
-    use crate::{EXPIRATIONS, ID_GENERATOR, NAMES, REGISTRATIONS, RETRIES};
+    use crate::{EXPIRATIONS, ID_GENERATOR, NAMES, REGISTRATIONS, RETRIES, TASKS};
 
     pub fn time() -> u64 {
         0
@@ -445,7 +510,7 @@ mod tests {
             .expect("failed to insert");
 
         Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES).update(
-            "id".into(),
+            "id",
             UpdateType::Canister(Principal::from_text("2ibo7-dia")?),
         )?;
 
@@ -478,10 +543,8 @@ mod tests {
             .with(|regs| regs.borrow_mut().insert("id".into(), reg))
             .expect("failed to insert");
 
-        Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES).update(
-            "id".into(),
-            UpdateType::State(State::PendingChallengeResponse),
-        )?;
+        Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES)
+            .update("id", UpdateType::State(State::PendingChallengeResponse))?;
 
         // Check registration
         let reg = REGISTRATIONS
@@ -496,6 +559,152 @@ mod tests {
                 state: State::PendingChallengeResponse,
             }
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn remove_not_found() -> Result<(), Error> {
+        let r = Remover::new(&REGISTRATIONS, &NAMES, &TASKS, &EXPIRATIONS, &RETRIES);
+
+        match r.remove("id") {
+            Err(RemoveError::NotFound) => {}
+            other => panic!("expected RemoveError::NotFound but got {:?}", other),
+        };
+
+        Ok(())
+    }
+
+    #[test]
+    fn remove_ok() -> Result<(), Error> {
+        REGISTRATIONS
+            .with(|regs| {
+                regs.borrow_mut().insert(
+                    "id".into(),
+                    Registration {
+                        name: Name::try_from("name").unwrap(),
+                        canister: Principal::from_text("aaaaa-aa").unwrap(),
+                        state: State::PendingOrder,
+                    },
+                )
+            })
+            .expect("failed to insert registration");
+
+        NAMES
+            .with(|names| {
+                names
+                    .borrow_mut()
+                    .insert(Name::try_from("name").unwrap(), "id".into())
+            })
+            .expect("failed to insert name mapping");
+
+        TASKS.with(|tasks| {
+            tasks.borrow_mut().push(
+                "id".into(), // item
+                Reverse(0),  // priority
+            )
+        });
+
+        EXPIRATIONS.with(|tasks| {
+            tasks.borrow_mut().push(
+                "id".into(), // item
+                Reverse(0),  // priority
+            )
+        });
+
+        RETRIES.with(|tasks| {
+            tasks.borrow_mut().push(
+                "id".into(), // item
+                Reverse(0),  // priority
+            )
+        });
+
+        let r = Remover::new(&REGISTRATIONS, &NAMES, &TASKS, &EXPIRATIONS, &RETRIES);
+
+        match r.remove("id") {
+            Ok(()) => {}
+            other => panic!("expected Ok but got {:?}", other),
+        };
+
+        match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".into())) {
+            None => {}
+            Some(_) => panic!("expected registration to be removed, but it wasn't"),
+        };
+
+        match NAMES.with(|names| names.borrow().get(&Name::try_from("name").unwrap())) {
+            None => {}
+            Some(_) => panic!("expected name mapping to be removed, but it wasn't"),
+        };
+
+        TASKS.with(|tasks| match tasks.borrow().get(&"id".to_string()) {
+            None => {}
+            Some(_) => panic!("expected task to be removed, but it wasn't"),
+        });
+
+        EXPIRATIONS.with(|exps| match exps.borrow().get(&"id".to_string()) {
+            None => {}
+            Some(_) => panic!("expected expiration to be removed, but it wasn't"),
+        });
+
+        RETRIES.with(|retries| match retries.borrow().get(&"id".to_string()) {
+            None => {}
+            Some(_) => panic!("expected retry to be removed, but it wasn't"),
+        });
+
+        Ok(())
+    }
+
+    #[test]
+    fn remove_partial() -> Result<(), Error> {
+        REGISTRATIONS
+            .with(|regs| {
+                regs.borrow_mut().insert(
+                    "id".into(),
+                    Registration {
+                        name: Name::try_from("name").unwrap(),
+                        canister: Principal::from_text("aaaaa-aa").unwrap(),
+                        state: State::PendingOrder,
+                    },
+                )
+            })
+            .expect("failed to insert");
+
+        let r = Remover::new(&REGISTRATIONS, &NAMES, &TASKS, &EXPIRATIONS, &RETRIES);
+
+        match r.remove("id") {
+            Ok(()) => {}
+            other => panic!("expected Ok but got {:?}", other),
+        };
+
+        match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".into())) {
+            None => {}
+            Some(_) => panic!("expected registration to be removed, but it wasn't"),
+        };
+
+        Ok(())
+    }
+
+    #[test]
+    fn expire_ok() -> Result<(), Error> {
+        [("id-1", 0), ("id-2", 1)].map(|(id, p)| {
+            EXPIRATIONS.with(|exps| {
+                exps.borrow_mut().push(
+                    id.into(),  // item
+                    Reverse(p), // priority
+                )
+            })
+        });
+
+        thread_local!(static REMOVER: RefCell<Box<dyn Remove>> = RefCell::new(Box::new({
+            let mut r = MockRemove::new();
+            r.expect_remove().times(1).with(predicate::eq("id-1")).returning(|_| Ok(()));
+            r
+        })));
+
+        match Expirer::new(&REMOVER, &EXPIRATIONS).expire(0) {
+            Ok(()) => {}
+            other => panic!("expected Ok but got {other:?}"),
+        };
 
         Ok(())
     }

@@ -122,6 +122,20 @@ pub trait Update: Send + Sync {
 }
 
 #[derive(Debug, thiserror::Error)]
+pub enum RemoveError {
+    #[error("Not found")]
+    NotFound,
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+#[automock]
+#[async_trait]
+pub trait Remove: Send + Sync {
+    async fn remove(&self, id: &str) -> Result<(), RemoveError>;
+}
+
+#[derive(Debug, thiserror::Error)]
 pub enum GetError {
     #[error("Not found")]
     NotFound,
@@ -232,6 +246,41 @@ impl Update for CanisterUpdater {
                 Error::NotFound => UpdateError::NotFound,
                 Error::Unauthorized => UpdateError::UnexpectedError(anyhow!("unauthorized")),
                 Error::UnexpectedError(err) => UpdateError::UnexpectedError(anyhow!(err)),
+            }),
+        }
+    }
+}
+
+pub struct CanisterRemover(pub Arc<Agent>, pub Principal);
+
+#[async_trait]
+impl Remove for CanisterRemover {
+    async fn remove(&self, id: &str) -> Result<(), RemoveError> {
+        use ifc::{RemoveRegistrationError as Error, RemoveRegistrationResponse as Response};
+
+        let waiter = Delay::builder()
+            .throttle(Duration::from_millis(500))
+            .timeout(Duration::from_millis(10000))
+            .build();
+
+        let args = Encode!(&id).context("failed to encode arg")?;
+
+        let resp = self
+            .0
+            .update(&self.1, "removeRegistration")
+            .with_arg(args)
+            .call_and_wait(waiter)
+            .await
+            .context("failed to query canister")?;
+
+        let resp = Decode!(&resp, Response).context("failed to decode canister response")?;
+
+        match resp {
+            Response::Ok(()) => Ok(()),
+            Response::Err(err) => Err(match err {
+                Error::NotFound => RemoveError::NotFound,
+                Error::Unauthorized => RemoveError::UnexpectedError(anyhow!("unauthorized")),
+                Error::UnexpectedError(err) => RemoveError::UnexpectedError(anyhow!(err)),
             }),
         }
     }
