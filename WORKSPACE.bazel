@@ -358,3 +358,12 @@ http_file(
     sha256 = "8ade1e03964a70b3204f26d05bf714150db98f016294dd38f18cd24ceadd2276",
     url = "https://github.com/dfinity/bitcoin-canister/releases/download/release%2F2022-12-02/ic-btc-canister.wasm.gz",
 )
+
+# Internet Identity canister (test build)
+
+http_file(
+    name = "ii_test_canister",
+    downloaded_file_path = "internet_identity_test.wasm",
+    sha256 = "5f179b2e8bdd637043a223a8ee1be6563ffa699dec071f84c8f8487a9dc8d54c",
+    url = "https://github.com/dfinity/internet-identity/releases/download/release-2023-01-16/internet_identity_test.wasm",
+)

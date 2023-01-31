@@ -10,6 +10,7 @@ pub mod distributed_tests;
 pub mod driver;
 pub mod execution;
 pub mod icrc1_agent_test;
+pub mod ii_delegation_test;
 pub mod ledger_tests;
 pub mod mainnet_tests;
 pub mod message_routing;
