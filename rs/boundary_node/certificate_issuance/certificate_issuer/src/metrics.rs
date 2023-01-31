@@ -16,7 +16,7 @@ use crate::{
     check::{Check, CheckError},
     dns::{self, Record, Resolve},
     registration::{
-        Create, CreateError, Get, GetError, Id, Registration, State, Update, UpdateError,
+        Create, CreateError, Get, GetError, Id, Registration, Update, UpdateError, UpdateType,
     },
     work::{Dispense, DispenseError, Process, ProcessError, Queue, QueueError, Task},
 };
@@ -78,17 +78,23 @@ impl<T: Create> Create for WithMetrics<T> {
 
 #[async_trait]
 impl<T: Update> Update for WithMetrics<T> {
-    async fn update(&self, id: &Id, state: &State) -> Result<(), UpdateError> {
+    async fn update(&self, id: &str, typ: &UpdateType) -> Result<(), UpdateError> {
         let start_time = Instant::now();
 
-        let out = self.0.update(id, state).await;
+        let out = self.0.update(id, typ).await;
 
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
 
         let labels = &[
             KeyValue::new("status", status),
-            KeyValue::new("state", state.to_string()),
+            KeyValue::new(
+                "type",
+                match typ {
+                    UpdateType::Canister(_) => "update_canister".into(), // ignore canister id as it's unbounded
+                    UpdateType::State(state) => state.to_string(),
+                },
+            ),
         ];
 
         let MetricParams {
@@ -102,7 +108,7 @@ impl<T: Update> Update for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), id = id.to_string(), state = state.to_string(), status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), id = id.to_string(), typ = ?typ, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -110,7 +116,7 @@ impl<T: Update> Update for WithMetrics<T> {
 
 #[async_trait]
 impl<T: Get> Get for WithMetrics<T> {
-    async fn get(&self, id: &Id) -> Result<Registration, GetError> {
+    async fn get(&self, id: &str) -> Result<Registration, GetError> {
         let start_time = Instant::now();
 
         let out = self.0.get(id).await;

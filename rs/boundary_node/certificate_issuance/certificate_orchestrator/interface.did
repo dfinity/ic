@@ -56,6 +56,11 @@ type GetRegistrationResponse = variant {
     Err: GetRegistrationError;
 };
 
+type UpdateType = variant {
+    Canister: principal;
+    State: State;
+};
+
 type UpdateRegistrationError = variant {
     NotFound;
     Unauthorized;
@@ -134,7 +139,7 @@ service: (InitArg) -> {
     // Registrations
     createRegistration: (Name, Canister) -> (CreateRegistrationResponse);
     getRegistration: (Id) -> (GetRegistrationResponse) query;
-    updateRegistration: (Id, State) -> (UpdateRegistrationResponse);
+    updateRegistration: (Id, UpdateType) -> (UpdateRegistrationResponse);
 
     // Certificates
     uploadCertificate: (Id, EncryptedPair) -> (UploadCertificateResponse);
