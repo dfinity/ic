@@ -28,7 +28,7 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
-use ic_logger::{info, log, warn, ReplicaLogger};
+use ic_logger::{error, info, log, warn, ReplicaLogger};
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry, Timer,
@@ -46,7 +46,7 @@ use ic_types::{
 };
 use ic_xnet_hyper::{ExecuteOnRuntime, TlsConnector};
 use ic_xnet_uri::XNetAuthority;
-use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 pub use proximity::{GenRangeFn, ProximityMap};
 use rand::{thread_rng, Rng};
 use std::{
@@ -78,6 +78,8 @@ pub struct XNetPayloadBuilderMetrics {
     pub validate_payload_duration: HistogramVec,
     /// Track outstanding background query tasks
     pub outstanding_queries: IntGauge,
+    /// Critical error: failed `count_bytes()` on valid slice.
+    pub critical_error_slice_count_bytes_failed: IntCounter,
 }
 
 pub const METRIC_BUILD_PAYLOAD_DURATION: &str = "xnet_builder_build_payload_duration_seconds";
@@ -88,6 +90,7 @@ pub const METRIC_SLICE_MESSAGES: &str = "xnet_builder_slice_messages";
 pub const METRIC_SLICE_PAYLOAD_SIZE: &str = "xnet_builder_slice_payload_size_bytes";
 pub const METRIC_VALIDATE_PAYLOAD_DURATION: &str = "xnet_builder_validate_payload_duration_seconds";
 pub const METRIC_OUTSTANDING_XNET_QUERIES: &str = "xnet_builder_outstanding_queries";
+pub const CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED: &str = "xnet_slice_count_bytes_failed";
 
 pub const LABEL_STATUS: &str = "status";
 pub const LABEL_PROXIMITY: &str = "proximity";
@@ -145,6 +148,8 @@ impl XNetPayloadBuilderMetrics {
                 METRIC_OUTSTANDING_XNET_QUERIES,
                 "Number of xnet queries that have not finished",
             ),
+            critical_error_slice_count_bytes_failed: metrics_registry
+                .error_counter(CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED),
         }
     }
 
@@ -628,6 +633,25 @@ impl XNetPayloadBuilderImpl {
             }
         }
 
+        let byte_size = match (self.count_bytes_fn)(certified_slice) {
+            Ok(byte_size) => byte_size,
+            Err(e) => {
+                // This should not happen. We have already validated the slice.
+                error!(
+                    self.log,
+                    "{}: Stream from {}: failed to compute CertifiedStreamSlice byte size for valid slice: {}",
+                    CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED,
+                    subnet_id,
+                    e
+                );
+                self.metrics.critical_error_slice_count_bytes_failed.inc();
+                return SliceValidationResult::Invalid(format!(
+                    "Failed to compute CertifiedStreamSlice byte size: {}",
+                    e
+                ));
+            }
+        };
+
         // `signals_end` must point to a message in the stream (or just past the last
         // message).
         match self.validate_signals(
@@ -651,8 +675,7 @@ impl XNetPayloadBuilderImpl {
                         .map(|messages| messages.end())
                         .unwrap_or(expected.message_index),
                     signals_end: slice.header().signals_end,
-                    byte_size: (self.count_bytes_fn)(certified_slice)
-                        .expect("Failed to unpack CertifiedStresmSlice"),
+                    byte_size,
                 }
             }
 
