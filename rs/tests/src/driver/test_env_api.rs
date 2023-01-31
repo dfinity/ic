@@ -136,7 +136,7 @@ use super::cli::{
 };
 use super::config::NODES_INFO;
 use super::driver_setup::{DEFAULT_FARM_BASE_URL, SSH_AUTHORIZED_PRIV_KEYS_DIR};
-use super::farm::DnsRecord;
+use super::farm::{Certificate, DnsRecord};
 use super::test_setup::GroupSetup;
 use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::new::constants::{self, kibana_link};
@@ -1639,5 +1639,25 @@ where
         let group_name = group_setup.farm_group_name;
         farm.create_dns_records(&group_name, dns_records)
             .expect("Failed to create DNS records")
+    }
+}
+
+pub trait GetWildcardCertificate {
+    /// Get a certificate signed by Let's Encrypt from farm
+    /// for the domain `*.farm.dfinity.systems`.
+    fn get_wildcard_certificate(&self) -> Certificate;
+}
+
+impl<T> GetWildcardCertificate for T
+where
+    T: HasTestEnv,
+{
+    fn get_wildcard_certificate(&self) -> Certificate {
+        let env = self.test_env();
+        let log = env.logger();
+        let farm_base_url = env.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, log);
+        farm.get_wildcard_certificate()
+            .expect("Failed get wildcard certificate")
     }
 }

@@ -60,6 +60,13 @@ impl Farm {
         }
     }
 
+    pub fn get_wildcard_certificate(&self) -> FarmResult<Certificate> {
+        let path = "certificate";
+        let resp = self.retry_until_success_long(self.get(path))?;
+        let cert = resp.json::<Certificate>()?;
+        Ok(cert)
+    }
+
     pub fn create_group(&self, group_name: &str, ttl: Duration, spec: GroupSpec) -> FarmResult<()> {
         let path = format!("group/{}", group_name);
         let ttl = ttl.as_secs() as u32;
@@ -193,6 +200,11 @@ impl Farm {
         let rb = self.put(&path);
         let _resp = self.retry_until_success(rb)?;
         Ok(())
+    }
+
+    fn get(&self, path: &str) -> RequestBuilder {
+        let url = self.url_from_path(path);
+        self.client.get(url)
     }
 
     fn post(&self, path: &str) -> RequestBuilder {
@@ -518,6 +530,16 @@ impl AttachImageSpec {
             id,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Certificate {
+    #[serde(rename = "privKeyPem")]
+    pub priv_key_pem: String,
+    #[serde(rename = "certPem")]
+    pub cert_pem: String,
+    #[serde(rename = "chainPem")]
+    pub chain_pem: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
