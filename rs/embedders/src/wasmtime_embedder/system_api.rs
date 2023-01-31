@@ -802,52 +802,6 @@ pub(crate) fn syscalls<S: SystemApi>(
         .unwrap();
 
     linker
-        .func_wrap("ic0", "call_simple", {
-            let log = log.clone();
-            move |mut caller: Caller<'_, StoreData<S>>,
-                  callee_src: i32,
-                  callee_size: i32,
-                  name_src: i32,
-                  name_len: i32,
-                  reply_fun: i32,
-                  reply_env: i32,
-                  reject_fun: i32,
-                  reject_env: i32,
-                  src: i32,
-                  len: i32| {
-                charge_for_system_api_call(
-                    &log,
-                    canister_id,
-                    &mut caller,
-                    system_api_complexity::overhead::CALL_SIMPLE,
-                    len as u32,
-                    &ExecutionComplexity {
-                        cpu: system_api_complexity::cpu::CALL_SIMPLE,
-                        ..Default::default()
-                    },
-                    NumInstructions::from(0),
-                    stable_memory_dirty_page_limit,
-                )?;
-                with_memory_and_system_api(&mut caller, |system_api, memory| {
-                    system_api.ic0_call_simple(
-                        callee_src as u32,
-                        callee_size as u32,
-                        name_src as u32,
-                        name_len as u32,
-                        reply_fun as u32,
-                        reply_env as u32,
-                        reject_fun as u32,
-                        reject_env as u32,
-                        src as u32,
-                        len as u32,
-                        memory,
-                    )
-                })
-            }
-        })
-        .unwrap();
-
-    linker
         .func_wrap("ic0", "call_new", {
             let log = log.clone();
             move |mut caller: Caller<'_, StoreData<S>>,

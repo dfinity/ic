@@ -97,7 +97,6 @@ struct SandboxedExecutionMetrics {
     sandboxed_execution_executed_message_slices: IntCounterVec,
     // TODO(EXC-365): Remove these metrics once we confirm that no module imports these IC0 methods
     // anymore.
-    sandboxed_execution_wasm_imports_call_simple: IntCounter,
     sandboxed_execution_wasm_imports_controller_size: IntCounter,
     sandboxed_execution_wasm_imports_controller_copy: IntCounter,
     // TODO(EXC-376): Remove these metrics once we confirm that no module imports these IC0 methods
@@ -229,10 +228,6 @@ impl SandboxedExecutionMetrics {
                 "sandboxed_execution_replica_cache_lookups", 
                 "Results from looking up a wasm module in the embedder cache or compilation cache", 
                 &["lookup_result"]),
-            sandboxed_execution_wasm_imports_call_simple: metrics_registry.int_counter(
-                "sandboxed_execution_wasm_imports_call_simple_total",
-                "The number of Wasm modules that import ic0.call_simple",
-            ),
             sandboxed_execution_wasm_imports_controller_size: metrics_registry.int_counter(
                 "sandboxed_execution_wasm_imports_controller_size_total",
                 "The number of Wasm modules that import ic0.controller_size",
@@ -871,9 +866,6 @@ impl WasmExecutor for SandboxedExecutionController {
 }
 
 fn observe_metrics(metrics: &SandboxedExecutionMetrics, imports_details: &WasmImportsDetails) {
-    if imports_details.imports_call_simple {
-        metrics.sandboxed_execution_wasm_imports_call_simple.inc();
-    }
     if imports_details.imports_controller_size {
         metrics
             .sandboxed_execution_wasm_imports_controller_size

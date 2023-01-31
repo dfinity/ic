@@ -21,7 +21,7 @@ use ic_sys::PageBytes;
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
-    methods::{Callback, SystemMethod, WasmClosure},
+    methods::{SystemMethod, WasmClosure},
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, NumBytes, NumInstructions, NumPages,
     PrincipalId, SubnetId, Time,
 };
@@ -1721,134 +1721,6 @@ impl SystemApi for SystemApiImpl {
             }
         };
         trace_syscall!(self, ic0_controller_copy, result);
-        result
-    }
-
-    fn ic0_call_simple(
-        &mut self,
-        callee_src: u32,
-        callee_size: u32,
-        method_name_src: u32,
-        method_name_len: u32,
-        reply_fun: u32,
-        reply_env: u32,
-        reject_fun: u32,
-        reject_env: u32,
-        data_src: u32,
-        data_len: u32,
-        heap: &[u8],
-    ) -> HypervisorResult<i32> {
-        let result = match &mut self.api_type {
-            ApiType::Start { .. }
-            | ApiType::Init { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery {
-                query_kind: NonReplicatedQueryKind::Pure,
-                ..
-            }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. } => Err(self.error_for("ic0_call_simple")),
-            ApiType::Update {
-                call_context_id, ..
-            }
-            | ApiType::NonReplicatedQuery {
-                query_kind:
-                    NonReplicatedQueryKind::Stateful {
-                        call_context_id, ..
-                    },
-                ..
-            }
-            | ApiType::SystemTask {
-                call_context_id, ..
-            }
-            | ApiType::ReplyCallback {
-                call_context_id, ..
-            }
-            | ApiType::RejectCallback {
-                call_context_id, ..
-            } => {
-                if data_len as u64 > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get() {
-                    return Ok(RejectCode::SysFatal as i32);
-                }
-
-                let method_name = valid_subslice(
-                    "ic0.call_simple method_name",
-                    method_name_src,
-                    method_name_len,
-                    heap,
-                )?;
-                let method_name = String::from_utf8_lossy(method_name).to_string();
-                let payload = Vec::from(valid_subslice(
-                    "ic0.call_simple payload",
-                    data_src,
-                    data_len,
-                    heap,
-                )?);
-                let id_bytes =
-                    valid_subslice("ic0.call_simple callee_src", callee_src, callee_size, heap)?;
-
-                let callee =
-                    PrincipalId::try_from(id_bytes).map_err(HypervisorError::InvalidPrincipalId)?;
-
-                let callee = CanisterId::new(callee).map_err(HypervisorError::InvalidCanisterId)?;
-
-                let on_reply = WasmClosure::new(reply_fun, reply_env);
-                let on_reject = WasmClosure::new(reject_fun, reject_env);
-
-                let prepayment_for_response_execution = self
-                    .sandbox_safe_system_state
-                    .prepayment_for_response_execution();
-                let prepayment_for_response_transmission = self
-                    .sandbox_safe_system_state
-                    .prepayment_for_response_transmission();
-
-                let callback_id =
-                    self.sandbox_safe_system_state
-                        .register_callback(Callback::new(
-                            *call_context_id,
-                            Some(self.sandbox_safe_system_state.canister_id),
-                            Some(callee),
-                            Cycles::zero(),
-                            Some(prepayment_for_response_execution),
-                            Some(prepayment_for_response_transmission),
-                            on_reply,
-                            on_reject,
-                            None,
-                        ))?;
-
-                let msg = Request {
-                    sender: self.sandbox_safe_system_state.canister_id,
-                    receiver: callee,
-                    method_name,
-                    method_payload: payload,
-                    sender_reply_callback: callback_id,
-                    payment: Cycles::zero(),
-                };
-                self.push_output_request(
-                    msg,
-                    prepayment_for_response_execution,
-                    prepayment_for_response_transmission,
-                )
-            }
-        };
-        trace_syscall!(
-            self,
-            ic0_call_simple,
-            result,
-            callee_src,
-            callee_size,
-            method_name_src,
-            method_name_len,
-            reply_fun,
-            reply_env,
-            reject_fun,
-            reject_env,
-            data_src,
-            data_len,
-            summarize(heap, method_name_src, method_name_len),
-            summarize(heap, data_src, data_len)
-        );
         result
     }
 

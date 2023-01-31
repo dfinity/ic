@@ -506,24 +506,6 @@ pub trait SystemApi {
     /// Traps, with a possibly helpful message
     fn ic0_trap(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
 
-    /// Creates a pending inter-canister message that will be scheduled if the
-    /// current message execution completes successfully.
-    #[allow(clippy::too_many_arguments)]
-    fn ic0_call_simple(
-        &mut self,
-        callee_src: u32,
-        callee_size: u32,
-        method_name_src: u32,
-        method_name_len: u32,
-        reply_fun: u32,
-        reply_env: u32,
-        reject_fun: u32,
-        reject_env: u32,
-        data_src: u32,
-        data_len: u32,
-        heap: &[u8],
-    ) -> HypervisorResult<i32>;
-
     /// Begins assembling a call to the canister specified by
     /// callee_src/callee_size at method name_src/name_size. Two mandatory
     /// callbacks are recorded which will be invoked on success and error

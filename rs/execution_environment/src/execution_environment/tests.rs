@@ -43,7 +43,7 @@ mod orthogonal_persistence;
 const BALANCE_EPSILON: Cycles = Cycles::new(10_000_000);
 const ONE_GIB: i64 = 1 << 30;
 
-// A Wasm module calling call_simple
+// A Wasm module calling call_perform
 const CALL_SIMPLE_WAT: &str = r#"(module
                   (import "ic0" "call_new"
                     (func $ic0_call_new
@@ -68,8 +68,8 @@ const CALL_SIMPLE_WAT: &str = r#"(module
                     (call $ic0_call_cycles_add
                         (i64.const 100)
                     )
-                    (call $ic0_call_perform)
-                    drop)
+                    (drop (call $ic0_call_perform))
+                  )
                   (export "canister_update test" (func $test))
                   (memory $memory 1)
                   (export "memory" (memory $memory))
@@ -77,28 +77,30 @@ const CALL_SIMPLE_WAT: &str = r#"(module
                   (data (i32.const 100) "\00\00\00\00\00\00\03\09\01\01")
             )"#;
 
-// A Wasm module calling call_simple and replying
+// A Wasm module calling call_perform and replying
 const CALL_SIMPLE_AND_REPLY_WAT: &str = r#"(module
-                  (import "ic0" "call_simple"
-                    (func $ic0_call_simple
-                        (param i32 i32)
-                        (param $method_name_src i32)    (param $method_name_len i32)
-                        (param $reply_fun i32)          (param $reply_env i32)
-                        (param $reject_fun i32)         (param $reject_env i32)
-                        (param $data_src i32)           (param $data_len i32)
-                        (result i32)))
+                  (import "ic0" "call_new"
+                    (func $ic0_call_new
+                      (param i32 i32)
+                      (param $method_name_src i32)    (param $method_name_len i32)
+                      (param $reply_fun i32)          (param $reply_env i32)
+                      (param $reject_fun i32)         (param $reject_env i32)
+                  ))
+                  (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+                  (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+
                   (import "ic0" "msg_reply" (func $msg_reply))
                   (import "ic0" "msg_reply_data_append"
                     (func $msg_reply_data_append (param i32) (param i32)))
                   (func $test
-                    (call $ic0_call_simple
+                    (call $ic0_call_new
                         (i32.const 100) (i32.const 10)  ;; callee canister id = 777
                         (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
                         (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
-                        (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
-                        (i32.const 19) (i32.const 3)    ;; refers to "XYZ" on the heap
-                        )
-                    drop
+                        (i32.const 33) (i32.const 44))  ;; fictive on_reject closure
+                    (call $ic0_call_data_append
+                        (i32.const 19) (i32.const 3))   ;; refers to "XYZ" on the heap
+                    (drop (call $ic0_call_perform))
                     (call $msg_reply_data_append
                         (i32.const 23) (i32.const 8))    ;; refers to "MONOLORD"
                     (call $msg_reply))

@@ -323,8 +323,8 @@ fn call_increases_cycles_consumed_metric() {
         cycles_account_manager,
     );
 
-    api.ic0_call_simple(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, &[])
-        .unwrap();
+    api.ic0_call_new(0, 0, 0, 0, 0, 0, 0, 0, &[]).unwrap();
+    api.ic0_call_perform().unwrap();
 
     let system_state_changes = api.into_system_state_changes();
     system_state_changes
