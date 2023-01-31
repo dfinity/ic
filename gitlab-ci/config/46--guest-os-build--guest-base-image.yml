@@ -65,7 +65,7 @@ build-push-base-images:
          docker push "${IMAGE}":latest
 
          NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' "${IMAGE}":"${TAG}")"
-         echo "${NEW_REF}" > "${FILE}"
+         echo "${NEW_REF}" > "${CI_PROJECT_DIR}/${FILE}"
      done
 
      # commit, push & create new merge request 
