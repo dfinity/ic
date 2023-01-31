@@ -81,7 +81,7 @@ use ic_types::{
     p2p::GossipAdvert,
     NodeId,
 };
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use prometheus::IntCounterVec;
 use std::{
     cmp::max,
@@ -92,7 +92,7 @@ use std::{
     pin::Pin,
     sync::{
         atomic::{AtomicBool, Ordering::SeqCst},
-        Arc, Condvar, Mutex,
+        Arc, Condvar,
     },
     task::{Context, Poll},
     thread::JoinHandle,
@@ -199,7 +199,7 @@ impl FlowWorker {
                     .expect("Acquiring a permit can't fail because we never close the semaphore.")
             }
         };
-        self.threadpool.lock().unwrap().execute(move || {
+        self.threadpool.lock().execute(move || {
             let _permit = permit;
             let _send_timer = send_timer;
             consume_message_fn(msg, node_id);
@@ -452,7 +452,7 @@ pub struct AdvertBroadcaster {
     /// For advert send requests from artifact manager.
     adverts_by_class: IntCounterVec,
     sem: Arc<Semaphore>,
-    started: Arc<(Mutex<bool>, Condvar)>,
+    started: Arc<(std::sync::Mutex<bool>, Condvar)>,
     dropped_adverts: IntCounterVec,
 }
 
@@ -481,7 +481,7 @@ impl AdvertBroadcaster {
                 &["type"],
             ),
             sem: Arc::new(Semaphore::new(MAX_ADVERT_BUFFER)),
-            started: Arc::new((Mutex::new(false), Condvar::new())),
+            started: Arc::new((std::sync::Mutex::new(false), Condvar::new())),
             dropped_adverts,
         }
     }
@@ -590,14 +590,14 @@ pub mod tests {
 
         /// The function performs an atomic increment-or-set operation.
         fn increment_or_set(map: &ItemCountCollector, peer_id: NodeId) {
-            let map_i = &mut map.lock().unwrap();
+            let map_i = &mut map.lock();
             map_i.entry(peer_id).and_modify(|e| *e += 1).or_insert(1);
         }
 
         /// The function returns the number of flows of the node with the given
         /// node ID.
         fn get_node_flow_count(map: &ItemCountCollector, node_id: NodeId) -> usize {
-            let map_i = &mut map.lock().unwrap();
+            let map_i = &mut map.lock();
             *map_i.get(&node_id).unwrap_or(&0)
         }
     }

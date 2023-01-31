@@ -26,7 +26,8 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_metrics::fetch_int_gauge;
 use ic_types::{consensus::catchup::CUPWithOriginalProtobuf, replica_config::ReplicaConfig};
-use std::sync::{Arc, Mutex};
+use parking_lot::Mutex;
+use std::sync::Arc;
 use std::time::Duration;
 use tempfile::Builder;
 
@@ -363,7 +364,6 @@ pub fn spawn_replicas_as_threads(
         );
         hub_access
             .lock()
-            .unwrap()
             .insert(node_test_id(instance_id as u64), thread_port);
     }
 
@@ -375,7 +375,7 @@ pub fn spawn_replicas_as_threads(
         let test = test;
         let test = Box::new(test);
         let replica_log = log.clone();
-        let transport_hub = hub_access.lock().unwrap();
+        let transport_hub = hub_access.lock();
         let tp = transport_hub.get(&node_test_id(i as u64)).clone();
         let replica_registry = Arc::clone(&registry_client) as Arc<dyn RegistryClient>;
         let replica_config = ReplicaConfig {
