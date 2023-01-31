@@ -1,0 +1,86 @@
+= IC-OS
+
+IC-OS is an all-encompassing term for all the operating systems within the IC: setupOS, hostOS, guestOS, and boundary-guestOS.
+
+* setupOS: responsible for booting a new replica node and installing hostOS and guestOS.
+* hostOS: the operating system that runs on the host machine. The main responsibility of hostOS is to launch and run the guestOS in a virtual machine. In regards to its capabilities, it is dumb by design.
+* guestOS: the operating system that runs inside of a virtual machine on the hostOS. Inside guestOS, the core IC protocol is run.
+* boundary-guestOS: the operating system that runs on boundary nodes
+
+== Operating System
+
+Each IC-OS operating system is currently based on the Ubuntu 20.04 Server LTS Docker image:
+
+   FROM ubuntu:20.04
+
+Missing components such as the kernel, bootloader and system service manager are installed during the build process.
+
+== Under the hood: Building an image
+
+GuestOS, boundary-guestOS, hostOS, and setupOS each have a docker-base file containing all their external dependencies, and once a week, the CI pipeline builds a new base image for each OS.
+The docker base image creates a common version of dependencies, which helps provide determinism to our builds.
+
+Each OS also has a main dockerfile that builds off the base image, and builds a docker image containing the actual system logic.
+
+Then, this docker image is transformed into a bootable "bare-metal" image (or "virtual-metal" VM image) that can be used outside of containerization (either in a VM or as a physical host operating system). This results in a very minimal system with basically no services running at all.
+
+Note that all pre-configuration of the system is performed using docker utilities, and the system is actually also operational as a docker container.
+This means that some development and testing could be done on the docker image itself, but an actual VM image is required for proper testing.
+
+== Developing the Ubuntu system
+
+The Ubuntu configuration and system logic is contained in the rootfs/ subdirectory of each OS.
+See instructions link:README-rootfs.adoc#[here] on how to make changes to the OS.
+
+== Directory organization
+
+Each rootfs/ subdirectory contains everything related to building a bootable Ubuntu system. 
+It uses various template directories (e.g. /opt) that are simply copied verbatim to the target system -- you can just drop files there to include them in the image.
+
+The bootloader/ directory contains everything related to building EFI firmware and the grub bootloader image. It is configured to support the A/B partition split on those OSes that are upgradable (hostOS, guestOS, and potentially boundary-guestOS)
+
+All build scripts are contained in the scripts/ directory.
+Note: guestOS has many scripts in its own scripts/ subdirectory that still need to be unified with the outer scripts/ directory.
+
+== Environment setup
+To build IC-OS images outside of using /gitlab-ci/container/container-run.sh, you will need to configure your environment. To see what packages you must install, see ic/gitlab-ci/docker/Dockerfile.
+
+== Running SEV-SNP VM with virsh
+
+=== Preparing dev machine
+
+Here are the steps to run a boundary-guestOS image as a SEV-SNP image
+
+* Download the latest snp release from here: https://github.com/dfinity/AMDSEV/releases/tag/snp-release-2022-08-02
+* Install the host kernel and reboot the machine
+* Make sure that SEV-SNP is enabled on the host. By running this command:
+```bash
+ubuntu@sf1-gby01:~/AMDSEV/snp-release-2022-04-15$ sudo dmesg | grep  -i -e sev -e ccp -e rmp
+[    0.000000] Command line: BOOT_IMAGE=/boot/vmlinuz-5.14.0-rc2-snp-host-6d4469b86f90 root=/dev/mapper/vgroot-lvroot ro mem_encrypt=on kvm_amd.sev=1 amd_iommu=on
+[    0.520036] Kernel command line: BOOT_IMAGE=/boot/vmlinuz-5.14.0-rc2-snp-host-6d4469b86f90 root=/dev/mapper/vgroot-lvroot ro mem_encrypt=on kvm_amd.sev=1 amd_iommu=on
+[    1.768903] SEV-SNP: RMP table physical address 0x0000007fef500000 - 0x000000806fcfffff
+[    2.767472] [Hardware Error]: event severity: fatal
+[    8.328990] ccp 0000:22:00.1: enabling device (0000 -> 0002)
+[    8.330886] ccp 0000:22:00.1: no command queues available
+[    8.331699] ccp 0000:22:00.1: sev enabled
+[    8.331702] ccp 0000:22:00.1: psp enabled
+[    8.331973] ccp 0000:a6:00.1: enabling device (0000 -> 0002)
+[    8.333711] ccp 0000:a6:00.1: no command queues available
+[    8.382289] ccp 0000:22:00.1: SEV firmware update successful
+[   17.253755] ccp 0000:22:00.1: SEV-SNP API:1.51 build:3
+[   17.267208] SEV supported: 410 ASIDs
+[   17.267209] SEV-ES and SEV-SNP supported: 99 ASIDs
+```
+
+### Preparing image
+
+* cd to the root of the source tree
+* build the image: bazel build //ic-os/boundary-guestos/envs/dev-sev/...
+* ic-os/scripts/prepare-for-virsh.sh
+
+### Create, login, destroy
+
+* ```$ virsh create ./bn_sev_vm.xml```
+* ```$ virsh console boundary_nodes_sev_snp-$USER```
+** Note: control-] to exit
+* ```$ virsh destoy boundary_nodes_sev_snp-$USER```
