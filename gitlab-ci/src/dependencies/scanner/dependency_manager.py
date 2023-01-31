@@ -397,7 +397,8 @@ class NPM(DependencyManager):
     def __clone_repository_from_url(url: str, path: pathlib.Path):
         environment = {}
         cwd = path
-        command = f"git clone {url}"
+        command = f"git clone --depth=1 {url}"
+        logging.info(f"Performing git clone {url}")
         _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
         return
 
@@ -409,6 +410,7 @@ class NPM(DependencyManager):
         cwd = path
         command = "npm audit --json"
 
+        logging.info(f"Performing npm audit {cwd.resolve()}")
         result = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
         audit_out = json.loads(result)
 
@@ -420,6 +422,7 @@ class NPM(DependencyManager):
         environment = {}
         cwd = path
         command = "npm install"
+        logging.info(f"Performing npm install {cwd.resolve()}")
         _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
 
         command = "npm list --all --json"
@@ -581,6 +584,7 @@ class NPM(DependencyManager):
             path = self.root.parent / project.path
             if not path.is_dir():
                 raise RuntimeError(f"path {path} is invalid")
+            logging.info(f"Calling finding helper for {repository.name} {path} {project.name}")
             finding_builder.extend(self.__findings_helper(repository.name, scanner, path, project.name))
 
         return finding_builder

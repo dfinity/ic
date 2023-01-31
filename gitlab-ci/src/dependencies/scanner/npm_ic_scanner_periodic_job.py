@@ -1,3 +1,5 @@
+import logging
+
 from data_source.console_logger_finding_data_source_subscriber import ConsoleLoggerFindingDataSourceSubscriber
 from data_source.jira_finding_data_source import JiraFindingDataSource
 from model.repository import Project
@@ -8,6 +10,9 @@ from scanner.console_logger_scanner_subscriber import ConsoleLoggerScannerSubscr
 from scanner.dependency_manager import NPM
 from scanner.dependency_scanner import NPMICScanner
 from scanner.scanner_job_type import ScannerJobType
+
+logging.basicConfig()
+logging.getLogger().setLevel(logging.DEBUG)
 
 
 REPOS_TO_SCAN = [

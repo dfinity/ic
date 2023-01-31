@@ -166,7 +166,9 @@ def test_clone_repository_from_url(process_executor_mock, npm_test):
     path = pathlib.Path()
     resolved_path = path.resolve()
     npm_test._NPM__clone_repository_from_url(url, path)
-    process_executor_mock.assert_called_once_with("git clone https://localhost", resolved_path, {}, use_nix_shell=False)
+    process_executor_mock.assert_called_once_with(
+        "git clone --depth=1 https://localhost", resolved_path, {}, use_nix_shell=False
+    )
 
 
 @patch("scanner.process_executor.ProcessExecutor.execute_command", return_value="{'key':'value'}")

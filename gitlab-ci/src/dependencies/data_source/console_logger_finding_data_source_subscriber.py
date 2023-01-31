@@ -7,4 +7,4 @@ class ConsoleLoggerFindingDataSourceSubscriber(FindingDataSourceSubscriber):
         print(f"on_finding_created({finding})")
 
     def on_finding_updated(self, finding_before: Finding, finding_after: Finding):
-        print(f"on_finding_created({finding_before},{finding_after})")
+        print(f"on_finding_updated({finding_before},{finding_after})")
