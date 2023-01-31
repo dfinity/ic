@@ -95,6 +95,15 @@ pub fn test(env: TestEnv) {
                 assert_eq!(result, Ok(vec![n as u8]));
             }
 
+            info!(log, "Checking for malicious logs...");
+            // Use unspecific allow_malicious_behaviour instead of specific maliciously_corrupt_own_state_at_heights
+            assert_node_malicious(
+                malicious_node.clone(),
+                vec!["allow_malicious_behaviour: true"],
+            )
+            .await;
+            info!(log, "Malicious log check succeeded.");
+
             // Wait until the malicious node restarts.
             malicious_node
                 .await_status_is_healthy()

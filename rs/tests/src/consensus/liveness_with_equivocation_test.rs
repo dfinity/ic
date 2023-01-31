@@ -27,7 +27,7 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
-    util::UniversalCanister,
+    util::{assert_malicious_from_topo, UniversalCanister},
 };
 use ic_agent::export::Principal;
 use ic_agent::Agent;
@@ -106,6 +106,10 @@ pub fn test(env: TestEnv) {
         &agent_2,
     ));
     assert_eq!(last_pulled_msg, last_pushed_msg);
+
+    info!(log, "Checking for malicious logs...");
+    assert_malicious_from_topo(&topology, vec!["allow_malicious_behaviour: true"]);
+    info!(log, "Malicious log check succeeded.");
 }
 
 async fn do_the_work<R: Rng>(

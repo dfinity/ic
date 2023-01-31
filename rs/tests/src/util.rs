@@ -1245,9 +1245,10 @@ impl LogStream {
         let socket = TcpSocket::new_v6()?;
         let mut stream = socket.connect(socket_addr).await?;
 
-        stream.write_all(b"GET /entries?follow HTTP/1.1\n").await?;
-        stream.write_all(b"Accept: application/json\n").await?;
-        stream.write_all(b"Range: entries=:-1:\n\r\n\r").await?;
+        // Use plaintext instead of json, because some messages are too large for the journal json serializer
+        stream
+            .write_all(b"GET /entries?follow HTTP/1.1\n\r\n\r")
+            .await?;
 
         let bf = BufReader::new(stream);
         Ok(bf.lines())
@@ -1330,4 +1331,68 @@ impl MetricsFetcher {
         }
         Ok(result)
     }
+}
+
+/// Assert that all malicious nodes in a topology produced log that signals malicious behaviour.
+/// For every node, the log is searched until any of the given substrings is found, or timeout is reached.
+/// Use this function at the end of malicious node tests, when all logs are present already.
+pub fn assert_malicious_from_topo(topology: &TopologySnapshot, malicious_signals: Vec<&str>) {
+    let malicious_nodes = topology
+        .subnets()
+        .flat_map(|x| x.nodes())
+        .filter(|n| n.is_malicious());
+    assert_malicious(malicious_nodes, malicious_signals);
+}
+
+/// Assert that all nodes of the given set produced log that signals malicious behaviour.
+/// For every node, the log is searched until any of the given substrings is found, or timeout is reached.
+/// Use this function at the end of malicious node tests, when all logs are present already.
+pub fn assert_malicious(
+    malicious_nodes: impl Iterator<Item = IcNodeSnapshot>,
+    malicious_signals: Vec<&str>,
+) {
+    block_on(async {
+        // This should produce a result quickly, because all the logs are already present on the remote.
+        // But the logstream does not terminate, so if a malicious signal is missing, we stop the Future after a while and fail.
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            assert_nodes_malicious_parallel(malicious_nodes, malicious_signals),
+        )
+        .await
+        .expect("Timed out while waiting for malicious logs")
+        .expect("Not all malicious nodes produced logs containting the malicious signal.");
+    })
+}
+
+/// Malicous node logs have to be checked individually, because all nodes have to signal malice.
+async fn assert_nodes_malicious_parallel(
+    nodes: impl Iterator<Item = IcNodeSnapshot>,
+    signals: Vec<&str>,
+) -> Result<(), &str> {
+    let mut futures = vec![];
+    for node in nodes {
+        futures.push(async {
+            let mut stream = LogStream::open(vec![node].into_iter())
+                .await
+                .expect("Failed to open LogStream to malicious node");
+            stream
+                .wait_until(|_, line| signals.iter().any(|x| line.contains(x)))
+                .await
+        });
+    }
+    let result = join_all(futures).await.iter().all(|x| x.is_ok());
+    match result {
+        true => Ok(()),
+        false => Err("Not all malicious nodes produced logs containting the malicious signal."),
+    }
+}
+
+/// Assert that a node produced log that signals malicious behaviour.
+pub async fn assert_node_malicious(node: IcNodeSnapshot, malicious_signals: Vec<&str>) {
+    LogStream::open(vec![node].into_iter())
+        .await
+        .expect("Failed to open LogStream to malicious node")
+        .wait_until(|_, line| malicious_signals.iter().any(|x| line.contains(x)))
+        .await
+        .expect("Node did not have malicious log.")
 }
