@@ -231,12 +231,13 @@ impl Service<Request<Vec<u8>>> for CallService {
         let log = self.log.clone();
         let validator_executor = self.validator_executor.clone();
         let malicious_flags = self.malicious_flags.clone();
-
         Box::pin(async move {
-            if let Err(http_err) = validator_executor
-                .validate_signed_ingress(&msg, registry_version, &malicious_flags)
-                .await
-            {
+            let validate_signed_ingress_fut = validator_executor.validate_signed_ingress(
+                msg.clone(),
+                registry_version,
+                malicious_flags,
+            );
+            if let Err(http_err) = validate_signed_ingress_fut.await {
                 let res = make_plaintext_response(http_err.status, http_err.message);
                 return Ok(res);
             }
