@@ -14,7 +14,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     certificate::Export,
     check::{Check, CheckError},
-    registration::{Create, CreateError, Get, GetError, Update, UpdateError, UpdateType},
+    registration::{
+        Create, CreateError, Get, GetError, Remove, RemoveError, Update, UpdateError, UpdateType,
+    },
     work::Queue,
 };
 
@@ -201,6 +203,65 @@ pub async fn update_handler(
     Response::builder().status(200).body(Body::empty()).unwrap()
 }
 
+#[allow(clippy::type_complexity)]
+pub async fn remove_handler(
+    Extension((ck, g, r)): Extension<(Arc<dyn Check>, Arc<dyn Get>, Arc<dyn Remove>)>,
+    Path(id): Path<String>,
+    _: Request<Body>,
+) -> Response<Body> {
+    let reg = match g.get(&id).await {
+        Ok(reg) => reg,
+
+        Err(GetError::NotFound) => {
+            return Response::builder()
+                .status(404)
+                .body(Body::from("not found"))
+                .unwrap()
+        }
+
+        Err(GetError::UnexpectedError(_)) => {
+            return Response::builder()
+                .status(500)
+                .body(Body::from("unexpected error"))
+                .unwrap()
+        }
+    };
+
+    // Run checker to ensure either removal conditions are met:
+    // 1. missing delegation cname record
+    // 2. missing canister ID mapping
+    match ck.check(&reg.name).await {
+        Err(CheckError::MissingDnsCname { .. }) => {}
+        Err(CheckError::MissingDnsTxtCanisterId { .. }) => {}
+        _ => {
+            return Response::builder()
+                .status(400)
+                .body(Body::from("removal conditions not met: please ensure your delegation cname and canister mapping records are removed"))
+                .unwrap();
+        }
+    };
+
+    match r.remove(&id).await {
+        Ok(()) => {}
+
+        Err(RemoveError::NotFound) => {
+            return Response::builder()
+                .status(404)
+                .body(Body::from("not found"))
+                .unwrap()
+        }
+
+        Err(RemoveError::UnexpectedError(_)) => {
+            return Response::builder()
+                .status(500)
+                .body(Body::from("unexpected error"))
+                .unwrap()
+        }
+    };
+
+    Response::builder().status(200).body(Body::empty()).unwrap()
+}
+
 // TODO(or): wrap this export_handler with ttl-based caching and E-tag check
 pub async fn export_handler(
     Extension(e): Extension<Arc<dyn Export>>,
@@ -242,7 +303,7 @@ mod tests {
 
     use crate::{
         check::MockCheck,
-        registration::{MockGet, MockUpdate, Registration, State},
+        registration::{MockGet, MockRemove, MockUpdate, Registration, State},
     };
 
     #[tokio::test]
@@ -324,6 +385,89 @@ mod tests {
         .await;
 
         assert_eq!(resp.status(), 200);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn remove_ok() -> Result<(), Error> {
+        let mut getter = MockGet::new();
+        getter
+            .expect_get()
+            .times(1)
+            .with(predicate::eq("id"))
+            .returning(|_| {
+                Ok(Registration {
+                    name: String::from("name"),
+                    canister: Principal::from_text("aaaaa-aa").unwrap(),
+                    state: State::PendingOrder,
+                })
+            });
+
+        let mut checker = MockCheck::new();
+        checker
+            .expect_check()
+            .times(1)
+            .with(predicate::eq("name"))
+            .returning(|_| {
+                Err(CheckError::MissingDnsCname {
+                    src: "src".into(),
+                    dst: "dst".into(),
+                })
+            });
+
+        let mut remover = MockRemove::new();
+        remover
+            .expect_remove()
+            .times(1)
+            .with(predicate::eq("id"))
+            .returning(|_| Ok(()));
+
+        let resp = remove_handler(
+            Extension((Arc::new(checker), Arc::new(getter), Arc::new(remover))),
+            Path("id".into()),
+            Request::builder().body(Body::empty())?,
+        )
+        .await;
+
+        assert_eq!(resp.status(), 200);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn remove_bad_request() -> Result<(), Error> {
+        let mut getter = MockGet::new();
+        getter
+            .expect_get()
+            .times(1)
+            .with(predicate::eq("id"))
+            .returning(|_| {
+                Ok(Registration {
+                    name: String::from("name"),
+                    canister: Principal::from_text("aaaaa-aa").unwrap(),
+                    state: State::PendingOrder,
+                })
+            });
+
+        let mut checker = MockCheck::new();
+        checker
+            .expect_check()
+            .times(1)
+            .with(predicate::eq("name"))
+            .returning(|_| Ok(Principal::from_text("aaaaa-aa").unwrap()));
+
+        let mut remover = MockRemove::new();
+        remover.expect_remove().never();
+
+        let resp = remove_handler(
+            Extension((Arc::new(checker), Arc::new(getter), Arc::new(remover))),
+            Path("id".into()),
+            Request::builder().body(Body::empty())?,
+        )
+        .await;
+
+        assert_eq!(resp.status(), 400);
 
         Ok(())
     }

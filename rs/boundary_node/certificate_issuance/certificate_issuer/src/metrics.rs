@@ -16,7 +16,8 @@ use crate::{
     check::{Check, CheckError},
     dns::{self, Record, Resolve},
     registration::{
-        Create, CreateError, Get, GetError, Id, Registration, Update, UpdateError, UpdateType,
+        Create, CreateError, Get, GetError, Id, Registration, Remove, RemoveError, Update,
+        UpdateError, UpdateType,
     },
     work::{Dispense, DispenseError, Process, ProcessError, Queue, QueueError, Task},
 };
@@ -109,6 +110,35 @@ impl<T: Update> Update for WithMetrics<T> {
         recorder.record(&cx, duration, labels);
 
         info!(action = action.as_str(), id = id.to_string(), typ = ?typ, status, duration, error = ?out.as_ref().err());
+
+        out
+    }
+}
+
+#[async_trait]
+impl<T: Remove> Remove for WithMetrics<T> {
+    async fn remove(&self, id: &str) -> Result<(), RemoveError> {
+        let start_time = Instant::now();
+
+        let out = self.0.remove(id).await;
+
+        let status = if out.is_ok() { "ok" } else { "fail" };
+        let duration = start_time.elapsed().as_secs_f64();
+
+        let labels = &[KeyValue::new("status", status)];
+
+        let MetricParams {
+            action,
+            counter,
+            recorder,
+        } = &self.1;
+
+        let cx = Context::current();
+
+        counter.add(&cx, 1, labels);
+        recorder.record(&cx, duration, labels);
+
+        info!(action = action.as_str(), id = id.to_string(), status, duration, error = ?out.as_ref().err());
 
         out
     }

@@ -6,8 +6,9 @@ use certificate_orchestrator_interface::{
     EncryptedPair, ExportCertificatesError, ExportCertificatesResponse, GetRegistrationError,
     GetRegistrationResponse, Id, ListAllowedPrincipalsError, ListAllowedPrincipalsResponse,
     ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse, Name, QueueTaskError,
-    QueueTaskResponse, Registration, UpdateRegistrationError, UpdateRegistrationResponse,
-    UpdateType, UploadCertificateError, UploadCertificateResponse, NAME_MAX_LEN,
+    QueueTaskResponse, Registration, RemoveRegistrationError, RemoveRegistrationResponse,
+    UpdateRegistrationError, UpdateRegistrationResponse, UpdateType, UploadCertificateError,
+    UploadCertificateResponse, NAME_MAX_LEN,
 };
 use ic_cdk::{
     api::time, caller, export::Principal, post_upgrade, pre_upgrade, timer::set_timer_interval,
@@ -25,8 +26,8 @@ use crate::{
     certificate::{Export, ExportError, Exporter, Upload, UploadError, Uploader},
     id::{Generate, Generator},
     registration::{
-        Create, CreateError, Creator, Expire, Expirer, Get, GetError, Getter, Update, UpdateError,
-        Updater,
+        Create, CreateError, Creator, Expire, Expirer, Get, GetError, Getter, Remove, RemoveError,
+        Remover, Update, UpdateError, Updater,
     },
     work::{Dispense, DispenseError, Dispenser, Queue, QueueError, Queuer, Retrier, Retry},
 };
@@ -151,6 +152,8 @@ thread_local! {
         )
     );
 
+    static TASKS: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
+
     static EXPIRATIONS: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
 
     static RETRIES: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
@@ -171,6 +174,12 @@ thread_local! {
         let u = Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES);
         let u = WithAuthorize(u, &MAIN_AUTHORIZER);
         Box::new(u)
+    });
+
+    static REMOVER: RefCell<Box<dyn Remove>> = RefCell::new({
+        let r = Remover::new(&REGISTRATIONS, &NAMES, &TASKS, &EXPIRATIONS, &RETRIES);
+        let r = WithAuthorize(r, &MAIN_AUTHORIZER);
+        Box::new(r)
     });
 }
 
@@ -200,8 +209,6 @@ thread_local! {
 // Tasks
 
 thread_local! {
-    static TASKS: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
-
     static QUEUER: RefCell<Box<dyn Queue>> = RefCell::new({
         let q = Queuer::new(&TASKS, &REGISTRATIONS);
         let q = WithAuthorize(q, &MAIN_AUTHORIZER);
@@ -219,7 +226,7 @@ thread_local! {
 
 thread_local! {
     static EXPIRER: RefCell<Box<dyn Expire>> = RefCell::new({
-        let e = Expirer::new(&REGISTRATIONS, &NAMES, &TASKS, &EXPIRATIONS);
+        let e = Expirer::new(&REMOVER, &EXPIRATIONS);
         Box::new(e)
     });
 
@@ -359,7 +366,7 @@ fn create_registration(name: String, canister: Principal) -> CreateRegistrationR
 }
 
 #[query(name = "getRegistration")]
-fn get_registration(id: Id) -> GetRegistrationResponse {
+fn get_registration(id: String) -> GetRegistrationResponse {
     match GETTER.with(|g| g.borrow().get(&id)) {
         Ok(reg) => GetRegistrationResponse::Ok(reg),
         Err(err) => GetRegistrationResponse::Err(match err {
@@ -373,14 +380,28 @@ fn get_registration(id: Id) -> GetRegistrationResponse {
 }
 
 #[update(name = "updateRegistration")]
-fn update_registration(id: Id, typ: UpdateType) -> UpdateRegistrationResponse {
-    match UPDATER.with(|u| u.borrow().update(id, typ)) {
+fn update_registration(id: String, typ: UpdateType) -> UpdateRegistrationResponse {
+    match UPDATER.with(|u| u.borrow().update(&id, typ)) {
         Ok(()) => UpdateRegistrationResponse::Ok(()),
         Err(err) => UpdateRegistrationResponse::Err(match err {
             UpdateError::NotFound => UpdateRegistrationError::NotFound,
             UpdateError::Unauthorized => UpdateRegistrationError::Unauthorized,
             UpdateError::UnexpectedError(_) => {
                 UpdateRegistrationError::UnexpectedError(err.to_string())
+            }
+        }),
+    }
+}
+
+#[update(name = "removeRegistration")]
+fn remove_registration(id: String) -> RemoveRegistrationResponse {
+    match REMOVER.with(|r| r.borrow().remove(&id)) {
+        Ok(()) => RemoveRegistrationResponse::Ok(()),
+        Err(err) => RemoveRegistrationResponse::Err(match err {
+            RemoveError::NotFound => RemoveRegistrationError::NotFound,
+            RemoveError::Unauthorized => RemoveRegistrationError::Unauthorized,
+            RemoveError::UnexpectedError(_) => {
+                RemoveRegistrationError::UnexpectedError(err.to_string())
             }
         }),
     }
