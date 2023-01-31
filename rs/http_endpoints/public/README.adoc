@@ -1,34 +1,36 @@
-= Http Handler
+= Public HTTPS Endpoint
 :toc:
 
 == Introduction
 
-The http handler is responsible for processing http requests as specified in the
+The public endpoint is responsible for processing https requests as specified in the
 https://sdk.dfinity.org/docs/interface-spec/index.html#http-interface[IC specification]. Processing semantics include:
 
 * accepting TCP connections
-* TLS handshake for connections using HTTPs
-* safe/bounded receiving of http requests
-* forwarding, potentially after a transform, each request to the corresponding downstream component
+* TLS handshake for connections using HTTPS
+* forwarding, potentially after a transform, each request to the corresponding upstream component
 * request validation according to the https://sdk.dfinity.org/docs/interface-spec/index.html[interface specification of the IC]
-* async execution within the http handler 
+* async accepting and serving of connections 
+* DoS mitigation, as described in the link:rs/http_endpoints/README.adoc[parent README.adoc]
 
 === Startup
 
-The HTTP endpoints starts serving requests as soon as `+start_server+` is called. This is driven by operational needs,
+The HTTPS endpoint starts serving requests as soon as `+start_server+` is called. This is driven by operational needs,
 we want to serve `+/status+`, `+/_/dashboard+`, `+/_/pprof+`,`+/catch_up_package+` endpoints as soon as possible.
 
-In order to serve `+query+`, `+read_state+` or `+call+` requests the replica needs to meet a few preconditions. The precondidation are
+In order to serve `+query+`, `+read_state+` or `+call+` requests, the replica needs to meet a few preconditions. The preconditions are
 encoded in the `+ic_types::messages::ReplicaHealthStatus+` enum which is part of the `+/status+` response. 
-If you try to send, for example a query request, before the replica enters `+ReplicaHealthStatus::Healthy+`, then *503 Service Unavailable*
+If you try to send, for example, a query request, before the replica enters `+ReplicaHealthStatus::Healthy+`, then *503 Service Unavailable*
 is returned as part of the response.
 
-=== HTTP vs HTTPs
+=== HTTP vs HTTPS
 
 Currently we peek the first byte of the TCP stream to determine if the connection is TLS or not.
 
-Alternatively, to peeking the first byte of the stream, we could use a dedicated ports for HTTP and HTTPs. Until we
+An alternative to peeking the first byte of the stream is to use dedicated ports for HTTP and HTTPS. Until we
 implement client authentication we decided to keep the current solution.
+
+Only requests intended for debuging purposes, going to `+/_/.*+`, should use HTTP.
 
 === Code structure
 
@@ -46,7 +48,7 @@ According to the https://smartcontracts.org/docs/interface-spec/index.html[IC sp
 . The IC asks the targeted canister if it is willing to accept this message and be charged for the expense of processing it. This uses the Ingress message inspection API for normal calls. 
 . At some point, the IC may accept the call for processing and set its status to received. This indicates that the IC as a whole has received the call and plans on processing it (although it may still not get processed if the IC is under high load).
 
-In the existing implementation of the IC protocol, if an error occurs within the http handler that prevents a call request from being executed by the IC then a 4xx or 5xx error code is returned.
+In the existing implementation of the IC protocol, if an error occurs within the HTTPS endpoint, which prevents a call request from being executed by the IC, then a 4xx or 5xx error code is returned.
 When assigning an error code try to answer the following question: "is this something actionable by the caller, the canister owner, the IC operator?". 4xx is for caller and 5xx is for canister owner or IC operator.
 
 Alternatives for http status codes when inspecting a message (canister code) fails:
@@ -59,56 +61,3 @@ there is no clean way of splitting 5xx status codes and doing so would hide info
 ==== Query
 
 ==== Read state
-
-== tower::Service FAQ
-
-=== When implementing a https://docs.rs/tower/0.4.11/tower/trait.Service.html[tower::Service], use https://docs.rs/tower/0.4.11/tower/util/struct.BoxService.html[tower::util::BoxService] as the public interface
-
-When you have an implementation of the Service trait in one crate and you want to share that implementation
-with other crates, then there are few options what to export as public interface:
-
-* (preferred) +BoxService<...>+ is concise way to define an object that implements the Service trait. 
-* The class that implements the trait. Within the code base we discourage making a struct public
-that crosses API boundaries.
-* +Arc<dyn Service ...>+. When using a Service with https://docs.rs/hyper/0.14.14/hyper[Hyper], Hyper
-takes ownership of the Service object. So, +Arc<...>+ is not the most suitable choice. 
-* +Box<dyn Service ...>+. More verbose than +BoxService<...>+, because you need to specify the
-associated types. Also, a plain BoxService object is simpler to reason about than a smart pointer
-like +Box<dyn Service...>+.
-
-=== I want my service to be shared across many threads
-
-Implementations of the Service trait are not necessary https://dfinity-lab.gitlab.io/core/ic/docs/spec/meta/rust.html#_thread_safe_types[thread-safe].
-Here the +BoxService+ comes handy because it tries to protect the caller of your service from race
-conditions. +BoxService+ doesn't implement +Clone+ nor +Copy+. Hence we can't have two copies/clones of
-the same object that we pass to different threads. You can wrap the service object in an +Arc<...>+
-but you need to call +get_mut+ which will fail as soon as you have more than one Arc.
-
-Here are few options for sharing an object that implements the Service trait:
-
-* (preferred) Use a https://docs.rs/tower/0.4.11/tower/buffer/index.html[buffer] service around the 
-object. This effectively places the service behind a multi-producer, single-consumer buffering channel.
-* Wrap the object in a +Arc<Mutex<...>>+. The caller must make sure the mutex is acquired for the whole 
-duration from calling +poll_ready+ until +call+ returns. This is effectively the same as the "buffer" approach.
-With this approach is hard to control the contention on the mutex (it is hard to know how many threads are stuck
-waiting to acquire the mutex).
-
-=== Returning errors
-
-If +Poll::Ready(Err(_))+ is returned when +poll_ready+ is called, the service is no longer able to service requests and the caller should discard the service instance. https://docs.rs/tower/0.4.11/tower/trait.Service.html#tymethod.poll_ready[[docs.rs]]
-
-Returning a +Service::Error+ to a hyper server will cause the connection to be abruptly aborted. https://docs.rs/hyper/0.14.15/src/hyper/service/http.rs.html[[docs.rs]]
-
-==== Avoid returning https://docs.rs/tower/0.4.11/tower/load_shed/struct.LoadShed.html[tower::LoadShed] as part of a public API
-
-Having LoadShed<...> as part of cross-component API just increases the API surface - the client needs reason 
-about the addition semantics LoadShed introduces. +LoadShed+ also restricts the +Service::Error+ type to be 
-+BoxError+.
-
-=== Avoid driving clones of a service object ready without using them
-
-Some layers keep internal state in the form of semaphore permits. If you acquire a semaphore permit
-better use it or free it. This semantics doesn't play very well the https://docs.rs/tower/0.4.11/tower/steer/index.html[tower::Steer] service.
-For example, if we create a Steer service per TCP connection and one of the upstream services uses a buffer,
-then each connection will try to acquire a semaphore permit. However, it may be that only a small number of
-connection use that permit.
