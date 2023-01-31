@@ -16,14 +16,6 @@ The following vendors and models are currently supported:
 |Supermicro  |AS-1023US-TR4-0-BC27G|H11DSU-iN|2x AMD EPYC 7302|16x 32 GB (512 GB total) DDR4 ECC|1x 3.5 TB NVMe, 4x 8 TB SCSI
 |====
 
-== Operating System
-
-The operating system is currently based on the Ubuntu 20.04 Server LTS Docker image:
-
-   FROM ubuntu:20.04
-
-Missing components such as the kernel, bootloader and system service manager are installed during the build process.
-
 === Build Process
 
 The build process consists of a Shell script and two Dockerfiles, which turn the upstream Ubuntu Docker image into a bootable disk-image containing the system. Please consult the following scripts for details:

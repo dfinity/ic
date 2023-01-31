@@ -1,231 +1,114 @@
-= Ubuntu base OS
+= Guest OS
 
-This contains the build scripts for using full system images of Ubuntu
-including the IC software stack as units of deployment and upgrade.
+A GuestOS image is comprised of the base Ubuntu plus the replica and orchestrator binaries.
+GuestOS runs inside a QEMU virtual machine. The IC protocol runs inside of the guestOS virtual machine.
 
-== Quick build and test instructions (MacOS)
+For more details on the goals, structure, and disk layout of GuestOS, https://docs.google.com/presentation/d/1xECozJhVCqzFC3mMMvROD7rlB-xWDHHLKvZuVnuLgJc/edit?usp=sharing[see here]
 
-Before you start, ensure that you have the prerequisites:
+== How to build and run guestOS
+=== Building guestOS
 
-- https://www.docker.com/get-started[Docker]: for building the disk image.
-- https://www.qemu.org/download[QEMU]: for testing.
-- OVMF UEFI firmware: for testing. If you're running Linux, you can simply
-`sudo apt-get install ovmf`. If you're on MacOS, you'd need a Linux system to
-install the OVMF package, and then download the `OVMF_CODE.fd` file to your
-local machine for testing.
+To build with Bazel, you need https://bazel.build/install[Bazel] installed.
+Alternatively, the following script allows building IC-OS in a container with the correct environment already configured:
 
-== Quick build and test instructions (Linux required)
-To build a full system image for development, run:
+    ./gitlab-ci/container/container-run.sh
 
-  scripts/build-disk-image.sh -o /tmp/disk.img -v <version>  -t dev -p <password> -x ../../artifacts/build-ic/artifacts/release
+Build a guestOS image:
 
-When building your replica, nodemanger and other IC binaries, be sure *not* to use Nix to build those.
-Instead do a docker based build as described here: https://github.com/dfinity/ic#building-the-code
+    bazel build //ic-os/guestos/dev/...
 
-  ./gitlab-ci/container/container-run.sh
+This will output disk-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/dev, which is your tarred guestOS image.
 
-  # Build binaries and canisters
-  bazel build :binaries //publish/canisters
+=== Running guestOS
 
-  # Obtain the location of the binaries and canisters run
-  bazel cquery output=files :binaries
-  bazel cquery output=files //publish/canisters
+The guestOS image (disk.img) can booted directly in qemu:
 
-This can then be booted in qemu, e.g.:
-
-  qemu-system-x86_64 \
-    -display none -serial mon:stdio \
-    -machine type=q35,accel=kvm -enable-kvm \
-    -cpu host \
-    -m 2G \
+    qemu-system-x86_64 \
+    -nographic -m 4G \
     -bios /usr/share/OVMF/OVMF_CODE.fd \
-    -device virtio-blk-pci,drive=drive0,addr=2.0 -drive file=/tmp/disk.img,format=raw,id=drive0,if=none \
-    -device pcie-root-port,id=pcie.1,chassis=1 \
-    -netdev user,id=enp1s0,hostfwd=tcp::8080-:8080,hostfwd=tcp::22222-:22 \
-    -device virtio-net-pci,netdev=enp1s0,bus=pcie.1,addr=0.0
+    -drive file=disk.img,format=raw,if=virtio
 
-You can interact with the VM via the console now (note: issue "ctrl-a", "c"
-to enter qemu console from here; issue "quit" to terminate the VM).
+* Note: `ctrl-a x` to quit the qemu console.
 
-You can also SSH into your qemu instance on [::1]:22222.
+You can also use bazel to do a testnet deployment. For documentation on this process, see ic/testnet/tools/README.md
 
-The system is laid out such that there are two alternate system partitions
-(called "A" and "B"): One is active at any point in time, the other is available
-for writing updates into it. You can test this by first building a
-partition image that can be put there as upgrade:
+== Upgrade GuestOS
+The GuestOS disk layout contains two sets of system partitions, called partition sets "A" and "B".
 
-  scripts/build-ubuntu.sh -o /tmp/upgrade-image.tar
+image:media/guestOS_disk-layout.png[]
 
-(Note that this is basically also built as part of the above full
-disk image build). Transfer this in whatever way to the target system
-and install it using the tool included, by running on the *target* *system*:
+Above is the guestOS disk layout—partition set "A" in green, partition set "B" in blue.
 
-  /opt/ic/bin/manageboot.sh upgrade-install upgrade-image.tar
-  /opt/ic/bin/manageboot.sh upgrade-commit
+At any point in time, one partition set is "active" and the other is "passive". 
+We can write to the passive partition set, and when we are ready, we can swap the active and passive partition sets, thereby upgrading the GuestOS.
 
-After that, the newly installed system will be booted. On next boot, it will
-revert to the original system unless you previously confirm that the new
-system is actually fully operational:
+=== Building upgrade image
 
-  /opt/ic/bin/manageboot.sh confirm
+The same bazel command to build a guestOS image will also produce a guestOS upgrade image:
+
+    bazel build //ic-os/guestos/dev/...
+
+This will output update-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/dev, which is your tarred guestOS-update image.
+
+=== Installing upgrade image
+
+    rootfs/opt/ic/bin/manageboot.sh upgrade-install update-img.tar
+    rootfs/opt/ic/bin/manageboot.sh upgrade-commit
+
+After that, the newly installed system will be booted. Note that on the next boot, it will revert to the original system unless you then confirm that the new system is actually fully operational:
+
+    rootfs/opt/ic/bin/manageboot.sh confirm
+
+For more information on the upgrade commands, see https://github.com/dfinity/ic/blob/master/ic-os/guestos/rootfs/opt/ic/bin/manageboot.sh[rootfs/opt/ic/bin/manageboot.sh]
 
 == Developing the Ubuntu system
 
-The entirety of the actual Ubuntu operating system is contained in the
-rootfs/ subdirectory. See instructions link:rootfs/README.adoc#[there] on how to
-make changes to the OS.
+The Ubuntu configuration and system logic is contained in the rootfs/ subdirectory.
+See instructions link:rootfs/README.adoc#[here] on how to make changes to the OS.
 
-== Directory organization
+For further reading, see the docs in the
+link:doc/README.adoc#[doc/ subdirectory]
 
-The directory rootfs/ contains everything related to building a bootable
-Ubuntu system. It uses various template directories (e.g. /opt) that
-are simply copied verbatim to the target system -- you can just drop
-files there to include in the image.
+== Alternate build paths
 
-The directory bootloader/ contains everything related to building EFI
-firmware and the grub bootloader image. It is configured to support
-A/B partition split:
+GuestOS images can also be built with Docker or by using the build scripts directly.
 
-All build scripts are contained in the scripts/ subdirectory.
+=== Building with Podman
 
-== CI build
+The container-based build process is described https://github.com/dfinity/ic#building-the-code[here].
+Be sure *not* to use Nix to build the IC binary artifacts. 
 
-For CI purposes, the build is split such that the network-dependent
-part (docker) is separated from the other parts of the build pipeline.
+    ./gitlab-ci/container/build-ic.sh
 
-To run these two steps separately, execute:
+This command will output a tarred guestOS image in the artifacts/icos folder: "disk-img.tar.gz"
 
-  scripts/build-docker.sh /tmp/dockertmp
-  scripts/build-disk-image.sh -o /tmp/disk.img -t /tmp/dockertmp/bootloader.tar -u /tmp/dockertmp/rootfs.tar
+Note that building with Podman creates a production image as opposed to a development image. When you run production images inside of QEMU, you will not be able to access the console and other debugging tools.
 
-The "update artifact" image can be built using:
+=== Building directly from the build scripts
 
-  scripts/build-docker.sh /tmp/dockertmp
-  scripts/build-ubuntu.sh -o /tmp/update-image.tar -i /tmp/dockertmp/rootfs.tar
+In order to build directly from the build scripts, you must first build the release binaries. These binaries can be built locally, but they can also be downloaded remotely from a previous build.
 
-== Docker container use
+Downloading the binaries from a previous build is much faster, but it will not include your local changes to the replica and orchestrator. 
+However, this is not a problem if you are not working on the release binaries. 
+In fact, this is preferable if you do not want your local environment to impact the creation of the release binaries.
 
-The system can also be turned into a docker image that allows to boot an
-entire testnet as a set of docker containers. See link:containerfs/README.adoc#[containerfs/]
-for some initial build documentation.
+As the node team rarely touches the release binaries, we prefer this build path.
 
-== Prerequisites
+    GET_GUEST_OS=0 ./ic-os/guestos/scripts/get-artifacts.sh
 
-docker, usual set of fs tools (sfdisk, ext4fs tools, vfat, ...)
+This will download the release binaries and place them in the ic/artifacts folder.
 
-== Under the hood
+Setting GET_GUEST_OS=0 will tell the get-artifacts script to ignore downloading a complete guestOS image.
+Leave out GET_GUEST_OS=0 if you want to quickly obtain a guestOS image!
 
-The ubuntu system is built by converting the official Ubuntu docker image
-into a bootable "bare-metal" image (or "virtual-metal" VM image). This
-results in a very minimal system with basically no services running at all.
-All pre-configuration of the system is performed using docker utilities,
-and the system is actually also fully operational as a docker container.
-This means that development and testing can be done on the docker image
-itself - actual VM image is only required for full end to end testing.
+Once you have the canister and release binaries, you can build the image:
 
-== Prod deployment
+    ./scripts/build-disk-image.sh -o <output> -v <version> -t dev -p <password> -x ../../artifacts/release
 
-The prod deployment is facilitated using the following command:
+This command will take up to 10 minutes to run. 
+It will output disk.img, which is the guestOS image.
 
-  virt-install \
-    --disk disk.img --import \
-    --memory 4096 \
-    --os-variant ubuntu20.04 \
-    --network bridge=X \
-    --network bridge=Y \
-    --graphics none \
-    --console pty,target.type=virtio --serial pty \
-    --boot uefi \
-    --noautoconsole
 
-This sets up the following critical system pieces for operation:
+Similar to a guestOS image, a guestOS-upgrade image can be built by using the build scripts directly:
 
-* a virtual harddisk driven by virtio-blk
-* first virtual network device driven by virtio-net, using PCI bus 1 slot 0
-* second virtual network device driven by virtio-net, using PCI bus 2 slot 0
-
-== Run a single machine NNS using qemu (e.g. on developer laptop)
-
-Generate key material and configuration files for the guest and the disk image with it:
-
-    ./boot-single-machine-nns.sh
-    ./scripts/build-disk-image.sh -o disk.img
-
-Then start qemu as described above.
-
-Then, install the NNS:
-
-    ./tests/scripts/install-nns.sh /tmp/tmp.3HNnhenaD8
-
-The directory given as argument is printed at the end of the `boot-single-machine-nns.sh` script.
-
-== Test base OS upgrades
-
-Boot a single machine NNS instance and run in qemu as described above.
-
-Build a base OS upgrade image and servce it via http.
-
-    mkdir /tmp/upgrade
-    scripts/build-update-image.sh -o /tmp/upgrade/upgrade-image.tar -v 42
-    (cd /tmp/upgrade; python -m http.server 8000 --bind ::)
-
-Upgrade the NNS subnetwork. First, check the currently running version.
-
-    /tmp/tmp.3HNnhenaD8/ic-admin --nns-url http://[::1]:8080 get-replica-version 0.1.0
-
-This should return a replica version record. Note that the record does not specify a base OS image yet.
-Then, trigger the upgrade (currently, with a very recent ic-admin, which is not yet on master)
-
-    export IP=192.168.178.139
-    ic-admin --nns-url http://[::1]:8080 propose-to-bless-replica-version-flexible 42 \
-      --summary "Blesing replica version" \
-      http://$IP:8000/upgrade-image.tar e592d1a0aa055da6e9436f95c2a7e7e96ed0417eebb55d6a5af0fa15a4cd0ce4
-    ic-admin --nns-url=http://[::1]:8080 forward-test-neuron-vote ${PROPOSAL_ID} && ic-admin --nns-url=http://[::1]:8080 execute-eligible-proposals
-    ic-admin --nns-url=http://[::1]:8080 get-replica-version 42
-    ic-admin --nns-url=http://[::1]:8080 get-subnet 0 | grep replica_version
-    ic-admin --nns-url=http://[::1]:8080 update-subnet-replica-version 0 42
-
-== Boot replica and join existing subnetwork as new node
-
-You have to be connected to the DFINITY VPN for those steps to work.
-
-Boot an existing testnet as described here:
-https://gitlab.com/dfinity-lab/core/ic/blob/master/testnet/docs/HowTo-OperateNetworks.adoc#new-how-to-deploy-a-new-network
-
-Typically, it is enough to do:
-
-    cd testnet/tools
-    nix run -c testnet-install-head-sh ${testnet}
-
-Assume the IP address of the machine we want to join is 10.11.10.109 and 2a00:fb01:400:42:5054:ff:fe33:4eb0. We want to join subnetwork 1.
-The eastist way to find the IP addresses to use is to boot an image via `virt-install`, use `ifconfig` to determine MAC addresses and IP
-addresses assigned to that guest.
-
-Call join-as-new-node, e.g.:
-
-    ./join-as-new-node.sh dcs-consensus2-11.dfinity.systems 1 10.11.10.109 2a00:fb01:400:42:5054:ff:fe33:4eb0
-
-Then build the image.
-
-    ./scripts/build-disk-image.sh -o disk.img && \
-      tar c --sparse disk.img >disk.tar && \
-      scp -C disk.tar zh1-spm22.zh1.dfinity.network:
-
-Then deploy it there:
-Note that we specify the MAC addresses of the network interfaces here, so that we guarantee we get the same IP addresses assigned from DHCP.
-
-    sudo virsh destroy skaestle; \
-    sudo virsh undefine skaestle --nvram; \
-    tar -xf disk.tar && \
-    cp disk.img /tmp/skaestle/disk.img && \
-    virt-install --disk /tmp/skaestle/disk.img --import --memory 4096 --os-variant ubuntu20.04 --network bridge=br0,mac=52:54:00:4f:f8:ec \
-      --network bridge=vlan66,mac=52:54:00:33:4e:b0 --graphics none --name skaestle --console pty,target.type=virtio --serial pty --boot uefi --noautoconsole
-
-Check that it comes up:
-
-    curl -s 10.11.10.109:9090 | grep ^consensus_batch_height
-
-That's the current block height of the new replica. It should be larger than 0 after a little time to catch up.
-Also check network connections:
-
-    ssh root@10.11.10.109 -o UserKnownHostsFile=/dev/null 'ss -plant'
+    ./scripts/build-ubuntu.sh -o /tmp/upgrade-image.tar

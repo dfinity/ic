@@ -2,10 +2,12 @@
 
 == Introduction
 
-The term SetupOS is used for the operating system installing the IC-OS stack (hypervisor and virtual machine). This installer enables the node providers/operators to independently install their nodes.
+The term SetupOS is used for the operating system installing the IC-OS stack (hypervisor and virtual machine / hostOS and guestOS). This installer enables the node providers/operators to independently install their nodes.
 Instead of installing and relying on a full blown upstream ISO image, we assemble the system based on a minimal Docker image and add the required components ourselves. This approach allows for a minimal, controlled and well understood system - which is key for a secure platform.
 
-== Support
+To learn more about the onboarding and installation process, https://wiki.internetcomputer.org/wiki/Node_Provider_Onboarding#[read the Node Provider Onboarding Wiki].
+
+== Support 
 
 The following vendors and models are currently supported:
 
@@ -14,14 +16,6 @@ The following vendors and models are currently supported:
 |Dell        |PowerEdge R6525      |0DMD2T   |2x AMD EPYC 7302|16x 32 GB (512 GB total) DDR4 ECC|10x 3.5 TB NVMe
 |Supermicro  |AS-1023US-TR4-0-BC27G|H11DSU-iN|2x AMD EPYC 7302|16x 32 GB (512 GB total) DDR4 ECC|1x 3.5 TB NVMe, 4x 8 TB SCSI
 |====
-
-== Operating System
-
-The operating system is currently based on the Ubuntu 20.04 Server LTS Docker image:
-
-   FROM ubuntu:20.04
-
-Missing components such as the kernel, bootloader and system service manager are installed during the build process.
 
 === Build Process
 
@@ -33,8 +27,8 @@ The build process consists of a Shell script and two Dockerfiles, which turn the
 
 We currently split the Docker build process into two Dockerfiles. This split is necessary to ensure a reproducible build.
 
-  ic/ic-os/hostos/rootfs/Dockerfile.base
-  ic/ic-os/hostos/rootfs/Dockerfile
+  ic/ic-os/setupos/rootfs/Dockerfile.base
+  ic/ic-os/setupos/rootfs/Dockerfile
 
 The +Dockerfile.base+ takes care of installing all upstream Ubuntu packages. The version of these packages can change at any given time, as updates are published regularly. We publish the result on our public https://hub.docker.com/u/dfinity[Docker Hub].
 

@@ -1,6 +1,4 @@
-= IC guest OS
-
-This is the guest IC guest OS running in a VM on the IC node machines.
+= IC GuestOS docs
 
 Refer to detailed documentation on:
 
