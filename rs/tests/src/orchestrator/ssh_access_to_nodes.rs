@@ -12,18 +12,33 @@ Coverage::
 end::catalog[] */
 
 use crate::{
-    driver::{test_env::TestEnv, test_env_api::*},
-    orchestrator::utils::ssh_access::*,
+    driver::{
+        ic::InternetComputer,
+        test_env::{SshKeyGen, TestEnv},
+        test_env_api::{
+            HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot,
+            NnsInstallationExt, SubnetSnapshot, TopologySnapshot,
+        },
+    },
+    orchestrator::utils::ssh_access::{
+        assert_authentication_fails, assert_authentication_works, fail_to_update_subnet_record,
+        fail_updating_ssh_keys_for_all_unassigned_nodes, generate_key_strings,
+        get_updatesubnetpayload_with_keys, get_updateunassignednodespayload,
+        update_ssh_keys_for_all_unassigned_nodes, update_subnet_record,
+        wait_until_authentication_fails, wait_until_authentication_is_granted, AuthMean,
+    },
     util::{block_on, get_app_subnet_and_node, get_nns_node},
 };
 
-use crate::driver::ic::InternetComputer;
 use ic_nns_common::registry::MAX_NUM_SSH_KEYS;
 use ic_registry_subnet_type::SubnetType;
-
 use std::net::IpAddr;
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen("admin")
+        .expect("Failed to generate ssh admin keys");
+
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)

@@ -250,6 +250,10 @@ name = "ic-systest-node-reassignment-test"
 path = "bin/node_reassignment_test.rs"
 
 [[bin]]
+name = "ic-systest-ssh-access-to-nodes-test"
+path = "bin/ssh_access_to_nodes_test.rs"
+
+[[bin]]
 name = "ic-systest-node-registration-test"
 path = "bin/node_registration_test.rs"
 
