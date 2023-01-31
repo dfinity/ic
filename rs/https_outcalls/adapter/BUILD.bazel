@@ -50,14 +50,14 @@ rust_library(
     name = "adapter",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_name = "ic_canister_http_adapter",
+    crate_name = "ic_https_outcalls_adapter",
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
 
 rust_binary(
-    name = "ic-canister-http-adapter",
+    name = "ic-https-outcalls-adapter",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,

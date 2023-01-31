@@ -108,7 +108,7 @@ RUN addgroup --system nonconfidential && \
     addgroup --system vsock && \
     addgroup --system ic-registry-local-store
 
-# The "ic-http-adapter" account. Used to run `ic-canister-http-adapter` binary
+# The "ic-http-adapter" account. Used to run `ic-https-outcalls-adapter` binary
 # to allow nodes to make HTTP calls.
 RUN addgroup ic-http-adapter && \
     adduser --system --disabled-password --shell /usr/sbin/nologin -c "IC Canister HTTP Adapter" ic-http-adapter && \

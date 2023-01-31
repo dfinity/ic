@@ -126,7 +126,7 @@
         bitcoin_mainnet_uds_metrics_path: "/run/ic-node/bitcoin-mainnet-adapter/metrics",
         // IPC socket and metrics path for canister http adapter. These UDS path has to be the same as
         // specified in the systemd socket file.
-        // The canister http adapter socket file is: /ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.socket
+        // The canister http adapter socket file is: /ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.socket
         canister_http_uds_path: "/run/ic-node/canister-http-adapter/socket",
         canister_http_uds_metrics_path: "/run/ic-node/canister-http-adapter/metrics",
     },

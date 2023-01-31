@@ -11,11 +11,11 @@
 mod test {
     use futures::TryFutureExt;
     use http::{header::HeaderValue, StatusCode};
-    use ic_canister_http_adapter::{AdapterServer, Config};
     use ic_canister_http_service::{
         canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest,
         HttpMethod,
     };
+    use ic_https_outcalls_adapter::{AdapterServer, Config};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use once_cell::sync::OnceCell;

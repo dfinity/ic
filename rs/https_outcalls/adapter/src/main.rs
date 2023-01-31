@@ -1,12 +1,12 @@
 /// This binary is managed by systemd and added to the replica image.
 /// The replica communicates with the HTTP adapter over unix domain sockets.
 /// Relevant configuration files:
-/// systemd service ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.service
-/// systemd socket ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.socket
+/// systemd service ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.service
+/// systemd socket ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.socket
 use clap::Parser;
 use ic_adapter_metrics_server::start_metrics_grpc;
 use ic_async_utils::{abort_on_panic, incoming_from_first_systemd_socket, incoming_from_path};
-use ic_canister_http_adapter::{AdapterServer, Cli, IncomingSource};
+use ic_https_outcalls_adapter::{AdapterServer, Cli, IncomingSource};
 use ic_logger::{error, info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use serde_json::to_string_pretty;
@@ -35,8 +35,8 @@ pub async fn main() {
     // metrics socket as FD(4).
     // SAFETY: The process is managed by systemd and is configured to start with at metrics socket.
     // Additionally this function is only called once here.
-    // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.socketi
-    // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-canister-http-adapter.service
+    // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.socketi
+    // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.service
     if config.incoming_source == IncomingSource::Systemd {
         unsafe {
             start_metrics_grpc(metrics_registry.clone(), logger.clone());

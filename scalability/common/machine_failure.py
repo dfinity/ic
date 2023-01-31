@@ -25,7 +25,7 @@ class MachineFailure(threading.Thread):
         return [
             "ic-replica",
             "ic-btc-adapter",
-            "ic-canister-http-adapter",
+            "ic-https-outcalls-adapter",
             "ic-crypto-csp",
             "ic-onchain-observability-adapter",
         ]

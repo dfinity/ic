@@ -389,7 +389,7 @@ dontaudit ic_canister_sandbox_t ic_canister_sandbox_t : process { signal };
 dontaudit ic_canister_sandbox_t cert_t : file { read };
 
 ###############################################################################
-# ic-canister-http-adapter
+# ic-https-outcalls-adapter
 
 application_domain(ic_http_adapter_t, ic_http_adapter_exec_t)
 
