@@ -9,7 +9,7 @@ use crate::driver::test_env_api::{
 use crate::tecdsa::tecdsa_signature_test::{
     get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature, KEY_ID1,
 };
-use crate::util::{runtime_from_url, MessageCanister};
+use crate::util::{assert_malicious_from_topo, runtime_from_url, MessageCanister};
 use canister_test::{Canister, Cycles};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -64,7 +64,7 @@ pub fn test(env: TestEnv) {
     info!(&log, "Successfully installed NNS canisters");
     let nns_agent = nns_honest_node.with_default_agent(|agent| async move { agent });
     let rt = tokio::runtime::Runtime::new().expect("Could not create tokio runtime.");
-
+    let logger = log.clone();
     rt.block_on(async move {
         let nns_runtime = runtime_from_url(
             nns_honest_node.get_public_url(),
@@ -90,4 +90,8 @@ pub fn test(env: TestEnv) {
         .unwrap();
         verify_signature(&message_hash, &public_key, &signature);
     });
+
+    info!(logger, "Checking for malicious logs...");
+    assert_malicious_from_topo(&topology, vec!["maliciously_corrupt_ecdsa_dealings: true"]);
+    info!(logger, "Malicious log check succeeded.");
 }

@@ -26,9 +26,9 @@ Authentication checks in block validation.
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::TestEnv;
+use crate::driver::test_env::{SshKeyGen, TestEnv};
 use crate::driver::test_env_api::{
-    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, ADMIN,
 };
 use crate::execution::request_signature_test::{expiry_time, random_ecdsa_identity, sign_update};
 use crate::util::*;
@@ -48,6 +48,7 @@ use url::Url;
 
 pub fn config(env: TestEnv) {
     env.ensure_group_setup_created();
+    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -82,7 +83,8 @@ pub fn test(env: TestEnv) {
         .expect("No malicious node found in the subnet.");
 
     let agent = malicious_node.with_default_agent(|agent| async move { agent });
-
+    let topo = topology.clone();
+    let log = logger.clone();
     block_on({
         async move {
             let canister = UniversalCanister::new_with_retries(
@@ -126,7 +128,7 @@ pub fn test(env: TestEnv) {
             // Wait for all the requests to be gossiped to the honest nodes. `read_state`
             // cannot be used here because these requests are never executed to begin with.
 
-            std::thread::sleep(std::time::Duration::from_secs(30));
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
 
             // Query all the honest nodes and verify that the memory is unchanged.
 
@@ -161,7 +163,7 @@ pub fn test(env: TestEnv) {
             )
             .await;
 
-            std::thread::sleep(std::time::Duration::from_secs(30));
+            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
 
             // Query all the honest nodes and verify that the memory has been updated.
             for node in honest_nodes {
@@ -178,6 +180,10 @@ pub fn test(env: TestEnv) {
             }
         }
     });
+
+    info!(log, "Checking for malicious logs ...");
+    assert_malicious_from_topo(&topo, vec!["maliciously_disable_ingress_validation: true"]);
+    info!(log, "Malicious log check succeeded.");
 }
 
 async fn play_malicious_requests<T: Identity + 'static>(
