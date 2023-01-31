@@ -70,7 +70,7 @@ options may be specified:
     Specify an initial denylist of canisters for the Boundary Nodes
 
   --denylist_url url
-    Specify the url for the denylist updater 
+    Specify the url for the denylist updater
 
   --prober-identity path
     specify an identity file for the prober
@@ -80,6 +80,10 @@ options may be specified:
 
   --application-domains
     comma-delimited list of domains serving application canisters (e.g. ic0.dev or ic0.app)
+
+  --certdir
+    specify the directory holding TLS certificates for the hosted domain
+    (default: None i.e. snakeoil/self certified certificate will be used)
 
   --ipv4_http_ips
     the ipv4 blocks (e.g. "1.2.3.4/5") to be whitelisted for inbound http(s)
@@ -202,6 +206,9 @@ function build_ic_bootstrap_tar() {
             --application-domains)
                 local APPLICATION_DOMAINS="$2"
                 ;;
+            --certdir)
+                local CERT_DIR="$2"
+                ;;
             --ipv6_replica_ips)
                 local IPV6_REPLICA_IPS="$2"
                 ;;
@@ -272,6 +279,8 @@ function build_ic_bootstrap_tar() {
             fail=1
         fi
     done
+
+    CERT_DIR="${CERT_DIR:-}"
 
     if [[ -z "${ELASTICSEARCH_URL:-}" ]]; then
         err "missing elasticsearch_url"
@@ -345,6 +354,15 @@ EOF
     if [[ -n "${PROBER_IDENTITY:-}" ]]; then
         echo "Using prober identity ${PROBER_IDENTITY}"
         cp "${PROBER_IDENTITY}" "${BOOTSTRAP_TMPDIR}/prober_identity.pem"
+    fi
+
+    # setup the certificates
+    if [[ -n "${CERT_DIR:-}" && -f "${CERT_DIR}/fullchain.pem" && -f "${CERT_DIR}/privkey.pem" && -f "${CERT_DIR}/chain.pem" ]]; then
+        echo "Using certificates ${CERT_DIR}/fullchain.pem ${CERT_DIR}/privkey.pem ${CERT_DIR}/chain.pem"
+        mkdir -p "${BOOTSTRAP_TMPDIR}/certs"
+        cp "${CERT_DIR}/fullchain.pem" "${BOOTSTRAP_TMPDIR}/certs"
+        cp "${CERT_DIR}/privkey.pem" "${BOOTSTRAP_TMPDIR}/certs"
+        cp "${CERT_DIR}/chain.pem" "${BOOTSTRAP_TMPDIR}/certs"
     fi
 
     tar cf "${OUT_FILE}" -C "${BOOTSTRAP_TMPDIR}" .
