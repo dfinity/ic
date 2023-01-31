@@ -6,13 +6,14 @@ use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface as ifc;
 use garcon::Delay;
 use ic_agent::Agent;
+use mockall::automock;
 use serde::{Deserialize, Serialize};
 
 use crate::work::ProcessError;
 
 pub type Id = String;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum State {
     Failed(String),
     PendingOrder,
@@ -35,52 +36,6 @@ impl From<ProcessError> for State {
             ProcessError::UnexpectedError(_) => State::Failed(e.to_string()),
         }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Registration {
-    pub name: String,
-    pub canister: Principal,
-    pub state: State,
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum CreateError {
-    #[error("Registration '{0}' already exists")]
-    Duplicate(Id),
-    #[error(transparent)]
-    UnexpectedError(#[from] anyhow::Error),
-}
-
-#[async_trait]
-pub trait Create: Send + Sync {
-    async fn create(&self, name: &str, canister: &Principal) -> Result<Id, CreateError>;
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum UpdateError {
-    #[error("Not found")]
-    NotFound,
-    #[error(transparent)]
-    UnexpectedError(#[from] anyhow::Error),
-}
-
-#[async_trait]
-pub trait Update: Send + Sync {
-    async fn update(&self, id: &Id, state: &State) -> Result<(), UpdateError>;
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum GetError {
-    #[error("Not found")]
-    NotFound,
-    #[error(transparent)]
-    UnexpectedError(#[from] anyhow::Error),
-}
-
-#[async_trait]
-pub trait Get: Send + Sync {
-    async fn get(&self, id: &Id) -> Result<Registration, GetError>;
 }
 
 impl From<ifc::State> for State {
@@ -107,6 +62,13 @@ impl From<State> for ifc::State {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Registration {
+    pub name: String,
+    pub canister: Principal,
+    pub state: State,
+}
+
 impl From<ifc::Registration> for Registration {
     fn from(reg: ifc::Registration) -> Self {
         Registration {
@@ -117,14 +79,70 @@ impl From<ifc::Registration> for Registration {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum UpdateType {
+    Canister(Principal),
+    State(State),
+}
+
+impl From<UpdateType> for ifc::UpdateType {
+    fn from(typ: UpdateType) -> Self {
+        match typ {
+            UpdateType::Canister(canister) => ifc::UpdateType::Canister(canister),
+            UpdateType::State(state) => ifc::UpdateType::State(state.into()),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CreateError {
+    #[error("Registration '{0}' already exists")]
+    Duplicate(Id),
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+#[async_trait]
+pub trait Create: Send + Sync {
+    async fn create(&self, name: &str, canister: &Principal) -> Result<Id, CreateError>;
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum UpdateError {
+    #[error("Not found")]
+    NotFound,
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+#[automock]
+#[async_trait]
+pub trait Update: Send + Sync {
+    async fn update(&self, id: &str, typ: &UpdateType) -> Result<(), UpdateError>;
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum GetError {
+    #[error("Not found")]
+    NotFound,
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+#[automock]
+#[async_trait]
+pub trait Get: Send + Sync {
+    async fn get(&self, id: &str) -> Result<Registration, GetError>;
+}
+
 pub struct CanisterGetter(pub Arc<Agent>, pub Principal);
 
 #[async_trait]
 impl Get for CanisterGetter {
-    async fn get(&self, id: &Id) -> Result<Registration, GetError> {
+    async fn get(&self, id: &str) -> Result<Registration, GetError> {
         use ifc::{GetRegistrationError as Error, GetRegistrationResponse as Response};
 
-        let args = Encode!(id).context("failed to encode arg")?;
+        let args = Encode!(&id).context("failed to encode arg")?;
 
         let resp = self
             .0
@@ -187,7 +205,7 @@ pub struct CanisterUpdater(pub Arc<Agent>, pub Principal);
 
 #[async_trait]
 impl Update for CanisterUpdater {
-    async fn update(&self, id: &Id, state: &State) -> Result<(), UpdateError> {
+    async fn update(&self, id: &str, typ: &UpdateType) -> Result<(), UpdateError> {
         use ifc::{UpdateRegistrationError as Error, UpdateRegistrationResponse as Response};
 
         let waiter = Delay::builder()
@@ -195,8 +213,8 @@ impl Update for CanisterUpdater {
             .timeout(Duration::from_millis(10000))
             .build();
 
-        let state: ifc::State = state.to_owned().into();
-        let args = Encode!(id, &state).context("failed to encode arg")?;
+        let typ: ifc::UpdateType = typ.to_owned().into();
+        let args = Encode!(&id, &typ).context("failed to encode arg")?;
 
         let resp = self
             .0

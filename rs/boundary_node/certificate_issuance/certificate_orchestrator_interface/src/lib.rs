@@ -153,6 +153,12 @@ pub enum GetRegistrationResponse {
 }
 
 #[derive(CandidType, Deserialize)]
+pub enum UpdateType {
+    Canister(Principal),
+    State(State),
+}
+
+#[derive(CandidType, Deserialize)]
 pub enum UpdateRegistrationError {
     NotFound,
     Unauthorized,

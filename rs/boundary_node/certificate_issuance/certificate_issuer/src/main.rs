@@ -15,7 +15,7 @@ use axum::{
     http::{Request, Response, StatusCode, Uri},
     middleware::{self, Next},
     response::IntoResponse,
-    routing::{get, post},
+    routing::{get, post, put},
     Extension, Router, Server,
 };
 use candid::Principal;
@@ -54,7 +54,7 @@ use crate::{
     dns::Resolver,
     encode::{Decoder, Encoder},
     metrics::{MetricParams, WithMetrics},
-    registration::{Create, Get, State, Update},
+    registration::{Create, Get, State, Update, UpdateType},
     work::{Dispense, DispenseError, Process, Queue},
 };
 
@@ -264,15 +264,24 @@ async fn main() -> Result<(), Error> {
     // API
     let create_registration_handler = api::create_handler.layer(Extension({
         let v: (Arc<dyn Check>, Arc<dyn Create>, Arc<dyn Queue>) = (
-            registration_checker, // registration_checker
-            registration_creator, // registration_creator
-            queuer.clone(),       // queuer
+            registration_checker.clone(), // registration_checker
+            registration_creator.clone(), // registration_creator
+            queuer.clone(),               // queuer
         );
         v
     }));
 
     let get_registration_handler = api::get_handler.layer(Extension({
-        let v: Arc<dyn Get> = registration_getter;
+        let v: Arc<dyn Get> = registration_getter.clone();
+        v
+    }));
+
+    let update_registration_handler = api::update_handler.layer(Extension({
+        let v: (Arc<dyn Check>, Arc<dyn Get>, Arc<dyn Update>) = (
+            registration_checker.clone(), // registration_checker
+            registration_getter.clone(),  // registration_getter
+            registration_updater.clone(), // registration_updater
+        );
         v
     }));
 
@@ -284,6 +293,7 @@ async fn main() -> Result<(), Error> {
     let api_router = Router::new()
         .route("/registrations", post(create_registration_handler))
         .route("/registrations/:id", get(get_registration_handler))
+        .route("/registrations/:id", put(update_registration_handler))
         .route("/certificates", get(export_handler));
 
     // API (Instrument)
@@ -437,7 +447,7 @@ async fn main() -> Result<(), Error> {
                                 .context("failed to queue task {id}")?;
 
                             registration_updater
-                                .update(&id, &State::Available)
+                                .update(&id, &UpdateType::State(State::Available))
                                 .await
                                 .context("failed to update registration {id}")?;
                         }
@@ -453,7 +463,7 @@ async fn main() -> Result<(), Error> {
                                 .context("failed to queue task {id}")?;
 
                             registration_updater
-                                .update(&id, &err.into())
+                                .update(&id, &UpdateType::State(err.into()))
                                 .await
                                 .context("failed to update registration {id}")?;
                         }

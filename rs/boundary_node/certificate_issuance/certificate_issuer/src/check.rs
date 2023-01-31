@@ -6,6 +6,7 @@ use ic_utils::{
     call::SyncCall,
     interfaces::http_request::{HttpRequestCanister, HttpResponse},
 };
+use mockall::automock;
 use std::sync::Arc;
 use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
 
@@ -35,6 +36,7 @@ pub enum CheckError {
     UnexpectedError(#[from] anyhow::Error),
 }
 
+#[automock]
 #[async_trait]
 pub trait Check: Send + Sync {
     async fn check(&self, name: &str) -> Result<Principal, CheckError>;

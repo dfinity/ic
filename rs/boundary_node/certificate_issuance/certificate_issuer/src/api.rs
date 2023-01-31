@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     certificate::Export,
     check::{Check, CheckError},
-    registration::{Create, CreateError, Get, GetError},
+    registration::{Create, CreateError, Get, GetError, Update, UpdateError, UpdateType},
     work::Queue,
 };
 
@@ -137,6 +137,70 @@ pub async fn get_handler(
         .unwrap()
 }
 
+#[allow(clippy::type_complexity)]
+pub async fn update_handler(
+    Extension((ck, g, u)): Extension<(Arc<dyn Check>, Arc<dyn Get>, Arc<dyn Update>)>,
+    Path(id): Path<String>,
+    _: Request<Body>,
+) -> Response<Body> {
+    let reg = match g.get(&id).await {
+        Ok(reg) => reg,
+
+        Err(GetError::NotFound) => {
+            return Response::builder()
+                .status(404)
+                .body(Body::from("not found"))
+                .unwrap()
+        }
+
+        Err(GetError::UnexpectedError(_)) => {
+            return Response::builder()
+                .status(500)
+                .body(Body::from("unexpected error"))
+                .unwrap()
+        }
+    };
+
+    // Run through checker to get canister ID
+    let canister = match ck.check(&reg.name).await {
+        Ok(canister) => canister,
+        Err(CheckError::UnexpectedError(_)) => {
+            return Response::builder()
+                .status(500)
+                .body(Body::from("unexpected error"))
+                .unwrap()
+        }
+        Err(err) => {
+            return Response::builder()
+                .status(500)
+                .body(Body::from(err.to_string()))
+                .unwrap()
+        }
+    };
+
+    if reg.canister != canister {
+        match u.update(&id, &UpdateType::Canister(canister)).await {
+            Ok(()) => {}
+
+            Err(UpdateError::NotFound) => {
+                return Response::builder()
+                    .status(404)
+                    .body(Body::from("not found"))
+                    .unwrap()
+            }
+
+            Err(UpdateError::UnexpectedError(_)) => {
+                return Response::builder()
+                    .status(500)
+                    .body(Body::from("unexpected error"))
+                    .unwrap()
+            }
+        };
+    }
+
+    Response::builder().status(200).body(Body::empty()).unwrap()
+}
+
 // TODO(or): wrap this export_handler with ttl-based caching and E-tag check
 pub async fn export_handler(
     Extension(e): Extension<Arc<dyn Export>>,
@@ -166,4 +230,101 @@ pub async fn export_handler(
         .status(200)
         .body(Body::from(bs))
         .unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use anyhow::Error;
+    use candid::Principal;
+    use mockall::predicate;
+
+    use crate::{
+        check::MockCheck,
+        registration::{MockGet, MockUpdate, Registration, State},
+    };
+
+    #[tokio::test]
+    async fn update_ok() -> Result<(), Error> {
+        let mut getter = MockGet::new();
+        getter
+            .expect_get()
+            .times(1)
+            .with(predicate::eq("id"))
+            .returning(|_| {
+                Ok(Registration {
+                    name: String::from("name"),
+                    canister: Principal::from_text("aaaaa-aa").unwrap(),
+                    state: State::PendingOrder,
+                })
+            });
+
+        let mut checker = MockCheck::new();
+        checker
+            .expect_check()
+            .times(1)
+            .with(predicate::eq("name"))
+            .returning(|_| Ok(Principal::from_text("2ibo7-dia").unwrap()));
+
+        let mut updater = MockUpdate::new();
+        updater
+            .expect_update()
+            .times(1)
+            .with(
+                predicate::eq("id"),
+                predicate::eq(UpdateType::Canister(
+                    Principal::from_text("2ibo7-dia").unwrap(),
+                )),
+            )
+            .returning(|_, _| Ok(()));
+
+        let resp = update_handler(
+            Extension((Arc::new(checker), Arc::new(getter), Arc::new(updater))),
+            Path("id".into()),
+            Request::builder().body(Body::empty())?,
+        )
+        .await;
+
+        assert_eq!(resp.status(), 200);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn update_skip() -> Result<(), Error> {
+        let mut getter = MockGet::new();
+        getter
+            .expect_get()
+            .times(1)
+            .with(predicate::eq("id"))
+            .returning(|_| {
+                Ok(Registration {
+                    name: String::from("name"),
+                    canister: Principal::from_text("aaaaa-aa").unwrap(),
+                    state: State::PendingOrder,
+                })
+            });
+
+        let mut checker = MockCheck::new();
+        checker
+            .expect_check()
+            .times(1)
+            .with(predicate::eq("name"))
+            .returning(|_| Ok(Principal::from_text("aaaaa-aa").unwrap()));
+
+        let mut updater = MockUpdate::new();
+        updater.expect_update().never();
+
+        let resp = update_handler(
+            Extension((Arc::new(checker), Arc::new(getter), Arc::new(updater))),
+            Path("id".into()),
+            Request::builder().body(Body::empty())?,
+        )
+        .await;
+
+        assert_eq!(resp.status(), 200);
+
+        Ok(())
+    }
 }

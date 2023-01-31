@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 
 use anyhow::anyhow;
 use candid::Principal;
-use certificate_orchestrator_interface::{Id, Name, NameError, Registration, State};
+use certificate_orchestrator_interface::{Id, Name, NameError, Registration, State, UpdateType};
 use ic_cdk::caller;
 use ic_stable_structures::StableBTreeMap;
 use priority_queue::PriorityQueue;
@@ -175,7 +175,7 @@ pub enum UpdateError {
 }
 
 pub trait Update {
-    fn update(&self, id: Id, state: State) -> Result<(), UpdateError>;
+    fn update(&self, id: Id, typ: UpdateType) -> Result<(), UpdateError>;
 }
 
 pub struct Updater {
@@ -199,30 +199,55 @@ impl Updater {
 }
 
 impl Update for Updater {
-    fn update(&self, id: Id, state: State) -> Result<(), UpdateError> {
-        self.registrations.with(|regs| {
-            let Registration {
-                name: domain,
-                canister,
-                ..
-            } = regs.borrow().get(&id).ok_or(UpdateError::NotFound)?;
+    fn update(&self, id: Id, typ: UpdateType) -> Result<(), UpdateError> {
+        match typ {
+            // Update canister ID
+            UpdateType::Canister(canister) => {
+                self.registrations.with(|regs| {
+                    let Registration { name, state, .. } =
+                        regs.borrow().get(&id).ok_or(UpdateError::NotFound)?;
 
-            regs.borrow_mut()
-                .insert(
-                    id.to_owned(),
-                    Registration {
-                        name: domain,
-                        canister,
-                        state: state.to_owned(),
-                    },
-                )
-                .map_err(|err| UpdateError::from(anyhow!(format!("failed to insert: {err}"))))
-        })?;
+                    regs.borrow_mut()
+                        .insert(
+                            id.to_owned(),
+                            Registration {
+                                name,
+                                canister,
+                                state,
+                            },
+                        )
+                        .map_err(|err| {
+                            UpdateError::from(anyhow!(format!("failed to insert: {err}")))
+                        })
+                })?;
+            }
 
-        // Successful registrations should not be expired or retried
-        if state == State::Available {
-            self.expirations.with(|exps| exps.borrow_mut().remove(&id));
-            self.retries.with(|rets| rets.borrow_mut().remove(&id));
+            // Update state
+            UpdateType::State(state) => {
+                self.registrations.with(|regs| {
+                    let Registration { name, canister, .. } =
+                        regs.borrow().get(&id).ok_or(UpdateError::NotFound)?;
+
+                    regs.borrow_mut()
+                        .insert(
+                            id.to_owned(),
+                            Registration {
+                                name,
+                                canister,
+                                state: state.to_owned(),
+                            },
+                        )
+                        .map_err(|err| {
+                            UpdateError::from(anyhow!(format!("failed to insert: {err}")))
+                        })
+                })?;
+
+                // Successful registrations should not be expired or retried
+                if state == State::Available {
+                    self.expirations.with(|exps| exps.borrow_mut().remove(&id));
+                    self.retries.with(|rets| rets.borrow_mut().remove(&id));
+                }
+            }
         }
 
         Ok(())
@@ -230,7 +255,7 @@ impl Update for Updater {
 }
 
 impl<T: Update, A: Authorize> Update for WithAuthorize<T, A> {
-    fn update(&self, id: Id, state: State) -> Result<(), UpdateError> {
+    fn update(&self, id: Id, typ: UpdateType) -> Result<(), UpdateError> {
         if let Err(err) = self.1.authorize(&caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => UpdateError::Unauthorized,
@@ -238,7 +263,7 @@ impl<T: Update, A: Authorize> Update for WithAuthorize<T, A> {
             });
         };
 
-        self.0.update(id, state)
+        self.0.update(id, typ)
     }
 }
 
@@ -408,7 +433,7 @@ mod tests {
     }
 
     #[test]
-    fn update_ok() -> Result<(), Error> {
+    fn update_canister_ok() -> Result<(), Error> {
         let reg = Registration {
             name: Name::try_from("name")?,
             canister: Principal::from_text("aaaaa-aa")?,
@@ -419,8 +444,44 @@ mod tests {
             .with(|regs| regs.borrow_mut().insert("id".into(), reg))
             .expect("failed to insert");
 
-        Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES)
-            .update("id".into(), State::PendingChallengeResponse)?;
+        Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES).update(
+            "id".into(),
+            UpdateType::Canister(Principal::from_text("2ibo7-dia")?),
+        )?;
+
+        // Check registration
+        let reg = REGISTRATIONS
+            .with(|regs| regs.borrow().get(&String::from("id")))
+            .expect("expected registration to exist but none found");
+
+        assert_eq!(
+            reg,
+            Registration {
+                name: Name::try_from("name")?,
+                canister: Principal::from_text("2ibo7-dia")?,
+                state: State::PendingOrder,
+            }
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn update_state_ok() -> Result<(), Error> {
+        let reg = Registration {
+            name: Name::try_from("name")?,
+            canister: Principal::from_text("aaaaa-aa")?,
+            state: State::PendingOrder,
+        };
+
+        REGISTRATIONS
+            .with(|regs| regs.borrow_mut().insert("id".into(), reg))
+            .expect("failed to insert");
+
+        Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES).update(
+            "id".into(),
+            UpdateType::State(State::PendingChallengeResponse),
+        )?;
 
         // Check registration
         let reg = REGISTRATIONS

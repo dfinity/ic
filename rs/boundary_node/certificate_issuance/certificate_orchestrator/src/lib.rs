@@ -6,8 +6,8 @@ use certificate_orchestrator_interface::{
     EncryptedPair, ExportCertificatesError, ExportCertificatesResponse, GetRegistrationError,
     GetRegistrationResponse, Id, ListAllowedPrincipalsError, ListAllowedPrincipalsResponse,
     ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse, Name, QueueTaskError,
-    QueueTaskResponse, Registration, State, UpdateRegistrationError, UpdateRegistrationResponse,
-    UploadCertificateError, UploadCertificateResponse, NAME_MAX_LEN,
+    QueueTaskResponse, Registration, UpdateRegistrationError, UpdateRegistrationResponse,
+    UpdateType, UploadCertificateError, UploadCertificateResponse, NAME_MAX_LEN,
 };
 use ic_cdk::{
     api::time, caller, export::Principal, post_upgrade, pre_upgrade, timer::set_timer_interval,
@@ -373,8 +373,8 @@ fn get_registration(id: Id) -> GetRegistrationResponse {
 }
 
 #[update(name = "updateRegistration")]
-fn update_registration(id: Id, state: State) -> UpdateRegistrationResponse {
-    match UPDATER.with(|u| u.borrow().update(id, state)) {
+fn update_registration(id: Id, typ: UpdateType) -> UpdateRegistrationResponse {
+    match UPDATER.with(|u| u.borrow().update(id, typ)) {
         Ok(()) => UpdateRegistrationResponse::Ok(()),
         Err(err) => UpdateRegistrationResponse::Err(match err {
             UpdateError::NotFound => UpdateRegistrationError::NotFound,
