@@ -6,8 +6,8 @@ Description=Socket for IC Canister HTTP Provider
 # process receives the sockets. 'socket' will be passed as FD(3) 
 # 'metrics' will be passed as FD(4) to canister http service.
 # https://www.freedesktop.org/software/systemd/man/systemd.socket.html
-ListenStream=/run/ic-node/canister-http-adapter/socket
-ListenStream=/run/ic-node/canister-http-adapter/metrics
+ListenStream=/run/ic-node/https-outcalls-adapter/socket
+ListenStream=/run/ic-node/https-outcalls-adapter/metrics
 SocketUser=ic-http-adapter
 SocketGroup=ic-http-adapter
 SocketMode=0660

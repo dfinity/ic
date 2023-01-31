@@ -3,7 +3,7 @@
 function usage() {
     cat <<EOF
 Usage:
-  generate-canister-http-adapter-config -o ic-https-outcalls-adapter.json5
+  generate-https-outcalls-adapter-config -o ic-https-outcalls-adapter.json5
 
   Generate the canister http adapter config.
 
