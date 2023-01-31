@@ -54,6 +54,10 @@ pub const MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS: usize = 700;
 /// The maximum number of GenericNervousSystemFunctions the system allows.
 pub const MAX_NUMBER_OF_GENERIC_NERVOUS_SYSTEM_FUNCTIONS: usize = 200_000;
 
+/// The maximum number of dapps that can be registered in a single
+/// RegisterDappCanisters proposal.
+pub const MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL: usize = 1_000;
+
 impl Proposal {
     /// Returns whether a proposal is allowed to be submitted when
     /// the heap growth potential is low.
@@ -708,6 +712,11 @@ fn validate_and_render_register_dapp_canisters(
         return Err("RegisterDappCanisters must specify at least one canister id".to_string());
     }
 
+    let num_canisters_to_register = register_dapp_canisters.canister_ids.len();
+    if num_canisters_to_register > MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL {
+        return Err(format!("RegisterDappCanisters cannot specify more than {MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL} canister ids"));
+    }
+
     let canisters_to_register = register_dapp_canisters
         .canister_ids
         .iter()
@@ -727,7 +736,7 @@ fn validate_and_render_register_dapp_canisters(
             .collect::<String>();
 
         let render = format!(
-            "# Proposal to register dapp canister: \n\
+            "# Proposal to register {num_canisters_to_register} dapp canisters: \n\
              ## Canister ids: {canister_list}"
         );
         Ok(render)
@@ -771,6 +780,7 @@ fn validate_and_render_deregister_dapp_canisters(
     if error_canister_ids.is_empty() {
         let rendered = format!(
             r"# Proposal to set the listed principals as controllers of the listed canisters:
+(This will result in the canisters being deregistered from this SNS.)
 
 ## Principals:
 - {}
@@ -2315,6 +2325,48 @@ Version {
         for line in rendered_proposal.lines() {
             assert!(!line.starts_with(char::is_whitespace), "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace");
         }
+    }
+
+    #[test]
+    fn validate_and_render_register_dapp_canisters_allows_max_canisters() {
+        let canister_ids = (0..MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL)
+            .map(|i| PrincipalId::new_user_test_id(i as u64))
+            .collect::<Vec<_>>();
+        let disallowed_canister_ids: HashSet<CanisterId> = HashSet::new();
+
+        let register_dapp_canisters = RegisterDappCanisters { canister_ids };
+        let rendered_proposal = validate_and_render_register_dapp_canisters(
+            &register_dapp_canisters,
+            &disallowed_canister_ids,
+        )
+        .unwrap();
+
+        for canister_id in register_dapp_canisters.canister_ids {
+            assert!(rendered_proposal.contains(&format!("\n- {canister_id}")), "rendered proposal \"{rendered_proposal}\" does not contain canister id \"- {canister_id}\"");
+        }
+
+        rendered_proposal.contains(&format!("{MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL}"));
+
+        for line in rendered_proposal.lines() {
+            assert!(!line.starts_with(char::is_whitespace), "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace");
+        }
+    }
+
+    #[test]
+    fn validate_and_render_register_dapp_canisters_doesnt_allow_more_than_max_canisters() {
+        let canister_ids = (0..(MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL + 1))
+            .map(|i| PrincipalId::new_user_test_id(i as u64))
+            .collect::<Vec<_>>();
+        let disallowed_canister_ids: HashSet<CanisterId> = HashSet::new();
+
+        let register_dapp_canisters = RegisterDappCanisters { canister_ids };
+        let rendered_error = validate_and_render_register_dapp_canisters(
+            &register_dapp_canisters,
+            &disallowed_canister_ids,
+        )
+        .unwrap_err();
+
+        rendered_error.contains(&format!("{MAX_NUMBER_OF_DAPPS_TO_REGISTER_PER_PROPOSAL}"));
     }
 
     #[test]
