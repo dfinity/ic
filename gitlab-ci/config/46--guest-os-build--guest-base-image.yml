@@ -59,7 +59,7 @@ build-push-base-images:
      )
      # search, replace & push
      for FILE in "${IMAGE_FILES[@]}"; do
-         IMAGE="$(cut -d @ -f 1 "${FILE}")"
+         IMAGE="$(cut -d @ -f 1 "${CI_PROJECT_DIR}/${FILE}")"
          # TAG gets defined in *build-base-images
          docker push "${IMAGE}":"${TAG}"
          docker push "${IMAGE}":latest
