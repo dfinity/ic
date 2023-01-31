@@ -5965,6 +5965,8 @@ version = "0.8.0"
 dependencies = [
  "anyhow",
  "assert_matches",
+ "candid",
+ "canister-test",
  "criterion",
  "ic-config",
  "ic-cycles-account-manager",
@@ -5974,6 +5976,7 @@ dependencies = [
  "ic-registry-routing-table",
  "ic-registry-subnet-type",
  "ic-replicated-state",
+ "ic-state-machine-tests",
  "ic-sys",
  "ic-system-api",
  "ic-test-utilities",
@@ -13924,6 +13927,17 @@ name = "stable_reader"
 version = "0.1.0"
 dependencies = [
  "byteorder",
+]
+
+[[package]]
+name = "stable_structures"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-cdk",
+ "ic-cdk-macros",
+ "ic-stable-structures 0.5.0",
+ "serde",
 ]
 
 [[package]]
