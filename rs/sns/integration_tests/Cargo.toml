@@ -30,6 +30,7 @@ hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-ic00-types = { path = "../../types/ic00_types" }
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
+ic-icrc1-ledger = { path = "../../rosetta-api/icrc1/ledger" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-nervous-system-common = { path = "../../nervous_system/common/" }
 ic-nns-constants = { path = "../../nns/constants/" }

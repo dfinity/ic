@@ -9,6 +9,7 @@ use ic_crypto_sha::Sha256;
 use ic_icrc1::{endpoints::TransferArg, Account, Subaccount};
 use ic_icrc1_index::InitArgs as IndexInitArgs;
 use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
+use ic_icrc1_ledger::LedgerArgument;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_root::{CanisterStatusResult, CanisterStatusType};
@@ -223,10 +224,10 @@ impl SnsTestsInitPayloadBuilder {
     pub fn build(&mut self) -> SnsCanisterInitPayloads {
         let governance = self.governance.build();
 
-        let ledger = self.ledger.clone();
+        let ledger = LedgerArgument::Init(self.ledger.clone());
 
         let mut swap = self.swap.clone();
-        swap.transaction_fee_e8s = Some(ledger.transfer_fee);
+        swap.transaction_fee_e8s = Some(self.ledger.transfer_fee);
         swap.neuron_minimum_stake_e8s = Some(
             governance
                 .parameters
@@ -290,12 +291,15 @@ pub fn populate_canister_ids(
 
     // Ledger
     {
-        let ledger = &mut sns_canister_init_payloads.ledger;
-        ledger.minting_account = Account {
-            owner: governance_canister_id.unwrap(),
-            subaccount: None,
-        };
-        ledger.archive_options.controller_id = root_canister_id.unwrap();
+        if let LedgerArgument::Init(ref mut ledger) = sns_canister_init_payloads.ledger {
+            ledger.minting_account = Account {
+                owner: governance_canister_id.unwrap(),
+                subaccount: None,
+            };
+            ledger.archive_options.controller_id = root_canister_id.unwrap();
+        } else {
+            panic!("bug: expected Init got Upgrade");
+        }
     }
 
     // Swap
@@ -371,25 +375,26 @@ impl SnsCanisters<'_> {
             &mut init_payloads,
         );
 
-        assert!(!init_payloads.ledger.initial_balances.iter().any(|(a, _)| a
-            == &Account {
-                owner: governance_canister_id.get(),
-                subaccount: None
-            }));
+        if let LedgerArgument::Init(ref mut ledger) = init_payloads.ledger {
+            assert!(!ledger.initial_balances.iter().any(|(a, _)| a
+                == &Account {
+                    owner: governance_canister_id.get(),
+                    subaccount: None
+                }));
 
-        // Set initial neurons
-        for n in init_payloads.governance.neurons.values() {
-            let sub = n
-                .subaccount()
-                .unwrap_or_else(|e| panic!("Couldn't calculate subaccount from neuron: {}", e));
-            let aid = Account {
-                owner: governance_canister_id.get(),
-                subaccount: Some(sub),
-            };
-            init_payloads
-                .ledger
-                .initial_balances
-                .push((aid, n.cached_neuron_stake_e8s));
+            // Set initial neurons
+            for n in init_payloads.governance.neurons.values() {
+                let sub = n
+                    .subaccount()
+                    .unwrap_or_else(|e| panic!("Couldn't calculate subaccount from neuron: {}", e));
+                let aid = Account {
+                    owner: governance_canister_id.get(),
+                    subaccount: Some(sub),
+                };
+                ledger
+                    .initial_balances
+                    .push((aid, n.cached_neuron_stake_e8s));
+            }
         }
 
         // Install canisters
@@ -1296,7 +1301,7 @@ pub async fn set_up_governance_canister(
 /// Compiles the ledger canister, builds it's initial payload and installs it
 pub async fn install_ledger_canister<'runtime, 'a>(
     canister: &mut Canister<'runtime>,
-    args: LedgerInitArgs,
+    args: LedgerArgument,
 ) {
     install_rust_canister_with_memory_allocation(
         canister,
@@ -1311,7 +1316,7 @@ pub async fn install_ledger_canister<'runtime, 'a>(
 /// Creates and installs the ledger canister.
 pub async fn set_up_ledger_canister(runtime: &'_ Runtime, args: LedgerInitArgs) -> Canister<'_> {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
-    install_ledger_canister(&mut canister, args).await;
+    install_ledger_canister(&mut canister, LedgerArgument::Init(args)).await;
     canister
 }
 

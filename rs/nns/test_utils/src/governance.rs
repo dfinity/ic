@@ -420,7 +420,8 @@ async fn change_nns_canister_by_proposal(
         .with_memory_allocation(ic_nns_constants::memory_allocation_of(
             canister.canister_id(),
         ))
-        .with_wasm(wasm);
+        .with_wasm(wasm)
+        .with_arg(Encode!().unwrap());
     let proposal = if let Some(arg) = arg {
         proposal.with_arg(arg)
     } else {
@@ -497,6 +498,27 @@ pub async fn upgrade_nns_canister_with_arg_by_proposal(
         governance,
         root,
         false,
+        wasm,
+        Some(arg),
+    )
+    .await
+}
+
+/// Submits a proposal to upgrade an NNS canister, with the provided argument.
+pub async fn upgrade_nns_canister_with_args_by_proposal(
+    canister: &Canister<'_>,
+    governance: &Canister<'_>,
+    root: &Canister<'_>,
+    stop_before_installing: bool,
+    wasm: Wasm,
+    arg: Vec<u8>,
+) {
+    change_nns_canister_by_proposal(
+        CanisterInstallMode::Upgrade,
+        canister,
+        governance,
+        root,
+        stop_before_installing,
         wasm,
         Some(arg),
     )

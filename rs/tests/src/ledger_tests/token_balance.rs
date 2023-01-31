@@ -88,8 +88,13 @@ pub fn test(env: TestEnv) {
     block_on(async move {
         // upgrade the `lifeline` canister, since it is the minting
         // canister as tracked by the ledger
-        let lifeline =
-            UniversalCanister::upgrade(&nns_runtime, &nns_agent, &LIFELINE_CANISTER_ID).await;
+        let lifeline = UniversalCanister::upgrade_with_args(
+            &nns_runtime,
+            &nns_agent,
+            &LIFELINE_CANISTER_ID,
+            Vec::new(),
+        )
+        .await;
         let (can1, can2, can3, can4, can5) = tokio::join!(
             UniversalCanister::new_with_retries(&app_agent, app_node.effective_canister_id(), &log),
             UniversalCanister::new_with_retries(&app_agent, app_node.effective_canister_id(), &log),
@@ -224,8 +229,13 @@ pub fn test(env: TestEnv) {
             .expect("error accessing neuron?");
 
         // upgrade `governance` to universal
-        let governance =
-            UniversalCanister::upgrade(&nns_runtime, &nns_agent, &GOVERNANCE_CANISTER_ID).await;
+        let governance = UniversalCanister::upgrade_with_args(
+            &nns_runtime,
+            &nns_agent,
+            &GOVERNANCE_CANISTER_ID,
+            Vec::new(),
+        )
+        .await;
 
         // perform a few subaccount transfers
         // first: account -> subaccount

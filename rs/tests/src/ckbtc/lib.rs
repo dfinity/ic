@@ -26,7 +26,7 @@ use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_ic00_types::CanisterIdRecord;
 use ic_ic00_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_icrc1::Account;
-use ic_icrc1_ledger::InitArgs;
+use ic_icrc1_ledger::{InitArgs, LedgerArgument};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -254,7 +254,7 @@ pub(crate) async fn install_ledger(
         owner: minting_user,
         subaccount: None,
     };
-    let init_args = InitArgs {
+    let init_args = LedgerArgument::Init(InitArgs {
         minting_account,
         initial_balances: vec![],
         transfer_fee: TRANSFER_FEE,
@@ -270,7 +270,7 @@ pub(crate) async fn install_ledger(
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },
-    };
+    });
     install_icrc1_ledger(env, canister, &init_args).await;
     canister.canister_id()
 }

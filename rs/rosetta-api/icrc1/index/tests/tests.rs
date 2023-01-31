@@ -8,7 +8,7 @@ use ic_icrc1_index::{
     GetAccountTransactionsArgs, GetTransactions, GetTransactionsResult, InitArgs as IndexInitArgs,
     ListSubaccountsArgs, TransactionWithId,
 };
-use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
+use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::{
     block::{BlockIndex, BlockType, EncodedBlock, HashOf},
@@ -95,7 +95,7 @@ fn install_ledger(
     initial_balances: Vec<(Account, u64)>,
     archive_options: ArchiveOptions,
 ) -> CanisterId {
-    let args = LedgerInitArgs {
+    let args = LedgerArgument::Init(LedgerInitArgs {
         minting_account: MINTER.clone(),
         initial_balances,
         transfer_fee: FEE,
@@ -108,7 +108,7 @@ fn install_ledger(
             Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
         ],
         archive_options,
-    };
+    });
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
 }

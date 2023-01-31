@@ -101,6 +101,24 @@ pub struct InitArgs {
     pub archive_options: ArchiveOptions,
 }
 
+#[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub struct UpgradeArgs {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Vec<(String, Value)>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token_symbol: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transfer_fee: Option<u64>,
+}
+
+#[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub enum LedgerArgument {
+    Init(InitArgs),
+    Upgrade(Option<UpgradeArgs>),
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Ledger {
     balances: LedgerBalances,
@@ -254,6 +272,24 @@ impl Ledger {
         records.push(Value::entry("icrc1:symbol", self.token_symbol()));
         records.push(Value::entry("icrc1:fee", self.transfer_fee().get_e8s()));
         records
+    }
+
+    pub fn upgrade_metadata(&mut self, args: UpgradeArgs) {
+        if let Some(upgrade_metadata_args) = args.metadata {
+            self.metadata = upgrade_metadata_args
+                .into_iter()
+                .map(|(k, v)| (k, StoredValue::from(v)))
+                .collect();
+        }
+        if let Some(token_name) = args.token_name {
+            self.token_name = token_name;
+        }
+        if let Some(token_symbol) = args.token_symbol {
+            self.token_symbol = token_symbol;
+        }
+        if let Some(transfer_fee) = args.transfer_fee {
+            self.transfer_fee = Tokens::from_e8s(transfer_fee);
+        }
     }
 
     /// Returns the root hash of the certified ledger state.

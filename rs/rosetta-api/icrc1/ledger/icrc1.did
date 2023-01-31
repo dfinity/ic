@@ -62,7 +62,19 @@ type InitArgs = record {
     };
 };
 
-service : (InitArgs) -> {
+type UpgradeArgs = record {
+    metadata : opt vec record { text; Value };
+    token_symbol : opt text;
+    token_name : opt text;
+    transfer_fee : opt nat64;
+};
+
+type LedgerArg = record {
+    Init: opt InitArgs;
+    Upgrade: opt UpgradeArgs;
+};
+
+service : (ledger_arg : LedgerArg) -> {
     icrc1_name : () -> (text) query;
     icrc1_symbol : () -> (text) query;
     icrc1_decimals : () -> (nat8) query;

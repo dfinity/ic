@@ -1,6 +1,6 @@
 use ic_base_types::PrincipalId;
 use ic_icrc1::endpoints::Value;
-use ic_icrc1_ledger::InitArgs;
+use ic_icrc1_ledger::{InitArgs, LedgerArgument};
 use ic_icrc1_ledger_sm_tests::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE,
     MINTER, NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE,
@@ -28,8 +28,8 @@ fn archive_wasm() -> Vec<u8> {
     )
 }
 
-fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> InitArgs {
-    InitArgs {
+fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerArgument {
+    LedgerArgument::Init(InitArgs {
         minting_account: MINTER.clone(),
         initial_balances: args.initial_balances,
         transfer_fee: FEE,
@@ -50,12 +50,17 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> InitArgs {
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },
-    }
+    })
 }
 
 #[test]
 fn test_metadata() {
     ic_icrc1_ledger_sm_tests::test_metadata(ledger_wasm(), encode_init_args)
+}
+
+#[test]
+fn test_upgrade() {
+    ic_icrc1_ledger_sm_tests::test_upgrade(ledger_wasm(), encode_init_args)
 }
 
 #[test]

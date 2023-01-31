@@ -1,4 +1,4 @@
-use candid::{CandidType, Deserialize};
+use candid::{CandidType, Deserialize, Encode};
 use dfn_core::api::{call, CanisterId};
 use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
@@ -164,7 +164,7 @@ impl ChangeCanisterProposal {
             mode,
             canister_id,
             wasm_module: Vec::new(),
-            arg: Vec::new(),
+            arg: Encode!().unwrap(),
             compute_allocation: None,
             memory_allocation: Some(candid::Nat::from(default_memory_allocation)),
             query_allocation: None,
