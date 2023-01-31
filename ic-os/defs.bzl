@@ -38,7 +38,7 @@ def _image_deps(mode, malicious = False):
             "//publish/binaries:canister_sandbox": "/opt/ic/bin/canister_sandbox:0755",
             "//publish/binaries:ic-btc-adapter": "/opt/ic/bin/ic-btc-adapter:0755",
             "//publish/binaries:ic-consensus-pool-util": "/opt/ic/bin/ic-consensus-pool-util:0755",
-            "//publish/binaries:ic-canister-http-adapter": "/opt/ic/bin/ic-canister-http-adapter:0755",
+            "//publish/binaries:ic-https-outcalls-adapter": "/opt/ic/bin/ic-https-outcalls-adapter:0755",
             "//publish/binaries:ic-crypto-csp": "/opt/ic/bin/ic-crypto-csp:0755",
             "//publish/binaries:ic-onchain-observability-adapter": "/opt/ic/bin/ic-onchain-observability-adapter:0755",
             "//publish/binaries:ic-regedit": "/opt/ic/bin/ic-regedit:0755",

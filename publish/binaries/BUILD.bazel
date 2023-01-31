@@ -10,7 +10,7 @@ LINUX_ONLY = [
 NO_STRIP = [
     "canister_sandbox",
     "ic-btc-adapter",
-    "ic-canister-http-adapter",
+    "ic-https-outcalls-adapter",
     "ic-onchain-observability-adapter",
     "replica",
 ]
@@ -29,7 +29,7 @@ BINARIES = {
     "ic-backup": "//rs/backup:ic-backup",
     "ic-balance-exporter": "//rs/boundary_node/ic_balance_exporter:ic-balance-exporter",
     "ic-starter": "//rs/starter:ic-starter",
-    "ic-canister-http-adapter": "//rs/https_outcalls/adapter:ic-canister-http-adapter",
+    "ic-https-outcalls-adapter": "//rs/https_outcalls/adapter:ic-https-outcalls-adapter",
     "ic-consensus-pool-util": "//rs/artifact_pool:ic-consensus-pool-util",
     "ic-crypto-csp": "//rs/crypto:ic-crypto-csp",
     "ic-onchain-observability-adapter": "//rs/monitoring/onchain_observability/adapter:ic-onchain-observability-adapter",

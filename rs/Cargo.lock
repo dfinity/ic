@@ -4474,44 +4474,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-canister-http-adapter"
-version = "0.1.0"
-dependencies = [
- "async-socks5",
- "async-stream",
- "byte-unit",
- "clap 3.2.23",
- "futures",
- "futures-core",
- "http",
- "hyper",
- "hyper-socks2",
- "hyper-tls",
- "ic-adapter-metrics-server",
- "ic-async-utils",
- "ic-canister-http-service",
- "ic-config",
- "ic-logger",
- "ic-metrics",
- "itertools",
- "once_cell",
- "prometheus 0.12.0",
- "prost",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "slog",
- "slog-async",
- "tempfile",
- "thiserror",
- "tokio",
- "tonic",
- "tower",
- "uuid 0.8.2",
- "warp",
-]
-
-[[package]]
 name = "ic-canister-http-adapter-client"
 version = "0.1.0"
 dependencies = [
@@ -6188,6 +6150,44 @@ dependencies = [
  "slog",
  "tar",
  "tokio",
+]
+
+[[package]]
+name = "ic-https-outcalls-adapter"
+version = "0.1.0"
+dependencies = [
+ "async-socks5",
+ "async-stream",
+ "byte-unit",
+ "clap 3.2.23",
+ "futures",
+ "futures-core",
+ "http",
+ "hyper",
+ "hyper-socks2",
+ "hyper-tls",
+ "ic-adapter-metrics-server",
+ "ic-async-utils",
+ "ic-canister-http-service",
+ "ic-config",
+ "ic-logger",
+ "ic-metrics",
+ "itertools",
+ "once_cell",
+ "prometheus 0.12.0",
+ "prost",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "slog",
+ "slog-async",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tonic",
+ "tower",
+ "uuid 0.8.2",
+ "warp",
 ]
 
 [[package]]
