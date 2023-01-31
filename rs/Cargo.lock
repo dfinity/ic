@@ -8955,6 +8955,7 @@ dependencies = [
  "maplit",
  "mockall 0.7.2",
  "nix 0.23.2",
+ "parking_lot 0.12.1",
  "phantom_newtype",
  "proptest",
  "rand 0.8.5",

@@ -61,6 +61,7 @@ lazy_static = "1.4.0"
 maplit = "1.0.2"
 mockall = "0.7.2"
 nix = "0.23.0"
+parking_lot = "0.12.1"
 phantom_newtype = { path = "../phantom_newtype" }
 proptest = "1.0"
 rand = "0.8"

@@ -4,10 +4,11 @@ use ic_interfaces_transport::{
 };
 use ic_logger::{info, ReplicaLogger};
 use ic_types::{NodeId, RegistryVersion};
+use parking_lot::Mutex;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex, RwLock, Weak};
+use std::sync::{Arc, RwLock, Weak};
 use tower::Service;
 
 #[derive(Default)]
@@ -58,7 +59,7 @@ impl ThreadPort {
 
     fn replay_deferred(&self, node_id: NodeId) {
         let replay = {
-            let mut deferred_guard = self.deferred.lock().unwrap();
+            let mut deferred_guard = self.deferred.lock();
             let deferred_map = &mut *deferred_guard;
             let mut replay = Vec::new();
             let i = 0;
@@ -118,17 +119,17 @@ impl ThreadPort {
 
         // 1.
         let destination_node = {
-            let hub_access = self.hub_access.lock().unwrap();
+            let hub_access = self.hub_access.lock();
             // All node ports must be connected  to hub before test start.
             hub_access.ports[&dest_node_id].clone()
         };
 
         // 2.
-        let event_handler = destination_node.event_handler.lock().unwrap().clone();
+        let event_handler = destination_node.event_handler.lock().clone();
 
         // 3.
         let mut event_handler = {
-            let mut deferred = destination_node.deferred.lock().unwrap();
+            let mut deferred = destination_node.deferred.lock();
             let deferred = deferred.entry(src_node_id).or_default();
 
             // Stash
@@ -170,7 +171,7 @@ impl Hub {
 impl Transport for ThreadPort {
     fn set_event_handler(&self, event_handler: TransportEventHandler) {
         info!(self.log, "Node{} -> Client Registered", self.id);
-        *self.event_handler.lock().unwrap() = Some(event_handler);
+        *self.event_handler.lock() = Some(event_handler);
     }
 
     fn start_connection(

@@ -1008,10 +1008,11 @@ pub mod tests {
         chunkable::{ArtifactChunk, ArtifactChunkData, Chunkable, ChunkableArtifact},
         Height, NodeId, PrincipalId,
     };
+    use parking_lot::Mutex;
     use std::collections::HashSet;
     use std::convert::TryFrom;
     use std::ops::Range;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     /// This priority function always returns Priority::FetchNow.
     fn priority_fn_fetch_now_all(_: &ArtifactId, _: &ArtifactAttribute) -> Priority {
@@ -1165,11 +1166,10 @@ pub mod tests {
                 get_transport(instance_id, hub_access.clone(), logger, rt_handle.clone());
             hub_access
                 .lock()
-                .unwrap()
                 .insert(node_test_id(instance_id as u64), thread_port);
         }
 
-        let transport_hub = hub_access.lock().unwrap();
+        let transport_hub = hub_access.lock();
         let tp = transport_hub.get(&node_test_id(0));
 
         // Set up the prioritizer.

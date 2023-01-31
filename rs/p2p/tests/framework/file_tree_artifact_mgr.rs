@@ -16,10 +16,11 @@ use ic_types::filetree_sync::{
     FileTreeSyncArtifact, FileTreeSyncChunksTracker, UnderConstructionState,
 };
 use ic_types::NodeId;
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::error::Error;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 const NODE_PREFIX: &str = "NODE";
 const POOL: &str = "POOL";
@@ -45,8 +46,8 @@ impl ArtifactProcessor<TestArtifact> for ArtifactChunkingTestImpl {
         _time_source: &dyn TimeSource,
         _artifacts: Vec<UnvalidatedArtifact<FileTreeSyncArtifact>>,
     ) -> (Vec<AdvertSendRequest<TestArtifact>>, ProcessingResult) {
-        let mut unvalidated_pool = self.file_tree_sync_unvalidated_pool.lock().unwrap();
-        let mut validated_pool = self.file_tree_sync_validated_pool.lock().unwrap();
+        let mut unvalidated_pool = self.file_tree_sync_unvalidated_pool.lock();
+        let mut validated_pool = self.file_tree_sync_validated_pool.lock();
         let adverts = unvalidated_pool
             .iter()
             .map(|(artifact_id, artifact)| AdvertSendRequest {
@@ -85,7 +86,7 @@ impl ArtifactClient<TestArtifact> for ArtifactChunkingTestImpl {
     }
 
     fn has_artifact(&self, message_id: &TestArtifactId) -> bool {
-        let pool = self.file_tree_sync_validated_pool.lock().unwrap();
+        let pool = self.file_tree_sync_validated_pool.lock();
         pool.contains_key(message_id)
     }
 
@@ -93,7 +94,7 @@ impl ArtifactClient<TestArtifact> for ArtifactChunkingTestImpl {
         &self,
         message_id: &TestArtifactId,
     ) -> Option<TestArtifactMessage> {
-        let pool = self.file_tree_sync_validated_pool.lock().unwrap();
+        let pool = self.file_tree_sync_validated_pool.lock();
         pool.get(message_id).cloned()
     }
 
