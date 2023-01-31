@@ -91,12 +91,9 @@ impl MEGaPrivateKey {
         Ok(MEGaPublicKey::new(EccPoint::mul_by_g(&self.secret)?))
     }
 
-    pub fn generate<R: RngCore + CryptoRng>(
-        curve: EccCurveType,
-        rng: &mut R,
-    ) -> ThresholdEcdsaResult<Self> {
+    pub fn generate<R: RngCore + CryptoRng>(curve: EccCurveType, rng: &mut R) -> Self {
         let secret = EccScalar::random(curve, rng);
-        Ok(Self { secret })
+        Self { secret }
     }
 
     pub fn deserialize(curve: EccCurveType, value: &[u8]) -> ThresholdEcdsaResult<Self> {
@@ -439,7 +436,7 @@ fn verify_pop(
     )?;
 
     pop_proof.verify(
-        &EccPoint::generator_g(curve_type)?,
+        &EccPoint::generator_g(curve_type),
         &pop_base,
         ephemeral_key,
         pop_public_key,
@@ -473,7 +470,7 @@ fn compute_eph_key_and_pop(
     let pop_proof = zk::ProofOfDLogEquivalence::create(
         seed.derive(ctype.pop_proof_domain_sep()),
         &beta,
-        &EccPoint::generator_g(curve_type)?,
+        &EccPoint::generator_g(curve_type),
         &pop_base,
         associated_data,
     )?;

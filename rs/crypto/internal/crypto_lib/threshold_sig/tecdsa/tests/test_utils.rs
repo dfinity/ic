@@ -42,7 +42,7 @@ impl ProtocolSetup {
         let mut pk = Vec::with_capacity(receivers);
 
         for _i in 0..receivers {
-            let k = MEGaPrivateKey::generate(curve, &mut rng)?;
+            let k = MEGaPrivateKey::generate(curve, &mut rng);
             pk.push(k.public_key()?);
             sk.push(k);
         }

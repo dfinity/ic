@@ -56,7 +56,7 @@ fn derive_rho(
 
     // Rerandomize presignature
     let randomized_pre_sig =
-        pre_sig.add_points(&EccPoint::generator_g(curve_type)?.scalar_mul(&randomizer)?)?;
+        pre_sig.add_points(&EccPoint::generator_g(curve_type).scalar_mul(&randomizer)?)?;
 
     let rho = ecdsa_conversion_function(&randomized_pre_sig)?;
 
@@ -365,8 +365,7 @@ impl ThresholdEcdsaCombinedSigInternal {
         let u1 = msg.mul(&s_inv)?;
         let u2 = self.r.mul(&s_inv)?;
 
-        let rp =
-            EccPoint::mul_2_points(&EccPoint::generator_g(curve_type)?, &u1, &public_key, &u2)?;
+        let rp = EccPoint::mul_2_points(&EccPoint::generator_g(curve_type), &u1, &public_key, &u2)?;
 
         if rp.is_infinity()? {
             return Err(ThresholdEcdsaError::InvalidSignature);

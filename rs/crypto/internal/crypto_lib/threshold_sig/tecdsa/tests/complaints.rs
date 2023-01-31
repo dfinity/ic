@@ -10,10 +10,10 @@ fn should_complaint_system_work() -> ThresholdEcdsaResult<()> {
 
     let mut rng = reproducible_rng();
 
-    let sk0 = MEGaPrivateKey::generate(curve, &mut rng)?;
+    let sk0 = MEGaPrivateKey::generate(curve, &mut rng);
     let pk0 = sk0.public_key()?;
 
-    let sk1 = MEGaPrivateKey::generate(curve, &mut rng)?;
+    let sk1 = MEGaPrivateKey::generate(curve, &mut rng);
     let pk1 = sk1.public_key()?;
 
     let dealer_index = 0;
@@ -208,7 +208,7 @@ fn should_complaint_verification_reject_spurious_complaints() -> ThresholdEcdsaR
 
     let mut rng = reproducible_rng();
 
-    let sk = MEGaPrivateKey::generate(curve, &mut rng)?;
+    let sk = MEGaPrivateKey::generate(curve, &mut rng);
     let pk = sk.public_key()?;
 
     let dealer_index = 0;

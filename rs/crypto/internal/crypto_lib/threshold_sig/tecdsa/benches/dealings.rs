@@ -15,7 +15,7 @@ fn create_random_dealing(
     let mut private_keys = Vec::with_capacity(recipients);
 
     for _i in 0..recipients {
-        private_keys.push(MEGaPrivateKey::generate(curve, &mut rng)?);
+        private_keys.push(MEGaPrivateKey::generate(curve, &mut rng));
     }
 
     let public_keys = private_keys

@@ -43,7 +43,7 @@ fn mega_key_validity() -> ThresholdEcdsaResult<()> {
     let mut rng = reproducible_rng();
 
     for curve_type in EccCurveType::all() {
-        let sk = MEGaPrivateKey::generate(curve_type, &mut rng)?;
+        let sk = MEGaPrivateKey::generate(curve_type, &mut rng);
         let pk = sk.public_key()?;
 
         let mut pk_bytes = pk.serialize();
@@ -75,8 +75,8 @@ fn mega_single_smoke_test() -> Result<(), ThresholdEcdsaError> {
 
     let mut rng = reproducible_rng();
 
-    let a_sk = MEGaPrivateKey::generate(curve, &mut rng)?;
-    let b_sk = MEGaPrivateKey::generate(curve, &mut rng)?;
+    let a_sk = MEGaPrivateKey::generate(curve, &mut rng);
+    let b_sk = MEGaPrivateKey::generate(curve, &mut rng);
 
     let a_pk = a_sk.public_key()?;
     let b_pk = b_sk.public_key()?;
@@ -121,8 +121,8 @@ fn mega_pair_smoke_test() -> Result<(), ThresholdEcdsaError> {
 
     let mut rng = reproducible_rng();
 
-    let a_sk = MEGaPrivateKey::generate(curve, &mut rng)?;
-    let b_sk = MEGaPrivateKey::generate(curve, &mut rng)?;
+    let a_sk = MEGaPrivateKey::generate(curve, &mut rng);
+    let b_sk = MEGaPrivateKey::generate(curve, &mut rng);
 
     let a_pk = a_sk.public_key()?;
     let b_pk = b_sk.public_key()?;
@@ -165,8 +165,8 @@ fn mega_should_reject_invalid_pop() -> Result<(), ThresholdEcdsaError> {
 
     let mut rng = reproducible_rng();
 
-    let a_sk = MEGaPrivateKey::generate(curve, &mut rng)?;
-    let b_sk = MEGaPrivateKey::generate(curve, &mut rng)?;
+    let a_sk = MEGaPrivateKey::generate(curve, &mut rng);
+    let b_sk = MEGaPrivateKey::generate(curve, &mut rng);
 
     let a_pk = a_sk.public_key()?;
     let b_pk = b_sk.public_key()?;
@@ -217,7 +217,7 @@ fn mega_private_key_should_redact_logs() -> Result<(), ThresholdEcdsaError> {
 
     let mut rng = reproducible_rng();
 
-    let sk = MEGaPrivateKey::generate(curve, &mut rng)?;
+    let sk = MEGaPrivateKey::generate(curve, &mut rng);
 
     let log = format!("{:?}", sk);
     assert_eq!("MEGaPrivateKey(EccScalar::K256) - REDACTED", log);
@@ -231,7 +231,7 @@ fn mega_private_key_bytes_should_redact_logs() -> Result<(), ThresholdEcdsaError
 
     let mut rng = reproducible_rng();
 
-    let sk = MEGaPrivateKey::generate(curve, &mut rng)?;
+    let sk = MEGaPrivateKey::generate(curve, &mut rng);
 
     let bytes = MEGaPrivateKeyK256Bytes::try_from(&sk)?;
 
