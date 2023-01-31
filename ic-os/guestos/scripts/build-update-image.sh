@@ -126,7 +126,7 @@ echo "${VERSION}" >"${TMPDIR}/version.txt"
 
 # Build all pieces and assemble the disk image.
 
-"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" -- \
+"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" \
     --build-arg BUILD_TYPE="${BUILD_TYPE}" \
     --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" \
     --build-arg BASE_IMAGE="${BASE_IMAGE}" \

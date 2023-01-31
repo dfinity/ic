@@ -14,7 +14,6 @@ BASE_DIR="$(dirname "${BASH_SOURCE[0]}")/.."
 TMP_DIR="$(mktemp -d)"
 trap "rm -rf ${TMP_DIR}" EXIT
 TOOL_DIR="${BASE_DIR}/../../toolchains/sysimage/"
-BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base")
 
 # Fixed timestamp for reproducible build
 TOUCH_TIMESTAMP="200901031815.05"
@@ -111,6 +110,7 @@ LOGGING="${LOGGING:=elasticsearch-node-0.mercury.dfinity.systems:443 elasticsear
 MEMORY="${MEMORY:=490}"
 NNS_URL="${NNS_URL:=https://nns.ic0.app}"
 NAME_SERVERS="${NAME_SERVERS:=2606:4700:4700::1111 2606:4700:4700::1001 2001:4860:4860::8888 2001:4860:4860::8844}"
+BASE_IMAGE_FILE="${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}"
 
 if [ "${OUT_FILE}" == "" ]; then
     usage >&2
@@ -278,7 +278,7 @@ function assemble_and_populate_image() {
     touch -t ${TOUCH_TIMESTAMP} ${TMP_DIR}/version.txt
 
     "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/boot-tree.tar" "${BASE_DIR}/bootloader"
-    "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/rootfs-tree.tar" -- --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" --build-arg BASE_IMAGE="${BASE_IMAGE}" "${BASE_DIR}/rootfs"
+    "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/rootfs-tree.tar" --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" --file-build-arg BASE_IMAGE="${BASE_IMAGE_FILE}" "${BASE_DIR}/rootfs"
 
     "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-esp.tar" -s 50M -p boot/efi -i "${TMP_DIR}/boot-tree.tar"
     "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-grub.tar" -s 50M -p boot/grub -i "${TMP_DIR}/boot-tree.tar" \

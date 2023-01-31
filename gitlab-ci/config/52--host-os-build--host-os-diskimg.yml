@@ -9,7 +9,6 @@ host-os-diskimg:
     paths:
       - ic-os/hostos/build-out/disk-img${BUILD_EXTRA_SUFFIX}/*
   variables:
-      BUILD_EXTRA_ARGS: ""
       BUILD_EXTRA_SUFFIX: ""
   script:
     - |
@@ -23,7 +22,6 @@ host-os-diskimg:
       echo "Build ID: ${VERSION}"
 
       cd "${CI_PROJECT_DIR}"/ic-os/hostos
-      # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-host-img -- \
       "${CI_PROJECT_DIR}"/gitlab-ci/src/job_scripts/lib/host-os-diskimg.sh \
         "$BUILD_OUT" "$BUILD_TMP" "$UPLOAD_TARGET" "$VERSION"

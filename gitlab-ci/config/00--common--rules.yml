@@ -269,6 +269,9 @@
         - ic-os/hostos/rootfs/Dockerfile.base
         - ic-os/hostos/rootfs/packages.common
         - ic-os/hostos/rootfs/packages.dev
+        - ic-os/setupos/rootfs/Dockerfile.base
+        - ic-os/setupos/rootfs/packages.common
+        - ic-os/setupos/rootfs/packages.dev
 
 .rules-scheduled-rosetta-release:
   rules:

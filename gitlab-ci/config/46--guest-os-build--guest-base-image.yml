@@ -6,25 +6,24 @@
       -f Dockerfile.base .
   docker build -q -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest \
       --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
-  # boundaryos-base
+  # boundaryos-base & boundaryos-base-snp
   cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
   docker build -q -t dfinity/boundaryos-base:"$TAG" -t dfinity/boundaryos-base:latest \
       -f Dockerfile.base .
-  # boundaryos-base-snp
-  cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
   docker build -q -t dfinity/boundaryos-base-snp:"$TAG" -t dfinity/boundaryos-base-snp:latest \
       --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
-  cd "${CI_PROJECT_DIR}"
   # hostos-base & hostos-base-dev
   cd "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
   docker build -q -t dfinity/hostos-base:"$TAG" -t dfinity/hostos-base:latest \
       -f Dockerfile.base .
   docker build -q -t dfinity/hostos-base-dev:"$TAG" -t dfinity/hostos-base-dev:latest \
       --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
-  # setupos-base
+  # setupos-base & setupos-base-dev
   cd "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
   docker build -q -t dfinity/setupos-base:"$TAG" -t dfinity/setupos-base:latest \
       -f Dockerfile.base .
+  docker build -q -t dfinity/setupos-base-dev:"$TAG" -t dfinity/setupos-base-dev:latest \
+      --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
 
 build-base-images:
   extends:
@@ -48,24 +47,25 @@ build-push-base-images:
    - |
      docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
 
-     IMAGE_LIST=(
-         dfinity/guestos-base
-         dfinity/guestos-base-dev
-         dfinity/boundaryos-base
-         dfinity/boundaryos-base-snp
-         dfinity/hostos-base
-         dfinity/hostos-base-dev
-         dfinity/setupos-base
+     IMAGE_FILES=(
+         ic-os/guestos/rootfs/docker-base.prod
+         ic-os/guestos/rootfs/docker-base.dev
+         ic-os/boundary-guestos/rootfs/docker-base.prod
+         ic-os/boundary-guestos/rootfs/docker-base.snp
+         ic-os/hostos/rootfs/docker-base.prod
+         ic-os/hostos/rootfs/docker-base.dev
+         ic-os/setupos/rootfs/docker-base.prod
+         ic-os/setupos/rootfs/docker-base.dev
      )
      # search, replace & push
-     for IMAGE in "${IMAGE_LIST[@]}"; do
+     for FILE in "${IMAGE_FILES[@]}"; do
+         IMAGE="$(cut -d @ -f 1 "${FILE}")"
          # TAG gets defined in *build-base-images
-         docker push "$IMAGE":"$TAG"
-         docker push "$IMAGE":latest
+         docker push "${IMAGE}":"${TAG}"
+         docker push "${IMAGE}":latest
 
-         OLD_REF="$(grep -rho -E "${IMAGE}@sha256:[0-9a-z]{64}" ./* | head -1)"
          NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' "${IMAGE}":"${TAG}")"
-         grep -r "$OLD_REF" --files-with-matches | xargs sed -i "s|${OLD_REF}|${NEW_REF}|g"
+         echo "${NEW_REF}" > "${FILE}"
      done
 
      # commit, push & create new merge request 
