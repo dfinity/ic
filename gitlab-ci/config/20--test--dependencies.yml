@@ -34,10 +34,16 @@ dependency-scan-nightly:
   variables: 
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
     CARGO_AUDIT_VERSION : "0.16.0"
+    NVM_VERSION : "17"
   script:
     - |
       set -euo pipefail
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      # shellcheck disable=SC1090
+      source "${NVM_DIR}/nvm.sh"
+      nvm use ${NVM_VERSION}
+      node --version
+      npm --version
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
       $SHELL_WRAPPER python3 scanner/bazel_ic_scanner_periodic_job.py
       $SHELL_WRAPPER python3 scanner/npm_ic_scanner_periodic_job.py
