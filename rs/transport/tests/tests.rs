@@ -1,3 +1,4 @@
+use futures::FutureExt;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
@@ -13,16 +14,17 @@ use ic_transport_test_utils::{
     basic_transport_message, basic_transport_message_v2, blocking_transport_message,
     create_mock_event_handler, get_free_localhost_port, large_transport_message, peer_down_message,
     setup_test_peer, start_connection_between_two_peers,
-    temp_crypto_component_with_tls_keys_in_registry, RegistryAndDataProvider, NODE_ID_1, NODE_ID_2,
-    NODE_ID_3, NODE_ID_4, REG_V1, TRANSPORT_CHANNEL_ID,
+    temp_crypto_component_with_tls_keys_in_registry, RegistryAndDataProvider, TestPeerBuilder,
+    TestTopologyBuilder, NODE_ID_1, NODE_ID_2, NODE_ID_3, NODE_ID_4, REG_V1, TRANSPORT_CHANNEL_ID,
 };
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{
     mpsc::{channel, Receiver, Sender},
-    Notify,
+    Barrier, Notify,
 };
 use tokio::time::Duration;
+use tower_test::mock::Handle;
 
 #[test]
 fn test_basic_conn_legacy() {
@@ -39,45 +41,74 @@ fn test_basic_conn_h2() {
 // issue the 'stop_connection' should receive a PeerDown event.
 fn test_basic_conn_impl(use_h2: bool) {
     with_test_replica_logger(|logger| {
-        let registry_version = REG_V1;
         let rt = tokio::runtime::Runtime::new().unwrap();
-        let (event_handler_1, mut handle_1) = create_mock_event_handler();
-        let (event_handler_2, mut handle_2) = create_mock_event_handler();
-        let (_control_plane_1, control_plane_2) = start_connection_between_two_peers(
-            rt.handle().clone(),
-            logger,
-            registry_version,
-            10,
-            event_handler_1,
-            event_handler_2,
-            NODE_ID_1,
-            NODE_ID_2,
-            use_h2,
-        );
+        let registry_data = RegistryAndDataProvider::new();
 
-        rt.block_on(async {
-            match handle_1.next_request().await {
-                Some((TransportEvent::PeerUp(_), resp)) => {
-                    resp.send_response(());
+        let wait_after_peer_up = Arc::new(Barrier::new(3));
+
+        let w1 = wait_after_peer_up.clone();
+        let peer1_expectations = |mut handle: Handle<TransportEvent, ()>| {
+            async move {
+                match handle.next_request().await {
+                    Some((TransportEvent::PeerUp(_), resp)) => {
+                        resp.send_response(());
+                    }
+                    e => panic!("Unexpected event {:?}", e),
                 }
-                _ => panic!("Unexpected event"),
-            }
-            match handle_2.next_request().await {
-                Some((TransportEvent::PeerUp(_), resp)) => {
-                    resp.send_response(());
+                w1.wait().await;
+                match handle.next_request().await {
+                    Some((TransportEvent::PeerDown(_), resp)) => {
+                        resp.send_response(());
+                    }
+                    e => panic!("Unexpected event {:?}", e),
                 }
-                _ => panic!("Unexpected event"),
             }
-        });
-        control_plane_2.stop_connection(&NODE_ID_1);
-        rt.block_on(async {
-            match handle_1.next_request().await {
-                Some((TransportEvent::PeerDown(_), resp)) => {
-                    resp.send_response(());
+            .boxed()
+        };
+        let w2 = wait_after_peer_up.clone();
+        let peer2_expectations = |mut handle: Handle<TransportEvent, ()>| {
+            async move {
+                match handle.next_request().await {
+                    Some((TransportEvent::PeerUp(_), resp)) => {
+                        resp.send_response(());
+                    }
+                    e => panic!("Unexpected event {:?}", e),
                 }
-                _ => panic!("Unexpected event"),
+                w2.wait().await;
             }
-        });
+            .boxed()
+        };
+
+        let peer1 = TestPeerBuilder::new(
+            NODE_ID_1,
+            rt.handle().clone(),
+            registry_data.clone(),
+            logger.clone(),
+        )
+        .h2(use_h2)
+        .build();
+
+        let peer2 = TestPeerBuilder::new(
+            NODE_ID_2,
+            rt.handle().clone(),
+            registry_data.clone(),
+            logger,
+        )
+        .h2(use_h2)
+        .build();
+
+        let mut test_transport = TestTopologyBuilder::new(registry_data, rt.handle().clone())
+            .add_node(peer1, peer1_expectations)
+            .add_node(peer2, peer2_expectations)
+            .full_mesh();
+
+        // Wait for PeerUp events to make sure we are connected and do not stop a connection
+        // that is not yet established.
+        rt.block_on(wait_after_peer_up.wait());
+
+        test_transport.stop_peer_connection(NODE_ID_2, NODE_ID_1);
+
+        test_transport.verify_all_peers_down();
     });
 }
 

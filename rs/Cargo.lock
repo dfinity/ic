@@ -9042,6 +9042,7 @@ dependencies = [
  "strum 0.24.1",
  "tokio",
  "tower",
+ "tower-test",
 ]
 
 [[package]]
