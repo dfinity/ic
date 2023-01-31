@@ -132,6 +132,7 @@ step 6 "Recover the NNS subnet to the first unassigned node." || (
         --replacement-nodes ${node_ids[0]} >$LOG_FILE 2>&1
 
     log "Recovery done, waiting until the new NNS starts up @ $UPLOAD_IP ..."
+    # TODO: NNS1-2024
     until ssh $SSH_ARGS "admin@${UPLOAD_IP}" 'journalctl | grep -q "Ready for interaction"' &>/dev/null; do
         print_blue "Waiting for the subnet to resume..."
         sleep 2

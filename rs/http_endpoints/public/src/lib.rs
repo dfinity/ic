@@ -214,10 +214,7 @@ fn start_server_initialization(
             ])
             .inc();
         health_status.store(ReplicaHealthStatus::Healthy);
-        // IMPORTANT: The system-tests relies on this log message to understand when it
-        // can start interacting with the replica. In the future, we plan to
-        // have a dedicated instrumentation channel to communicate between the
-        // replica and the testing framework, but for now, this is the best we can do.
+        // TODO: NNS1-2024
         info!(log, "Ready for interaction.");
     });
 }
