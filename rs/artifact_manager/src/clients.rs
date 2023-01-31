@@ -433,6 +433,11 @@ impl<Pool: IngressPool + IngressGossipPool + IngressPoolThrottler + Send + Sync 
         let range = start..=start + MAX_INGRESS_TTL;
         let pool = self.ingress_pool.clone();
         Some(Box::new(move |ingress_id, _| {
+            // EXPLANATION: Because ingress messages are included in blocks, consensus
+            // does not rely on ingress gossip for correctness. Ingress gossip exists to
+            // reduce latency in cases where replicas don't have enough ingress messages
+            // to fill their block. Once a replica's pool is full, ingress gossip just
+            // causes redundant traffic between replicas, and is thus not needed.
             if pool
                 .read()
                 .expect("couldn't acquire readers lock on ingress pool")
