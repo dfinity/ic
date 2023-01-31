@@ -58,7 +58,7 @@ const ENCRYPTED_PRIVATE_KEY_LEN: u32 = KB; // 1 * KB
 const ENCRYPTED_CERTIFICATE_LEN: u32 = 8 * KB;
 const ENCRYPTED_PAIR_LEN: u32 = ENCRYPTED_PRIVATE_KEY_LEN + ENCRYPTED_CERTIFICATE_LEN;
 
-const REGISTRATION_EXPIRATION_TTL: Duration = Duration::from_secs(6 * 3600); // 6 Hours
+const REGISTRATION_EXPIRATION_TTL: Duration = Duration::from_secs(60 * 60); // 1 Hour
 const IN_PROGRESS_TTL: Duration = Duration::from_secs(10 * 60); // 10 Minutes
 
 // Memory

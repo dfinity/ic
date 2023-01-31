@@ -75,8 +75,8 @@ pub trait Dispense: Sync + Send {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProcessError {
-    #[error("awaiting propogation of challenge response dns txt record")]
-    AwaitingDnsPropogation,
+    #[error("awaiting propagation of challenge response dns txt record")]
+    AwaitingDnsPropagation,
 
     #[error("awaiting acme approval for certificate order")]
     AwaitingAcmeOrderReady,
@@ -86,8 +86,12 @@ pub enum ProcessError {
 }
 
 impl From<&ProcessError> for Duration {
-    fn from(_: &ProcessError) -> Self {
-        Duration::from_secs(60)
+    fn from(error: &ProcessError) -> Self {
+        match error {
+            ProcessError::AwaitingDnsPropagation => Duration::from_secs(60),
+            ProcessError::AwaitingAcmeOrderReady => Duration::from_secs(60),
+            ProcessError::UnexpectedError(_) => Duration::from_secs(10 * 60),
+        }
     }
 }
 
@@ -286,11 +290,11 @@ impl Process for Processor {
                     .await
                     .context("failed to create dns record")?;
 
-                Err(ProcessError::AwaitingDnsPropogation)
+                Err(ProcessError::AwaitingDnsPropagation)
             }
 
             Action::Ready => {
-                // Phase 7 - Ensure DNS TXT record has propogated
+                // Phase 7 - Ensure DNS TXT record has propagated
                 self.resolver
                     .lookup(
                         &format!("_acme-challenge.{}.{}", task.name, self.delegation_domain),
@@ -299,7 +303,7 @@ impl Process for Processor {
                     .await
                     .map_err(|err| match err.kind() {
                         ResolveErrorKind::NoRecordsFound { .. } => {
-                            ProcessError::AwaitingDnsPropogation
+                            ProcessError::AwaitingDnsPropagation
                         }
                         _ => ProcessError::UnexpectedError(anyhow!(
                             "failed to resolve TXT record: {err}"
@@ -422,9 +426,9 @@ mod tests {
         );
 
         match processor.process(&id, &task).await {
-            Err(ProcessError::AwaitingDnsPropogation) => Ok(()),
+            Err(ProcessError::AwaitingDnsPropagation) => Ok(()),
             other => Err(anyhow!(
-                "expected AwaitingDnsPropogation but got {:?}",
+                "expected AwaitingDnsPropagation but got {:?}",
                 other
             )),
         }

@@ -30,7 +30,7 @@ impl ToString for State {
 impl From<ProcessError> for State {
     fn from(e: ProcessError) -> Self {
         match e {
-            ProcessError::AwaitingDnsPropogation => State::PendingChallengeResponse,
+            ProcessError::AwaitingDnsPropagation => State::PendingChallengeResponse,
             ProcessError::AwaitingAcmeOrderReady => State::PendingAcmeApproval,
             ProcessError::UnexpectedError(_) => State::Failed(e.to_string()),
         }
