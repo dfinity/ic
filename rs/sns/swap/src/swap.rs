@@ -9,7 +9,8 @@ use crate::pb::v1::{
     BuyerState, CanisterCallError, CfInvestment, DerivedState, DirectInvestment,
     ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateRequest,
     GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetLifecycleRequest,
-    GetLifecycleResponse, Init, Lifecycle, OpenRequest, OpenResponse, RefreshBuyerTokensResponse,
+    GetLifecycleResponse, Init, Lifecycle, ListCommunityFundParticipantsRequest,
+    ListCommunityFundParticipantsResponse, OpenRequest, OpenResponse, RefreshBuyerTokensResponse,
     RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
     SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
 };
@@ -53,6 +54,9 @@ use crate::pb::v1::{
 // is configured to be 75% of a Xnet message size, or roughly 1.5MB. This is equivalent to
 // (1024 * 1024) * 1.5
 pub const CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES: usize = 1572864_usize;
+
+const DEFAULT_LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT: u32 = 10_000;
+const LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP: u32 = 10_000;
 
 impl From<(Option<i32>, String)> for CanisterCallError {
     fn from((code, description): (Option<i32>, String)) -> Self {
@@ -1830,6 +1834,23 @@ impl Swap {
             lifecycle: Some(self.lifecycle),
         }
     }
+
+    pub fn list_community_fund_participants(
+        &self,
+        request: &ListCommunityFundParticipantsRequest,
+    ) -> ListCommunityFundParticipantsResponse {
+        let ListCommunityFundParticipantsRequest { limit, offset } = request;
+        let offset = offset.unwrap_or_default() as usize;
+        let limit = limit
+            .unwrap_or(DEFAULT_LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT) // use default
+            .min(LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP) // cap
+            as usize;
+
+        let end = (offset + limit).min(self.cf_participants.len());
+        let cf_participants = self.cf_participants[offset..end].to_vec();
+
+        ListCommunityFundParticipantsResponse { cf_participants }
+    }
 }
 
 pub fn is_valid_principal(p: &str) -> bool {
@@ -1864,6 +1885,7 @@ fn string_to_principal(maybe_principal_id: &String) -> Option<PrincipalId> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pb::v1::{CfNeuron, CfParticipant};
     use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
     use pretty_assertions::assert_eq;
     use proptest::prelude::proptest;
@@ -2031,7 +2053,82 @@ mod tests {
         );
         assert_eq!(
             invalid_recipe.claimed_status,
-            Some(ClaimedStatus::Invalid as i32)
+            Some(ClaimedStatus::Invalid as i32),
+        );
+    }
+
+    #[test]
+    fn test_list_community_fund_participants() {
+        let cf_participants = vec![
+            CfParticipant {
+                hotkey_principal: PrincipalId::new_user_test_id(992899).to_string(),
+                cf_neurons: vec![CfNeuron {
+                    nns_neuron_id: 1,
+                    amount_icp_e8s: 698047,
+                }],
+            },
+            CfParticipant {
+                hotkey_principal: PrincipalId::new_user_test_id(800257).to_string(),
+                cf_neurons: vec![CfNeuron {
+                    nns_neuron_id: 2,
+                    amount_icp_e8s: 678574,
+                }],
+            },
+            CfParticipant {
+                hotkey_principal: PrincipalId::new_user_test_id(818371).to_string(),
+                cf_neurons: vec![CfNeuron {
+                    nns_neuron_id: 3,
+                    amount_icp_e8s: 305256,
+                }],
+            },
+            CfParticipant {
+                hotkey_principal: PrincipalId::new_user_test_id(657894).to_string(),
+                cf_neurons: vec![CfNeuron {
+                    nns_neuron_id: 4,
+                    amount_icp_e8s: 339747,
+                }],
+            },
+        ];
+        let swap = Swap {
+            cf_participants: cf_participants.clone(),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            swap.list_community_fund_participants(&ListCommunityFundParticipantsRequest::default()),
+            ListCommunityFundParticipantsResponse {
+                cf_participants: cf_participants.clone(),
+            },
+        );
+
+        assert_eq!(
+            swap.list_community_fund_participants(&ListCommunityFundParticipantsRequest {
+                offset: Some(2),
+                ..Default::default()
+            }),
+            ListCommunityFundParticipantsResponse {
+                cf_participants: cf_participants[2..].to_vec(),
+            },
+        );
+
+        assert_eq!(
+            swap.list_community_fund_participants(&ListCommunityFundParticipantsRequest {
+                offset: Some(1),
+                limit: Some(2),
+            }),
+            ListCommunityFundParticipantsResponse {
+                cf_participants: cf_participants[1..3].to_vec(),
+            },
+        );
+
+        assert_eq!(
+            swap.list_community_fund_participants(&ListCommunityFundParticipantsRequest {
+                offset: Some(2),
+                limit: Some(10),
+            }),
+            ListCommunityFundParticipantsResponse {
+                cf_participants: cf_participants[2..].to_vec(),
+            },
         );
     }
 

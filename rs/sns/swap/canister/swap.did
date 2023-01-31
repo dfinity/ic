@@ -71,6 +71,13 @@ type Investor = variant {
   CommunityFund : CfInvestment;
   Direct : DirectInvestment;
 };
+type ListCommunityFundParticipantsRequest = record {
+  offset : opt nat64;
+  limit : opt nat32;
+};
+type ListCommunityFundParticipantsResponse = record {
+  cf_participants : vec CfParticipant;
+};
 type NeuronAttributes = record { dissolve_delay_seconds : nat64; memo : nat64 };
 type NeuronBasketConstructionParameters = record {
   dissolve_delay_interval_seconds : nat64;
@@ -149,6 +156,9 @@ service : (Init) -> {
   get_init : (record {}) -> (GetInitResponse) query;
   get_lifecycle : (record {}) -> (GetLifecycleResponse) query;
   get_state : (record {}) -> (GetStateResponse) query;
+  list_community_fund_participants : (ListCommunityFundParticipantsRequest) -> (
+      ListCommunityFundParticipantsResponse,
+    ) query;
   open : (OpenRequest) -> (record {});
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (
       RefreshBuyerTokensResponse,
