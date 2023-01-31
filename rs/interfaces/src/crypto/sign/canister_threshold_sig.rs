@@ -1,15 +1,33 @@
-//! Traits for canister-requested threshold ECDSA signatures
-//! and the associated interactive distributed key generation protocol (IDKG).
+//! Traits providing the crypto component interfaces for a threshold ECDSA protocol.
 //!
-//! Canisters must be able to create ECDSA signatures (e.g., to create bitcoin and thereum
-//! transactions) but they cannot securely store a private key in memory (because the state of a
-//! canister is known to all replicas in the subnet hosting the canister and one or more replicas
-//! may be malicious). The secret key is therefore shared among the replicas of the subnet and they
-//! must be able to collaboratively create ECDSA signatures.
+//! A set of nodes can use a threshold ECDSA protocol to establish a decentralized ECDSA signing service.
+//! The protocol is secure as long as the number of corrupted nodes is less than the threshold (typically
+//! less than 1/3). The main building block used in the protocol is an interactive distributed key generation
+//! protocol (IDKG), which is used for the following:
+//! * Generate an ECDSA signing key, which is secret-shared between the participants.
+//! * Re-share an existing ECDSA signing key to a new set of nodes, e.g. if nodes leave or join a subnet, or
+//!   to back up the key on a another subnet.
+//! * Secret-share random values (also known as Beaver triplets) used in the computation of threshold ECDSA
+//!   signatures.
 //!
-//! Since each ECDSA signature requires 4 transcripts, which are created by the distributed key
-//! generation protocol, computing these transcripts must be
-//! efficient and that's the reason why the protocol is interactive.
+//! A signing service supporting multiple users needs to manage many public keys, often several per users.
+//! Since generating and managing these is expensive, it would not scale to generate different keys per user.
+//! Instead, the threshold ECDSA protocol implemented by the IC uses key derivation to derive individual
+//! users public keys from a master ECDSA signing key. The key derivation is a generalization of BIP32, and
+//! users can further derive any number of subkeys from their main public key. This allows the signing service
+//! to easily scale with the number of users.
+//!
+//! At an high-level, the ECDSA signing protocol can be divided into an offline and online phase:
+//! * Offline phase: this is a pre-computation step that can be performed ahead of time, before the message and
+//!   the identity of the signer are known to the nodes. Most of the interaction takes place in this phase of the
+//!   protocol. This phase consists of running 5 instances of the IDKG protocol to construct a *quadruple* of
+//!   secret-shared values that are used in the online phase of the protocol (the value generated in one of the
+//!   instances is used as an intermediary value and it is not used in the signing protocol). Each quadruple can
+//!   only be used in the construction of a single ECDSA signature.
+//! * Online phase: this phase is executed to answer an incoming signature request, i.e. once the message and
+//!   the identity of the signer are known. This part of the protocol is non-interactive, i.e all nodes use their
+//!   shares of a precomputed quadruple to compute locally a signature share. Enough shares can then be publicly
+//!   combined into a full ECDSA signature.
 
 use ic_base_types::NodeId;
 use ic_types::crypto::canister_threshold_sig::error::{
@@ -29,56 +47,107 @@ use ic_types::crypto::canister_threshold_sig::{
 };
 use std::collections::{BTreeMap, HashSet};
 
-/// A Crypto Component interface to run interactive distributed key generation (IDKG)
-/// protocol for canister-requested threshold ECDSA signatures.
+/// A Crypto Component interface to run interactive distributed key generation (IDKG) protocol as part of the
+/// threshold ECDSA protocol. Nodes can engage in an instance of the IDKG protocol to secret-share some values.
+/// A successful execution of the protocol terminates with a *transcript* which summarizes the messages exchanged
+/// during the protocol.
 ///
-/// The IDKG protocol produces a *transcript* that gives all replicas inside a subnet shares of an
-/// ECDSA secret key. Each canister-requested threshold signature requires 4 pre-computed
-/// transcripts (they are independent of the message to be signed),
-/// see [`PreSignatureQuadruple`].
+/// # Protocol Overview:
+/// The IDKG protocol involves two sets of participants interacting in the protocol: *dealers* and *receivers*.
+/// The set of dealers jointly constructs a common secret, which is secret-shared to the set of the receivers.
+/// I.e. each receiver obtains a piece of the common secret, such that a threshold number of receivers has to
+/// contribute with their shares in order to reconstruct the full secret.
+///
+/// Before starting the protocol, the node in a subnet agree on some global parameters [`IDkgTranscriptParams`],
+/// including, for example, the set of participants, which elliptic curve should be used, and an identifier for the
+/// protocol instance. The params used in a protocol instance must remain the same for the entire duration of the
+/// protocol.
+///
+/// ## Dealings:
+/// Dealers contribute to the protocol with a *dealing*, which consists of encrypted shares of a secret value known
+/// by the dealer, one encrypted share for each receiver, as well as a commitment to the shares. The protocol uses
+/// different types of commitments schemes:
+/// * Perfectly hiding commitments, as used in Pedersen's  verifiable secret sharing scheme (VSS). Here we refer to
+///   values committed with such commitment as `Masked`.
+/// * Perfectly binding commitments, as used in Feldman's VSS. Here we refer to values committed with such commitment
+///   as `Unmasked`.
+///
+/// Dealers can construct dealings for different kind of secrets and use different types of commitment schemes:
+/// * [`Random`]: at the end of the protocol the receivers have a share of a new random value that is masked.
+/// * [`ReshareOfMasked`]: given an existing masked secret shared between the dealers, at the end the receivers obtain
+///   a new sharing for the same secret, but unmasked.
+/// * [`ReshareOfUnmasked`]: given an existing unmasked secret shared between the dealers, at the end the receivers
+///   obtain a new sharing for the same secret, that is still unmasked.
+/// * [`UnmaskedTimesMasked`]: given two existing secrets, one masked and one unmasked, shared between the dealers,
+///   at the end the receivers obtain a sharing of the product of the initial secret that is masked.
+///
+/// Since this is an *interactive* distributed key generation protocol, the verification of encrypted shares in a dealing
+/// is done privately by the receivers, which decrypt their shares and check the validity against some public commitment.
+/// This is in contrast with non-interactive DKG protocols, where the verification of dealings can be performed publicly.
+/// In case the verification is successful, receivers sign the dealings to show their support.
+///
+/// ## Transcripts:
+/// Multiple dealings contributions from different dealers are required to establish a common secret. The minimum
+/// number of contributions depends both on the reconstruction threshold and on the kind of secret value being shared.
+/// Once enough dealings with sufficient receivers' support are collected, they are then combined into a transcript
+/// [`IDkgTranscript`] which summarizes all the information the receivers need to reconstruct their share of the
+/// common secret.
+///
+/// ## Complaints:
+/// After a transcript is successfully created, it could happen that a receiver cannot successfully decrypt all its
+/// shares from the dealers. If this happens the receiver can compute a [`IDkgComplaint`] against specific dealings
+/// and send this to all the other receivers. The receivers can verify the complaint and, if valid, return an
+/// [`IDkgOpening`] to the issuer of the complaint. Given enough valid openings, the issuer can reconstruct the missing
+/// share.
 ///
 /// # Use-Cases
 ///
-/// ## Initial Key Generation
+/// ## Key Generation
 ///
-/// Dealers and receivers are all members of the same subnet.
-/// When consensus realizes a key needs to be generated:
-/// 1. Run IDKG protocol with [`Random`] operation to generate transcript `alpha`.
-/// 1. Run IDKG protocol with [`ReshareOfUnmasked`] with transcript `alpha` to open public key.
+/// * Dealers: all the nodes in a subnet.
+/// * Receivers: same nodes as the set of dealers.
+/// The nodes run two instances of the IDKG protocol in sequence:
+/// 1. Run IDKG protocol to generate a [`Random`] secret key. Since the commitment used here is masking, the nodes do
+///    not yet know the corresponding public key, but only a share of it.
+/// 2. Run IDKG protocol to do a [`ReshareOfMasked`] secret key generated in the previous protocol instance. Since the
+///    commitment used here is unmasked, the nodes will then learn the public key corresponding to the secret key
+///    generated in the first instance.
 ///
-/// ## Key Resharing
+/// ## Key Re-sharing
 ///
-/// When the topology of a subnet changes or a key rotation of the nodes is triggered, the key
-/// transcript `alpha` is reshared to the new subnet.
-/// * Dealers: receivers of the previous transcript `alpha`
-/// * Receivers: all nodes in the subnet with the new topology (which may include new nodes but
-/// does not contain nodes that were removed).
+/// When the membership of subnet changes or in case shares associated with the key needs to be refreshed (e.g. for proactive
+/// security), the nodes of the subnet run one instance of the IDKG protocol.
+/// * Dealers: nodes that were receivers in the IDKG instance that generated the key to be re-shared.
+/// * Receivers: all nodes in the subnet with the new topology (which may include new nodes and exclude nodes that were
+///   removed).
+/// The nodes re-share a key by running a single IDKG protocol instance:
+/// 1. Run IDKG protocol to do a [`ReshareOfUnmasked`] key that was previously generated.
 ///
-/// Consensus orchestrates resharing by:
-/// 1. Run IDKG protocol with [`ReshareOfUnmasked`] with transcript `alpha` to reshare.
+/// ## XNet Key Re-sharing
 ///
-/// ## Key Resharing Accross Subnets
-///
-/// Triggered by the governance canister to backup the key in another subnet. Half of the protocol
-/// runs in a source subnet, while the other half runs in a target subnet. Note that the target
-/// subnet may yet to be created.
+/// Subnets can share an existing key with another subnet, e.g. to back it up or to scale the threshold ECDSA protocol.
+/// Half of the IDKG protocol runs in the source subnet that knows the key, while the other half runs in a target subnet
+/// receiving a copy of the key.
 /// * Dealers: all nodes in the source subnet
-/// * Receivers: all nodes in the target subnet
+/// * Receivers: all nodes in the target subnet. Note that this subnet does not need to exist yet, it could be under
+///   construction
 ///
-/// 1. Run IDKG with [`ReshareOfUnmasked`] with transcript `alpha`.
-///     * Source subnet calls [Self::create_dealing()] and [Self::verify_dealing_public()].
-///     * Source subnet collects a set of [`InitialIDkgDealings`], which are included in the registry.
-///     * Target subnet fetches the [`InitialIDkgDealings`] from the registry, terminates the protocol
-///     by calling all other IDKG APIs [Self::verify_dealing_private()], [Self::create_transcript()], ...
+/// The nodes run a single IDKG protocol instance:
+/// * The source subnet initiate a protocol to [`ReshareOfUnmasked`] key that was previously generated.
+/// * The source subnet collects enough dealings into [`InitialIDkgDealings`] that are then included in the registry.
+/// * The target subnet fetches the [`InitialIDkgDealings`] from the registry and completes the execution of the protocol.
 ///
-/// No back communication from target to source: this is possible by including enough (>=2f+1, only
-/// f+1 are needed) honest dealings in the InitialDealings (assuming at most f corruptions in the
-/// sources subnet)
+/// No communication between the source and target subnets is required apart from the registry. This is possible by
+/// making sure that the initial dealings include enough honest dealings, so that the receivers can terminate the protocol.
+/// I.e. with at most f corruptions, a set of >=2f+1 dealings from distinct dealers is guaranteed to have at least f+1
+/// honest dealings.
 ///
 /// [`InitialIDkgDealings`]: ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings
 /// [`PreSignatureQuadruple`]: ic_types::crypto::canister_threshold_sig::PreSignatureQuadruple
 /// [`Random`]: ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation::Random
+/// [`ReshareOfMasked`]: ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation::ReshareOfMasked
 /// [`ReshareOfUnmasked`]: ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation::ReshareOfUnmasked
+/// [`UnmaskedTimesMasked`]: ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptOperation::UnmaskedTimesMasked
 ///
 /// # Preconditions
 ///
