@@ -1,7 +1,6 @@
 #cloud-config
 packages:
   - sudo
-  - curl
   - git
   - podman
   - expect-dev
@@ -17,14 +16,9 @@ users:
 
 runcmd:
   - |
-    # Bazel Setup
-    curl -L0 -k https://github.com/bazelbuild/bazelisk/releases/download/v1.15.0/bazelisk-linux-amd64 -o /usr/local/bin/bazel
-    chmod 0755 /usr/local/bin/bazel
-  - |
     # IC-OS Build
-    git clone https://github.com/dfinity/ic.git
-    cd ic
-    [ -n "$REVISION" ] && git checkout $REVISION
-    unbuffer ./gitlab-ci/container/build-ic.sh | tee /home/ubuntu/build.out
+    sudo -u ubuntu git clone --depth 1 https://github.com/dfinity/ic.git /home/ubuntu/ic
+    [ -n "$REVISION" ] && sudo -u ubuntu bash -e -c "cd /home/ubuntu/ic; git fetch origin $REVISION && git checkout $REVISION"
+    sudo -u ubuntu bash -eo pipefail -c "cd /home/ubuntu/ic; unbuffer ./gitlab-ci/container/build-ic.sh -i -b -c | tee ../build.out"
     # while building: `tail -f /home/ubuntu/build.out`
     # when completed: `tree /home/ubuntu/ic/artifacts`
