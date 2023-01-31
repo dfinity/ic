@@ -1734,3 +1734,117 @@ fn dts_uninstall_with_aborted_response() {
     assert_eq!(err.code(), ErrorCode::CanisterRejectedMessage);
     assert_eq!(err.description(), "Canister has been uninstalled.");
 }
+
+/// The test makes sure cleanup callback has at least `cleanup_reservation_percentage` instructions reserved
+/// from a total `instruction_limit` to execute the cleanup callback.
+fn reserve_instructions_for_cleanup_callback_scenario(
+    test: &mut ExecutionTest,
+    instruction_limit: u64,
+) {
+    let cleanup_reservation_percentage = 5;
+    let cleanup_instructions_reserved = (instruction_limit * cleanup_reservation_percentage) / 100;
+
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+
+    // Canister B simply replies with the message that was sent to it.
+    let b = wasm().message_payload().append_and_reply().build();
+
+    // Canister A:
+    // 1. Calls canister B and transfers cycles.
+    // 2. In the response callback exhausts all the available instructions.
+    // 3. In the cleanup callback exhausts almost all the instructions and writes to the stable memory.
+    let unreachable_instructions_amount = 2 * instruction_limit;
+    let stable_grow_and_write_instructions = 20_000;
+    let stable_memory_data = b"x";
+    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+    let a = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reply(
+                    // In response callback exhaust all the instructions available to cause a cleanup callback.
+                    wasm()
+                        .instruction_counter_is_at_least(unreachable_instructions_amount)
+                        .trap(),
+                )
+                .on_cleanup(
+                    // In cleanup callback exhaust reserved instructions and write to the stable memory
+                    // to make sure that cleanup callback was executed fully and succesfully.
+                    wasm()
+                        .instruction_counter_is_at_least(
+                            cleanup_instructions_reserved - stable_grow_and_write_instructions,
+                        )
+                        .stable_grow(1)
+                        .stable_write(0, stable_memory_data),
+                ),
+            (0, transferred_cycles),
+        )
+        .build();
+    let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
+
+    // Canister A calls canister B.
+    test.execute_message(a_id);
+    assert_eq!(
+        test.canister_state(a_id).next_execution(),
+        NextExecution::None
+    );
+    test.induct_messages();
+
+    // Canister B replies.
+    test.execute_message(b_id);
+    test.induct_messages();
+
+    // Canister A:
+    // - executes a response callback which fails with exceeding instructions limit
+    // - executes a cleanup callback wich exhausts all the instructions and writes to stable memory
+    let execution_cost_before = test.canister_execution_cost(a_id);
+    test.execute_message(a_id);
+    let execution_cost_after = test.canister_execution_cost(a_id);
+    assert!(execution_cost_after > execution_cost_before);
+
+    // Assert that the response failed with exceeding instructions limit.
+    let ingress_status = test.ingress_status(&ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap_err();
+    assert_eq!(result.code(), ErrorCode::CanisterInstructionLimitExceeded);
+
+    // Assert that cleanup callback was executed fully and successfully by reading from stable memory.
+    let (ingress_id, _) = test.ingress_raw(
+        a_id,
+        "query",
+        wasm().stable_read(0, 1).append_and_reply().build(),
+    );
+    test.execute_message(a_id);
+    test.induct_messages();
+    let ingress_status = test.ingress_status(&ingress_id);
+    let result = check_ingress_status(ingress_status).unwrap();
+    assert_eq!(result, WasmResult::Reply(stable_memory_data.to_vec()));
+}
+
+#[test]
+fn reserve_instructions_for_cleanup_callback() {
+    let instruction_limit = 1_000_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(instruction_limit)
+        .with_manual_execution()
+        .build();
+
+    reserve_instructions_for_cleanup_callback_scenario(&mut test, instruction_limit);
+}
+
+#[test]
+fn reserve_instructions_for_cleanup_callback_with_dts() {
+    let instruction_limit = 1_000_000;
+    let slice_instruction_limit = 10_000;
+    let mut test = ExecutionTestBuilder::new()
+        .with_instruction_limit(instruction_limit)
+        .with_slice_instruction_limit(slice_instruction_limit)
+        .with_deterministic_time_slicing()
+        .with_manual_execution()
+        .build();
+
+    reserve_instructions_for_cleanup_callback_scenario(&mut test, instruction_limit);
+}

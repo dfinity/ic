@@ -273,8 +273,8 @@ fn basic_induct_messages_on_same_subnet_works() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
-            max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_message: NumInstructions::new(55),
+            max_instructions_per_message_without_dts: NumInstructions::from(55),
             max_instructions_per_slice: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
@@ -346,8 +346,8 @@ fn induct_messages_to_self_works() {
         .with_scheduler_config(SchedulerConfig {
             scheduler_cores: 2,
             max_instructions_per_round: NumInstructions::new(1000),
-            max_instructions_per_message: NumInstructions::new(50),
-            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_message: NumInstructions::new(55),
+            max_instructions_per_message_without_dts: NumInstructions::from(55),
             max_instructions_per_slice: NumInstructions::new(50),
             instruction_overhead_per_message: NumInstructions::from(0),
             instruction_overhead_per_canister: NumInstructions::from(0),
