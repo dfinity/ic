@@ -76,6 +76,10 @@ pub enum EventPayload {
         task_id: TaskId,
         msg: String,
     },
+    TaskSubReport {
+        task_id: TaskId,
+        sub_report: String,
+    },
     TaskStopped {
         task_id: TaskId,
     },
@@ -83,20 +87,8 @@ pub enum EventPayload {
 }
 
 impl Event {
-    pub fn task_failed(task_id: TaskId, msg: String) -> Self {
-        Self::now(EventPayload::TaskFailed { task_id, msg })
-    }
-
-    pub fn task_stopped(task_id: TaskId) -> Self {
-        Self::now(EventPayload::TaskStopped { task_id })
-    }
-
     pub fn task_spawned(task_id: TaskId) -> Self {
         Self::now(EventPayload::TaskSpawned { task_id })
-    }
-
-    pub fn task_caught_panic(task_id: TaskId, msg: String) -> Self {
-        Self::now(EventPayload::TaskCaughtPanic { task_id, msg })
     }
 
     pub fn process_event(task_id: TaskId, process_event_payload: ProcessEventPayload) -> Self {
@@ -104,6 +96,25 @@ impl Event {
             task_id,
             process_event: process_event_payload,
         })
+    }
+
+    pub fn task_caught_panic(task_id: TaskId, msg: String) -> Self {
+        Self::now(EventPayload::TaskCaughtPanic { task_id, msg })
+    }
+
+    pub fn task_failed(task_id: TaskId, msg: String) -> Self {
+        Self::now(EventPayload::TaskFailed { task_id, msg })
+    }
+
+    pub fn task_sub_report(task_id: TaskId, sub_report: String) -> Self {
+        Self::now(EventPayload::TaskSubReport {
+            task_id,
+            sub_report,
+        })
+    }
+
+    pub fn task_stopped(task_id: TaskId) -> Self {
+        Self::now(EventPayload::TaskStopped { task_id })
     }
 
     fn now(what: EventPayload) -> Self {

@@ -418,14 +418,6 @@ name = "ic-systest-distributed"
 path = "bin/distributed_test.rs"
 
 [[bin]]
-name = "ic-systest-sns-deployment"
-path = "bin/sns_deployment_test.rs"
-
-[[bin]]
-name = "ic-systest-sns-init-sale-scalability-experiment"
-path = "bin/sns_init_sale_scalability_experiment.rs"
-
-[[bin]]
 name = "ic-systest-query-workload-long-test"
 path = "bin/query_workload_long_test.rs"
 

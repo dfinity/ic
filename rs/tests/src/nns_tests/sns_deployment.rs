@@ -1,3 +1,5 @@
+use std::time::Instant;
+#[allow(unused)]
 /* tag::catalog[]
 Title:: Bootstrapping SNS & decentralization sale
 
@@ -17,11 +19,10 @@ Runbook::
 . For now, we don't check the sale start time as it is not yet exposed through canister API
 
 end::catalog[] */
-
 use std::time::{Duration, SystemTime};
 
 use candid::{Decode, Encode, Principal};
-use ic_agent::AgentError;
+use ic_agent::{Agent, AgentError};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha::Sha256;
 use ic_nervous_system_common::E8;
@@ -32,7 +33,9 @@ use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
-use ic_sns_swap::pb::v1::{GetStateRequest, GetStateResponse, Lifecycle, Params};
+use ic_sns_swap::pb::v1::{
+    GetStateRequest, GetStateResponse, Lifecycle, Params, RefreshBuyerTokensRequest,
+};
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
     SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
@@ -41,6 +44,8 @@ use ic_types::{Cycles, Height};
 use serde::{Deserialize, Serialize};
 use slog::info;
 
+use crate::driver::farm::HostFeature;
+use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot,
@@ -51,9 +56,11 @@ use crate::nns::{
     vote_execute_proposal_assert_executed,
 };
 use crate::orchestrator::utils::rw_message::install_nns_and_check_progress;
-use crate::util::{block_on, runtime_from_url, to_principal_id, UniversalCanister};
+use crate::util::{
+    assert_create_agent, block_on, runtime_from_url, to_principal_id, UniversalCanister,
+};
 
-use crate::driver::ic::{InternetComputer, Subnet};
+use crate::workload::{CallSpec, Request, RoundRobinPlan, Workload};
 
 use ic_nns_governance::pb::v1::{
     manage_neuron::Command, manage_neuron_response::Command as CommandResp, ManageNeuron,
@@ -63,16 +70,27 @@ use ic_nns_governance::pb::v1::{
 use canister_test::{Project, Runtime};
 use dfn_candid::candid_one;
 
+use crate::driver::ic::{
+    AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
+};
 use crate::driver::test_env::TestEnvAttribute;
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 
+const WORKLOAD_GENERATION_DURATION: Duration = Duration::from_secs(60);
+
 const DKG_INTERVAL: u64 = 199;
 const SUBNET_SIZE: usize = 4;
+const UVM_NUM_CPUS: NrOfVCPUs = NrOfVCPUs::new(2);
+const UVM_MEMORY_SIZE: AmountOfMemoryKiB = AmountOfMemoryKiB::new(16777216); // 16 GiB
+const UVM_BOOT_IMAGE_MIN_SIZE: ImageSizeGiB = ImageSizeGiB::new(4);
 
 const DAYS: Duration = Duration::from_secs(24 * 60 * 60);
+
+const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
+const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(5); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnsClient {
@@ -87,15 +105,20 @@ impl TestEnvAttribute for SnsClient {
 }
 
 impl SnsClient {
+    pub fn get_wallet_canister_principal(&self) -> Principal {
+        Principal::try_from(self.wallet_canister_id).unwrap()
+    }
+
+    fn get_wallet_canister<'a>(&self, agent: &'a Agent) -> UniversalCanister<'a> {
+        UniversalCanister::from_canister_id(agent, self.get_wallet_canister_principal())
+    }
+
     pub fn assert_state(&self, env: &TestEnv, state: Lifecycle) {
         let log = env.logger();
         let swap_id = self.sns_canisters.swap();
         let app_node = env.get_first_healthy_application_node_snapshot();
         let agent = app_node.build_default_agent();
-        let wallet_canister = UniversalCanister::from_canister_id(
-            &agent,
-            Principal::try_from(self.wallet_canister_id).unwrap(),
-        );
+        let wallet_canister = self.get_wallet_canister(&agent);
         info!(log, r#"Sending "get_state" to SNS swap"#);
         let res = block_on(get_swap_state(&wallet_canister, swap_id))
             .expect("get_state failed")
@@ -159,14 +182,28 @@ impl SnsClient {
             wallet_canister_id,
         };
         sns_client.write_attribute(env);
+        sns_client.assert_state(env, Lifecycle::Pending);
         sns_client
     }
 }
 
-pub fn setup(env: TestEnv) {
+pub fn sns_setup(env: TestEnv) {
     env.ensure_group_setup_created();
 
+    PrometheusVm::default()
+        .start(&env)
+        .expect("failed to start prometheus VM");
+
     InternetComputer::new()
+        .with_required_host_features(vec![
+            HostFeature::SnsLoadTest,
+            HostFeature::Host("fr1-dll07.fr1.dfinity.network".to_string()),
+        ])
+        .with_default_vm_resources(VmResources {
+            vcpus: Some(UVM_NUM_CPUS),
+            memory_kibibytes: Some(UVM_MEMORY_SIZE),
+            boot_image_minimal_size_gibibytes: Some(UVM_BOOT_IMAGE_MIN_SIZE),
+        })
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
@@ -180,24 +217,103 @@ pub fn setup(env: TestEnv) {
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    install_nns_and_check_progress(env.topology_snapshot());
-    SnsClient::install_sns_and_check_healthy(&env);
+    env.sync_prometheus_config_with_topology();
+
+    install_nns(&env);
+
+    install_sns(&env);
 }
 
-pub fn test(env: TestEnv) {
+pub fn install_nns(env: &TestEnv) {
     let log = env.logger();
-    let sns_client = SnsClient::read_attribute(&env);
-    sns_client.assert_state(&env, Lifecycle::Pending);
+    let start_time = Instant::now();
+    install_nns_and_check_progress(env.topology_snapshot());
     info!(
         log,
-        "=========== The SNS has been installed sucessfully ==========="
+        "=========== The NNS has been successfully installed in {:?} ==========",
+        start_time.elapsed()
     );
+}
+
+pub fn install_sns(env: &TestEnv) {
+    let log = env.logger();
+    let start_time = Instant::now();
+    SnsClient::install_sns_and_check_healthy(env);
+    info!(
+        log,
+        "========== The SNS has been installed successfully in {:?} ===========",
+        start_time.elapsed()
+    );
+}
+
+pub fn initiate_token_swap(env: TestEnv) {
+    let log = env.logger();
+    let start_time = Instant::now();
+    let sns_client = SnsClient::read_attribute(&env);
     sns_client.initiate_token_swap(&env);
     sns_client.assert_state(&env, Lifecycle::Open);
     info!(
         log,
-        "=========== The SNS token sale been been initialized sucessfully ==========="
+        "==== The SNS token sale has been initialized successfully in {:?} ====",
+        start_time.elapsed()
     );
+}
+
+fn get_request_provider(env: &TestEnv) -> SnsRequestProvider {
+    let sns_client = SnsClient::read_attribute(env);
+    let wallet_canister = sns_client.get_wallet_canister_principal();
+    SnsRequestProvider {
+        sender: wallet_canister,
+        sns_canisters: sns_client.sns_canisters,
+    }
+}
+
+pub fn workload_rps400_get_state_query(env: TestEnv) {
+    let req = get_request_provider(&env).get_state();
+    generate_sns_workload(env, 400, WORKLOAD_GENERATION_DURATION, req);
+}
+
+pub fn workload_rps800_get_state_query(env: TestEnv) {
+    let req = get_request_provider(&env).get_state();
+    generate_sns_workload(env, 800, WORKLOAD_GENERATION_DURATION, req);
+}
+
+pub fn workload_rps1200_get_state_query(env: TestEnv) {
+    let req = get_request_provider(&env).get_state();
+    generate_sns_workload(env, 1_200, WORKLOAD_GENERATION_DURATION, req);
+}
+
+pub fn workload_rps400_refresh_buyer_tokens(env: TestEnv) {
+    let req = get_request_provider(&env).refresh_buyer_tokens("");
+    generate_sns_workload(env, 400, WORKLOAD_GENERATION_DURATION, req);
+}
+
+pub fn workload_rps800_refresh_buyer_tokens(env: TestEnv) {
+    let req = get_request_provider(&env).refresh_buyer_tokens("");
+    generate_sns_workload(env, 800, WORKLOAD_GENERATION_DURATION, req);
+}
+
+pub fn workload_rps1200_refresh_buyer_tokens(env: TestEnv) {
+    let req = get_request_provider(&env).refresh_buyer_tokens("");
+    generate_sns_workload(env, 1_200, WORKLOAD_GENERATION_DURATION, req);
+}
+
+pub fn generate_sns_workload(env: TestEnv, rps: usize, duration: Duration, request: Request) {
+    let log = env.logger();
+
+    let plan = RoundRobinPlan::new(vec![request]);
+
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = block_on(assert_create_agent(app_node.get_public_url().as_str()));
+
+    // --- Generate workload ---
+    let workload = Workload::new(vec![agent], rps, duration, plan, log.clone())
+        .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
+        .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
+
+    let metrics = block_on(workload.execute()).expect("Workload execution has failed.");
+
+    env.emit_report(format!("{metrics}"));
 }
 
 /// Send and execute 6 proposals to add all SNS canister WASMs to the SNS WASM canister
@@ -325,6 +441,41 @@ pub async fn get_swap_state(
         .map(|res| Decode!(res.as_slice(), GetStateResponse).expect("failed to decode"))
 }
 
+pub struct SnsRequestProvider {
+    // The Principal of the canister issuing the request
+    pub sender: Principal,
+    pub sns_canisters: SnsCanisterIds,
+}
+
+impl SnsRequestProvider {
+    pub fn get_state(&self) -> Request {
+        let swap_canister = self.sns_canisters.swap().get().into();
+        Request::Query(CallSpec::new(
+            swap_canister,
+            "get_state",
+            Encode!(&GetStateRequest {}).unwrap(),
+        ))
+    }
+
+    pub fn refresh_buyer_tokens(&self, buyer: &str) -> Request {
+        let swap_canister = self.sns_canisters.swap().get().into();
+        Request::Update(CallSpec::new(
+            swap_canister,
+            "refresh_buyer_tokens",
+            Encode!(&RefreshBuyerTokensRequest {
+                buyer: String::from(buyer)
+            })
+            .unwrap(),
+        ))
+    }
+
+    /* TODO
+    pub fn account_balance(&self, account_id: &icp_ledger::AccountIdentifier) -> Request {
+        let ledger_canister = self.sns_canisters.ledger().get().into();
+        Request::Query(CallSpec::new(ledger_canister, "account_balance", Encode!(&AccountBalanceRequest { account: Some(account_id.into()) }).unwrap()))
+    }*/
+}
+
 pub fn two_days_from_now_in_secs() -> u64 {
     SystemTime::now()
         .checked_add(2 * DAYS)
@@ -340,7 +491,7 @@ pub fn open_sns_token_swap_payload_for_tests(
     OpenSnsTokenSwap {
         target_swap_canister_id: Some(sns_swap_canister_id),
         params: Some(Params {
-            min_participants: 50,
+            min_participants: 1,
             min_icp_e8s: 20 * E8,
             max_icp_e8s: 50 * E8,
             min_participant_icp_e8s: E8,

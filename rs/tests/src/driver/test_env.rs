@@ -4,7 +4,7 @@ use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use slog::{o, Drain, Logger};
+use slog::{info, o, Drain, Logger};
 use slog_async::OverflowStrategy;
 use std::fs::{self, File};
 use std::os::unix::prelude::AsRawFd;
@@ -14,6 +14,8 @@ use utils::fs::{sync_path, write_atomically};
 
 use super::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use super::pot_dsl::TestPath;
+
+use super::new::constants::SUBREPORT_LOG_PREFIX;
 
 const ASYNC_CHAN_SIZE: usize = 8192;
 
@@ -86,6 +88,13 @@ impl TestEnv {
 
     pub fn logger(&self) -> Logger {
         self.inner.logger.clone()
+    }
+
+    /// Log the final report from this test function. The test driver will incorporate this report into
+    /// the overall report of the current SystemTestGroup. Ideally, this should be a single line of text
+    /// with the summary of the most essential information (beyond pass / fail), e.g., a `Metrics` object.
+    pub fn emit_report(&self, report: String) {
+        info!(self.logger(), "{SUBREPORT_LOG_PREFIX}{report}");
     }
 
     pub fn fork_from<P: AsRef<Path>>(
