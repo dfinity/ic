@@ -80,6 +80,7 @@ step 2 "Step 2: Create subnet from the unassigned nodes" || (
     sleep 30
     for NODE in $UNASSIGNED_NODES; do
         IP=$(node_ip_from_node_id "$NNS_URL" "$NODE")
+        # TODO: NNS1-2024
         until ssh $SSH_ARGS "admin@${IP}" 'journalctl | grep -q "Ready for interaction"' &>/dev/null; do
             print_blue "Waiting for the subnet to be created..."
             sleep 2
