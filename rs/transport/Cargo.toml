@@ -27,3 +27,4 @@ tower = "0.4.12"
 ic-crypto-tls-interfaces-mocks = { path = "../crypto/tls_interfaces/mocks" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-transport-test-utils = { path = "./test_utils" }
+tower-test = "0.4.0"

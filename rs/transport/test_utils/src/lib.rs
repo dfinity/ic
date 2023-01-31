@@ -1,3 +1,4 @@
+use futures::future::BoxFuture;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
@@ -10,8 +11,8 @@ use ic_registry_keys::make_crypto_tls_cert_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_transport::transport::create_transport;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
-use std::{convert::Infallible, net::SocketAddr, str::FromStr, sync::Arc};
-use tokio::net::TcpSocket;
+use std::{collections::HashMap, convert::Infallible, net::SocketAddr, str::FromStr, sync::Arc};
+use tokio::{net::TcpSocket, task::JoinHandle};
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
 
@@ -57,6 +58,7 @@ pub fn get_free_localhost_port() -> std::io::Result<u16> {
     Ok(socket.local_addr()?.port())
 }
 
+#[derive(Clone)]
 pub struct RegistryAndDataProvider {
     pub data_provider: Arc<ProtoRegistryDataProvider>,
     pub registry: Arc<FakeRegistryClient>,
@@ -153,6 +155,186 @@ pub fn create_mock_event_handler() -> (TransportEventHandler, Handle<TransportEv
         }
     });
     (BoxCloneService::new(infallible_service), handle)
+}
+
+pub struct TestPeerBuilder {
+    node_id: NodeId,
+    rt_handle: tokio::runtime::Handle,
+    registry_data: RegistryAndDataProvider,
+    log: ReplicaLogger,
+    send_queue_size: usize,
+    crypto: Option<Arc<dyn TlsHandshake + Send + Sync>>,
+    h2: bool,
+    registry_version: RegistryVersion,
+}
+
+pub struct TestPeer {
+    node_id: NodeId,
+    addr: SocketAddr,
+    transport: Arc<dyn Transport>,
+    handle: Handle<TransportEvent, ()>,
+}
+
+impl TestPeerBuilder {
+    pub fn new(
+        node_id: NodeId,
+        rt_handle: tokio::runtime::Handle,
+        registry_data: RegistryAndDataProvider,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            node_id,
+            rt_handle,
+            registry_data,
+            log,
+            send_queue_size: 51200,
+            crypto: None,
+            h2: false,
+            registry_version: REG_V1,
+        }
+    }
+    pub fn h2(mut self, use_h2: bool) -> Self {
+        self.h2 = use_h2;
+        self
+    }
+    pub fn send_queue_size(mut self, n: usize) -> Self {
+        self.send_queue_size = n;
+        self
+    }
+    pub fn registry_version(mut self, rv: RegistryVersion) -> Self {
+        self.registry_version = rv;
+        self
+    }
+    pub fn crypto(mut self, c: Arc<dyn TlsHandshake + Send + Sync>) -> Self {
+        self.crypto = Some(c);
+        self
+    }
+    pub fn build(self) -> TestPeer {
+        let crypto = self.crypto.unwrap_or_else(|| {
+            let crypto =
+                temp_crypto_component_with_tls_keys_in_registry(&self.registry_data, self.node_id);
+            Arc::new(crypto)
+        });
+
+        let (event_handler, handle) = create_mock_event_handler();
+
+        let listening_port = get_free_localhost_port().expect("Failed to get free localhost port");
+        let node_config = TransportConfig {
+            node_ip: "127.0.0.1".to_string(),
+            listening_port,
+            send_queue_size: self.send_queue_size,
+            ..Default::default()
+        };
+
+        let transport = create_transport(
+            self.node_id,
+            node_config,
+            self.registry_version,
+            MetricsRegistry::new(),
+            crypto,
+            self.rt_handle,
+            self.log,
+            self.h2,
+        );
+        transport.set_event_handler(event_handler);
+
+        TestPeer {
+            node_id: self.node_id,
+            addr: SocketAddr::from_str(&format!("127.0.0.1:{}", listening_port)).unwrap(),
+            transport,
+            handle,
+        }
+    }
+}
+
+pub struct TestTopology {
+    peer_handles: HashMap<NodeId, TestPeerHandle>,
+}
+
+impl TestTopology {
+    /// Blocks until:
+    /// Reference count of control plane == 1
+    /// Make sure that event handler is down.
+    pub fn verify_all_peers_down(&mut self) {
+        for (_, peer) in self.peer_handles.iter() {
+            while Arc::strong_count(&peer.transport) != 1 {}
+            while !peer.event_handler_jh.is_finished() {}
+        }
+    }
+    pub fn stop_peer_connection(&self, src_node: NodeId, dst_node: NodeId) {
+        self.peer_handles
+            .get(&src_node)
+            .unwrap()
+            .transport
+            .stop_connection(&dst_node);
+    }
+}
+
+struct TestPeerHandle {
+    addr: SocketAddr,
+    transport: Arc<dyn Transport>,
+    event_handler_jh: JoinHandle<()>,
+}
+
+pub struct TestTopologyBuilder {
+    rt_handle: tokio::runtime::Handle,
+    registry_data: RegistryAndDataProvider,
+    peers: HashMap<NodeId, TestPeerHandle>,
+}
+
+impl TestTopologyBuilder {
+    pub fn new(registry_data: RegistryAndDataProvider, rt_handle: tokio::runtime::Handle) -> Self {
+        Self {
+            rt_handle,
+            registry_data,
+            peers: HashMap::new(),
+        }
+    }
+    pub fn add_node(
+        mut self,
+        peer: TestPeer,
+        expectation_event_handler: impl FnOnce(Handle<TransportEvent, ()>) -> BoxFuture<'static, ()>
+            + Send,
+    ) -> Self {
+        let TestPeer {
+            node_id: _,
+            addr,
+            transport,
+            handle,
+        } = peer;
+
+        let event_handler_jh = self.rt_handle.spawn((expectation_event_handler)(handle));
+
+        self.peers.insert(
+            peer.node_id,
+            TestPeerHandle {
+                addr,
+                transport,
+                event_handler_jh,
+            },
+        );
+        self
+    }
+    pub fn full_mesh(self) -> TestTopology {
+        // Make sure registry contains all peers.
+        self.registry_data.registry.update_to_latest_version();
+
+        // Create full mesh network.
+        for (id_1, peer_1) in self.peers.iter() {
+            for (id_2, peer_2) in self.peers.iter() {
+                if id_1 != id_2 {
+                    peer_1.transport.start_connection(
+                        id_2,
+                        peer_2.addr,
+                        self.registry_data.data_provider.latest_version(),
+                    )
+                }
+            }
+        }
+        TestTopology {
+            peer_handles: self.peers,
+        }
+    }
 }
 
 pub fn start_connection_between_two_peers(

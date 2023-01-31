@@ -31,6 +31,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/tls_interfaces/mocks",
     "//rs/test_utilities/logger",
     "//rs/transport/test_utils",
+    "@crate_index//:tower-test",
 ]
 
 rust_library(
