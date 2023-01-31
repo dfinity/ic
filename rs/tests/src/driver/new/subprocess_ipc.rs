@@ -1,4 +1,5 @@
 use super::event::{Event, EventSubscriber, TaskId};
+use crate::driver::new::constants::{PANIC_LOG_PREFIX, SUBREPORT_LOG_PREFIX};
 use bincode;
 use serde::{Deserialize, Serialize};
 use slog::{error, warn, Drain, Level, Logger, OwnedKVList, Record};
@@ -11,7 +12,6 @@ use std::{
 };
 
 const MSG_BUF_SIZE: usize = 64 * 1024; // 64 KiB
-const PANIC_LOG_PREFIX: &str = "[Function panicked]: ";
 const MSG_TRUNC_SIZE: usize = 60 * 1024;
 const TRUNC_WARNING: &str = "[...]Logged message has been truncated (>64kB)!";
 
@@ -192,6 +192,7 @@ impl LogServer {
                     match bincode::deserialize(&buf[..n]) {
                         Ok(log_event) => {
                             self.emit_panic_event(&log_event);
+                            self.emit_subreport_event(&log_event);
                             let LogEvent {
                                 // for now, when receiving a message, we just ignore the task id and
                                 // rely on the code location of the log message to provide context.
@@ -215,7 +216,7 @@ impl LogServer {
         Ok(())
     }
 
-    /// Given a log event, emit a corresponding panic event if the log message contains a panic
+    /// Given a log event, emit the corresponding panic event if the log message contains a panic
     /// message. This is the counterpart to the [log_panic_event] function.
     #[inline]
     fn emit_panic_event(&self, log_event: &LogEvent) {
@@ -227,6 +228,19 @@ impl LogServer {
                 let mut sub = self.sub.lock().unwrap();
                 (sub)(Event::task_caught_panic(task_id, msg))
             }
+        }
+    }
+
+    /// Given a log event, emit the corresponding panic event if the log message contains a panic
+    /// message. This is the counterpart to the [log_panic_event] function.
+    #[inline]
+    fn emit_subreport_event(&self, log_event: &LogEvent) {
+        if let Some(pos) = log_event.log_record.msg.find(SUBREPORT_LOG_PREFIX) {
+            let task_id = log_event.task_id.clone();
+            let start_pos = pos + SUBREPORT_LOG_PREFIX.len();
+            let report = (log_event.log_record.msg[start_pos..]).to_string();
+            let mut sub = self.sub.lock().unwrap();
+            (sub)(Event::task_sub_report(task_id, report))
         }
     }
 

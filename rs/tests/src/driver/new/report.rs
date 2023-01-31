@@ -46,15 +46,26 @@ impl TargetFunctionOutcome for TargetFunctionFailure {
     }
 }
 
-fn fmt_succs(succs: &[TargetFunctionSuccess], f: &mut Formatter<'_>, min_width: usize) -> Result {
+fn fmt_succs(
+    succs: &[TargetFunctionSuccess],
+    sub_reports: &BTreeMap<TaskId, String>,
+    f: &mut Formatter<'_>,
+    min_width: usize,
+) -> Result {
     succs.iter().fold(write!(f, ""), |acc, success| {
+        let tid = success.task_id();
         acc.and(writeln!(
             f,
             "{}",
             &format!(
-                "Test {:<min_width$}  PASSED in {:>6.2}s",
-                success.task_id().name(),
-                success.runtime.as_secs_f64()
+                "Test {:<min_width$}  PASSED in {:>6.2}s{}",
+                tid.name(),
+                success.runtime.as_secs_f64(),
+                if let Some(sub_report) = sub_reports.get(&tid) {
+                    format!(" -- {}", sub_report.clone())
+                } else {
+                    String::from("")
+                }
             )
         ))
     })
@@ -102,6 +113,8 @@ pub struct SystemTestGroupReport {
     detected_timeouts: BTreeSet<TaskId>,
 
     is_group_timed_out: bool,
+
+    sub_reports: BTreeMap<TaskId, String>,
 
     pub farm_group_report: Option<FarmGroupReport>,
 }
@@ -174,6 +187,12 @@ impl SystemTestGroupReport {
     pub fn is_group_timed_out(&self) -> bool {
         self.is_group_timed_out
     }
+
+    pub fn set_test_sub_report(&mut self, test_id: TaskId, sub_report: String) {
+        if let Some(old_sub_report) = self.sub_reports.insert(test_id.clone(), sub_report.clone()) {
+            panic!("sub-reports should be unique per task, but {test_id} emitted two: {old_sub_report} and {sub_report}");
+        }
+    }
 }
 
 fn compute_min_width<T>(xs: &[T]) -> Option<usize>
@@ -198,7 +217,7 @@ impl Display for SystemTestGroupReport {
             .and(if self.failures.is_empty() && self.successes.is_empty() {
                 writeln!(f, "No test outcomes were reported.")
             } else if self.failures.is_empty() {
-                fmt_succs(&self.successes, f, w).and(writeln!(
+                fmt_succs(&self.successes, &self.sub_reports, f, w).and(writeln!(
                     f,
                     "{:.^table_width$}",
                     format!(" All {} tests passed! ", self.successes.len())
@@ -210,7 +229,7 @@ impl Display for SystemTestGroupReport {
                     format!(" All {} tests failed ", self.failures.len())
                 ))
             } else {
-                fmt_succs(&self.successes, f, w)
+                fmt_succs(&self.successes, &self.sub_reports, f, w)
                     .and(writeln!(
                         f,
                         "{:.^table_width$}",

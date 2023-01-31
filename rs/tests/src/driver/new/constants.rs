@@ -47,3 +47,6 @@ const KIBANA_BASE_URL: &str = "https://kibana.testnet.dfinity.systems";
 pub fn kibana_link(farm_group_name: &str) -> String {
     format!("{}{}", KIBANA_BASE_URL, node_logs(farm_group_name))
 }
+
+pub const PANIC_LOG_PREFIX: &str = "[Function panicked]: ";
+pub const SUBREPORT_LOG_PREFIX: &str = "[SubReport]: ";

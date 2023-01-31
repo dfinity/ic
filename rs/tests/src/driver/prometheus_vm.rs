@@ -153,6 +153,10 @@ chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
             log,
             "Grafana at http://[{:?}]:{GRAFANA_PORT}", prometheus_vm.ipv6
         );
+        info!(
+            log,
+            "IC Progress Clock at http://[{:?}]:{GRAFANA_PORT}/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now", prometheus_vm.ipv6
+        );
         Ok(())
     }
 }

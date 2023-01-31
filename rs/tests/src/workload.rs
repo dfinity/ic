@@ -1,6 +1,7 @@
 use ic_agent::{export::Principal, Agent};
 use slog::info;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::{
     cmp::{max, min},
     time::{Duration, Instant},
@@ -57,12 +58,21 @@ pub enum Request {
     Update(CallSpec),
 }
 
+impl Request {
+    pub fn spec(&self) -> &CallSpec {
+        match self {
+            Request::Query(spec) => spec,
+            Request::Update(spec) => spec,
+        }
+    }
+}
+
 /// Part of the canister call ([`Request`]) definition.
 #[derive(Clone)]
 pub struct CallSpec {
-    canister_id: Principal,
-    method_name: String,
-    payload: Vec<u8>,
+    pub canister_id: Principal,
+    pub method_name: String,
+    pub payload: Vec<u8>,
 }
 
 /// Defines success/failure execution status of the canister call.
@@ -100,6 +110,7 @@ pub struct Metrics {
     failure_calls: Counter,
     min_request_duration: Duration,
     max_request_duration: Duration,
+    total_request_duration: Duration,
     requests_duration_buckets: Option<Vec<RequestDurationBucket>>,
 }
 
@@ -113,8 +124,25 @@ impl Default for Metrics {
             failure_calls: 0,
             min_request_duration: Duration::MAX,
             max_request_duration: Duration::default(),
+            total_request_duration: Duration::default(),
             requests_duration_buckets: None,
         }
+    }
+}
+
+impl Display for Metrics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Metrics {{ min: {}ms, avg: {}ms, max: {}ms, success_rate: {:.2}%, successes: {}, failures: {}, errors: {:?} }}",
+            self.min_request_duration().as_millis(),
+            self.avg_request_duration().as_millis(),
+            self.max_request_duration().as_millis(),
+            self.success_rate(),
+            self.success_calls(),
+            self.failure_calls(),
+            self.errors_map
+        )
     }
 }
 
@@ -129,7 +157,7 @@ impl Metrics {
     }
 
     pub fn total_calls(&self) -> Counter {
-        self.success_calls + self.failure_calls()
+        self.success_calls + self.failure_calls
     }
 
     pub fn success_calls(&self) -> Counter {
@@ -142,6 +170,16 @@ impl Metrics {
 
     pub fn min_request_duration(&self) -> Duration {
         self.min_request_duration
+    }
+
+    pub fn avg_request_duration(&self) -> Duration {
+        self.total_request_duration
+            .checked_div(self.total_calls().try_into().unwrap())
+            .unwrap()
+    }
+
+    pub fn success_rate(&self) -> f64 {
+        (100 * self.success_calls()) as f64 / (self.total_calls() as f64)
     }
 
     pub fn max_request_duration(&self) -> Duration {
@@ -163,6 +201,7 @@ impl Metrics {
     pub fn process_request(&mut self, request: RequestResult) {
         self.min_request_duration = min(self.min_request_duration, request.duration);
         self.max_request_duration = max(self.max_request_duration, request.duration);
+        self.total_request_duration += request.duration;
         if let Some(ref mut request_duration_bucket) = self.requests_duration_buckets {
             for bucket in request_duration_bucket.iter_mut() {
                 if request.duration >= bucket.threshold {
@@ -475,6 +514,8 @@ mod tests {
         assert_eq!(0, metrics.errors().len());
         assert_eq!(metrics.min_request_duration, Duration::from_secs(1));
         assert_eq!(metrics.max_request_duration, Duration::from_secs(1));
+        assert_eq!(metrics.total_request_duration, Duration::from_secs(1));
+        assert_eq!(metrics.avg_request_duration(), Duration::from_secs(1));
     }
 
     #[test]
@@ -506,6 +547,9 @@ mod tests {
         assert_eq!(errors["some_other_error"], 1);
         assert_eq!(metrics.min_request_duration, Duration::from_secs(1));
         assert_eq!(metrics.max_request_duration, Duration::from_secs(4));
+        assert_eq!(metrics.total_request_duration, Duration::from_secs(8));
+        assert!(Duration::from_secs(2) < metrics.avg_request_duration());
+        assert!(Duration::from_secs(3) > metrics.avg_request_duration());
     }
 
     #[test]
