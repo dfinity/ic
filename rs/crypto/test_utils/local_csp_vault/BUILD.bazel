@@ -1,0 +1,28 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/seed",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/internal/crypto_service_provider",
+    "//rs/crypto/tls_interfaces",
+    "//rs/types/types",
+    "@crate_index//:mockall_0_7_2",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "local_csp_vault",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_crypto_test_utils_local_csp_vault",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)

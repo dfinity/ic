@@ -1,7 +1,5 @@
 mod basic_sig;
 mod idkg;
-#[cfg(test)]
-pub mod mock_local_csp_vault;
 mod multi_sig;
 mod ni_dkg;
 mod public_and_secret_key_store;

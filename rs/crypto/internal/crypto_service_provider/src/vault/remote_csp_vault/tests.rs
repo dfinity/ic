@@ -83,64 +83,6 @@ mod timeout {
     }
 }
 
-mod basic_signature_csp_vault {
-    use super::*;
-    use crate::types::CspSignature;
-    use crate::vault::api::CspBasicSignatureError;
-    use crate::vault::local_csp_vault::mock_local_csp_vault::MockLocalCspVault;
-    use crate::KeyId;
-    use ic_crypto_internal_basic_sig_ed25519::types::SignatureBytes;
-    use ic_types::crypto::AlgorithmId;
-
-    #[test]
-    fn should_delegate_for_sign() {
-        let mut local_vault = MockLocalCspVault::new();
-        let algorithm_id = AlgorithmId::Ed25519;
-        let message = b"message to sign";
-        let key_id = KeyId::from([42; 32]);
-        let signature = CspSignature::Ed25519(SignatureBytes([42; 64]));
-        local_vault
-            .expect_sign()
-            .times(1)
-            .withf(move |del_algorithm_id, del_message, del_key_id| {
-                *del_algorithm_id == algorithm_id && del_message == message && *del_key_id == key_id
-            })
-            .return_const(Ok(signature.clone()));
-        let tokio_rt = new_tokio_runtime();
-        let remote_vault =
-            new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), Arc::new(local_vault));
-
-        let result = remote_vault.sign(algorithm_id, message, key_id);
-
-        assert_matches!(result, Ok(sig) if sig == signature);
-    }
-
-    #[test]
-    fn should_delegate_for_sign_returning_error() {
-        let mut local_vault = MockLocalCspVault::new();
-        let algorithm_id = AlgorithmId::Ed25519;
-        let message = b"message to sign";
-        let key_id = KeyId::from([42; 32]);
-        let expected_error = CspBasicSignatureError::MalformedSecretKey {
-            algorithm: AlgorithmId::Groth20_Bls12_381,
-        };
-        local_vault
-            .expect_sign()
-            .times(1)
-            .withf(move |del_algorithm_id, del_message, del_key_id| {
-                *del_algorithm_id == algorithm_id && del_message == message && *del_key_id == key_id
-            })
-            .return_const(Err(expected_error.clone()));
-        let tokio_rt = new_tokio_runtime();
-        let remote_vault =
-            new_remote_csp_vault_with_local_csp_vault(tokio_rt.handle(), Arc::new(local_vault));
-
-        let result = remote_vault.sign(algorithm_id, message, key_id);
-
-        assert_matches!(result, Err(error) if error == expected_error);
-    }
-}
-
 mod basic_sig {
     use super::*;
     use crate::public_key_store::PublicKeySetOnceError;

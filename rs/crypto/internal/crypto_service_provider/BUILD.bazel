@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
@@ -8,6 +8,79 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
+DEPENDENCIES = [
+    "//rs/config",
+    "//rs/crypto/internal/crypto_lib/basic_sig/cose",
+    "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
+    "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
+    "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
+    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
+    "//rs/crypto/internal/crypto_lib/basic_sig/iccsa",
+    "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
+    "//rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
+    "//rs/crypto/internal/crypto_lib/seed",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
+    "//rs/crypto/internal/crypto_lib/tls",
+    "//rs/crypto/internal/crypto_lib/types",
+    "//rs/crypto/internal/logmon",
+    "//rs/crypto/internal/test_vectors",
+    "//rs/crypto/secrets_containers",
+    "//rs/crypto/sha",
+    "//rs/crypto/tls_interfaces",
+    "//rs/crypto/utils/time",
+    "//rs/interfaces",
+    "//rs/monitoring/logger",
+    "//rs/protobuf",
+    "//rs/types/types",
+    "//rs/utils",
+    "@crate_index//:base64",
+    "@crate_index//:hex",
+    "@crate_index//:openssl",
+    "@crate_index//:parking_lot",
+    "@crate_index//:prost",
+    "@crate_index//:rand_0_8_4",
+    "@crate_index//:rand_chacha_0_3_1",
+    "@crate_index//:serde",
+    "@crate_index//:serde_cbor",
+    "@crate_index//:simple_asn1",
+    "@crate_index//:slog",
+    "@crate_index//:strum",
+    "@crate_index//:tarpc",
+    "@crate_index//:tempfile",
+    "@crate_index//:threadpool",
+    "@crate_index//:tokio",
+    "@crate_index//:tokio-openssl",
+    "@crate_index//:tokio-serde",
+    "@crate_index//:tokio-util",
+    "@crate_index//:zeroize",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto/internal/csp_test_utils",
+    "//rs/crypto/node_key_generation",
+    "//rs/crypto/test_utils",
+    "//rs/crypto/test_utils/local_csp_vault",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/test_utilities",
+    "//rs/test_utilities/in_memory_logger",
+    "//rs/types/types_test_utils",
+    "@crate_index//:assert_matches",
+    "@crate_index//:lazy_static",
+    "@crate_index//:mockall_0_7_2",
+    "@crate_index//:proptest",
+    "@crate_index//:slog-async",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+    "@crate_index//:strum_macros",
+]
+
+DEV_MACRO_DEPENDENCIES = [
+    "@crate_index//:proptest-derive",
+]
+
 rust_library(
     name = "crypto_service_provider",
     srcs = glob([
@@ -15,58 +88,9 @@ rust_library(
         "gen/**",
     ]),
     crate_name = "ic_crypto_internal_csp",
-    proc_macro_deps = [
-        "@crate_index//:async-trait",
-        "@crate_index//:strum_macros",
-    ],
+    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
-    deps = [
-        "//rs/config",
-        "//rs/crypto/internal/crypto_lib/basic_sig/cose",
-        "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
-        "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256k1",
-        "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
-        "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
-        "//rs/crypto/internal/crypto_lib/basic_sig/iccsa",
-        "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
-        "//rs/crypto/internal/crypto_lib/multi_sig/bls12_381",
-        "//rs/crypto/internal/crypto_lib/seed",
-        "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
-        "//rs/crypto/internal/crypto_lib/threshold_sig/tecdsa",
-        "//rs/crypto/internal/crypto_lib/tls",
-        "//rs/crypto/internal/crypto_lib/types",
-        "//rs/crypto/internal/logmon",
-        "//rs/crypto/internal/test_vectors",
-        "//rs/crypto/secrets_containers",
-        "//rs/crypto/sha",
-        "//rs/crypto/tls_interfaces",
-        "//rs/crypto/utils/time",
-        "//rs/interfaces",
-        "//rs/monitoring/logger",
-        "//rs/protobuf",
-        "//rs/types/types",
-        "//rs/utils",
-        "@crate_index//:base64",
-        "@crate_index//:hex",
-        "@crate_index//:openssl",
-        "@crate_index//:parking_lot",
-        "@crate_index//:prost",
-        "@crate_index//:rand_0_8_4",
-        "@crate_index//:rand_chacha_0_3_1",
-        "@crate_index//:serde",
-        "@crate_index//:serde_cbor",
-        "@crate_index//:simple_asn1",
-        "@crate_index//:slog",
-        "@crate_index//:strum",
-        "@crate_index//:tarpc",
-        "@crate_index//:tempfile",
-        "@crate_index//:threadpool",
-        "@crate_index//:tokio",
-        "@crate_index//:tokio-openssl",
-        "@crate_index//:tokio-serde",
-        "@crate_index//:tokio-util",
-        "@crate_index//:zeroize",
-    ],
+    deps = DEPENDENCIES,
 )
 
 rust_test(
@@ -80,23 +104,20 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/crypto/internal/crypto_service_provider",
     },
-    proc_macro_deps = [
-        "@crate_index//:proptest-derive",
-    ],
-    deps = [
-        "//rs/crypto/internal/csp_test_utils",
-        "//rs/crypto/node_key_generation",
-        "//rs/crypto/test_utils",
-        "//rs/crypto/test_utils/reproducible_rng",
-        "//rs/test_utilities",
-        "//rs/test_utilities/in_memory_logger",
-        "//rs/types/types_test_utils",
-        "@crate_index//:assert_matches",
-        "@crate_index//:lazy_static",
-        "@crate_index//:mockall_0_7_2",
-        "@crate_index//:proptest",
-        "@crate_index//:slog-async",
-    ],
+    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES,
+)
+
+rust_test_suite(
+    name = "crypto_service_provider_integration_tests",
+    srcs = glob(
+        ["tests/*.rs"],
+        exclude = [
+            "tests/check_generated_files.rs",
+        ],
+    ),
+    proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
+    deps = [":crypto_service_provider"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 generated_files_check(
