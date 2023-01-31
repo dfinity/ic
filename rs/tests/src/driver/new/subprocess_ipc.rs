@@ -12,6 +12,8 @@ use std::{
 
 const MSG_BUF_SIZE: usize = 64 * 1024; // 64 KiB
 const PANIC_LOG_PREFIX: &str = "[Function panicked]: ";
+const MSG_TRUNC_SIZE: usize = 60 * 1024;
+const TRUNC_WARNING: &str = "[...]Logged message has been truncated (>64kB)!";
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LogEvent {
@@ -26,6 +28,13 @@ impl LogEvent {
         Self {
             task_id,
             log_record,
+        }
+    }
+
+    fn truncate_msg(&self) -> Self {
+        Self {
+            task_id: self.task_id.clone(),
+            log_record: self.log_record.truncate_msg(),
         }
     }
 }
@@ -47,6 +56,25 @@ impl LogRecord {
             module: record.module().to_string(),
             line: record.line(),
             msg: record.msg().to_string(),
+        }
+    }
+
+    pub fn truncate_msg(&self) -> Self {
+        let bytes = self.msg.as_bytes();
+        let mut index = MSG_TRUNC_SIZE;
+        // seek for utf-8 character boundary: cut after a byte with MSB 0.
+        while (bytes[index] & 128) != 0 {
+            index -= 1;
+        }
+        let mut msg = self.msg.clone();
+        msg.truncate(index + 1);
+        msg.push_str(TRUNC_WARNING);
+        Self {
+            level: self.level,
+            file: self.file.clone(),
+            module: self.module.clone(),
+            line: self.line,
+            msg,
         }
     }
 }
@@ -71,8 +99,17 @@ impl SubprocessSender {
 
     #[inline]
     fn send_log_event(&self, log_event: &LogEvent) {
-        let buf =
-            bincode::serialize(log_event).expect("[should not fail!] could not serialize LogEvent");
+        if log_event.log_record.msg.len() > MSG_TRUNC_SIZE {
+            self.send_log_event_(&log_event.truncate_msg());
+        } else {
+            self.send_log_event_(log_event);
+        }
+    }
+
+    #[inline]
+    fn send_log_event_(&self, log_event: &LogEvent) {
+        let buf = bincode::serialize(&log_event)
+            .expect("[should not fail!] could not serialize LogEvent");
         if let Err(e) = self.sock.send_to(&buf[..], &self.sock_path) {
             // this object is assumed to be the only log channel available in this process. Thus,
             // in case of a failure, we just print out to stderr.
@@ -185,7 +222,6 @@ impl LogServer {
         if let Some(Level::Warning) = Level::from_usize(log_event.log_record.level) {
             if let Some(pos) = log_event.log_record.msg.find(PANIC_LOG_PREFIX) {
                 let task_id = log_event.task_id.clone();
-
                 let start_pos = pos + PANIC_LOG_PREFIX.len();
                 let msg = (log_event.log_record.msg[start_pos..]).to_string();
                 let mut sub = self.sub.lock().unwrap();
@@ -303,6 +339,9 @@ mod tests {
         // send logs
         info!(subproc_logger, "hello info");
         warn!(subproc_logger, "hello warn");
+        //send huge string
+        let huge_str = (0..(MSG_BUF_SIZE + 1)).map(|_| "x").collect::<String>();
+        info!(subproc_logger, "{}", huge_str);
         // send panic
         log_panic_event(&subproc_logger, "oh, a panic!");
         // shutdown log_server
@@ -320,6 +359,9 @@ mod tests {
         assert_eq!(warn_log_msg.msg, "hello warn");
 
         assert_eq!(info_log_msg.line + 1, warn_log_msg.line);
+
+        let info_log_msg = log_rcvr.recv().unwrap();
+        assert!(info_log_msg.msg.ends_with(TRUNC_WARNING));
 
         let panic_event = evt_rcvr.recv().unwrap();
 
