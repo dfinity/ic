@@ -28,7 +28,6 @@ pub mod wasm_transform;
 #[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct WasmImportsDetails {
     // True if the module imports these IC0 methods.
-    pub imports_call_simple: bool,
     pub imports_controller_size: bool,
     pub imports_controller_copy: bool,
     pub imports_call_cycles_add: bool,

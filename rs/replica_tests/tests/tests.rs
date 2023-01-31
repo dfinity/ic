@@ -1217,7 +1217,7 @@ fn escape_bytes(x: &[u8]) -> String {
 // sums up all the responses and returns the sum when all the replies have been
 // received.
 //
-// The first canister ensures that when call_simple fails, it fails with the
+// The first canister ensures that when call_perform fails, it fails with the
 // appropriate error code and the test ensures that the ingress message
 // eventually finishes running.
 fn test_inter_canister_messaging_full_queues() {
@@ -1246,7 +1246,7 @@ fn test_inter_canister_messaging_full_queues() {
             vec![], None);
 
     // This canister keeps forwarding the value that was received in an
-    // ingress msg to the reflector canister above till call_simple fails.
+    // ingress msg to the reflector canister above till call_perform fails.
     // It sums up the reflected values and returns the sum.
     let canister_id = env.install_canister_wat(
         &format!(
@@ -1257,14 +1257,15 @@ fn test_inter_canister_messaging_full_queues() {
               (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32)))
               (import "ic0" "debug_print" (func $debug_print (param i32) (param i32)))
-              (import "ic0" "call_simple"
-                (func $ic0_call_simple
-                    (param i32 i32)
-                    (param $method_name_src i32)    (param $method_name_len i32)
-                    (param $reply_fun i32)          (param $reply_env i32)
-                    (param $reject_fun i32)         (param $reject_env i32)
-                    (param $data_src i32)           (param $data_len i32)
-                    (result i32)))
+              (import "ic0" "call_new"
+                (func $ic0_call_new
+                  (param i32 i32)
+                  (param $method_name_src i32)    (param $method_name_len i32)
+                  (param $reply_fun i32)          (param $reply_env i32)
+                  (param $reject_fun i32)         (param $reject_env i32)
+              ))
+              (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+              (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
 
               (func $compute
                 ;; heap[10] = payload[0]
@@ -1273,15 +1274,18 @@ fn test_inter_canister_messaging_full_queues() {
                 (block
                   (loop
                     ;; Call the reflector and store the return value in heap[30]
-                    (i32.store
-                      (i32.const 30)
-                      (call $ic0_call_simple
+                    (call $ic0_call_new
                         (i32.const 100) (i32.const {})  ;; reflector canister id
                         (i32.const 0) (i32.const 2)     ;; refers to "re" on the heap
                         (i32.const 0) (i32.const 0)     ;; on_reply closure
                         (i32.const 0) (i32.const 0)     ;; on_reject closure
+                    )
+                    (call $ic0_call_data_append
                         (i32.const 10) (i32.const 1)    ;; refers to byte copied from the payload
-                      )
+                    ) 
+                    (i32.store
+                      (i32.const 30)
+                      (call $ic0_call_perform)
                     )
 
                     ;; If heap[30] == 2 then call failed due to full queues.  Break out of loop
@@ -1552,14 +1556,15 @@ fn test_inter_canister_message_exchange_2() {
               (import "ic0" "msg_reply" (func $msg_reply))
               (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32)))
-              (import "ic0" "call_simple"
-                (func $ic0_call_simple
-                    (param i32 i32)
-                    (param $method_name_src i32)    (param $method_name_len i32)
-                    (param $reply_fun i32)          (param $reply_env i32)
-                    (param $reject_fun i32)         (param $reject_env i32)
-                    (param $data_src i32)           (param $data_len i32)
-                    (result i32)))
+              (import "ic0" "call_new"
+                (func $ic0_call_new
+                  (param i32 i32)
+                  (param $method_name_src i32)    (param $method_name_len i32)
+                  (param $reply_fun i32)          (param $reply_env i32)
+                  (param $reject_fun i32)         (param $reject_env i32)
+              ))
+              (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+              (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
 
               (func $compute
                 ;; heap[20] = 0
@@ -1567,20 +1572,24 @@ fn test_inter_canister_message_exchange_2() {
                 ;; heap[10] = payload[0]
                 (call $ic0_msg_arg_data_copy (i32.const 10) (i32.const 0) (i32.const 1))
                 ;; sends heap[10] to one multiplier
-                (call $ic0_call_simple
+                (call $ic0_call_new
                     (i32.const 100) (i32.const {})  ;; multiplier canister id
                     (i32.const 0) (i32.const 2)     ;; refers to "2x" on the heap
                     (i32.const 0) (i32.const 0)     ;; on_reply closure
-                    (i32.const 0) (i32.const 0)     ;; on_reject closure
+                    (i32.const 0) (i32.const 0))    ;; on_reject closure
+                (call $ic0_call_data_append
                     (i32.const 10) (i32.const 1))   ;; refers to byte copied from the payload
+                (call $ic0_call_perform)
                 drop
                 ;; sends heap[10] to another multiplier
-                (call $ic0_call_simple
+                (call $ic0_call_new
                     (i32.const 200) (i32.const {})  ;; multiplier canister id
                     (i32.const 0) (i32.const 2)     ;; refers to "2x" on the heap
                     (i32.const 0) (i32.const 0)     ;; on_reply closure
-                    (i32.const 0) (i32.const 0)     ;; on_reject closure
+                    (i32.const 0) (i32.const 0))    ;; on_reject closure
+                (call $ic0_call_data_append
                     (i32.const 10) (i32.const 1))   ;; refers to byte copied from the payload
+                (call $ic0_call_perform)
                 drop
                 (global.set $ncalls (i32.const 2)))
 
@@ -1725,25 +1734,28 @@ fn test_inter_canister_message_exchange_3() {
               (import "ic0" "msg_reply" (func $msg_reply))
               (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32)))
-              (import "ic0" "call_simple"
-                (func $ic0_call_simple
-                    (param i32 i32)
-                    (param $method_name_src i32)    (param $method_name_len i32)
-                    (param $reply_fun i32)          (param $reply_env i32)
-                    (param $reject_fun i32)         (param $reject_env i32)
-                    (param $data_src i32)           (param $data_len i32)
-                    (result i32)))
+              (import "ic0" "call_new"
+                (func $ic0_call_new
+                  (param i32 i32)
+                  (param $method_name_src i32)    (param $method_name_len i32)
+                  (param $reply_fun i32)          (param $reply_env i32)
+                  (param $reject_fun i32)         (param $reject_env i32)
+              ))
+              (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+              (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
 
               (func $mul
                 ;; heap[10] = payload[0]
                 (call $ic0_msg_arg_data_copy (i32.const 10) (i32.const 0) (i32.const 1))
                 ;; sends heap[10] to one multiplier
-                (call $ic0_call_simple
+                (call $ic0_call_new
                     (i32.const 100) (i32.const {})  ;; multiplier canister id
                     (i32.const 0) (i32.const 3)     ;; refers to "mul" on the heap
                     (i32.const 0) (i32.const 0)     ;; on_reply closure
-                    (i32.const 0) (i32.const 0)     ;; on_reject closure
+                    (i32.const 0) (i32.const 0))    ;; on_reject closure
+                (call $ic0_call_data_append
                     (i32.const 10) (i32.const 1))   ;; refers to byte copied from the payload
+                (call $ic0_call_perform)
                 drop)
 
               (func $mul_callback (param $env i32)
@@ -1796,14 +1808,15 @@ fn test_inter_canister_message_exchange_4() {
               (import "ic0" "msg_reply" (func $msg_reply))
               (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32)))
-              (import "ic0" "call_simple"
-                (func $ic0_call_simple
-                    (param i32 i32)
-                    (param $method_name_src i32)    (param $method_name_len i32)
-                    (param $reply_fun i32)          (param $reply_env i32)
-                    (param $reject_fun i32)         (param $reject_env i32)
-                    (param $data_src i32)           (param $data_len i32)
-                    (result i32)))
+              (import "ic0" "call_new"
+                (func $ic0_call_new
+                  (param i32 i32)
+                  (param $method_name_src i32)    (param $method_name_len i32)
+                  (param $reply_fun i32)          (param $reply_env i32)
+                  (param $reject_fun i32)         (param $reject_env i32)
+              ))
+              (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+              (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
 
               (func $compute
                 ;; heap[10] = payload[0]
@@ -1811,12 +1824,14 @@ fn test_inter_canister_message_exchange_4() {
                 ;; write own canister id to heap[100..]
                 (call $canister_self_copy (i32.const 100) (i32.const 0) (call $canister_self_size))
                 ;; calls the multiplier canister
-                (call $ic0_call_simple
+                (call $ic0_call_new
                     (i32.const 100) (call $canister_self_size)
                     (i32.const 0) (i32.const 6)     ;; refers to "square" on the heap
                     (i32.const 0) (i32.const 0)     ;; on_reply closure
-                    (i32.const 0) (i32.const 0)     ;; on_reject closure
+                    (i32.const 0) (i32.const 0))    ;; on_reject closure
+                (call $ic0_call_data_append
                     (i32.const 10) (i32.const 1))   ;; refers to byte copied from the payload
+                (call $ic0_call_perform)
                 drop)
 
               (func $square
@@ -1927,9 +1942,15 @@ fn test_reject_callback() {
                   (import "ic0" "canister_self_copy"
                           (func $ic0_self_copy (param i32 i32 i32)))
 
-                  (import "ic0" "call_simple"
-                          (func $ic0_call_simple (param i32 i32 i32 i32 i32 i32 i32 i32 i32 i32)
-                                                 (result i32)))
+                  (import "ic0" "call_new"
+                      (func $ic0_call_new
+                          (param i32 i32)
+                          (param $method_name_src i32)    (param $method_name_len i32)
+                          (param $reply_fun i32)          (param $reply_env i32)
+                          (param $reject_fun i32)         (param $reject_env i32)
+                  ))
+                  (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+                  (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
 
                   (import "ic0" "msg_reject" (func $msg_reject (param i32 i32)))
 
@@ -1944,18 +1965,19 @@ fn test_reject_callback() {
                   (func (export "canister_update entry") (local $len i32)
                         (local.set $len (call $ic0_self_size))
                         (call $ic0_self_copy (i32.const 32) (i32.const 0) (local.get $len))
-                        (drop (call $ic0_call_simple
+                        (call $ic0_call_new
                               (i32.const 32)            ;; callee_src
                               (local.get $len)          ;; callee_size
                               (i32.const 7)             ;; method_name_src
-                              (i32.const 4)            ;; method_name_len
+                              (i32.const 4)             ;; method_name_len
                               (i32.const 0)             ;; reply_fun
                               (i32.const 0)             ;; reply_env
                               (i32.const 1)             ;; reject_fun
-                              (i32.const 0)             ;; reject_env
+                              (i32.const 0))            ;; reject_env
+                         (call $ic0_call_data_append
                               (i32.const 0)             ;; data_src
-                              (i32.const 5)             ;; data_len
-                              )))
+                              (i32.const 5))            ;; data_len
+                         (drop (call $ic0_call_perform)))
 
                   (func (export "canister_update ping")
                         (call $msg_reject (i32.const 0) (i32.const 6)))

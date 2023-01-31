@@ -45,18 +45,6 @@ pub mod ic0 {
         pub fn msg_reply();
         pub fn msg_reply_data_append(offset: u32, size: u32);
         pub fn trap(offset: u32, size: u32);
-        pub fn call_simple(
-            callee_src: u32,
-            callee_size: u32,
-            name_src: u32,
-            name_size: u32,
-            reply_fun: usize,
-            reply_env: u32,
-            reject_fun: usize,
-            reject_env: u32,
-            data_src: u32,
-            data_size: u32,
-        ) -> i32;
         pub fn call_new(
             callee_src: u32,
             callee_size: u32,
@@ -165,20 +153,6 @@ pub mod ic0 {
 
     pub unsafe fn trap(_offset: u32, _size: u32) {
         wrong_arch("trap")
-    }
-    pub unsafe fn call_simple(
-        _callee_src: u32,
-        _callee_size: u32,
-        _name_src: u32,
-        _name_size: u32,
-        _reply_fun: usize,
-        _reply_env: u32,
-        _reject_fun: usize,
-        _reject_env: u32,
-        _data_src: u32,
-        _data_size: u32,
-    ) -> i32 {
-        wrong_arch("call_simple")
     }
 
     pub unsafe fn call_new(
@@ -320,7 +294,7 @@ pub mod ic0 {
 
 // Convenience wrappers around the DFINTY System API
 
-/// A thin wrapper around `call_simple`.  Calls another canisters and invokes
+/// A thin wrapper around `call_new`, `call_data_append`, and `call_perform`.  Calls another canisters and invokes
 /// on_reply/on_reject with the given `env` once reply/reject is received.
 #[allow(clippy::too_many_arguments)]
 pub fn call_raw(
@@ -438,7 +412,7 @@ pub fn call_bytes(
         future_ptr as *mut (),
         funds,
     );
-    // 0 is a special error code, meaning call_simple call succeeded
+    // 0 is a special error code, meaning call_perform call succeeded
     if err_code != 0 {
         // Decrease the refcount as the closure will not be called.
         std::mem::drop(unsafe { RefCounted::from_raw(future_ptr) });
@@ -504,7 +478,7 @@ pub fn call_bytes_with_cleanup(
         future_ptr as *mut (),
         funds,
     );
-    // 0 is a special error code, meaning call_simple call succeeded
+    // 0 is a special error code, meaning call_perform call succeeded
     if err_code != 0 {
         // Decrease the refcount as the closure will not be called.
         unsafe { RefCounted::from_raw(future_ptr) };

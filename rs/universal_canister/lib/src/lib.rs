@@ -536,7 +536,7 @@ impl From<PayloadBuilder> for Vec<u8> {
     }
 }
 
-/// Arguments to be passed into `call_simple` or `call_with_funds`.
+/// Arguments to be passed into `call_new`.
 #[derive(Clone)]
 pub struct CallArgs {
     pub on_reply: Vec<u8>,

@@ -231,27 +231,6 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
             )],
         ),
         (
-            "call_simple",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                        ValType::I32,
-                    ],
-                    return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        (
             "call_new",
             vec![(
                 API_VERSION_IC0,
@@ -725,7 +704,6 @@ fn set_imports_details(import_details: &mut WasmImportsDetails, import_module: &
         return;
     }
     match field {
-        "call_simple" => import_details.imports_call_simple = true,
         "controller_size" => import_details.imports_controller_size = true,
         "controller_copy" => import_details.imports_controller_copy = true,
         "call_cycles_add" => import_details.imports_call_cycles_add = true,

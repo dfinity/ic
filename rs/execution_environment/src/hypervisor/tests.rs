@@ -1602,28 +1602,29 @@ fn ic0_canister_self_copy_works() {
 }
 
 #[test]
-fn ic0_call_simple_has_no_effect_on_trap() {
+fn ic0_call_has_no_effect_on_trap() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
-            (import "ic0" "call_simple"
-                (func $ic0_call_simple
-                    (param i32 i32)
-                    (param $method_name_src i32)    (param $method_name_len i32)
-                    (param $reply_fun i32)          (param $reply_env i32)
-                    (param $reject_fun i32)         (param $reject_env i32)
-                    (param $data_src i32)           (param $data_len i32)
-                    (result i32))
-            )
+            (import "ic0" "call_new"
+              (func $ic0_call_new
+                (param i32 i32)
+                (param $method_name_src i32)    (param $method_name_len i32)
+                (param $reply_fun i32)          (param $reply_env i32)
+                (param $reject_fun i32)         (param $reject_env i32)
+            ))
+            (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
             (import "ic0" "trap" (func $ic_trap (param i32) (param i32)))
             (func (export "canister_update test")
-                (call $ic0_call_simple
+                (call $ic0_call_new
                     (i32.const 100) (i32.const 10)  ;; callee canister id = 777
                     (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
                     (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
-                    (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
-                    (i32.const 19) (i32.const 3)    ;; refers to "XYZ" on the heap
-                    )
+                    (i32.const 33) (i32.const 44))  ;; fictive on_reject closure
+                (call $ic0_call_data_append
+                    (i32.const 19) (i32.const 3))   ;; refers to "XYZ" on the heap
+                (call $ic0_call_perform)
                 drop
                 (call $ic_trap (i32.const 0) (i32.const 18))
             )
@@ -1747,7 +1748,7 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
     let wat = r#"
         (module
             (import "ic0" "call_new"
-                (func $call_new
+                (func $ic0_call_new
                     (param i32 i32)
                     (param $method_name_src i32) (param $method_name_len i32)
                     (param $reply_fun i32)       (param $reply_env i32)
@@ -1756,7 +1757,7 @@ fn ic0_call_cycles_add_has_no_effect_without_ic0_call_perform() {
             )
             (import "ic0" "call_cycles_add" (func $call_cycles_add (param i64)))
             (func (export "canister_update test")
-                (call $call_new
+                (call $ic0_call_new
                     (i32.const 100) (i32.const 10)  ;; callee canister id = 777
                     (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
                     (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
@@ -1871,29 +1872,30 @@ fn ic0_mint_cycles_succeeds_on_cmc() {
 }
 
 #[test]
-fn ic0_call_simple_enqueues_request() {
+fn ic0_call_enqueues_request() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
         (module
-            (import "ic0" "call_simple"
-                (func $call_simple
-                    (param i32 i32)
-                    (param $method_name_src i32)    (param $method_name_len i32)
-                    (param $reply_fun i32)          (param $reply_env i32)
-                    (param $reject_fun i32)         (param $reject_env i32)
-                    (param $data_src i32)           (param $data_len i32)
-                    (result i32)
-                )
-            )
+            (import "ic0" "call_new"
+              (func $ic0_call_new
+                (param i32 i32)
+                (param $method_name_src i32)    (param $method_name_len i32)
+                (param $reply_fun i32)          (param $reply_env i32)
+                (param $reject_fun i32)         (param $reject_env i32)
+            ))
+            (import "ic0" "call_data_append" (func $ic0_call_data_append (param $src i32) (param $size i32)))
+            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
+
             (import "ic0" "msg_reply" (func $msg_reply))
             (func (export "canister_update test")
-                (call $call_simple
+                (call $ic0_call_new
                     (i32.const 100) (i32.const 10)  ;; callee canister id = 777
                     (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
                     (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
-                    (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
-                    (i32.const 19) (i32.const 3)    ;; refers to "XYZ" on the heap
-                )
+                    (i32.const 33) (i32.const 44))  ;; fictive on_reject closure
+                (call $ic0_call_data_append
+                    (i32.const 19) (i32.const 3))   ;; refers to "XYZ" on the heap
+                (call $ic0_call_perform)
                 drop
                 (call $msg_reply)
             )
@@ -1914,7 +1916,7 @@ fn ic0_call_perform_enqueues_request() {
     let wat = r#"
         (module
             (import "ic0" "call_new"
-                (func $call_new
+                (func $ic0_call_new
                     (param i32 i32)
                     (param $method_name_src i32)    (param $method_name_len i32)
                     (param $reply_fun i32)          (param $reply_env i32)
@@ -1922,21 +1924,21 @@ fn ic0_call_perform_enqueues_request() {
                 )
             )
             (import "ic0" "call_data_append"
-                (func $call_data_append (param $src i32) (param $size i32))
+                (func $ic0_call_data_append (param $src i32) (param $size i32))
             )
-            (import "ic0" "call_perform" (func $call_perform (result i32)))
+            (import "ic0" "call_perform" (func $ic0_call_perform (result i32)))
             (import "ic0" "msg_reply" (func $msg_reply))
             (func (export "canister_update test")
-                (call $call_new
+                (call $ic0_call_new
                     (i32.const 100) (i32.const 10)  ;; callee canister id = 777
                     (i32.const 0) (i32.const 18)    ;; refers to "some_remote_method" on the heap
                     (i32.const 11) (i32.const 22)   ;; fictive on_reply closure
                     (i32.const 33) (i32.const 44)   ;; fictive on_reject closure
                 )
-                (call $call_data_append
+                (call $ic0_call_data_append
                     (i32.const 19) (i32.const 3)    ;; refers to "XYZ" on the heap
                 )
-                (call $call_perform)
+                (call $ic0_call_perform)
                 drop
                 (call $msg_reply)
             )

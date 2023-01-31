@@ -133,22 +133,6 @@ impl SystemApi for SystemApiEmpty {
     fn ic0_trap(&self, _: u32, _: u32, _: &[u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn ic0_call_simple(
-        &mut self,
-        _: u32,
-        _: u32,
-        _: u32,
-        _: u32,
-        _: u32,
-        _: u32,
-        _: u32,
-        _: u32,
-        _: u32,
-        _: u32,
-        _: &[u8],
-    ) -> HypervisorResult<i32> {
-        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
-    }
     fn ic0_call_new(
         &mut self,
         _: u32,

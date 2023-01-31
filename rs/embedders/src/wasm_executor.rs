@@ -61,7 +61,6 @@ pub trait WasmExecutor: Send + Sync {
 struct WasmExecutorMetrics {
     // TODO(EXC-365): Remove these metrics once we confirm that no module imports these IC0 methods
     // anymore.
-    imports_call_simple: IntCounter,
     imports_controller_size: IntCounter,
     imports_controller_copy: IntCounter,
     // TODO(EXC-376): Remove these metrics once we confirm that no module imports these IC0 methods
@@ -78,10 +77,6 @@ impl WasmExecutorMetrics {
     #[doc(hidden)] // pub for usage in tests
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            imports_call_simple: metrics_registry.int_counter(
-                "execution_wasm_imports_call_simple_total",
-                "The number of Wasm modules that import ic0.call_simple",
-            ),
             imports_controller_size: metrics_registry.int_counter(
                 "execution_wasm_imports_controller_size_total",
                 "The number of Wasm modules that import ic0.controller_size",
@@ -350,9 +345,6 @@ impl WasmExecutorImpl {
     }
 
     pub fn observe_metrics(&self, imports_details: &WasmImportsDetails) {
-        if imports_details.imports_call_simple {
-            self.metrics.imports_call_simple.inc();
-        }
         if imports_details.imports_controller_size {
             self.metrics.imports_controller_size.inc();
         }

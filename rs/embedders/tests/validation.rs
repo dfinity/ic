@@ -761,35 +761,6 @@ fn can_reject_wasm_with_invalid_global_access() {
 }
 
 #[test]
-fn can_validate_module_with_call_simple_import() {
-    // Instruments import of `call_simple` from `ic0`.
-    let wasm = wat2wasm(
-        r#"(module 
-        (import "ic0" "call_simple" 
-          (func $ic0_call_simple
-            (param i32 i32)
-            (param $method_name_src i32)    (param $method_name_len i32)
-            (param $reply_fun i32)          (param $reply_env i32)
-            (param $reject_fun i32)         (param $reject_env i32)
-            (param $data_src i32)           (param $data_len i32)
-            (result i32))
-    ))"#,
-    )
-    .unwrap();
-
-    assert_eq!(
-        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
-        Ok(WasmValidationDetails {
-            imports_details: WasmImportsDetails {
-                imports_call_simple: true,
-                ..Default::default()
-            },
-            ..Default::default()
-        })
-    );
-}
-
-#[test]
 fn can_validate_module_cycles_related_imports() {
     // Instruments imports from `ic0`.
     let wasm = wat2wasm(

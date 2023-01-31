@@ -40,7 +40,6 @@ Local  (new) profile:release-lto commit:04f38ce0 branch:master
 | update/ic0_controller_copy()/10B           |     223M |     192M |    -14% |     36.46s |
 | update/ic0_debug_print()/1B                |    5.45G |    3.27G |    -40% |      2.14s |
 | update/ic0_debug_print()/64B               |    8.48G |    5.13G |    -40% |      1.36s |
-| update/ic0_call_simple()                   |    92.6M |    91.3M |     -2% |     76.67s |
 | update/ic0_call_new()                      |    10.8M |    73.1M |   +576% |     95.76s |
 | update/call_new+ic0_call_data_append()/1B  |     118M |     113M |     -5% |     61.95s |
 | update/call_new+ic0_call_data_append()/8K  |    17.1G |    16.3G |     -5% |      0.43s |
@@ -112,7 +111,6 @@ Average speedup of the local (new) changes: +3% (throughput)
 | update/ic0_controller_copy()/10B           |     58ms |   67.4ms |    +16% |
 | update/ic0_debug_print()/1B                |   20.7ms |   34.4ms |    +66% |
 | update/ic0_debug_print()/64B               |   20.7ms |   34.2ms |    +65% |
-| update/ic0_call_simple()                   |    1.52s |    1.54s |     +1% |
 | update/ic0_call_new()                      |    251ms |    246ms |     -2% |
 | update/call_new+ic0_call_data_append()/1B  |    355ms |    371ms |     +4% |
 | update/call_new+ic0_call_data_append()/8K  |    479ms |    502ms |     +4% |

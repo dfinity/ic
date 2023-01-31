@@ -33,7 +33,6 @@ The throughput is higher due to increased complexity:
 | callback/ic0_msg_reject_msg_copy()/1B      |        168M |        393M |   +133% |
 | callback/ic0_msg_reject_msg_copy()/10B     |        276M |        495M |    +79% |
 | update/ic0_msg_reject()*                   |       13.3K |       99.8K |   +650% |
-| update/ic0_call_simple()                   |       80.2M |       92.6M |    +15% |
 | update/call_new+ic0_call_data_append()/1B  |       62.8M |        118M |    +87% |
 | update/call_new+ic0_call_data_append()/8K  |       17.2G |       17.1G |     -1% |
 
@@ -44,6 +43,5 @@ While the actual time executing the system calls is +- the same as there were no
 | callback/ic0_msg_reject_msg_copy()/1B      |        83ms |      86.4ms |     +4% |
 | callback/ic0_msg_reject_msg_copy()/10B     |      83.1ms |      86.8ms |     +4% |
 | update/ic0_msg_reject()*                   |       224us |       230us |     +2% |
-| update/ic0_call_simple()                   |       1.50s |       1.52s |     +1% |
 | update/call_new+ic0_call_data_append()/1B  |       350ms |       355ms |     +1% |
 | update/call_new+ic0_call_data_append()/8K  |       476ms |       479ms |     +0% |
