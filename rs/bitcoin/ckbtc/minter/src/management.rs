@@ -126,30 +126,44 @@ pub async fn get_utxos(
     address: &Address,
     min_confirmations: u32,
 ) -> Result<Vec<Utxo>, CallError> {
-    const GET_UTXOS_COST_CYCLES: u64 = 5_000_000_000;
+    // NB. The prices are 10B on the mainnet and 4B on the testnet:
+    // https://internetcomputer.org/docs/current/developer-docs/deploy/computation-and-storage-costs
+    let get_utxos_cost_cycles = match network {
+        Network::Mainnet => 10_000_000_000,
+        Network::Testnet | Network::Regtest => 4_000_000_000,
+    };
 
     // Calls "bitcoin_get_utxos" method with the specified argument on the
     // management canister.
-    async fn bitcoin_get_utxos(req: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
-        call("bitcoin_get_utxos", GET_UTXOS_COST_CYCLES, req).await
+    async fn bitcoin_get_utxos(
+        req: &GetUtxosRequest,
+        cycles: u64,
+    ) -> Result<GetUtxosResponse, CallError> {
+        call("bitcoin_get_utxos", cycles, req).await
     }
 
-    let mut response = bitcoin_get_utxos(&GetUtxosRequest {
-        address: address.to_string(),
-        network: network.into(),
-        filter: Some(UtxosFilterInRequest::MinConfirmations(min_confirmations)),
-    })
+    let mut response = bitcoin_get_utxos(
+        &GetUtxosRequest {
+            address: address.to_string(),
+            network: network.into(),
+            filter: Some(UtxosFilterInRequest::MinConfirmations(min_confirmations)),
+        },
+        get_utxos_cost_cycles,
+    )
     .await?;
 
     let mut utxos = std::mem::take(&mut response.utxos);
 
     // Continue fetching until there are no more pages.
     while let Some(page) = response.next_page {
-        response = bitcoin_get_utxos(&GetUtxosRequest {
-            address: address.to_string(),
-            network: network.into(),
-            filter: Some(UtxosFilterInRequest::Page(page)),
-        })
+        response = bitcoin_get_utxos(
+            &GetUtxosRequest {
+                address: address.to_string(),
+                network: network.into(),
+                filter: Some(UtxosFilterInRequest::Page(page)),
+            },
+            get_utxos_cost_cycles,
+        )
         .await?;
 
         utxos.append(&mut response.utxos);
@@ -160,11 +174,14 @@ pub async fn get_utxos(
 
 /// Returns the current fee percentiles on the bitcoin network.
 pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByte>, CallError> {
-    const GET_CURRENT_FEE_PERCENTILES_COST_CYCLES: u64 = 100 * 1_000_000;
+    let cost_cycles = match network {
+        Network::Mainnet => 100_000_000,
+        Network::Testnet | Network::Regtest => 40_000_000,
+    };
 
     call(
         "bitcoin_get_current_fee_percentiles",
-        GET_CURRENT_FEE_PERCENTILES_COST_CYCLES,
+        cost_cycles,
         &GetCurrentFeePercentilesRequest {
             network: network.into(),
         },
@@ -177,13 +194,19 @@ pub async fn send_transaction(
     transaction: &tx::SignedTransaction,
     network: Network,
 ) -> Result<(), CallError> {
-    const SEND_TRANSACTION_BASE_COST_CYCLES: u64 = 5 * 1_000_000_000;
-    const SEND_TRANSACTION_COST_CYCLES_PER_BYTE: u64 = 20 * 1_000_000;
+    let send_tx_base_cost_cycles = match network {
+        Network::Mainnet => 5_000_000_000,
+        Network::Testnet | Network::Regtest => 2_000_000_000,
+    };
+    let send_tx_cost_per_byte_cycles = match network {
+        Network::Mainnet => 20_000_000,
+        Network::Testnet | Network::Regtest => 8_000_000,
+    };
 
     let tx_bytes = transaction.serialize();
 
-    let transaction_cost_cycles = SEND_TRANSACTION_BASE_COST_CYCLES
-        + (tx_bytes.len() as u64) * SEND_TRANSACTION_COST_CYCLES_PER_BYTE;
+    let transaction_cost_cycles =
+        send_tx_base_cost_cycles + (tx_bytes.len() as u64) * send_tx_cost_per_byte_cycles;
 
     call(
         "bitcoin_send_transaction",
