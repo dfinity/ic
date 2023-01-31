@@ -33,6 +33,7 @@ pub const TOKEN_NAME: &str = "Test Token";
 pub const TOKEN_SYMBOL: &str = "XTST";
 pub const TEXT_META_KEY: &str = "test:image";
 pub const TEXT_META_VALUE: &str = "grumpy_cat.png";
+pub const TEXT_META_VALUE_2: &str = "dog.png";
 pub const BLOB_META_KEY: &str = "test:blob";
 pub const BLOB_META_VALUE: &[u8] = b"\xca\xfe\xba\xbe";
 pub const NAT_META_KEY: &str = "test:nat";
@@ -40,7 +41,7 @@ pub const NAT_META_VALUE: u128 = u128::MAX;
 pub const INT_META_KEY: &str = "test:int";
 pub const INT_META_VALUE: i128 = i128::MIN;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct InitArgs {
     pub minting_account: Account,
     pub initial_balances: Vec<(Account, u64)>,
@@ -49,6 +50,20 @@ pub struct InitArgs {
     pub token_symbol: String,
     pub metadata: Vec<(String, Value)>,
     pub archive_options: ArchiveOptions,
+}
+
+#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+pub struct UpgradeArgs {
+    pub metadata: Option<Vec<(String, Value)>>,
+    pub token_name: Option<String>,
+    pub token_symbol: Option<String>,
+    pub transfer_fee: Option<u64>,
+}
+
+#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+pub enum LedgerArgument {
+    Init(InitArgs),
+    Upgrade(Option<UpgradeArgs>),
 }
 
 fn test_transfer_model<T>(
@@ -1244,4 +1259,68 @@ where
             },
         )
         .unwrap();
+}
+
+pub fn test_upgrade<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let (env, canister_id) = setup(ledger_wasm.clone(), encode_init_args, vec![]);
+
+    let metadata_res = metadata(&env, canister_id);
+    let metadata_value = metadata_res.get(TEXT_META_KEY).unwrap();
+    assert_eq!(*metadata_value, Value::Text(TEXT_META_VALUE.to_string()));
+
+    const OTHER_TOKEN_SYMBOL: &str = "NEWSYMBOL";
+    const OTHER_TOKEN_NAME: &str = "NEWTKNNAME";
+    const NEW_FEE: u64 = 1234;
+
+    let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
+        metadata: Some(vec![(
+            TEXT_META_KEY.into(),
+            Value::Text(TEXT_META_VALUE_2.into()),
+        )]),
+        token_name: Some(OTHER_TOKEN_NAME.into()),
+        token_symbol: Some(OTHER_TOKEN_SYMBOL.into()),
+        transfer_fee: Some(NEW_FEE),
+    }));
+
+    env.upgrade_canister(canister_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
+        .expect("failed to upgrade the archive canister");
+
+    let metadata_res_after_upgrade = metadata(&env, canister_id);
+    assert_eq!(
+        *metadata_res_after_upgrade.get(TEXT_META_KEY).unwrap(),
+        Value::Text(TEXT_META_VALUE_2.to_string())
+    );
+
+    let token_symbol_after_upgrade: String = Decode!(
+        &env.query(canister_id, "icrc1_symbol", Encode!().unwrap())
+            .expect("failed to query symbol")
+            .bytes(),
+        String
+    )
+    .expect("failed to decode balance_of response");
+    assert_eq!(token_symbol_after_upgrade, OTHER_TOKEN_SYMBOL);
+
+    let token_name_after_upgrade: String = Decode!(
+        &env.query(canister_id, "icrc1_name", Encode!().unwrap())
+            .expect("failed to query name")
+            .bytes(),
+        String
+    )
+    .expect("failed to decode balance_of response");
+    assert_eq!(token_name_after_upgrade, OTHER_TOKEN_NAME);
+
+    let token_fee_after_upgrade: u64 = Decode!(
+        &env.query(canister_id, "icrc1_fee", Encode!().unwrap())
+            .expect("failed to query fee")
+            .bytes(),
+        Nat
+    )
+    .expect("failed to decode balance_of response")
+    .0
+    .to_u64()
+    .unwrap();
+    assert_eq!(token_fee_after_upgrade, NEW_FEE);
 }

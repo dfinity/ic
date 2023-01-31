@@ -17,6 +17,7 @@ use ic_ic00_types::{CanisterStatusResult, EmptyBlob, Payload};
 use ic_message::ForwardParams;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_test_utils::governance::upgrade_nns_canister_by_proposal;
+use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
 use ic_types::{CanisterId, Cycles, PrincipalId};
@@ -278,6 +279,30 @@ impl<'a> UniversalCanister<'a> {
             &root,
             true,
             Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()),
+        )
+        .await;
+        Self::from_canister_id(
+            agent,
+            Principal::try_from(nns_canister_id.get().to_vec()).unwrap(),
+        )
+    }
+
+    pub async fn upgrade_with_args(
+        runtime: &'a Runtime,
+        agent: &'a Agent,
+        nns_canister_id: &CanisterId,
+        args: Vec<u8>,
+    ) -> UniversalCanister<'a> {
+        let can = Canister::new(runtime, *nns_canister_id);
+        let governance = Canister::new(runtime, GOVERNANCE_CANISTER_ID);
+        let root = Canister::new(runtime, ROOT_CANISTER_ID);
+        upgrade_nns_canister_with_args_by_proposal(
+            &can,
+            &governance,
+            &root,
+            true,
+            Wasm::from_bytes(UNIVERSAL_CANISTER_WASM.to_vec()),
+            args,
         )
         .await;
         Self::from_canister_id(

@@ -12,7 +12,7 @@ use ic_icrc1::{
     },
     Account, Operation, Transaction,
 };
-use ic_icrc1_ledger::{InitArgs, Ledger};
+use ic_icrc1_ledger::{Ledger, LedgerArgument};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerData,
 };
@@ -52,9 +52,16 @@ impl LedgerAccess for Access {
 }
 
 #[init]
-fn init(args: InitArgs) {
-    let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
-    LEDGER.with(|cell| *cell.borrow_mut() = Some(Ledger::from_init_args(args, now)))
+fn init(args: LedgerArgument) {
+    match args {
+        LedgerArgument::Init(init_args) => {
+            let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
+            LEDGER.with(|cell| *cell.borrow_mut() = Some(Ledger::from_init_args(init_args, now)))
+        }
+        LedgerArgument::Upgrade(_) => {
+            panic!("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
+        }
+    }
 }
 
 #[pre_upgrade]
@@ -64,13 +71,23 @@ fn pre_upgrade() {
 }
 
 #[post_upgrade]
-fn post_upgrade() {
-    LEDGER.with(|cell| {
-        *cell.borrow_mut() = Some(
-            ciborium::de::from_reader(StableReader::default())
-                .expect("failed to decode ledger state"),
-        );
-    })
+fn post_upgrade(args: Option<LedgerArgument>) {
+    if let Some(args) = args {
+        match args {
+            LedgerArgument::Init(_) => panic!("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
+            LedgerArgument::Upgrade(upgrade_args) => {
+                LEDGER.with(|cell| {
+                    *cell.borrow_mut() = Some(
+                        ciborium::de::from_reader(StableReader::default())
+                            .expect("failed to decode ledger state"),
+                    );
+                });
+                if let Some(upgrade_args) = upgrade_args {
+                    Access::with_ledger_mut(|ledger| ledger.upgrade_metadata(upgrade_args));
+                }
+            }
+        }
+    }
 }
 
 fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {

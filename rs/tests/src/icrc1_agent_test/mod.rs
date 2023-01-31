@@ -4,7 +4,7 @@ use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, PrincipalId};
 use ic_icrc1::Account;
 use ic_icrc1_agent::{CallMode, Icrc1Agent, TransferArg, Value};
-use ic_icrc1_ledger::InitArgs;
+use ic_icrc1_ledger::{InitArgs, LedgerArgument};
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
 use icp_ledger::ArchiveOptions;
@@ -71,7 +71,7 @@ pub fn test(env: TestEnv) {
             .create_canister_max_cycles_with_retries()
             .await
             .expect("Unable to create canister");
-        // let mut ledger = Canister::new(&runtime, ledger_canister_id);
+
         let init_args = InitArgs {
             minting_account,
             initial_balances: vec![(account1.clone(), 1_000_000_000)],
@@ -89,7 +89,7 @@ pub fn test(env: TestEnv) {
                 max_transactions_per_response: None,
             },
         };
-        install_icrc1_ledger(&env, &mut ledger, &init_args).await;
+        install_icrc1_ledger(&env, &mut ledger, &LedgerArgument::Init(init_args.clone())).await;
 
         /////////////
         // test
@@ -231,7 +231,11 @@ pub fn test(env: TestEnv) {
     });
 }
 
-pub async fn install_icrc1_ledger<'a>(env: &TestEnv, canister: &mut Canister<'a>, args: &InitArgs) {
+pub async fn install_icrc1_ledger<'a>(
+    env: &TestEnv,
+    canister: &mut Canister<'a>,
+    args: &LedgerArgument,
+) {
     install_rust_canister_from_path(
         canister,
         env.get_dependency_path("rs/rosetta-api/icrc1/ledger/ledger_canister.wasm"),

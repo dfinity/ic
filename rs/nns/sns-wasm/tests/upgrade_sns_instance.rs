@@ -1,6 +1,7 @@
 use candid::{Decode, Encode, Nat};
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1_ledger::LedgerArgument;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
 use ic_nns_test_utils::state_test_helpers::{
@@ -418,15 +419,19 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
     // Update some init payload parameters so that our archive can spawn (i.e. can make a transaction
     // because we have a normal non-neuron ledger account, and no restrictions.
     init_payloads.governance.mode = Mode::Normal.into();
-    init_payloads.ledger.archive_options.trigger_threshold = 10;
-    init_payloads.ledger.archive_options.num_blocks_to_archive = 5;
-    init_payloads.ledger.initial_balances.push((
-        Account {
-            owner: user,
-            subaccount: None,
-        },
-        100000000,
-    ));
+    if let LedgerArgument::Init(ref mut ledger) = init_payloads.ledger {
+        ledger.archive_options.trigger_threshold = 10;
+        ledger.archive_options.num_blocks_to_archive = 5;
+        ledger.initial_balances.push((
+            Account {
+                owner: user,
+                subaccount: None,
+            },
+            100000000,
+        ));
+    } else {
+        panic!("bug: expected Init got Upgrade");
+    }
 
     let wasm_for_type = |canister_type| wasm_map.get(canister_type).unwrap().wasm.clone();
     let install_code = |canister: CanisterId, wasm: Vec<u8>, payload| {
@@ -696,15 +701,19 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
     // Update some init payload parameters so that our archive can spawn (i.e. can make a transaction
     // because we have a normal non-neuron ledger account, and no restrictions.
     init_payloads.governance.mode = Mode::Normal.into();
-    init_payloads.ledger.archive_options.trigger_threshold = 10;
-    init_payloads.ledger.archive_options.num_blocks_to_archive = 5;
-    init_payloads.ledger.initial_balances.push((
-        Account {
-            owner: user,
-            subaccount: None,
-        },
-        100000000,
-    ));
+    if let LedgerArgument::Init(ref mut ledger) = init_payloads.ledger {
+        ledger.archive_options.trigger_threshold = 10;
+        ledger.archive_options.num_blocks_to_archive = 5;
+        ledger.initial_balances.push((
+            Account {
+                owner: user,
+                subaccount: None,
+            },
+            100000000,
+        ));
+    } else {
+        panic!("bug: expected Init got Upgrade");
+    }
 
     let wasm_for_type = |canister_type| wasm_map.get(canister_type).unwrap().wasm.clone();
     let install_code = |canister: CanisterId, wasm: Vec<u8>, payload| {

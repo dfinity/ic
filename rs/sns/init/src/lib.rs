@@ -9,7 +9,7 @@ use anyhow::anyhow;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Account;
 use ic_icrc1_index::InitArgs as IndexInitArgs;
-use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
+use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
 use ic_nns_constants::{
@@ -73,7 +73,7 @@ pub struct SnsCanisterIds {
 #[derive(Debug, Clone)]
 pub struct SnsCanisterInitPayloads {
     pub governance: Governance,
-    pub ledger: LedgerInitArgs,
+    pub ledger: LedgerArgument,
     pub root: SnsRootCanister,
     pub swap: SwapInit,
     pub index: IndexInitArgs,
@@ -210,7 +210,7 @@ impl SnsInitPayload {
     fn ledger_init_args(
         &self,
         sns_canister_ids: &SnsCanisterIds,
-    ) -> anyhow::Result<LedgerInitArgs> {
+    ) -> anyhow::Result<LedgerArgument> {
         let root_canister_id = CanisterId::new(sns_canister_ids.root).unwrap();
         let token_symbol = self
             .token_symbol
@@ -260,7 +260,7 @@ impl SnsInitPayload {
             },
         };
 
-        Ok(payload)
+        Ok(LedgerArgument::Init(payload))
     }
 
     /// Construct the params used to initialize a SNS Index canister.
@@ -849,6 +849,7 @@ mod test {
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1::Account;
+    use ic_icrc1_ledger::LedgerArgument;
     use ic_sns_governance::governance::ValidGovernanceProto;
     use ic_sns_governance::pb::v1::governance::SnsMetadata;
     use ic_sns_governance::types::ONE_MONTH_SECONDS;
@@ -972,20 +973,18 @@ mod test {
             Some(sns_canister_ids.root)
         );
 
-        assert_eq!(
-            sns_canisters_init_payloads
-                .ledger
-                .archive_options
-                .controller_id,
-            sns_canister_ids.root
-        );
-        assert_eq!(
-            sns_canisters_init_payloads.ledger.minting_account,
-            Account {
-                owner: sns_canister_ids.governance,
-                subaccount: None
-            }
-        );
+        if let LedgerArgument::Init(ledger) = sns_canisters_init_payloads.ledger {
+            assert_eq!(ledger.archive_options.controller_id, sns_canister_ids.root);
+            assert_eq!(
+                ledger.minting_account,
+                Account {
+                    owner: sns_canister_ids.governance,
+                    subaccount: None
+                }
+            );
+        } else {
+            panic!("bug: expected Init got Upgrade.");
+        }
 
         assert_eq!(
             sns_canisters_init_payloads.root.governance_canister_id,
@@ -1106,19 +1105,21 @@ mod test {
             .build_canister_payloads(&sns_canister_ids, None, false)
             .expect("Expected SnsInitPayload to be a valid payload");
 
-        let ledger = canister_payloads.ledger;
-
         // Assert that the Ledger canister would accept this init payload
-        assert_eq!(ledger.token_symbol, token_symbol);
-        assert_eq!(ledger.token_name, token_name);
-        assert_eq!(
-            ledger.minting_account,
-            Account {
-                owner: sns_canister_ids.governance,
-                subaccount: None
-            }
-        );
-        assert_eq!(ledger.transfer_fee, transaction_fee);
+        if let LedgerArgument::Init(ledger) = canister_payloads.ledger {
+            assert_eq!(ledger.token_symbol, token_symbol);
+            assert_eq!(ledger.token_name, token_name);
+            assert_eq!(
+                ledger.minting_account,
+                Account {
+                    owner: sns_canister_ids.governance,
+                    subaccount: None
+                }
+            );
+            assert_eq!(ledger.transfer_fee, transaction_fee);
+        } else {
+            panic!("bug: expected Init got Upgrade.");
+        }
     }
 
     #[test]
@@ -1233,11 +1234,12 @@ mod test {
             .expect("Expected SnsInitPayload to be a valid payload");
 
         let governance = canister_payloads.governance;
-        let init_accounts: BTreeMap<Account, u64> = canister_payloads
-            .ledger
-            .initial_balances
-            .into_iter()
-            .collect();
+        let init_accounts: BTreeMap<Account, u64> =
+            if let LedgerArgument::Init(ledger) = canister_payloads.ledger {
+                ledger.initial_balances.into_iter().collect()
+            } else {
+                panic!("bug: expected Init got Upgrade");
+            };
 
         // Assert that the Governance canister would accept this init payload
         assert!(ValidGovernanceProto::try_from(governance.clone()).is_ok());

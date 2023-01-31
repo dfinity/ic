@@ -467,7 +467,7 @@ impl Scenario {
             state_machine,
             self.ledger_canister_id,
             SnsCanisterType::Ledger,
-            &self.configuration.ledger,
+            &self.configuration.ledger.clone(),
         );
         init_canister(
             state_machine,

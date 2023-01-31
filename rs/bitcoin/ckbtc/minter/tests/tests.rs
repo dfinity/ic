@@ -9,7 +9,7 @@ use ic_ckbtc_minter::updates::update_balance::{
     UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult,
 };
 use ic_icrc1::Account;
-use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
+use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
 use icp_ledger::ArchiveOptions;
@@ -39,7 +39,7 @@ fn minter_wasm() -> Vec<u8> {
 }
 
 fn install_ledger(env: &StateMachine) -> CanisterId {
-    let args = LedgerInitArgs {
+    let args = LedgerArgument::Init(LedgerInitArgs {
         minting_account: Account {
             owner: Default::default(),
             subaccount: None,
@@ -58,7 +58,7 @@ fn install_ledger(env: &StateMachine) -> CanisterId {
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },
-    };
+    });
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
 }
