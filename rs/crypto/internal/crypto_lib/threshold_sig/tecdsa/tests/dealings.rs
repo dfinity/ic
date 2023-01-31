@@ -11,7 +11,7 @@ fn gen_private_keys(
     let mut private_keys = Vec::with_capacity(cnt);
 
     for _i in 0..cnt {
-        private_keys.push(MEGaPrivateKey::generate(curve, &mut rng)?);
+        private_keys.push(MEGaPrivateKey::generate(curve, &mut rng));
     }
 
     let public_keys = private_keys

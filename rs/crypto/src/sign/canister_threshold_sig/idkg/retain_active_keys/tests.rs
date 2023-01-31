@@ -293,7 +293,6 @@ mod oldest_public_key {
         .expect("error hashing to scalar");
         MEGaPublicKey::new(
             EccPoint::generator_g(EccCurveType::K256)
-                .expect("generator wrong")
                 .scalar_mul(&unique_scalar_per_version)
                 .expect("error with multiplication by scalar"),
         )

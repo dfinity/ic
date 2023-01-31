@@ -424,7 +424,7 @@ mod idkg_retain_active_keys {
     }
 
     fn an_idkg_public_key() -> MEGaPublicKey {
-        MEGaPublicKey::new(EccPoint::generator_g(EccCurveType::K256).expect("generator wrong"))
+        MEGaPublicKey::new(EccPoint::generator_g(EccCurveType::K256))
     }
 
     fn generate_idkg_dealing_encryption_key_pairs<

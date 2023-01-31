@@ -277,7 +277,7 @@ pub fn gen_keypair(
     seed: Seed,
 ) -> Result<(MEGaPublicKey, MEGaPrivateKey), ThresholdEcdsaError> {
     let mut rng = seed.into_rng();
-    let private_key = MEGaPrivateKey::generate(curve_type, &mut rng)?;
+    let private_key = MEGaPrivateKey::generate(curve_type, &mut rng);
 
     let public_key = private_key.public_key()?;
 

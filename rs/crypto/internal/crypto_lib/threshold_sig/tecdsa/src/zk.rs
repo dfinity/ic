@@ -39,8 +39,8 @@ struct ProofOfEqualOpeningsInstance {
 impl ProofOfEqualOpeningsInstance {
     fn from_witness(secret: &EccScalar, masking: &EccScalar) -> ThresholdEcdsaResult<Self> {
         let curve_type = secret.curve_type();
-        let g = EccPoint::generator_g(curve_type)?;
-        let h = EccPoint::generator_h(curve_type)?;
+        let g = EccPoint::generator_g(curve_type);
+        let h = EccPoint::generator_h(curve_type);
         let a = EccPoint::pedersen(secret, masking)?;
         let b = EccPoint::mul_by_g(secret)?;
         Ok(Self {
@@ -54,8 +54,8 @@ impl ProofOfEqualOpeningsInstance {
 
     fn from_commitments(pedersen: &EccPoint, simple: &EccPoint) -> ThresholdEcdsaResult<Self> {
         let curve_type = pedersen.curve_type();
-        let g = EccPoint::generator_g(curve_type)?;
-        let h = EccPoint::generator_h(curve_type)?;
+        let g = EccPoint::generator_g(curve_type);
+        let h = EccPoint::generator_h(curve_type);
         Ok(Self {
             curve_type,
             g,
@@ -175,8 +175,8 @@ impl ProofOfProductInstance {
         product_masking: &EccScalar,
     ) -> ThresholdEcdsaResult<Self> {
         let curve_type = lhs.curve_type();
-        let g = EccPoint::generator_g(curve_type)?;
-        let h = EccPoint::generator_h(curve_type)?;
+        let g = EccPoint::generator_g(curve_type);
+        let h = EccPoint::generator_h(curve_type);
 
         let lhs_com = g.scalar_mul(lhs)?;
         let rhs_com = EccPoint::mul_2_points(&g, rhs, &h, rhs_masking)?;
@@ -198,8 +198,8 @@ impl ProofOfProductInstance {
         product_com: &EccPoint,
     ) -> ThresholdEcdsaResult<Self> {
         let curve_type = lhs_com.curve_type();
-        let g = EccPoint::generator_g(curve_type)?;
-        let h = EccPoint::generator_h(curve_type)?;
+        let g = EccPoint::generator_g(curve_type);
+        let h = EccPoint::generator_h(curve_type);
         Ok(Self {
             curve_type,
             g,

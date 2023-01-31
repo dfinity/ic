@@ -150,15 +150,11 @@ mod stability_tests {
                 expected: "ea1004285ebbadc58afc93ca583973c793e1ee5c9cefa7d0165491f19937c1ed",
             },
             ParameterizedTest {
-                input: MEGaPublicKey::new(
-                    EccPoint::generator_g(EccCurveType::K256).expect("error retrieving generator"),
-                ),
+                input: MEGaPublicKey::new(EccPoint::generator_g(EccCurveType::K256)),
                 expected: "4aeda75e42b4ca12c3d278a4684849bccbfd3ed6861d16fbee6c2585e7560039",
             },
             ParameterizedTest {
-                input: MEGaPublicKey::new(
-                    EccPoint::generator_h(EccCurveType::K256).expect("error retrieving generator"),
-                ),
+                input: MEGaPublicKey::new(EccPoint::generator_h(EccCurveType::K256)),
                 expected: "502da182fa4451163418bb07073182ca280aa4fb1f652b70f5b3b8f1642579cb",
             },
         ];
@@ -200,15 +196,11 @@ mod stability_tests {
 
     #[test]
     fn should_provide_stable_key_id_from_commitment() {
-        let generator_g_k256 =
-            EccPoint::generator_g(EccCurveType::K256).expect("error retrieving generator");
-        let generator_h_k256 =
-            EccPoint::generator_h(EccCurveType::K256).expect("error retrieving generator");
+        let generator_g_k256 = EccPoint::generator_g(EccCurveType::K256);
+        let generator_h_k256 = EccPoint::generator_h(EccCurveType::K256);
 
-        let generator_g_p256 =
-            EccPoint::generator_g(EccCurveType::P256).expect("error retrieving generator");
-        let generator_h_p256 =
-            EccPoint::generator_h(EccCurveType::P256).expect("error retrieving generator");
+        let generator_g_p256 = EccPoint::generator_g(EccCurveType::P256);
+        let generator_h_p256 = EccPoint::generator_h(EccCurveType::P256);
         let tests = vec![
             ParameterizedTest {
                 input: PolynomialCommitment::Simple(SimpleCommitment {

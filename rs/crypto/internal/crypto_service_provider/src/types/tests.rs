@@ -159,7 +159,7 @@ fn should_return_correct_enum_variant() {
     assert_eq!(key.enum_variant(), "FsEncryption");
 
     let mut rng = Seed::from_bytes(&[0u8; 32]).into_rng();
-    let mega_private_key = MEGaPrivateKey::generate(EccCurveType::K256, &mut rng).unwrap();
+    let mega_private_key = MEGaPrivateKey::generate(EccCurveType::K256, &mut rng);
     let mega_private_key_bytes = MEGaPrivateKeyK256Bytes::try_from(&mega_private_key).unwrap();
     let mega_public_key = mega_private_key.public_key().unwrap();
     let mega_public_key_bytes = MEGaPublicKeyK256Bytes::try_from(&mega_public_key).unwrap();

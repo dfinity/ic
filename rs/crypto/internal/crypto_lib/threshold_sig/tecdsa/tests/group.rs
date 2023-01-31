@@ -49,8 +49,8 @@ fn verify_serialization_round_trips_correctly() -> ThresholdEcdsaResult<()> {
         assert!(identity.serialize().iter().all(|x| *x == 0x00));
 
         assert_serialization_round_trips(identity);
-        assert_serialization_round_trips(EccPoint::generator_g(curve_type)?);
-        assert_serialization_round_trips(EccPoint::generator_h(curve_type)?);
+        assert_serialization_round_trips(EccPoint::generator_g(curve_type));
+        assert_serialization_round_trips(EccPoint::generator_h(curve_type));
 
         for _r in 0..100 {
             let s = EccScalar::random(curve_type, &mut rng);
@@ -113,7 +113,7 @@ fn hash_to_scalar_k256_has_fixed_output() -> ThresholdEcdsaResult<()> {
 #[test]
 fn generator_h_has_expected_value() -> ThresholdEcdsaResult<()> {
     for curve_type in EccCurveType::all() {
-        let h = EccPoint::generator_h(curve_type)?;
+        let h = EccPoint::generator_h(curve_type);
 
         let input = "h";
         let dst = format!("ic-crypto-tecdsa-{}-generator-h", curve_type);
@@ -181,7 +181,7 @@ fn test_scalar_negate() -> ThresholdEcdsaResult<()> {
 #[test]
 fn test_point_mul_by_node_index() -> ThresholdEcdsaResult<()> {
     for curve in EccCurveType::all() {
-        let g = EccPoint::generator_g(curve)?;
+        let g = EccPoint::generator_g(curve);
 
         for node_index in 0..300 {
             let g_ni = g.mul_by_node_index(node_index)?;
@@ -234,7 +234,7 @@ fn test_point_negate() -> ThresholdEcdsaResult<()> {
 
     for curve_type in EccCurveType::all() {
         let id = EccPoint::identity(curve_type);
-        let g = EccPoint::generator_g(curve_type)?;
+        let g = EccPoint::generator_g(curve_type);
 
         assert_eq!(id.negate(), id);
 
@@ -258,7 +258,7 @@ fn test_mul_2_is_correct() -> ThresholdEcdsaResult<()> {
     let mut rng = reproducible_rng();
 
     for curve_type in EccCurveType::all() {
-        let g = EccPoint::generator_g(curve_type)?;
+        let g = EccPoint::generator_g(curve_type);
 
         for _iteration in 0..100 {
             let p_0 = g.scalar_mul(&EccScalar::random(curve_type, &mut rng))?;
@@ -327,7 +327,7 @@ fn test_mul_n_vartime_naf() -> ThresholdEcdsaResult<()> {
 
     for curve_type in EccCurveType::all() {
         for window_size in [3, 4, 5, 6, 7] {
-            let g = EccPoint::generator_g(curve_type)?;
+            let g = EccPoint::generator_g(curve_type);
             let mut random_pair = || -> ThresholdEcdsaResult<_> {
                 Ok((
                     g.scalar_mul(&EccScalar::random(curve_type, &mut rng))?,
