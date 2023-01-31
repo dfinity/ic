@@ -5,6 +5,8 @@ exports_files([
     "launch_single_vm.py",
     "partitions.csv",
     "rootfs",
+    "rootfs/docker-base.dev",
+    "rootfs/docker-base.prod",
     "rootfs/allow_console_root",
     "rootfs/dev-certs/canister_http_test_ca.cert",
     "rootfs/dev-certs/canister_http_test_ca.key",

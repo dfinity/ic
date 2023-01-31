@@ -4,12 +4,16 @@
 # - `docker build --pull -t dfinity/hostos-main -f Dockerfile .`
 #
 
+# The base images are defined in docker-base.prod and docker-base.dev. Update
+# the references there when a new base image has been built. Note that this
+# argument MUST be given by the build script, otherwise build will fail.
+ARG BASE_IMAGE=
+
 #
 # First build stage:
 # - Construct the actual target image (IC-OS root filesystem)
 #
-# Update below image when new dfinity/hostos-base image gets produced (see deploy-host-os-baseimg CI job on master/rc).
-FROM dfinity/hostos-base@sha256:3d22efcee90c5d8ff6b167f67c0c2d3a11ad7fb3398d186d99da3866c67ce2d4
+FROM $BASE_IMAGE
 
 USER root:root
 

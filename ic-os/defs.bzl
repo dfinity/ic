@@ -55,36 +55,6 @@ def _image_deps(mode, malicious = False):
     deps["rootfs"].update(extra_rootfs_deps[mode])
     return deps
 
-def _set_dockerfile_arg_default(ctx):
-    """
-    Set a default value for an `ARG` in a Dockerfile, by adding the value to a temporary file, and using that to build with.
-    """
-    dockerfile_out = ctx.actions.declare_file("Dockerfile." + ctx.label.name)
-    command = " sed 's/^ARG {name}=$/&\\\\/; /ARG {name}=\\\\$/r {default}' {input} >{output}".format(
-        name = ctx.attr.arg_name,
-        default = ctx.file.arg_default_file.path,
-        input = ctx.file.dockerfile_in.path,
-        output = dockerfile_out.path,
-    )
-    ctx.actions.run_shell(
-        inputs = [
-            ctx.file.dockerfile_in,
-            ctx.file.arg_default_file,
-        ],
-        outputs = [dockerfile_out],
-        command = command,
-    )
-    return [DefaultInfo(files = depset(direct = [dockerfile_out]))]
-
-set_dockerfile_arg_default = rule(
-    implementation = _set_dockerfile_arg_default,
-    attrs = {
-        "dockerfile_in": attr.label(allow_single_file = True),
-        "arg_default_file": attr.label(allow_single_file = True),
-        "arg_name": attr.string(),
-    },
-)
-
 def icos_build(name, mode = None, malicious = False, visibility = None):
     """
     An ICOS build parameterized by mode.
@@ -100,26 +70,22 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
 
     image_deps = _image_deps(mode, malicious)
 
-    extra_args_docker = ["--build-arg", "BUILD_TYPE=" + mode]
+    build_args = ["BUILD_TYPE=" + mode]
 
     # set root password only in dev mode
     if mode == "dev":
-        extra_args_docker.extend(["--build-arg", "ROOT_PASSWORD=root"])
+        build_args.extend(["ROOT_PASSWORD=root"])
 
-    set_dockerfile_arg_default(
-        name = "rootfs-dockerfile",
-        dockerfile_in = "//ic-os/guestos:rootfs/Dockerfile",
-        arg_default_file = "//ic-os/guestos:rootfs/docker-base." + mode,
-        arg_name = "BASE_IMAGE",
-    )
+    file_build_args = {"//ic-os/guestos:rootfs/docker-base." + mode: "BASE_IMAGE"}
 
     docker_tar(
         visibility = visibility,
         name = "rootfs-tree.tar",
-        dockerfile = ":rootfs-dockerfile",
+        dockerfile = "//ic-os/guestos:rootfs/Dockerfile",
         src = "//ic-os/guestos:rootfs",
         dep = ["//ic-os/guestos:rootfs-files"],
-        extra_args = extra_args_docker,
+        build_args = build_args,
+        file_build_args = file_build_args,
         target_compatible_with = [
             "@platforms//os:linux",
         ],
@@ -527,11 +493,6 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         visibility = visibility,
     )
 
-boundary_node_img_bases = {
-    "prod": "dfinity/boundaryos-base@sha256:3e116a3872f92f763ebb0ba692c0f3883b64a849277065e8450506863fc7ad44",
-    "sev": "dfinity/boundaryos-base-snp@sha256:975c9e2ad504b62c77b8231fbde326fd16f09f53cfcf221e0b6dfddda199e419",
-}
-
 # Declare the dependencies that we will have for the built filesystem images.
 # This needs to be done separately from the build rules because we want to
 # compute the hash over all inputs going into the image and derive the
@@ -603,23 +564,20 @@ def boundary_node_icos_build(name, mode = None, sev = False, visibility = None):
 
     if mode == "dev":
         rootfs_args = [
-            "--build-arg",
             "ROOT_PASSWORD=root",
-            "--build-arg",
             "SW=false",
         ]
     elif mode == "prod":
         rootfs_args = [
-            "--build-arg",
             "ROOT_PASSWORD=",
-            "--build-arg",
             "SW=true",
         ]
 
     if sev:
-        boundary_node_base_img = boundary_node_img_bases["sev"]
+        base_suffix = "snp"
     else:
-        boundary_node_base_img = boundary_node_img_bases["prod"]
+        base_suffix = "prod"
+    file_build_args = {"//ic-os/boundary-guestos:rootfs/docker-base." + base_suffix: "BASE_IMAGE"}
 
     native.sh_binary(
         name = "vuln-scan",
@@ -641,12 +599,10 @@ def boundary_node_icos_build(name, mode = None, sev = False, visibility = None):
         name = "rootfs-tree.tar",
         src = "//ic-os/boundary-guestos:rootfs",
         dep = ["//ic-os/boundary-guestos:rootfs-files"],
-        extra_args = [
-            "--build-arg",
+        build_args = [
             "BUILD_TYPE=" + mode,
-            "--build-arg",
-            "BASE_IMAGE=" + boundary_node_base_img,
         ] + rootfs_args,
+        file_build_args = file_build_args,
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],

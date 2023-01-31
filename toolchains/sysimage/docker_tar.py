@@ -10,6 +10,8 @@
 # Call example:
 #   docker_tar dockerdir --build-arg foo=bar > tree.tar
 #
+from __future__ import annotations
+
 import argparse
 import atexit
 import hashlib
@@ -21,6 +23,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import typing
 
 from reproducibility import print_artifact_info
 
@@ -331,16 +334,35 @@ def make_argparser():
         help="Name of the Dockerfile to target.",
     )
     parser.add_argument(
-        "build_args",
-        metavar="build_args",
+        "--build-arg",
+        metavar="BUILD-ARG",
+        dest="build_args",
         type=str,
-        nargs="*",
-        help="Extra args to pass to docker build",
+        action="append",
+        help="""Args to pass to Docker as build time variables. Each argument
+                should be of the form VARIABLE=value. Can be specified multiple
+                times.""",
+    )
+    parser.add_argument(
+        "--file-build-arg",
+        metavar="FILE-BUILD-ARG",
+        dest="file_build_args",
+        type=str,
+        action="append",
+        help="""File backed args to pass to Docker as build time variables.
+                Each argument should be of the form VARIABLE=/path/to/file,
+                where each file contains a single line value. Can be specified
+                multiple times.""",
+    )
+    parser.add_argument(
+        "context",
+        type=str,
+        help="Directory to be used as docker build context.",
     )
     return parser
 
 
-def diff_hash_lists(out_file, build_args, fs):
+def diff_hash_lists(out_file, context, fs):
     """
     If the expected.hash-list file exists, this function will output a list of
     hashes for the in-memory filesystem. It is intended to be used to figure out
@@ -360,10 +382,10 @@ def diff_hash_lists(out_file, build_args, fs):
     """
     actual_hash_list = f"{out_file}.hash-list"
     with open(actual_hash_list, "w") as file:
-        if len(build_args) == 0:
+        if len(context) == 0:
             return
 
-        expected_hash_list = os.path.join(build_args[0], "expected.hash-list")
+        expected_hash_list = os.path.join(context, "expected.hash-list")
         if not os.path.isfile(expected_hash_list):
             return
 
@@ -375,25 +397,49 @@ def diff_hash_lists(out_file, build_args, fs):
         subprocess.run(diff_cmd)
 
 
+def resolve_file_args(file_build_args: typing.List[str]) -> typing.List[str]:
+    result = list()
+    for arg in file_build_args:
+        chunks = arg.split("=")
+        if len(chunks) != 2:
+            raise RuntimeError(f"File build arg '{arg}' is not valid")
+        (name, path) = chunks
+
+        with open(path) as f:
+            value = f.readline().strip()
+            result.append(f"{name}={value}")
+
+    return result
+
+
 def main():
     args = make_argparser().parse_args(sys.argv[1:])
 
     out_file = args.output
     dockerfile = args.dockerfile
-    build_args = list(args.build_args)
+    context = args.context
+    build_args = list(args.build_args or [])
+
+    # Bazel can't read files. (: Resolve them here, instead.
+    resolved_file_args = resolve_file_args(args.file_build_args or [])
+    build_args.extend(resolved_file_args)
+
+    cmd_args = [v for arg in build_args for v in ("--build-arg", arg)]
 
     # Build the docker image.
     if not args.skip_pull:
-        build_args.append("--pull")
+        cmd_args.append("--pull")
     if any(
         [
             os.environ.get("CI_JOB_NAME", "").startswith("build-ic"),
             os.environ.get("CI_COMMIT_REF_PROTECTED", "false") == "true",
         ]
     ):
-        build_args.append("--no-cache")
+        cmd_args.append("--no-cache")
 
-    image_hash = docker_build(build_args, dockerfile)
+    cmd_args.append(context)
+
+    image_hash = docker_build(cmd_args, dockerfile)
 
     # Extract and flatten all layers, build an in-memory pseudo filesystem
     # representing the docker image.
@@ -403,7 +449,7 @@ def main():
     tar_fs(fs, open(out_file, "wb"))
 
     # Diff filesystem against an expected hash list if one is provided.
-    diff_hash_lists(out_file, build_args, fs)
+    diff_hash_lists(out_file, context, fs)
 
     print_artifact_info(out_file)
 

@@ -19,14 +19,14 @@ mkdir -p "$BUILD_OUT"
 echo "$VERSION" >"${BUILD_TMP}/version.txt"
 
 if [ -z "$CI_JOB_ID" ]; then
-    ./build.sh -v "$VERSION" "$BUILD_EXTRA_ARGS"
+    ./build.sh -v "$VERSION"
     tar xzf disk-img.tar.gz -C "$BUILD_TMP"
     tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
         -cvzf "${BUILD_OUT}/disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt
     ls -lah "$BUILD_TMP"
 else
     buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-img -- \
-        ./build.sh -v "$VERSION" "$BUILD_EXTRA_ARGS"
+        ./build.sh -v "$VERSION"
     buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" move-build -- \
         tar xzf disk-img.tar.gz -C "$BUILD_TMP"
     buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" tar-build-out -- \

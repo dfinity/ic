@@ -87,7 +87,7 @@ if [ "${EXEC_SRCDIR}" == "" ]; then
     exit 1
 fi
 
-BASE_IMAGE=$(cat "${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}")
+BASE_IMAGE_FILE="${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE}"
 
 # HACK: build required system binaries
 make -C ${BASE_DIR}/src infogetty prestorecon
@@ -110,10 +110,10 @@ echo "${VERSION}" >"${TMPDIR}/version.txt"
 
 # Build all pieces and assemble the disk image.
 
-"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" -- \
+"${TOOL_DIR}"/docker_tar.py -o "${TMPDIR}/rootfs-tree.tar" \
     --build-arg BUILD_TYPE="${BUILD_TYPE}" \
     --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" \
-    --build-arg BASE_IMAGE="${BASE_IMAGE}" \
+    --file-build-arg BASE_IMAGE="${BASE_IMAGE_FILE}" \
     "${BASE_DIR}/rootfs"
 "${BASE_DIR}"/../bootloader/build-bootloader-tree.sh -o "${TMPDIR}/boot-tree.tar"
 "${TOOL_DIR}"/build_vfat_image.py -o "${TMPDIR}/partition-esp.tar" -s 100M -p boot/efi -i "${TMPDIR}/boot-tree.tar"
