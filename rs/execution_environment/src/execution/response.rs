@@ -35,6 +35,10 @@ use crate::execution_environment::{
 #[cfg(test)]
 mod tests;
 
+/// A percentage of the total message limit reserved for executing the cleanup
+/// callback.
+const RESERVED_CLEANUP_INSTRUCTIONS_IN_PERCENT: u64 = 5;
+
 /// The algorithm for executing the response callback works with two canisters:
 /// - `clean_canister`: the canister state from the current replicated state
 ///    without any changes by the ongoing execution.
@@ -312,6 +316,7 @@ impl ResponseHelper {
         original: &OriginalContext,
         round: &RoundContext,
         round_limits: &mut RoundLimits,
+        reserved_cleanup_instructions: NumInstructions,
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
         self.canister
             .system_state
@@ -337,7 +342,12 @@ impl ResponseHelper {
                     err,
                 );
                 let err = HypervisorError::InsufficientCyclesBalance(err);
-                return Err((self, err, output.num_instructions_left));
+                // Return total instructions: wasm executor leftovers + cleanup reservation.
+                return Err((
+                    self,
+                    err,
+                    output.num_instructions_left + reserved_cleanup_instructions,
+                ));
             }
         }
 
@@ -352,15 +362,17 @@ impl ResponseHelper {
             round.hypervisor.subnet_id(),
             round.log,
         );
+        // Return total instructions: wasm executor leftovers + cleanup reservation.
+        let instructions_available = output.num_instructions_left + reserved_cleanup_instructions;
         match output.wasm_result {
             Ok(_) => Ok(self.finish(
                 output.wasm_result,
-                output.num_instructions_left,
+                instructions_available,
                 NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
                 original,
                 round,
             )),
-            Err(err) => Err((self, err, output.num_instructions_left)),
+            Err(err) => Err((self, err, instructions_available)),
         }
     }
 
@@ -542,6 +554,7 @@ struct PausedResponseExecution {
     paused_wasm_execution: Box<dyn PausedWasmExecution>,
     helper: PausedResponseHelper,
     execution_parameters: ExecutionParameters,
+    reserved_cleanup_instructions: NumInstructions,
     original: OriginalContext,
 }
 
@@ -599,6 +612,7 @@ impl PausedExecution for PausedResponseExecution {
             clean_canister,
             helper,
             self.execution_parameters,
+            self.reserved_cleanup_instructions,
             self.original,
             round,
             round_limits,
@@ -799,6 +813,9 @@ pub fn execute_response(
         ),
     };
 
+    let (execution_parameters, reserved_cleanup_instructions) =
+        reserve_cleanup_instructions(execution_parameters);
+
     let result = round.hypervisor.execute_dts(
         api_type,
         helper.canister().execution_state.as_ref().unwrap(),
@@ -817,10 +834,23 @@ pub fn execute_response(
         clean_canister,
         helper,
         execution_parameters,
+        reserved_cleanup_instructions,
         original,
         round,
         round_limits,
     )
+}
+
+// Reserves a percentage of message instructions limit for a cleanup callback execution.
+fn reserve_cleanup_instructions(
+    mut execution_parameters: ExecutionParameters,
+) -> (ExecutionParameters, NumInstructions) {
+    let instruction_limits = &mut execution_parameters.instruction_limits;
+    let initial_message_limit = instruction_limits.message();
+    let reserved_cleanup_instructions =
+        (initial_message_limit * RESERVED_CLEANUP_INSTRUCTIONS_IN_PERCENT) / 100;
+    instruction_limits.reduce_by(reserved_cleanup_instructions);
+    (execution_parameters, reserved_cleanup_instructions)
 }
 
 // Helper function to execute response cleanup.
@@ -882,6 +912,7 @@ fn process_response_result(
     clean_canister: CanisterState,
     helper: ResponseHelper,
     execution_parameters: ExecutionParameters,
+    reserved_cleanup_instructions: NumInstructions,
     original: OriginalContext,
     round: RoundContext,
     round_limits: &mut RoundLimits,
@@ -900,6 +931,7 @@ fn process_response_result(
                 paused_wasm_execution,
                 helper: helper.pause(),
                 execution_parameters,
+                reserved_cleanup_instructions,
                 original,
             });
             ExecuteMessageResult::Paused {
@@ -930,6 +962,7 @@ fn process_response_result(
                 &original,
                 &round,
                 round_limits,
+                reserved_cleanup_instructions,
             ) {
                 Ok(result) => result,
                 Err((helper, err, instructions_left)) => {

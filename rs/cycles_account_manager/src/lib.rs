@@ -566,10 +566,11 @@ impl CyclesAccountManager {
         prepayment_for_response_transmission: Cycles,
         subnet_size: usize,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        // The total amount charged is the fee to do the xnet call (request +
-        // response) + the fee to send the request + the fee for the largest
-        // possible response + the fee for executing the largest allowed
-        // response when it eventually arrives.
+        // The total amount charged consists of:
+        //   - the fee to do the xnet call (request + response)
+        //   - the fee to send the request (by size)
+        //   - the fee for the largest possible response
+        //   - the fee for executing the largest allowed response when it eventually arrives.
         let fee = self.scale_cost(
             self.config.xnet_call_fee
                 + self.config.xnet_byte_transmission_fee * request.payload_size_bytes().get(),
