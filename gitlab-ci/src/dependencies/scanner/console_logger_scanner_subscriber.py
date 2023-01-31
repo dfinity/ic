@@ -13,4 +13,4 @@ class ConsoleLoggerScannerSubscriber(ScannerSubscriber):
         print(f"on_scan_job_succeeded({job_type.name},{job_id})")
 
     def on_scan_job_failed(self, job_type: ScannerJobType, job_id: str, reason: str):
-        print(f"on_ci_job_failed({job_type.name},{job_id},{reason})")
+        print(f"on_scan_job_failed({job_type.name},{job_id},{reason})")
