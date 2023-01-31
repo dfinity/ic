@@ -2,13 +2,13 @@
 type Account = record { owner : principal; subaccount : opt blob };
 
 type RetrieveBtcArgs = record {
-    // The address to which ckBTC minter should deposit BTC.
+    // The address to which the ckBTC minter should deposit BTC.
     // Currently, the minter understands only the following types of addresses:
     //   * P2WPKH addresses (they start with the "bc1q" prefix on the Bitcoin mainnet).
     //   * P2PKH addresses (they start with the "1" prefix on the Bitcoin mainnet).
     //   * P2SH addresses (they start with the "3" prefix on the Bitcoin mainnet).
     address : text;
-    // The amount of BTC in Satoshis that client wants to withdraw.
+    // The amount of BTC in Satoshis that the client wants to withdraw.
     amount : nat64;
 };
 
@@ -21,7 +21,7 @@ type RetrieveBtcError = variant {
     // The withdrawal amount is too low.
     // The payload contains the minimal withdrawal amount.
     AmountTooLow : nat64;
-    // The withdrawal account does not hold requested ckBTC amount.
+    // The ckBTC balance of the withdrawal account is too low.
     InsufficientFunds : record { balance : nat64 };
     // The minter is overloaded, retry the request.
     // The payload contains a human-readable message explaining what caused the unavailability.
@@ -31,7 +31,7 @@ type RetrieveBtcError = variant {
 };
 
 type RetrieveBtcOk = record {
-    // Returns the burn transaction index on ckBTC minter corresponding to the withdrawal.
+    // Returns the burn transaction index corresponding to the withdrawal.
     // You can use this index to query the withdrawal status.
     block_index : nat64
 };
@@ -47,7 +47,7 @@ type UpdateBalanceResult = record {
 type UpdateBalanceError = variant {
     // There are no new UTXOs to process.
     NoNewUtxos;
-    // The minter already processes another update balance request for the caller.
+    // The minter is already processing another update balance request for the caller.
     AlreadyProcessing;
     // The minter is overloaded, retry the request.
     // The payload contains a human-readable message explaining what caused the unavailability.
@@ -76,22 +76,22 @@ type Mode = variant {
 
 // The initialization parameters of the minter canister.
 type InitArgs = record {
-    // The minter will interact with this Bitcoin network to wrap/unwrap BTC.
+    // The minter will interact with this Bitcoin network.
     btc_network : BtcNetwork;
 
-    // The principal of the ledger that handles the ckBTC transfers.
-    // You must configure ledger to recognize the default account of
-    // ckBTC minter canister as the minting account.
+    // The principal of the ledger that handles ckBTC transfers.
+    // The default account of the ckBTC minter must be configured as
+    // the minting account of the ledger.
     ledger_id : principal;
 
     // The name of the ECDSA key to use.
     // E.g., "dfx_test_key" on the local replica.
     ecdsa_key_name : text;
 
-    // The minimal amount of ckBTC that we allow to convert to BTC.
+    // The minimal amount of ckBTC that can be converted to BTC.
     retrieve_btc_min_amount : nat64;
 
-    /// Maximum time of nanoseconds that a transaction should spend in the queue
+    /// Maximum time in nanoseconds that a transaction should spend in the queue
     /// before being sent.
     max_time_in_queue_nanos : nat64;
 
@@ -105,10 +105,10 @@ type InitArgs = record {
 
 // The upgrade parameters of the minter canister.
 type UpgradeArgs = record {
-    // The minimal amount of ckBTC that we allow to convert to BTC.
+    // The minimal amount of ckBTC that the minter converts to BTC.
     retrieve_btc_min_amount : opt nat64;
 
-    /// Maximum time of nanoseconds that a transaction should spend in the queue
+    /// Maximum time in nanoseconds that a transaction should spend in the queue
     /// before being sent.
     max_time_in_queue_nanos : opt nat64;
 
@@ -123,7 +123,7 @@ type UpgradeArgs = record {
 type RetrieveBtcStatus = variant {
     // The minter does not have any information on the specified
     // retrieval request.  It can be that nobody submitted the
-    // request, or the minter pruned the relevant information from the
+    // request or the minter pruned the relevant information from the
     // history to save space.
     Unknown;
 
@@ -185,10 +185,10 @@ type Event = variant {
 };
 
 service : (InitArgs) -> {
-    // Section "Wrap BTC" {{{
+    // Section "Convert BTC to ckBTC" {{{
 
     // Returns the bitcoin address to which the owner should send BTC
-    // before converting the amount to ckBTC using the update_balance
+    // before converting the amount to ckBTC using the [update_balance]
     // endpoint.
     //
     // If the owner is not set, it defaults to the caller's principal.
@@ -204,19 +204,19 @@ service : (InitArgs) -> {
     //   [get_btc_address] endpoint returns.
     update_balance : (record { owner: opt principal; subaccount : opt blob }) -> (variant { Ok : UpdateBalanceResult; Err : UpdateBalanceError });
 
-    // }}} Section "Wrap BTC"
+    // }}} Section "Convert BTC to ckBTC"
 
-    // Section "Unwrap BTC" {{{
+    // Section "Convert ckBTC to BTC" {{{
 
     // Returns the account to which the caller should deposit ckBTC
-    // before withdrawing BTC using the retrieve_btc endpoint.
+    // before withdrawing BTC using the [retrieve_btc] endpoint.
     get_withdrawal_account : () -> (Account);
 
     // Submits a request to convert ckBTC to BTC.
     //
     // # Note
     //
-    // Finalizing BTC retrieval can take up to an hour.  Instead of
+    // The BTC retrieval process is slow.  Instead of
     // synchronously waiting for a BTC transaction to settle, this
     // method returns a request ([block_index]) that the caller can use
     // to query the request status.
@@ -230,14 +230,14 @@ service : (InitArgs) -> {
     /// Returns the status of a [retrieve_btc] request.
     retrieve_btc_status : (record { block_index : nat64 }) -> (RetrieveBtcStatus) query;
 
-    // }}} Section "Unwrap BTC"
+    // }}} Section "Convert ckBTC to BTC"
 
     // Section "Event log" {{{
 
     // The minter keeps track of all state modifications in an internal event log.
     //
-    // This method returns an list of events in the specified range.
-    // The minter can return less events than requested. The result is
+    // This method returns a list of events in the specified range.
+    // The minter can return fewer events than requested. The result is
     // an empty vector if the start position is greater than the total
     // number of events.
     //
