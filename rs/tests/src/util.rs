@@ -662,6 +662,24 @@ pub async fn assert_create_agent(url: &str) -> Agent {
         .unwrap_or_else(|err| panic!("Failed to create agent for {}: {:?}", url, err))
 }
 
+/// Initializes an `Agent` using the provided URL and identity.
+pub async fn assert_create_agent_with_identity(
+    url: &str,
+    identity: impl Identity + Clone + 'static,
+) -> Agent {
+    let start = Instant::now();
+    while start.elapsed() < READY_WAIT_TIMEOUT {
+        if let Ok(v) = agent_with_identity(url, identity.clone()).await {
+            return v;
+        }
+        tokio::time::sleep(RETRY_BACKOFF).await;
+    }
+
+    agent_with_identity(url, identity)
+        .await
+        .unwrap_or_else(|err| panic!("Failed to create agent for {}: {:?}", url, err))
+}
+
 pub async fn create_agent(url: &str) -> Result<Agent, AgentError> {
     agent_with_identity(url, get_identity()).await
 }
