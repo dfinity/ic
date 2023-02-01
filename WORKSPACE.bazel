@@ -360,7 +360,6 @@ http_file(
 )
 
 # Internet Identity canister (test build)
-
 http_file(
     name = "ii_test_canister",
     downloaded_file_path = "internet_identity_test.wasm",
