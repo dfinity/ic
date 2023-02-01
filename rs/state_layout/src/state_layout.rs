@@ -557,7 +557,12 @@ impl StateLayout {
             match checkpoint_ref_registry.get_mut(&height) {
                 Some(ref mut ref_data) => {
                     ref_data.checkpoint_layout_counter += 1;
-                    debug_assert!(!ref_data.mark_deleted);
+                    #[cfg(debug_assert)]
+                    {
+                        let mark_deleted = ref_data.mark_deleted;
+                        drop(checkpoint_ref_registry);
+                        debug_assert!(!mark_deleted);
+                    }
                 }
                 None => {
                     checkpoint_ref_registry.insert(
