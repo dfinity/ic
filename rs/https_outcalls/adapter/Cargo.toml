@@ -17,8 +17,8 @@ hyper-socks2 = "0.6.0"
 hyper-tls = "0.5.0"
 ic-adapter-metrics-server = { path = "../../monitoring/adapter_metrics_server" }
 ic-async-utils = { path = "../../async_utils" }
-ic-canister-http-service = { path = "../service" }
 ic-config = { path = "../../config" }
+ic-https-outcalls-service = { path = "../service" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 itertools = "0.10.3"

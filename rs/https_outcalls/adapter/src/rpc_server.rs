@@ -12,7 +12,7 @@ use hyper::{
     Body, Client, Method,
 };
 use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
-use ic_canister_http_service::{
+use ic_https_outcalls_service::{
     canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
     CanisterHttpSendResponse, HttpHeader, HttpMethod,
 };

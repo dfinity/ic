@@ -1,11 +1,11 @@
 use crate::metrics::Metrics;
 use candid::Encode;
 use futures::future::TryFutureExt;
-use ic_canister_http_service::{
+use ic_error_types::{RejectCode, UserError};
+use ic_https_outcalls_service::{
     canister_http_service_client::CanisterHttpServiceClient, CanisterHttpSendRequest,
     CanisterHttpSendResponse, HttpHeader, HttpMethod,
 };
-use ic_error_types::{RejectCode, UserError};
 use ic_ic00_types::{CanisterHttpResponsePayload, TransformArgs};
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_canister_http_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
@@ -316,7 +316,7 @@ fn grpc_status_code_to_reject(code: Code) -> RejectCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_canister_http_service::{
+    use ic_https_outcalls_service::{
         canister_http_service_server::{CanisterHttpService, CanisterHttpServiceServer},
         CanisterHttpSendRequest, CanisterHttpSendResponse,
     };

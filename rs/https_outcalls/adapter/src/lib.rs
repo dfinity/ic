@@ -23,7 +23,7 @@ use hyper::{
 };
 use hyper_socks2::SocksConnector;
 use hyper_tls::HttpsConnector;
-use ic_canister_http_service::canister_http_service_server::CanisterHttpServiceServer;
+use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use std::time::Duration;

@@ -4451,42 +4451,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-canister-http-adapter-client"
-version = "0.1.0"
-dependencies = [
- "candid",
- "futures",
- "ic-adapter-metrics",
- "ic-async-utils",
- "ic-canister-http-service",
- "ic-config",
- "ic-error-types",
- "ic-ic00-types",
- "ic-interfaces",
- "ic-interfaces-canister-http-adapter-client",
- "ic-logger",
- "ic-metrics",
- "ic-protobuf",
- "ic-test-utilities",
- "ic-types",
- "prometheus 0.12.0",
- "slog",
- "tokio",
- "tonic",
- "tower",
- "tower-test",
-]
-
-[[package]]
-name = "ic-canister-http-service"
-version = "0.1.0"
-dependencies = [
- "prost",
- "tonic",
- "tonic-build",
-]
-
-[[package]]
 name = "ic-canister-log"
 version = "0.8.0"
 
@@ -6162,8 +6126,8 @@ dependencies = [
  "hyper-tls",
  "ic-adapter-metrics-server",
  "ic-async-utils",
- "ic-canister-http-service",
  "ic-config",
+ "ic-https-outcalls-service",
  "ic-logger",
  "ic-metrics",
  "itertools",
@@ -6182,6 +6146,42 @@ dependencies = [
  "tower",
  "uuid 0.8.2",
  "warp",
+]
+
+[[package]]
+name = "ic-https-outcalls-adapter-client"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "futures",
+ "ic-adapter-metrics",
+ "ic-async-utils",
+ "ic-config",
+ "ic-error-types",
+ "ic-https-outcalls-service",
+ "ic-ic00-types",
+ "ic-interfaces",
+ "ic-interfaces-canister-http-adapter-client",
+ "ic-logger",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-test-utilities",
+ "ic-types",
+ "prometheus 0.12.0",
+ "slog",
+ "tokio",
+ "tonic",
+ "tower",
+ "tower-test",
+]
+
+[[package]]
+name = "ic-https-outcalls-service"
+version = "0.1.0"
+dependencies = [
+ "prost",
+ "tonic",
+ "tonic-build",
 ]
 
 [[package]]
@@ -7252,10 +7252,10 @@ dependencies = [
  "bincode",
  "futures",
  "ic-artifact-manager",
- "ic-canister-http-adapter-client",
  "ic-config",
  "ic-cycles-account-manager",
  "ic-execution-environment",
+ "ic-https-outcalls-adapter-client",
  "ic-interfaces",
  "ic-interfaces-p2p",
  "ic-interfaces-registry",
@@ -7840,7 +7840,6 @@ dependencies = [
  "ic-async-utils",
  "ic-btc-adapter-client",
  "ic-btc-consensus",
- "ic-canister-http-adapter-client",
  "ic-config",
  "ic-consensus",
  "ic-crypto",
@@ -7852,6 +7851,7 @@ dependencies = [
  "ic-execution-environment",
  "ic-http-endpoints-metrics",
  "ic-http-endpoints-public",
+ "ic-https-outcalls-adapter-client",
  "ic-ic00-types",
  "ic-interfaces",
  "ic-interfaces-bitcoin-adapter-client",
@@ -7909,11 +7909,11 @@ version = "0.8.0"
 dependencies = [
  "ic-artifact-manager",
  "ic-artifact-pool",
- "ic-canister-http-adapter-client",
  "ic-config",
  "ic-consensus",
  "ic-crypto-tls-interfaces",
  "ic-cycles-account-manager",
+ "ic-https-outcalls-adapter-client",
  "ic-ingress-manager",
  "ic-interfaces",
  "ic-interfaces-canister-http-adapter-client",

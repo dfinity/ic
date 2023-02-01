@@ -225,7 +225,7 @@ pub fn construct_ic_stack(
     );
     let self_validating_payload_builder = Arc::new(self_validating_payload_builder);
 
-    let canister_http_adapter_client = ic_canister_http_adapter_client::setup_canister_http_client(
+    let canister_http_adapter_client = ic_https_outcalls_adapter_client::setup_canister_http_client(
         rt_handle.clone(),
         &metrics_registry,
         config.adapters_config,

@@ -35,7 +35,7 @@ DEV_DEPENDENCIES = [
 rust_library(
     name = "client",
     srcs = glob(["src/**"]),
-    crate_name = "ic_canister_http_adapter_client",
+    crate_name = "ic_https_outcalls_adapter_client",
     version = "0.1.0",
     deps = DEPENDENCIES,
 )
