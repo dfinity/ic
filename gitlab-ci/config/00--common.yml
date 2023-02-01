@@ -2,7 +2,7 @@ include:
   - local: /gitlab-ci/config/00--common--rules.yml
   - local: /gitlab-ci/config/00--common--images.yml
 
-stages:             # Files from the given stage should be prefixed with:
+stages:                 # Files from the given stage should be prefixed with:
   - automation          # temp
   - init                # 10--
   - test                # 20--
