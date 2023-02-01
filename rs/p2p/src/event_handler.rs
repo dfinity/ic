@@ -77,7 +77,7 @@ use ic_logger::{debug, error, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_types::{
-    artifact::{AdvertClass, ArtifactFilter, ArtifactTag},
+    artifact::{ArtifactFilter, ArtifactTag},
     p2p::GossipAdvert,
     NodeId,
 };
@@ -449,8 +449,6 @@ pub struct AdvertBroadcaster {
     threadpool: ThreadPool,
     /// The shared *Gossip* instance (using automatic reference counting).
     gossip: Arc<RwLock<Option<GossipArc>>>,
-    /// For advert send requests from artifact manager.
-    adverts_by_class: IntCounterVec,
     sem: Arc<Semaphore>,
     started: Arc<(std::sync::Mutex<bool>, Condvar)>,
     dropped_adverts: IntCounterVec,
@@ -474,12 +472,6 @@ impl AdvertBroadcaster {
             log,
             threadpool,
             gossip: Arc::new(RwLock::new(None)),
-
-            adverts_by_class: metrics_registry.int_counter_vec(
-                "gossip_adverts_by_class",
-                "Number of adverts from clients, by advert class",
-                &["type"],
-            ),
             sem: Arc::new(Semaphore::new(MAX_ADVERT_BUFFER)),
             started: Arc::new((std::sync::Mutex::new(false), Condvar::new())),
             dropped_adverts,
@@ -494,7 +486,7 @@ impl AdvertBroadcaster {
     }
 
     /// The method broadcasts the given advert.
-    pub fn broadcast_advert(&self, advert: GossipAdvert, advert_class: AdvertClass) {
+    pub fn send(&self, advert: GossipAdvert, dst: ArtifactDestination) {
         let (lock, cvar) = &*self.started;
         let mut started = lock.lock().unwrap();
         while !*started {
@@ -503,15 +495,6 @@ impl AdvertBroadcaster {
 
         let artifact_id_label = ArtifactTag::from(&advert.artifact_id).into();
         // Translate the advert request to internal format
-
-        self.adverts_by_class
-            .with_label_values(&[advert_class.as_str()])
-            .inc();
-
-        let dst = match advert_class {
-            AdvertClass::Critical => ArtifactDestination::SendToAllPeers,
-            AdvertClass::None => return,
-        };
 
         match self.sem.clone().try_acquire_owned() {
             Ok(permit) => {
@@ -543,7 +526,6 @@ pub mod tests {
     use ic_interfaces_transport::TransportPayload;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{p2p::p2p_test_setup_logger, types::ids::node_test_id};
-    use ic_types::artifact::AdvertClass;
     use tokio::time::{sleep, Duration};
 
     struct TestThrottle();
@@ -702,7 +684,7 @@ pub mod tests {
     async fn broadcast_advert(count: usize, handler: &AdvertBroadcaster) {
         for i in 0..count {
             let message = make_gossip_advert(i as u64);
-            handler.broadcast_advert(message, AdvertClass::Critical);
+            handler.send(message, ArtifactDestination::SendToAllPeers);
         }
     }
 
