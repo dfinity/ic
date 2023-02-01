@@ -7,10 +7,10 @@ library module:
   cd "${where_this_file_lives}"
   python3 -m unittest candid_changes_are_backwards_compatible_test
 
-This gets run automatically by the python-tests Gitlab CI job, which is defined
+This gets run automatically by the pre-commit job, which is defined
 here:
 
-  gitlab-ci/config/20--test--python.yml
+  .pre-commit-config.yaml
 
 """
 import contextlib
