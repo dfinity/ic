@@ -69,6 +69,7 @@ build-push-base-images:
      done
 
      # commit, push & create new merge request 
+     cd "${CI_PROJECT_DIR}"
      git remote set-url origin \
          "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
      git config --global user.email "idx@dfinity.org"
