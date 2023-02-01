@@ -24,7 +24,7 @@ impl TargetFunctionOutcome for TargetFunctionSuccess {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub enum TargetFunctionFailure {
     Panicked {
         task_id: TaskId,
@@ -81,7 +81,7 @@ fn fmt_fails(fails: &[TargetFunctionFailure], f: &mut Formatter<'_>, min_width: 
                 runtime,
             } => acc.and(writeln!(
                 f,
-                "Test {:<min_width$}  FAILED in {:>6.2}s -- {}",
+                "Test {:<min_width$}  FAILED in {:>6.2}s -- {:?}",
                 task_id.name(),
                 runtime.as_secs_f64(),
                 message
@@ -105,6 +105,9 @@ pub struct SystemTestGroupReport {
     successes: Vec<TargetFunctionSuccess>,
     failures: Vec<TargetFunctionFailure>,
 
+    // tracks the assertion failures that were receives from test tasks
+    assert_failure_messages: BTreeMap<TaskId, String>,
+
     start_times: BTreeMap<TaskId, Instant>,
     end_times: BTreeMap<TaskId, Instant>,
 
@@ -125,7 +128,60 @@ impl SystemTestGroupReport {
     }
 
     pub fn add_fail(&mut self, fail: TargetFunctionFailure) {
+        let fail = if let Some(assert_msg) = self.assert_failure_messages.get(&fail.task_id()) {
+            // If we received an assertion failure message from the subprocess, it overrides
+            // timeouts in the report.
+            let message = assert_msg.to_string();
+            match fail {
+                TargetFunctionFailure::Panicked {
+                    task_id, runtime, ..
+                } => TargetFunctionFailure::Panicked {
+                    task_id,
+                    message,
+                    runtime,
+                },
+                TargetFunctionFailure::TimedOut { task_id, timeout } => {
+                    TargetFunctionFailure::Panicked {
+                        task_id,
+                        message,
+                        runtime: timeout,
+                    }
+                }
+            }
+        } else {
+            fail
+        };
         self.failures.push(fail);
+    }
+
+    pub fn set_assert_failure_message(&mut self, failed_task_id: TaskId, failure_message: &str) {
+        // This function might be called for an already failed test. Thus, we need to search
+        // through all failed tests and add the corresponding message.
+        for fail in self
+            .failures
+            .iter_mut()
+            .filter(|f| f.task_id() == failed_task_id)
+        {
+            let new_fail = match fail {
+                TargetFunctionFailure::Panicked { runtime, .. } => {
+                    TargetFunctionFailure::Panicked {
+                        task_id: failed_task_id.clone(),
+                        message: failure_message.to_string(),
+                        runtime: *runtime,
+                    }
+                }
+                TargetFunctionFailure::TimedOut { timeout, .. } => {
+                    TargetFunctionFailure::Panicked {
+                        task_id: failed_task_id.clone(),
+                        message: failure_message.to_string(),
+                        runtime: *timeout,
+                    }
+                }
+            };
+            *fail = new_fail;
+        }
+        self.assert_failure_messages
+            .insert(failed_task_id, failure_message.to_string());
     }
 
     pub fn is_failure_free(&self) -> bool {
