@@ -1,4 +1,46 @@
-python-tests:
+gitlab-ci-config-validation:
+  extends:
+    - .ubuntu-docker-k8s
+    - .rules-pipeline-no-merge-train
+  needs:
+    job: gen-cargo-pipeline
+    artifacts: false
+  stage: test
+  variables: 
+    PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
+  artifacts:
+    reports:
+      junit: test_report.xml
+    paths:
+      - gitlab-ci/src/htmlcov
+  script:
+    - |
+      set -xeuo pipefail
+      cd gitlab-ci/src
+      python3 gitlab_config/main.py --job-list-validate
+      python3 gitlab_config/main.py --cfg-validate
+      
+python-gitlab-ci-tests:
+  extends:
+    - .ubuntu-docker-k8s
+    - .rules-pipeline-no-merge-train
+  needs: []
+  stage: test
+  variables: 
+    PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
+  artifacts:
+    reports:
+      junit: test_report.xml
+    paths:
+      - gitlab-ci/src/htmlcov
+  script:
+    - |
+      set -xeuo pipefail
+      cd gitlab-ci/src
+      # dependencies tests are broken by !10353
+      pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch --ignore=dependencies
+
+python-scalability-tests:
   extends:
     - .ubuntu-docker-k8s
     - .rules-pipeline-no-merge-train
@@ -15,13 +57,6 @@ python-tests:
     paths:
       - gitlab-ci/src/htmlcov
   script:
-    - |
-      set -xeuo pipefail
-      cd gitlab-ci/src
-      # dependencies tests are broken by !10353
-      pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch --ignore=dependencies
-      python3 gitlab_config/main.py --job-list-validate
-      python3 gitlab_config/main.py --cfg-validate
     - |
       echo "Running scalability/common/tests"
       set -euo pipefail

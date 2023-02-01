@@ -78,7 +78,9 @@ ci_jobs_required:
   - cargo-audit
   - gen-cargo-pipeline
   - pre-commit
-  - python-tests
+  - gitlab-ci-config-validation
+  - python-scalability-tests
+  - python-gitlab-ci-tests
   # prod tests
   - rejoin-nightly
   - rejoin-test-slo
