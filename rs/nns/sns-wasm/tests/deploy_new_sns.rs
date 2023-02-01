@@ -143,7 +143,7 @@ fn test_canisters_are_created_and_installed() {
         // This canister will have id = universal_canister_id.
         // It has to be set up after the other canisters.
         let wallet_canister =
-            set_up_universal_canister_with_cycles(&runtime, EXPECTED_SNS_CREATION_FEE).await;
+            set_up_universal_canister_with_cycles(&runtime, 2 * EXPECTED_SNS_CREATION_FEE).await;
 
         let result = try_call_with_cycles_via_universal_canister(
             &wallet_canister,
@@ -283,6 +283,28 @@ fn test_canisters_are_created_and_installed() {
             response.controllers(),
             vec![ROOT_CANISTER_ID.get(), swap_canister_id.get()]
         );
+
+        // After a caller (on the SNS-WASM whitelist) calls deploy_new_sns, the caller is removed
+        // from the whitelist.
+        let result = try_call_with_cycles_via_universal_canister(
+            &wallet_canister,
+            sns_wasm,
+            "deploy_new_sns",
+            Encode!(&DeployNewSnsRequest {
+                sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing())
+            })
+            .unwrap(),
+            EXPECTED_SNS_CREATION_FEE,
+        )
+        .await
+        .unwrap();
+
+        let response = Decode!(&result, DeployNewSnsResponse).unwrap();
+        let expected_error = SnsWasmError {
+            message: "Caller is not in allowed principals list. Cannot deploy an sns.".to_string(),
+        };
+        assert_eq!(response.error, Some(expected_error));
+
         Ok(())
     });
 }

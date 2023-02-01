@@ -20,8 +20,10 @@ fn list_deployed_snses_lists_created_sns_instances() {
 
     // The canister id the wallet canister will have.
     let wallet_canister_id = CanisterId::from_u64(11);
+    // Each SNS deploy consumes an ID from the whitelist, so we add 2
+    let whitelisted_ids = vec![wallet_canister_id.into(), wallet_canister_id.into()];
 
-    let machine = set_up_state_machine_with_nns(vec![wallet_canister_id.into()]);
+    let machine = set_up_state_machine_with_nns(whitelisted_ids);
 
     // Enough cycles for 2 SNS deploys
     let wallet_canister =
