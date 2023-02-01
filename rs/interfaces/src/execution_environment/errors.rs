@@ -339,36 +339,4 @@ impl HypervisorError {
             HypervisorError::MemoryAccessLimitExceeded(_) => "MemoryAccessLimitExceeded",
         }
     }
-
-    /// Does this error come from a problem in the execution environment?
-    /// Other errors could be caused by bad canister code.
-    pub fn is_system_error(&self) -> bool {
-        match self {
-            HypervisorError::InstrumentationFailed(_)
-            | HypervisorError::WasmEngineError(_)
-            | HypervisorError::Aborted
-            | HypervisorError::SliceOverrun { .. } => true,
-            HypervisorError::Cleanup {
-                callback_err,
-                cleanup_err,
-            } => callback_err.is_system_error() || cleanup_err.is_system_error(),
-            HypervisorError::FunctionNotFound(_, _)
-            | HypervisorError::MethodNotFound(_)
-            | HypervisorError::ContractViolation(_)
-            | HypervisorError::InstructionLimitExceeded
-            | HypervisorError::InvalidWasm(_)
-            | HypervisorError::Trapped(_)
-            | HypervisorError::CalledTrap(_)
-            | HypervisorError::WasmModuleNotFound
-            | HypervisorError::OutOfMemory
-            | HypervisorError::CanisterStopped
-            | HypervisorError::InsufficientCyclesInCall { .. }
-            | HypervisorError::InvalidPrincipalId(_)
-            | HypervisorError::InvalidCanisterId(_)
-            | HypervisorError::MessageRejected
-            | HypervisorError::InsufficientCyclesBalance(_)
-            | HypervisorError::WasmReservedPages
-            | HypervisorError::MemoryAccessLimitExceeded(_) => false,
-        }
-    }
 }

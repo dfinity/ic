@@ -7,7 +7,7 @@ use crate::{
     execution::{
         inspect_message, nonreplicated_query::execute_non_replicated_query,
         replicated_query::execute_replicated_query, response::execute_response,
-        system_task::execute_canister_task, update::execute_update,
+        update::execute_update,
     },
     execution_environment_metrics::{
         ExecutionEnvironmentMetrics, SUBMITTED_OUTCOME_LABEL, SUCCESS_STATUS_LABEL,
@@ -36,7 +36,9 @@ use ic_interfaces::{
     execution_environment::{
         ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
     },
-    messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask},
+    messages::{
+        CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, CanisterTask,
+    },
 };
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
@@ -64,35 +66,23 @@ use ic_types::{
         extract_effective_canister_id, AnonymousQuery, Payload, RejectContext, Request, Response,
         SignedIngressContent, StopCanisterContext,
     },
+    methods::SystemMethod,
     nominal_cycles::NominalCycles,
     CanisterId, Cycles, LongExecutionMode, NumBytes, NumInstructions, SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_wasm_types::WasmHash;
-use lazy_static::lazy_static;
 use phantom_newtype::AmountOf;
 use prometheus::IntCounter;
 use rand::RngCore;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::{convert::Into, convert::TryFrom, sync::Arc};
 use strum::ParseError;
 
 #[cfg(test)]
 mod tests;
-
-lazy_static! {
-    /// Track how many system task errors have been encountered
-    /// so that we can restrict logging to a sample of them.
-    static ref SYSTEM_TASK_ERROR_COUNT: AtomicU64 = AtomicU64::new(0);
-}
-
-/// How often system task errors should be logged to avoid overloading the logs.
-const LOG_ONE_SYSTEM_TASK_OUT_OF: u64 = 100;
-/// How many first system task messages to log unconditionally.
-const LOG_FIRST_N_SYSTEM_TASKS: u64 = 50;
 
 /// The response of the executed message created by the `ic0.msg_reply()`
 /// or `ic0.msg_reject()` System API functions.
@@ -1029,17 +1019,25 @@ impl ExecutionEnvironment {
             }
         }
 
+        let round = RoundContext {
+            network_topology: &network_topology,
+            hypervisor: &self.hypervisor,
+            cycles_account_manager: &self.cycles_account_manager,
+            execution_refund_error_counter: self.metrics.execution_cycles_refund_error_counter(),
+            log: &self.log,
+            time,
+        };
+
         let req = match input {
             CanisterMessageOrTask::Task(task) => {
                 return self.execute_canister_task(
                     canister,
                     task,
+                    prepaid_execution_cycles,
                     instruction_limits,
-                    network_topology,
-                    time,
+                    round,
                     round_limits,
                     subnet_size,
-                    &self.log,
                 );
             }
             CanisterMessageOrTask::Message(CanisterMessage::Response(response)) => {
@@ -1059,15 +1057,6 @@ impl ExecutionEnvironment {
             CanisterMessageOrTask::Message(CanisterMessage::Ingress(ingress)) => {
                 CanisterCall::Ingress(ingress)
             }
-        };
-
-        let round = RoundContext {
-            network_topology: &network_topology,
-            hypervisor: &self.hypervisor,
-            cycles_account_manager: &self.cycles_account_manager,
-            execution_refund_error_counter: self.metrics.execution_cycles_refund_error_counter(),
-            log: &self.log,
-            time,
         };
 
         let method = {
@@ -1119,7 +1108,7 @@ impl ExecutionEnvironment {
                 );
                 execute_update(
                     canister,
-                    req,
+                    CanisterCallOrTask::Call(req),
                     method,
                     prepaid_execution_cycles,
                     execution_parameters,
@@ -1140,57 +1129,25 @@ impl ExecutionEnvironment {
         &self,
         canister: CanisterState,
         task: CanisterTask,
+        prepaid_execution_cycles: Option<Cycles>,
         instruction_limits: InstructionLimits,
-        network_topology: Arc<NetworkTopology>,
-        time: Time,
+        round: RoundContext,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
-        log: &ReplicaLogger,
     ) -> ExecuteMessageResult {
         let execution_parameters =
             self.execution_parameters(&canister, instruction_limits, ExecutionMode::Replicated);
-        let (canister, instructions_used, result) = execute_canister_task(
+        execute_update(
             canister,
-            task.clone(),
-            network_topology,
+            CanisterCallOrTask::Task(task.clone()),
+            WasmMethod::System(SystemMethod::from(task)),
+            prepaid_execution_cycles,
             execution_parameters,
-            self.own_subnet_type,
-            time,
-            &self.hypervisor,
-            &self.cycles_account_manager,
+            round.time,
+            round,
             round_limits,
-            self.metrics.execution_cycles_refund_error_counter(),
             subnet_size,
-            log,
         )
-        .into_parts();
-        if let Err(err) = &result {
-            // We should monitor all errors in the system subnets and only
-            // system errors on other subnets.
-            if self.hypervisor.subnet_type() == SubnetType::System || err.is_system_error() {
-                // We could improve the rate limiting using some kind of exponential backoff.
-                let log_count = SYSTEM_TASK_ERROR_COUNT.fetch_add(1, Ordering::SeqCst);
-                if log_count < LOG_FIRST_N_SYSTEM_TASKS
-                    || log_count % LOG_ONE_SYSTEM_TASK_OUT_OF == 0
-                {
-                    warn!(
-                        self.log,
-                        "Error executing canister task {} on canister {} with failure `{}`",
-                        task,
-                        canister.canister_id(),
-                        err;
-                        messaging.canister_id => canister.canister_id().to_string(),
-                    );
-                }
-            }
-        }
-        let heap_delta = result.unwrap_or_else(|_| NumBytes::from(0));
-        ExecuteMessageResult::Finished {
-            canister,
-            response: ExecutionResponse::Empty,
-            instructions_used,
-            heap_delta,
-        }
     }
 
     /// Returns the maximum amount of memory that can be utilized by a single

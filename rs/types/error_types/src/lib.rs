@@ -249,6 +249,52 @@ impl UserError {
     pub fn reject_code(&self) -> RejectCode {
         self.code().into()
     }
+
+    pub fn is_system_error(&self) -> bool {
+        match self.code {
+            ErrorCode::CanisterWasmEngineError => true,
+            ErrorCode::SubnetOversubscribed
+            | ErrorCode::MaxNumberOfCanistersReached
+            | ErrorCode::CanisterOutputQueueFull
+            | ErrorCode::IngressMessageTimeout
+            | ErrorCode::CanisterQueueNotEmpty
+            | ErrorCode::CanisterNotFound
+            | ErrorCode::CanisterMethodNotFound
+            | ErrorCode::CanisterAlreadyInstalled
+            | ErrorCode::CanisterWasmModuleNotFound
+            | ErrorCode::InsufficientMemoryAllocation
+            | ErrorCode::InsufficientCyclesForCreateCanister
+            | ErrorCode::SubnetNotFound
+            | ErrorCode::CanisterNotHostedBySubnet
+            | ErrorCode::CanisterOutOfCycles
+            | ErrorCode::CanisterTrapped
+            | ErrorCode::CanisterCalledTrap
+            | ErrorCode::CanisterContractViolation
+            | ErrorCode::CanisterInvalidWasm
+            | ErrorCode::CanisterDidNotReply
+            | ErrorCode::CanisterOutOfMemory
+            | ErrorCode::CanisterStopped
+            | ErrorCode::CanisterStopping
+            | ErrorCode::CanisterNotStopped
+            | ErrorCode::CanisterStoppingCancelled
+            | ErrorCode::CanisterInvalidController
+            | ErrorCode::CanisterFunctionNotFound
+            | ErrorCode::CanisterNonEmpty
+            | ErrorCode::CertifiedStateUnavailable
+            | ErrorCode::CanisterRejectedMessage
+            | ErrorCode::QueryCallGraphLoopDetected
+            | ErrorCode::UnknownManagementMessage
+            | ErrorCode::IngressHistoryFull
+            | ErrorCode::InvalidManagementPayload
+            | ErrorCode::InsufficientCyclesInCall
+            | ErrorCode::CanisterInstructionLimitExceeded
+            | ErrorCode::CanisterInstallCodeRateLimited
+            | ErrorCode::CanisterMemoryAccessLimitExceeded
+            | ErrorCode::QueryCallGraphTooDeep
+            | ErrorCode::QueryCallGraphTotalInstructionLimitExceeded
+            | ErrorCode::CompositeQueryCalledInReplicatedMode => false,
+        }
+    }
 }
 
 impl std::error::Error for UserError {

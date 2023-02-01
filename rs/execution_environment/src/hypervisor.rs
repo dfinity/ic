@@ -7,15 +7,12 @@ use ic_embedders::wasm_utils::decoding::decoded_wasm_size;
 use ic_embedders::{wasm_executor::WasmExecutorImpl, WasmExecutionInput, WasmtimeEmbedder};
 use ic_embedders::{CompilationCache, CompilationResult};
 use ic_interfaces::execution_environment::{HypervisorResult, WasmExecutionOutput};
-use ic_logger::{fatal, ReplicaLogger};
+use ic_logger::ReplicaLogger;
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NetworkTopology;
-use ic_replicated_state::{
-    page_map::allocated_pages_count, CanisterState, ExecutionState, SchedulerState, SystemState,
-};
-use ic_sys::PAGE_SIZE;
+use ic_replicated_state::{page_map::allocated_pages_count, ExecutionState, SystemState};
 use ic_system_api::ExecutionParameters;
 use ic_system_api::{sandbox_safe_system_state::SandboxSafeSystemState, ApiType};
 use ic_types::{methods::FuncRef, CanisterId, NumBytes, NumInstructions, SubnetId, Time};
@@ -128,38 +125,6 @@ impl Hypervisor {
 
     pub fn subnet_type(&self) -> SubnetType {
         self.own_subnet_type
-    }
-
-    // A helper that converts a Wasm execution output to an execution
-    // result of `execution_canister_*` functions.
-    //
-    // The components of the resulting `CanisterState` are computed
-    // as follows:
-    // - `execution_state` is taken from the Wasm output.
-    // - `scheduler_state` is taken from the corresponding argument.
-    // - `system_state` is taken from the system_state_accessor if the execution
-    //   succeeded; otherwise, it is taken from the corresponding argument.
-    pub fn system_execution_result(
-        &self,
-        output: WasmExecutionOutput,
-        execution_state: ExecutionState,
-        old_system_state: SystemState,
-        scheduler_state: SchedulerState,
-        output_system_state: SystemState,
-    ) -> (CanisterState, NumInstructions, HypervisorResult<NumBytes>) {
-        let (system_state, heap_delta) = match output.wasm_result {
-            Ok(opt_result) => {
-                if opt_result.is_some() {
-                    fatal!(self.log, "[EXC-BUG] System methods cannot use msg_reply.");
-                }
-                let bytes = NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64);
-                (output_system_state, Ok(bytes))
-            }
-            Err(err) => (old_system_state, Err(err)),
-        };
-        let canister =
-            CanisterState::from_parts(Some(execution_state), system_state, scheduler_state);
-        (canister, output.num_instructions_left, heap_delta)
     }
 
     pub fn create_execution_state(
