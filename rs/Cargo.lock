@@ -4899,6 +4899,7 @@ dependencies = [
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-keygen",
+ "ic-crypto-test-utils-local-csp-vault",
  "ic-crypto-test-utils-multi-sigs",
  "ic-crypto-test-utils-threshold-sigs",
  "ic-crypto-tls-cert-validation",

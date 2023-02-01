@@ -1,9 +1,7 @@
 use crate::vault::api::IDkgProtocolCspVault;
-use crate::vault::local_csp_vault::test_utils::temp_local_csp_server::TempLocalCspVault;
 use crate::vault::test_utils;
 use crate::LocalCspVault;
 use crate::PublicKeyStore;
-use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
@@ -32,14 +30,12 @@ mod idkg_gen_dealing_encryption_key_pair {
 
         #[test]
         fn should_generate_mega_key_pair_and_store_it_in_the_vault(seed: [u8;32]) {
-            let temp_vault =  TempLocalCspVault::new_with_rng(Seed::from_bytes(&seed).into_rng());
+            let vault =  LocalCspVault::builder().with_rng(Seed::from_bytes(&seed).into_rng()).build();
 
-            let generated_public_key = temp_vault
-                .vault
+            let generated_public_key = vault
                 .idkg_gen_dealing_encryption_key_pair()
                 .expect("error generating I-DKG dealing encryption key pair");
-            let stored_public_key = temp_vault
-                .vault
+            let stored_public_key = vault
                 .current_node_public_keys()
                 .expect("error retrieving public keys")
                 .idkg_dealing_encryption_public_key
@@ -49,18 +45,16 @@ mod idkg_gen_dealing_encryption_key_pair {
 
             prop_assert_eq!(generated_public_key.curve_type(), EccCurveType::K256);
             prop_assert_eq!(idkg_dealing_encryption_pk_to_proto(generated_public_key), stored_public_key);
-            prop_assert!(temp_vault.vault.sks_contains(&key_id).expect("error reading SKS"));
+            prop_assert!(vault.sks_contains(&key_id).expect("error reading SKS"));
         }
     }
 
     #[test]
     fn should_generate_distinct_mega_public_keys_with_high_probability() {
-        let rng = reproducible_rng();
-        let temp_vault = TempLocalCspVault::new_with_rng(rng);
+        let vault = LocalCspVault::builder().build();
         let mut generated_keys = HashSet::new();
         for _ in 1..=100 {
-            let public_key = temp_vault
-                .vault
+            let public_key = vault
                 .idkg_gen_dealing_encryption_key_pair()
                 .expect("error generating I-DKG dealing encryption key pair");
             // MEGaPublicKey does not implement Hash so we use the serialized form
@@ -81,20 +75,17 @@ mod idkg_gen_dealing_encryption_key_pair {
 
     #[test]
     fn should_correctly_extend_public_key_vector() {
-        let rng = reproducible_rng();
-        let temp_vault = TempLocalCspVault::new_with_rng(rng);
+        let vault = LocalCspVault::builder().build();
         let mut generated_keys = Vec::new();
         for _ in 1..=5 {
-            let public_key = temp_vault
-                .vault
+            let public_key = vault
                 .idkg_gen_dealing_encryption_key_pair()
                 .expect("failed to create keys");
             let public_key_proto = idkg_dealing_encryption_pk_to_proto(public_key.clone());
             generated_keys.push(public_key_proto);
         }
         assert_eq!(
-            temp_vault
-                .vault
+            vault
                 .public_key_store
                 .read()
                 .idkg_dealing_encryption_pubkeys(),
@@ -105,13 +96,12 @@ mod idkg_gen_dealing_encryption_key_pair {
     #[test]
     fn should_eventually_detect_race_condition_when_extending_public_key_vector() {
         const NUM_ITERATIONS: usize = 200;
-        let temp_vault = Arc::new(TempLocalCspVault::new_with_rng(reproducible_rng()));
+        let vault = LocalCspVault::builder().build_into_arc();
         let mut thread_handles = Vec::new();
         for _ in 1..=NUM_ITERATIONS {
-            let temp_vault = Arc::clone(&temp_vault);
+            let vault = Arc::clone(&vault);
             thread_handles.push(std::thread::spawn(move || {
-                temp_vault
-                    .vault
+                vault
                     .idkg_gen_dealing_encryption_key_pair()
                     .expect("failed to create keys")
             }));
@@ -123,7 +113,7 @@ mod idkg_gen_dealing_encryption_key_pair {
             assert!(duplicate_key_detector.insert(public_key.serialize()));
             generated_keys.push(public_key);
         }
-        let public_key_store_read_lock = temp_vault.vault.public_key_store.read();
+        let public_key_store_read_lock = vault.public_key_store.read();
         for generated_key in generated_keys {
             assert!(public_key_store_read_lock
                 .idkg_dealing_encryption_pubkeys()
@@ -262,14 +252,12 @@ mod idkg_retain_active_keys {
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::vault::api::{IDkgProtocolCspVault, PublicKeyStoreCspVault, SecretKeyStoreCspVault};
     use crate::vault::local_csp_vault::idkg::idkg_dealing_encryption_pk_to_proto;
-    use crate::vault::local_csp_vault::test_utils::temp_local_csp_server::TempLocalCspVault;
     use crate::LocalCspVault;
     use crate::SecretKeyStore;
     use assert_matches::assert_matches;
     use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
     use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint};
     use ic_crypto_internal_types::scope::{ConstScope, Scope};
-    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
     use mockall::predicate::eq;
     use mockall::Sequence;
@@ -279,11 +267,9 @@ mod idkg_retain_active_keys {
 
     #[test]
     fn should_fail_when_idkg_oldest_public_key_not_found() {
-        let temp_vault = TempLocalCspVault::new_with_rng(reproducible_rng());
+        let vault = LocalCspVault::builder().build();
 
-        let result = temp_vault
-            .vault
-            .idkg_retain_active_keys(BTreeSet::new(), an_idkg_public_key());
+        let result = vault.idkg_retain_active_keys(BTreeSet::new(), an_idkg_public_key());
 
         assert_matches!(result, Err(IDkgRetainKeysError::InternalError {internal_error})
             if internal_error.contains("Could not find oldest IDKG public key")
@@ -292,48 +278,42 @@ mod idkg_retain_active_keys {
 
     #[test]
     fn should_not_delete_only_key_pair() {
-        let temp_vault = TempLocalCspVault::new_with_rng(reproducible_rng());
-        let public_key = temp_vault
-            .vault
+        let vault = LocalCspVault::builder().build();
+        let public_key = vault
             .idkg_gen_dealing_encryption_key_pair()
             .expect("error generating IDKG key pair");
 
-        let result = temp_vault
-            .vault
-            .idkg_retain_active_keys(BTreeSet::new(), public_key.clone());
+        let result = vault.idkg_retain_active_keys(BTreeSet::new(), public_key.clone());
 
         assert!(result.is_ok());
         assert_eq!(
-            temp_vault
-                .vault
+            vault
                 .current_node_public_keys()
                 .expect("missing node public keys")
                 .idkg_dealing_encryption_public_key,
             Some(idkg_dealing_encryption_pk_to_proto(public_key.clone()))
         );
-        assert!(temp_vault
-            .vault
+        assert!(vault
             .sks_contains(&KeyId::try_from(&public_key).expect("invalid key ID"))
             .expect("error reading SKS"));
     }
 
     #[test]
     fn should_retain_only_active_public_keys() {
-        let temp_vault = TempLocalCspVault::new_with_rng(reproducible_rng());
+        let vault = LocalCspVault::builder().build();
         let number_of_keys = 5;
         let oldest_public_key_index = 2;
         let mut rotated_public_keys =
-            generate_idkg_dealing_encryption_key_pairs(&temp_vault.vault, number_of_keys);
+            generate_idkg_dealing_encryption_key_pairs(&vault, number_of_keys);
 
-        temp_vault
-            .vault
+        vault
             .idkg_retain_active_keys(
                 BTreeSet::new(),
                 rotated_public_keys[oldest_public_key_index].clone(),
             )
             .expect("error retaining active IDKG keys");
 
-        let guard = temp_vault.vault.public_key_store_read_lock();
+        let guard = vault.public_key_store_read_lock();
         let retained_public_keys = guard.idkg_dealing_encryption_pubkeys();
         assert_eq!(
             retained_public_keys.len(),
@@ -350,14 +330,13 @@ mod idkg_retain_active_keys {
 
     #[test]
     fn should_retain_only_active_secret_keys() {
-        let temp_vault = TempLocalCspVault::new_with_rng(reproducible_rng());
+        let vault = LocalCspVault::builder().build();
         let number_of_keys = 5;
         let oldest_public_key_index = 2;
         let rotated_public_keys =
-            generate_idkg_dealing_encryption_key_pairs(&temp_vault.vault, number_of_keys);
+            generate_idkg_dealing_encryption_key_pairs(&vault, number_of_keys);
 
-        temp_vault
-            .vault
+        vault
             .idkg_retain_active_keys(
                 BTreeSet::new(),
                 rotated_public_keys[oldest_public_key_index].clone(),
@@ -367,15 +346,9 @@ mod idkg_retain_active_keys {
         for (i, public_key) in rotated_public_keys.iter().enumerate() {
             let key_id = KeyId::try_from(public_key).expect("invalid key id");
             if i < oldest_public_key_index {
-                assert!(!temp_vault
-                    .vault
-                    .sks_contains(&key_id)
-                    .expect("error reading SKS"));
+                assert!(!vault.sks_contains(&key_id).expect("error reading SKS"));
             } else {
-                assert!(temp_vault
-                    .vault
-                    .sks_contains(&key_id)
-                    .expect("error reading SKS"));
+                assert!(vault.sks_contains(&key_id).expect("error reading SKS"));
             }
         }
     }
