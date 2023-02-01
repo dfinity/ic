@@ -11,12 +11,12 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, SubnetTopology};
 use ic_test_utilities::{
-    execution_environment::test_registry_settings,
     state_manager::FakeStateManager,
     types::batch::{BatchBuilder, IngressPayloadBuilder, PayloadBuilder},
     types::ids::subnet_test_id,
     types::messages::SignedIngressBuilder,
 };
+use ic_test_utilities_execution_environment::test_registry_settings;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::messages::SignedIngress;

@@ -33,6 +33,7 @@ slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debu
 assert_matches = "1.0.0"
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-test-utilities = { path = "../test_utilities" }
+ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 ic-nns-constants = { path = "../nns/constants" }

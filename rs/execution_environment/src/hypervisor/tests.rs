@@ -1,7 +1,3 @@
-use crate::execution::test_utilities::{
-    assert_empty_reply, check_ingress_status, get_reply, wasm_compilation_cost,
-    wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
-};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_base_types::NumSeconds;
@@ -20,6 +16,10 @@ use ic_replicated_state::{
 use ic_replicated_state::{CanisterStatus, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::assert_utils::assert_balance_equals;
+use ic_test_utilities_execution_environment::{
+    assert_empty_reply, check_ingress_status, get_reply, wasm_compilation_cost,
+    wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
+};
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_metrics::{fetch_histogram_stats, HistogramStats};
 use ic_types::ingress::{IngressState, IngressStatus};

@@ -2,9 +2,6 @@ use assert_matches::assert_matches;
 use candid::{Decode, Encode};
 use ic_types::nominal_cycles::NominalCycles;
 
-use crate::execution::test_utilities::{
-    assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
-};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
@@ -22,6 +19,9 @@ use ic_replicated_state::{
     CanisterStatus, SystemState,
 };
 use ic_test_utilities::{assert_utils::assert_balance_equals, mock_time};
+use ic_test_utilities_execution_environment::{
+    assert_empty_reply, check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
+};
 use ic_test_utilities_metrics::{fetch_histogram_vec_count, metric_vec};
 use ic_types::canister_http::Transform;
 use ic_types::{

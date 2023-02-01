@@ -24,12 +24,12 @@ use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, Replicated
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::types::ids::subnet_test_id;
 use ic_test_utilities::{
-    execution_environment::generate_network_topology,
     mock_time,
     state::canister_from_exec_state,
     types::ids::{canister_test_id, user_test_id},
     types::messages::IngressBuilder,
 };
+use ic_test_utilities_execution_environment::generate_network_topology;
 use ic_types::{
     messages::{CallbackId, Payload, RejectContext},
     methods::{Callback, WasmClosure},

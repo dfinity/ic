@@ -9,7 +9,9 @@ use ic_state_machine_tests::{Cycles, WasmResult};
 use ic_types::NumInstructions;
 use ic_universal_canister::{call_args, wasm};
 
-use crate::execution::test_utilities::{check_ingress_status, ExecutionTest, ExecutionTestBuilder};
+use ic_test_utilities_execution_environment::{
+    check_ingress_status, ExecutionTest, ExecutionTestBuilder,
+};
 
 const GB: u64 = 1024 * 1024 * 1024;
 

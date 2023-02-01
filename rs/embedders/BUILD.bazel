@@ -40,6 +40,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/routing_table",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
+    "//rs/test_utilities/execution_environment",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
     "@crate_index//:insta",

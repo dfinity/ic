@@ -252,6 +252,7 @@ members = [
   "system_api",
   "test_utilities",
   "test_utilities/artifact_pool",
+  "test_utilities/execution_environment",
   "test_utilities/load_wasm",
   "test_utilities/compare_dirs",
   "test_utilities/logger",

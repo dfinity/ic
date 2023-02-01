@@ -1,33 +1,38 @@
-use crate::util::process_stopping_canisters;
-use crate::{
-    execute_canister, CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
-    ExecutionResponse, Hypervisor, IngressHistoryWriterImpl, InternalHttpQueryHandler,
-    RoundInstructions, RoundLimits,
+use ic_test_utilities::{
+    crypto::mock_random_number_generator,
+    mock_time,
+    types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
 };
+
 use ic_base_types::{NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_config::subnet_config::SchedulerConfig;
 use ic_config::{
     embedders::Config as EmbeddersConfig,
     execution_environment::{BitcoinConfig, Config},
     flag_status::FlagStatus,
+    subnet_config::SchedulerConfig,
     subnet_config::SubnetConfigs,
 };
+use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{wasm_utils::compile, WasmtimeEmbedder};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
+pub use ic_execution_environment::ExecutionResponse;
+use ic_execution_environment::{
+    execute_canister, util::process_stopping_canisters, CompilationCostHandling,
+    ExecuteMessageResult, ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl,
+    InternalHttpQueryHandler, RoundInstructions, RoundLimits,
+};
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusType, EcdsaKeyId,
     EmptyBlob, InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
     UpdateSettingsArgs,
 };
-use ic_interfaces::messages::CanisterTask;
 use ic_interfaces::{
     execution_environment::{
         ExecutionMode, IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
         SubnetAvailableMemory,
     },
-    messages::CanisterCall,
-    messages::CanisterMessage,
+    messages::{CanisterCall, CanisterMessage, CanisterTask},
 };
 use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -37,36 +42,113 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::ExecutionTask;
 use ic_replicated_state::{
     canister_state::NextExecution,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CallContext, CanisterState, ExecutionState, InputQueueType, ReplicatedState,
+    CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, Memory,
+    NetworkTopology, NodeTopology, ReplicatedState, SubnetTopology,
 };
 use ic_system_api::InstructionLimits;
-use ic_test_utilities::{
-    crypto::mock_random_number_generator,
-    execution_environment::{generate_subnets, test_registry_settings},
-    mock_time,
-    types::messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
-};
-use ic_types::messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES;
 use ic_types::{
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{AnonymousQuery, CallbackId, MessageId, RequestOrResponse, Response, UserQuery},
+    messages::{
+        AnonymousQuery, CallbackId, MessageId, RequestOrResponse, Response, UserQuery,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+    },
     CanisterId, Cycles, NumInstructions, Time, UserId,
 };
-use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
+use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_wasm_types::BinaryEncodedWasm;
+
 use maplit::btreemap;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::Arc;
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
+
+/// A helper to create subnets.
+pub fn generate_subnets(
+    subnet_ids: Vec<SubnetId>,
+    own_subnet_id: SubnetId,
+    own_subnet_type: SubnetType,
+    own_subnet_size: usize,
+) -> BTreeMap<SubnetId, SubnetTopology> {
+    let mut result: BTreeMap<SubnetId, SubnetTopology> = Default::default();
+    for subnet_id in subnet_ids {
+        let mut subnet_type = SubnetType::System;
+        let mut nodes = btreemap! {};
+        if subnet_id == own_subnet_id {
+            subnet_type = own_subnet_type;
+            // Populate network_topology of own_subnet with fake nodes to simulate subnet_size.
+            for i in 0..own_subnet_size {
+                nodes.insert(
+                    node_test_id(i as u64),
+                    NodeTopology {
+                        ip_address: "fake-ip-address".to_string(),
+                        http_port: 1234,
+                    },
+                );
+            }
+        }
+        result.insert(
+            subnet_id,
+            SubnetTopology {
+                public_key: vec![1, 2, 3, 4],
+                nodes,
+                subnet_type,
+                subnet_features: SubnetFeatures::default(),
+                ecdsa_keys_held: BTreeSet::new(),
+            },
+        );
+    }
+    result
+}
+
+pub fn generate_network_topology(
+    subnet_size: usize,
+    own_subnet_id: SubnetId,
+    nns_subnet_id: SubnetId,
+    own_subnet_type: SubnetType,
+    subnets: Vec<SubnetId>,
+    routing_table: Option<RoutingTable>,
+) -> NetworkTopology {
+    NetworkTopology {
+        nns_subnet_id,
+        subnets: generate_subnets(subnets, own_subnet_id, own_subnet_type, subnet_size),
+        routing_table: match routing_table {
+            Some(routing_table) => Arc::new(routing_table),
+            None => {
+                Arc::new(RoutingTable::try_from(btreemap! {
+                CanisterIdRange { start: CanisterId::from(0), end: CanisterId::from(CANISTER_IDS_PER_SUBNET - 1) } => own_subnet_id,
+            }).unwrap())
+            }
+        },
+        ..Default::default()
+    }
+}
+
+pub fn test_registry_settings() -> RegistryExecutionSettings {
+    RegistryExecutionSettings {
+        max_number_of_canisters: 0x2000,
+        provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
+        max_ecdsa_queue_size: 20,
+        subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
+    }
+}
+
+pub fn default_memory_for_system_api() -> Option<Memory> {
+    match EmbeddersConfig::default()
+        .feature_flags
+        .wasm_native_stable_memory
+    {
+        FlagStatus::Enabled => None,
+        FlagStatus::Disabled => Some(Memory::default()),
+    }
+}
 
 /// When a universal canister is installed, but the serialized module has been
 /// cached, the test setup thinks the canister was only charged for the reduced
@@ -82,8 +164,8 @@ pub fn universal_canister_compilation_cost_correction() -> NumInstructions {
 /// A helper for execution tests.
 ///
 /// Example usage:
-/// ```
-/// use ic_execution_environment::execution::test_utilities::{*};
+/// ```no_run
+/// use ic_test_utilities_execution_environment::{*};
 /// let mut test = ExecutionTestBuilder::new().build();
 /// let wat = r#"(module (func (export "canister_query query")))"#;
 /// let canister_id = test.canister_from_wat(wat).unwrap();

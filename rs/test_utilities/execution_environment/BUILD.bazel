@@ -1,0 +1,50 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/config",
+    "//rs/constants",
+    "//rs/cycles_account_manager",
+    "//rs/embedders",
+    "//rs/execution_environment",
+    "//rs/interfaces",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/registry/provisional_whitelist",
+    "//rs/registry/routing_table",
+    "//rs/registry/subnet_features",
+    "//rs/registry/subnet_type",
+    "//rs/replicated_state",
+    "//rs/system_api",
+    "//rs/test_utilities",
+    "//rs/types/base_types",
+    "//rs/types/error_types",
+    "//rs/types/ic00_types",
+    "//rs/types/types",
+    "//rs/types/types_test_utils",
+    "//rs/types/wasm_types",
+    "//rs/universal_canister/lib",
+    "@crate_index//:maplit",
+    "@crate_index//:wat",
+]
+
+rust_library(
+    name = "execution_environment",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_test_utilities_execution_environment",
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "execution_environment_test",
+    crate = ":execution_environment",
+    deps = DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "execution_environment_doc_test",
+    crate = ":execution_environment",
+    deps = DEPENDENCIES,
+)

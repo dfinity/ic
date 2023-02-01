@@ -1,5 +1,3 @@
-use crate::execution::test_utilities::{check_ingress_status, ExecutionTest, ExecutionTestBuilder};
-use crate::ExecutionResponse;
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
 use ic_error_types::ErrorCode;
@@ -8,6 +6,9 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::{CanisterStatus, NumWasmPages};
 use ic_test_utilities::types::messages::ResponseBuilder;
+use ic_test_utilities_execution_environment::{
+    check_ingress_status, ExecutionResponse, ExecutionTest, ExecutionTestBuilder,
+};
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},

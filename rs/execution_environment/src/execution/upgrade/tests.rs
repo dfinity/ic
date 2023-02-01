@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 
-use crate::execution::test_utilities::{check_ingress_status, ExecutionTest, ExecutionTestBuilder};
 use ic_error_types::ErrorCode;
 use ic_ic00_types::{EmptyBlob, Payload};
 use ic_logger::replica_logger::LogEntryLogger;
 use ic_replicated_state::{canister_state::NextExecution, CanisterState};
 use ic_state_machine_tests::{IngressState, WasmResult};
 use ic_test_utilities::types::ids::user_test_id;
+use ic_test_utilities_execution_environment::{
+    check_ingress_status, ExecutionTest, ExecutionTestBuilder,
+};
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::Cycles;
 use maplit::btreeset;

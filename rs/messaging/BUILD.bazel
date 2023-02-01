@@ -48,6 +48,7 @@ rust_test(
     deps = [
         "//rs/interfaces/state_manager/mocks",
         "//rs/test_utilities",
+        "//rs/test_utilities/execution_environment",
         "//rs/test_utilities/logger",
         "//rs/test_utilities/metrics",
         "@crate_index//:assert_matches",

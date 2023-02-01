@@ -40,13 +40,13 @@ use ic_system_api::{
     ApiType, ExecutionParameters,
 };
 use ic_test_utilities::{
-    execution_environment::{generate_subnets, test_registry_settings},
     state::CanisterStateBuilder,
     types::{
         ids::{canister_test_id, subnet_test_id, user_test_id},
         messages::{RequestBuilder, SignedIngressBuilder},
     },
 };
+use ic_test_utilities_execution_environment::{generate_subnets, test_registry_settings};
 use ic_types::{
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
     ingress::{IngressState, IngressStatus},

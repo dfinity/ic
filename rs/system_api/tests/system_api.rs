@@ -20,7 +20,6 @@ use ic_system_api::{
 };
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
-    execution_environment::default_memory_for_system_api,
     mock_time,
     state::SystemStateBuilder,
     types::{
@@ -28,6 +27,7 @@ use ic_test_utilities::{
         messages::RequestBuilder,
     },
 };
+use ic_test_utilities_execution_environment::default_memory_for_system_api;
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES},
     methods::{Callback, WasmClosure},
