@@ -11,7 +11,6 @@ hex = "0.4.2"
 ic-async-utils = { path = "../async_utils" }
 ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
-ic-canister-http-adapter-client = { path = "../https_outcalls/client" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-crypto = { path = "../crypto" }
@@ -22,6 +21,7 @@ ic-cycles-account-manager = { path = "../cycles_account_manager" }
 ic-error-types = { path = "../types/error_types" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-http-endpoints-public = { path = "../http_endpoints/public" }
+ic-https-outcalls-adapter-client = { path = "../https_outcalls/client" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-bitcoin-adapter-client = { path = "../interfaces/bitcoin_adapter_client" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
