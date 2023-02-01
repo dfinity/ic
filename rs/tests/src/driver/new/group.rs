@@ -775,6 +775,8 @@ impl SystemTestGroup {
                                     runtime: report.get_test_duration(task_id),
                                 });
                             }
+                        } else if let EventPayload::TaskCaughtPanic { ref task_id, ref msg } = event.what {
+                            report.set_assert_failure_message(task_id.clone(), msg);
                         }
                         // else { non-terminal event }
                         match event.what {

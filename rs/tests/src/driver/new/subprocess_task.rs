@@ -20,6 +20,7 @@ use super::{
     event::BroadcastingEventSubscriberFactory,
     event::{Event, TaskId},
     process::{KillFn, Process},
+    subprocess_ipc::log_panic_event,
     task::{Task, TaskHandle},
 };
 
@@ -147,7 +148,11 @@ impl Task for SubprocessTask {
             .unwrap()
             .take()
             .expect("Task was already executed!");
-        panic_to_result(catch_unwind(f))
+        let res = panic_to_result(catch_unwind(f));
+        if let Err(s) = &res {
+            log_panic_event(&self.group_ctx.logger(), s);
+        }
+        res
     }
 
     fn task_id(&self) -> TaskId {
