@@ -1,7 +1,6 @@
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::CspSignature;
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
-use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use std::sync::Arc;
 use tokio_rustls::rustls;
 use tokio_rustls::rustls::internal::msgs::enums::SignatureAlgorithm;
@@ -20,12 +19,11 @@ pub struct CspServerEd25519SigningKey {
 
 impl CspServerEd25519SigningKey {
     /// Creates a `CspServerEd25519SigningKey` that uses `tls_csp_vault` to
-    /// create signatures. The `self_cert` is used to derive the key ID of the
-    /// private key.
-    pub fn new(self_cert: &TlsPublicKeyCert, tls_csp_vault: Arc<dyn TlsHandshakeCspVault>) -> Self {
+    /// create signatures. The `key_id` indicates which secret key is used for signing.
+    pub fn new(key_id: KeyId, tls_csp_vault: Arc<dyn TlsHandshakeCspVault>) -> Self {
         Self {
             signer: CspServerEd25519Signer {
-                key_id: KeyId::from(self_cert),
+                key_id,
                 tls_csp_vault,
             },
         }

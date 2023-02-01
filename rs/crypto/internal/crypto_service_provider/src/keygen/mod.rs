@@ -63,7 +63,7 @@ impl CspSecretKeyStoreChecker for Csp {
 
     fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> Result<bool, CryptoError> {
         // we calculate the key_id first to minimize locking time:
-        let key_id = KeyId::from(cert);
+        let key_id = KeyId::try_from(cert)?;
         self.sks_contains(&key_id)
     }
 }

@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use crate::keygen::utils::node_signing_pk_to_proto;
 use crate::types::{CspPublicKey, CspSignature};
 use crate::vault::api::{CspBasicSignatureError, CspBasicSignatureKeygenError, CspVault};
@@ -18,7 +19,7 @@ pub fn should_generate_node_signing_key_pair_and_store_keys(csp_vault: Arc<dyn C
 
     assert_matches!(gen_key_result, CspPublicKey::Ed25519(_));
     assert!(csp_vault
-        .sks_contains(&KeyId::from(&gen_key_result))
+        .sks_contains(&KeyId::try_from(&gen_key_result).unwrap())
         .is_ok());
     assert_eq!(
         csp_vault
@@ -102,7 +103,11 @@ pub fn generate_key_pair_and_sign_message(
         CspPublicKey::Ed25519(pk_bytes) => pk_bytes,
         _ => panic!("Wrong CspPublicKey: {:?}", csp_pk),
     };
-    let sign_result = csp_vault.sign(AlgorithmId::Ed25519, message, KeyId::from(&csp_pk));
+    let sign_result = csp_vault.sign(
+        AlgorithmId::Ed25519,
+        message,
+        KeyId::try_from(&csp_pk).unwrap(),
+    );
     (pk_bytes, sign_result)
 }
 
@@ -123,7 +128,7 @@ pub fn should_not_basic_sign_with_unsupported_algorithm_id(csp_vault: Arc<dyn Cs
             let sign_result = csp_vault.sign(
                 AlgorithmId::EcdsaP256,
                 msg.as_ref(),
-                KeyId::from(&public_key),
+                KeyId::try_from(&public_key).unwrap(),
             );
             assert!(sign_result.is_err());
             let err = sign_result.expect_err("Expected an error.");
@@ -139,7 +144,7 @@ pub fn should_not_basic_sign_with_non_existent_key(csp_vault: Arc<dyn CspVault>)
     let mut rng = thread_rng();
     let (_, pk_bytes) = ed25519::keypair_from_rng(&mut rng);
 
-    let key_id = KeyId::from(&CspPublicKey::Ed25519(pk_bytes));
+    let key_id = KeyId::try_from(&CspPublicKey::Ed25519(pk_bytes)).unwrap();
     let msg = "some message";
     let sign_result = csp_vault.sign(AlgorithmId::Ed25519, msg.as_ref(), key_id);
     assert!(sign_result.is_err());

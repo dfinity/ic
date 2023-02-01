@@ -1,5 +1,5 @@
 use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
-use crate::key_id::KeyId;
+use crate::key_id::{KeyId, KeyIdInstantiationError};
 use crate::types::CspPublicCoefficients;
 use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::ExternalPublicKeys;
@@ -166,6 +166,12 @@ pub struct NodeKeysError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct ExternalPublicKeyError(pub Box<String>);
+
+impl From<KeyIdInstantiationError> for ExternalPublicKeyError {
+    fn from(error: KeyIdInstantiationError) -> Self {
+        ExternalPublicKeyError(Box::new(format!("Cannot instantiate KeyId: {:?}", error)))
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum LocalPublicKeyError {

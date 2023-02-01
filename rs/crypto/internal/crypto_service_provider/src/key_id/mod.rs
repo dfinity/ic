@@ -5,7 +5,7 @@ use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use ic_crypto_sha::{Context, DomainSeparationContext, Sha256};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::{AlgorithmId, CryptoError};
 use std::fmt;
 use std::fmt::Formatter;
 
@@ -60,9 +60,57 @@ impl From<[u8; 32]> for KeyId {
     }
 }
 
-impl From<&CspPublicKey> for KeyId {
-    fn from(public_key: &CspPublicKey) -> Self {
-        bytes_hash_as_key_id(public_key.algorithm_id(), public_key.pk_bytes())
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum KeyIdInstantiationError {
+    InvalidArguments(String),
+}
+
+impl From<KeyIdInstantiationError> for CryptoError {
+    fn from(error: KeyIdInstantiationError) -> Self {
+        CryptoError::InvalidArgument {
+            message: format!("Cannot instantiate KeyId: {:?}", error),
+        }
+    }
+}
+
+/// Compute a KeyId from an `AlgorithmId` and a slice of bytes.
+///
+/// The computed KeyId is the result of applying SHA256 to the bytes:
+/// `domain_separator | algorithm_id | size(bytes) | bytes`
+/// where  domain_separator is DomainSeparationContext(KEY_ID_DOMAIN),
+/// algorithm_id is a 1-byte value, and size(pk_bytes) is the size of
+/// pk_bytes as u32 in BigEndian format.                              
+///
+/// # Errors
+/// * `KeyIdInstantiationError::InvalidArgument`: if the slice of bytes is too large and its size does not fit in a `u32`.
+impl<B> TryFrom<(AlgorithmId, &B)> for KeyId
+where
+    B: AsRef<[u8]>,
+{
+    type Error = KeyIdInstantiationError;
+
+    fn try_from((alg_id, bytes): (AlgorithmId, &B)) -> Result<Self, Self::Error> {
+        let bytes = bytes.as_ref();
+        let bytes_size = u32::try_from(bytes.len()).map_err(|_error| {
+            KeyIdInstantiationError::InvalidArguments(format!(
+                "Bytes array is too large (number of bytes {} does not fit in a u32)",
+                bytes.len()
+            ))
+        })?;
+        let mut hash =
+            Sha256::new_with_context(&DomainSeparationContext::new(KEY_ID_DOMAIN.to_string()));
+        hash.write(&[alg_id.as_u8()]);
+        hash.write(&bytes_size.to_be_bytes());
+        hash.write(bytes);
+        Ok(KeyId::from(hash.finish()))
+    }
+}
+
+impl TryFrom<&CspPublicKey> for KeyId {
+    type Error = KeyIdInstantiationError;
+
+    fn try_from(public_key: &CspPublicKey) -> Result<Self, Self::Error> {
+        KeyId::try_from((public_key.algorithm_id(), &public_key.pk_bytes()))
     }
 }
 
@@ -71,10 +119,11 @@ impl TryFrom<&MEGaPublicKey> for KeyId {
 
     fn try_from(public_key: &MEGaPublicKey) -> Result<Self, Self::Error> {
         match public_key.curve_type() {
-            EccCurveType::K256 => Ok(bytes_hash_as_key_id(
+            EccCurveType::K256 => KeyId::try_from((
                 AlgorithmId::ThresholdEcdsaSecp256k1,
                 &public_key.serialize(),
-            )),
+            ))
+            .map_err(|error| format!("cannot instantiate KeyId: {:?}", error)),
             c => Err(format!("unsupported curve: {:?}", c)),
         }
     }
@@ -107,9 +156,11 @@ impl From<&PolynomialCommitment> for KeyId {
     }
 }
 
-impl From<&TlsPublicKeyCert> for KeyId {
-    fn from(cert: &TlsPublicKeyCert) -> Self {
-        bytes_hash_as_key_id(AlgorithmId::Tls, cert.as_der())
+impl TryFrom<&TlsPublicKeyCert> for KeyId {
+    type Error = KeyIdInstantiationError;
+
+    fn try_from(cert: &TlsPublicKeyCert) -> Result<Self, Self::Error> {
+        KeyId::try_from((AlgorithmId::Tls, cert.as_der()))
     }
 }
 
@@ -156,19 +207,4 @@ impl AsRef<[u8]> for KeyId {
     fn as_ref(&self) -> &[u8] {
         &self.0
     }
-}
-
-// KeyId is SHA256 computed on the bytes:
-//     domain_separator | algorithm_id | size(pk_bytes) | pk_bytes
-// where  domain_separator is DomainSeparationContext(KEY_ID_DOMAIN),
-// algorithm_id is a 1-byte value, and size(pk_bytes) is the size of
-// pk_bytes as u32 in BigEndian format.
-fn bytes_hash_as_key_id(alg_id: AlgorithmId, bytes: &[u8]) -> KeyId {
-    let mut hash =
-        Sha256::new_with_context(&DomainSeparationContext::new(KEY_ID_DOMAIN.to_string()));
-    hash.write(&[alg_id.as_u8()]);
-    let bytes_size = u32::try_from(bytes.len()).expect("type conversion error");
-    hash.write(&bytes_size.to_be_bytes());
-    hash.write(bytes);
-    KeyId::from(hash.finish())
 }

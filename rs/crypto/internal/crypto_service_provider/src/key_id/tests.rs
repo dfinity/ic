@@ -14,6 +14,7 @@ fn should_fail_to_create_key_id_from_mega_key_with_unsupported_curve() {
 mod stability_tests {
     use super::*;
     use crate::CspPublicKey;
+    use assert_matches::assert_matches;
     use hex::FromHex;
     use ic_crypto_internal_test_vectors::ed25519::TESTVEC_MESSAGE_LEN_256_BIT_STABILITY_1_PK;
     use ic_crypto_internal_test_vectors::ed25519::TESTVEC_MESSAGE_LEN_256_BIT_STABILITY_2_PK;
@@ -30,6 +31,7 @@ mod stability_tests {
     use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
     use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
     use ic_crypto_tls_interfaces::TlsPublicKeyCert;
+    use ic_types::crypto::AlgorithmId;
     use openssl::x509::X509;
     use std::fmt::Debug;
 
@@ -100,6 +102,85 @@ mod stability_tests {
     }
 
     #[test]
+    fn should_provide_stable_key_id_from_algorithm_id_and_slice_of_bytes() {
+        let bytes = b"The quick brown fox jumps over the lazy dog";
+        let tests = vec![
+            ParameterizedTest {
+                input: (AlgorithmId::Placeholder, bytes),
+                expected: "ffa2bc682bd09b967beeb044e28d2ed70c0ebae08992b345d7e86a4430e86d2a",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::MultiBls12_381, bytes),
+                expected: "11a827ca50021de5a5eebf15308246b8165cd6657c042d5cab7a90bb8eedada4",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::ThresBls12_381, bytes),
+                expected: "0363739b96464568aa6de05e7382501a9627cd234137d075c976390b865122d2",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::SchnorrSecp256k1, bytes),
+                expected: "a83f43b0e274deeb030a089edc83eb5882edae79b8d4a29343d90dea0d70e8a7",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::StaticDhSecp256k1, bytes),
+                expected: "b5b0352b3427e5fa6db9b303a594bf0868411e34ea2d1492ce1c8439e6aef403",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::HashSha256, bytes),
+                expected: "46ebb69e526e8f2f075fe909b2834895750fd764d08f1756b7dd8bb356c596d3",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::Tls, bytes),
+                expected: "b380083b1ad6dd1e7322e68af67674ce8b34da536ad81f2f1db5fd84cfbbedb1",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::Ed25519, bytes),
+                expected: "17d90d9d25e6d6d91bf8d288f2a772aaf35d66a7cf95458953802aea375c7218",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::Secp256k1, bytes),
+                expected: "7cf3b50f237ceca873c902c240653c753b5c6b6a5caefdbba0fd695246ec9726",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::Groth20_Bls12_381, bytes),
+                expected: "c519689f5e4b2a53e60a258eb84f30959e5179249ebd00379000ad607408faaf",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::NiDkg_Groth20_Bls12_381, bytes),
+                expected: "acd485da4f6e3098e9f561b769e0c4016e7ee5623a70c83c5717d1506ad7414c",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::EcdsaP256, bytes),
+                expected: "18d78b4cb946490169e010df135850c70c6a7ba48ec7b9e5fdaf649787094ac9",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::EcdsaSecp256k1, bytes),
+                expected: "6073946f0ab5be5e5f86ef41c94db45305dd75786b79d9567dac62227c64c62f",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::IcCanisterSignature, bytes),
+                expected: "c4779c81d5a29a454e24c42e883b1d02cec9a6d41929f1c8f1900bef84c7bf4b",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::RsaSha256, bytes),
+                expected: "544503d9091cf65bb8b1d25b7d88cf84d320c024aa4015f0325b7801a23a14f8",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::ThresholdEcdsaSecp256k1, bytes),
+                expected: "dbdb741cea355e1693af335ee34727aa49aaed676c34ff1b62f49538358f0a13",
+            },
+            ParameterizedTest {
+                input: (AlgorithmId::MegaSecp256k1, bytes),
+                expected: "93549663cba48293c1d9a92de585a49581e05af84563aecd47fb7ab5fe9745c3",
+            },
+        ];
+
+        for test in &tests {
+            assert_matches!(KeyId::try_from(test.input), Ok(actual) if actual == test.expected_key_id())
+        }
+    }
+
+    #[test]
     fn should_provide_stable_key_id_from_public_key_hash() {
         let tests = vec![
             ParameterizedTest {
@@ -133,12 +214,7 @@ mod stability_tests {
         ];
 
         for test in &tests {
-            assert_eq!(
-                KeyId::from(&test.input),
-                test.expected_key_id(),
-                "Parameterized test {:?} failed",
-                &test
-            );
+            assert_matches!(KeyId::try_from(&test.input), Ok(actual) if actual == test.expected_key_id())
         }
     }
 
@@ -280,12 +356,7 @@ t7Ica9iKR8XXVy+W5eyW52YYPbGzXZ0FgxPcOMk3Tm2qx/zJJ7pkN+rJeIEgQHEj
         }];
 
         for test in &tests {
-            assert_eq!(
-                KeyId::from(&test.input),
-                test.expected_key_id(),
-                "Parameterized test {:?} failed",
-                &test
-            );
+            assert_matches!(KeyId::try_from(&test.input), Ok(key_id) if key_id == test.expected_key_id());
         }
     }
 

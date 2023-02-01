@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use crate::api::CspSigner;
 use crate::key_id::KeyId;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
@@ -28,7 +29,7 @@ pub fn should_generate_tls_key_pair_and_store_certificate(csp_vault: Arc<dyn Csp
     let cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
-    let key_id = KeyId::from(&cert);
+    let key_id = KeyId::try_from(&cert).unwrap();
 
     assert!(csp_vault.sks_contains(&key_id).expect("SKS call failed"));
     assert_eq!(
@@ -176,7 +177,10 @@ pub fn should_sign_with_valid_key(csp_vault: Arc<dyn CspVault>) {
         .expect("Generation of TLS keys failed.");
 
     assert!(csp_vault
-        .tls_sign(&random_message(), &KeyId::from(&public_key_cert))
+        .tls_sign(
+            &random_message(),
+            &KeyId::try_from(&public_key_cert).expect("Cannot instantiate KeyId")
+        )
         .is_ok());
 }
 
@@ -188,7 +192,10 @@ pub fn should_sign_verifiably(csp_vault: Arc<dyn CspVault>) {
     let msg = random_message();
 
     let sig = csp_vault
-        .tls_sign(&msg, &KeyId::from(&public_key_cert))
+        .tls_sign(
+            &msg,
+            &KeyId::try_from(&public_key_cert).expect("cannot instantiate KeyId"),
+        )
         .expect("failed to generate signature");
 
     let csp_pub_key = ed25519_csp_pubkey_from_tls_pubkey_cert(&public_key_cert);
@@ -216,7 +223,7 @@ pub fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type(csp_vault: Arc<
         .expect("failed to generate keys");
     let msg = random_message();
 
-    let result = csp_vault.tls_sign(&msg, &KeyId::from(&wrong_csp_pub_key));
+    let result = csp_vault.tls_sign(&msg, &KeyId::try_from(&wrong_csp_pub_key).unwrap());
 
     assert_eq!(
         result.expect_err("Unexpected success."),

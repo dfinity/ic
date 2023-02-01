@@ -18,7 +18,6 @@ use ic_crypto_internal_test_vectors::multi_bls12_381::{
     TESTVEC_MULTI_BLS12_381_1_PK, TESTVEC_MULTI_BLS12_381_1_SIG,
 };
 use ic_crypto_internal_test_vectors::test_data;
-use ic_types::crypto::AlgorithmId::Ed25519;
 use rand::CryptoRng;
 use rand::Rng;
 use rand::SeedableRng;
@@ -37,7 +36,7 @@ mod sign_common {
             MockPublicKeyStore::new(),
         );
 
-        let result = csp.sign(Ed25519, b"msg", KeyId::from(KEY_ID));
+        let result = csp.sign(AlgorithmId::Ed25519, b"msg", KeyId::from(KEY_ID));
 
         assert!(result.unwrap_err().is_secret_key_not_found());
     }
@@ -51,7 +50,7 @@ mod sign_common {
             MockPublicKeyStore::new(),
         );
 
-        let _ = csp.sign(Ed25519, b"msg", KeyId::from(KEY_ID));
+        let _ = csp.sign(AlgorithmId::Ed25519, b"msg", KeyId::from(KEY_ID));
     }
 }
 
@@ -70,7 +69,11 @@ mod sign_ed25519 {
             MockPublicKeyStore::new(),
         );
 
-        assert_eq!(csp.sign(Ed25519, &msg, KeyId::from(KEY_ID)).unwrap(), sig);
+        assert_eq!(
+            csp.sign(AlgorithmId::Ed25519, &msg, KeyId::from(KEY_ID))
+                .unwrap(),
+            sig
+        );
     }
 
     #[test]
@@ -84,7 +87,7 @@ mod sign_ed25519 {
             MockPublicKeyStore::new(),
         );
 
-        let result = csp.sign(Ed25519, b"msg", KeyId::from(KEY_ID));
+        let result = csp.sign(AlgorithmId::Ed25519, b"msg", KeyId::from(KEY_ID));
 
         assert!(result.unwrap_err().is_invalid_argument());
     }
@@ -103,7 +106,7 @@ mod verify_common {
             MockPublicKeyStore::new(),
         );
 
-        assert!(csp.verify(&sig, &msg, Ed25519, pk).is_ok());
+        assert!(csp.verify(&sig, &msg, AlgorithmId::Ed25519, pk).is_ok());
     }
 }
 
@@ -338,7 +341,7 @@ mod verify_ed25519 {
             MockPublicKeyStore::new(),
         );
 
-        assert!(csp.verify(&sig, &msg, Ed25519, pk).is_ok());
+        assert!(csp.verify(&sig, &msg, AlgorithmId::Ed25519, pk).is_ok());
     }
 
     #[test]
@@ -352,7 +355,7 @@ mod verify_ed25519 {
             MockPublicKeyStore::new(),
         );
 
-        let result = csp.verify(&wrong_sig, &msg, Ed25519, pk);
+        let result = csp.verify(&wrong_sig, &msg, AlgorithmId::Ed25519, pk);
 
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -368,7 +371,7 @@ mod verify_ed25519 {
             MockPublicKeyStore::new(),
         );
 
-        let result = csp.verify(&sig, wrong_msg, Ed25519, pk);
+        let result = csp.verify(&sig, wrong_msg, AlgorithmId::Ed25519, pk);
 
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -384,7 +387,7 @@ mod verify_ed25519 {
             MockPublicKeyStore::new(),
         );
 
-        let result = csp.verify(&sig, &msg, Ed25519, wrong_pk);
+        let result = csp.verify(&sig, &msg, AlgorithmId::Ed25519, wrong_pk);
 
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -400,7 +403,7 @@ mod verify_ed25519 {
             MockPublicKeyStore::new(),
         );
 
-        let result = csp.verify(&sig_with_wrong_type, &msg, Ed25519, pk);
+        let result = csp.verify(&sig_with_wrong_type, &msg, AlgorithmId::Ed25519, pk);
 
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -416,7 +419,7 @@ mod verify_ed25519 {
             MockPublicKeyStore::new(),
         );
 
-        let result = csp.verify(&sig, &msg, Ed25519, pk_with_wrong_type);
+        let result = csp.verify(&sig, &msg, AlgorithmId::Ed25519, pk_with_wrong_type);
 
         assert!(result.unwrap_err().is_signature_verification_error());
     }
@@ -567,7 +570,7 @@ mod multi {
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
         let message = b"Three turtle doves";
-        let key_id = KeyId::from(&public_key);
+        let key_id = KeyId::try_from(&public_key).unwrap();
         let signature = csp
             .sign(AlgorithmId::MultiBls12_381, message, key_id)
             .expect("Signing failed");
@@ -590,7 +593,7 @@ mod multi {
         let (public_key, _pop) = csp.gen_committee_signing_key_pair().unwrap();
         let incompatible_signature = {
             let incompatible_public_key = csp.gen_node_signing_key_pair().unwrap();
-            let incompatible_key_id = KeyId::from(&incompatible_public_key);
+            let incompatible_key_id = KeyId::try_from(&incompatible_public_key).unwrap();
             csp.sign(incompatible_algorithm, message, incompatible_key_id)
                 .expect("Signing failed")
         };
@@ -608,7 +611,7 @@ mod multi {
         let algorithm = AlgorithmId::MultiBls12_381;
         let csp = Csp::with_rng(ChaCha20Rng::seed_from_u64(42));
         let (public_key, _pop) = csp.gen_committee_signing_key_pair().unwrap();
-        let key_id = KeyId::from(&public_key);
+        let key_id = KeyId::try_from(&public_key).unwrap();
         let incompatible_public_key = csp.gen_node_signing_key_pair().unwrap();
         let message = b"Three turtle doves";
         let signature = csp
@@ -638,11 +641,11 @@ mod multi {
         let (public_key1, _pop1) = csp1
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id1 = KeyId::from(&public_key1);
+        let key_id1 = KeyId::try_from(&public_key1).unwrap();
         let (public_key2, _pop2) = csp2
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id2 = KeyId::from(&public_key2);
+        let key_id2 = KeyId::try_from(&public_key2).unwrap();
 
         // Two signatures combined should verify:
         let message = b"Three turtle doves";
@@ -687,11 +690,11 @@ mod multi {
         let (public_key1, _pop1) = csp1
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id1 = KeyId::from(&public_key1);
+        let key_id1 = KeyId::try_from(&public_key1).unwrap();
         let (public_key2, _pop2) = csp2
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id2 = KeyId::from(&public_key2);
+        let key_id2 = KeyId::try_from(&public_key2).unwrap();
 
         // Two signatures combined should verify:
         let message = b"Three turtle doves";
@@ -734,7 +737,7 @@ mod multi {
         let (public_key1, _pop1) = csp1
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        let key_id1 = KeyId::from(&public_key1);
+        let key_id1 = KeyId::try_from(&public_key1).unwrap();
 
         // An incompatible signature:
         let (_, incompatible_public_key2, message, incompatible_signature2) =
