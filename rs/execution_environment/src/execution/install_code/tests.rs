@@ -1,9 +1,11 @@
 use ic_error_types::{ErrorCode, UserError};
 use ic_types::{CanisterId, Cycles, NumInstructions};
 
-use crate::execution::test_utilities::{check_ingress_status, ExecutionTest, ExecutionTestBuilder};
 use ic_ic00_types::{CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload};
 use ic_replicated_state::canister_state::NextExecution;
+use ic_test_utilities_execution_environment::{
+    check_ingress_status, ExecutionTest, ExecutionTestBuilder,
+};
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::MessageId;

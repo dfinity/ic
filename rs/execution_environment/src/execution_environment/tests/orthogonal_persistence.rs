@@ -1,4 +1,4 @@
-use crate::execution::test_utilities::{ExecutionTest, ExecutionTestBuilder};
+use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::{ingress::WasmResult, CanisterId};
 use proptest::{
     prelude::*,

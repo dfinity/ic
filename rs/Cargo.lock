@@ -5933,6 +5933,7 @@ dependencies = [
  "ic-sys",
  "ic-system-api",
  "ic-test-utilities",
+ "ic-test-utilities-execution-environment",
  "ic-test-utilities-logger",
  "ic-types",
  "ic-utils 0.8.0",
@@ -6012,6 +6013,7 @@ dependencies = [
  "ic-sys",
  "ic-system-api",
  "ic-test-utilities",
+ "ic-test-utilities-execution-environment",
  "ic-test-utilities-logger",
  "ic-test-utilities-metrics",
  "ic-types",
@@ -6731,6 +6733,7 @@ dependencies = [
  "ic-registry-subnet-type",
  "ic-replicated-state",
  "ic-test-utilities",
+ "ic-test-utilities-execution-environment",
  "ic-test-utilities-logger",
  "ic-test-utilities-metrics",
  "ic-types",
@@ -8827,6 +8830,7 @@ dependencies = [
  "ic-replicated-state",
  "ic-sys",
  "ic-test-utilities",
+ "ic-test-utilities-execution-environment",
  "ic-types",
  "ic-utils 0.8.0",
  "ic-wasm-types",
@@ -8969,6 +8973,36 @@ dependencies = [
 [[package]]
 name = "ic-test-utilities-compare-dirs"
 version = "0.8.0"
+
+[[package]]
+name = "ic-test-utilities-execution-environment"
+version = "0.8.0"
+dependencies = [
+ "ic-base-types",
+ "ic-config",
+ "ic-constants",
+ "ic-cycles-account-manager",
+ "ic-embedders",
+ "ic-error-types",
+ "ic-execution-environment",
+ "ic-ic00-types",
+ "ic-interfaces",
+ "ic-logger",
+ "ic-metrics",
+ "ic-registry-provisional-whitelist",
+ "ic-registry-routing-table",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-replicated-state",
+ "ic-system-api",
+ "ic-test-utilities",
+ "ic-types",
+ "ic-types-test-utils",
+ "ic-universal-canister",
+ "ic-wasm-types",
+ "maplit",
+ "wat",
+]
 
 [[package]]
 name = "ic-test-utilities-in-memory-logger"

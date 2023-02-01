@@ -14,11 +14,11 @@ use ic_system_api::{
     ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
 use ic_test_utilities::{
-    execution_environment::default_memory_for_system_api,
     mock_time,
-    types::ids::{call_context_test_id, subnet_test_id, user_test_id},
+    state::SystemStateBuilder,
+    types::ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
 };
-use ic_test_utilities::{state::SystemStateBuilder, types::ids::canister_test_id};
+use ic_test_utilities_execution_environment::default_memory_for_system_api;
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext},
     methods::SystemMethod,

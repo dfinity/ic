@@ -5,10 +5,6 @@ use crate::{
         InstallCodeContext, StopCanisterResult,
     },
     canister_settings::{CanisterSettings, CanisterSettingsBuilder},
-    execution::test_utilities::{
-        get_reply, get_routing_table_with_specified_ids_allocation_range, wasm_compilation_cost,
-        wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
-    },
     execution_environment::as_round_instructions,
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
@@ -55,6 +51,10 @@ use ic_test_utilities::{
         messages::{IngressBuilder, RequestBuilder, SignedIngressBuilder},
     },
     universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM},
+};
+use ic_test_utilities_execution_environment::{
+    get_reply, get_routing_table_with_specified_ids_allocation_range, wasm_compilation_cost,
+    wat_compilation_cost, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},

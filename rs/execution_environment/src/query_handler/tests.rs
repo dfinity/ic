@@ -1,4 +1,3 @@
-use crate::execution::test_utilities::{ExecutionTest, ExecutionTestBuilder};
 use crate::InternalHttpQueryHandler;
 use ic_base_types::NumSeconds;
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
@@ -8,6 +7,7 @@ use ic_test_utilities::{
     types::ids::user_test_id,
     universal_canister::{call_args, wasm},
 };
+use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::{ingress::WasmResult, messages::UserQuery, Cycles, NumInstructions};
 use std::sync::Arc;
 
@@ -17,7 +17,7 @@ fn downcast_query_handler(query_handler: &dyn std::any::Any) -> &InternalHttpQue
     // SAFETY:
     //
     // The type `InternalHttpQueryHandler` is imported in
-    // `ic_test_utilities::execution_environment` but because this dependency is
+    // `ic_test_utilities_execution_environment` but because this dependency is
     // only added as a dev dependency it's considered different than the type
     // imported here which is used in non-dev dependencies. However, we know
     // that the two types are the same under the hood, so we can safely perform

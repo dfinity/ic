@@ -12,10 +12,10 @@ use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
     ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
-use ic_test_utilities::execution_environment::default_memory_for_system_api;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, types::ids::canister_test_id,
 };
+use ic_test_utilities_execution_environment::default_memory_for_system_api;
 use ic_types::{ComputeAllocation, NumBytes, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 

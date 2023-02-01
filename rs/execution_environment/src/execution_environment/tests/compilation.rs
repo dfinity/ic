@@ -1,12 +1,12 @@
 mod execution_tests {
     use std::path::PathBuf;
 
-    use crate::execution::test_utilities::{wat_compilation_cost, ExecutionTestBuilder};
     use ic_error_types::ErrorCode;
     use ic_replicated_state::{
         canister_state::execution_state::{WasmBinary, WasmMetadata},
         ExecutionState, ExportedFunctions, Memory,
     };
+    use ic_test_utilities_execution_environment::{wat_compilation_cost, ExecutionTestBuilder};
     use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_int_counter_vec};
     use ic_types::methods::WasmMethod;
     use ic_types::Cycles;
@@ -500,9 +500,9 @@ mod state_machine_tests {
     //! `expected_compiled_wasms` set at checkpoints. These tests are running a
     //! full scheduler so they exercise the actual checkpoint logic.
 
-    use crate::execution::test_utilities::wat_compilation_cost;
     use crate::CompilationCostHandling;
     use ic_state_machine_tests::StateMachine;
+    use ic_test_utilities_execution_environment::wat_compilation_cost;
 
     /// A canister with an update and a query method.
     const TEST_CANISTER: &str = r#"
