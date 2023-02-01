@@ -1,4 +1,4 @@
-// This module defines how update messages are executed.
+// This module defines how update messages and canister tasks are executed.
 // See https://smartcontracts.org/docs/interface-spec/index.html#rule-message-execution
 
 use crate::execution::common::{
@@ -14,25 +14,25 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_interfaces::messages::CanisterMessage;
-use ic_interfaces::messages::{CanisterCall, CanisterMessageOrTask};
+use ic_interfaces::messages::{CanisterCall, CanisterMessageOrTask, CanisterTask};
+use ic_interfaces::messages::{CanisterCallOrTask, CanisterMessage};
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::{CallOrigin, CanisterState};
 use ic_types::messages::CallContextId;
-use ic_types::{Cycles, NumBytes, NumInstructions, Time};
+use ic_types::{CanisterTimer, Cycles, NumBytes, NumInstructions, Time};
 use ic_wasm_types::WasmEngineError::FailedToApplySystemChanges;
 
 use ic_system_api::{ApiType, ExecutionParameters};
-use ic_types::methods::{FuncRef, WasmMethod};
+use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
 
 #[cfg(test)]
 mod tests;
 
-// Execute an inter-canister request or an ingress update message.
+// Execute an inter-canister call message or a canister task.
 #[allow(clippy::too_many_arguments)]
 pub fn execute_update(
     clean_canister: CanisterState,
-    message: CanisterCall,
+    call_or_task: CanisterCallOrTask,
     method: WasmMethod,
     prepaid_execution_cycles: Option<Cycles>,
     execution_parameters: ExecutionParameters,
@@ -60,9 +60,11 @@ pub fn execute_update(
                             return finish_call_with_error(
                                 UserError::new(ErrorCode::CanisterOutOfCycles, err),
                                 canister,
-                                message,
+                                call_or_task,
                                 NumInstructions::from(0),
                                 round.time,
+                                execution_parameters.subnet_type,
+                                round.log,
                             );
                         }
                     };
@@ -79,9 +81,9 @@ pub fn execute_update(
     );
 
     let original = OriginalContext {
-        call_origin: CallOrigin::from(&message),
+        call_origin: CallOrigin::from(&call_or_task),
         method,
-        message,
+        call_or_task,
         prepaid_execution_cycles,
         execution_parameters,
         subnet_size,
@@ -103,13 +105,25 @@ pub fn execute_update(
         }
     };
 
-    let api_type = ApiType::update(
-        time,
-        original.message.method_payload().to_vec(),
-        original.message.cycles(),
-        *original.message.sender(),
-        helper.call_context_id(),
-    );
+    let api_type = match &original.call_or_task {
+        CanisterCallOrTask::Call(msg) => ApiType::update(
+            time,
+            msg.method_payload().to_vec(),
+            msg.cycles(),
+            *msg.sender(),
+            helper.call_context_id(),
+        ),
+        CanisterCallOrTask::Task(CanisterTask::Heartbeat) => ApiType::system_task(
+            SystemMethod::CanisterHeartbeat,
+            time,
+            helper.call_context_id(),
+        ),
+        CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => ApiType::system_task(
+            SystemMethod::CanisterGlobalTimer,
+            time,
+            helper.call_context_id(),
+        ),
+    };
 
     let memory_usage = helper
         .canister()
@@ -134,12 +148,20 @@ pub fn execute_update(
                 slice.executed_instructions,
             );
             update_round_limits(round_limits, &slice);
-            let ingress_status = if resuming_aborted {
-                // Resuming an aborted execution doesn't change the ingress
-                // status.
-                None
-            } else {
-                ingress_status_with_processing_state(&original.message, original.time)
+
+            let ingress_status = match (resuming_aborted, &original.call_or_task) {
+                (true, _) => {
+                    // Resuming an aborted execution doesn't change the ingress
+                    // status.
+                    None
+                }
+                (false, CanisterCallOrTask::Task(_)) => {
+                    // Canister tasks do not have ingress status.
+                    None
+                }
+                (false, CanisterCallOrTask::Call(call)) => {
+                    ingress_status_with_processing_state(call, original.time)
+                }
             };
             let paused_execution = Box::new(PausedCallExecution {
                 paused_wasm_execution,
@@ -196,9 +218,11 @@ fn finish_err(
     finish_call_with_error(
         err,
         canister,
-        original.message,
+        original.call_or_task,
         instructions_used,
         round.time,
+        original.execution_parameters.subnet_type,
+        round.log,
     )
 }
 
@@ -207,7 +231,7 @@ fn finish_err(
 #[derive(Debug)]
 struct OriginalContext {
     call_origin: CallOrigin,
-    message: CanisterCall,
+    call_or_task: CanisterCallOrTask,
     prepaid_execution_cycles: Cycles,
     method: WasmMethod,
     execution_parameters: ExecutionParameters,
@@ -246,11 +270,19 @@ impl UpdateHelper {
             .unwrap()
             .new_call_context(
                 original.call_origin.clone(),
-                original.message.cycles(),
+                original.call_or_task.cycles(),
                 original.time,
             );
 
         let initial_cycles_balance = canister.system_state.balance();
+
+        match original.call_or_task {
+            CanisterCallOrTask::Call(_) | CanisterCallOrTask::Task(CanisterTask::Heartbeat) => {}
+            CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => {
+                // The global timer is one-off.
+                canister.system_state.global_timer = CanisterTimer::Inactive;
+            }
+        }
 
         Ok(Self {
             canister,
@@ -505,13 +537,15 @@ impl PausedExecution for PausedCallExecution {
             self.original.canister_id,
         );
         self.paused_wasm_execution.abort();
-        let message = match self.original.message {
-            CanisterCall::Request(r) => CanisterMessage::Request(r),
-            CanisterCall::Ingress(i) => CanisterMessage::Ingress(i),
+        let message_or_task = match self.original.call_or_task {
+            CanisterCallOrTask::Call(CanisterCall::Request(r)) => {
+                CanisterMessageOrTask::Message(CanisterMessage::Request(r))
+            }
+            CanisterCallOrTask::Call(CanisterCall::Ingress(i)) => {
+                CanisterMessageOrTask::Message(CanisterMessage::Ingress(i))
+            }
+            CanisterCallOrTask::Task(task) => CanisterMessageOrTask::Task(task),
         };
-        (
-            CanisterMessageOrTask::Message(message),
-            self.original.prepaid_execution_cycles,
-        )
+        (message_or_task, self.original.prepaid_execution_cycles)
     }
 }

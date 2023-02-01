@@ -36,6 +36,9 @@ use ic_types_test_utils::ids::{canister_test_id, node_test_id, subnet_test_id, u
 use ic_universal_canister::{call_args, wasm};
 
 #[cfg(test)]
+mod canister_task;
+
+#[cfg(test)]
 mod compilation;
 #[cfg(test)]
 mod orthogonal_persistence;

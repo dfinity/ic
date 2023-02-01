@@ -1,6 +1,10 @@
 // This module defines common helper functions.
 // TODO(RUN-60): Move helper functions here.
 
+use ic_registry_subnet_type::SubnetType;
+use lazy_static::lazy_static;
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::wasm_executor::{CanisterStateChanges, SliceExecutionOutput};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -8,7 +12,7 @@ use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
-use ic_interfaces::messages::CanisterCall;
+use ic_interfaces::messages::{CanisterCall, CanisterCallOrTask};
 use ic_logger::{error, fatal, warn, ReplicaLogger};
 use ic_replicated_state::{
     CallContext, CallContextAction, CallOrigin, CanisterState, ExecutionState, NetworkTopology,
@@ -22,6 +26,17 @@ use ic_types::{Cycles, MemoryAllocation, NumInstructions, Time, UserId};
 
 use crate::execution_environment::ExecutionResponse;
 use crate::{as_round_instructions, ExecuteMessageResult, RoundLimits};
+
+lazy_static! {
+    /// Track how many system task errors have been encountered
+    /// so that we can restrict logging to a sample of them.
+    static ref SYSTEM_TASK_ERROR_COUNT: AtomicU64 = AtomicU64::new(0);
+}
+
+/// How often system task errors should be logged to avoid overloading the logs.
+const LOG_ONE_SYSTEM_TASK_OUT_OF: u64 = 100;
+/// How many first system task messages to log unconditionally.
+const LOG_FIRST_N_SYSTEM_TASKS: u64 = 50;
 
 pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserError> {
     if CanisterStatusType::Running != canister.status() {
@@ -480,12 +495,14 @@ pub fn apply_canister_state_changes(
 pub(crate) fn finish_call_with_error(
     user_error: UserError,
     canister: CanisterState,
-    req: CanisterCall,
+    call_or_task: CanisterCallOrTask,
     instructions_used: NumInstructions,
     time: Time,
+    subnet_type: SubnetType,
+    log: &ReplicaLogger,
 ) -> ExecuteMessageResult {
-    let result = match req {
-        CanisterCall::Request(request) => {
+    let response = match call_or_task {
+        CanisterCallOrTask::Call(CanisterCall::Request(request)) => {
             let response = Response {
                 originator: request.sender,
                 respondent: canister.canister_id(),
@@ -495,7 +512,7 @@ pub(crate) fn finish_call_with_error(
             };
             ExecutionResponse::Request(response)
         }
-        CanisterCall::Ingress(ingress) => {
+        CanisterCallOrTask::Call(CanisterCall::Ingress(ingress)) => {
             let status = IngressStatus::Known {
                 receiver: canister.canister_id().get(),
                 user_id: ingress.source,
@@ -504,10 +521,31 @@ pub(crate) fn finish_call_with_error(
             };
             ExecutionResponse::Ingress((ingress.message_id.clone(), status))
         }
+        CanisterCallOrTask::Task(task) => {
+            // We should monitor all errors in the system subnets and only
+            // system errors on other subnets.
+            if subnet_type == SubnetType::System || user_error.is_system_error() {
+                // We could improve the rate limiting using some kind of exponential backoff.
+                let log_count = SYSTEM_TASK_ERROR_COUNT.fetch_add(1, Ordering::SeqCst);
+                if log_count < LOG_FIRST_N_SYSTEM_TASKS
+                    || log_count % LOG_ONE_SYSTEM_TASK_OUT_OF == 0
+                {
+                    warn!(
+                        log,
+                        "Error executing canister task {:?} on canister {} with failure `{}`",
+                        task,
+                        canister.canister_id(),
+                        user_error;
+                        messaging.canister_id => canister.canister_id().to_string(),
+                    );
+                }
+            }
+            ExecutionResponse::Empty
+        }
     };
     ExecuteMessageResult::Finished {
         canister,
-        response: result,
+        response,
         instructions_used,
         heap_delta: NumBytes::from(0),
     }

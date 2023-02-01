@@ -1,6 +1,7 @@
 //! Messages used in various components.
 use ic_types::{
     messages::{Ingress, Request, Response, StopCanisterContext},
+    methods::SystemMethod,
     CanisterId, Cycles, PrincipalId,
 };
 use std::{convert::TryFrom, sync::Arc};
@@ -121,6 +122,15 @@ impl TryFrom<CanisterMessage> for CanisterCall {
 pub enum CanisterTask {
     Heartbeat,
     GlobalTimer,
+}
+
+impl From<CanisterTask> for SystemMethod {
+    fn from(task: CanisterTask) -> Self {
+        match task {
+            CanisterTask::Heartbeat => SystemMethod::CanisterHeartbeat,
+            CanisterTask::GlobalTimer => SystemMethod::CanisterGlobalTimer,
+        }
+    }
 }
 
 impl Display for CanisterTask {

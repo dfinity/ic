@@ -9,6 +9,7 @@ use crate::execution::common::{
 };
 use crate::execution_environment::{ExecuteMessageResult, RoundContext, RoundLimits};
 use ic_error_types::{ErrorCode, UserError};
+use ic_interfaces::messages::CanisterCallOrTask;
 use ic_interfaces::{execution_environment::HypervisorError, messages::CanisterCall};
 use ic_logger::{info, ReplicaLogger};
 use ic_replicated_state::{CallOrigin, CanisterState};
@@ -50,9 +51,11 @@ pub fn execute_replicated_query(
             return finish_call_with_error(
                 UserError::new(ErrorCode::CanisterOutOfCycles, err),
                 canister,
-                req,
+                CanisterCallOrTask::Call(req),
                 NumInstructions::from(0),
                 time,
+                execution_parameters.subnet_type,
+                round.log,
             );
         }
     };
@@ -71,7 +74,15 @@ pub fn execute_replicated_query(
             ErrorCode::CompositeQueryCalledInReplicatedMode,
             "Composite query cannot be called in replicated mode",
         );
-        return finish_call_with_error(user_error, canister, req, NumInstructions::from(0), time);
+        return finish_call_with_error(
+            user_error,
+            canister,
+            CanisterCallOrTask::Call(req),
+            NumInstructions::from(0),
+            time,
+            execution_parameters.subnet_type,
+            round.log,
+        );
     }
 
     if let Err(user_error) = validate_message(&canister, &method) {
@@ -84,7 +95,15 @@ pub fn execute_replicated_query(
             subnet_size,
             round.log,
         );
-        return finish_call_with_error(user_error, canister, req, NumInstructions::from(0), time);
+        return finish_call_with_error(
+            user_error,
+            canister,
+            CanisterCallOrTask::Call(req),
+            NumInstructions::from(0),
+            time,
+            execution_parameters.subnet_type,
+            round.log,
+        );
     }
 
     let call_origin = CallOrigin::from(&req);
