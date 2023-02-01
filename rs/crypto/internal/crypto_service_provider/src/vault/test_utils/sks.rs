@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::{SecretKeyStoreError, SecretKeyStorePersistenceError};
@@ -28,7 +29,7 @@ pub fn sks_should_contain_keys_only_after_generation(
     let public_key1 = csp_vault1
         .gen_node_signing_key_pair()
         .expect("Test setup failed: Failed to generate keys");
-    let key_id1 = KeyId::from(&public_key1);
+    let key_id1 = KeyId::try_from(&public_key1).unwrap();
     assert!(
         csp_vault1.sks_contains(&key_id1).expect("SKS call failed"),
         "Key should be present after generation."
@@ -41,7 +42,7 @@ pub fn sks_should_contain_keys_only_after_generation(
     let public_key2 = csp_vault2
         .gen_node_signing_key_pair()
         .expect("Test setup failed: Failed to generate keys");
-    let key_id2 = KeyId::from(&public_key2);
+    let key_id2 = KeyId::try_from(&public_key2).unwrap();
     assert_ne!(
         key_id1, key_id2,
         "Test failure: Key IDs from different CSPs were the same.  Check random number generation."
@@ -67,7 +68,7 @@ pub fn sks_should_contain_tls_keys_only_after_generation(
     let public_key_cert1 = csp_vault1
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("error generating TLS key pair");
-    let key_id1 = KeyId::from(&public_key_cert1);
+    let key_id1 = KeyId::try_from(&public_key_cert1).unwrap();
     assert!(
         csp_vault1.sks_contains(&key_id1).expect("SKS call failed"),
         "TLS key should be present after generation."
@@ -80,7 +81,7 @@ pub fn sks_should_contain_tls_keys_only_after_generation(
     let public_key_cert2 = csp_vault2
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("error generating TLS key pair");
-    let key_id2 = KeyId::from(&public_key_cert2);
+    let key_id2 = KeyId::try_from(&public_key_cert2).unwrap();
     assert_ne!(
         key_id1, key_id2,
         "Test failure: Key IDs from different CSPs were the same.  Check random number generation."

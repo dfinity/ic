@@ -23,7 +23,7 @@ mod test_multi_sign {
             (4, NODE_4, STABILITY_4),
         ] {
             let (sk, pk, _pop, msg, expected_sig) = multi_bls12_381::testvec(*testvec);
-            let key_id = KeyId::from(&pk);
+            let key_id = KeyId::try_from(&pk).unwrap();
             let key_record = committee_signing_record_with(
                 *node,
                 pk.multi_bls12_381_bytes().unwrap().to_vec(),
@@ -62,7 +62,7 @@ mod test_multi_sig_verification {
     fn should_correctly_verify_multi_sig_individual() {
         for (index, node, testvec) in &[(1, NODE_1, STABILITY_1), (2, NODE_2, STABILITY_2)] {
             let (sk, pk, _pop, msg, sig) = multi_bls12_381::testvec(*testvec);
-            let key_id = KeyId::from(&pk);
+            let key_id = KeyId::try_from(&pk).unwrap();
 
             let key_record = committee_signing_record_with(
                 *node,

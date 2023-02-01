@@ -1,3 +1,4 @@
+use crate::key_id::KeyIdInstantiationError;
 use crate::secret_key_store::{panic_due_to_duplicated_key_id, SecretKeyStoreError};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
@@ -135,6 +136,14 @@ impl From<CspSecretKeyStoreContainsError> for CryptoError {
     }
 }
 
+impl From<KeyIdInstantiationError> for CspBasicSignatureKeygenError {
+    fn from(error: KeyIdInstantiationError) -> Self {
+        CspBasicSignatureKeygenError::InternalError {
+            internal_error: format!("Cannot instantiate KeyId: {:?}", error),
+        }
+    }
+}
+
 impl From<SecretKeyStoreError> for CspBasicSignatureKeygenError {
     fn from(err: SecretKeyStoreError) -> Self {
         match err {
@@ -144,6 +153,14 @@ impl From<SecretKeyStoreError> for CspBasicSignatureKeygenError {
             SecretKeyStoreError::PersistenceError(e) => {
                 panic!("Error persisting secret key store during CSP basic signature key generation: {}", e)
             }
+        }
+    }
+}
+
+impl From<KeyIdInstantiationError> for CspMultiSignatureKeygenError {
+    fn from(error: KeyIdInstantiationError) -> Self {
+        CspMultiSignatureKeygenError::InternalError {
+            internal_error: format!("Cannot instantiate KeyId: {:?}", error),
         }
     }
 }

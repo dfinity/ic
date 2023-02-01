@@ -6,6 +6,7 @@ use crate::tls::{
     node_id_from_cert_subject_common_name, tls_cert_from_registry, TlsCertFromRegistryError,
 };
 use ic_crypto_internal_csp::api::CspTlsHandshakeSignerProvider;
+use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, TlsPublicKeyCert, TlsServerHandshakeError, TlsStream,
 };
@@ -30,15 +31,22 @@ pub async fn perform_tls_server_handshake<P: CspTlsHandshakeSignerProvider>(
     registry_version: RegistryVersion,
 ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
     let self_tls_cert = tls_cert_from_registry(registry_client, self_node_id, registry_version)?;
+    let self_tls_cert_key_id = KeyId::try_from(&self_tls_cert).map_err(|error| {
+        TlsServerHandshakeError::MalformedSelfCertificate {
+            internal_error: format!("Cannot instantiate KeyId: {:?}", error),
+        }
+    })?;
     let client_cert_verifier = NodeClientCertVerifier::new_with_mandatory_client_auth(
         allowed_clients.nodes().clone(),
         Arc::clone(registry_client),
         registry_version,
     );
+    let ed25519_signing_key =
+        CspServerEd25519SigningKey::new(self_tls_cert_key_id, signer_provider.handshake_signer());
     let config = server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
         Arc::new(client_cert_verifier),
         self_tls_cert,
-        signer_provider,
+        ed25519_signing_key,
     );
 
     let rustls_stream = accept_connection(tcp_stream, config).await?;
@@ -61,10 +69,17 @@ pub async fn perform_tls_server_handshake_without_client_auth<P: CspTlsHandshake
     registry_version: RegistryVersion,
 ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError> {
     let self_tls_cert = tls_cert_from_registry(registry_client, self_node_id, registry_version)?;
+    let self_tls_cert_key_id = KeyId::try_from(&self_tls_cert).map_err(|error| {
+        TlsServerHandshakeError::MalformedSelfCertificate {
+            internal_error: format!("Cannot instantiate KeyId: {:?}", error),
+        }
+    })?;
+    let ed25519_signing_key =
+        CspServerEd25519SigningKey::new(self_tls_cert_key_id, signer_provider.handshake_signer());
     let config = server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
         NoClientAuth::new(),
         self_tls_cert,
-        signer_provider,
+        ed25519_signing_key,
     );
 
     let rustls_stream = accept_connection(tcp_stream, config).await?;
@@ -74,19 +89,15 @@ pub async fn perform_tls_server_handshake_without_client_auth<P: CspTlsHandshake
     )))
 }
 
-fn server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key<
-    P: CspTlsHandshakeSignerProvider,
->(
+fn server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
     client_cert_verifier: Arc<dyn ClientCertVerifier>,
     self_tls_cert: TlsPublicKeyCert,
-    signer_provider: &P,
+    ed25519_signing_key: CspServerEd25519SigningKey,
 ) -> ServerConfig {
     let mut config = ServerConfig::new(client_cert_verifier);
     config.versions = vec![ProtocolVersion::TLSv1_3];
     config.ciphersuites = vec![&TLS13_AES_256_GCM_SHA384, &TLS13_AES_128_GCM_SHA256];
 
-    let ed25519_signing_key =
-        CspServerEd25519SigningKey::new(&self_tls_cert, signer_provider.handshake_signer());
     config.cert_resolver = static_cert_resolver(
         certified_key(self_tls_cert, ed25519_signing_key),
         SignatureScheme::ED25519,

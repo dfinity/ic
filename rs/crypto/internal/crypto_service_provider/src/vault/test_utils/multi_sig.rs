@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use crate::api::CspSigner;
 use crate::keygen::utils::committee_signing_pk_to_proto;
 use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
@@ -26,7 +27,9 @@ pub fn should_generate_committee_signing_key_pair_and_store_keys(csp_vault: Arc<
         .expect("Failure generating key pair with pop");
 
     assert_matches!(pk, CspPublicKey::MultiBls12_381(_));
-    assert!(csp_vault.sks_contains(&KeyId::from(&pk)).is_ok());
+    assert!(csp_vault
+        .sks_contains(&KeyId::try_from(&pk).unwrap())
+        .is_ok());
     assert_eq!(
         csp_vault
             .current_node_public_keys()
@@ -89,7 +92,7 @@ pub fn should_multi_sign_and_verify_with_generated_key(csp_vault: Arc<dyn CspVau
     let (csp_pub_key, csp_pop) = csp_vault
         .gen_committee_signing_key_pair()
         .expect("failed to generate keys");
-    let key_id = KeyId::from(&csp_pub_key);
+    let key_id = KeyId::try_from(&csp_pub_key).unwrap();
 
     let mut rng = thread_rng();
     let msg_len: usize = rng.gen_range(0..1024);
@@ -113,7 +116,7 @@ pub fn should_not_multi_sign_with_unsupported_algorithm_id(csp_vault: Arc<dyn Cs
     let (csp_pub_key, _csp_pop) = csp_vault
         .gen_committee_signing_key_pair()
         .expect("failed to generate keys");
-    let key_id = KeyId::from(&csp_pub_key);
+    let key_id = KeyId::try_from(&csp_pub_key).unwrap();
 
     let msg = [31; 41];
 
@@ -140,7 +143,7 @@ pub fn should_not_multi_sign_if_secret_key_in_store_has_wrong_type(csp_vault: Ar
     let result = csp_vault.multi_sign(
         AlgorithmId::MultiBls12_381,
         &msg,
-        KeyId::from(&wrong_csp_pub_key),
+        KeyId::try_from(&wrong_csp_pub_key).unwrap(),
     );
 
     assert_eq!(

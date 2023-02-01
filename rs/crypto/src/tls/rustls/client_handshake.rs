@@ -4,6 +4,7 @@ use crate::tls::rustls::node_cert_verifier::NodeServerCertVerifier;
 use crate::tls::rustls::{certified_key, RustlsTlsStream};
 use crate::tls::{tls_cert_from_registry, TlsCertFromRegistryError};
 use ic_crypto_internal_csp::api::CspTlsHandshakeSignerProvider;
+use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsClientHandshakeError, TlsStream};
 use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
@@ -24,11 +25,16 @@ pub async fn perform_tls_client_handshake<P: CspTlsHandshakeSignerProvider>(
     registry_version: RegistryVersion,
 ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
     let self_tls_cert = tls_cert_from_registry(registry_client, self_node_id, registry_version)?;
+    let self_tls_cert_key_id = KeyId::try_from(&self_tls_cert).map_err(|error| {
+        TlsClientHandshakeError::MalformedSelfCertificate {
+            internal_error: format!("Cannot instantiate KeyId: {:?}", error),
+        }
+    })?;
     let mut config = ClientConfig::new();
     config.versions = vec![ProtocolVersion::TLSv1_3];
     config.ciphersuites = vec![&TLS13_AES_256_GCM_SHA384, &TLS13_AES_128_GCM_SHA256];
     let ed25519_signing_key =
-        CspServerEd25519SigningKey::new(&self_tls_cert, signer_provider.handshake_signer());
+        CspServerEd25519SigningKey::new(self_tls_cert_key_id, signer_provider.handshake_signer());
     config.client_auth_cert_resolver = static_cert_resolver(
         certified_key(self_tls_cert, ed25519_signing_key),
         SignatureScheme::ED25519,

@@ -320,7 +320,7 @@ fn ensure_node_signing_key_material_is_set_up_correctly(
         });
     }
     let csp_key = CspPublicKey::try_from(pubkey_proto)?;
-    let key_id = KeyId::from(&csp_key);
+    let key_id = KeyId::try_from(&csp_key)?;
     if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::Ed25519,
@@ -346,7 +346,7 @@ fn ensure_committee_signing_key_material_is_set_up_correctly(
     }
     ensure_committe_signing_key_pop_is_well_formed(&pubkey_proto)?;
     let csp_key = CspPublicKey::try_from(pubkey_proto)?;
-    let key_id = KeyId::from(&csp_key);
+    let key_id = KeyId::try_from(&csp_key)?;
     if !csp.sks_contains(&key_id)? {
         return Err(CryptoError::SecretKeyNotFound {
             algorithm: AlgorithmId::MultiBls12_381,

@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 mod csp_tests {
     use crate::api::CspSigner;
     use crate::api::CspTlsHandshakeSignerProvider;
@@ -66,7 +67,7 @@ mod csp_tests {
     #[test]
     fn should_contain_newly_generated_secret_key_from_store() {
         let (csp, public_key) = csp_with_node_signing_key_pair();
-        let key_id = KeyId::from(&public_key);
+        let key_id = KeyId::try_from(&public_key).unwrap();
 
         let is_contained_in_sks_store = csp
             .sks_contains(&key_id)
@@ -78,7 +79,7 @@ mod csp_tests {
     #[test]
     fn should_sign_and_verify_with_newly_generated_secret_key_from_store() {
         let (csp, public_key) = csp_with_node_signing_key_pair();
-        let key_id = KeyId::from(&public_key);
+        let key_id = KeyId::try_from(&public_key).unwrap();
         let message = "Hello world!".as_bytes();
 
         let signature = csp
@@ -104,7 +105,7 @@ mod csp_tests {
     #[test]
     fn should_sign_and_verify_with_newly_generated_tls_secret_key_from_store() {
         let (csp, cert) = csp_with_tls_key_pair();
-        let key_id = KeyId::from(&cert);
+        let key_id = KeyId::try_from(&cert).unwrap();
         let message = "Hello world!".as_bytes();
 
         let signature = csp

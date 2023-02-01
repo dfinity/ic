@@ -77,7 +77,7 @@ mod test_basic_sign {
         #[test]
         fn should_correctly_sign() {
             let (sk, pk, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
-            let key_id = KeyId::from(&pk);
+            let key_id = KeyId::try_from(&pk).unwrap();
             let key_record = node_signing_record_with(
                 NODE_1,
                 pk.ed25519_bytes().unwrap().to_vec(),
@@ -254,8 +254,8 @@ mod test_basic_sig_verification {
             let (sk_1, pk_1, msg, _) = basic_sig::testvec(ED25519_STABILITY_1);
             let (sk_2, pk_2, _, _) = basic_sig::testvec(ED25519_STABILITY_2);
 
-            let key_id_1 = KeyId::from(&pk_1);
-            let key_id_2 = KeyId::from(&pk_2);
+            let key_id_1 = KeyId::try_from(&pk_1).unwrap();
+            let key_id_2 = KeyId::try_from(&pk_2).unwrap();
             let key_record_1 = node_signing_record_with(
                 NODE_1,
                 pk_1.ed25519_bytes().unwrap().to_vec(),

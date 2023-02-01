@@ -22,7 +22,7 @@ mod gen_node_siging_key_pair_tests {
     fn should_correctly_generate_node_signing_keys() {
         let csp = Csp::with_rng(rng());
         let public_key = csp.gen_node_signing_key_pair().unwrap();
-        let key_id = KeyId::from(&public_key);
+        let key_id = KeyId::try_from(&public_key).unwrap();
 
         assert_eq!(
             key_id,
@@ -89,7 +89,7 @@ mod gen_key_pair_with_pop_tests {
         let csprng = csprng_seeded_with(test_vector.seed);
         let csp = Csp::with_rng(csprng);
         let (public_key, pop) = csp.gen_committee_signing_key_pair().unwrap();
-        let key_id = KeyId::from(&public_key);
+        let key_id = KeyId::try_from(&public_key).unwrap();
 
         assert_eq!(key_id, test_vector.key_id);
         assert_eq!(public_key, test_vector.public_key);
@@ -237,12 +237,13 @@ fn should_correctly_convert_tls_cert_hash_as_key_id() {
     let cert = TlsPublicKeyCert::new_from_der(cert_der)
         .expect("failed to build TlsPublicKeyCert from DER");
 
-    let key_id = KeyId::from(&cert);
+    let key_id = KeyId::try_from(&cert);
 
     // We expect the following hard coded key id:
-    let expected_key_id =
-        hex_to_32_bytes("bc1f70570a2aaa0904069e1a77b710c729ac1bf026a02f14ad8613c3627b211a");
-    assert_eq!(key_id, KeyId::from(expected_key_id));
+    let expected_key_id = KeyId::from(hex_to_32_bytes(
+        "bc1f70570a2aaa0904069e1a77b710c729ac1bf026a02f14ad8613c3627b211a",
+    ));
+    assert_matches!(key_id, Ok(actual) if actual == expected_key_id);
 }
 
 fn csprng_seeded_with(seed: u64) -> impl CryptoRng + Rng {

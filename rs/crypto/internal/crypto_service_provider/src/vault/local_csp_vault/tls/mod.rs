@@ -124,7 +124,10 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes)
             .expect("generated X509 certificate has malformed DER encoding");
 
-        let key_id = KeyId::from(&x509_pk_cert);
+        let key_id =
+            KeyId::try_from(&x509_pk_cert).map_err(|error| CspTlsKeygenError::InternalError {
+                internal_error: format!("Cannot instantiate KeyId: {:?}", error),
+            })?;
         let secret_key = CspSecretKey::TlsEd25519(secret_key);
         let cert_proto = x509_pk_cert.to_proto();
         let valid_cert = validate_tls_certificate(cert_proto, node)?;
