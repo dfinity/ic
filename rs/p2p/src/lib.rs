@@ -120,6 +120,7 @@ mod metrics;
 mod peer_context;
 
 pub use event_handler::{AdvertBroadcaster, P2PThreadJoiner};
+pub use gossip_protocol::ArtifactDestination;
 
 /// Custom P2P result type returning a P2P error in case of error.
 pub(crate) type P2PResult<T> = std::result::Result<T, P2PError>;

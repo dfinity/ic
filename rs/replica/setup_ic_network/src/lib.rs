@@ -37,13 +37,13 @@ use ic_interfaces_state_manager::{StateManager, StateReader};
 use ic_interfaces_transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_p2p::{start_p2p, AdvertBroadcaster, P2PThreadJoiner};
+use ic_p2p::{start_p2p, AdvertBroadcaster, ArtifactDestination, P2PThreadJoiner};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::StateSync;
 use ic_transport::transport::create_transport;
 use ic_types::{
-    artifact::{Advert, ArtifactKind, ArtifactTag, FileTreeSyncAttribute},
+    artifact::{Advert, AdvertClass, ArtifactKind, ArtifactTag, FileTreeSyncAttribute},
     consensus::catchup::CUPWithOriginalProtobuf,
     consensus::HasHeight,
     crypto::CryptoHash,
@@ -237,7 +237,12 @@ fn setup_artifact_manager(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry,
             client_on_state_change,
-            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| match req.advert_class {
+                AdvertClass::Critical => {
+                    advert_broadcaster.send(req.advert.into(), ArtifactDestination::SendToAllPeers)
+                }
+                AdvertClass::None => (),
+            },
         );
         artifact_manager_maker.add_client(client, addr);
         return Ok(artifact_manager_maker.finish());
@@ -248,7 +253,12 @@ fn setup_artifact_manager(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry.clone(),
             Box::new(state_sync_client.clone()) as Box<_>,
-            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| match req.advert_class {
+                AdvertClass::Critical => {
+                    advert_broadcaster.send(req.advert.into(), ArtifactDestination::SendToAllPeers)
+                }
+                AdvertClass::None => (),
+            },
         );
         artifact_manager_maker.add_client(Box::new(state_sync_client), addr);
     }
@@ -304,7 +314,12 @@ fn setup_artifact_manager(
         // Create the consensus client.
         let advert_broadcaster = advert_broadcaster.clone();
         let (consensus_client, actor) = processors::ConsensusProcessor::build(
-            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| match req.advert_class {
+                AdvertClass::Critical => {
+                    advert_broadcaster.send(req.advert.into(), ArtifactDestination::SendToAllPeers)
+                }
+                AdvertClass::None => (),
+            },
             || {
                 ic_consensus::consensus::setup(
                     consensus_replica_config.clone(),
@@ -341,7 +356,12 @@ fn setup_artifact_manager(
         // Create the ingress client.
         let advert_broadcaster = advert_broadcaster.clone();
         let (ingress_client, actor) = processors::IngressProcessor::build(
-            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| match req.advert_class {
+                AdvertClass::Critical => {
+                    advert_broadcaster.send(req.advert.into(), ArtifactDestination::SendToAllPeers)
+                }
+                AdvertClass::None => (),
+            },
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.ingress_pool),
             ingress_manager,
@@ -357,7 +377,12 @@ fn setup_artifact_manager(
         // Create the certification client.
         let advert_broadcaster = advert_broadcaster.clone();
         let (certification_client, actor) = processors::CertificationProcessor::build(
-            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| match req.advert_class {
+                AdvertClass::Critical => {
+                    advert_broadcaster.send(req.advert.into(), ArtifactDestination::SendToAllPeers)
+                }
+                AdvertClass::None => (),
+            },
             || {
                 certification::setup(
                     consensus_replica_config.clone(),
@@ -381,7 +406,12 @@ fn setup_artifact_manager(
         // Create the DKG client.
         let advert_broadcaster = advert_broadcaster.clone();
         let (dkg_client, actor) = processors::DkgProcessor::build(
-            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| match req.advert_class {
+                AdvertClass::Critical => {
+                    advert_broadcaster.send(req.advert.into(), ArtifactDestination::SendToAllPeers)
+                }
+                AdvertClass::None => (),
+            },
             || {
                 (
                     dkg::DkgImpl::new(
@@ -419,7 +449,12 @@ fn setup_artifact_manager(
             finalized.payload.as_ref().as_ecdsa().is_some(),
         );
         let (ecdsa_client, actor) = processors::EcdsaProcessor::build(
-            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| match req.advert_class {
+                AdvertClass::Critical => {
+                    advert_broadcaster.send(req.advert.into(), ArtifactDestination::SendToAllPeers)
+                }
+                AdvertClass::None => (),
+            },
             || {
                 (
                     ecdsa::EcdsaImpl::new(
@@ -448,7 +483,12 @@ fn setup_artifact_manager(
 
     {
         let (canister_http_client, actor) = processors::CanisterHttpProcessor::build(
-            move |req| advert_broadcaster.broadcast_advert(req.advert.into(), req.advert_class),
+            move |req| match req.advert_class {
+                AdvertClass::Critical => {
+                    advert_broadcaster.send(req.advert.into(), ArtifactDestination::SendToAllPeers)
+                }
+                AdvertClass::None => (),
+            },
             || {
                 (
                     canister_http::pool_manager::CanisterHttpPoolManagerImpl::new(
