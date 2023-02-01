@@ -89,7 +89,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/bitcoin/types/                      @dfinity-lab/teams/execution-owners
 /rs/boundary_node/                      @dfinity-lab/teams/boundarynode-team
 /rs/canister_client/                    @dfinity-lab/teams/networking-team
-/rs/canister_http/                      @dfinity-lab/teams/networking-team
 /rs/canister_sandbox/                   @dfinity-lab/teams/runtime-owners
 /rs/canonical_state/                    @dfinity-lab/teams/message-routing-owners
 /rs/certification/                      @dfinity-lab/teams/message-routing-owners
@@ -110,6 +109,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/gitlab-ci-config.yml                @dfinity-lab/teams/idx
 /rs/guestos_vsock_agent/                @dfinity-lab/teams/node-team
 /rs/http_endpoints/                     @dfinity-lab/teams/networking-team
+/rs/https_outcalls/                     @dfinity-lab/teams/networking-team
 /rs/ic_p8s_service_discovery/           @dfinity-lab/teams/ic-testing-verification
 /rs/ingress_manager/                    @dfinity-lab/teams/consensus-owners
 /rs/interfaces/                         @dfinity-lab/teams/interface-owners
