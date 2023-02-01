@@ -72,16 +72,17 @@ fn pre_upgrade() {
 
 #[post_upgrade]
 fn post_upgrade(args: Option<LedgerArgument>) {
+    LEDGER.with(|cell| {
+        *cell.borrow_mut() = Some(
+            ciborium::de::from_reader(StableReader::default())
+                .expect("failed to decode ledger state"),
+        );
+    });
+
     if let Some(args) = args {
         match args {
             LedgerArgument::Init(_) => panic!("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
             LedgerArgument::Upgrade(upgrade_args) => {
-                LEDGER.with(|cell| {
-                    *cell.borrow_mut() = Some(
-                        ciborium::de::from_reader(StableReader::default())
-                            .expect("failed to decode ledger state"),
-                    );
-                });
                 if let Some(upgrade_args) = upgrade_args {
                     Access::with_ledger_mut(|ledger| ledger.upgrade_metadata(upgrade_args));
                 }
