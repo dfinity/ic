@@ -6,7 +6,7 @@ use std::time::Duration;
 use ic_prep_lib::subnet_configuration::constants::{NNS_SUBNET_SIZE, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_tests::driver::ic::{ImageSizeGiB, NrOfVCPUs, VmResources};
 use ic_tests::driver::new::group::SystemTestGroup;
-use ic_tests::networking::subnet_query_workload::test;
+use ic_tests::networking::replica_query_workload::test;
 use ic_tests::networking::subnet_update_workload::config;
 use ic_tests::systest;
 

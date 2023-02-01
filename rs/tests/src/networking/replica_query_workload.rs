@@ -1,6 +1,6 @@
 /* tag::catalog[]
 
-Title:: Subnet handles query workloads.
+Title:: Single replica handles query workloads.
 
 Goal:: Ensure IC responds to queries of a given size in a timely manner.
 
@@ -11,7 +11,7 @@ Runbook::
 2. Build and install one counter canister on the Application subnet.
 3. Instantiate and start a workload against the Application subnet.
    Workload sends query[canister_id, "read"] requests.
-   All requests are sent to the same node.
+   All requests are sent to the same node/replica.
 4. Collect metrics from the workload and assert:
    - All requests should complete within DURATION_THRESHOLD.
    - All requests should be successful.
@@ -39,11 +39,6 @@ const DURATION_THRESHOLD: Duration = Duration::from_secs(2);
 // Parameters related to workload creation.
 const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(30); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
-
-// Send workload to one node for 2h with 1000 rps
-pub fn large_subnet_test(env: TestEnv) {
-    test(env, 1000, Duration::from_secs(2 * 60 * 60))
-}
 
 pub fn log_max_open_files(log: &Logger) {
     let output = Command::new("sh")
