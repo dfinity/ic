@@ -40,7 +40,8 @@ use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as BasicSigEd255
 use ic_crypto_internal_multi_sig_bls12381::types::PopBytes as MultiSigBls12381PopBytes;
 use ic_crypto_internal_multi_sig_bls12381::types::PublicKeyBytes as MultiSigBls12381PublicKeyBytes;
 use ic_crypto_internal_threshold_sig_ecdsa::{verify_mega_public_key, EccCurveType};
-use ic_crypto_tls_cert_validation::TlsCertValidationError;
+pub use ic_crypto_tls_cert_validation::TlsCertValidationError;
+pub use ic_crypto_tls_cert_validation::ValidTlsCertificate;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
@@ -62,28 +63,11 @@ mod proto_conversions;
 /// Use `try_from` to create an instance from unvalidated `NodePublicKeys`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ValidNodePublicKeys {
-    node_id: NodeId,
-    node_signing_public_key: PublicKey,
-    committee_signing_public_key: PublicKey,
-    tls_certificate: X509PublicKeyCert,
-    dkg_dealing_encryption_public_key: PublicKey,
-    idkg_dealing_encryption_public_key: PublicKey,
-}
-
-/// Validated iDKG dealing encryption public key of a node.
-///
-/// Instances have successfully passed the validity check and are immutable,
-/// i.e., the contained public key material is guaranteed to be valid.
-///
-/// Use `try_from` to create an instance from an unvalidated public key.
-///
-/// Note: this struct will only exist temporarily while not all nodes have an
-/// iDKG dealing encryption key yet. Once all nodes have such a key,
-/// individually validating iDKG dealing encryption keys will become obsolete
-/// and this struct will be removed.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ValidIDkgDealingEncryptionPublicKey {
-    idkg_dealing_encryption_pubkey: PublicKey,
+    node_signing_public_key: ValidNodeSigningPublicKey,
+    committee_signing_public_key: ValidCommitteeSigningPublicKey,
+    tls_certificate: ValidTlsCertificate,
+    dkg_dealing_encryption_public_key: ValidDkgDealingEncryptionPublicKey,
+    idkg_dealing_encryption_public_key: ValidIDkgDealingEncryptionPublicKey,
 }
 
 impl ValidNodePublicKeys {
@@ -98,74 +82,242 @@ impl ValidNodePublicKeys {
         keys: CurrentNodePublicKeys,
         node_id: NodeId,
     ) -> Result<Self, KeyValidationError> {
+        let node_signing_public_key_proto = keys
+            .node_signing_public_key
+            .ok_or_else(|| invalid_node_signing_key_error("key is missing"))?;
         let node_signing_public_key =
-            validate_node_signing_key(keys.node_signing_public_key, node_id)?;
+            ValidNodeSigningPublicKey::try_from((node_signing_public_key_proto, node_id))?;
+
+        let committee_signing_public_key_proto = keys
+            .committee_signing_public_key
+            .ok_or_else(|| invalid_committee_signing_key_error("key is missing"))?;
         let committee_signing_public_key =
-            validate_committee_signing_key(keys.committee_signing_public_key)?;
-        let tls_certificate = validate_tls_certificate(keys.tls_certificate, node_id)?;
-        let dkg_dealing_encryption_public_key =
-            validate_dkg_dealing_encryption_key(keys.dkg_dealing_encryption_public_key, node_id)?;
-        let idkg_dealing_encryption_public_key =
-            validate_idkg_dealing_encryption_key(keys.idkg_dealing_encryption_public_key)?;
+            ValidCommitteeSigningPublicKey::try_from(committee_signing_public_key_proto)?;
+
+        let tls_certificate_proto = keys.tls_certificate.ok_or_else(|| TlsCertValidationError {
+            error: "invalid TLS certificate: certificate is missing".to_string(),
+        })?;
+        let tls_certificate = ValidTlsCertificate::try_from((tls_certificate_proto, node_id))?;
+
+        let dkg_dealing_encryption_public_key_proto = keys
+            .dkg_dealing_encryption_public_key
+            .ok_or_else(|| invalid_dkg_dealing_enc_pubkey_error("key is missing"))?;
+        let dkg_dealing_encryption_public_key = ValidDkgDealingEncryptionPublicKey::try_from((
+            dkg_dealing_encryption_public_key_proto,
+            node_id,
+        ))?;
+
+        let idkg_dealing_encryption_public_key_proto = keys
+            .idkg_dealing_encryption_public_key
+            .ok_or_else(|| invalid_idkg_dealing_enc_pubkey_error("key is missing"))?;
+        let idkg_dealing_encryption_public_key = ValidIDkgDealingEncryptionPublicKey::try_from(
+            idkg_dealing_encryption_public_key_proto,
+        )?;
 
         Ok(ValidNodePublicKeys {
-            node_id,
             node_signing_public_key,
             committee_signing_public_key,
+            tls_certificate,
             dkg_dealing_encryption_public_key,
             idkg_dealing_encryption_public_key,
-            tls_certificate,
         })
     }
 
     /// Returns the node ID for which the public key material's validity was
     /// successfully verified.
     pub fn node_id(&self) -> NodeId {
-        self.node_id
+        self.node_signing_public_key.derived_node_id
     }
 
     /// Returns the validated node signing key.
     pub fn node_signing_key(&self) -> &PublicKey {
-        &self.node_signing_public_key
+        &self.node_signing_public_key.public_key
     }
 
     /// Returns the validated committee signing key.
     pub fn committee_signing_key(&self) -> &PublicKey {
-        &self.committee_signing_public_key
+        &self.committee_signing_public_key.public_key
     }
 
     /// Returns the validated DKG dealing encryption key.
     pub fn dkg_dealing_encryption_key(&self) -> &PublicKey {
-        &self.dkg_dealing_encryption_public_key
+        &self.dkg_dealing_encryption_public_key.public_key
     }
 
     /// Returns the validated DKG dealing encryption key.
     pub fn idkg_dealing_encryption_key(&self) -> &PublicKey {
-        &self.idkg_dealing_encryption_public_key
+        &self.idkg_dealing_encryption_public_key.public_key
     }
 
     /// Returns the validated TLS certificate.
     pub fn tls_certificate(&self) -> &X509PublicKeyCert {
-        &self.tls_certificate
+        self.tls_certificate.get()
+    }
+}
+
+/// Validated node signing public key.
+///
+/// The [`public_key`] contained is guaranteed to be immutable and a valid node signing public key.
+/// The [`derived_node_id`] contains the node id derived from the [`public_key`].
+///
+/// Use `try_from` to create an instance from an unvalidated public key.
+///
+/// See `try_from((PublicKey, NodeId))` if you need to validate the [`derived_node_id`] against an
+/// expected trustworthy node id.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidNodeSigningPublicKey {
+    public_key: PublicKey,
+    derived_node_id: NodeId,
+}
+
+impl TryFrom<PublicKey> for ValidNodeSigningPublicKey {
+    type Error = KeyValidationError;
+
+    fn try_from(public_key: PublicKey) -> Result<Self, Self::Error> {
+        let public_key_bytes = BasicSigEd25519PublicKeyBytes::try_from(&public_key)
+            .map_err(|e| invalid_node_signing_key_error(format!("{}", e)))?;
+        if !ic_crypto_internal_basic_sig_ed25519::verify_public_key(&public_key_bytes) {
+            return Err(invalid_node_signing_key_error("verification failed"));
+        }
+        let derived_node_id = derive_node_id(public_key_bytes);
+        Ok(Self {
+            public_key,
+            derived_node_id,
+        })
+    }
+}
+
+impl TryFrom<(PublicKey, NodeId)> for ValidNodeSigningPublicKey {
+    type Error = KeyValidationError;
+
+    fn try_from((public_key, expected_node_id): (PublicKey, NodeId)) -> Result<Self, Self::Error> {
+        let valid_public_key = ValidNodeSigningPublicKey::try_from(public_key)?;
+        if expected_node_id != valid_public_key.derived_node_id {
+            return Err(invalid_node_signing_key_error(format!(
+                "key not valid for node ID {expected_node_id}"
+            )));
+        }
+        Ok(valid_public_key)
+    }
+}
+
+impl ValidNodeSigningPublicKey {
+    pub fn get(&self) -> &PublicKey {
+        &self.public_key
+    }
+
+    /// Returns the node ID derived from the `public_key`.
+    pub fn derived_node_id(&self) -> &NodeId {
+        &self.derived_node_id
+    }
+}
+
+/// Validated node committee signing public key.
+///
+/// The [`public_key`] contained is guaranteed to be immutable and a valid node committee signing public key.
+/// Use `try_from` to create an instance from an unvalidated public key.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidCommitteeSigningPublicKey {
+    public_key: PublicKey,
+}
+
+/// Validates a node's committee signing public key.
+///
+/// See the crate documentation for the exact checks that are performed.
+impl TryFrom<PublicKey> for ValidCommitteeSigningPublicKey {
+    type Error = KeyValidationError;
+
+    fn try_from(value: PublicKey) -> Result<Self, Self::Error> {
+        let pubkey_bytes = MultiSigBls12381PublicKeyBytes::try_from(&value)
+            .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))?;
+        let pop_bytes = MultiSigBls12381PopBytes::try_from(&value)
+            .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))?;
+
+        // Note that `verify_pop` also ensures that the public key is a point on the
+        // curve and in the right subgroup.
+        ic_crypto_internal_multi_sig_bls12381::verify_pop(pop_bytes, pubkey_bytes)
+            .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))?;
+        Ok(Self { public_key: value })
+    }
+}
+
+impl ValidCommitteeSigningPublicKey {
+    pub fn get(&self) -> &PublicKey {
+        &self.public_key
+    }
+}
+
+/// Validated NIDKG dealing encryption public key.
+///
+/// The [`public_key`] contained is guaranteed to be immutable and
+/// a valid NIDGK dealing encryption public key.
+/// Use `try_from((PublicKey, NodeId))` to create an instance from an unvalidated public key and node id.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidDkgDealingEncryptionPublicKey {
+    public_key: PublicKey,
+}
+
+/// Validates a node's non-interactive DKG dealing encryption key.
+///
+/// See the crate documentation for the exact checks that are performed.
+impl TryFrom<(PublicKey, NodeId)> for ValidDkgDealingEncryptionPublicKey {
+    type Error = KeyValidationError;
+
+    fn try_from((public_key, node_id): (PublicKey, NodeId)) -> Result<Self, Self::Error> {
+        // Note: `fs_ni_dkg_pubkey_from_proto` also ensures that the
+        // public key is a point on the curve and in the right subgroup.
+        let fs_ni_dkg_pubkey = fs_ni_dkg_pubkey_from_proto(&public_key)
+            .map_err(|e| invalid_dkg_dealing_enc_pubkey_error(format!("{}", e)))?;
+        if !fs_ni_dkg_pubkey.verify(node_id.get().as_slice()) {
+            return Err(invalid_dkg_dealing_enc_pubkey_error("verification failed"));
+        }
+        Ok(Self { public_key })
+    }
+}
+
+impl ValidDkgDealingEncryptionPublicKey {
+    pub fn get(&self) -> &PublicKey {
+        &self.public_key
+    }
+}
+
+/// Validated iDKG dealing encryption public key of a node.
+///
+/// Instances have successfully passed the validity check and are immutable,
+/// i.e., the contained public key material is guaranteed to be valid.
+///
+/// Use `try_from` to create an instance from an unvalidated public key.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ValidIDkgDealingEncryptionPublicKey {
+    public_key: PublicKey,
+}
+
+/// Validates a node's interactive DKG dealing encryption key.
+///
+/// See the crate documentation for the exact checks that are performed.
+impl TryFrom<PublicKey> for ValidIDkgDealingEncryptionPublicKey {
+    type Error = KeyValidationError;
+
+    fn try_from(public_key: PublicKey) -> Result<Self, Self::Error> {
+        let curve_type = match AlgorithmIdProto::from_i32(public_key.algorithm) {
+            Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
+            alg_id => Err(invalid_idkg_dealing_enc_pubkey_error(format!(
+                "unsupported algorithm: {:?}",
+                alg_id
+            ))),
+        }?;
+        // `verify_mega_public_key` also ensures that the public key is a valid point on the curve.
+        verify_mega_public_key(curve_type, &public_key.key_value).map_err(|e| {
+            invalid_idkg_dealing_enc_pubkey_error(format!("verification failed: {:?}", e))
+        })?;
+        Ok(Self { public_key })
     }
 }
 
 impl ValidIDkgDealingEncryptionPublicKey {
-    /// Determines if the given iDKG dealing encryption public key is valid.
-    ///
-    /// Returns a `ValidIDkgDealingEncryptionPublicKey` iff the `key` is valid.
-    /// After successful validation, callers should only work with the returned
-    /// instance in their API so as to avoid confusion about whether the key
-    /// is validated or not.
-    pub fn try_from(key: PublicKey) -> Result<Self, KeyValidationError> {
-        Ok(Self {
-            idkg_dealing_encryption_pubkey: validate_idkg_dealing_encryption_key(Some(key))?,
-        })
-    }
-
     /// Returns the validated I-DKG dealing encryption key.
     pub fn get(&self) -> &PublicKey {
-        &self.idkg_dealing_encryption_pubkey
+        &self.public_key
     }
 }
 
@@ -179,107 +331,6 @@ impl fmt::Display for KeyValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
-}
-
-/// Validates a node's signing key.
-///
-/// See the crate documentation for the exact checks that are performed.
-fn validate_node_signing_key(
-    node_signing_key: Option<PublicKey>,
-    node_id: NodeId,
-) -> Result<PublicKey, KeyValidationError> {
-    let pubkey_proto =
-        node_signing_key.ok_or_else(|| invalid_node_signing_key_error("key is missing"))?;
-
-    let pubkey_bytes = BasicSigEd25519PublicKeyBytes::try_from(&pubkey_proto)
-        .map_err(|e| invalid_node_signing_key_error(format!("{}", e)))?;
-
-    if node_id != derive_node_id(pubkey_bytes) {
-        return Err(invalid_node_signing_key_error(format!(
-            "key not valid for node ID {}",
-            node_id
-        )));
-    }
-    if !ic_crypto_internal_basic_sig_ed25519::verify_public_key(&pubkey_bytes) {
-        return Err(invalid_node_signing_key_error("verification failed"));
-    }
-    Ok(pubkey_proto)
-}
-
-/// Validates a node's committee signing key.
-///
-/// See the crate documentation for the exact checks that are performed.
-fn validate_committee_signing_key(
-    committee_signing_key: Option<PublicKey>,
-) -> Result<PublicKey, KeyValidationError> {
-    let pubkey_proto = committee_signing_key
-        .ok_or_else(|| invalid_committee_signing_key_error("key is missing"))?;
-
-    let pubkey_bytes = MultiSigBls12381PublicKeyBytes::try_from(&pubkey_proto)
-        .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))?;
-    let pop_bytes = MultiSigBls12381PopBytes::try_from(&pubkey_proto)
-        .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))?;
-
-    // Note that `verify_pop` also ensures that the public key is a point on the
-    // curve and in the right subgroup.
-    ic_crypto_internal_multi_sig_bls12381::verify_pop(pop_bytes, pubkey_bytes)
-        .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))?;
-
-    Ok(pubkey_proto)
-}
-
-/// Validates a node's non-interactive DKG dealing encryption key.
-///
-/// See the crate documentation for the exact checks that are performed.
-fn validate_dkg_dealing_encryption_key(
-    dkg_dealing_encryption_key: Option<PublicKey>,
-    node_id: NodeId,
-) -> Result<PublicKey, KeyValidationError> {
-    let pubkey_proto = dkg_dealing_encryption_key
-        .ok_or_else(|| invalid_dkg_dealing_enc_pubkey_error("key is missing"))?;
-
-    // Note: `fs_ni_dkg_pubkey_from_proto` also ensures that the
-    // public key is a point on the curve and in the right subgroup.
-    let fs_ni_dkg_pubkey = fs_ni_dkg_pubkey_from_proto(&pubkey_proto)
-        .map_err(|e| invalid_dkg_dealing_enc_pubkey_error(format!("{}", e)))?;
-    if !fs_ni_dkg_pubkey.verify(node_id.get().as_slice()) {
-        return Err(invalid_dkg_dealing_enc_pubkey_error("verification failed"));
-    }
-    Ok(pubkey_proto)
-}
-
-/// Validates a node's interactive DKG dealing encryption key.
-///
-/// See the crate documentation for the exact checks that are performed.
-fn validate_idkg_dealing_encryption_key(
-    idkg_dealing_encryption_key: Option<PublicKey>,
-) -> Result<PublicKey, KeyValidationError> {
-    let pubkey_proto = idkg_dealing_encryption_key
-        .ok_or_else(|| invalid_idkg_dealing_enc_pubkey_error("key is missing"))?;
-
-    let curve_type = match AlgorithmIdProto::from_i32(pubkey_proto.algorithm) {
-        Some(AlgorithmIdProto::MegaSecp256k1) => Ok(EccCurveType::K256),
-        alg_id => Err(invalid_idkg_dealing_enc_pubkey_error(format!(
-            "unsupported algorithm: {:?}",
-            alg_id
-        ))),
-    }?;
-    // `verify_mega_public_key` also ensures that the public key is a valid point on the curve.
-    verify_mega_public_key(curve_type, &pubkey_proto.key_value).map_err(|e| {
-        invalid_idkg_dealing_enc_pubkey_error(format!("verification failed: {:?}", e))
-    })?;
-    Ok(pubkey_proto)
-}
-
-pub fn validate_tls_certificate(
-    tls_certificate: Option<X509PublicKeyCert>,
-    node_id: NodeId,
-) -> Result<X509PublicKeyCert, TlsCertValidationError> {
-    let cert = tls_certificate.ok_or_else(|| TlsCertValidationError {
-        error: "invalid TLS certificate: certificate is missing".to_string(),
-    })?;
-    ic_crypto_tls_cert_validation::validate_tls_certificate(&cert, node_id)?;
-    Ok(cert)
 }
 
 fn derive_node_id(pk_bytes: BasicSigEd25519PublicKeyBytes) -> NodeId {

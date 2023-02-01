@@ -10,7 +10,7 @@ use openssl::pkey::PKey;
 use std::sync::Arc;
 
 const NODE_1: u64 = 4241;
-const NOT_AFTER: &str = "25670102030405Z";
+const NOT_AFTER: &str = "99991231235959Z";
 
 /// Key should be present only after key generation.
 ///

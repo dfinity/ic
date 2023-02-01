@@ -15,7 +15,7 @@ use tokio_rustls::rustls::internal::msgs::enums::SignatureAlgorithm;
 use tokio_rustls::rustls::sign::SigningKey;
 use tokio_rustls::rustls::{SignatureScheme, TLSError};
 
-const NOT_AFTER: &str = "25670102030405Z";
+const NOT_AFTER: &str = "99991231235959Z";
 
 #[test]
 fn should_produce_same_signature_as_csp_server_if_ed25519_is_chosen() {

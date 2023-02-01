@@ -10,6 +10,7 @@ use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsSc
 use ic_crypto_internal_tls::keygen::{
     generate_tls_key_pair_der, TlsEd25519SecretKeyDerBytes, TlsKeyPairAndCertGenerationError,
 };
+use ic_crypto_node_key_validation::ValidTlsCertificate;
 use ic_crypto_secrets_containers::{SecretArray, SecretVec};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
@@ -126,7 +127,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let key_id = KeyId::from(&x509_pk_cert);
         let secret_key = CspSecretKey::TlsEd25519(secret_key);
         let cert_proto = x509_pk_cert.to_proto();
-        self.store_tls_key_pair(key_id, secret_key, cert_proto)?;
+        let valid_cert = validate_tls_certificate(cert_proto, node)?;
+        self.store_tls_key_pair(key_id, secret_key, valid_cert.get().clone())?;
 
         Ok(x509_pk_cert)
     }
@@ -188,4 +190,15 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         };
         result
     }
+}
+
+fn validate_tls_certificate(
+    cert_proto: X509PublicKeyCert,
+    node: NodeId,
+) -> Result<ValidTlsCertificate, CspTlsKeygenError> {
+    ValidTlsCertificate::try_from((cert_proto, node)).map_err(|error| {
+        CspTlsKeygenError::InternalError {
+            internal_error: format!("TLS certificate validation error: {}", error),
+        }
+    })
 }

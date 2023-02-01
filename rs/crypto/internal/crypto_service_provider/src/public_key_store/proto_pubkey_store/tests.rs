@@ -7,6 +7,7 @@ use crate::PUBLIC_KEY_STORE_DATA_FILENAME;
 use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
+use ic_crypto_node_key_generation::derive_node_id;
 use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
@@ -15,9 +16,11 @@ use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_types::crypto::AlgorithmId;
+use ic_types::{NodeId, PrincipalId};
 use slog::Level;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::{env, fs};
 use tempfile::TempDir;
 
@@ -319,6 +322,18 @@ fn should_deserialize_existing_public_key_store() {
             timestamp: None,
         })
     );
+    //node_id is derived from node signing public key
+    //so we also check here for the expected hard-coded value
+    assert_eq!(
+        derive_node_id(&store.node_signing_pubkey().unwrap()),
+        NodeId::new(
+            PrincipalId::from_str(
+                "4inqb-2zcvk-f6yql-sowol-vg3es-z24jd-jrkow-mhnsd-ukvfp-fak5p-aae"
+            )
+            .unwrap()
+        )
+    );
+
     assert_eq!(
         store.committee_signing_pubkey(),
         Some(PublicKey {

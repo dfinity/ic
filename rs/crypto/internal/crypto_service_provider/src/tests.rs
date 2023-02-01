@@ -128,7 +128,7 @@ mod csp_tests {
 
     fn csp_with_tls_key_pair() -> (Csp, TlsPublicKeyCert) {
         const NODE_1: u64 = 4241;
-        const NOT_AFTER: &str = "25670102030405Z";
+        const NOT_AFTER: &str = "99991231235959Z";
         let csp = Csp::with_rng(csprng());
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)

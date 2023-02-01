@@ -1,4 +1,5 @@
 use crate::tls::{node_id_from_cert_subject_common_name, tls_cert_from_registry};
+use ic_crypto_tls_cert_validation::ValidTlsCertificate;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsPublicKeyCert};
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
@@ -169,7 +170,8 @@ fn verify_node_cert(
     // to not just pass any untrusted data to it. We consider the DER here trusted
     // because it is equal to the certificate DER stored in the registry, as checked
     // above.
-    ensure_node_certificate_is_valid(presented_cert_der, presented_cert_node_id)
+    ensure_node_certificate_is_valid(presented_cert_der, presented_cert_node_id)?;
+    Ok(())
 }
 
 fn ensure_exactly_one_presented_cert(presented_certs: &[Certificate]) -> Result<(), TLSError> {
@@ -243,9 +245,7 @@ fn ensure_node_certificate_is_valid(
     certificate_der: Vec<u8>,
     cert_node_id: NodeId,
 ) -> Result<(), TLSError> {
-    ic_crypto_tls_cert_validation::validate_tls_certificate(
-        &X509PublicKeyCert { certificate_der },
-        cert_node_id,
-    )
-    .map_err(|e| TLSError::General(format!("The peer certificate is invalid: {}", e)))
+    ValidTlsCertificate::try_from((X509PublicKeyCert { certificate_der }, cert_node_id))
+        .map_err(|e| TLSError::General(format!("The peer certificate is invalid: {}", e)))?;
+    Ok(())
 }

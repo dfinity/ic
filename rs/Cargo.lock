@@ -5199,6 +5199,7 @@ dependencies = [
  "ic-crypto-internal-tls",
  "ic-crypto-internal-types",
  "ic-crypto-node-key-generation",
+ "ic-crypto-node-key-validation",
  "ic-crypto-secrets-containers",
  "ic-crypto-sha",
  "ic-crypto-test-utils",

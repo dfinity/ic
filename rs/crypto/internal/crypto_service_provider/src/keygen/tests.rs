@@ -256,7 +256,7 @@ mod tls {
 
     const NODE_1: u64 = 4241;
     const FIXED_SEED: u64 = 42;
-    const NOT_AFTER: &str = "25670102030405Z";
+    const NOT_AFTER: &str = "99991231235959Z";
 
     #[test]
     #[should_panic(expected = "has already been inserted")]

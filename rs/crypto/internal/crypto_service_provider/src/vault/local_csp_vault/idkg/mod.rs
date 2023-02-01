@@ -17,6 +17,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{
     MEGaPrivateKeyK256Bytes, MEGaPublicKey, MEGaPublicKeyK256Bytes, PolynomialCommitment,
     SecretShares, Seed,
 };
+use ic_crypto_node_key_validation::ValidIDkgDealingEncryptionPublicKey;
 use ic_logger::debug;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -420,7 +421,12 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let (public_key, csp_secret_key, key_id) = generate_idkg_key_material_from_seed(seed)?;
         let mut public_key_proto = idkg_dealing_encryption_pk_to_proto(public_key.clone());
         self.set_timestamp(&mut public_key_proto);
-        self.idkg_store_secret_and_public_keys(key_id, csp_secret_key, public_key_proto)?;
+        let valid_public_key = validate_idkg_dealing_encryption_public_key(public_key_proto)?;
+        self.idkg_store_secret_and_public_keys(
+            key_id,
+            csp_secret_key,
+            valid_public_key.get().clone(),
+        )?;
         Ok(public_key)
     }
 
@@ -707,4 +713,14 @@ fn idkg_retain_active_dealing_encryption_public_keys<P: PublicKeyStore>(
                 ),
             },
         })
+}
+
+fn validate_idkg_dealing_encryption_public_key(
+    public_key_proto: PublicKey,
+) -> Result<ValidIDkgDealingEncryptionPublicKey, CspCreateMEGaKeyError> {
+    ValidIDkgDealingEncryptionPublicKey::try_from(public_key_proto).map_err(|error| {
+        CspCreateMEGaKeyError::InternalError {
+            internal_error: format!("Key validation error: {}", error),
+        }
+    })
 }
