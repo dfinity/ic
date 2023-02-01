@@ -10,6 +10,7 @@ use crate::vault::api::{
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
+use ic_crypto_node_key_validation::ValidNodeSigningPublicKey;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::AlgorithmId;
 use rand::{CryptoRng, Rng};
@@ -63,7 +64,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let public_key = CspPublicKey::Ed25519(pk_bytes);
         let key_id = KeyId::from(&public_key);
         let public_key_proto = node_signing_pk_to_proto(public_key.clone());
-        self.store_node_signing_key_pair(key_id, secret_key, public_key_proto)?;
+        let valid_public_key = validate_node_signing_public_key(public_key_proto)?;
+        self.store_node_signing_key_pair(key_id, secret_key, valid_public_key.get().clone())?;
         Ok(public_key)
     }
 
@@ -135,4 +137,14 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         };
         result
     }
+}
+
+fn validate_node_signing_public_key(
+    public_key_proto: PublicKey,
+) -> Result<ValidNodeSigningPublicKey, CspBasicSignatureKeygenError> {
+    ValidNodeSigningPublicKey::try_from(public_key_proto).map_err(|error| {
+        CspBasicSignatureKeygenError::InternalError {
+            internal_error: format!("Node signing public key validation error: {}", error),
+        }
+    })
 }

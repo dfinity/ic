@@ -22,7 +22,7 @@ use std::sync::Arc;
 
 pub const NODE_1: u64 = 4241;
 pub const FIXED_SEED: u64 = 42;
-pub const NOT_AFTER: &str = "25670102030405Z";
+pub const NOT_AFTER: &str = "99991231235959Z";
 
 pub fn should_generate_tls_key_pair_and_store_certificate(csp_vault: Arc<dyn CspVault>) {
     let cert = csp_vault

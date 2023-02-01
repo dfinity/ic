@@ -18,7 +18,7 @@ mod keygen {
     use crate::vault::local_csp_vault::LocalCspVault;
     use mockall::Sequence;
 
-    const NOT_AFTER: &str = "25670102030405Z";
+    const NOT_AFTER: &str = "99991231235959Z";
 
     #[test]
     fn should_generate_tls_key_pair_and_store_certificate() {
@@ -122,6 +122,21 @@ mod keygen {
         assert_matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
             if message.eq("'not after' date must not be in the past") && not_after.eq(date_in_the_past)
         );
+    }
+
+    #[test]
+    fn should_return_error_if_not_after_date_does_not_equal_99991231235959z() {
+        let csp_vault = LocalCspVault::builder().build_into_arc();
+        let unexpected_not_after_date = "25670102030405Z";
+
+        let result = csp_vault.gen_tls_key_pair(
+            node_test_id(test_utils::tls::NODE_1),
+            unexpected_not_after_date,
+        );
+
+        assert_matches!(result, Err(CspTlsKeygenError::InternalError {internal_error}) 
+            if internal_error.contains("TLS certificate validation error") &&
+            internal_error.contains("notAfter date is not RFC 5280 value 99991231235959Z"));
     }
 
     #[test]

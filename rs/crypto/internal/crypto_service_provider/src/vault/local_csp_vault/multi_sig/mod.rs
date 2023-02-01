@@ -10,6 +10,7 @@ use crate::vault::api::{
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_multi_sig_bls12381 as multi_bls12381;
+use ic_crypto_node_key_validation::ValidCommitteeSigningPublicKey;
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use rand::{CryptoRng, Rng};
@@ -63,7 +64,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let (secret_key, pk_and_pop) = self.gen_multi_bls12381_keypair_with_pop()?;
         let key_id = KeyId::from(&pk_and_pop.0);
         let committee_public_key_proto = committee_signing_pk_to_proto(pk_and_pop.clone());
-        self.store_committee_signing_key_pair(key_id, secret_key, committee_public_key_proto)?;
+        let valid_public_key = validate_committee_signing_public_key(committee_public_key_proto)?;
+        self.store_committee_signing_key_pair(key_id, secret_key, valid_public_key.get().clone())?;
         Ok(pk_and_pop)
     }
 
@@ -163,4 +165,14 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
         Ok((sk, (pk, pop)))
     }
+}
+
+fn validate_committee_signing_public_key(
+    committee_public_key_proto: PublicKey,
+) -> Result<ValidCommitteeSigningPublicKey, CspMultiSignatureKeygenError> {
+    ValidCommitteeSigningPublicKey::try_from(committee_public_key_proto).map_err(|error| {
+        CspMultiSignatureKeygenError::InternalError {
+            internal_error: format!("Committee signing public key validation error: {}", error),
+        }
+    })
 }
