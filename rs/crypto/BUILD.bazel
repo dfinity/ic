@@ -78,6 +78,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils",
     "//rs/crypto/test_utils/canister_threshold_sigs",
     "//rs/crypto/test_utils/keygen",
+    "//rs/crypto/test_utils/local_csp_vault",
     "//rs/crypto/test_utils/multi_sigs",
     "//rs/crypto/test_utils/threshold_sigs",
     "//rs/interfaces/registry/mocks",

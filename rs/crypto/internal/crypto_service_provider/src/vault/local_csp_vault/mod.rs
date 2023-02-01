@@ -8,8 +8,6 @@ mod public_seed;
 mod secret_key_store;
 mod tecdsa;
 #[cfg(test)]
-mod test_utils;
-#[cfg(test)]
 mod tests;
 mod threshold_sig;
 mod tls;
@@ -31,12 +29,8 @@ use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use rand::rngs::OsRng;
 use rand::{CryptoRng, Rng};
 use std::collections::HashSet;
-use std::fs;
-use std::fs::Permissions;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::sync::Arc;
-use tempfile::TempDir;
 
 /// An implementation of `CspVault`-trait that runs in-process
 /// and uses local secret key stores.
@@ -119,42 +113,6 @@ impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicK
             metrics,
             logger,
         )
-    }
-}
-
-impl<R: Rng + CryptoRng>
-    LocalCspVault<R, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore>
-{
-    pub fn new_in_temp_dir(rng: R) -> (Self, TempDir) {
-        let temp_dir = tempfile::Builder::new()
-            .prefix("ic_crypto_")
-            .tempdir()
-            .expect("failed to create temporary crypto directory");
-        fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o750)).unwrap_or_else(|_| {
-            panic!(
-                "failed to set permissions of crypto directory {}",
-                temp_dir.path().display()
-            )
-        });
-        let sks_file = "temp_sks_data.pb";
-        let canister_sks_file = "temp_canister_sks_data.pb";
-        let public_key_store_file = "temp_public_keys.pb";
-
-        let sks = ProtoSecretKeyStore::open(temp_dir.path(), sks_file, None);
-        let canister_sks = ProtoSecretKeyStore::open(temp_dir.path(), canister_sks_file, None);
-        let public_key_store =
-            ProtoPublicKeyStore::open(temp_dir.path(), public_key_store_file, no_op_logger());
-
-        let vault = Self::new_internal(
-            rng,
-            sks,
-            canister_sks,
-            public_key_store,
-            Arc::new(CurrentSystemTimeSource::new(no_op_logger())),
-            Arc::new(CryptoMetrics::none()),
-            no_op_logger(),
-        );
-        (vault, temp_dir)
     }
 }
 
