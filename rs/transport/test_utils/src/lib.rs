@@ -3,7 +3,10 @@ use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_interfaces_transport::{Transport, TransportEvent, TransportEventHandler, TransportPayload};
+use ic_interfaces_transport::{
+    Transport, TransportChannelId, TransportError, TransportEvent, TransportEventHandler,
+    TransportPayload,
+};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -267,6 +270,19 @@ impl TestTopology {
             .unwrap()
             .transport
             .stop_connection(&dst_node);
+    }
+    pub fn send_payload(
+        &self,
+        src_node: NodeId,
+        dst_node: NodeId,
+        channel_id: TransportChannelId,
+        msg: TransportPayload,
+    ) -> Result<(), TransportError> {
+        self.peer_handles
+            .get(&src_node)
+            .unwrap()
+            .transport
+            .send(&dst_node, channel_id, msg)
     }
 }
 

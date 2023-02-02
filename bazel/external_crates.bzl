@@ -263,6 +263,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.3",
                 features = [
                     "html_reports",
+                    "async_tokio",
                 ],
             ),
             "crossbeam": crate.spec(
