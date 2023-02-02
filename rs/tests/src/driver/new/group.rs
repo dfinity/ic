@@ -5,7 +5,6 @@ use std::path::PathBuf;
 
 use crate::driver::{
     farm::Farm,
-    ic::VmResources,
     new::{
         action_graph::ActionGraph,
         context::{GroupContext, ProcessContext},
@@ -317,7 +316,6 @@ pub struct SystemTestGroup {
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
     with_farm: bool,
-    default_vm_resources: Option<VmResources>,
 }
 
 impl Default for SystemTestGroup {
@@ -343,7 +341,6 @@ impl SystemTestGroup {
             timeout_per_test: None,
             overall_timeout: None,
             with_farm: true,
-            default_vm_resources: None,
         }
     }
 
@@ -458,16 +455,6 @@ impl SystemTestGroup {
 
     pub fn with_timeout_per_test(mut self, t: Duration) -> Self {
         self.timeout_per_test = Some(t);
-        self
-    }
-
-    /// Set the VM resources (like number of virtual CPUs and memory) of all
-    /// implicitly constructed nodes.
-    ///
-    /// Setting the VM resources for explicitly constructed nodes
-    /// has to be via `Node::new_with_vm_resources`.
-    pub fn with_default_vm_resources(mut self, default_vm_resources: Option<VmResources>) -> Self {
-        self.default_vm_resources = default_vm_resources;
         self
     }
 

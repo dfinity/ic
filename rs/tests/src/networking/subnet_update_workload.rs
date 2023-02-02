@@ -24,7 +24,7 @@ end::catalog[] */
 use crate::{
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
-        ic::{InternetComputer, Subnet},
+        ic::{ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources},
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
@@ -82,6 +82,7 @@ pub fn config(
     nodes_nns_subnet: usize,
     nodes_app_subnet: usize,
     use_boundary_node: bool,
+    boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
 ) {
     env.ensure_group_setup_created();
     let logger = env.logger();
@@ -92,6 +93,11 @@ pub fn config(
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(nodes_nns_subnet))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(nodes_app_subnet))
+        .with_default_vm_resources(VmResources {
+            vcpus: Some(NrOfVCPUs::new(8)),
+            memory_kibibytes: None,
+            boot_image_minimal_size_gibibytes,
+        })
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
     env.sync_prometheus_config_with_topology();
@@ -185,13 +191,14 @@ pub fn large_config(env: TestEnv) {
         constants::NNS_SUBNET_SIZE + 18,
         constants::NNS_SUBNET_SIZE,
         false,
+        None,
     )
 }
 
 // Create IC with two subnets, a system subnet and app subnet with 4 nodes each
 // and one boundary node
 pub fn boundary_config(env: TestEnv) {
-    config(env, 4, 4, true)
+    config(env, 4, 4, true, None)
 }
 
 // Run a test with roughly half the rps supported by subnets, sent directly
