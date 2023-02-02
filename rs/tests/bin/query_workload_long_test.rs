@@ -4,7 +4,7 @@ use anyhow::Result;
 use std::time::Duration;
 
 use ic_prep_lib::subnet_configuration::constants::{NNS_SUBNET_SIZE, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_tests::driver::ic::{ImageSizeGiB, NrOfVCPUs, VmResources};
+use ic_tests::driver::ic::ImageSizeGiB;
 use ic_tests::driver::new::group::SystemTestGroup;
 use ic_tests::networking::replica_query_workload::test;
 use ic_tests::networking::subnet_update_workload::config;
@@ -30,6 +30,9 @@ fn main() -> Result<()> {
             NNS_SUBNET_SIZE,
             SMALL_APP_SUBNET_MAX_SIZE,
             USE_BOUNDARY_NODE,
+            // Since this is a long-running test, it accumulates a lot of disk space.
+            // This is why we increase the default of 50 GiB to 500 GiB.
+            Some(ImageSizeGiB::new(500)),
         )
     };
     let test = |env| test(env, RPS, WORKLOAD_RUNTIME);
@@ -38,13 +41,6 @@ fn main() -> Result<()> {
         .add_test(systest!(test))
         .with_timeout_per_test(per_task_timeout) // each task (including the setup function) may take up to `per_task_timeout`.
         .with_overall_timeout(overall_timeout) // the entire group may take up to `overall_timeout`.
-        // Since this is a long-running test, it accumulates a lot of disk space.
-        // This is why we increase the default of 50 GiB to 500 GiB.
-        .with_default_vm_resources(Some(VmResources {
-            vcpus: Some(NrOfVCPUs::new(8)),
-            memory_kibibytes: None,
-            boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(500)),
-        }))
         .execute_from_args()?;
     Ok(())
 }

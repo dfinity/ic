@@ -17,7 +17,7 @@ Runbook::
 
 end::catalog[] */
 
-use crate::driver::ic::{InternetComputer, Subnet};
+use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use crate::driver::test_env::{SshKeyGen, TestEnv};
 use crate::driver::test_env_api::{
     HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
@@ -83,6 +83,11 @@ pub fn setup(env: TestEnv, config: Config) {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(config.nodes_system_subnet))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_app_subnet))
+        .with_default_vm_resources(VmResources {
+            vcpus: Some(NrOfVCPUs::new(8)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
+            boot_image_minimal_size_gibibytes: None,
+        })
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
 }
