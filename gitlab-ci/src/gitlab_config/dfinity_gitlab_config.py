@@ -331,21 +331,12 @@ class DfinityGitLabConfig:
         logging.debug("CI config linted using the GitLab CI Lint API https://docs.gitlab.com/ee/api/lint.html")
 
     def _bash_linter(self, job_name, content):
-        if shutil.which("shellcheck"):
-            # shellcheck is already in path, use it
-            def shellcheck(path):
-                try:
-                    return utils.run(f"shellcheck --shell=bash {path}")
-                except subprocess.CalledProcessError as e:
-                    logging.error(e.output.decode())
-                    raise
-
-        else:
-            # run in a new nix-shell
-            nix = pathlib.PurePath(__file__).parent.parent.joinpath("shell.nix").as_posix()
-
-            def shellcheck(path):
-                return utils.run_in_nix_shell(f"shellcheck --shell=bash {path}", shell_nix_path=nix)
+        def shellcheck(path):
+            try:
+                return utils.run(f"shellcheck --shell=bash {path}")
+            except subprocess.CalledProcessError as e:
+                logging.error(e.output.decode())
+                raise
 
         (_, path) = tempfile.mkstemp(suffix=f"-{job_name}")
         with open(path, "w") as f:

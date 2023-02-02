@@ -31,7 +31,7 @@ function process_single_core_file() {
     if $UPLOAD_BINARIES; then
         # Try to extract a list of executables used by this core dump
         EXEC_NAMES=$(lldb --core "$1" --one-line 'image list
-        exit' | grep '^\[' | grep -v '/nix/' | grep -v 'vdso' | awk '{print $NF}')
+        exit' | grep '^\[' | grep -v 'vdso' | awk '{print $NF}')
 
         for exec_name in $EXEC_NAMES; do
             # pigz and artifact dependent executables, skipping the ones already done

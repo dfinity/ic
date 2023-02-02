@@ -1,6 +1,6 @@
 .benchmark-test:
   extends:
-    - .ubuntu-nix-docker-k8s
+    - .ubuntu-cargo-docker-k8s
     - .rules-benchmark-tests
   stage: benchmark-tests
   resource_group: $TESTNET
@@ -436,7 +436,7 @@ statesync-experiment:
 
 .benchmark-spot-test:
   extends:
-    - .ubuntu-nix-docker-k8s
+    - .ubuntu-cargo-docker-k8s
     - .rules-benchmark-spot-tests
   stage: benchmark-spot-tests
   resource_group: $TESTNET
@@ -635,7 +635,7 @@ xnet-nightly:
 
 .sns-tests:
   extends:
-    - .ubuntu-nix-docker-k8s
+    - .ubuntu-cargo-docker-k8s
     - .rules-sns-tests
   stage: sns-tests
   resource_group: $TESTNET

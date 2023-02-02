@@ -1,6 +1,6 @@
 benchmarks:
   extends:
-    - .ubuntu-nix-docker-k8s
+    - .ubuntu-cargo-docker-k8s
     - .rules-benchmarks-schedule
   stage: cargo-test
   needs: []
@@ -18,14 +18,14 @@ benchmarks:
     - cd "${CI_PROJECT_DIR}/rs"
     - |
       ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" nix-shell -- timeout -k 10 "${CARGO_BENCH_TIMEOUT}" nix-shell --run "
-        buildevents cmd ${ROOT_PIPELINE_ID} ${CI_JOB_ID} cargo-build -- cargo bench --no-run
-      "
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" timeout -- timeout \
+        -k 10 "${CARGO_BENCH_TIMEOUT}" buildevents cmd "${ROOT_PIPELINE_ID}" \
+          ${CI_JOB_ID} cargo-build -- cargo bench --no-run 
     - |
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" nix-shell -- timeout -k 10 "${CARGO_BENCH_TIMEOUT}" nix-shell --run "
-        set -euo pipefail
-        buildevents cmd ${ROOT_PIPELINE_ID} ${CI_JOB_ID} cargo-test -- cargo bench --no-fail-fast
-      "
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" timeout -- timeout \
+        -k 10 "${CARGO_BENCH_TIMEOUT}" buildevents cmd "${ROOT_PIPELINE_ID}" \
+        ${CI_JOB_ID} cargo-test -- cargo bench --no-fail-fast
+
   after_script:
     - |
       echo -e "\e[0Ksection_start:$(date +%s):after_script[collapsed=true]\r\e[0KClick here to see the after_script section. It does not affect the job success status"
