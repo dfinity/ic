@@ -732,15 +732,17 @@ impl From<ClaimedSwapNeuronStatus> for ClaimedStatus {
 #[cfg(test)]
 mod tests {
     use crate::pb::v1::{
-        params::NeuronBasketConstructionParameters, CfNeuron, CfParticipant, Init, OpenRequest,
-        Params,
+        params::NeuronBasketConstructionParameters, CfNeuron, CfParticipant, Init,
+        ListDirectParticipantsResponse, OpenRequest, Params, Participant,
     };
+    use crate::swap::MAX_LIST_DIRECT_PARTICIPANTS_LIMIT;
     use ic_base_types::PrincipalId;
     use ic_nervous_system_common::{
         assert_is_err, assert_is_ok, E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
     };
     use lazy_static::lazy_static;
     use prost::Message;
+    use std::mem;
 
     const OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID: u64 = 489102;
 
@@ -899,6 +901,38 @@ mod tests {
             "Looks like we can support at least {} Community Fund neurons (among {} principals).",
             safe_len * neurons_per_principal,
             safe_len,
+        );
+    }
+
+    /// Test that the configured MAX_LIST_DIRECT_PARTICIPANTS_LIMIT will efficiently pack
+    /// Participants and not exceed the message size limits of the IC.
+    #[test]
+    fn test_list_direct_participation_limit_is_accurate_and_efficient() {
+        let max_inter_canister_payload_in_bytes = 2 * 1024 * 1024; // 2 MiB
+        let participant_size = mem::size_of::<Participant>();
+        let response_size = mem::size_of::<ListDirectParticipantsResponse>();
+
+        // Account for Response overhead, then divide the max message size by the memory footprint
+        // of the participant.
+        let participants_per_message =
+            (max_inter_canister_payload_in_bytes - response_size) / participant_size;
+
+        assert!(
+            participants_per_message >= MAX_LIST_DIRECT_PARTICIPANTS_LIMIT as usize,
+            "The currently compiled MAX_LIST_DIRECT_PARTICIPANTS_LIMIT is greater than what can \
+            fit in a single inter canister message. Calculated participants per message: {}. \
+            Configured limit: {}",
+            participants_per_message,
+            MAX_LIST_DIRECT_PARTICIPANTS_LIMIT
+        );
+
+        let remainder = participants_per_message - MAX_LIST_DIRECT_PARTICIPANTS_LIMIT as usize;
+        assert!(
+            remainder < 5000,
+            "An increment of more than 5000 participants ({}) can be added to the \
+            ListDirectParticipantsResponse without reaching the max message size. Update \
+            MAX_LIST_DIRECT_PARTICIPANTS_LIMIT and the corresponding API docs",
+            remainder
         );
     }
 }

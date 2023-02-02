@@ -7,9 +7,10 @@ use crate::common::{
     compute_multiple_successful_claim_swap_neurons_response,
     compute_single_successful_claim_swap_neurons_response, create_generic_sns_neuron_recipes,
     create_single_neuron_recipe, extract_canister_call_error, extract_set_dapp_controller_response,
-    i2principal_id_string, mock_stub, successful_set_dapp_controllers_call_result,
-    successful_set_mode_call_result, successful_settle_community_fund_participation_result,
-    verify_participant_balances, TestInvestor,
+    get_snapshot_of_buyers_index_list, i2principal_id_string, mock_stub, paginate_participants,
+    successful_set_dapp_controllers_call_result, successful_set_mode_call_result,
+    successful_settle_community_fund_participation_result, verify_participant_balances,
+    TestInvestor,
 };
 use futures::{channel::mpsc, future::FutureExt, StreamExt};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -35,6 +36,7 @@ use ic_sns_governance::{
     types::ONE_MONTH_SECONDS,
 };
 use ic_sns_swap::{
+    memory,
     pb::v1::{
         params::NeuronBasketConstructionParameters,
         sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
@@ -351,6 +353,14 @@ fn test_min_icp() {
             .amount_icp_e8s(),
         2 * E8
     );
+
+    // Assert that the buyer list was updated in order
+    let buyers_list = get_snapshot_of_buyers_index_list();
+    assert_eq!(
+        vec![*TEST_USER1_PRINCIPAL, *TEST_USER2_PRINCIPAL,],
+        buyers_list
+    );
+
     // There are now two participants with a total of 4 ICP.
     //
     // Cannot commit
@@ -511,6 +521,10 @@ fn test_min_max_icp_per_buyer() {
                 .amount_icp_e8s(),
             5 * E8
         );
+
+        // Assert that the buyer list was updated in order
+        let buyers_list = get_snapshot_of_buyers_index_list();
+        assert_eq!(vec![*TEST_USER1_PRINCIPAL,], buyers_list);
     }
 }
 
@@ -3561,4 +3575,193 @@ async fn test_claim_swap_neurons_handles_inconsistent_response() {
         swap.neuron_recipes.last().unwrap().claimed_status,
         Some(ClaimedStatus::Pending as i32)
     );
+}
+
+/// Test that when paginating through the Participants, that different invocations
+/// result in the same ordering.
+#[test]
+fn test_list_direct_participants_list_is_deterministic() {
+    // Prepare the canister with multiple buyers
+    let mut swap = Swap {
+        lifecycle: Open as i32,
+        params: Some(params()),
+        init: Some(init()),
+        ..Default::default()
+    };
+
+    // Set up the spy ledger to return token balances
+    let spy_ledger = SpyLedger::new(vec![
+        LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
+        LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
+        LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
+        LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
+    ]);
+
+    // Participate in the sale by calling refresh_buyer_tokens. This will update the
+    // buyers map and BUYERS_LIST_INDEX
+    for i in 0..4 {
+        swap.refresh_buyer_token_e8s(
+            PrincipalId::new_user_test_id(i),
+            SWAP_CANISTER_ID,
+            &spy_ledger,
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+    }
+
+    let first_pass = paginate_participants(&swap, /* limit */ 1);
+    let second_pass = paginate_participants(&swap, /* limit */ 1);
+
+    assert_eq!(first_pass, second_pass);
+    assert!(!first_pass.is_empty())
+}
+
+/// Test that when paging through all participants, that all are returned.
+#[test]
+fn test_list_direct_participants_paginates_all_participants() {
+    // Prepare the canister with multiple buyers
+    let mut swap = Swap {
+        lifecycle: Open as i32,
+        params: Some(params()),
+        init: Some(init()),
+        ..Default::default()
+    };
+
+    // Set up the spy ledger to return token balances
+    let spy_ledger = SpyLedger::new(vec![
+        LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
+        LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
+        LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
+        LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
+    ]);
+
+    // Participate in the sale by calling refresh_buyer_tokens. This will update the
+    // buyers map and BUYERS_LIST_INDEX
+    for i in 0..4 {
+        swap.refresh_buyer_token_e8s(
+            PrincipalId::new_user_test_id(i),
+            SWAP_CANISTER_ID,
+            &spy_ledger,
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+    }
+
+    // Paginate through all of the participants
+    let participants = paginate_participants(&swap, /* limit */ 3);
+    assert!(!participants.is_empty());
+
+    // Rebuild the buyer map based on the list response
+    let mut rebuilt_buyers_map = btreemap! {};
+    for participant in participants {
+        rebuilt_buyers_map.insert(
+            participant.participant_id.unwrap().to_string(),
+            participant.participation.unwrap(),
+        );
+    }
+
+    // Assert that they are equal, i.e. the test was able to get all participants
+    assert_eq!(rebuilt_buyers_map, swap.buyers);
+}
+
+/// Test that `rebuild_index` hits the right condition and rebuilds if it was missing
+#[test]
+fn test_rebuild_indexes_correctly_rebuilds_buyers_list_index() {
+    // Prepare the canister with multiple buyers
+    let swap = Swap {
+        lifecycle: Open as i32,
+        params: Some(params()),
+        init: Some(init()),
+        buyers: btreemap! {
+            i2principal_id_string(1) => BuyerState::new(50 * E8),
+            i2principal_id_string(2) => BuyerState::new(50 * E8),
+            i2principal_id_string(3) => BuyerState::new(50 * E8),
+        },
+        ..Default::default()
+    };
+
+    // Paginate through all of the participants
+    let participants = paginate_participants(&swap, /* limit */ 1);
+    // The list should be empty because there was no equivalent update to BUYERS_INDEX_LIST
+    assert!(participants.is_empty());
+
+    // The actual BUYERS_LIST_INDEX should be empty too
+    let buyer_list_index_length = memory::BUYERS_LIST_INDEX.with(|list| list.borrow().len());
+    assert_eq!(buyer_list_index_length, 0);
+
+    // Execute the code under test
+    swap.rebuild_indexes()
+        .unwrap_or_else(|err| panic!("rebuild_indexes failed due to {}", err));
+
+    // Inspect results
+
+    // Paginate though all of the participants again
+    let participants = paginate_participants(&swap, /* limit */ 1);
+    assert_eq!(participants.len(), 3);
+
+    // The actual BUYERS_LIST_INDEX should now be populated
+    let buyer_list_index_length = memory::BUYERS_LIST_INDEX.with(|list| list.borrow().len());
+    assert_eq!(buyer_list_index_length, 3);
+}
+
+/// Test that if the index exists, it is not rebuilt in a different order.
+#[test]
+fn test_rebuild_indexes_ignores_existing_index() {
+    // Prepare the canister with multiple buyers
+    let mut swap = Swap {
+        lifecycle: Open as i32,
+        params: Some(params()),
+        init: Some(init()),
+        ..Default::default()
+    };
+
+    // Set up the spy ledger to return token balances
+    let spy_ledger = SpyLedger::new(vec![
+        LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
+        LedgerReply::AccountBalance(Ok(Tokens::from_e8s(100 * E8))),
+    ]);
+
+    // Participate in the sale by calling refresh_buyer_tokens. This will update the
+    // buyers map and BUYERS_LIST_INDEX
+    for i in 0..2 {
+        swap.refresh_buyer_token_e8s(
+            PrincipalId::new_user_test_id(i),
+            SWAP_CANISTER_ID,
+            &spy_ledger,
+        )
+        .now_or_never()
+        .unwrap()
+        .unwrap();
+    }
+
+    // Paginate through all of the participants
+    let participants = paginate_participants(&swap, /* limit */ 1);
+    assert_eq!(participants.len(), 2);
+
+    // Grab a snapshot of the index to compare to later
+    let buyer_list_index_length_before: Vec<PrincipalId> =
+        memory::BUYERS_LIST_INDEX.with(|list| list.borrow().iter().collect());
+    assert_eq!(buyer_list_index_length_before.len(), 2);
+
+    // Execute the code under test
+    swap.rebuild_indexes()
+        .unwrap_or_else(|err| panic!("rebuild_indexes failed due to {}", err));
+
+    // Inspect results
+
+    // Paginate though all of the participants again
+    let participants = paginate_participants(&swap, /* limit */ 1);
+    assert_eq!(participants.len(), 2);
+
+    // The actual BUYERS_LIST_INDEX should not have been rebuilt
+    let buyer_list_index_length_after: Vec<PrincipalId> =
+        memory::BUYERS_LIST_INDEX.with(|list| list.borrow().iter().collect());
+    assert_eq!(buyer_list_index_length_after.len(), 2);
+
+    assert_eq!(
+        buyer_list_index_length_before,
+        buyer_list_index_length_after
+    )
 }

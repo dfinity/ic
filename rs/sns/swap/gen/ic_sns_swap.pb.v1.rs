@@ -1487,6 +1487,71 @@ pub struct GetDerivedStateResponse {
     #[prost(double, optional, tag = "2")]
     pub sns_tokens_per_icp: ::core::option::Option<f64>,
 }
+/// Request struct for the method `list_direct_participants`. This method
+/// paginates over all direct participants in the decentralization sale.
+/// Direct participants are participants who did not participate via the
+/// CommunityFund.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ListDirectParticipantsRequest {
+    /// The limit of the number of Participants returned in each page, in range [0, 30,000].
+    /// If no value, or a value outside of this range is requested, 30,000 will be used.
+    #[prost(uint32, optional, tag = "1")]
+    pub limit: ::core::option::Option<u32>,
+    /// Skip the first `offset` elements when constructing the response.
+    #[prost(uint32, optional, tag = "2")]
+    pub offset: ::core::option::Option<u32>,
+}
+/// Response struct for the method `list_direct_participants`.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ListDirectParticipantsResponse {
+    /// The list of Participants returned from the invocation of `list_direct_participants`.
+    /// The list is a page of all the buyers in the Sale canister at the time of the
+    /// method call. The size of the page is equal to either
+    /// - the max page size (30,000),
+    /// - the corresponding `ListDirectParticipantsRequest.limit`,
+    /// - the remaining Participants, if there are fewer than `limit` participants left
+    ///
+    /// Pagination through the entire list of participants is complete if
+    /// len(participants) < `ListDirectParticipantsRequest.limit`.
+    #[prost(message, repeated, tag = "1")]
+    pub participants: ::prost::alloc::vec::Vec<Participant>,
+}
+/// A direct Participant in the decentralization sale.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Participant {
+    /// The PrincipalId of the participant.
+    #[prost(message, optional, tag = "1")]
+    pub participant_id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    /// The BuyerState of the participant, which includes the
+    /// amount of participation in e8s of a Token, and the transfer
+    /// status of those tokens.
+    #[prost(message, optional, tag = "2")]
+    pub participation: ::core::option::Option<BuyerState>,
+}
 /// Request struct for the method `get_sale_parameters`.
 #[derive(
     candid::CandidType,

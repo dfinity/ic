@@ -12,6 +12,7 @@ comparable = { version = "0.5.1", features = ["derive"] }
 crc32fast = "1.2.0"
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-protobuf = { path = "../../protobuf" }
+ic-stable-structures = "0.5.0"
 phantom_newtype = { path = "../../phantom_newtype" }
 prost = "0.11.0"
 serde = { version = "1.0.99", features = ["derive"] }

@@ -79,6 +79,11 @@ type ListCommunityFundParticipantsRequest = record {
 type ListCommunityFundParticipantsResponse = record {
   cf_participants : vec CfParticipant;
 };
+type ListDirectParticipantsRequest = record {
+  offset : opt nat32;
+  limit : opt nat32;
+};
+type ListDirectParticipantsResponse = record { participants : vec Participant };
 type ListSnsNeuronRecipesRequest = record {
   offset : opt nat64;
   limit : opt nat32;
@@ -106,6 +111,10 @@ type Params = record {
   sns_token_e8s : nat64;
   max_participant_icp_e8s : nat64;
   min_icp_e8s : nat64;
+};
+type Participant = record {
+  participation : opt BuyerState;
+  participant_id : opt principal;
 };
 type Possibility = variant {
   Ok : SetDappControllersResponse;
@@ -167,6 +176,9 @@ service : (Init) -> {
   get_state : (record {}) -> (GetStateResponse) query;
   list_community_fund_participants : (ListCommunityFundParticipantsRequest) -> (
       ListCommunityFundParticipantsResponse,
+    ) query;
+  list_direct_participants : (ListDirectParticipantsRequest) -> (
+      ListDirectParticipantsResponse,
     ) query;
   list_sns_neuron_recipes : (ListSnsNeuronRecipesRequest) -> (
       ListSnsNeuronRecipesResponse,

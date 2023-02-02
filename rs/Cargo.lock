@@ -4253,6 +4253,7 @@ dependencies = [
  "ic-base-types-protobuf-generator",
  "ic-crypto-sha",
  "ic-protobuf",
+ "ic-stable-structures 0.5.0",
  "ic-test-utilities-compare-dirs",
  "phantom_newtype",
  "proptest",

@@ -14,14 +14,16 @@ use ic_sns_governance::{
     types::ONE_MONTH_SECONDS,
 };
 use ic_sns_swap::{
+    memory,
     pb::v1::{
         set_mode_call_result::SetModeResult,
         settle_community_fund_participation_result,
         sns_neuron_recipe::{ClaimedStatus, Investor},
         sns_neuron_recipe::{Investor::Direct, NeuronAttributes},
-        CanisterCallError, DirectInvestment, RestoreDappControllersResponse,
-        SetDappControllersCallResult, SetDappControllersResponse, SetModeCallResult,
-        SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, TransferableAmount,
+        CanisterCallError, DirectInvestment, ListDirectParticipantsRequest, Participant,
+        RestoreDappControllersResponse, SetDappControllersCallResult, SetDappControllersResponse,
+        SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap,
+        TransferableAmount,
     },
     swap::CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES,
 };
@@ -257,4 +259,31 @@ pub fn create_generic_sns_neuron_recipes(count: u64) -> Vec<SnsNeuronRecipe> {
             claimed_status: Some(ClaimedStatus::Pending as i32),
         })
         .collect()
+}
+
+pub fn paginate_participants(swap: &Swap, limit: usize) -> Vec<Participant> {
+    let mut participants = vec![];
+    let mut offset = 0;
+
+    loop {
+        let list_direct_participants_response =
+            swap.list_direct_participants(ListDirectParticipantsRequest {
+                limit: Some(limit as u32),
+                offset: Some(offset),
+            });
+
+        let len = list_direct_participants_response.participants.len();
+        assert!(len <= limit);
+
+        participants.extend(list_direct_participants_response.participants);
+        offset += len as u32;
+
+        if len < limit {
+            return participants;
+        }
+    }
+}
+
+pub fn get_snapshot_of_buyers_index_list() -> Vec<PrincipalId> {
+    memory::BUYERS_LIST_INDEX.with(|m| m.borrow().iter().collect())
 }
