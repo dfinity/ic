@@ -95,7 +95,6 @@ pub(crate) struct DataPlaneMetrics {
     pub(crate) read_tasks: IntGauge,
     // TODO: revisit these metrics when introducing multiple channels because of high cardinality.
     pub(crate) h2_write_capacity: IntGaugeVec,
-    pub(crate) h2_write_send_invocations: HistogramVec,
     pub(crate) h2_read_used_capacity: IntGaugeVec,
     pub(crate) h2_read_available_capacity: IntGaugeVec,
 }
@@ -153,13 +152,6 @@ impl DataPlaneMetrics {
             h2_write_capacity: metrics_registry.int_gauge_vec(
                 "transport_h2_write_capacity_bytes",
                 "Http2 sender capacity when writing message to stream",
-                &["peer_id", LABEL_CHANNEL_ID],
-            ),
-            h2_write_send_invocations: metrics_registry.histogram_vec(
-                "transport_h2_write_send_invocations",
-                "Http2 send invocations per payload.",
-                // 1, 2, 5 should be enough.
-                decimal_buckets(0, 0),
                 &["peer_id", LABEL_CHANNEL_ID],
             ),
             h2_read_used_capacity: metrics_registry.int_gauge_vec(

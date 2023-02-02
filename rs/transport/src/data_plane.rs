@@ -20,9 +20,9 @@
 use crate::{
     metrics::{DataPlaneMetrics, IntGaugeResource},
     types::{
-        ChannelReader, ChannelWriter, Connected, ConnectionRole, H2Reader, SendQueueReader,
-        StreamReadError, StreamState, TransportHeader, TransportImpl, H2_FRAME_SIZE,
-        H2_WINDOW_SIZE, TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
+        Connected, ConnectionRole, H2Reader, H2Writer, SendQueueReader, StreamReadError,
+        StreamState, TransportHeader, TransportImpl, H2_FRAME_SIZE, H2_WINDOW_SIZE,
+        TRANSPORT_FLAGS_IS_HEARTBEAT, TRANSPORT_HEADER_SIZE,
     },
     utils::get_peer_label,
 };
@@ -35,9 +35,10 @@ use ic_logger::{info, warn};
 use std::convert::TryInto;
 use std::net::SocketAddr;
 use std::sync::Weak;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, Instant};
+use tokio_util::io::StreamReader;
 use tower::{BoxError, Service};
 
 // DEQUEUE_BYTES is the number of bytes which we will attempt to dequeue and
@@ -115,11 +116,11 @@ fn unpack_header(data: Vec<u8>) -> TransportHeader {
 
 /// Per-flow send task. Reads the requests from the send queue and writes to
 /// the socket.
-fn spawn_write_task(
+fn spawn_write_task<W: AsyncWrite + Unpin + Send + 'static>(
     peer_id: NodeId,
     channel_id: TransportChannelId,
     mut send_queue_reader: Box<dyn SendQueueReader + Send + Sync>,
-    mut writer: ChannelWriter,
+    mut writer: W,
     data_plane_metrics: DataPlaneMetrics,
     weak_self: Weak<TransportImpl>,
     rt_handle: tokio::runtime::Handle,
@@ -185,29 +186,21 @@ fn spawn_write_task(
     })
 }
 
-async fn write_one_message(
-    writer: &mut ChannelWriter,
+async fn write_one_message<W: AsyncWrite + Unpin>(
+    writer: &mut W,
     bytes_to_send: Vec<u8>,
 ) -> Result<(), std::io::Error> {
-    match writer {
-        ChannelWriter::Legacy(writer) => {
-            writer.write_all(&bytes_to_send).await?;
-            writer.flush().await
-        }
-        ChannelWriter::H2SendStream(writer) => {
-            // Use SendStreamWrapper to manage capacity and send data as capacity becomes available
-            writer.send_data(bytes::Bytes::from(bytes_to_send)).await
-        }
-    }
+    writer.write_all(&bytes_to_send).await?;
+    writer.flush().await
 }
 
 /// Per-flow receive task. Reads the messages from the socket and passes to
 /// the client.
-fn spawn_read_task(
+fn spawn_read_task<R: AsyncRead + Unpin + Send + 'static>(
     peer_id: NodeId,
     channel_id: TransportChannelId,
     mut event_handler: TransportEventHandler,
-    mut reader: ChannelReader,
+    mut reader: R,
     data_plane_metrics: DataPlaneMetrics,
     weak_self: Weak<TransportImpl>,
     rt_handle: tokio::runtime::Handle,
@@ -221,10 +214,7 @@ fn spawn_read_task(
         while let Some(arc_self) = weak_self.upgrade() {
             // Read the next message from the socket
             let read_message_start = Instant::now();
-            let read_one_msg_result = match reader {
-                ChannelReader::Legacy(ref mut tls_reader) => read_one_message(tls_reader, heartbeat_timeout).await,
-                ChannelReader::H2RecvStream(ref mut h2_reader) => read_one_message_h2(h2_reader, heartbeat_timeout).await,
-            };
+            let read_one_msg_result = read_one_message(&mut reader,heartbeat_timeout).await;
 
             match read_one_msg_result {
                 Err(err) => {
@@ -325,38 +315,6 @@ async fn read_one_message<T: AsyncRead + Unpin>(
     Ok((header, payload))
 }
 
-/// Reads and returns the next header and message payload.
-/// This requires reading frames until a full message is fully received.
-async fn read_one_message_h2(
-    reader: &mut H2Reader,
-    timeout: Duration,
-) -> Result<(TransportHeader, TransportPayload), StreamReadError> {
-    // Read until we have the header
-    let complete_header = reader
-        .get_message(TRANSPORT_HEADER_SIZE, "header".to_string(), timeout)
-        .await?;
-    let header = unpack_header(complete_header);
-
-    if header.flags & TRANSPORT_FLAGS_IS_HEARTBEAT != 0 {
-        // Process heartbeat
-        return Ok((header, TransportPayload::default()));
-    }
-
-    // Continue reading until we have the body
-    let complete_payload = reader
-        .get_message(
-            header.payload_length.try_into().unwrap(),
-            "body".to_string(),
-            timeout,
-        )
-        .await?;
-
-    let payload = TransportPayload(complete_payload);
-
-    // If we received part of additional messages, stash that for later use
-    Ok((header, payload))
-}
-
 /// Reads the requested bytes from the socket with a timeout
 async fn read_into_buffer<T: AsyncRead + Unpin>(
     reader: &mut T,
@@ -387,14 +345,12 @@ pub(crate) async fn create_connected_state(
 ) -> Result<Connected, Box<dyn std::error::Error + Send + Sync>> {
     if !use_h2 {
         let (tls_reader, tls_writer) = tokio::io::split(tls_stream);
-        let channel_reader = ChannelReader::new_with_legacy(tls_reader);
-        let channel_writer = ChannelWriter::new_with_legacy(tls_writer);
         // Spawn write task
         let write_task = spawn_write_task(
             peer_id,
             channel_id,
             send_queue_reader,
-            channel_writer,
+            tls_writer,
             data_plane_metrics.clone(),
             weak_self.clone(),
             rt_handle.clone(),
@@ -404,7 +360,7 @@ pub(crate) async fn create_connected_state(
             peer_id,
             channel_id,
             event_handler,
-            channel_reader,
+            tls_reader,
             data_plane_metrics,
             weak_self,
             rt_handle,
@@ -482,14 +438,15 @@ pub(crate) async fn create_connected_state_for_h2_client(
     let (response_fut, send_stream) = h2.send_request(request, false)?;
     let recv_stream = response_fut.await?.into_body();
 
+    let peer_label = get_peer_label(&peer_addr.ip().to_string(), &peer_id);
     let write_task = spawn_write_task(
         peer_id,
         channel_id,
         send_queue_reader,
-        ChannelWriter::new_with_h2_send_stream(
+        H2Writer::new(
             send_stream,
             channel_id,
-            get_peer_label(&peer_addr.ip().to_string(), &peer_id),
+            peer_label.clone(),
             data_plane_metrics.clone(),
         ),
         data_plane_metrics.clone(),
@@ -501,12 +458,12 @@ pub(crate) async fn create_connected_state_for_h2_client(
         peer_id,
         channel_id,
         event_handler,
-        ChannelReader::new_with_h2_recv_stream(
+        StreamReader::new(H2Reader::new(
             recv_stream,
             channel_id,
-            get_peer_label(&peer_addr.ip().to_string(), &peer_id),
+            peer_label,
             data_plane_metrics.clone(),
-        ),
+        )),
         data_plane_metrics,
         weak_self,
         rt_handle.clone(),
@@ -552,14 +509,16 @@ pub(crate) async fn create_connected_state_for_h2_server(
 
     // Once we have multiple streams we would accepts more streams.
     let h2_conn = rt_handle.spawn(async move { while let Some(Ok(_)) = h2.accept().await {} });
+
+    let peer_label = get_peer_label(&peer_addr.ip().to_string(), &peer_id);
     let write_task = spawn_write_task(
         peer_id,
         channel_id,
         send_queue_reader,
-        ChannelWriter::new_with_h2_send_stream(
+        H2Writer::new(
             send_stream,
             channel_id,
-            get_peer_label(&peer_addr.ip().to_string(), &peer_id),
+            peer_label.clone(),
             data_plane_metrics.clone(),
         ),
         data_plane_metrics.clone(),
@@ -571,12 +530,12 @@ pub(crate) async fn create_connected_state_for_h2_server(
         peer_id,
         channel_id,
         event_handler,
-        ChannelReader::new_with_h2_recv_stream(
+        StreamReader::new(H2Reader::new(
             recv_stream,
             channel_id,
-            get_peer_label(&peer_addr.ip().to_string(), &peer_id),
+            peer_label,
             data_plane_metrics.clone(),
-        ),
+        )),
         data_plane_metrics,
         weak_self,
         rt_handle,

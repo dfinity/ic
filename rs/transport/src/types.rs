@@ -4,22 +4,24 @@ use crate::metrics::{ControlPlaneMetrics, DataPlaneMetrics, SendQueueMetrics};
 use crate::utils::SendQueueImpl;
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures::future::poll_fn;
-use h2::{RecvStream, SendStream};
+use futures::{ready, Stream};
+use h2::{Reason, RecvStream, SendStream};
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
-use ic_crypto_tls_interfaces::TlsStream;
 use ic_interfaces_transport::{TransportChannelId, TransportEventHandler, TransportPayload};
 use ic_logger::{warn, ReplicaLogger};
-use std::collections::{BTreeSet, HashMap};
-use std::fmt::{self, Debug, Formatter};
-use std::net::IpAddr;
-use std::net::SocketAddr;
-use std::sync::{Arc, Weak};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt::{self, Debug, Formatter},
+    net::{IpAddr, SocketAddr},
+    pin::Pin,
+    sync::{Arc, Weak},
+    task::{Context, Poll},
+};
 use strum::{AsRefStr, IntoStaticStr};
+use tokio::io::AsyncWrite;
 use tokio::{
-    io::{ReadHalf, WriteHalf},
     runtime::Handle,
     sync::{Mutex, RwLock},
     task::JoinHandle,
@@ -69,46 +71,6 @@ pub const H2_FRAME_SIZE: u32 = 16_777_215;
 
 /// This value was chosen empirically and can be raised if needed
 pub const H2_WINDOW_SIZE: u32 = 1_000_000;
-
-pub(crate) enum ChannelReader {
-    Legacy(ReadHalf<Box<dyn TlsStream>>),
-    H2RecvStream(H2Reader),
-}
-
-impl ChannelReader {
-    pub fn new_with_legacy(tls_reader: ReadHalf<Box<dyn TlsStream>>) -> Self {
-        ChannelReader::Legacy(tls_reader)
-    }
-
-    pub fn new_with_h2_recv_stream(
-        recv_stream: RecvStream,
-        channel_id: TransportChannelId,
-        peer_label: String,
-        metrics: DataPlaneMetrics,
-    ) -> Self {
-        ChannelReader::H2RecvStream(H2Reader::new(recv_stream, channel_id, peer_label, metrics))
-    }
-}
-
-pub(crate) enum ChannelWriter {
-    Legacy(WriteHalf<Box<dyn TlsStream>>),
-    H2SendStream(H2Writer),
-}
-
-impl ChannelWriter {
-    pub fn new_with_legacy(tls_writer: WriteHalf<Box<dyn TlsStream>>) -> Self {
-        ChannelWriter::Legacy(tls_writer)
-    }
-
-    pub fn new_with_h2_send_stream(
-        send_stream: SendStream<Bytes>,
-        channel_id: TransportChannelId,
-        peer_label: String,
-        metrics: DataPlaneMetrics,
-    ) -> Self {
-        ChannelWriter::H2SendStream(H2Writer::new(send_stream, channel_id, peer_label, metrics))
-    }
-}
 
 /// Transport implementation state struct. The control and data planes provide
 /// implementations for this struct.
@@ -185,50 +147,94 @@ impl H2Writer {
             metrics,
         }
     }
+}
 
-    // This is invoked to send data via sendstream. As a prerequisite, it checks available capacity
-    // and waits until non-zero capacity is available before calling send to avoid overloading memory
-    pub async fn send_data(&mut self, mut data: Bytes) -> Result<(), std::io::Error> {
-        let mut send_invocations = 0;
+// Similar to hyper implementation https://github.com/hyperium/hyper/blob/master/src/proto/h2/mod.rs#L318
+impl AsyncWrite for H2Writer {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, std::io::Error>> {
         self.metrics
             .h2_write_capacity
             .with_label_values(&[&self.peer_label, &self.channel_id_label])
             .set(self.send_stream.capacity() as i64);
 
-        while !data.is_empty() {
-            let len = data.len();
-            self.send_stream.reserve_capacity(len);
-
-            match poll_fn(|cx| self.send_stream.poll_capacity(cx)).await {
-                None | Some(Err(_)) => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "poll capacity failure",
-                    ));
-                }
-                Some(Ok(0)) => continue,
-                Some(Ok(cap)) => {
-                    let to_send = data.split_to(std::cmp::min(cap, len));
-                    self.send_stream.send_data(to_send, false).map_err(|err| {
-                        err.into_io().unwrap_or_else(|| {
-                            std::io::Error::new(std::io::ErrorKind::Other, "failed to send header")
-                        })
-                    })?;
-                }
-            }
-            send_invocations += 1;
+        if buf.is_empty() {
+            return Poll::Ready(Ok(0));
         }
-        self.metrics
-            .h2_write_send_invocations
-            .with_label_values(&[&self.peer_label, &self.channel_id_label])
-            .observe(send_invocations.into());
-        Ok(())
+
+        self.send_stream.reserve_capacity(buf.len());
+
+        // We ignore all errors returned by `poll_capacity` and `write`, as we
+        // will get the correct from `poll_reset` anyway.
+
+        let cnt = loop {
+            match ready!(self.send_stream.poll_capacity(cx)) {
+                None => {
+                    break Some(0);
+                }
+                // Sending an empty buffer indicates end of stream. But getting 0
+                // from poll_capacity does not mean that the stream is finished. Try again...
+                Some(Ok(0)) => continue,
+                Some(Ok(cnt)) => {
+                    let cap = self
+                        .send_stream
+                        .send_data(
+                            Bytes::copy_from_slice(&buf[..std::cmp::min(cnt, buf.len())]),
+                            false,
+                        )
+                        .ok()
+                        .map(|()| std::cmp::min(cnt, buf.len()));
+                    break cap;
+                }
+                Some(Err(_)) => break None,
+            }
+        };
+
+        if let Some(cnt) = cnt {
+            return Poll::Ready(Ok(cnt));
+        }
+
+        Poll::Ready(Err(h2_to_io_error(
+            match ready!(self.send_stream.poll_reset(cx)) {
+                Ok(Reason::NO_ERROR) | Ok(Reason::CANCEL) | Ok(Reason::STREAM_CLOSED) => {
+                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()))
+                }
+                Ok(reason) => reason.into(),
+                Err(e) => e,
+            },
+        )))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), std::io::Error>> {
+        if self.send_stream.send_data(Bytes::default(), true).is_ok() {
+            return Poll::Ready(Ok(()));
+        }
+
+        Poll::Ready(Err(h2_to_io_error(
+            match ready!(self.send_stream.poll_reset(cx)) {
+                Ok(Reason::NO_ERROR) => return Poll::Ready(Ok(())),
+                Ok(Reason::CANCEL) | Ok(Reason::STREAM_CLOSED) => {
+                    return Poll::Ready(Err(std::io::ErrorKind::BrokenPipe.into()))
+                }
+                Ok(reason) => reason.into(),
+                Err(e) => e,
+            },
+        )))
     }
 }
 
 pub(crate) struct H2Reader {
     receive_stream: RecvStream,
-    buffer: Vec<u8>,
     channel_id_label: String,
     peer_label: String,
     metrics: DataPlaneMetrics,
@@ -243,23 +249,17 @@ impl H2Reader {
     ) -> Self {
         Self {
             receive_stream,
-            buffer: vec![],
             channel_id_label: channel_id.to_string(),
             peer_label,
             metrics,
         }
     }
+}
 
-    /// Reads frames until target length is reached.
-    /// After each frame is read, capacity is released.
-    /// Timeout is applied to each frame read.
-    /// If more bytes are read than the target, return that as an 'excess'
-    pub async fn get_message(
-        &mut self,
-        target_len: usize,
-        msg_type: String,
-        timeout: Duration,
-    ) -> Result<Vec<u8>, StreamReadError> {
+impl Stream for H2Reader {
+    type Item = Result<Bytes, std::io::Error>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.metrics
             .h2_read_used_capacity
             .with_label_values(&[&self.peer_label, &self.channel_id_label])
@@ -269,33 +269,29 @@ impl H2Reader {
             .with_label_values(&[&self.peer_label, &self.channel_id_label])
             .set(self.receive_stream.flow_control().available_capacity() as i64);
 
-        while self.buffer.len() < target_len {
-            let read_future = self.receive_stream.data();
-            match tokio::time::timeout(timeout, read_future).await {
-                Err(_) => return Err(StreamReadError::TimeOut),
-                Ok(Some(Ok(chunk))) => {
-                    self.buffer.append(&mut chunk.to_vec());
-                    let _ = self
-                        .receive_stream
-                        .flow_control()
-                        .release_capacity(chunk.len());
-                }
-                // None means the stream is exhausted
-                Ok(None) => return Err(StreamReadError::EndOfStream),
-                Ok(Some(Err(h2_error))) => {
-                    return Err(StreamReadError::H2ReceiveStreamFailure(format!(
-                        "{:?} for {:?}",
-                        h2_error.to_string(),
-                        msg_type
-                    )));
+        let this = self.get_mut();
+
+        match ready!(Pin::new(&mut this.receive_stream).poll_data(cx)) {
+            Some(Ok(chunk)) => {
+                let len = chunk.len();
+
+                match this.receive_stream.flow_control().release_capacity(len) {
+                    Ok(()) => Poll::Ready(Some(Ok(chunk))),
+                    Err(err) => Poll::Ready(Some(Err(h2_to_io_error(err)))),
                 }
             }
+            Some(Err(err)) => Poll::Ready(Some(Err(h2_to_io_error(err)))),
+            None => Poll::Ready(None),
         }
-        let extra_buffer = self.buffer.split_off(target_len);
+    }
+}
 
-        let message = self.buffer.to_vec();
-        self.buffer = extra_buffer;
-        Ok(message)
+// Copied from hyper source code.
+fn h2_to_io_error(e: h2::Error) -> std::io::Error {
+    if e.is_io() {
+        e.into_io().unwrap()
+    } else {
+        std::io::Error::new(std::io::ErrorKind::Other, e)
     }
 }
 
@@ -581,6 +577,18 @@ pub(crate) trait SendQueueReader {
 
 #[cfg(test)]
 mod tests {
+    use futures::future::join;
+    use h2::{client, server};
+    use http::Request;
+    use ic_metrics::MetricsRegistry;
+    use ic_transport_test_utils::get_free_localhost_port;
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::{TcpListener, TcpStream},
+        sync::Barrier,
+    };
+    use tokio_util::io::StreamReader;
+
     use super::*;
 
     fn connecting_state() -> ConnectionState {
@@ -614,6 +622,125 @@ mod tests {
                 current_state.is_valid_transition(&next_state),
                 expected_result
             );
+        }
+    }
+
+    struct H2Setup {
+        _client_con: JoinHandle<()>,
+        _sever_con: JoinHandle<()>,
+        client_writer: H2Writer,
+        server_writer: H2Writer,
+        client_reader: StreamReader<H2Reader, Bytes>,
+        server_reader: StreamReader<H2Reader, Bytes>,
+    }
+
+    async fn setup_h2_reader_writer(
+        initial_window_size: u32,
+        initial_connection_window_size: u32,
+        frame_size: u32,
+    ) -> H2Setup {
+        // Spawn h2 server side.
+        let port = get_free_localhost_port().unwrap();
+
+        // Create barrier to make sure we only connect after we binded to the socket.
+        let b = Arc::new(Barrier::new(2));
+        let b_c = b.clone();
+        let h2_server_task = tokio::spawn(async move {
+            let listener = TcpListener::bind(format!("127.0.0.1:{}", port))
+                .await
+                .unwrap();
+            b_c.wait().await;
+            let (stream, _) = listener.accept().await.unwrap();
+            stream
+        });
+
+        b.wait().await;
+        let client_stream = TcpStream::connect(format!("127.0.0.1:{}", port))
+            .await
+            .unwrap();
+
+        let server_stream = h2_server_task.await.unwrap();
+
+        let client_fut = async move {
+            client::Builder::new()
+                .initial_window_size(initial_window_size)
+                .initial_connection_window_size(initial_connection_window_size)
+                .initial_window_size(frame_size)
+                .handshake(client_stream)
+                .await
+                .unwrap()
+        };
+        let server_fut = async move {
+            server::Builder::new()
+                .initial_window_size(initial_window_size)
+                .initial_connection_window_size(initial_connection_window_size)
+                .initial_window_size(frame_size)
+                .handshake(server_stream)
+                .await
+                .unwrap()
+        };
+
+        let ((client_send, client_conn), mut server_conn) = join(client_fut, server_fut).await;
+
+        let h2_client_driver = tokio::spawn(async move {
+            let _ = client_conn.await;
+        });
+
+        let client_fut = async move {
+            let mut h2 = client_send.ready().await.unwrap();
+            let request = Request::new(());
+            let (resp_fut, send_stream) = h2.send_request(request, false).unwrap();
+            (send_stream, resp_fut)
+        };
+
+        let server_fut = async {
+            let (request, mut respond) = server_conn.accept().await.unwrap().unwrap();
+            let response = http::Response::new(());
+            let send_stream = respond.send_response(response, false).unwrap();
+            let recv_stream = request.into_body();
+            (send_stream, recv_stream)
+        };
+
+        let ((client_writer, client_reader_fut), (server_writer, server_reader)) =
+            join(client_fut, server_fut).await;
+
+        let h2_server_driver =
+            tokio::spawn(async move { while let Some(Ok(_)) = server_conn.accept().await {} });
+
+        let client_reader = client_reader_fut.await.unwrap().into_body();
+
+        let client_reader = StreamReader::new(H2Reader::new(
+            client_reader,
+            TransportChannelId::from(0),
+            String::new(),
+            DataPlaneMetrics::new(MetricsRegistry::default()),
+        ));
+        let client_writer = H2Writer::new(
+            client_writer,
+            TransportChannelId::from(0),
+            String::new(),
+            DataPlaneMetrics::new(MetricsRegistry::default()),
+        );
+        let server_reader = StreamReader::new(H2Reader::new(
+            server_reader,
+            TransportChannelId::from(0),
+            String::new(),
+            DataPlaneMetrics::new(MetricsRegistry::default()),
+        ));
+        let server_writer = H2Writer::new(
+            server_writer,
+            TransportChannelId::from(0),
+            String::new(),
+            DataPlaneMetrics::new(MetricsRegistry::default()),
+        );
+
+        H2Setup {
+            _client_con: h2_client_driver,
+            _sever_con: h2_server_driver,
+            client_writer,
+            server_writer,
+            client_reader,
+            server_reader,
         }
     }
 
@@ -660,5 +787,28 @@ mod tests {
             (connected_state(ConnectionRole::Client), false),
         ];
         verify_state_transitions(state, expected);
+    }
+    #[tokio::test]
+    async fn h2_single_message() {
+        let H2Setup {
+            _client_con,
+            _sever_con,
+            mut client_writer,
+            mut server_writer,
+            mut client_reader,
+            mut server_reader,
+        } = setup_h2_reader_writer(H2_WINDOW_SIZE, H2_WINDOW_SIZE, H2_FRAME_SIZE).await;
+
+        let message = vec![1; 10];
+        client_writer.write_all(&message).await.unwrap();
+        let mut buf = vec![0; 10];
+        server_reader.read_exact(&mut buf).await.unwrap();
+        assert_eq!(buf, message);
+
+        let message = vec![1; 10];
+        server_writer.write_all(&message).await.unwrap();
+        let mut buf = vec![0; 10];
+        client_reader.read_exact(&mut buf).await.unwrap();
+        assert_eq!(buf, message);
     }
 }
