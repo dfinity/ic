@@ -3006,12 +3006,13 @@ proptest! {
                 instructions_per_round
             );
         }
-        let total_executed: u64 = executed.into_values().sum();
+        let total_executed_instructions: u64 = executed.into_values().sum();
+        let total_executed_messages: u64 = total_executed_instructions / instructions_per_message.get();
         assert!(
-            minimum_executed_messages <= total_executed / scheduler_cores as u64,
-            "Executed less instructions than expected: {} <= {}",
+            minimum_executed_messages <= total_executed_messages,
+            "Executed {} messages but expected at least {}.",
+            total_executed_messages,
             minimum_executed_messages,
-            total_executed
         );
     }
 
