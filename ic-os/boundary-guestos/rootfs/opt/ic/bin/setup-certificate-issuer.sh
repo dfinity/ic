@@ -27,7 +27,6 @@ function read_variables() {
             "certificate_orchestrator_uri") ORCHESTRATOR_URI="${value}" ;;
             "certificate_orchestrator_canister_id") ORCHESTRATOR_CANISTER_ID="${value}" ;;
             "certificate_issuer_delegation_domain") DELEGATION_DOMAIN="${value}" ;;
-            "certificate_issuer_application_domain") APPLICATION_DOMAIN="${value}" ;;
             "certificate_issuer_acme_id") ACME_ACCOUNT_ID="${value}" ;;
             "certificate_issuer_acme_key") ACME_ACCOUNT_KEY="${value}" ;;
             "certificate_issuer_cloudflare_api_key") CLOUDFLARE_API_KEY="${value}" ;;
@@ -51,7 +50,6 @@ KEY_PATH=${CFG_DIR}/enc_key.pem
 ORCHESTRATOR_URI=${ORCHESTRATOR_URI}
 ORCHESTRATOR_CANISTER_ID=${ORCHESTRATOR_CANISTER_ID}
 DELEGATION_DOMAIN=${DELEGATION_DOMAIN}
-APPLICATION_DOMAIN=${APPLICATION_DOMAIN}
 ACME_ACCOUNT_ID=${ACME_ACCOUNT_ID}
 ACME_ACCOUNT_KEY=${ACME_ACCOUNT_KEY}
 CLOUDFLARE_API_KEY=${CLOUDFLARE_API_KEY}

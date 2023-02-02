@@ -98,10 +98,6 @@ struct Cli {
     #[arg(long)]
     delegation_domain: String,
 
-    /// A domain that will be used to access a client's canister
-    #[arg(long)]
-    application_domain: String,
-
     #[arg(long)]
     acme_account_id: String,
 

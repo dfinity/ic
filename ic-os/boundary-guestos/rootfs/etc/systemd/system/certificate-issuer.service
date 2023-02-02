@@ -20,7 +20,6 @@ ExecStart=/opt/ic/bin/certificate-issuer \
     --orchestrator-canister-id  "${ORCHESTRATOR_CANISTER_ID}" \
     --key-path                  "${KEY_PATH}"                 \
     --delegation-domain         "${DELEGATION_DOMAIN}"        \
-    --application-domain        "${APPLICATION_DOMAIN}"       \
     --acme-account-id           "${ACME_ACCOUNT_ID}"          \
     --acme-account-key          "${ACME_ACCOUNT_KEY}"         \
     --cloudflare-api-key        "${CLOUDFLARE_API_KEY}"       \
