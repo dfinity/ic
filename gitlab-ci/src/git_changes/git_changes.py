@@ -19,7 +19,6 @@ import logging
 import os
 import sys
 import time
-from fnmatch import fnmatch
 from pprint import pformat
 
 import git
@@ -167,42 +166,6 @@ def ci_config_changes(repo_path="."):
     ]
 
     return get_changed_files(git_root, included_files + key_ci_scripts)
-
-
-def nix_shell_changes(rust_workspace_abs):
-    """Return a set of changed Nix configuration files, ignoring Cargo.nix."""
-    shell_nix_path = f"{rust_workspace_abs}/shell.nix"
-
-    if not os.path.exists(shell_nix_path):
-        return set()
-
-    git_repo = git.Repo(rust_workspace_abs, search_parent_directories=True)
-    git_root = git_repo.git.rev_parse("--show-toplevel")
-
-    merge_base = get_merge_base(git_repo)
-    current_rev = git_repo.head.commit
-
-    git_repo.git.checkout(merge_base)
-    if os.path.exists(shell_nix_path):
-        deriv_before = gitlab_config.utils.run_in_shell(f"nix-instantiate {shell_nix_path}")
-    else:
-        deriv_before = ""
-
-    git_repo.git.checkout(current_rev)
-    deriv_after = gitlab_config.utils.run_in_shell(f"nix-instantiate {shell_nix_path}")
-
-    if deriv_before == deriv_after:
-        # Nix shell in the rust_workspace didn't change, Nix changes can be safely ignored
-        logging.info("No changes in the Nix shell derivation detected")
-        return set()
-
-    all_changes = get_changed_files(git_root, ".")
-    ans = set()
-    for file_name in all_changes:
-        if fnmatch(file_name, "/*.nix") and not fnmatch(file_name, "*/Cargo.nix"):
-            ans.add(file_name)
-
-    return ans
 
 
 if __name__ == "__main__":

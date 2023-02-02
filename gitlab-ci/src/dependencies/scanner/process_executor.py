@@ -11,23 +11,12 @@ class ProcessExecutor:
         self.command = command
 
     @staticmethod
-    def execute_command(command: str, cwd: Path, environment: typing.Dict[str, str], use_nix_shell: bool) -> str:
+    def execute_command(command: str, cwd: Path, environment: typing.Dict[str, str]) -> str:
         environ = dict(os.environ)
         environ.update(environment)
         logging.info("Executing : " + command)
-        if use_nix_shell:
-            command = ["nix-shell", "--run", command]
-            result = subprocess.run(
-                command=command,
-                cwd=cwd,
-                encoding="utf-8",
-                env=environ,
-                capture_output=True,
-                text=True,
-            )
-        else:
-            command = shlex.split(command)
-            result = subprocess.run(command, cwd=cwd, encoding="utf-8", capture_output=True, text=True, env=environ)
+        command = shlex.split(command)
+        result = subprocess.run(command, cwd=cwd, encoding="utf-8", capture_output=True, text=True, env=environ)
 
         if result.returncode > 1:
             logging.error("Process Executor failed for " + str(command))

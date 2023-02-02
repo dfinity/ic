@@ -442,8 +442,8 @@ def _generate_tests_may_raise_exception(
     log_rdeps(wmarked_crates_to_dep)
 
     cargo_test_sample_crates = set()
-    if git_changes.nix_shell_changes(rust_workspace) or git_changes.ci_config_changes(git_root):
-        logging.info("Nix or CI config changed, also test sample crates")
+    if git_changes.ci_config_changes(git_root):
+        logging.info("CI config changed, also test sample crates")
 
         # Exclude really expensive crates.
         fast_crates = sorted(list(workspace_crates - set("ic-nns-integration-tests")))
@@ -503,7 +503,7 @@ def generate_tests(
         rust_workspace: A string path to the root of the cargo workspace.
         guestos_workspace: A string path to the guestos image build workspace.
         out: Output path of the GitLab YAML file.
-        cargo_sample_size: Crate sample sizes for ci and nix file changes.
+        cargo_sample_size: Crate sample sizes for ci file changes.
         dry_run: Don't post errors to Slack.
 
     """

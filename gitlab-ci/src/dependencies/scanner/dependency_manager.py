@@ -143,7 +143,7 @@ class Bazel(DependencyManager):
         result = ""
 
         try:
-            result = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
+            result = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
         except subprocess.CalledProcessError:
             logging.error(f"Command execution failed for bazel projects:\n{traceback.format_exc()}")
         finally:
@@ -162,7 +162,7 @@ class Bazel(DependencyManager):
         else:
             command = "cargo audit --json"
 
-        result = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
+        result = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
         audit_out = json.loads(result)
         return audit_out
 
@@ -399,7 +399,7 @@ class NPM(DependencyManager):
         cwd = path
         command = f"git clone --depth=1 {url}"
         logging.info(f"Performing git clone {url}")
-        _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
+        _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
         return
 
     @staticmethod
@@ -411,7 +411,7 @@ class NPM(DependencyManager):
         command = "npm audit --json"
 
         logging.info(f"Performing npm audit {cwd.resolve()}")
-        result = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
+        result = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
         audit_out = json.loads(result)
 
         return audit_out
@@ -423,11 +423,11 @@ class NPM(DependencyManager):
         cwd = path
         command = "npm install"
         logging.info(f"Performing npm install {cwd.resolve()}")
-        _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
+        _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
 
         command = "npm list --all --json"
 
-        result = ProcessExecutor.execute_command(command, cwd.resolve(), environment, use_nix_shell=False)
+        result = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
         list_out = json.loads(result)
         return list_out
 

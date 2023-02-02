@@ -89,7 +89,6 @@ RUN curl -fsSL https://github.com/krallin/tini/releases/download/v${tini_version
 RUN gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 595E85A6B1B4779EA4DAAEC70B588DFF0527A9B7 && \
     gpg --batch --verify /tini.asc /tini && chmod +x /tini
 
-# To replace nix-shell loading the python packages required for pipeline-config-validation and python-scalability-tests
 RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit==2.20.0 honeycomb-beeline junit-xml paramiko \
     python-gitlab libhoney termcolor pygithub python-dateutil elasticsearch elasticsearch-dsl freezegun \
     jsonschema mypy pylint pytest-shutil pyyaml xmltodict pytest==5.4.3 jira toml cvss pytest-cov \

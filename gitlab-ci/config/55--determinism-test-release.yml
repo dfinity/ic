@@ -1,6 +1,6 @@
 .build-determinism-release:
   extends:
-    - .ubuntu-nix-docker-k8s-pinned-dc
+    - .ubuntu-cargo-docker-k8s-pinned-dc
     - .rules-scheduled-reproducibility
   stage: build-determinism-test
   needs:

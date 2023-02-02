@@ -3,10 +3,10 @@ include:
 
 .ubuntu-docker-protected:
   extends:
-    - .ubuntu-nix-docker-k8s-pinned-dc
+    - .ubuntu-cargo-docker-k8s-pinned-dc
     - .ic-build-image
 
 .ubuntu-docker-k8s-protected:
   extends:
-    - .ubuntu-nix-docker-k8s-pinned-dc
+    - .ubuntu-cargo-docker-k8s-pinned-dc
     - .ic-build-image

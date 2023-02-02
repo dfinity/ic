@@ -1,5 +1,5 @@
 cargo-lock-generate:
-  extends: .ubuntu-nix-docker-k8s
+  extends: .ubuntu-cargo-docker-k8s
   needs: []  # don't wait on other jobs
   stage: test
   script:
@@ -7,7 +7,7 @@ cargo-lock-generate:
       echo "Running a tiny cargo check (should always succeed), just to make sure Cargo.lock is up to date"
       set -exuo pipefail
       cd "${CI_PROJECT_DIR}/rs"
-      nix-shell --run "cargo check -p ic-sys"
+      cargo check -p ic-sys
       cd "${CI_PROJECT_DIR}"
     - |
       set -exuo pipefail

@@ -3,7 +3,7 @@ include:
 
 .ubuntu-docker-protected:
   extends:
-    - .ubuntu-nix-docker
+    - .ubuntu-cargo-docker
     - .ic-build-image
   tags:
     - dfinity-launch

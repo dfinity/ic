@@ -1,17 +1,27 @@
 gen-cargo-pipeline:
   extends:
-    - .ubuntu-nix-docker-k8s
+    - .ubuntu-cargo-docker-k8s
     - .cargo-rules-autorun-on-trigger
   # Child pipeline must be generated in a stage prior to the one where it runs
   stage: init
+  tags:
+    - dfinity
+    - ubuntu
+  variables:
+    PYTHONPATH : ${CI_PROJECT_DIR}/gitlab-ci/src
   script:
     - |
       set -euo pipefail
       ssh-add -L
-      cd gitlab-ci/src/gen_gitlab_cargo_pipeline
-      $SHELL_WRAPPER nix-shell --run "
-        python gen_pipeline.py ../../../rs/ ../../../ic-os -v --out=../../../child-pipeline.yml
-      " ../shell.nix
+
+      cd gitlab-ci/src/
+
+      # set-up python dev
+      pipenv --python 3
+      pipenv install -r requirements.txt
+      $SHELL_WRAPPER pipenv run python3 gen_gitlab_cargo_pipeline/gen_pipeline.py \
+        ../../rs/ ../../ic-os -v --out=../../child-pipeline.yml
+      
       cd -
       # Parse list of tags from current runner and return the first one that is two symbols.
       # This is most likely DC tag. Therefore set it for all child cargo pipelines to also run them all in the current DC.

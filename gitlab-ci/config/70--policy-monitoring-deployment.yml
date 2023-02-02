@@ -14,7 +14,7 @@
 
 deploy-monpoly-docker:
   extends:
-    - .ubuntu-nix-docker-k8s
+    - .ubuntu-cargo-docker-k8s
     - .rules-monpoly-deploy
   stage: prod-tests
   script:
