@@ -151,11 +151,18 @@ pub enum LedgerCall {
         to: AccountIdentifier,
         memo: u64,
     },
+    AccountBalanceICRC1 {
+        account: Account,
+    },
+    AccountBalanceICP {
+        account: AccountIdentifier,
+    },
 }
 
 #[derive(Debug)]
 pub enum LedgerReply {
     TransferFunds(Result</* block_height */ u64, NervousSystemError>),
+    AccountBalance(Result<Tokens, NervousSystemError>),
 }
 
 /// Struct that allows tests to spy on the calls made
@@ -205,10 +212,14 @@ impl ICRC1Ledger for SpyLedger {
             .lock()
             .unwrap()
             .pop()
-            .expect("Expected a LedgerReply to be in the queue");
+            .expect("Expected a LedgerReply to be on the queue");
 
         match ledger_reply {
             LedgerReply::TransferFunds(reply) => reply,
+            reply => panic!(
+                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {:?}",
+                reply
+            ),
         }
     }
 
@@ -216,8 +227,28 @@ impl ICRC1Ledger for SpyLedger {
         unimplemented!();
     }
 
-    async fn account_balance(&self, _account_id: Account) -> Result<Tokens, NervousSystemError> {
-        unimplemented!();
+    async fn account_balance(&self, account_id: Account) -> Result<Tokens, NervousSystemError> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(LedgerCall::AccountBalanceICRC1 {
+                account: account_id,
+            });
+
+        let ledger_reply = self
+            .replies
+            .lock()
+            .unwrap()
+            .pop()
+            .expect("Expected a LedgerReply to be on the queue");
+
+        match ledger_reply {
+            LedgerReply::AccountBalance(reply) => reply,
+            reply => panic!(
+                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {:?}",
+                reply
+            ),
+        }
     }
 
     fn canister_id(&self) -> CanisterId {
@@ -251,10 +282,14 @@ impl IcpLedger for SpyLedger {
             .lock()
             .unwrap()
             .pop()
-            .expect("Expected a LedgerReply to be on the stack");
+            .expect("Expected a LedgerReply to be on the queue");
 
         match ledger_reply {
             LedgerReply::TransferFunds(reply) => reply,
+            reply => panic!(
+                "Expected LedgerReply::TransferFunds to be at the front of the queue. Had {:?}",
+                reply
+            ),
         }
     }
 
@@ -264,9 +299,27 @@ impl IcpLedger for SpyLedger {
 
     async fn account_balance(
         &self,
-        _account: AccountIdentifier,
+        account: AccountIdentifier,
     ) -> Result<Tokens, NervousSystemError> {
-        unimplemented!()
+        self.calls
+            .lock()
+            .unwrap()
+            .push(LedgerCall::AccountBalanceICP { account });
+
+        let ledger_reply = self
+            .replies
+            .lock()
+            .unwrap()
+            .pop()
+            .expect("Expected a LedgerReply to be on the queue");
+
+        match ledger_reply {
+            LedgerReply::AccountBalance(reply) => reply,
+            reply => panic!(
+                "Expected LedgerReply::AccountBalance to be at the front of the queue. Had {:?}",
+                reply
+            ),
+        }
     }
 
     fn canister_id(&self) -> CanisterId {

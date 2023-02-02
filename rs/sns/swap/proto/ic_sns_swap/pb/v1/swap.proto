@@ -796,6 +796,44 @@ message GetDerivedStateResponse {
   optional double sns_tokens_per_icp = 2;
 }
 
+// Request struct for the method `list_direct_participants`. This method
+// paginates over all direct participants in the decentralization sale.
+// Direct participants are participants who did not participate via the
+// CommunityFund.
+message ListDirectParticipantsRequest {
+  // The limit of the number of Participants returned in each page, in range [0, 30,000].
+  // If no value, or a value outside of this range is requested, 30,000 will be used.
+  optional uint32 limit = 1;
+
+  // Skip the first `offset` elements when constructing the response.
+  optional uint32 offset = 2;
+}
+
+// Response struct for the method `list_direct_participants`.
+message ListDirectParticipantsResponse {
+  // The list of Participants returned from the invocation of `list_direct_participants`.
+  // The list is a page of all the buyers in the Sale canister at the time of the
+  // method call. The size of the page is equal to either
+  // - the max page size (30,000),
+  // - the corresponding `ListDirectParticipantsRequest.limit`,
+  // - the remaining Participants, if there are fewer than `limit` participants left
+  //
+  // Pagination through the entire list of participants is complete if
+  // len(participants) < `ListDirectParticipantsRequest.limit`.
+  repeated Participant participants = 1;
+}
+
+// A direct Participant in the decentralization sale.
+message Participant {
+  // The PrincipalId of the participant.
+  ic_base_types.pb.v1.PrincipalId participant_id = 1;
+
+  // The BuyerState of the participant, which includes the
+  // amount of participation in e8s of a Token, and the transfer
+  // status of those tokens.
+  BuyerState participation = 2;
+}
+
 // Request struct for the method `get_sale_parameters`.
 message GetSaleParametersRequest {
 }

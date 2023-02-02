@@ -26,9 +26,10 @@ use ic_sns_swap::{
         GetCanisterStatusRequest, GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest,
         GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetSaleParametersRequest,
         GetSaleParametersResponse, GetStateRequest, GetStateResponse, Init,
-        ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse, OpenRequest,
-        OpenResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
-        RestoreDappControllersRequest, RestoreDappControllersResponse, Swap,
+        ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
+        ListDirectParticipantsRequest, ListDirectParticipantsResponse, OpenRequest, OpenResponse,
+        RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, RestoreDappControllersRequest,
+        RestoreDappControllersResponse, Swap,
     },
 };
 use ic_stable_structures::{writer::Writer, Memory};
@@ -315,6 +316,21 @@ async fn get_derived_state_(_request: GetDerivedStateRequest) -> GetDerivedState
     swap().derived_state().into()
 }
 
+/// Lists direct participants in the Sale.
+#[export_name = "canister_query list_direct_participants"]
+fn list_direct_participants() {
+    over_async(candid_one, list_direct_participants_)
+}
+
+/// Lists direct participants in the Sale.
+#[candid_method(query, rename = "list_direct_participants")]
+async fn list_direct_participants_(
+    request: ListDirectParticipantsRequest,
+) -> ListDirectParticipantsResponse {
+    log!(INFO, "list_direct_participants");
+    swap().list_direct_participants(request)
+}
+
 #[export_name = "canister_query list_sns_neuron_recipes"]
 fn list_sns_neuron_recipes() {
     over(candid_one, list_sns_neuron_recipes_)
@@ -325,6 +341,7 @@ fn list_sns_neuron_recipes_(request: ListSnsNeuronRecipesRequest) -> ListSnsNeur
     log!(INFO, "list_neuron_recipes");
     swap().list_sns_neuron_recipes(request)
 }
+
 // =============================================================================
 // ===               Canister helper & boilerplate methods                   ===
 // =============================================================================
@@ -469,6 +486,15 @@ fn canister_post_upgrade() {
             }
         }
     }
+
+    // Rebuild the indexes if needed. If the rebuilding process fails, panic so the upgrade
+    // rolls back.
+    swap().rebuild_indexes().unwrap_or_else(|err| {
+        panic!(
+            "Error rebuilding the Sale canister indexes. The stable memory has been exhausted: {}",
+            err
+        )
+    });
 }
 
 /// Resources to serve for a given http_request

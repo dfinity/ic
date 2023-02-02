@@ -1,5 +1,6 @@
 use crate::clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient};
 use crate::logs::{ERROR, INFO};
+use crate::memory;
 use crate::pb::v1::{
     params::NeuronBasketConstructionParameters,
     restore_dapp_controllers_response, set_dapp_controllers_call_result, set_mode_call_result,
@@ -12,7 +13,8 @@ use crate::pb::v1::{
     GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetLifecycleRequest,
     GetLifecycleResponse, GetSaleParametersRequest, GetSaleParametersResponse, Init, Lifecycle,
     ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
-    ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse, OpenRequest, OpenResponse,
+    ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
+    ListSnsNeuronRecipesResponse, OpenRequest, OpenResponse, Participant,
     RefreshBuyerTokensResponse, RestoreDappControllersResponse, SetDappControllersCallResult,
     SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult,
     TransferableAmount,
@@ -35,6 +37,7 @@ use ic_sns_governance::{
         ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId, SetMode, SetModeResponse,
     },
 };
+use ic_stable_structures::GrowFailed;
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use itertools::{Either, Itertools};
 use maplit::btreemap;
@@ -57,6 +60,9 @@ use crate::pb::v1::{
 // is configured to be 75% of a Xnet message size, or roughly 1.5MB. This is equivalent to
 // (1024 * 1024) * 1.5
 pub const CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES: usize = 1572864_usize;
+
+/// The maximum count of participants that can be returned by ListDirectParticipants
+pub const MAX_LIST_DIRECT_PARTICIPANTS_LIMIT: u32 = 30_000;
 
 const DEFAULT_LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT: u32 = 10_000;
 const LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP: u32 = 10_000;
@@ -596,6 +602,19 @@ impl Swap {
             ));
         }
         let max_participant_icp_e8s = params.max_participant_icp_e8s;
+
+        // Append to a new buyer to the BUYERS_LIST_INDEX
+        let is_preexisting_buyer = self.buyers.contains_key(&buyer.to_string());
+        if !is_preexisting_buyer {
+            insert_buyer_into_buyers_list_index(buyer)
+                .map_err(|grow_failed| {
+                    format!(
+                        "Failed to add buyer {} to state, the canister's stable memory could not grow: {}",
+                        buyer, grow_failed
+                    )
+                })?;
+        }
+
         let buyer_state = self
             .buyers
             .entry(buyer.to_string())
@@ -1839,6 +1858,44 @@ impl Swap {
         }
     }
 
+    pub fn list_direct_participants(
+        &self,
+        list_direct_participants_request: ListDirectParticipantsRequest,
+    ) -> ListDirectParticipantsResponse {
+        let ListDirectParticipantsRequest { limit, offset } = list_direct_participants_request;
+        let offset = offset.unwrap_or_default() as usize;
+        let limit = limit
+            .unwrap_or(MAX_LIST_DIRECT_PARTICIPANTS_LIMIT)
+            .min(MAX_LIST_DIRECT_PARTICIPANTS_LIMIT) as usize;
+
+        // StableMemory Vectors do not support indexing via ranges. Instead use iters to
+        // get the sub-vec
+        let buyer_principals_in_page: Vec<PrincipalId> =
+            memory::BUYERS_LIST_INDEX.with(|buyer_list| {
+                buyer_list
+                    .borrow()
+                    .iter()
+                    .skip(offset)
+                    .take(limit)
+                    .collect()
+            });
+
+        // Look up the corresponding BuyerState for each PrincipalId in the page and construct
+        // the results
+        let participants = buyer_principals_in_page
+            .iter()
+            .map(|principal| {
+                let buyer_state = self.buyers.get(&principal.to_string());
+                Participant {
+                    participant_id: Some(*principal),
+                    participation: buyer_state.cloned(),
+                }
+            })
+            .collect();
+
+        ListDirectParticipantsResponse { participants }
+    }
+
     /// Gets Params.
     pub fn get_sale_parameters(
         &self,
@@ -1865,6 +1922,37 @@ impl Swap {
         let cf_participants = self.cf_participants[offset..end].to_vec();
 
         ListCommunityFundParticipantsResponse { cf_participants }
+    }
+
+    pub fn rebuild_indexes(&self) -> Result<(), String> {
+        let buyers_list_index_is_empty =
+            memory::BUYERS_LIST_INDEX.with(|bli| bli.borrow().is_empty());
+
+        if !self.buyers.is_empty() && buyers_list_index_is_empty {
+            log!(
+                INFO,
+                "Buyers state is populated but BUYERS_LIST_INDEX is not. This most likely indicates \
+                that this canister was upgraded from a previous version where BUYERS_LIST_INDEX did not \
+                exist. Conducting a best effort rebuild."
+            );
+
+            for key in self.buyers.keys() {
+                // Try to parse the string representation of the Principal. Logging the error
+                // occurs in `string_to_principal`.
+                if let Some(buyer_principal) = string_to_principal(key) {
+                    // If the index cannot be built due to limitations of the stable memory,
+                    // return to the caller to determine how to handle the error.
+                    insert_buyer_into_buyers_list_index(buyer_principal).map_err(|grow_failed| {
+                        format!(
+                            "Failed to add buyer {} to state, the canister's stable memory could not grow: {}",
+                            buyer_principal, grow_failed
+                        )
+                    })?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     // List SnsNeuronRecipes with paging
@@ -1913,6 +2001,10 @@ fn string_to_principal(maybe_principal_id: &String) -> Option<PrincipalId> {
             None
         }
     }
+}
+
+fn insert_buyer_into_buyers_list_index(buyer_principal_id: PrincipalId) -> Result<(), GrowFailed> {
+    memory::BUYERS_LIST_INDEX.with(|buyer_list| buyer_list.borrow_mut().push(&buyer_principal_id))
 }
 
 #[cfg(test)]

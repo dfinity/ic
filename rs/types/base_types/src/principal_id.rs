@@ -3,8 +3,10 @@ use candid::types::principal::{Principal, PrincipalError};
 use candid::types::{Type, TypeId};
 use ic_crypto_sha::Sha224;
 use ic_protobuf::types::v1 as pb;
+use ic_stable_structures::{BoundedStorable, Storable};
 use serde::{Deserialize, Serialize};
 use std::{
+    borrow::Cow,
     convert::TryFrom,
     error::Error,
     fmt,
@@ -410,6 +412,27 @@ impl TryFrom<pb::PrincipalId> for PrincipalId {
     fn try_from(value: pb::PrincipalId) -> Result<Self, Self::Error> {
         Self::try_from(&value.raw[..])
     }
+}
+
+/// Super trait implementation for the BoundedStorable trait on PrincipalId for use
+/// in StableStructures
+impl Storable for PrincipalId {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        self.to_vec().into()
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        PrincipalId::try_from(&bytes[..]).expect("Cannot decode PrincipalId")
+    }
+}
+
+/// Impl of the BoundedStorable trait on PrincipalId for use in StableStructures
+impl BoundedStorable for PrincipalId {
+    /// The upper bound of a PrincipalId is 29 bytes.
+    const MAX_SIZE: u32 = Self::MAX_LENGTH_IN_BYTES as u32;
+
+    /// PrincipalIds can be variable length.
+    const IS_FIXED_SIZE: bool = false;
 }
 
 #[cfg(test)]
