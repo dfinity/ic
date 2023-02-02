@@ -22,8 +22,6 @@ cargo-build-release-linux:
   extends: 
   - .cargo-build-docker
   - .rules-parent-pipeline-protected-branch-only
-  # TODO(IDX-2581): Remove "allowed to fail" when build fixed
-  allow_failure: true
   script:
     - |
       set -eExuo pipefail
