@@ -68,6 +68,12 @@ const DEFAULT_LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT: u32 = 10_000;
 const LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP: u32 = 10_000;
 const DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT: u32 = 10_000;
 
+/// Range of allowed memos for neurons distributed via an SNS sale. This range is used to choose
+/// the memos of Sale neurons, and to enforce that other memos (e.g. for Airdrop neurons) do not
+/// conflict with the memos of Sale neurons.
+pub const SALE_NEURON_MEMO_RANGE_START: u64 = 1_000_000;
+pub const SALE_NEURON_MEMO_RANGE_END: u64 = 10_000_000;
+
 impl From<(Option<i32>, String)> for CanisterCallError {
     fn from((code, description): (Option<i32>, String)) -> Self {
         Self { code, description }
@@ -397,10 +403,9 @@ impl Swap {
             // is a hash of PrincipalId and some unique memo. Since direct
             // investors in the swap use their own principal_id, there are no
             // neuron id collisions, and each basket can use memos starting at 0.
-            for (memo, scheduled_vesting_event) in neuron_basket_construction_parameters
-                .generate_vesting_schedule(amount_sns_e8s)
-                .into_iter()
-                .enumerate()
+            let mut memo = SALE_NEURON_MEMO_RANGE_START;
+            for scheduled_vesting_event in
+                neuron_basket_construction_parameters.generate_vesting_schedule(amount_sns_e8s)
             {
                 neurons.push(SnsNeuronRecipe {
                     sns: Some(TransferableAmount {
@@ -412,7 +417,7 @@ impl Swap {
                         buyer_principal: buyer_principal.clone(),
                     })),
                     neuron_attributes: Some(NeuronAttributes {
-                        memo: memo as u64,
+                        memo,
                         dissolve_delay_seconds: scheduled_vesting_event.dissolve_delay_seconds,
                     }),
                     claimed_status: Some(ClaimedStatus::Pending as i32),
@@ -420,6 +425,7 @@ impl Swap {
                 total_sns_tokens_sold = total_sns_tokens_sold
                     .checked_add(scheduled_vesting_event.amount_e8s)
                     .unwrap();
+                memo += 1;
             }
         }
 

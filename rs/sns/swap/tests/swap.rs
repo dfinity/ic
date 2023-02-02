@@ -35,6 +35,7 @@ use ic_sns_governance::{
     },
     types::ONE_MONTH_SECONDS,
 };
+use ic_sns_swap::swap::SALE_NEURON_MEMO_RANGE_START;
 use ic_sns_swap::{
     memory,
     pb::v1::{
@@ -900,20 +901,17 @@ fn test_scenario_happy() {
 
                 let starting_memo = match investor {
                     TestInvestor::CommunityFund(starting_memo) => starting_memo,
-                    TestInvestor::Direct(_) => 0,
+                    TestInvestor::Direct(_) => SALE_NEURON_MEMO_RANGE_START,
                 };
 
                 split_amount
                     .iter()
                     .enumerate()
                     .map(|(ledger_account_memo, amount)| {
+                        let memo = starting_memo + ledger_account_memo as u64;
                         let to = match investor {
-                            TestInvestor::CommunityFund(_) => {
-                                cf(starting_memo + ledger_account_memo as u64)
-                            }
-                            TestInvestor::Direct(principal_id) => {
-                                dst(principal_id, ledger_account_memo as u64)
-                            }
+                            TestInvestor::CommunityFund(_) => cf(memo),
+                            TestInvestor::Direct(principal_id) => dst(principal_id, memo),
                         };
 
                         LedgerExpect::TransferFunds(
@@ -1197,7 +1195,7 @@ async fn test_finalize_swap_ok() {
                         owner: SNS_GOVERNANCE_CANISTER_ID.into(),
                         subaccount: Some(compute_neuron_staking_subaccount_bytes(
                             buyer_principal_id,
-                            ledger_account_memo as u64,
+                            ledger_account_memo as u64 + SALE_NEURON_MEMO_RANGE_START,
                         )),
                     };
                     LedgerCall::TransferFundsICRC1 {
