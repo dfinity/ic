@@ -1,13 +1,19 @@
 # Container images used by jobs.
 
 .ic-build-image:
+  artifacts:
+    expire_in: 3 days
   image:
     name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:16dc19d277147122341879cb77e1480e66507fccb45d76c7e15487e71488fc5d"
 
 .ic-build-nix-image:
+  artifacts:
+    expire_in: 3 days
   image:
     name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-nix:16dc19d277147122341879cb77e1480e66507fccb45d76c7e15487e71488fc5d"
 
 .ic-build-bazel-image:
+  artifacts:
+    expire_in: 3 days
   image:
     name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:16dc19d277147122341879cb77e1480e66507fccb45d76c7e15487e71488fc5d"
