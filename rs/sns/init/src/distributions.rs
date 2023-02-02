@@ -17,6 +17,7 @@ use ic_sns_governance::pb::v1::{
     neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
 };
 use ic_sns_governance::types::ONE_MONTH_SECONDS;
+use ic_sns_swap::swap::{SALE_NEURON_MEMO_RANGE_END, SALE_NEURON_MEMO_RANGE_START};
 use maplit::btreemap;
 use std::collections::BTreeMap;
 
@@ -244,6 +245,17 @@ impl FractionalDeveloperVotingPower {
             ));
         }
 
+        for (controller, memo) in deduped_dev_neurons.keys() {
+            if SALE_NEURON_MEMO_RANGE_START <= *memo && *memo <= SALE_NEURON_MEMO_RANGE_END {
+                return Err(anyhow!(
+                    "Error: Developer neuron with controller {} cannot have a memo in the range {} to {}",
+                    controller.unwrap(),
+                    SALE_NEURON_MEMO_RANGE_START,
+                    SALE_NEURON_MEMO_RANGE_END
+                ));
+            }
+        }
+
         let missing_airdrop_principals_count = airdrop_distribution
             .airdrop_neurons
             .iter()
@@ -272,6 +284,17 @@ impl FractionalDeveloperVotingPower {
             return Err(anyhow!(
                 "Error: Duplicate controllers detected in airdrop_neurons"
             ));
+        }
+
+        for (controller, memo) in deduped_airdrop_neurons.keys() {
+            if SALE_NEURON_MEMO_RANGE_START <= *memo && *memo <= SALE_NEURON_MEMO_RANGE_END {
+                return Err(anyhow!(
+                    "Error: Airdrop neuron with controller {} cannot have a memo in the range {} to {}",
+                    controller.unwrap(),
+                    SALE_NEURON_MEMO_RANGE_START,
+                    SALE_NEURON_MEMO_RANGE_END
+                ));
+            }
         }
 
         let mut duplicated_neuron_principals = vec![];
@@ -566,6 +589,7 @@ mod test {
     use ic_sns_governance::pb::v1::neuron::DissolveState;
     use ic_sns_governance::pb::v1::{NervousSystemParameters, NeuronId, NeuronPermission};
     use ic_sns_governance::types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
+    use ic_sns_swap::swap::SALE_NEURON_MEMO_RANGE_START;
     use std::str::FromStr;
 
     fn create_canister_ids() -> SnsCanisterIds {
@@ -1313,5 +1337,76 @@ mod test {
         assert!(initial_token_distribution
             .validate(&nervous_system_parameters)
             .is_err());
+    }
+
+    /// Test that validation fails if Airdrop or Developer neurons are given memos in the incorrect
+    /// range.
+    #[test]
+    fn test_fractional_developer_voting_power_memos() {
+        let mut distribution1 = NeuronDistribution {
+            controller: Some(PrincipalId::new_user_test_id(1)),
+            stake_e8s: 100_000_000,
+            memo: 0,
+            dissolve_delay_seconds: ONE_MONTH_SECONDS * 6,
+            vesting_period_seconds: None,
+        };
+
+        let mut distribution2 = NeuronDistribution {
+            controller: Some(PrincipalId::new_user_test_id(2)),
+            stake_e8s: 100_000_000,
+            memo: 0,
+            dissolve_delay_seconds: ONE_MONTH_SECONDS * 6,
+            vesting_period_seconds: None,
+        };
+
+        // A basic valid FractionalDeveloperVotingPower
+        let mut initial_token_distribution = FractionalDeveloperVotingPower {
+            developer_distribution: Some(DeveloperDistribution {
+                developer_neurons: vec![distribution1.clone()],
+            }),
+            treasury_distribution: Some(TreasuryDistribution { total_e8s: 0 }),
+            swap_distribution: Some(SwapDistribution {
+                total_e8s: 1_000_000_000,
+                initial_swap_amount_e8s: 100_000_000,
+            }),
+            airdrop_distribution: Some(AirdropDistribution {
+                airdrop_neurons: vec![distribution2.clone()],
+            }),
+        };
+
+        // A basic valid NervousSystemParameter
+        let nervous_system_parameters = NervousSystemParameters::with_default_values();
+
+        // Validate that the initial version is valid
+        initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .expect("initial_token_distribution is invalid");
+
+        // A developer distribution with a memo in the Sale neuron memo range should fail validation
+        distribution1.memo = SALE_NEURON_MEMO_RANGE_START + 10;
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: vec![distribution1.clone()],
+        });
+
+        assert_eq!(initial_token_distribution
+            .validate(&nervous_system_parameters)
+            .unwrap_err().to_string(), "Error: Developer neuron with controller 6fyp7-3ibaa-aaaaa-aaaap-4ai cannot have a memo in the range 1000000 to 10000000".to_string());
+
+        // Reset the developer neuron memo
+        distribution1.memo = 0;
+        initial_token_distribution.developer_distribution = Some(DeveloperDistribution {
+            developer_neurons: vec![distribution1],
+        });
+
+        // An airdrop distribution with a memo in the Sale neuron memo range should fail validation
+        distribution2.memo = SALE_NEURON_MEMO_RANGE_START + 888;
+        initial_token_distribution.airdrop_distribution = Some(AirdropDistribution {
+            airdrop_neurons: vec![distribution2],
+        });
+
+        assert_eq!(initial_token_distribution
+                       .validate(&nervous_system_parameters)
+                       .unwrap_err().to_string(),
+                   "Error: Airdrop neuron with controller djduj-3qcaa-aaaaa-aaaap-4ai cannot have a memo in the range 1000000 to 10000000".to_string());
     }
 }
