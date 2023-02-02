@@ -152,6 +152,14 @@ thread_local! {
         )
     );
 
+    static ENCRYPTED_CERTIFICATES: RefCell<StableBTreeMap<Memory, Id, EncryptedPair>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ENCRYPTED_CERTIFICATES))),
+            REGISTRATION_ID_LEN, // MAX_KEY_SIZE,
+            ENCRYPTED_PAIR_LEN,  // MAX_VALUE_SIZE
+        )
+    );
+
     static TASKS: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
 
     static EXPIRATIONS: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
@@ -177,7 +185,7 @@ thread_local! {
     });
 
     static REMOVER: RefCell<Box<dyn Remove>> = RefCell::new({
-        let r = Remover::new(&REGISTRATIONS, &NAMES, &TASKS, &EXPIRATIONS, &RETRIES);
+        let r = Remover::new(&REGISTRATIONS, &NAMES, &TASKS, &EXPIRATIONS, &RETRIES, &ENCRYPTED_CERTIFICATES);
         let r = WithAuthorize(r, &MAIN_AUTHORIZER);
         Box::new(r)
     });
@@ -185,14 +193,6 @@ thread_local! {
 
 // Certificates
 thread_local! {
-    static ENCRYPTED_CERTIFICATES: RefCell<StableBTreeMap<Memory, Id, EncryptedPair>> = RefCell::new(
-        StableBTreeMap::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ENCRYPTED_CERTIFICATES))),
-            REGISTRATION_ID_LEN, // MAX_KEY_SIZE,
-            ENCRYPTED_PAIR_LEN,  // MAX_VALUE_SIZE
-        )
-    );
-
     static UPLOADER: RefCell<Box<dyn Upload>> = RefCell::new({
         let u = Uploader::new(&ENCRYPTED_CERTIFICATES, &REGISTRATIONS);
         let u = WithAuthorize(u, &MAIN_AUTHORIZER);

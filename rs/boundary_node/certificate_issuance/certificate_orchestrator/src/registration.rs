@@ -2,7 +2,9 @@ use std::cmp::Reverse;
 
 use anyhow::anyhow;
 use candid::Principal;
-use certificate_orchestrator_interface::{Id, Name, NameError, Registration, State, UpdateType};
+use certificate_orchestrator_interface::{
+    EncryptedPair, Id, Name, NameError, Registration, State, UpdateType,
+};
 use ic_cdk::caller;
 use ic_stable_structures::StableBTreeMap;
 use mockall::automock;
@@ -292,6 +294,7 @@ pub struct Remover {
     tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
     expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+    encrypted_certificates: LocalRef<StableBTreeMap<Memory, Id, EncryptedPair>>,
 }
 
 impl Remover {
@@ -301,6 +304,7 @@ impl Remover {
         tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
         expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
         retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+        encrypted_certificates: LocalRef<StableBTreeMap<Memory, Id, EncryptedPair>>,
     ) -> Self {
         Self {
             registrations,
@@ -308,6 +312,7 @@ impl Remover {
             tasks,
             expirations,
             retries,
+            encrypted_certificates,
         }
     }
 }
@@ -328,6 +333,10 @@ impl Remove for Remover {
         // remove task/retry/expiry if present
         [self.tasks, self.retries, self.expirations]
             .map(|pq| pq.with(|pq| pq.borrow_mut().remove(&id.to_string())));
+
+        // remove certificate
+        self.encrypted_certificates
+            .with(|certs| certs.borrow_mut().remove(&id.to_string()));
 
         Ok(())
     }
@@ -411,10 +420,13 @@ mod tests {
     use std::cell::RefCell;
 
     use anyhow::Error;
+    use certificate_orchestrator_interface::EncryptedPair;
     use mockall::predicate;
 
     use super::*;
-    use crate::{EXPIRATIONS, ID_GENERATOR, NAMES, REGISTRATIONS, RETRIES, TASKS};
+    use crate::{
+        ENCRYPTED_CERTIFICATES, EXPIRATIONS, ID_GENERATOR, NAMES, REGISTRATIONS, RETRIES, TASKS,
+    };
 
     pub fn time() -> u64 {
         0
@@ -565,7 +577,14 @@ mod tests {
 
     #[test]
     fn remove_not_found() -> Result<(), Error> {
-        let r = Remover::new(&REGISTRATIONS, &NAMES, &TASKS, &EXPIRATIONS, &RETRIES);
+        let r = Remover::new(
+            &REGISTRATIONS,
+            &NAMES,
+            &TASKS,
+            &EXPIRATIONS,
+            &RETRIES,
+            &ENCRYPTED_CERTIFICATES,
+        );
 
         match r.remove("id") {
             Err(RemoveError::NotFound) => {}
@@ -619,7 +638,22 @@ mod tests {
             )
         });
 
-        let r = Remover::new(&REGISTRATIONS, &NAMES, &TASKS, &EXPIRATIONS, &RETRIES);
+        ENCRYPTED_CERTIFICATES
+            .with(|certs| {
+                certs
+                    .borrow_mut()
+                    .insert("id".into(), EncryptedPair(vec![], vec![]))
+            })
+            .expect("failed to insert registration");
+
+        let r = Remover::new(
+            &REGISTRATIONS,
+            &NAMES,
+            &TASKS,
+            &EXPIRATIONS,
+            &RETRIES,
+            &ENCRYPTED_CERTIFICATES,
+        );
 
         match r.remove("id") {
             Ok(()) => {}
@@ -651,6 +685,11 @@ mod tests {
             Some(_) => panic!("expected retry to be removed, but it wasn't"),
         });
 
+        ENCRYPTED_CERTIFICATES.with(|certs| match certs.borrow().get(&"id".to_string()) {
+            None => {}
+            Some(_) => panic!("expected certs to be removed, but they were not"),
+        });
+
         Ok(())
     }
 
@@ -669,7 +708,14 @@ mod tests {
             })
             .expect("failed to insert");
 
-        let r = Remover::new(&REGISTRATIONS, &NAMES, &TASKS, &EXPIRATIONS, &RETRIES);
+        let r = Remover::new(
+            &REGISTRATIONS,
+            &NAMES,
+            &TASKS,
+            &EXPIRATIONS,
+            &RETRIES,
+            &ENCRYPTED_CERTIFICATES,
+        );
 
         match r.remove("id") {
             Ok(()) => {}
