@@ -1487,6 +1487,31 @@ pub struct GetDerivedStateResponse {
     #[prost(double, optional, tag = "2")]
     pub sns_tokens_per_icp: ::core::option::Option<f64>,
 }
+/// Request struct for the method `get_sale_parameters`.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetSaleParametersRequest {}
+/// Response struct for the method `get_sale_parameters`.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetSaleParametersResponse {
+    #[prost(message, optional, tag = "1")]
+    pub params: ::core::option::Option<Params>,
+}
 /// Request struct for the method `list_community_fund_participants`.
 #[derive(
     candid::CandidType,

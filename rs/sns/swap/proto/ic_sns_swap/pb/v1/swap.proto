@@ -796,6 +796,15 @@ message GetDerivedStateResponse {
   optional double sns_tokens_per_icp = 2;
 }
 
+// Request struct for the method `get_sale_parameters`.
+message GetSaleParametersRequest {
+}
+
+// Response struct for the method `get_sale_parameters`.
+message GetSaleParametersResponse {
+  Params params = 1;
+}
+
 // Request struct for the method `list_community_fund_participants`.
 message ListCommunityFundParticipantsRequest {
   // The maximum number of elements that will be in the response.

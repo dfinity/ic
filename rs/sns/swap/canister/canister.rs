@@ -24,11 +24,11 @@ use ic_sns_swap::{
         ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse,
         GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest, GetBuyersTotalResponse,
         GetCanisterStatusRequest, GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest,
-        GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetStateRequest,
-        GetStateResponse, Init, ListCommunityFundParticipantsRequest,
-        ListCommunityFundParticipantsResponse, OpenRequest, OpenResponse,
-        RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, RestoreDappControllersRequest,
-        RestoreDappControllersResponse, Swap,
+        GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetSaleParametersRequest,
+        GetSaleParametersResponse, GetStateRequest, GetStateResponse, Init,
+        ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse, OpenRequest,
+        OpenResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
+        RestoreDappControllersRequest, RestoreDappControllersResponse, Swap,
     },
 };
 use ic_stable_structures::{writer::Writer, Memory};
@@ -98,6 +98,18 @@ fn get_buyer_state() {
 fn get_buyer_state_(request: GetBuyerStateRequest) -> GetBuyerStateResponse {
     log!(INFO, "get_buyer_state");
     swap().get_buyer_state(&request)
+}
+
+/// Get Params.
+#[export_name = "get_sale_parameters"]
+fn get_sale_parameters() {
+    over(candid_one, get_sale_parameters_)
+}
+
+/// Get Params.
+#[candid_method(query, rename = "get_sale_parameters")]
+fn get_sale_parameters_(request: GetSaleParametersRequest) -> GetSaleParametersResponse {
+    swap().get_sale_parameters(&request)
 }
 
 /// List Community Fund participants.

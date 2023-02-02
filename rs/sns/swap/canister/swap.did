@@ -55,6 +55,7 @@ type GetDerivedStateResponse = record {
 };
 type GetInitResponse = record { init : opt Init };
 type GetLifecycleResponse = record { lifecycle : opt int32 };
+type GetSaleParametersResponse = record { params : opt Params };
 type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
 type GovernanceError = record { error_message : text; error_type : int32 };
 type Init = record {
@@ -162,6 +163,7 @@ service : (Init) -> {
   get_derived_state : (record {}) -> (GetDerivedStateResponse) query;
   get_init : (record {}) -> (GetInitResponse) query;
   get_lifecycle : (record {}) -> (GetLifecycleResponse) query;
+  get_sale_parameters : (record {}) -> (GetSaleParametersResponse) query;
   get_state : (record {}) -> (GetStateResponse) query;
   list_community_fund_participants : (ListCommunityFundParticipantsRequest) -> (
       ListCommunityFundParticipantsResponse,
