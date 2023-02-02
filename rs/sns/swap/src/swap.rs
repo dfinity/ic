@@ -10,11 +10,12 @@ use crate::pb::v1::{
     BuyerState, CanisterCallError, CfInvestment, DerivedState, DirectInvestment,
     ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateRequest,
     GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetLifecycleRequest,
-    GetLifecycleResponse, Init, Lifecycle, ListCommunityFundParticipantsRequest,
-    ListCommunityFundParticipantsResponse, ListSnsNeuronRecipesRequest,
-    ListSnsNeuronRecipesResponse, OpenRequest, OpenResponse, RefreshBuyerTokensResponse,
-    RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
-    SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
+    GetLifecycleResponse, GetSaleParametersRequest, GetSaleParametersResponse, Init, Lifecycle,
+    ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
+    ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse, OpenRequest, OpenResponse,
+    RefreshBuyerTokensResponse, RestoreDappControllersResponse, SetDappControllersCallResult,
+    SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult,
+    TransferableAmount,
 };
 use crate::types::{ScheduledVestingEvent, TransferResult};
 #[cfg(target_arch = "wasm32")]
@@ -208,7 +209,7 @@ impl Swap {
             .expect("Expected the init field to be populated in the Sale canister state")
     }
 
-    /// Retrieve a reference to the `init` field without panicking.
+    /// Retrieves a reference to the `init` field.
     pub fn init(&self) -> Result<&Init, String> {
         self.init
             .as_ref()
@@ -254,7 +255,7 @@ impl Swap {
             .fold(0, |sum, v| sum.saturating_add(v))
     }
 
-    /// Determine if the Sale is in it's terminal state
+    /// Determines if the Sale is in it's terminal state
     /// based on it's lifecycle.
     fn lifecycle_is_terminal(&self) -> bool {
         self.lifecycle().is_terminal()
@@ -264,7 +265,7 @@ impl Swap {
     // --- state transition functions ------------------------------------------
     //
 
-    /// If the swap is OPEN, try to commit or abort the swap. Returns
+    /// If the swap is OPEN, tries to commit or abort the swap. Returns
     /// true if a transition was made and false otherwise.
     pub fn try_commit_or_abort(&mut self, now_seconds: u64) -> bool {
         if self.can_commit(now_seconds) {
@@ -328,7 +329,7 @@ impl Swap {
         Ok(OpenResponse {})
     }
 
-    /// Compute `amount_icp_e8s` scaled by (`total_sns_e8s` divided by
+    /// Computes `amount_icp_e8s` scaled by (`total_sns_e8s` divided by
     /// `total_icp_e8s`), but perform the computation in integer space
     /// by computing `(amount_icp_e8s * total_sns_e8s) /
     /// total_icp_e8s` in 128 bit space.
@@ -481,7 +482,7 @@ impl Swap {
         self.set_lifecycle(Lifecycle::Aborted);
     }
 
-    /// Retrieve the balance of 'this' canister on the SNS token
+    /// Retrieves the balance of 'this' canister on the SNS token
     /// ledger.
     ///
     /// It is assumed that prior to calling this method, tokens have
@@ -697,7 +698,7 @@ impl Swap {
         self.lifecycle() == Lifecycle::Aborted
     }
 
-    /// set_dapp_controllers calls SNS Root with the Sale canister's configured
+    /// Calls SNS Root with the Sale canister's configured
     /// `fallback_controller_principal_ids`. set_dapp_controllers is generic and
     /// used for the various Sale APIs that need to return control of the dapp(s)
     /// back to the devs.
@@ -731,7 +732,7 @@ impl Swap {
             .await)
     }
 
-    /// Call set_dapp_controllers() and handle errors for finalize
+    /// Calls set_dapp_controllers() and handles errors for finalize
     async fn set_dapp_controllers_for_finalize(
         &self,
         sns_root_client: &mut impl SnsRootClient,
@@ -747,7 +748,7 @@ impl Swap {
         }
     }
 
-    /// Acquire the lock on `finalize_swap`.
+    /// Acquires the lock on `finalize_swap`.
     pub fn lock_finalize_swap(&mut self) -> Result<(), String> {
         match self.is_finalize_swap_locked() {
             true => Err("The Sale canister has finalize_swap call already in progress".to_string()),
@@ -837,7 +838,7 @@ impl Swap {
         finalize_swap_response
     }
 
-    /// Perform the subactions of finalize.
+    /// Performs the subactions of finalize.
     ///
     /// IMPORTANT: As the canister awaits across message barriers to make
     /// inter-canister calls, finalize_inner and all subsequent methods MUST
@@ -914,7 +915,7 @@ impl Swap {
         finalize_swap_response
     }
 
-    /// In state COMMITTED. Claim SNS Neurons on behalf of participants.
+    /// In state COMMITTED. Claims SNS Neurons on behalf of participants.
     ///
     /// Returns the following values:
     /// - the number of skipped neurons because of previous claims
@@ -1215,7 +1216,7 @@ impl Swap {
         sweep_result
     }
 
-    /// Given a SwapNeuron and an index, update the correct SnsNeuronRecipe with the
+    /// Given a SwapNeuron and an index, updates the correct SnsNeuronRecipe with the
     /// status of the SwapNeuron. Return a SweepResult to be consumed by claim_swap_neurons
     fn process_swap_neuron(
         swap_neuron: SwapNeuron,
@@ -1407,7 +1408,7 @@ impl Swap {
         }
     }
 
-    /// Transfer ICP tokens from buyer's subaccounts to the SNS governance
+    /// Transfers ICP tokens from buyer's subaccounts to the SNS governance
     /// canister if COMMITTED or back to the buyer if ABORTED.
     ///
     /// Returns the following values:
@@ -1518,7 +1519,7 @@ impl Swap {
         sweep_result
     }
 
-    /// In state COMMITTED. Transfer SNS tokens from the swap
+    /// In state COMMITTED. Transfers SNS tokens from the swap
     /// canister to each buyer.
     ///
     /// Returns the following values:
@@ -1707,7 +1708,7 @@ impl Swap {
     // --- predicates on the state ---------------------------------------------
     //
 
-    /// Validate the state for internal consistency. This does not
+    /// Validates the state for internal consistency. This does not
     /// validate that the ledger balances correspond to what the
     /// `Swap` state thinks they are.
     pub fn validate(&self) -> Result<(), String> {
@@ -1831,13 +1832,24 @@ impl Swap {
         }
     }
 
-    /// Return the current lifecycle stage (e.g. Open, Committed, etc)
+    /// Returns the current lifecycle stage (e.g. Open, Committed, etc)
     pub fn get_lifecycle(&self, _request: &GetLifecycleRequest) -> GetLifecycleResponse {
         GetLifecycleResponse {
             lifecycle: Some(self.lifecycle),
         }
     }
 
+    /// Gets Params.
+    pub fn get_sale_parameters(
+        &self,
+        _request: &GetSaleParametersRequest,
+    ) -> GetSaleParametersResponse {
+        GetSaleParametersResponse {
+            params: self.params.clone(),
+        }
+    }
+
+    /// Lists Community Fund participants.
     pub fn list_community_fund_participants(
         &self,
         request: &ListCommunityFundParticipantsRequest,
@@ -1906,10 +1918,29 @@ fn string_to_principal(maybe_principal_id: &String) -> Option<PrincipalId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb::v1::{CfNeuron, CfParticipant};
-    use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+    use crate::pb::v1::{
+        params::NeuronBasketConstructionParameters, CfNeuron, CfParticipant, Params,
+    };
+    use ic_nervous_system_common::{E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS};
+    use lazy_static::lazy_static;
     use pretty_assertions::assert_eq;
     use proptest::prelude::proptest;
+
+    lazy_static! {
+        static ref PARAMS: Params = Params {
+            min_participants: 7,
+            min_icp_e8s: 10 * E8,
+            max_icp_e8s: 1000 * E8,
+            min_participant_icp_e8s: 2 * E8,
+            max_participant_icp_e8s: 100 * E8,
+            swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
+            sns_token_e8s: 500 * E8,
+            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                count: 12,
+                dissolve_delay_interval_seconds: 30 * SECONDS_PER_DAY,
+            }),
+        };
+    }
 
     #[test]
     fn test_get_lifecycle() {
@@ -2075,6 +2106,21 @@ mod tests {
         assert_eq!(
             invalid_recipe.claimed_status,
             Some(ClaimedStatus::Invalid as i32),
+        );
+    }
+
+    #[test]
+    fn test_get_sale_parameters() {
+        let swap = Swap {
+            params: Some(PARAMS.clone()),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            swap.get_sale_parameters(&GetSaleParametersRequest {}),
+            GetSaleParametersResponse {
+                params: Some(PARAMS.clone()),
+            },
         );
     }
 
