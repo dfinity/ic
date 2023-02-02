@@ -10,9 +10,12 @@ use candid::IDLArgs;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nns_constants::ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_sns_governance::pb::v1::ListNeuronsResponse;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_init::{SnsCanisterIds, SnsCanisterInitPayloads};
+use ic_sns_root::pb::v1::ListSnsCanistersResponse;
 use ic_sns_wasm::pb::v1::DeployNewSnsRequest;
+use serde_json::json;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::fs::{create_dir_all, OpenOptions};
@@ -24,12 +27,16 @@ use tempfile::NamedTempFile;
 #[cfg(test)]
 use std::io::BufReader;
 
-use crate::{call_dfx, get_identity, hex_encode_candid, DeployArgs};
+use crate::{call_dfx, get_identity, hex_encode_candid, DeployArgs, DeployTestflightArgs};
 
 /// If SNS canisters have already been created, return their canister IDs, else create the
 /// SNS canisters and return their canister IDs.
-pub fn lookup_or_else_create_canisters(args: &DeployArgs) -> SnsCanisterIds {
-    let sns_canister_ids = match lookup(args) {
+pub fn lookup_or_else_create_canisters(
+    verbose: bool,
+    network: &String,
+    initial_cycles_per_canister: Option<u64>,
+) -> SnsCanisterIds {
+    let sns_canister_ids = match lookup(verbose, network) {
         Some(sns_canister_ids) => {
             println!("SNS canisters already allocated");
             sns_canister_ids
@@ -37,9 +44,9 @@ pub fn lookup_or_else_create_canisters(args: &DeployArgs) -> SnsCanisterIds {
         None => {
             println!(
                 "SNS canisters not found, creating SNS canisters with {:?} cycles each",
-                args.initial_cycles_per_canister
+                initial_cycles_per_canister
             );
-            create_canisters(args)
+            create_canisters(verbose, network, initial_cycles_per_canister)
         }
     };
 
@@ -48,44 +55,49 @@ pub fn lookup_or_else_create_canisters(args: &DeployArgs) -> SnsCanisterIds {
 }
 
 /// If all the SNS canisters have already been created, return them.
-fn lookup(args: &DeployArgs) -> Option<SnsCanisterIds> {
+fn lookup(verbose: bool, network: &String) -> Option<SnsCanisterIds> {
     Some(SnsCanisterIds {
-        governance: get_canister_id("sns_governance", args)?,
-        ledger: get_canister_id("sns_ledger", args)?,
-        root: get_canister_id("sns_root", args)?,
-        swap: get_canister_id("sns_swap", args)?,
-        index: get_canister_id("sns_index", args)?,
+        governance: get_canister_id("sns_governance", verbose, network)?,
+        ledger: get_canister_id("sns_ledger", verbose, network)?,
+        root: get_canister_id("sns_root", verbose, network)?,
+        swap: get_canister_id("sns_swap", verbose, network)?,
+        index: get_canister_id("sns_index", verbose, network)?,
     })
 }
 
 /// Call `dfx canister create` to allocate canister IDs for all SNS canisters.
-fn create_canisters(args: &DeployArgs) -> SnsCanisterIds {
+fn create_canisters(
+    verbose: bool,
+    network: &String,
+    initial_cycles_per_canister: Option<u64>,
+) -> SnsCanisterIds {
     println!("Creating SNS canisters...");
-    let cycles = format!("{}", args.initial_cycles_per_canister.unwrap_or_default());
+    let cycles = format!("{}", initial_cycles_per_canister.unwrap_or_default());
 
     call_dfx(&[
         "canister",
         "--network",
-        &args.network,
+        network,
         "create",
         "--all",
         "--with-cycles",
         &cycles,
     ]);
-    lookup(args).expect("SNS canisters failed to be created")
+    lookup(verbose, network).expect("SNS canisters failed to be created")
 }
 
 /// Return the canister ID of the canister given by `canister_name`
-pub fn get_canister_id(canister_name: &str, args: &DeployArgs) -> Option<PrincipalId> {
-    println!(
-        "dfx canister --network {} id {}",
-        &args.network, canister_name
-    );
-    let output = call_dfx(&["canister", "--network", &args.network, "id", canister_name]);
+pub fn get_canister_id(
+    canister_name: &str,
+    verbose: bool,
+    network: &String,
+) -> Option<PrincipalId> {
+    println!("dfx canister --network {} id {}", &network, canister_name);
+    let output = call_dfx(&["canister", "--network", network, "id", canister_name]);
 
     let canister_id = String::from_utf8(output.stdout)
         .map_err(|e| {
-            if args.verbose {
+            if verbose {
                 println!(
                     "Could not parse the output of 'dfx canister id {}' as a string, error: {}",
                     canister_name, e
@@ -96,7 +108,7 @@ pub fn get_canister_id(canister_name: &str, args: &DeployArgs) -> Option<Princip
 
     PrincipalId::from_str(canister_id.trim())
         .map_err(|e| {
-            if args.verbose {
+            if verbose {
                 println!(
                     "Could not parse the output of 'dfx canister id {}' as a PrincipalId, error: {}",
                     canister_name, e
@@ -104,6 +116,42 @@ pub fn get_canister_id(canister_name: &str, args: &DeployArgs) -> Option<Princip
             }
         })
         .ok()
+}
+
+/// Merges the given JSON into a JSON file.
+/// - If the file is missing or empty, the JSON is simply written to the file.
+pub fn merge_into_json_file<P>(path: P, value: &JsonValue) -> anyhow::Result<()>
+where
+    P: AsRef<Path>,
+{
+    // Read the file, keeping the file pointer for the later write.
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(path)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
+    // Merge in the JSON value
+    // ... If there is existing JSON we need to hold it in this scope:
+    #[allow(unused_assignments)]
+    let mut modified_contents = JsonValue::Null;
+    // ... Get a pointer to the updated data:
+    let new_json = if contents.is_empty() {
+        value
+    } else {
+        modified_contents = serde_json::from_str(&contents)?;
+        json_patch::merge(&mut modified_contents, value);
+        &modified_contents
+    };
+    // Truncate the file and write the new contents.
+    file.set_len(0)?;
+    file.seek(SeekFrom::Start(0))?;
+
+    let mut writer = BufWriter::new(file);
+    writeln!(&mut writer, "{}", &serde_json::to_string_pretty(&new_json)?)?;
+    writer.flush()?;
+    Ok(())
 }
 
 /// Responsible for deploying using SNS-WASM canister (for protected SNS subnet)
@@ -264,42 +312,6 @@ impl SnsWasmSnsDeployer {
         serde_json::to_value(structure).unwrap()
     }
 
-    /// Merges the given JSON into a JSON file.
-    /// - If the file is missing or empty, the JSON is simply written to the file.
-    pub fn merge_into_json_file<P>(path: P, value: &JsonValue) -> anyhow::Result<()>
-    where
-        P: AsRef<Path>,
-    {
-        // Read the file, keeping the file pointer for the later write.
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(path)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        // Merge in the JSON value
-        // ... If there is existing JSON we need to hold it in this scope:
-        #[allow(unused_assignments)]
-        let mut modified_contents = JsonValue::Null;
-        // ... Get a pointer to the updated data:
-        let new_json = if contents.is_empty() {
-            value
-        } else {
-            modified_contents = serde_json::from_str(&contents)?;
-            json_patch::merge(&mut modified_contents, value);
-            &modified_contents
-        };
-        // Truncate the file and write the new contents.
-        file.set_len(0)?;
-        file.seek(SeekFrom::Start(0))?;
-
-        let mut writer = BufWriter::new(file);
-        writeln!(&mut writer, "{}", &serde_json::to_string_pretty(&new_json)?)?;
-        writer.flush()?;
-        Ok(())
-    }
-
     /// Records the created canister IDs in dfx.JSON
     pub fn save_canister_ids(&self, buffer: &[u8]) -> anyhow::Result<()> {
         let canisters_file = {
@@ -327,7 +339,7 @@ impl SnsWasmSnsDeployer {
         let args: IDLArgs = candid_str.parse()?;
         let canisters_in_idl = Self::get_canisters_record(&args)?;
         let new_canisters_json = Self::canister_ids_as_json(canisters_in_idl, &self.args.network);
-        Self::merge_into_json_file(canisters_file, &new_canisters_json)
+        merge_into_json_file(canisters_file, &new_canisters_json)
     }
 }
 #[test]
@@ -378,8 +390,7 @@ fn should_save_canister_ids() {
     );
     // ... verify that writing to an empty file dumps the data without modification
     let file = NamedTempFile::new().unwrap();
-    SnsWasmSnsDeployer::merge_into_json_file(file.path(), &new_canisters_json)
-        .expect("Failed to save changes to file");
+    merge_into_json_file(file.path(), &new_canisters_json).expect("Failed to save changes to file");
     let file_content =
         serde_json::from_reader(&mut BufReader::new(file.reopen().unwrap())).unwrap();
     assert_same_json(&expected_json, &file_content, "Save to file doesn't work");
@@ -387,7 +398,9 @@ fn should_save_canister_ids() {
 
 /// Responsible for deploying SNS canisters
 pub struct DirectSnsDeployerForTests {
-    pub args: DeployArgs,
+    pub network: String,
+    pub sns_canister_ids_save_to: PathBuf,
+    pub wasms_dir: PathBuf,
     pub sns_canister_payloads: SnsCanisterInitPayloads,
     pub sns_canisters: SnsCanisterIds,
     pub wallet_canister: PrincipalId,
@@ -396,11 +409,15 @@ pub struct DirectSnsDeployerForTests {
 }
 
 impl DirectSnsDeployerForTests {
-    pub fn new(args: DeployArgs, sns_init_payload: SnsInitPayload, testflight: bool) -> Self {
-        let sns_canisters = lookup_or_else_create_canisters(&args);
+    pub fn new(args: DeployArgs, sns_init_payload: SnsInitPayload) -> Self {
+        let sns_canisters = lookup_or_else_create_canisters(
+            args.verbose,
+            &args.network,
+            args.initial_cycles_per_canister,
+        );
         // TODO - add version hash to test upgrade path locally?  Where would we find that?
         let sns_canister_payloads =
-            match sns_init_payload.build_canister_payloads(&sns_canisters, None, testflight) {
+            match sns_init_payload.build_canister_payloads(&sns_canisters, None, false) {
                 Ok(payload) => payload,
                 Err(e) => panic!("Could not build canister init payloads: {}", e),
             };
@@ -409,12 +426,42 @@ impl DirectSnsDeployerForTests {
         let dfx_identity = get_identity("get-principal", &args.network);
 
         Self {
-            args,
+            network: args.network,
+            sns_canister_ids_save_to: args.sns_canister_ids_save_to,
+            wasms_dir: args.wasms_dir,
             sns_canister_payloads,
             sns_canisters,
             wallet_canister,
             dfx_identity,
-            testflight,
+            testflight: false,
+        }
+    }
+
+    pub fn new_testflight(args: DeployTestflightArgs, sns_init_payload: SnsInitPayload) -> Self {
+        let sns_canisters = lookup_or_else_create_canisters(
+            args.verbose,
+            &args.network,
+            Some(args.initial_cycles_per_canister),
+        );
+        // TODO - add version hash to test upgrade path locally?  Where would we find that?
+        let sns_canister_payloads =
+            match sns_init_payload.build_canister_payloads(&sns_canisters, None, true) {
+                Ok(payload) => payload,
+                Err(e) => panic!("Could not build canister init payloads: {}", e),
+            };
+
+        let wallet_canister = get_identity("get-wallet", &args.network);
+        let dfx_identity = get_identity("get-principal", &args.network);
+
+        Self {
+            network: args.network,
+            sns_canister_ids_save_to: args.sns_canister_ids_save_to,
+            wasms_dir: args.wasms_dir,
+            sns_canister_payloads,
+            sns_canisters,
+            wallet_canister,
+            dfx_identity,
+            testflight: true,
         }
     }
 
@@ -422,7 +469,62 @@ impl DirectSnsDeployerForTests {
     pub fn deploy(&self) {
         self.install_sns_canisters();
         self.set_sns_canister_controllers();
+        self.save_canister_ids();
         self.validate_deployment();
+    }
+
+    /// Records the created canister IDs in dfx.JSON
+    pub fn save_canister_ids(&self) {
+        let canisters_file = {
+            let path = &self.sns_canister_ids_save_to;
+            if let Some(dir) = path.parent() {
+                create_dir_all(dir)
+                    .map_err(|err| {
+                        format!(
+                            "Failed to create directory for {}: {err}",
+                            path.to_string_lossy()
+                        )
+                    })
+                    .unwrap();
+            }
+            path
+        };
+
+        let output = call_dfx(&[
+            "canister",
+            "--network",
+            &self.network,
+            "call",
+            "--output",
+            "raw",
+            "sns_root",
+            "list_sns_canisters",
+            "(record {})",
+        ]);
+        let mut hex = output.stdout;
+        while hex.last() == Some(&b'\n') || hex.last() == Some(&b'\r') {
+            hex.pop().unwrap();
+        }
+        let sns_canister_ids = Decode!(
+            &hex::decode(hex).expect("cannot parse dfx output as hex"),
+            ListSnsCanistersResponse
+        )
+        .expect("cannot parse dfx output as ListSnsCanistersResponse");
+        let dapps: Vec<String> = sns_canister_ids
+            .dapps
+            .into_iter()
+            .map(|c| c.to_string())
+            .collect();
+        let sns_canister_ids_json = json!({
+            "governance_canister_id": sns_canister_ids.governance.expect("SNS root does not return governance canister ID"),
+            "index_canister_id": sns_canister_ids.index.expect("SNS root does not return index canister ID"),
+            "ledger_canister_id": sns_canister_ids.ledger.expect("SNS root does not return ledger canister ID"),
+            "root_canister_id": sns_canister_ids.root.expect("SNS root does not return root canister ID"),
+            "swap_canister_id": sns_canister_ids.swap.expect("SNS root does not return swap canister ID"),
+            "dapp_canister_id_list": dapps,
+        });
+        merge_into_json_file(canisters_file, &sns_canister_ids_json)
+            .expect("cannot write SNS canister IDs to file");
     }
 
     /// Validate that the SNS deployment executed successfully
@@ -432,6 +534,7 @@ impl DirectSnsDeployerForTests {
         self.print_ledger_metadata();
         self.print_token_symbol();
         self.print_token_name();
+        self.print_developer_neuron_ids();
     }
 
     /// Call Governance's `get_nervous_system_parameters` method and print the result
@@ -440,7 +543,7 @@ impl DirectSnsDeployerForTests {
         call_dfx(&[
             "canister",
             "--network",
-            &self.args.network,
+            &self.network,
             "call",
             "sns_governance",
             "get_nervous_system_parameters",
@@ -454,7 +557,7 @@ impl DirectSnsDeployerForTests {
         call_dfx(&[
             "canister",
             "--network",
-            &self.args.network,
+            &self.network,
             "call",
             "sns_ledger",
             "icrc1_metadata",
@@ -468,7 +571,7 @@ impl DirectSnsDeployerForTests {
         call_dfx(&[
             "canister",
             "--network",
-            &self.args.network,
+            &self.network,
             "call",
             "sns_ledger",
             "icrc1_symbol",
@@ -482,12 +585,47 @@ impl DirectSnsDeployerForTests {
         call_dfx(&[
             "canister",
             "--network",
-            &self.args.network,
+            &self.network,
             "call",
             "sns_ledger",
             "icrc1_name",
             "()",
         ]);
+    }
+
+    /// Call the Governance's `list_neurons` method and print the developer neuron IDs in hex
+    fn print_developer_neuron_ids(&self) {
+        let arg = format!(
+            "(record {{of_principal = opt principal\"{}\"; limit = 0}})",
+            self.dfx_identity,
+        );
+        let output = call_dfx(&[
+            "canister",
+            "--network",
+            &self.network,
+            "call",
+            "--output",
+            "raw",
+            "sns_governance",
+            "list_neurons",
+            &arg,
+        ]);
+        let mut hex = output.stdout;
+        while hex.last() == Some(&b'\n') || hex.last() == Some(&b'\r') {
+            hex.pop().unwrap();
+        }
+        let neurons = Decode!(
+            &hex::decode(hex).expect("cannot parse dfx output as hex"),
+            ListNeuronsResponse
+        )
+        .expect("cannot parse dfx output as ListNeuronsResponse");
+        let ids: Vec<String> = neurons
+            .neurons
+            .iter()
+            .map(|n| hex::encode(&n.id.as_ref().expect("developer neuron has no ID").id))
+            .collect();
+        println!("Developer neuron IDs:");
+        println!("{}", ids.join(", "));
     }
 
     /// Set the SNS canister controllers appropriately.
@@ -534,7 +672,7 @@ impl DirectSnsDeployerForTests {
         let output = call_dfx(&[
             "canister",
             "--network",
-            &self.args.network,
+            &self.network,
             "update-settings",
             "--add-controller",
             &controller.to_string(),
@@ -554,7 +692,7 @@ impl DirectSnsDeployerForTests {
         call_dfx(&[
             "canister",
             "--network",
-            &self.args.network,
+            &self.network,
             "update-settings",
             "--remove-controller",
             &controller.to_string(),
@@ -603,12 +741,12 @@ impl DirectSnsDeployerForTests {
 
     /// Install the given canister
     fn install_canister(&self, sns_canister_name: &str, wasm_name: &str, init_args: &str) {
-        let mut wasm = self.args.wasms_dir.clone();
+        let mut wasm = self.wasms_dir.clone();
         wasm.push(format!("{}.wasm", wasm_name));
         call_dfx(&[
             "canister",
             "--network",
-            &self.args.network,
+            &self.network,
             "install",
             "--argument-type=raw",
             "--argument",

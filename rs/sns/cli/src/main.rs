@@ -5,14 +5,20 @@ mod init_config_file;
 mod unit_helpers;
 
 use crate::deploy::{DirectSnsDeployerForTests, SnsWasmSnsDeployer};
-use crate::init_config_file::{InitConfigFileArgs, SnsCliInitConfig};
+use crate::init_config_file::{
+    InitConfigFileArgs, SnsCliInitConfig, SnsInitialTokenDistributionConfig,
+};
 use anyhow::anyhow;
 use candid::{CandidType, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_sns_init::pb::v1::SnsInitPayload;
+use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution;
+use ic_sns_init::pb::v1::{
+    AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
+    SnsInitPayload, SwapDistribution, TreasuryDistribution,
+};
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs};
 use std::convert::TryFrom;
@@ -42,8 +48,9 @@ enum SubCommand {
     /// For use in tests only.
     DeploySkippingSnsWasmsForTests(DeployArgs),
     /// Deploy an sns directly to a subnet, skipping the sns-wasms canister.
+    /// The SNS canisters remain controlled by the developer after deployment.
     /// For use in tests only.
-    DeployTestflight(DeployArgs),
+    DeployTestflight(DeployTestflightArgs),
     /// Add a wasms for one of the SNS canisters, skipping the NNS proposal,
     /// for tests.
     AddSnsWasmForTests(AddSnsWasmForTestsArgs),
@@ -99,9 +106,54 @@ pub struct DeployArgs {
     #[structopt(long)]
     save_to: Option<String>,
 
+    /// Saves the SNS canister IDs in the specified json file for sns-quill.
+    ///
+    /// Default: sns_canister_ids.json
+    #[structopt(default_value = "sns_canister_ids.json", long)]
+    sns_canister_ids_save_to: PathBuf,
+
     /// The fee to provide
     #[structopt(default_value = "180000000000000", long)]
     with_cycles: u64,
+
+    /// The directory with SNS canister WASMs.
+    #[structopt(default_value = ".", long)]
+    wasms_dir: PathBuf,
+}
+
+/// The arguments used to configure a SNS testflight deployment
+#[derive(Debug, Parser)]
+pub struct DeployTestflightArgs {
+    /// Print all error and info messages.
+    #[structopt(long)]
+    verbose: bool,
+
+    /// The network to deploy to. This can be "local", "ic", or the URL of an IC network.
+    #[structopt(default_value = "local", long)]
+    network: String,
+
+    /// The initial config file, this file should have all the necessary parameters to deploy an SNS.
+    /// See command "init-config-file"
+    #[clap(long, parse(from_os_str))]
+    pub init_config_file: Option<PathBuf>,
+
+    /// The canister ID of the wallet to use on this subnet.
+    ///
+    /// This is needed in testnet scenarios or if you want to use a different wallet than the one
+    /// currently set for your dfx identity.
+    #[clap(long)]
+    pub wallet_canister_override: Option<PrincipalId>,
+
+    /// The amount of cycles to initialize each SNS canister with. This can be omitted when
+    /// deploying locally.
+    #[structopt(default_value = "500000000000", long)]
+    initial_cycles_per_canister: u64,
+
+    /// Saves the SNS canister IDs in the specified json file for sns-quill.
+    ///
+    /// Default: sns_canister_ids.json
+    #[structopt(default_value = "sns_canister_ids.json", long)]
+    sns_canister_ids_save_to: PathBuf,
 
     /// The directory with SNS canister WASMs.
     #[structopt(default_value = ".", long)]
@@ -153,35 +205,94 @@ impl DeployArgs {
     }
 
     pub fn generate_sns_init_payload(&self) -> anyhow::Result<SnsInitPayload> {
-        let file = File::open(&self.init_config_file).map_err(|err| {
-            anyhow!(
-                "Couldn't open initial parameters file ({:?}): {}",
-                &self.init_config_file,
-                err
-            )
-        })?;
+        generate_sns_init_payload(&self.init_config_file)
+    }
+}
 
-        let sns_cli_init_config: SnsCliInitConfig =
-            serde_yaml::from_reader(file).map_err(|err| {
-                anyhow!(
-                    "Couldn't parse the initial parameters file ({:?}): {}",
-                    &self.init_config_file,
-                    err
-                )
-            })?;
+pub fn generate_sns_init_payload(init_config_file: &PathBuf) -> anyhow::Result<SnsInitPayload> {
+    let file = File::open(init_config_file).map_err(|err| {
+        anyhow!(
+            "Couldn't open initial parameters file ({:?}): {}",
+            init_config_file,
+            err
+        )
+    })?;
 
-        let sns_init_payload = SnsInitPayload::try_from(sns_cli_init_config).map_err(|err| {
-            anyhow!(
-                "Error encountered when building the SnsInitPayload from the config file: {}",
-                err
-            )
-        })?;
+    let sns_cli_init_config: SnsCliInitConfig = serde_yaml::from_reader(file).map_err(|err| {
+        anyhow!(
+            "Couldn't parse the initial parameters file ({:?}): {}",
+            init_config_file,
+            err
+        )
+    })?;
 
-        sns_init_payload
-            .validate()
-            .map_err(|err| anyhow!("Initial parameters file failed validation: {}", err))?;
+    let sns_init_payload = SnsInitPayload::try_from(sns_cli_init_config).map_err(|err| {
+        anyhow!(
+            "Error encountered when building the SnsInitPayload from the config file: {}",
+            err
+        )
+    })?;
 
-        Ok(sns_init_payload)
+    sns_init_payload
+        .validate()
+        .map_err(|err| anyhow!("Initial parameters file failed validation: {}", err))?;
+
+    Ok(sns_init_payload)
+}
+
+impl DeployTestflightArgs {
+    pub fn generate_sns_init_payload(&self) -> anyhow::Result<SnsInitPayload> {
+        match &self.init_config_file {
+            Some(init_config_file) => generate_sns_init_payload(init_config_file),
+            None => {
+                let developer_identity = get_identity("get-principal", &self.network);
+                let developer_neuron = NeuronDistribution {
+                    controller: Some(developer_identity),
+                    stake_e8s: 1500000000,
+                    memo: 0,
+                    dissolve_delay_seconds: 15780000,
+                    vesting_period_seconds: None,
+                };
+                let developer_dist = DeveloperDistribution {
+                    developer_neurons: vec![developer_neuron],
+                };
+                let treasury_dist = TreasuryDistribution {
+                    total_e8s: 5000000000,
+                };
+                let swap_dist = SwapDistribution {
+                    total_e8s: 6000000000,
+                    initial_swap_amount_e8s: 3000000000,
+                };
+                let airdrop_dist = AirdropDistribution {
+                    airdrop_neurons: vec![],
+                };
+                let dists = FractionalDeveloperVotingPower {
+                    developer_distribution: Some(developer_dist),
+                    treasury_distribution: Some(treasury_dist),
+                    swap_distribution: Some(swap_dist),
+                    airdrop_distribution: Some(airdrop_dist),
+                };
+                let initial_token_distribution = SnsInitialTokenDistributionConfig {
+                    initial_token_distribution: Some(
+                        InitialTokenDistribution::FractionalDeveloperVotingPower(dists),
+                    ),
+                };
+                let mut sns_init_config = SnsCliInitConfig {
+                    initial_token_distribution,
+                    ..Default::default()
+                };
+                sns_init_config.sns_ledger.token_name = Some("MyTestToken".to_string());
+                sns_init_config.sns_ledger.token_symbol = Some("MTT".to_string());
+                sns_init_config
+                    .sns_governance
+                    .fallback_controller_principal_ids = vec![developer_identity.to_string()];
+                sns_init_config.sns_governance.url = Some("https://example.com".to_string());
+                sns_init_config.sns_governance.name = Some("My_Test_Token".to_string());
+                sns_init_config.sns_governance.description =
+                    Some("MyTestTokenDescription".to_string());
+                sns_init_config.try_into()
+            }
+        }
     }
 }
 
@@ -206,9 +317,9 @@ fn main() {
     match args.sub_command {
         SubCommand::Deploy(args) => deploy(args),
         SubCommand::DeploySkippingSnsWasmsForTests(args) => {
-            deploy_skipping_sns_wasms_for_tests(args, false)
+            deploy_skipping_sns_wasms_for_tests(args)
         }
-        SubCommand::DeployTestflight(args) => deploy_skipping_sns_wasms_for_tests(args, true),
+        SubCommand::DeployTestflight(args) => deploy_testflight(args),
         SubCommand::AddSnsWasmForTests(args) => add_sns_wasm_for_tests(args),
         SubCommand::AccountBalance(args) => print_account_balance(args),
         SubCommand::InitConfigFile(args) => init_config_file::exec(args),
@@ -229,8 +340,7 @@ fn deploy(args: DeployArgs) {
 }
 
 /// Deploy an SNS with the given DeployArgs, skipping sns-wasm.
-/// In testflight mode, no controllers of SNS canisters are removed.
-fn deploy_skipping_sns_wasms_for_tests(args: DeployArgs, testflight: bool) {
+fn deploy_skipping_sns_wasms_for_tests(args: DeployArgs) {
     args.validate();
     let sns_init_payload = args.generate_sns_init_payload().unwrap_or_else(|err| {
         eprintln!(
@@ -239,7 +349,20 @@ fn deploy_skipping_sns_wasms_for_tests(args: DeployArgs, testflight: bool) {
         );
         exit(1);
     });
-    DirectSnsDeployerForTests::new(args, sns_init_payload, testflight).deploy()
+    DirectSnsDeployerForTests::new(args, sns_init_payload).deploy()
+}
+
+/// Deploy an SNS with the given DeployTestflightArgs, skipping sns-wasm.
+/// The SNS canisters remain controlled by the developer after deployment.
+fn deploy_testflight(args: DeployTestflightArgs) {
+    let sns_init_payload = args.generate_sns_init_payload().unwrap_or_else(|err| {
+        eprintln!(
+            "Error encountered when generating the SnsInitPayload: {}",
+            err
+        );
+        exit(1);
+    });
+    DirectSnsDeployerForTests::new_testflight(args, sns_init_payload).deploy()
 }
 
 fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) {
