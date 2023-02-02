@@ -5,12 +5,14 @@ use crate::pb::v1::{
     restore_dapp_controllers_response, set_dapp_controllers_call_result, set_mode_call_result,
     set_mode_call_result::SetModeResult,
     settle_community_fund_participation_result,
-    sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
+    sns_neuron_recipe::Investor,
+    sns_neuron_recipe::{ClaimedStatus, NeuronAttributes},
     BuyerState, CanisterCallError, CfInvestment, DerivedState, DirectInvestment,
     ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateRequest,
     GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetLifecycleRequest,
     GetLifecycleResponse, Init, Lifecycle, ListCommunityFundParticipantsRequest,
-    ListCommunityFundParticipantsResponse, OpenRequest, OpenResponse, RefreshBuyerTokensResponse,
+    ListCommunityFundParticipantsResponse, ListSnsNeuronRecipesRequest,
+    ListSnsNeuronRecipesResponse, OpenRequest, OpenResponse, RefreshBuyerTokensResponse,
     RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
     SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, TransferableAmount,
 };
@@ -57,6 +59,7 @@ pub const CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES: usize = 1572864_usize;
 
 const DEFAULT_LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT: u32 = 10_000;
 const LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP: u32 = 10_000;
+const DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT: u32 = 10_000;
 
 impl From<(Option<i32>, String)> for CanisterCallError {
     fn from((code, description): (Option<i32>, String)) -> Self {
@@ -1851,6 +1854,24 @@ impl Swap {
 
         ListCommunityFundParticipantsResponse { cf_participants }
     }
+
+    // List SnsNeuronRecipes with paging
+    pub fn list_sns_neuron_recipes(
+        &self,
+        request: ListSnsNeuronRecipesRequest,
+    ) -> ListSnsNeuronRecipesResponse {
+        let limit = request
+            .limit
+            .unwrap_or(DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT)
+            .min(DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT) as usize;
+
+        let start_at = request.offset.unwrap_or_default() as usize;
+        let end = (start_at + limit).min(self.neuron_recipes.len());
+
+        let sns_neuron_recipes = self.neuron_recipes[start_at..end].to_vec();
+
+        ListSnsNeuronRecipesResponse { sns_neuron_recipes }
+    }
 }
 
 pub fn is_valid_principal(p: &str) -> bool {
@@ -2244,5 +2265,66 @@ mod tests {
                 expected_current_dissolve_delay_seconds += dissolve_delay_interval_seconds;
             }
         }
+    }
+    #[test]
+    fn test_list_sns_neuron_recipes() {
+        let dummy_recipe = |investor_principal: PrincipalId| SnsNeuronRecipe {
+            sns: None,
+            neuron_attributes: None,
+            claimed_status: None,
+            investor: Some(Investor::Direct(DirectInvestment {
+                buyer_principal: investor_principal.to_string(),
+            })),
+        };
+
+        let neuron_recipes = vec![
+            dummy_recipe(PrincipalId::new_user_test_id(0)),
+            dummy_recipe(PrincipalId::new_user_test_id(1)),
+            dummy_recipe(PrincipalId::new_user_test_id(2)),
+            dummy_recipe(PrincipalId::new_user_test_id(3)),
+        ];
+        let swap = Swap {
+            neuron_recipes: neuron_recipes.clone(),
+            ..Default::default()
+        };
+        assert_eq!(
+            swap.list_sns_neuron_recipes(ListSnsNeuronRecipesRequest {
+                limit: None,
+                offset: None
+            }),
+            ListSnsNeuronRecipesResponse {
+                sns_neuron_recipes: neuron_recipes.clone()
+            }
+        );
+
+        assert_eq!(
+            swap.list_sns_neuron_recipes(ListSnsNeuronRecipesRequest {
+                limit: Some(2),
+                offset: None
+            }),
+            ListSnsNeuronRecipesResponse {
+                sns_neuron_recipes: neuron_recipes[0..2].to_vec()
+            }
+        );
+
+        assert_eq!(
+            swap.list_sns_neuron_recipes(ListSnsNeuronRecipesRequest {
+                limit: None,
+                offset: Some(1)
+            }),
+            ListSnsNeuronRecipesResponse {
+                sns_neuron_recipes: neuron_recipes[1..].to_vec()
+            }
+        );
+
+        assert_eq!(
+            swap.list_sns_neuron_recipes(ListSnsNeuronRecipesRequest {
+                limit: Some(2),
+                offset: Some(1)
+            }),
+            ListSnsNeuronRecipesResponse {
+                sns_neuron_recipes: neuron_recipes[1..3].to_vec()
+            }
+        );
     }
 }

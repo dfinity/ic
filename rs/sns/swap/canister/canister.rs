@@ -12,6 +12,7 @@ use ic_nervous_system_common::{
     serve_logs, serve_metrics, stable_mem_utils::BufferedStableMemReader,
 };
 use ic_sns_governance::ledger::LedgerCanister;
+use ic_sns_swap::pb::v1::{ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse};
 use ic_sns_swap::{
     clients::{
         ManagementCanister, ProdManagementCanister, RealNnsGovernanceClient,
@@ -302,6 +303,16 @@ async fn get_derived_state_(_request: GetDerivedStateRequest) -> GetDerivedState
     swap().derived_state().into()
 }
 
+#[export_name = "canister_query list_sns_neuron_recipes"]
+fn list_sns_neuron_recipes() {
+    over(candid_one, list_sns_neuron_recipes_)
+}
+
+#[candid_method(query, rename = "list_sns_neuron_recipes")]
+fn list_sns_neuron_recipes_(request: ListSnsNeuronRecipesRequest) -> ListSnsNeuronRecipesResponse {
+    log!(INFO, "list_neuron_recipes");
+    swap().list_sns_neuron_recipes(request)
+}
 // =============================================================================
 // ===               Canister helper & boilerplate methods                   ===
 // =============================================================================

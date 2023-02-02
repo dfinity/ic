@@ -809,3 +809,17 @@ message ListCommunityFundParticipantsRequest {
 message ListCommunityFundParticipantsResponse {
   repeated CfParticipant cf_participants = 1;
 }
+
+// Request for the method 'list_sns_neuron_recipes'
+message ListSnsNeuronRecipesRequest {
+  // The maximum number of elements that will be in the response.
+  // This is capped at 10_000.
+  optional uint32 limit = 1;
+  // Skip the first `offset` elements when constructing the response
+  optional uint64 offset = 2;
+}
+
+// Response for the method 'list_sns_neuron_recipes'
+message ListSnsNeuronRecipesResponse {
+  repeated SnsNeuronRecipe sns_neuron_recipes = 1;
+}
