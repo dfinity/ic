@@ -396,7 +396,7 @@ async fn finalize_requests() {
 
     // Transactions whose change outpoint is present in the newly fetched UTXOs
     // can be finalized.  Note that all new minter transactions must have a
-    // change output because minter always charges a fee for unwrapping tokens.
+    // change output because minter always charges a fee for converting tokens.
     let confirmed_transactions: Vec<_> = state::read_state(|s| {
         s.submitted_transactions
             .iter()
