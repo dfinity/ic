@@ -12,12 +12,16 @@ use crate::util::{
     random_ed25519_identity,
 };
 use candid::{CandidType, Deserialize, Principal};
+use canister_test::PrincipalId;
 use ic_agent::{Agent, Identity};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::{
-    Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope, HttpUserQuery,
+    Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpQueryResponse,
+    HttpRequestEnvelope, HttpUserQuery,
 };
 use ic_types::Time;
+use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_utils::interfaces::ManagementCanister;
 use reqwest::Response;
 use serde_bytes::ByteBuf;
 use slog::info;
@@ -156,6 +160,17 @@ pub fn test(env: TestEnv) {
         "Counter canister with id={counter_canister_id} installed on subnet with id={}",
         app_node.subnet_id().unwrap()
     );
+    let app_agent = app_node.build_default_agent();
+    let ucan_id = block_on(install_universal_canister(
+        &app_agent,
+        app_node.effective_canister_id(),
+    ));
+    // We use universal canister to verify the identity of the caller for query and update calls performed with delegation.
+    info!(
+        log,
+        "Universal canister with id={ucan_id} installed on subnet with id={}",
+        app_node.subnet_id().unwrap()
+    );
     let user_identity = random_ed25519_identity();
     let pubkey = user_identity.sign(&[]).unwrap().public_key.unwrap();
     let non_nns_agent = block_on(agent_with_identity(
@@ -177,30 +192,23 @@ pub fn test(env: TestEnv) {
     info!(log, "Delegation received");
     let app_agent_with_delegation = AgentWithDelegation {
         node_url: app_node.get_public_url(),
-        pubkey: ii_derived_public_key,
+        pubkey: ii_derived_public_key.clone(),
         signed_delegation,
+        delegation_identity,
     };
     info!(
         log,
         "Making an update call on counter canister with delegation (increment counter)"
     );
-    let response = block_on(app_agent_with_delegation.update(
-        &counter_canister_id,
-        "write",
-        &delegation_identity,
-        Blob(vec![]),
-    ));
+    let response =
+        block_on(app_agent_with_delegation.update(&counter_canister_id, "write", Blob(vec![])));
     assert_eq!(response.status(), 202);
     info!(
         log,
         "Making a query call on counter canister with delegation (read counter)"
     );
-    let response = block_on(app_agent_with_delegation.query(
-        &counter_canister_id,
-        "read",
-        &delegation_identity,
-        Blob(vec![]),
-    ));
+    let response =
+        block_on(app_agent_with_delegation.query(&counter_canister_id, "read", Blob(vec![])));
     assert_eq!(response.status(), 200);
     info!(log, "Asserting canister counter has value=1");
     let app_agent = app_node.build_default_agent();
@@ -213,22 +221,40 @@ pub fn test(env: TestEnv) {
         10,
         Duration::from_secs(1),
     ));
+    info!(log, "Asserting caller identity of the query call");
+    let expected_principal = Principal::self_authenticating(&ii_derived_public_key);
+    info!(
+        log,
+        "Expected principal {} of the caller", expected_principal
+    );
+    let actual_principal = {
+        let response = block_on(app_agent_with_delegation.query(
+            &ucan_id,
+            "query",
+            Blob(wasm().caller().append_and_reply().build()),
+        ));
+        let body = block_on(async { response.bytes().await }).unwrap();
+        let response: HttpQueryResponse = serde_cbor::from_slice(&body).unwrap();
+        let reply = match response {
+            HttpQueryResponse::Replied { reply } => reply.arg,
+            HttpQueryResponse::Rejected { reject_message, .. } => {
+                panic!("Query call was rejected: {reject_message}")
+            }
+        };
+        Principal::from_slice(reply.as_ref())
+    };
+    assert_eq!(expected_principal, actual_principal);
 }
 
-struct AgentWithDelegation {
+struct AgentWithDelegation<T> {
     node_url: url::Url,
     pubkey: UserKey,
     signed_delegation: SignedDelegation,
+    delegation_identity: T,
 }
 
-impl AgentWithDelegation {
-    pub async fn update(
-        &self,
-        canister_id: &Principal,
-        method_name: &str,
-        identity: &impl Identity,
-        arg: Blob,
-    ) -> Response {
+impl<T: Identity> AgentWithDelegation<T> {
+    pub async fn update(&self, canister_id: &Principal, method_name: &str, arg: Blob) -> Response {
         let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: Blob(canister_id.as_slice().to_vec()),
@@ -243,7 +269,7 @@ impl AgentWithDelegation {
                 nonce: None,
             },
         };
-        let signature = sign_update(&content, identity);
+        let signature = sign_update(&content, &self.delegation_identity);
         let envelope = HttpRequestEnvelope {
             content: content.clone(),
             sender_delegation: Some(vec![ic_types::messages::SignedDelegation::new(
@@ -271,13 +297,7 @@ impl AgentWithDelegation {
             .unwrap()
     }
 
-    pub async fn query(
-        &self,
-        canister_id: &Principal,
-        method_name: &str,
-        identity: &impl Identity,
-        arg: Blob,
-    ) -> Response {
+    pub async fn query(&self, canister_id: &Principal, method_name: &str, arg: Blob) -> Response {
         let content = HttpQueryContent::Query {
             query: HttpUserQuery {
                 canister_id: Blob(canister_id.as_slice().to_vec()),
@@ -292,7 +312,7 @@ impl AgentWithDelegation {
                 nonce: None,
             },
         };
-        let signature = sign_query(&content, identity);
+        let signature = sign_query(&content, &self.delegation_identity);
         let envelope = HttpRequestEnvelope {
             content: content.clone(),
             sender_delegation: Some(vec![ic_types::messages::SignedDelegation::new(
@@ -405,4 +425,27 @@ async fn create_delegation(
         }
     };
     (signed_delegation, ii_derived_public_key)
+}
+
+async fn install_universal_canister(
+    agent: &Agent,
+    effective_canister_id: PrincipalId,
+) -> Principal {
+    let mgr = ManagementCanister::create(agent);
+    let canister_id = mgr
+        .create_canister()
+        .as_provisional_create_with_amount(None)
+        .with_effective_canister_id(effective_canister_id)
+        .call_and_wait(delay())
+        .await
+        .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))
+        .unwrap()
+        .0;
+    mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
+        .with_raw_arg(wasm().build())
+        .call_and_wait(delay())
+        .await
+        .map_err(|err| format!("Couldn't install universal canister: {}", err))
+        .unwrap();
+    canister_id
 }
