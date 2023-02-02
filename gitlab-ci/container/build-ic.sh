@@ -98,11 +98,12 @@ rm -rf "$CANISTERS_DIR_FULL"
 rm -rf "$DISK_DIR_FULL"
 
 echo_green "Building selected IC artifacts"
+BAZEL_CMD="bazel build --config=local --ic_version='$VERSION' --ic_version_rc_only='$IC_VERSION_RC_ONLY'"
 BUILD_BINARIES_CMD=$(
     cat <<-END
     # build binaries
     mkdir -p "$BINARIES_DIR"
-    bazel build --config=local //publish/binaries
+    $BAZEL_CMD //publish/binaries
     bazel cquery --output=files //publish/binaries | xargs -I {} cp {} "$BINARIES_DIR"
 END
 )
@@ -111,7 +112,7 @@ BUILD_CANISTERS_CMD=$(
     cat <<-END
     # build canisters
     mkdir -p "$CANISTERS_DIR"
-    bazel build --config=local --ic_version_rc_only="$IC_VERSION_RC_ONLY" //publish/canisters
+    $BAZEL_CMD //publish/canisters
     bazel cquery --output=files //publish/canisters | xargs -I {} cp {} "$CANISTERS_DIR"
 END
 )
@@ -120,7 +121,7 @@ BUILD_IMAGES_CMD=$(
     cat <<-END
     # build ic-os images
     mkdir -p "$DISK_DIR"
-    bazel build --config=local --ic_version="$VERSION" //ic-os/guestos/prod
+    $BAZEL_CMD //ic-os/guestos/prod
     bazel cquery --output=files //ic-os/guestos/prod | xargs -I {} cp {} "$DISK_DIR"
 END
 )
