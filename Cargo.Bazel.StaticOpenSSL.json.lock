@@ -1,5 +1,5 @@
 {
-  "checksum": "e2bfc01662ba9630187dc136c127c13ce5fcd8e5ed54dcd1b0d396ab1c197160",
+  "checksum": "0b978382f074b0e2bc4811e0815f6d999e665cc85a4b167a95ede2c65e265ead",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -19269,6 +19269,9 @@
         "compile_data_glob": [
           "**"
         ],
+        "crate_features": [
+          "timers"
+        ],
         "deps": {
           "common": [
             {
@@ -19278,6 +19281,10 @@
             {
               "id": "cfg-if 1.0.0",
               "target": "cfg_if"
+            },
+            {
+              "id": "futures 0.3.26",
+              "target": "futures"
             },
             {
               "id": "ic0 0.18.9",
@@ -19290,6 +19297,10 @@
             {
               "id": "serde_bytes 0.11.8",
               "target": "serde_bytes"
+            },
+            {
+              "id": "slotmap 1.0.6",
+              "target": "slotmap"
             }
           ],
           "selects": {}
@@ -41557,6 +41568,78 @@
         "version": "0.2.0"
       },
       "license": "MIT/Apache-2.0"
+    },
+    "slotmap 1.0.6": {
+      "name": "slotmap",
+      "version": "1.0.6",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/slotmap/1.0.6/download",
+          "sha256": "e1e08e261d0e8f5c43123b7adf3e4ca1690d655377ac93a03b2c9d3e98de1342"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "slotmap",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "slotmap",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "slotmap 1.0.6",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "1.0.6"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "version_check 0.9.4",
+              "target": "version_check"
+            }
+          ],
+          "selects": {}
+        }
+      },
+      "license": "Zlib"
     },
     "smallvec 1.10.0": {
       "name": "smallvec",
