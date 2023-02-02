@@ -1,4 +1,5 @@
 use anyhow::bail;
+use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
 use wasmtime::MemoryType;
 use wasmtime_environ::{WASM32_MAX_PAGES, WASM_PAGE_SIZE};
 
@@ -64,13 +65,13 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
         reserved_size_in_bytes: Option<usize>,
         guard_size: usize,
     ) -> Result<Box<dyn wasmtime::LinearMemory>, String> {
-        // Wasmtime 'guarantees' that these values are <= WASM_MAX_PAGES
-        // and has asserts for that in its Memory implementation
-        // but let's just clip to that without panicking in case they change
-        // something...
-        let min = std::cmp::min(ty.minimum(), WASM32_MAX_PAGES) as usize;
-        let max =
-            std::cmp::min(ty.maximum().unwrap_or(WASM32_MAX_PAGES), WASM32_MAX_PAGES) as usize;
+        let max_pages = if ty.is_64() {
+            MAX_STABLE_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64)
+        } else {
+            WASM32_MAX_PAGES
+        };
+        let min = std::cmp::min(ty.minimum(), max_pages) as usize;
+        let max = std::cmp::min(ty.maximum().unwrap_or(max_pages), max_pages) as usize;
 
         let mem_size = reserved_size_in_bytes.unwrap_or_else(wasm_max_mem_size_in_bytes);
 
