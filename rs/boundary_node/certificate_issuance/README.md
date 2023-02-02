@@ -29,8 +29,9 @@ The boundary nodes perform a few checks to ensure everything has been properly
 set up by the user and will then request a certificate.
 
 The `certificate-issuer` service runs on all boundary nodes. It has a public
-endpoint that allows users to register a custom domain and check the status
-of the registration request. Whenever the service receives a new request, it first
+endpoint that allows users to register a custom domain, check the status
+of the registration request, update an existing registration and remove a
+registration. Whenever the service receives a new request, it first
 checks that the DNS entries of the domain have been properly configured:
 
 1. The traffic is redirected to the boundary nodes using a `CNAME` to the boundary nodes' application domain (e.g., ic0.app).

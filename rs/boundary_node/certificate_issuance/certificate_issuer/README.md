@@ -6,8 +6,10 @@ from users, processes them and interacts with the `certificate_orchestrator` can
 The `certificate_issuer` provides two public endpoints, which can be used to
 submit registration requests and query the status of these requests:
 
-* `/registrations`: submit a registration requests;
-* `/registrations/<registration_id>`: check the status of a submitted request.
+* `/registrations` (POST): submit a registration requests;
+* `/registrations/<id>` (GET): check the status of a submitted request.
+* `/registrations/<id>` (PUT): update the canister behind the domain.
+* `/registrations/<id>` (DELETE): delete registration (domain-to-canister mapping, certificate and keys).
 
 In addition, it provides a private endpoint for the `certificate_syncer` to obtain
 the certificates:
