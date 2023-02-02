@@ -69,8 +69,8 @@ type UpgradeArgs = record {
     transfer_fee : opt nat64;
 };
 
-type LedgerArg = record {
-    Init: opt InitArgs;
+type LedgerArg = variant {
+    Init: InitArgs;
     Upgrade: opt UpgradeArgs;
 };
 
