@@ -14,7 +14,7 @@ pub const MINIMUM_VERSION_NUMBER: ProtocolVersion = 70001;
 
 /// This const is used to provide a based buffer size for how many messages can be stashed into the
 /// channel. If there are more messages, the sender will end up waiting.
-pub const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 1024;
+pub const DEFAULT_CHANNEL_BUFFER_SIZE: usize = 64;
 
 /// This field contains the datatype used to store height of a Bitcoin block
 pub type BlockHeight = u32;
