@@ -16,6 +16,7 @@ members = [
   "bitcoin/types/internal",
   "bitcoin/types/public",
   "boundary_node/certificate_issuance/certificate_issuer",
+  "boundary_node/certificate_issuance/certificate_orchestrator",
   "boundary_node/certificate_issuance/certificate_syncer",
   "boundary_node/control_plane",
   "boundary_node/denylist_updater",

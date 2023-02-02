@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "@crate_index//:anyhow",
     "@crate_index//:bincode",
     "@crate_index//:candid",
+    "@crate_index//:cfg-if",
     "@crate_index//:hex",
     "@crate_index//:ic_stable_structures_0_2_0",
     "@crate_index//:ic-cdk",
