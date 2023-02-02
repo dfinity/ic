@@ -883,7 +883,7 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + [":src/counter.wat"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [":src/counter.wat"],
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -895,7 +895,7 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + [":src/counter.wat"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [":src/counter.wat"],
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -907,7 +907,7 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + [":src/counter.wat"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [":src/counter.wat"],
     deps = DEPENDENCIES + [":tests"],
 )
 
