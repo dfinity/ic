@@ -139,12 +139,20 @@ pub async fn update_balance(
         return Err(UpdateBalanceError::NoNewUtxos);
     }
 
-    log!(
-        P1,
-        "minting {} wrapped BTC for {} new UTXOs",
-        crate::tx::DisplayAmount(satoshis_to_mint),
-        new_utxos.len()
-    );
+    match btc_network {
+        ic_ic00_types::BitcoinNetwork::Mainnet => log!(
+            P1,
+            "minting {} ckBTC for {} new UTXOs",
+            crate::tx::DisplayAmount(satoshis_to_mint),
+            new_utxos.len()
+        ),
+        _ => log!(
+            P1,
+            "minting {} ckTESTBTC for {} new UTXOs",
+            crate::tx::DisplayAmount(satoshis_to_mint),
+            new_utxos.len()
+        ),
+    }
 
     let mint_txid = mint(satoshis_to_mint, caller_account.clone()).await?;
 
