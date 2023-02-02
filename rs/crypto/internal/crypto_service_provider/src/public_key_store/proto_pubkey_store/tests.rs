@@ -21,6 +21,7 @@ use slog::Level;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::time::SystemTime;
 use std::{env, fs};
 use tempfile::TempDir;
 
@@ -623,6 +624,7 @@ mod timestamps {
 mod retain_most_recent_idkg_public_keys_up_to_inclusive {
     use super::*;
     use crate::public_key_store::PublicKeyRetainError;
+    use std::time::Duration;
 
     #[test]
     fn should_fail_when_idkg_oldest_public_key_not_found() {
@@ -636,7 +638,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
     }
 
     #[test]
-    fn should_not_delete_only_public_key() {
+    fn should_not_delete_single_public_key() {
         let temp_dir = temp_dir();
         let mut store = public_key_store(&temp_dir);
         let public_key = public_key_with_key_value(42);
@@ -647,7 +649,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
 
         assert_matches!(
             store.retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key),
-            Ok(())
+            Ok(false)
         );
 
         assert_eq!(store.idkg_dealing_encryption_pubkeys(), vec![public_key]);
@@ -671,7 +673,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         assert_matches!(
             store
                 .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
-            Ok(())
+            Ok(true)
         );
 
         assert_eq!(
@@ -702,7 +704,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         assert_matches!(
             store
                 .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
-            Ok(())
+            Ok(true)
         );
 
         assert_eq!(
@@ -733,13 +735,13 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         assert_matches!(
             store
                 .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
-            Ok(())
+            Ok(true)
         );
         let keys_after_first_retain = store.idkg_dealing_encryption_pubkeys();
         assert_matches!(
             store
                 .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
-            Ok(())
+            Ok(false)
         );
         let keys_after_second_retain = store.idkg_dealing_encryption_pubkeys();
 
@@ -763,7 +765,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         assert_matches!(
             store
                 .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(1)),
-            Ok(())
+            Ok(true)
         );
 
         assert_eq!(
@@ -797,7 +799,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         assert_matches!(
             store
                 .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(1)),
-            Ok(())
+            Ok(true)
         );
 
         assert_eq!(
@@ -808,6 +810,39 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
                 public_key_with_key_value(2)
             ]
         )
+    }
+
+    #[test]
+    fn should_not_modify_public_key_store_on_disk_when_oldest_public_key_is_first() {
+        let temp_dir = temp_dir();
+        let mut store = public_key_store(&temp_dir);
+        add_idkg_dealing_encryption_public_keys(
+            &mut store,
+            vec![
+                public_key_with_key_value(0),
+                public_key_with_key_value(1),
+                public_key_with_key_value(2),
+                public_key_with_key_value(3),
+                public_key_with_key_value(4),
+            ],
+        );
+
+        let last_modification_time_before_retain =
+            public_key_store_last_modification_time(&temp_dir);
+        //ensure that system clock moved past `last_modification_time_before_retain`
+        std::thread::sleep(Duration::from_millis(100));
+        assert_matches!(
+            store
+                .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(0)),
+            Ok(false)
+        );
+        let last_modification_time_after_retain =
+            public_key_store_last_modification_time(&temp_dir);
+
+        assert_eq!(
+            last_modification_time_before_retain,
+            last_modification_time_after_retain
+        );
     }
 
     #[test]
@@ -833,7 +868,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         assert_matches!(
             store
                 .retain_most_recent_idkg_public_keys_up_to_inclusive(&public_key_with_key_value(2)),
-            Ok(())
+            Ok(true)
         );
 
         let logs = in_memory_logger.drain_logs();
@@ -989,4 +1024,11 @@ fn public_key_store(temp_dir: &TempDir) -> ProtoPublicKeyStore {
         PUBLIC_KEY_STORE_DATA_FILENAME,
         no_op_logger(),
     )
+}
+
+fn public_key_store_last_modification_time(temp_dir: &TempDir) -> SystemTime {
+    fs::metadata(temp_dir.path().join(PUBLIC_KEY_STORE_DATA_FILENAME))
+        .expect("cannot read metadata of public key store")
+        .modified()
+        .expect("cannot ready system time")
 }

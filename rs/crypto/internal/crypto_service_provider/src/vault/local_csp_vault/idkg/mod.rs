@@ -494,13 +494,16 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let oldest_public_key_proto = idkg_dealing_encryption_pk_to_proto(oldest_public_key);
         {
             let (sks_write_lock, mut pks_write_lock) = self.sks_and_pks_write_locks();
-            idkg_retain_active_dealing_encryption_public_keys(
+            let is_pks_modified = idkg_retain_active_dealing_encryption_public_keys(
                 &mut pks_write_lock,
                 &oldest_public_key_proto,
             )?;
-            let key_ids_to_keep =
-                idkg_public_key_proto_to_key_id(&pks_write_lock.idkg_dealing_encryption_pubkeys())?;
-            idkg_retain_active_dealing_encryption_secret_keys(sks_write_lock, key_ids_to_keep)?;
+            if is_pks_modified {
+                let key_ids_to_keep = idkg_public_key_proto_to_key_id(
+                    &pks_write_lock.idkg_dealing_encryption_pubkeys(),
+                )?;
+                idkg_retain_active_dealing_encryption_secret_keys(sks_write_lock, key_ids_to_keep)?;
+            }
         } //drop locks on sks and pks
         self.idkg_retain_active_canister_secret_shares(active_canister_key_ids)
     }
@@ -696,7 +699,7 @@ fn idkg_retain_active_dealing_encryption_secret_keys<S: SecretKeyStore>(
 fn idkg_retain_active_dealing_encryption_public_keys<P: PublicKeyStore>(
     pks_write_lock: &mut RwLockWriteGuard<P>,
     oldest_public_key: &PublicKey,
-) -> Result<(), IDkgRetainKeysError> {
+) -> Result<bool, IDkgRetainKeysError> {
     pks_write_lock
         .retain_most_recent_idkg_public_keys_up_to_inclusive(oldest_public_key)
         .map_err(|retain_error| match retain_error {

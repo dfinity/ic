@@ -367,7 +367,7 @@ mod idkg_retain_active_keys {
             .times(1)
             .in_sequence(&mut seq)
             .with(eq(oldest_public_key_proto.clone()))
-            .return_once(|_| Ok(()));
+            .return_once(|_| Ok(true));
         pks.expect_idkg_dealing_encryption_pubkeys()
             .times(1)
             .in_sequence(&mut seq)
@@ -378,6 +378,39 @@ mod idkg_retain_active_keys {
             .in_sequence(&mut seq)
             .withf(|_filter, scope| *scope == Scope::Const(ConstScope::IDkgMEGaEncryptionKeys))
             .return_const(Ok(()));
+        canister_sks
+            .expect_retain()
+            .times(1)
+            .in_sequence(&mut seq)
+            .withf(|_filter, scope| *scope == Scope::Const(ConstScope::IDkgThresholdKeys))
+            .return_const(Ok(()));
+
+        let vault = LocalCspVault::builder()
+            .with_node_secret_key_store(node_sks)
+            .with_canister_secret_key_store(canister_sks)
+            .with_public_key_store(pks)
+            .build();
+
+        assert!(vault
+            .idkg_retain_active_keys(BTreeSet::new(), oldest_public_key)
+            .is_ok());
+    }
+
+    #[test]
+    fn should_not_use_secret_key_store_if_public_key_store_was_not_modified() {
+        let mut pks = MockPublicKeyStore::new();
+        let node_sks = MockSecretKeyStore::new();
+        let mut canister_sks = MockSecretKeyStore::new();
+        let mut seq = Sequence::new();
+
+        let oldest_public_key = an_idkg_public_key();
+        let oldest_public_key_proto =
+            idkg_dealing_encryption_pk_to_proto(oldest_public_key.clone());
+        pks.expect_retain_most_recent_idkg_public_keys_up_to_inclusive()
+            .times(1)
+            .in_sequence(&mut seq)
+            .with(eq(oldest_public_key_proto))
+            .return_once(|_| Ok(false));
         canister_sks
             .expect_retain()
             .times(1)
