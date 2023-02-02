@@ -1,5 +1,5 @@
 {
-  "checksum": "320a29da9bcb73c38548635c99f063929ba6e3e1b63487e3ea45e8a944af9c74",
+  "checksum": "5256f62c4caa77f854c3ec059555a4972c1b72c41318d7c92a56a83e7a9fc658",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -178,15 +178,15 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.25",
+              "id": "futures-sink 0.3.26",
               "target": "futures_sink"
             },
             {
@@ -202,7 +202,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -297,7 +297,7 @@
               "target": "brotli"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -313,7 +313,7 @@
               "target": "flate2"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
@@ -369,7 +369,7 @@
               "target": "smallvec"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -381,7 +381,7 @@
               "target": "tracing"
             },
             {
-              "id": "zstd 0.12.2+zstd.1.5.2",
+              "id": "zstd 0.12.3+zstd.1.5.2",
               "target": "zstd"
             }
           ],
@@ -545,11 +545,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             }
           ],
@@ -615,11 +615,11 @@
               "target": "actix_utils"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -635,7 +635,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -681,7 +681,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
@@ -826,7 +826,7 @@
               "target": "ahash"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -846,11 +846,11 @@
               "target": "encoding_rs"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -2505,7 +2505,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             }
           ],
@@ -2515,7 +2515,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.63",
+              "id": "async-trait 0.1.64",
               "target": "async_trait"
             }
           ],
@@ -2556,7 +2556,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             }
           ],
@@ -2626,13 +2626,13 @@
       },
       "license": "MIT"
     },
-    "async-trait 0.1.63": {
+    "async-trait 0.1.64": {
       "name": "async-trait",
-      "version": "0.1.63",
+      "version": "0.1.64",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/async-trait/0.1.63/download",
-          "sha256": "eff18d764974428cf3a9328e23fc5c986f5fbed46e6cd4cdf42544df5d297ec1"
+          "url": "https://crates.io/api/v1/crates/async-trait/0.1.64/download",
+          "sha256": "1cd7fce9ba8c3c042128ce72d8b2ddbf3a05747efb67ea0313c635e10bda47a2"
         }
       },
       "targets": [
@@ -2669,7 +2669,7 @@
         "deps": {
           "common": [
             {
-              "id": "async-trait 0.1.63",
+              "id": "async-trait 0.1.64",
               "target": "build_script_build"
             },
             {
@@ -2688,7 +2688,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.63"
+        "version": "0.1.64"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -2894,11 +2894,11 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -2954,11 +2954,11 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "sync_wrapper 0.1.1",
+              "id": "sync_wrapper 0.1.2",
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -2984,7 +2984,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.63",
+              "id": "async-trait 0.1.64",
               "target": "async_trait"
             }
           ],
@@ -3055,11 +3055,11 @@
               "target": "build_script_build"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -3089,7 +3089,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.63",
+              "id": "async-trait 0.1.64",
               "target": "async_trait"
             }
           ],
@@ -3253,7 +3253,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             }
           ],
@@ -5707,13 +5707,13 @@
       },
       "license": "Unlicense OR MIT"
     },
-    "bytes 1.3.0": {
+    "bytes 1.4.0": {
       "name": "bytes",
-      "version": "1.3.0",
+      "version": "1.4.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/bytes/1.3.0/download",
-          "sha256": "dfb24e866b15a1af2a1b663f10c6b6b8f397a84aadb828f12e5b289ec23a3a3c"
+          "url": "https://crates.io/api/v1/crates/bytes/1.4.0/download",
+          "sha256": "89b2fd2a0dcf38d7971e2194b6b6eebab45ae01067456a7fd93d5547a61b70be"
         }
       },
       "targets": [
@@ -5740,7 +5740,7 @@
           "std"
         ],
         "edition": "2018",
-        "version": "1.3.0"
+        "version": "1.4.0"
       },
       "license": "MIT"
     },
@@ -5775,7 +5775,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             }
           ],
@@ -6449,13 +6449,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "cc 1.0.78": {
+    "cc 1.0.79": {
       "name": "cc",
-      "version": "1.0.78",
+      "version": "1.0.79",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cc/1.0.78/download",
-          "sha256": "a20104e2335ce8a659d6dd92a51a767a0c062599c73b343fd152cb401e828c3d"
+          "url": "https://crates.io/api/v1/crates/cc/1.0.79/download",
+          "sha256": "50d30906286121d95be3d479533b458f87493b30a4b5f79a607db8f5d11aa91f"
         }
       },
       "targets": [
@@ -6503,7 +6503,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.78"
+        "version": "1.0.79"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -7909,7 +7909,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.63",
+              "id": "async-trait 0.1.64",
               "target": "async_trait"
             }
           ],
@@ -8059,11 +8059,11 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core",
               "alias": "futures_core_03"
             },
@@ -8076,7 +8076,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio",
               "alias": "tokio_dep"
             },
@@ -8653,7 +8653,7 @@
         "deps": {
           "common": [
             {
-              "id": "unicode-segmentation 1.10.0",
+              "id": "unicode-segmentation 1.10.1",
               "target": "unicode_segmentation"
             }
           ],
@@ -9681,9 +9681,13 @@
           "**"
         ],
         "crate_features": [
+          "async",
+          "async_tokio",
           "cargo_bench_support",
           "default",
-          "html_reports"
+          "futures",
+          "html_reports",
+          "tokio"
         ],
         "deps": {
           "common": [
@@ -9706,6 +9710,10 @@
             {
               "id": "csv 1.1.6",
               "target": "csv"
+            },
+            {
+              "id": "futures 0.3.26",
+              "target": "futures"
             },
             {
               "id": "itertools 0.10.5",
@@ -9750,6 +9758,10 @@
             {
               "id": "tinytemplate 1.2.1",
               "target": "tinytemplate"
+            },
+            {
+              "id": "tokio 1.25.0",
+              "target": "tokio"
             },
             {
               "id": "walkdir 2.3.2",
@@ -11328,7 +11340,7 @@
         "deps": {
           "common": [
             {
-              "id": "uuid 1.2.2",
+              "id": "uuid 1.3.0",
               "target": "uuid"
             }
           ],
@@ -12200,7 +12212,7 @@
               "target": "byteorder"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -12216,7 +12228,7 @@
               "target": "cargo_metadata"
             },
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             },
             {
@@ -12361,15 +12373,15 @@
               "target": "fs_extra"
             },
             {
-              "id": "futures 0.3.25",
+              "id": "futures 0.3.26",
               "target": "futures"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -13039,7 +13051,7 @@
               "target": "tiny_http"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -13221,7 +13233,7 @@
               "target": "async_recursion"
             },
             {
-              "id": "async-trait 0.1.63",
+              "id": "async-trait 0.1.64",
               "target": "async_trait"
             },
             {
@@ -13245,7 +13257,7 @@
               "target": "ic_cdk_macros"
             },
             {
-              "id": "indoc 1.0.8",
+              "id": "indoc 1.0.9",
               "target": "indoc"
             },
             {
@@ -14530,7 +14542,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             }
           ],
@@ -15167,7 +15179,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             }
           ],
@@ -15924,13 +15936,13 @@
       },
       "license": "BSD-3-Clause"
     },
-    "futures 0.3.25": {
+    "futures 0.3.26": {
       "name": "futures",
-      "version": "0.3.25",
+      "version": "0.3.26",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures/0.3.25/download",
-          "sha256": "38390104763dc37a5145a53c29c63c1290b5d316d6086ec32c293f6736051bb0"
+          "url": "https://crates.io/api/v1/crates/futures/0.3.26/download",
+          "sha256": "13e2792b0ff0340399d58445b88fd9770e3489eff258a4cbc1523418f12abf84"
         }
       },
       "targets": [
@@ -15963,48 +15975,48 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.25",
+              "id": "futures-channel 0.3.26",
               "target": "futures_channel"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-executor 0.3.25",
+              "id": "futures-executor 0.3.26",
               "target": "futures_executor"
             },
             {
-              "id": "futures-io 0.3.25",
+              "id": "futures-io 0.3.26",
               "target": "futures_io"
             },
             {
-              "id": "futures-sink 0.3.25",
+              "id": "futures-sink 0.3.26",
               "target": "futures_sink"
             },
             {
-              "id": "futures-task 0.3.25",
+              "id": "futures-task 0.3.26",
               "target": "futures_task"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.25"
+        "version": "0.3.26"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-channel 0.3.25": {
+    "futures-channel 0.3.26": {
       "name": "futures-channel",
-      "version": "0.3.25",
+      "version": "0.3.26",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-channel/0.3.25/download",
-          "sha256": "52ba265a92256105f45b719605a571ffe2d1f0fea3807304b522c1d778f79eed"
+          "url": "https://crates.io/api/v1/crates/futures-channel/0.3.26/download",
+          "sha256": "2e5317663a9089767a1ec00a487df42e0ca174b61b4483213ac24448e4664df5"
         }
       },
       "targets": [
@@ -16048,22 +16060,22 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.25",
+              "id": "futures-channel 0.3.26",
               "target": "build_script_build"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.25",
+              "id": "futures-sink 0.3.26",
               "target": "futures_sink"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.25"
+        "version": "0.3.26"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -16072,13 +16084,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-core 0.3.25": {
+    "futures-core 0.3.26": {
       "name": "futures-core",
-      "version": "0.3.25",
+      "version": "0.3.26",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-core/0.3.25/download",
-          "sha256": "04909a7a7e4633ae6c4a9ab280aeb86da1236243a77b694a49eacd659a4bd3ac"
+          "url": "https://crates.io/api/v1/crates/futures-core/0.3.26/download",
+          "sha256": "ec90ff4d0fe1f57d600049061dc6bb68ed03c7d2fbd697274c41805dcb3f8608"
         }
       },
       "targets": [
@@ -16120,14 +16132,14 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.25"
+        "version": "0.3.26"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -16136,13 +16148,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-executor 0.3.25": {
+    "futures-executor 0.3.26": {
       "name": "futures-executor",
-      "version": "0.3.25",
+      "version": "0.3.26",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-executor/0.3.25/download",
-          "sha256": "7acc85df6714c176ab5edf386123fafe217be88c0840ec11f199441134a074e2"
+          "url": "https://crates.io/api/v1/crates/futures-executor/0.3.26/download",
+          "sha256": "e8de0a35a6ab97ec8869e32a2473f4b1324459e14c29275d14b10cb1fd19b50e"
         }
       },
       "targets": [
@@ -16171,32 +16183,32 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-task 0.3.25",
+              "id": "futures-task 0.3.26",
               "target": "futures_task"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.25"
+        "version": "0.3.26"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-io 0.3.25": {
+    "futures-io 0.3.26": {
       "name": "futures-io",
-      "version": "0.3.25",
+      "version": "0.3.26",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-io/0.3.25/download",
-          "sha256": "00f5fb52a06bdcadeb54e8d3671f8888a39697dcb0b81b23b55174030427f4eb"
+          "url": "https://crates.io/api/v1/crates/futures-io/0.3.26/download",
+          "sha256": "bfb8371b6fb2aeb2d280374607aeabfc99d95c72edfe51692e42d3d7f0d08531"
         }
       },
       "targets": [
@@ -16222,17 +16234,17 @@
           "std"
         ],
         "edition": "2018",
-        "version": "0.3.25"
+        "version": "0.3.26"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-macro 0.3.25": {
+    "futures-macro 0.3.26": {
       "name": "futures-macro",
-      "version": "0.3.25",
+      "version": "0.3.26",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-macro/0.3.25/download",
-          "sha256": "bdfb8ce053d86b91919aad980c220b1fb8401a9394410e1c289ed7e66b61835d"
+          "url": "https://crates.io/api/v1/crates/futures-macro/0.3.26/download",
+          "sha256": "95a73af87da33b5acf53acfebdc339fe592ecf5357ac7c0a7734ab9d8c876a70"
         }
       },
       "targets": [
@@ -16272,17 +16284,17 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.25"
+        "version": "0.3.26"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-sink 0.3.25": {
+    "futures-sink 0.3.26": {
       "name": "futures-sink",
-      "version": "0.3.25",
+      "version": "0.3.26",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-sink/0.3.25/download",
-          "sha256": "39c15cf1a4aa79df40f1bb462fb39676d0ad9e366c2a33b590d7c66f4f81fcf9"
+          "url": "https://crates.io/api/v1/crates/futures-sink/0.3.26/download",
+          "sha256": "f310820bb3e8cfd46c80db4d7fb8353e15dfff853a127158425f31e0be6c8364"
         }
       },
       "targets": [
@@ -16310,17 +16322,17 @@
           "std"
         ],
         "edition": "2018",
-        "version": "0.3.25"
+        "version": "0.3.26"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-task 0.3.25": {
+    "futures-task 0.3.26": {
       "name": "futures-task",
-      "version": "0.3.25",
+      "version": "0.3.26",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-task/0.3.25/download",
-          "sha256": "2ffb393ac5d9a6eaa9d3fdf37ae2776656b706e200c8e16b1bdb227f5198e6ea"
+          "url": "https://crates.io/api/v1/crates/futures-task/0.3.26/download",
+          "sha256": "dcf79a1bf610b10f42aea489289c5a2c478a786509693b80cd39c44ccd936366"
         }
       },
       "targets": [
@@ -16361,14 +16373,14 @@
         "deps": {
           "common": [
             {
-              "id": "futures-task 0.3.25",
+              "id": "futures-task 0.3.26",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.25"
+        "version": "0.3.26"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -16377,13 +16389,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "futures-util 0.3.25": {
+    "futures-util 0.3.26": {
       "name": "futures-util",
-      "version": "0.3.25",
+      "version": "0.3.26",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/futures-util/0.3.25/download",
-          "sha256": "197676987abd2f9cadff84926f410af1c183608d36641465df73ae8211dc65d6"
+          "url": "https://crates.io/api/v1/crates/futures-util/0.3.26/download",
+          "sha256": "9c1d6de3acfef38d2be4b1f543f553131788603495be83da675e180c8d6b7bd1"
         }
       },
       "targets": [
@@ -16436,27 +16448,27 @@
         "deps": {
           "common": [
             {
-              "id": "futures-channel 0.3.25",
+              "id": "futures-channel 0.3.26",
               "target": "futures_channel"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-io 0.3.25",
+              "id": "futures-io 0.3.26",
               "target": "futures_io"
             },
             {
-              "id": "futures-sink 0.3.25",
+              "id": "futures-sink 0.3.26",
               "target": "futures_sink"
             },
             {
-              "id": "futures-task 0.3.25",
+              "id": "futures-task 0.3.26",
               "target": "futures_task"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "build_script_build"
             },
             {
@@ -16482,13 +16494,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "futures-macro 0.3.25",
+              "id": "futures-macro 0.3.26",
               "target": "futures_macro"
             }
           ],
           "selects": {}
         },
-        "version": "0.3.25"
+        "version": "0.3.26"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -16574,7 +16586,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             }
           ],
@@ -17266,7 +17278,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -17274,15 +17286,15 @@
               "target": "fnv"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.25",
+              "id": "futures-sink 0.3.26",
               "target": "futures_sink"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -17298,7 +17310,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -17526,7 +17538,7 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -17630,7 +17642,7 @@
         "deps": {
           "common": [
             {
-              "id": "unicode-segmentation 1.10.0",
+              "id": "unicode-segmentation 1.10.1",
               "target": "unicode_segmentation"
             }
           ],
@@ -18166,7 +18178,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -18216,7 +18228,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -18399,7 +18411,7 @@
               "target": "bstr"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -18411,7 +18423,7 @@
               "target": "form_urlencoded"
             },
             {
-              "id": "futures 0.3.25",
+              "id": "futures 0.3.26",
               "target": "futures"
             },
             {
@@ -18447,7 +18459,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             }
           ],
@@ -18614,19 +18626,19 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
-              "id": "futures-channel 0.3.25",
+              "id": "futures-channel 0.3.26",
               "target": "futures_channel"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -18662,7 +18674,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -18748,7 +18760,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -18807,7 +18819,7 @@
               "target": "async_socks5"
             },
             {
-              "id": "futures 0.3.25",
+              "id": "futures 0.3.26",
               "target": "futures"
             },
             {
@@ -18827,7 +18839,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             }
           ],
@@ -18877,7 +18889,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -18923,7 +18935,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -18935,7 +18947,7 @@
               "target": "native_tls"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -19039,7 +19051,7 @@
               "target": "candid"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -19145,7 +19157,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.63",
+              "id": "async-trait 0.1.64",
               "target": "async_trait"
             }
           ],
@@ -19944,7 +19956,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.63",
+              "id": "async-trait 0.1.64",
               "target": "async_trait"
             },
             {
@@ -20541,7 +20553,7 @@
               "target": "regex"
             },
             {
-              "id": "unicode-segmentation 1.10.0",
+              "id": "unicode-segmentation 1.10.1",
               "target": "unicode_segmentation"
             },
             {
@@ -20556,13 +20568,13 @@
       },
       "license": "MIT"
     },
-    "indoc 1.0.8": {
+    "indoc 1.0.9": {
       "name": "indoc",
-      "version": "1.0.8",
+      "version": "1.0.9",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/indoc/1.0.8/download",
-          "sha256": "da2d6f23ffea9d7e76c53eee25dfb67bcd8fde7f1198b0855350698c9f07c780"
+          "url": "https://crates.io/api/v1/crates/indoc/1.0.9/download",
+          "sha256": "bfa799dd5ed20a7e349f3b4639aa80d74549c81716d9ec4f994c9b5815598306"
         }
       },
       "targets": [
@@ -20585,7 +20597,7 @@
           "**"
         ],
         "edition": "2018",
-        "version": "1.0.8"
+        "version": "1.0.9"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -21769,7 +21781,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             },
             {
@@ -22699,7 +22711,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -23314,7 +23326,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             }
           ],
@@ -23389,7 +23401,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             }
           ],
@@ -23581,7 +23593,7 @@
               "target": "bindgen"
             },
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             },
             {
@@ -23924,7 +23936,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             },
             {
@@ -24019,7 +24031,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             },
             {
@@ -24106,7 +24118,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             },
             {
@@ -24269,15 +24281,15 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.25",
+              "id": "futures-sink 0.3.26",
               "target": "futures_sink"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -24900,7 +24912,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             },
             {
@@ -26775,7 +26787,7 @@
                 "target": "libc"
               },
               {
-                "id": "security-framework 2.8.1",
+                "id": "security-framework 2.8.2",
                 "target": "security_framework"
               },
               {
@@ -29217,7 +29229,7 @@
               "target": "autocfg"
             },
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             },
             {
@@ -29300,15 +29312,15 @@
               "target": "fnv"
             },
             {
-              "id": "futures-channel 0.3.25",
+              "id": "futures-channel 0.3.26",
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.25",
+              "id": "futures-executor 0.3.26",
               "target": "futures_executor"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -29345,7 +29357,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.63",
+              "id": "async-trait 0.1.64",
               "target": "async_trait"
             }
           ],
@@ -29548,11 +29560,11 @@
               "target": "fnv"
             },
             {
-              "id": "futures-channel 0.3.25",
+              "id": "futures-channel 0.3.26",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -29640,15 +29652,15 @@
               "target": "fnv"
             },
             {
-              "id": "futures-channel 0.3.25",
+              "id": "futures-channel 0.3.26",
               "target": "futures_channel"
             },
             {
-              "id": "futures-executor 0.3.25",
+              "id": "futures-executor 0.3.26",
               "target": "futures_executor"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -29678,7 +29690,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.63",
+              "id": "async-trait 0.1.64",
               "target": "async_trait"
             }
           ],
@@ -32321,7 +32333,7 @@
               "target": "typed_arena"
             },
             {
-              "id": "unicode-segmentation 1.10.0",
+              "id": "unicode-segmentation 1.10.1",
               "target": "unicode_segmentation"
             }
           ],
@@ -33551,7 +33563,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             }
           ],
@@ -33605,7 +33617,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -33749,7 +33761,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -33882,7 +33894,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             }
           ],
@@ -35625,7 +35637,7 @@
               "target": "arc_swap"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -35633,11 +35645,11 @@
               "target": "combine"
             },
             {
-              "id": "futures 0.3.25",
+              "id": "futures 0.3.26",
               "target": "futures"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -35661,7 +35673,7 @@
               "target": "sha1_smol"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -35679,7 +35691,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.63",
+              "id": "async-trait 0.1.64",
               "target": "async_trait"
             }
           ],
@@ -36274,15 +36286,15 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -36378,7 +36390,7 @@
                 "target": "rustls_pemfile"
               },
               {
-                "id": "tokio 1.24.2",
+                "id": "tokio 1.25.0",
                 "target": "tokio"
               },
               {
@@ -36722,7 +36734,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             }
           ],
@@ -37328,7 +37340,7 @@
               "target": "byteorder"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -37983,7 +37995,7 @@
             ],
             "cfg(target_os = \"macos\")": [
               {
-                "id": "security-framework 2.8.1",
+                "id": "security-framework 2.8.2",
                 "target": "security_framework"
               }
             ],
@@ -38783,7 +38795,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             }
           ],
@@ -38793,13 +38805,13 @@
       },
       "license": "CC0-1.0"
     },
-    "security-framework 2.8.1": {
+    "security-framework 2.8.2": {
       "name": "security-framework",
-      "version": "2.8.1",
+      "version": "2.8.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/security-framework/2.8.1/download",
-          "sha256": "7c4437699b6d34972de58652c68b98cb5b53a4199ab126db8e20ec8ded29a721"
+          "url": "https://crates.io/api/v1/crates/security-framework/2.8.2/download",
+          "sha256": "a332be01508d814fed64bf28f798a146d73792121129962fdf335bb3c49a4254"
         }
       },
       "targets": [
@@ -38852,7 +38864,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.8.1"
+        "version": "2.8.2"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -39887,7 +39899,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures 0.3.25",
+              "id": "futures 0.3.26",
               "target": "futures"
             },
             {
@@ -42695,7 +42707,7 @@
               "target": "stable_deref_trait"
             },
             {
-              "id": "uuid 1.2.2",
+              "id": "uuid 1.3.0",
               "target": "uuid"
             }
           ],
@@ -43004,13 +43016,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "sync_wrapper 0.1.1": {
+    "sync_wrapper 0.1.2": {
       "name": "sync_wrapper",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/sync_wrapper/0.1.1/download",
-          "sha256": "20518fe4a4c9acf048008599e464deb21beeae3d3578418951a189c235a7a9a8"
+          "url": "https://crates.io/api/v1/crates/sync_wrapper/0.1.2/download",
+          "sha256": "2047c6ded9c721764247e62cd3b03c09ffc529b2ba5b10ec482ae507a4a70160"
         }
       },
       "targets": [
@@ -43033,7 +43045,7 @@
           "**"
         ],
         "edition": "2018",
-        "version": "0.1.1"
+        "version": "0.1.2"
       },
       "license": "Apache-2.0"
     },
@@ -43338,7 +43350,7 @@
               "target": "fnv"
             },
             {
-              "id": "futures 0.3.25",
+              "id": "futures 0.3.26",
               "target": "futures"
             },
             {
@@ -43370,7 +43382,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -44799,13 +44811,13 @@
       },
       "license": "MIT OR Apache-2.0 OR Zlib"
     },
-    "tokio 1.24.2": {
+    "tokio 1.25.0": {
       "name": "tokio",
-      "version": "1.24.2",
+      "version": "1.25.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio/1.24.2/download",
-          "sha256": "597a12a59981d9e3c38d216785b0c37399f6e415e8d0712047620f189371b0bb"
+          "url": "https://crates.io/api/v1/crates/tokio/1.25.0/download",
+          "sha256": "c8e00990ebabbe4c14c08aca901caed183ecd5c09562a12c824bb53d3c3fd3af"
         }
       },
       "targets": [
@@ -44868,7 +44880,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -44892,7 +44904,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "build_script_build"
             }
           ],
@@ -44937,7 +44949,7 @@
           ],
           "selects": {}
         },
-        "version": "1.24.2"
+        "version": "1.25.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -44990,7 +45002,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             }
           ],
@@ -45086,7 +45098,7 @@
               "target": "native_tls"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             }
           ],
@@ -45140,7 +45152,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -45152,7 +45164,7 @@
               "target": "openssl_sys"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -45210,7 +45222,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -45265,7 +45277,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -45324,15 +45336,15 @@
               "alias": "bincode_crate"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.25",
+              "id": "futures-sink 0.3.26",
               "target": "futures_sink"
             },
             {
@@ -45399,7 +45411,7 @@
               "target": "either"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -45407,7 +45419,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             }
           ],
@@ -45453,7 +45465,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
@@ -45461,7 +45473,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             }
           ],
@@ -45507,15 +45519,15 @@
               "target": "async_stream"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -45566,7 +45578,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -45574,7 +45586,7 @@
               "target": "log"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -45628,15 +45640,15 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-sink 0.3.25",
+              "id": "futures-sink 0.3.26",
               "target": "futures_sink"
             },
             {
@@ -45648,7 +45660,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -45854,15 +45866,15 @@
               "target": "base64"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -45899,7 +45911,7 @@
               "alias": "prost1"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -45937,7 +45949,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.63",
+              "id": "async-trait 0.1.64",
               "target": "async_trait"
             },
             {
@@ -46072,11 +46084,11 @@
         "deps": {
           "common": [
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -46100,7 +46112,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -46170,15 +46182,15 @@
               "target": "bitflags"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
-              "id": "futures-core 0.3.25",
+              "id": "futures-core 0.3.26",
               "target": "futures_core"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -46318,7 +46330,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -46326,7 +46338,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -46964,15 +46976,15 @@
               "target": "data_encoding"
             },
             {
-              "id": "futures-channel 0.3.25",
+              "id": "futures-channel 0.3.26",
               "target": "futures_channel"
             },
             {
-              "id": "futures-io 0.3.25",
+              "id": "futures-io 0.3.26",
               "target": "futures_io"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -47004,7 +47016,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -47022,7 +47034,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.63",
+              "id": "async-trait 0.1.64",
               "target": "async_trait"
             },
             {
@@ -47079,7 +47091,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -47107,7 +47119,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -47205,7 +47217,7 @@
               "target": "byteorder"
             },
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
@@ -47653,13 +47665,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "unicode-segmentation 1.10.0": {
+    "unicode-segmentation 1.10.1": {
       "name": "unicode-segmentation",
-      "version": "1.10.0",
+      "version": "1.10.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/unicode-segmentation/1.10.0/download",
-          "sha256": "0fdbf052a0783de01e944a6ce7a8cb939e295b1e7be835a1112c3b9a7f047a5a"
+          "url": "https://crates.io/api/v1/crates/unicode-segmentation/1.10.1/download",
+          "sha256": "1dd624098567895118886609431a7c3b8f516e41d30e0643f03d94592a147e36"
         }
       },
       "targets": [
@@ -47682,7 +47694,7 @@
           "**"
         ],
         "edition": "2018",
-        "version": "1.10.0"
+        "version": "1.10.1"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -48177,13 +48189,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "uuid 1.2.2": {
+    "uuid 1.3.0": {
       "name": "uuid",
-      "version": "1.2.2",
+      "version": "1.3.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/uuid/1.2.2/download",
-          "sha256": "422ee0de9031b5b948b97a8fc04e3aa35230001a722ddd27943e0be31564ce4c"
+          "url": "https://crates.io/api/v1/crates/uuid/1.3.0/download",
+          "sha256": "1674845326ee10d37ca60470760d4288a6f80f304007d92e5c53bab78c9cfd79"
         }
       },
       "targets": [
@@ -48210,7 +48222,7 @@
           "std"
         ],
         "edition": "2018",
-        "version": "1.2.2"
+        "version": "1.3.0"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -48425,8 +48437,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -48437,8 +48449,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -48728,15 +48740,15 @@
         "deps": {
           "common": [
             {
-              "id": "bytes 1.3.0",
+              "id": "bytes 1.4.0",
               "target": "bytes"
             },
             {
-              "id": "futures-channel 0.3.25",
+              "id": "futures-channel 0.3.26",
               "target": "futures_channel"
             },
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -48796,7 +48808,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.24.2",
+              "id": "tokio 1.25.0",
               "target": "tokio"
             },
             {
@@ -49430,7 +49442,7 @@
         "deps": {
           "common": [
             {
-              "id": "futures-util 0.3.25",
+              "id": "futures-util 0.3.26",
               "target": "futures_util"
             },
             {
@@ -50368,7 +50380,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             }
           ],
@@ -52914,13 +52926,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "zstd 0.12.2+zstd.1.5.2": {
+    "zstd 0.12.3+zstd.1.5.2": {
       "name": "zstd",
-      "version": "0.12.2+zstd.1.5.2",
+      "version": "0.12.3+zstd.1.5.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/zstd/0.12.2+zstd.1.5.2/download",
-          "sha256": "e9262a83dc741c0b0ffec209881b45dbc232c21b02a2b9cb1adb93266e41303d"
+          "url": "https://crates.io/api/v1/crates/zstd/0.12.3+zstd.1.5.2/download",
+          "sha256": "76eea132fb024e0e13fd9c2f5d5d595d8a967aa72382ac2f9d39fcc95afd0806"
         }
       },
       "targets": [
@@ -52951,24 +52963,24 @@
         "deps": {
           "common": [
             {
-              "id": "zstd-safe 6.0.2+zstd.1.5.2",
+              "id": "zstd-safe 6.0.3+zstd.1.5.2",
               "target": "zstd_safe"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.12.2+zstd.1.5.2"
+        "version": "0.12.3+zstd.1.5.2"
       },
       "license": "MIT"
     },
-    "zstd-safe 6.0.2+zstd.1.5.2": {
+    "zstd-safe 6.0.3+zstd.1.5.2": {
       "name": "zstd-safe",
-      "version": "6.0.2+zstd.1.5.2",
+      "version": "6.0.3+zstd.1.5.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/zstd-safe/6.0.2+zstd.1.5.2/download",
-          "sha256": "a6cf39f730b440bab43da8fb5faf5f254574462f73f260f85f7987f32154ff17"
+          "url": "https://crates.io/api/v1/crates/zstd-safe/6.0.3+zstd.1.5.2/download",
+          "sha256": "68e4a3f57d13d0ab7e478665c60f35e2a613dcd527851c2c7287ce5c787e134a"
         }
       },
       "targets": [
@@ -53015,18 +53027,18 @@
               "target": "libc"
             },
             {
-              "id": "zstd-safe 6.0.2+zstd.1.5.2",
+              "id": "zstd-safe 6.0.3+zstd.1.5.2",
               "target": "build_script_build"
             },
             {
-              "id": "zstd-sys 2.0.5+zstd.1.5.2",
+              "id": "zstd-sys 2.0.6+zstd.1.5.2",
               "target": "zstd_sys"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "6.0.2+zstd.1.5.2"
+        "version": "6.0.3+zstd.1.5.2"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -53035,13 +53047,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "zstd-sys 2.0.5+zstd.1.5.2": {
+    "zstd-sys 2.0.6+zstd.1.5.2": {
       "name": "zstd-sys",
-      "version": "2.0.5+zstd.1.5.2",
+      "version": "2.0.6+zstd.1.5.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/zstd-sys/2.0.5+zstd.1.5.2/download",
-          "sha256": "edc50ffce891ad571e9f9afe5039c4837bede781ac4bb13052ed7ae695518596"
+          "url": "https://crates.io/api/v1/crates/zstd-sys/2.0.6+zstd.1.5.2/download",
+          "sha256": "68a3f9792c0c3dc6c165840a75f47ae1f4da402c2d006881129579f6597e801b"
         }
       },
       "targets": [
@@ -53087,14 +53099,14 @@
               "target": "libc"
             },
             {
-              "id": "zstd-sys 2.0.5+zstd.1.5.2",
+              "id": "zstd-sys 2.0.6+zstd.1.5.2",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.0.5+zstd.1.5.2"
+        "version": "2.0.6+zstd.1.5.2"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -53103,7 +53115,7 @@
         "deps": {
           "common": [
             {
-              "id": "cc 1.0.78",
+              "id": "cc 1.0.79",
               "target": "cc"
             },
             {
@@ -53126,7 +53138,7 @@
     "borsh 0.9.3",
     "brotli 3.3.4",
     "brotli-decompressor 2.3.4",
-    "cc 1.0.78",
+    "cc 1.0.79",
     "cddl 0.9.1",
     "clap 3.2.23",
     "clap 4.1.4",
