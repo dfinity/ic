@@ -1520,6 +1520,39 @@ pub struct ListCommunityFundParticipantsResponse {
     #[prost(message, repeated, tag = "1")]
     pub cf_participants: ::prost::alloc::vec::Vec<CfParticipant>,
 }
+/// Request for the method 'list_sns_neuron_recipes'
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ListSnsNeuronRecipesRequest {
+    /// The maximum number of elements that will be in the response.
+    /// This is capped at 10_000.
+    #[prost(uint32, optional, tag = "1")]
+    pub limit: ::core::option::Option<u32>,
+    /// Skip the first `offset` elements when constructing the response
+    #[prost(uint64, optional, tag = "2")]
+    pub offset: ::core::option::Option<u64>,
+}
+/// Response for the method 'list_sns_neuron_recipes'
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ListSnsNeuronRecipesResponse {
+    #[prost(message, repeated, tag = "1")]
+    pub sns_neuron_recipes: ::prost::alloc::vec::Vec<SnsNeuronRecipe>,
+}
 /// Lifecycle states of the swap canister. The details of their meanings
 /// are provided in the documentation of the `Swap` message.
 #[derive(

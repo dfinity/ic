@@ -78,6 +78,13 @@ type ListCommunityFundParticipantsRequest = record {
 type ListCommunityFundParticipantsResponse = record {
   cf_participants : vec CfParticipant;
 };
+type ListSnsNeuronRecipesRequest = record {
+  offset : opt nat64;
+  limit : opt nat32;
+};
+type ListSnsNeuronRecipesResponse = record {
+  sns_neuron_recipes : vec SnsNeuronRecipe;
+};
 type NeuronAttributes = record { dissolve_delay_seconds : nat64; memo : nat64 };
 type NeuronBasketConstructionParameters = record {
   dissolve_delay_interval_seconds : nat64;
@@ -158,6 +165,9 @@ service : (Init) -> {
   get_state : (record {}) -> (GetStateResponse) query;
   list_community_fund_participants : (ListCommunityFundParticipantsRequest) -> (
       ListCommunityFundParticipantsResponse,
+    ) query;
+  list_sns_neuron_recipes : (ListSnsNeuronRecipesRequest) -> (
+      ListSnsNeuronRecipesResponse,
     ) query;
   open : (OpenRequest) -> (record {});
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (
