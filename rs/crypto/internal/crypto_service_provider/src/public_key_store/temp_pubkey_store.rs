@@ -97,7 +97,7 @@ impl PublicKeyStore for TempPublicKeyStore {
     fn retain_most_recent_idkg_public_keys_up_to_inclusive(
         &mut self,
         oldest_public_key_to_keep: &PublicKey,
-    ) -> Result<(), PublicKeyRetainError> {
+    ) -> Result<bool, PublicKeyRetainError> {
         self.store
             .retain_most_recent_idkg_public_keys_up_to_inclusive(oldest_public_key_to_keep)
     }

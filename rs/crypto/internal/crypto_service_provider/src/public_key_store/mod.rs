@@ -122,6 +122,7 @@ pub trait PublicKeyStore: Send + Sync {
     ) -> Result<(), PublicKeyAddError>;
 
     /// Retain only the most recent iDKG dealing encryption public keys.
+    /// Returns `Ok(true)` iff this operation modified the public key store.
     ///
     /// The order of public keys is based on their order of insertion ([`Self::add_idkg_dealing_encryption_pubkey`])
     /// and in particular not on their [`timestamp`](PublicKeyProto::timestamp) field.
@@ -135,7 +136,7 @@ pub trait PublicKeyStore: Send + Sync {
     fn retain_most_recent_idkg_public_keys_up_to_inclusive(
         &mut self,
         oldest_public_key_to_keep: &PublicKeyProto,
-    ) -> Result<(), PublicKeyRetainError>;
+    ) -> Result<bool, PublicKeyRetainError>;
 
     /// Gets the iDKG dealing encryption public keys.
     ///

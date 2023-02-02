@@ -158,13 +158,17 @@ impl PublicKeyStore for ProtoPublicKeyStore {
     fn retain_most_recent_idkg_public_keys_up_to_inclusive(
         &mut self,
         oldest_public_key_to_keep: &PublicKeyProto,
-    ) -> Result<(), PublicKeyRetainError> {
+    ) -> Result<bool, PublicKeyRetainError> {
         let mut idkg_public_keys_to_keep = Vec::new();
         let mut idkg_public_keys_to_delete = Vec::new();
         let mut keep = false;
 
-        for public_key_proto in &self.keys.idkg_dealing_encryption_pks {
+        for (index, public_key_proto) in self.keys.idkg_dealing_encryption_pks.iter().enumerate() {
             if !keep && public_key_proto.equal_ignoring_timestamp(oldest_public_key_to_keep) {
+                if index == 0 {
+                    //oldest public key is the first key -> NOP
+                    return Ok(false);
+                }
                 keep = true;
             }
             if !keep {
@@ -191,7 +195,8 @@ impl PublicKeyStore for ProtoPublicKeyStore {
         });
         self.keys.idkg_dealing_encryption_pks = idkg_public_keys_to_keep;
         self.write_node_public_keys_proto_to_disk()
-            .map_err(|io_error| PublicKeyRetainError::Io(io_error))
+            .map_err(PublicKeyRetainError::Io)?;
+        Ok(true)
     }
 
     fn idkg_dealing_encryption_pubkeys(&self) -> Vec<PublicKeyProto> {
