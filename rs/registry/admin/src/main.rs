@@ -2409,6 +2409,11 @@ struct ProposeToOpenSnsTokenSwap {
     /// The amount that the community fund will collectively spend in maturity on
     /// the swap.
     community_fund_investment_e8s: Option<u64>,
+
+    #[clap(long)]
+    /// An optional delay, so that the actual sale does not get opened immediately
+    /// after the adoption of the sale proposal.
+    sale_delay_seconds: Option<u64>,
 }
 impl From<&ProposeToOpenSnsTokenSwap> for OpenSnsTokenSwap {
     fn from(cli_proposal: &ProposeToOpenSnsTokenSwap) -> OpenSnsTokenSwap {
@@ -2424,6 +2429,7 @@ impl From<&ProposeToOpenSnsTokenSwap> for OpenSnsTokenSwap {
             neuron_basket_count,
             neuron_basket_dissolve_delay_interval_seconds,
             community_fund_investment_e8s,
+            sale_delay_seconds,
             // General proposal fields.  These are listed explicitly
             // so that it is clear which fields we are not using.
             proposer: _,
@@ -2449,6 +2455,7 @@ impl From<&ProposeToOpenSnsTokenSwap> for OpenSnsTokenSwap {
                     count: neuron_basket_count,
                     dissolve_delay_interval_seconds: neuron_basket_dissolve_delay_interval_seconds,
                 }),
+                sale_delay_seconds,
             }),
             community_fund_investment_e8s,
         }

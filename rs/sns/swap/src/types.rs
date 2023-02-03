@@ -541,7 +541,7 @@ impl Lifecycle {
         match self {
             Self::Committed | Self::Aborted => true,
 
-            Self::Pending | Self::Open => false,
+            Self::Pending | Self::Adopted | Self::Open => false,
             Self::Unspecified => {
                 log!(ERROR, "A wild Lifecycle::Unspecified appeared.",);
                 false
@@ -758,6 +758,7 @@ mod tests {
             count: 3,
             dissolve_delay_interval_seconds: 7890000, // 3 months
         }),
+        sale_delay_seconds: None,
     };
 
     lazy_static! {

@@ -293,6 +293,7 @@ type Params = record {
   swap_due_timestamp_seconds : nat64;
   min_participants : nat32;
   sns_token_e8s : nat64;
+  sale_delay_seconds : opt nat64;
   max_participant_icp_e8s : nat64;
   min_icp_e8s : nat64;
 };

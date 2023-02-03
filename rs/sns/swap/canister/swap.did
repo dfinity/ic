@@ -54,7 +54,10 @@ type GetDerivedStateResponse = record {
   buyer_total_icp_e8s : opt nat64;
 };
 type GetInitResponse = record { init : opt Init };
-type GetLifecycleResponse = record { lifecycle : opt int32 };
+type GetLifecycleResponse = record {
+  decentralization_sale_open_timestamp_seconds : opt nat64;
+  lifecycle : opt int32;
+};
 type GetSaleParametersResponse = record { params : opt Params };
 type GetStateResponse = record { swap : opt Swap; derived : opt DerivedState };
 type GovernanceError = record { error_message : text; error_type : int32 };
@@ -109,6 +112,7 @@ type Params = record {
   swap_due_timestamp_seconds : nat64;
   min_participants : nat32;
   sns_token_e8s : nat64;
+  sale_delay_seconds : opt nat64;
   max_participant_icp_e8s : nat64;
   min_icp_e8s : nat64;
 };
@@ -143,6 +147,7 @@ type SnsNeuronRecipe = record {
 };
 type Swap = record {
   neuron_recipes : vec SnsNeuronRecipe;
+  decentralization_sale_open_timestamp_seconds : opt nat64;
   finalize_swap_in_progress : opt bool;
   cf_participants : vec CfParticipant;
   init : opt Init;

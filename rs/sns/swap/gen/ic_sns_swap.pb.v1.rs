@@ -11,7 +11,7 @@
 ///
 /// ```text
 ///                                   sufficient_participation && (swap_due || icp_target_reached)
-/// PENDING ------------------> OPEN ------------------------------------------------------------> COMMITTED
+/// PENDING ------------------> ADOPTED ---------------------- OPEN --------------------------> COMMITTED
 ///                              |                                                                  |
 ///                              | swap_due && not sufficient_participation                         |
 ///                              v                                                                  v
@@ -64,10 +64,14 @@
 /// amount of SNS tokens. A call to `open` will then transition the
 /// canister to the OPEN state.
 ///
-/// Step 2. (State OPEN). The field `params` is received as an argument
+/// Step 2a. (State ADOPTED). The field `params` is received as an argument
 /// to the call to `open` and is henceforth immutable. The amount of
-/// SNS token is verified against the SNS ledger. The swap is open for
-/// participants who can enter into the auction with a number of ICP
+/// SNS token is verified against the SNS ledger. The swap will be
+/// opened after an optional delay. The transition to OPEN happens
+/// automatically (on the canister heartbeat) when the delay elapses.
+///
+/// Step 2a. (State OPEN). The delay has elapsed and the swap is open
+/// for participants who can enter into the auction with a number of ICP
 /// tokens until either the target amount has been reached or the
 /// auction is due, i.e., the date/time of the auction has been
 /// reached. The transition to COMMITTED or ABORTED happens
@@ -170,6 +174,11 @@ pub struct Swap {
     /// release the lock in the post upgrade hook.
     #[prost(bool, optional, tag = "10")]
     pub finalize_swap_in_progress: ::core::option::Option<bool>,
+    /// The timestamp for the actual opening of the sale, with an optional delay
+    /// (specified via params.sale_delay_seconds) after the adoption of the sale proposal.
+    /// Gets set when NNS calls open() upon the adoption of the sale proposal.
+    #[prost(uint64, optional, tag = "11")]
+    pub decentralization_sale_open_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.
@@ -326,6 +335,10 @@ pub struct Params {
     #[prost(message, optional, tag = "8")]
     pub neuron_basket_construction_parameters:
         ::core::option::Option<params::NeuronBasketConstructionParameters>,
+    /// An optional delay, so that the actual sale does not get opened immediately
+    /// after the adoption of the sale proposal.
+    #[prost(uint64, optional, tag = "9")]
+    pub sale_delay_seconds: ::core::option::Option<u64>,
 }
 /// Nested message and enum types in `Params`.
 pub mod params {
@@ -1434,6 +1447,8 @@ pub struct GetLifecycleRequest {}
 pub struct GetLifecycleResponse {
     #[prost(enumeration = "Lifecycle", optional, tag = "1")]
     pub lifecycle: ::core::option::Option<i32>,
+    #[prost(uint64, optional, tag = "2")]
+    pub decentralization_sale_open_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// Request struct for the method `get_init`
 #[derive(
@@ -1664,22 +1679,26 @@ pub struct ListSnsNeuronRecipesResponse {
 pub enum Lifecycle {
     /// The canister is incorrectly configured. Not a real lifecycle state.
     Unspecified = 0,
-    /// In this state, the canister is correctly initialized. Once SNS
+    /// In PENDING state, the canister is correctly initialized. Once SNS
     /// tokens have been transferred to the swap canister's account on
     /// the SNS ledger, a call to `open` with valid parameters will start
     /// the swap.
     Pending = 1,
-    /// In this state, prospective buyers can register for the token
+    /// In ADOPTED state, the proposal to start decentralization sale
+    /// has been adopted, and the sale can be opened after a delay
+    /// specified by params.sale_delay_seconds.
+    Adopted = 5,
+    /// In OPEN state, prospective buyers can register for the token
     /// swap. The swap will be committed when the target (max) ICP has
     /// been reached or the swap's due date/time occurs, whichever
     /// happens first.
     Open = 2,
-    /// The token price has been determined; on a call to `finalize`,
-    /// buyers receive their SNS neurons and the SNS governance canister
+    /// In COMMITTED state the token price has been determined; on a call to
+    /// finalize`, buyers receive their SNS neurons and the SNS governance canister
     /// receives the ICP.
     Committed = 3,
-    /// The token swap has been aborted, e.g., because the due date/time
-    /// occurred before the minimum (reserve) amount of ICP has been
+    /// In ABORTED state the token swap has been aborted, e.g., because the due
+    /// date/time occurred before the minimum (reserve) amount of ICP has been
     /// retrieved. On a call to `finalize`, participants get their ICP refunded.
     Aborted = 4,
 }
@@ -1692,6 +1711,7 @@ impl Lifecycle {
         match self {
             Lifecycle::Unspecified => "LIFECYCLE_UNSPECIFIED",
             Lifecycle::Pending => "LIFECYCLE_PENDING",
+            Lifecycle::Adopted => "LIFECYCLE_ADOPTED",
             Lifecycle::Open => "LIFECYCLE_OPEN",
             Lifecycle::Committed => "LIFECYCLE_COMMITTED",
             Lifecycle::Aborted => "LIFECYCLE_ABORTED",
