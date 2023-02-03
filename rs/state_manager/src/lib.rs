@@ -1620,7 +1620,7 @@ impl StateManagerImpl {
                     &metrics.manifest_metrics,
                     log,
                     state_sync_version,
-                    checkpoint_layout.raw_path(),
+                    &checkpoint_layout,
                     crate::manifest::DEFAULT_CHUNK_SIZE,
                     manifest_delta,
                 )
