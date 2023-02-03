@@ -1363,8 +1363,27 @@ macro_rules! declare_mul2_impl_for {
     };
 }
 
-macro_rules! declare_muln_vartime_impl_for {
-    ( $typ:ty, $window:expr ) => {
+/*
+* This macro dispatches a multi-scalar multiplication to different
+* algorithms, depending on the size of the problem.
+*
+* - Problems of size 1 are handled using trivial multiplication.
+* - Problems of size 2 are handled using the (constant time) mul2 implementation
+* - Problems larger than 2 but smaller than $naive_cutoff are done using
+*   a simple loop
+* - Problems larger than the naive cutoff, but smaller than w3_cutoff, are
+*   handled using 3-bit Pippenger
+* - Any larger problems are dispatched to 4-bit Pippenger
+*
+* For any fixed group, regardless of the number of elements (n), or the window
+* size (w), Pippenger's uses effectively a constant number of doublings. (255 in
+* the case of BLS12-381.) However the number of additions it uses varies, and
+* this depends upon both n, w, and the average Hamming weight of the scalar.
+* A randomized simulation demonstrates that it is only when n > 61 that the number
+* of additions for w=4 is typically smaller than for w=3.
+*/
+macro_rules! declare_muln_vartime_dispatch_for {
+    ( $typ:ty, $naive_cutoff:expr, $w3_cutoff:expr ) => {
         impl $typ {
             /// Multiscalar multiplication using Pippenger's algorithm
             ///
@@ -1377,55 +1396,89 @@ macro_rules! declare_muln_vartime_impl_for {
             /// memory-based side channels. Do not use this function with secret
             /// scalars.
             pub fn muln_vartime(points: &[Self], scalars: &[Scalar]) -> Self {
-                // Configurable window size: can be in 1..=8
-                type Window = WindowInfo<$window>;
-
-                let count = std::cmp::min(points.len(), scalars.len());
-
-                let mut windows = Vec::with_capacity(count);
-                for s in scalars {
-                    let sb = s.serialize();
-
-                    let mut window = [0u8; Window::WINDOWS];
-                    for i in 0..Window::WINDOWS {
-                        window[i] = Window::extract(&sb, i);
-                    }
-                    windows.push(window);
+                if points.len() == 1 {
+                    return &points[0] * &scalars[0];
+                } else if points.len() == 2 {
+                    return Self::mul2(&points[0], &scalars[0], &points[1], &scalars[1]);
+                } else if points.len() < $naive_cutoff {
+                    Self::muln_vartime_naive(points, scalars)
+                } else if points.len() < $w3_cutoff {
+                    Self::muln_vartime_window_3(points, scalars)
+                } else {
+                    Self::muln_vartime_window_4(points, scalars)
                 }
+            }
 
-                let mut accum = Self::identity();
-
-                let mut buckets = Self::identities(Window::ELEMENTS);
-
-                for i in 0..Window::WINDOWS {
-                    let mut max_bucket = 0;
-                    for j in 0..count {
-                        let bucket_index = windows[j][i] as usize;
-                        if bucket_index > 0 {
-                            buckets[bucket_index] += &points[j];
-                            max_bucket = std::cmp::max(max_bucket, bucket_index);
-                        }
-                    }
-
-                    if i > 0 {
-                        for _ in 0..Window::SIZE {
-                            accum = accum.double();
-                        }
-                    }
-
-                    let mut t = Self::identity();
-
-                    for j in (1..=max_bucket).rev() {
-                        t += &buckets[j];
-                        accum += &t;
-                        buckets[j] = Self::identity();
-                    }
-                }
-
-                accum
+            fn muln_vartime_naive(points: &[Self], scalars: &[Scalar]) -> Self {
+                points
+                    .iter()
+                    .zip(scalars.iter())
+                    .fold(Self::identity(), |accum, (p, s)| accum + p * s)
             }
         }
     };
+}
+
+macro_rules! declare_muln_vartime_impls_for {
+    ( $typ:ty, $window:expr ) => {
+        impl $typ {
+            paste! {
+                fn [< muln_vartime_window_ $window >] (points: &[Self], scalars: &[Scalar]) -> Self {
+                    // Configurable window size: can be in 1..=8
+                    type Window = WindowInfo<$window>;
+
+                    let count = std::cmp::min(points.len(), scalars.len());
+
+                    let mut windows = Vec::with_capacity(count);
+                    for s in scalars {
+                        let sb = s.serialize();
+
+                        let mut window = [0u8; Window::WINDOWS];
+                        for i in 0..Window::WINDOWS {
+                            window[i] = Window::extract(&sb, i);
+                        }
+                        windows.push(window);
+                    }
+
+                    let mut accum = Self::identity();
+
+                    let mut buckets = Self::identities(Window::ELEMENTS);
+
+                    for i in 0..Window::WINDOWS {
+                        let mut max_bucket = 0;
+                        for j in 0..count {
+                            let bucket_index = windows[j][i] as usize;
+                            if bucket_index > 0 {
+                                buckets[bucket_index] += &points[j];
+                                max_bucket = std::cmp::max(max_bucket, bucket_index);
+                            }
+                        }
+
+                        if i > 0 {
+                            for _ in 0..Window::SIZE {
+                                accum = accum.double();
+                            }
+                        }
+
+                        let mut t = Self::identity();
+
+                        for j in (1..=max_bucket).rev() {
+                            t += &buckets[j];
+                            accum += &t;
+                            buckets[j] = Self::identity();
+                        }
+                    }
+
+                    accum
+                }
+            }
+        }
+    };
+    ( $typ:ty, $window:expr, $($windows:expr),+ ) => {
+        declare_muln_vartime_impls_for!($typ, $window);
+        declare_muln_vartime_impls_for!($typ, $($windows),+ );
+    }
+
 }
 
 macro_rules! declare_muln_vartime_affine_impl_for {
@@ -1537,12 +1590,31 @@ macro_rules! declare_windowed_scalar_mul_ops_for {
     };
 }
 
+/// These constants dictate which window sizes for Pippenger's
+/// algorithm will be used for points in G1/G2, resp.
+///
+/// Inputs smaller than the W3 constant will instead use a naive
+/// algorithm.
+///
+/// These values were derived from benchmarks on a single machine,
+/// but seem to match fairly closely with simulated estimates of
+/// the cost of Pippenger's
+const G1_PROJECTIVE_USE_W3_LARGER_THAN: usize = 12;
+const G1_PROJECTIVE_USE_W4_LARGER_THAN: usize = 64;
+const G2_PROJECTIVE_USE_W3_LARGER_THAN: usize = 8;
+const G2_PROJECTIVE_USE_W4_LARGER_THAN: usize = 64;
+
 define_affine_and_projective_types!(G1Affine, G1Projective, 48);
 declare_addsub_ops_for!(G1Projective);
 declare_mixed_addition_ops_for!(G1Projective, G1Affine);
 declare_windowed_scalar_mul_ops_for!(G1Projective, 4);
 declare_mul2_impl_for!(G1Projective, G1Mul2Table, 2, 3);
-declare_muln_vartime_impl_for!(G1Projective, 3);
+declare_muln_vartime_dispatch_for!(
+    G1Projective,
+    G1_PROJECTIVE_USE_W3_LARGER_THAN,
+    G1_PROJECTIVE_USE_W4_LARGER_THAN
+);
+declare_muln_vartime_impls_for!(G1Projective, 3, 4);
 declare_muln_vartime_affine_impl_for!(G1Projective, G1Affine);
 impl_debug_using_serialize_for!(G1Affine);
 impl_debug_using_serialize_for!(G1Projective);
@@ -1552,7 +1624,12 @@ declare_addsub_ops_for!(G2Projective);
 declare_mixed_addition_ops_for!(G2Projective, G2Affine);
 declare_windowed_scalar_mul_ops_for!(G2Projective, 4);
 declare_mul2_impl_for!(G2Projective, G2Mul2Table, 2, 3);
-declare_muln_vartime_impl_for!(G2Projective, 3);
+declare_muln_vartime_dispatch_for!(
+    G2Projective,
+    G2_PROJECTIVE_USE_W3_LARGER_THAN,
+    G2_PROJECTIVE_USE_W4_LARGER_THAN
+);
+declare_muln_vartime_impls_for!(G2Projective, 3, 4);
 declare_muln_vartime_affine_impl_for!(G2Projective, G2Affine);
 impl_debug_using_serialize_for!(G2Affine);
 impl_debug_using_serialize_for!(G2Projective);
@@ -1792,7 +1869,7 @@ impl<const WINDOW_SIZE: usize> WindowInfo<WINDOW_SIZE> {
     const WINDOWS: usize = (Scalar::BYTES * 8 + Self::SIZE - 1) / Self::SIZE;
 
     const MASK: u8 = 0xFFu8 >> (8 - Self::SIZE);
-    const ELEMENTS: usize = 1 << Self::SIZE;
+    const ELEMENTS: usize = (1 << Self::SIZE) as usize;
 
     #[inline(always)]
     /// * `bit_len` denotes the total bit size
