@@ -3,6 +3,10 @@ name = "ic-balance-exporter"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "ic-balance-exporter"
+src = "src/main.rs"
+
 [dependencies]
 anyhow = "1.0.56"
 async-trait = "0.1.53"

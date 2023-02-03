@@ -5,8 +5,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[lib]
-crate-type = ["cdylib"]
+[[bin]]
+name = "kv_store"
+path = "src/main.rs"
 
 [dependencies]
 ic-cdk = "0.6.6"
