@@ -205,7 +205,7 @@ impl BackupHelper {
         ))
     }
 
-    fn rsync_node_backup(&self, node_ip: &IpAddr) {
+    fn rsync_spool(&self, node_ip: &IpAddr) {
         let _guard = self
             .artifacts_guard
             .lock()
@@ -226,7 +226,7 @@ impl BackupHelper {
             match self.rsync_remote_cmd(
                 remote_dir.clone(),
                 &self.spool_dir().into_os_string(),
-                &["-qa", "--append-verify"],
+                &["-qam", "--append-verify"],
             ) {
                 Ok(_) => return,
                 Err(e) => warn!(
@@ -299,7 +299,7 @@ impl BackupHelper {
     pub fn sync_files(&self, nodes: &Vec<IpAddr>) {
         let start_time = Instant::now();
         for n in nodes {
-            self.rsync_node_backup(n);
+            self.rsync_spool(n);
         }
         let duration = start_time.elapsed();
         let minutes = duration.as_secs() / 60;
