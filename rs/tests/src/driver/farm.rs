@@ -86,7 +86,12 @@ impl Farm {
         let ipv6 = created_vm.ipv6;
         info!(
             self.logger,
-            "VM({}) Host: {} IPv6: {}", &vm.name, created_vm.hostname, &ipv6,
+            "VM({}) Host: {} IPv6: {} vCPUs: {:?} Memory: {:?} KiB",
+            &vm.name,
+            created_vm.hostname,
+            &ipv6,
+            created_vm.spec.v_cpus,
+            created_vm.spec.memory_ki_b,
         );
         Ok(created_vm)
     }
@@ -504,6 +509,15 @@ pub enum FarmError {
 pub struct VMCreateResponse {
     pub ipv6: Ipv6Addr,
     pub hostname: String,
+    pub spec: VmSpec,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VmSpec {
+    #[serde(rename = "vCPUs")]
+    pub v_cpus: u64,
+    #[serde(rename = "memoryKiB")]
+    pub memory_ki_b: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
