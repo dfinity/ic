@@ -210,6 +210,7 @@ impl Swap {
             neuron_recipes: vec![],
             open_sns_token_swap_proposal_id: None,
             finalize_swap_in_progress: Some(false),
+            decentralization_sale_open_timestamp_seconds: None,
         }
     }
 
@@ -277,6 +278,16 @@ impl Swap {
     // --- state transition functions ------------------------------------------
     //
 
+    /// If the sale is ADOPTED, tries to open it (if the delay is elapsed).
+    /// Returns true if a transition was made, and false otherwise.
+    pub fn try_open_after_delay(&mut self, now_seconds: u64) -> bool {
+        if self.can_open(now_seconds) {
+            self.set_lifecycle(Lifecycle::Open);
+            return true;
+        }
+        false
+    }
+
     /// If the swap is OPEN, tries to commit or abort the swap. Returns
     /// true if a transition was made and false otherwise.
     pub fn try_commit_or_abort(&mut self, now_seconds: u64) -> bool {
@@ -337,7 +348,18 @@ impl Swap {
         self.params = req.params;
         self.cf_participants = req.cf_participants;
         self.open_sns_token_swap_proposal_id = req.open_sns_token_swap_proposal_id;
-        self.set_lifecycle(Lifecycle::Open);
+        let open_delay_seconds = self
+            .params
+            .clone()
+            .unwrap_or_default()
+            .sale_delay_seconds
+            .unwrap_or(0);
+        self.decentralization_sale_open_timestamp_seconds = Some(now_seconds + open_delay_seconds);
+        if open_delay_seconds > 0 {
+            self.set_lifecycle(Lifecycle::Adopted);
+        } else {
+            self.set_lifecycle(Lifecycle::Open);
+        }
         Ok(OpenResponse {})
     }
 
@@ -1777,6 +1799,14 @@ impl Swap {
         false
     }
 
+    /// The parameter `now_seconds` is greater than or equal to decentralization_sale_open_timestamp_seconds.
+    pub fn sale_opening_due(&self, now_seconds: u64) -> bool {
+        let sale_open_timestamp = self
+            .decentralization_sale_open_timestamp_seconds
+            .unwrap_or(now_seconds);
+        now_seconds >= sale_open_timestamp
+    }
+
     /// The minimum number of participants have been achieved, and the
     /// minimal total amount has been reached.
     pub fn sufficient_participation(&self) -> bool {
@@ -1800,6 +1830,15 @@ impl Swap {
             return self.participant_total_icp_e8s() >= params.max_icp_e8s;
         }
         false
+    }
+
+    /// Returns true if the swap can be opened at the specified
+    /// timestamp, and false otherwise.
+    pub fn can_open(&self, now_seconds: u64) -> bool {
+        if self.lifecycle() != Lifecycle::Adopted {
+            return false;
+        }
+        self.sale_opening_due(now_seconds)
     }
 
     /// Returns true if the swap can be committed at the specified
@@ -1861,6 +1900,8 @@ impl Swap {
     pub fn get_lifecycle(&self, _request: &GetLifecycleRequest) -> GetLifecycleResponse {
         GetLifecycleResponse {
             lifecycle: Some(self.lifecycle),
+            decentralization_sale_open_timestamp_seconds: self
+                .decentralization_sale_open_timestamp_seconds,
         }
     }
 
@@ -2037,6 +2078,7 @@ mod tests {
                 count: 12,
                 dissolve_delay_interval_seconds: 30 * SECONDS_PER_DAY,
             }),
+            sale_delay_seconds: None,
         };
     }
 
@@ -2049,6 +2091,12 @@ mod tests {
         assert_eq!(
             swap.get_lifecycle(&request).lifecycle,
             Some(Lifecycle::Pending as i32)
+        );
+
+        swap.lifecycle = Lifecycle::Adopted as i32;
+        assert_eq!(
+            swap.get_lifecycle(&request).lifecycle,
+            Some(Lifecycle::Adopted as i32)
         );
 
         swap.lifecycle = Lifecycle::Open as i32;

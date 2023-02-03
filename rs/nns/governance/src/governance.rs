@@ -8252,6 +8252,7 @@ mod tests {
                 dissolve_delay_interval_seconds: 7890000, // 3 months
             },
         ),
+        sale_delay_seconds: None,
     };
 
     type CanisterMethodCallResult = Result<Vec<u8>, (Option<i32>, String)>;

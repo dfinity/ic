@@ -17,22 +17,26 @@ import "ic_base_types/pb/v1/types.proto";
 enum Lifecycle {
   // The canister is incorrectly configured. Not a real lifecycle state.
   LIFECYCLE_UNSPECIFIED = 0;
-  // In this state, the canister is correctly initialized. Once SNS
+  // In PENDING state, the canister is correctly initialized. Once SNS
   // tokens have been transferred to the swap canister's account on
   // the SNS ledger, a call to `open` with valid parameters will start
   // the swap.
   LIFECYCLE_PENDING     = 1;
-  // In this state, prospective buyers can register for the token
+  // In ADOPTED state, the proposal to start decentralization sale
+  // has been adopted, and the sale can be opened after a delay
+  // specified by params.sale_delay_seconds.
+  LIFECYCLE_ADOPTED     = 5;
+  // In OPEN state, prospective buyers can register for the token
   // swap. The swap will be committed when the target (max) ICP has
   // been reached or the swap's due date/time occurs, whichever
   // happens first.
   LIFECYCLE_OPEN        = 2;
-  // The token price has been determined; on a call to `finalize`,
-  // buyers receive their SNS neurons and the SNS governance canister
+  // In COMMITTED state the token price has been determined; on a call to
+  // finalize`, buyers receive their SNS neurons and the SNS governance canister
   // receives the ICP.
   LIFECYCLE_COMMITTED   = 3;
-  // The token swap has been aborted, e.g., because the due date/time
-  // occurred before the minimum (reserve) amount of ICP has been
+  // In ABORTED state the token swap has been aborted, e.g., because the due
+  // date/time occurred before the minimum (reserve) amount of ICP has been
   // retrieved. On a call to `finalize`, participants get their ICP refunded.
   LIFECYCLE_ABORTED     = 4;
 }
@@ -51,7 +55,7 @@ enum Lifecycle {
 //
 // ```text
 //                                  sufficient_participation && (swap_due || icp_target_reached)
-// PENDING ------------------> OPEN ------------------------------------------------------------> COMMITTED
+// PENDING ------------------> ADOPTED ---------------------- OPEN --------------------------> COMMITTED
 //                             |                                                                  |
 //                             | swap_due && not sufficient_participation                         |
 //                             v                                                                  v
@@ -104,10 +108,14 @@ enum Lifecycle {
 // amount of SNS tokens. A call to `open` will then transition the
 // canister to the OPEN state.
 //
-// Step 2. (State OPEN). The field `params` is received as an argument
+// Step 2a. (State ADOPTED). The field `params` is received as an argument
 // to the call to `open` and is henceforth immutable. The amount of
-// SNS token is verified against the SNS ledger. The swap is open for
-// participants who can enter into the auction with a number of ICP
+// SNS token is verified against the SNS ledger. The swap will be
+// opened after an optional delay. The transition to OPEN happens
+// automatically (on the canister heartbeat) when the delay elapses.
+//
+// Step 2a. (State OPEN). The delay has elapsed and the swap is open
+// for participants who can enter into the auction with a number of ICP
 // tokens until either the target amount has been reached or the
 // auction is due, i.e., the date/time of the auction has been
 // reached. The transition to COMMITTED or ABORTED happens
@@ -206,6 +214,11 @@ message Swap {
   // a lock is not released, upgrades of the Swap canister can
   // release the lock in the post upgrade hook.
   optional bool finalize_swap_in_progress = 10;
+
+  // The timestamp for the actual opening of the sale, with an optional delay
+  // (specified via params.sale_delay_seconds) after the adoption of the sale proposal.
+  // Gets set when NNS calls open() upon the adoption of the sale proposal.
+  optional uint64 decentralization_sale_open_timestamp_seconds = 11;
 }
 
 // The initialisation data of the canister. Always specified on
@@ -337,6 +350,10 @@ message Params {
   // See `NeuronBasketConstructionParameters` for more details on how
   // the basket is configured.
   NeuronBasketConstructionParameters neuron_basket_construction_parameters = 8;
+
+  // An optional delay, so that the actual sale does not get opened immediately
+  // after the adoption of the sale proposal.
+  optional uint64 sale_delay_seconds = 9;
 }
 
 message TransferableAmount {
@@ -777,6 +794,7 @@ message GetLifecycleRequest {}
 // Response struct for the method `get_lifecycle`
 message GetLifecycleResponse {
   optional Lifecycle lifecycle = 1;
+  optional uint64 decentralization_sale_open_timestamp_seconds = 2;
 }
 
 // Request struct for the method `get_init`

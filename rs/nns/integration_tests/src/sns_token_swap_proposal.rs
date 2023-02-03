@@ -153,6 +153,7 @@ fn make_open_sns_token_swap_proposal(
             count: 3,
             dissolve_delay_interval_seconds: 7890000, // 3 months
         }),
+        sale_delay_seconds: None,
     };
 
     nns_governance_make_proposal(

@@ -350,6 +350,9 @@ fn list_sns_neuron_recipes_(request: ListSnsNeuronRecipesRequest) -> ListSnsNeur
 #[export_name = "canister_heartbeat"]
 fn canister_heartbeat() {
     let now = now_seconds();
+    if swap_mut().try_open_after_delay(now) {
+        log!(INFO, "Sale opened at timestamp {}", now);
+    }
     if swap_mut().try_commit_or_abort(now) {
         log!(INFO, "Swap committed/aborted at timestamp {}", now);
     }

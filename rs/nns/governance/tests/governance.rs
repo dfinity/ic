@@ -7070,6 +7070,7 @@ fn test_default_followees() {
                     count: BASKET_COUNT,
                     dissolve_delay_interval_seconds: 30 * ONE_DAY_SECONDS,
                 }),
+                sale_delay_seconds: None,
             }),
             community_fund_investment_e8s: Some(0),
         }),
@@ -10825,6 +10826,7 @@ lazy_static! {
                 dissolve_delay_interval_seconds: 7890000, // 3 months
             },
         ),
+        sale_delay_seconds: None,
     };
 
     // Collectively, the Community Fund neurons have 100e-8 ICP in maturity.

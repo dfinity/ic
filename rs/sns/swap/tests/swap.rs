@@ -41,7 +41,7 @@ use ic_sns_swap::{
     pb::v1::{
         params::NeuronBasketConstructionParameters,
         sns_neuron_recipe::{ClaimedStatus, Investor, NeuronAttributes},
-        Lifecycle::{Aborted, Committed, Open, Pending, Unspecified},
+        Lifecycle::{Aborted, Adopted, Committed, Open, Pending, Unspecified},
         SetDappControllersRequest, SetDappControllersResponse, *,
     },
     swap::{
@@ -110,6 +110,7 @@ fn params() -> Params {
             count: 3,
             dissolve_delay_interval_seconds: 7890000, // 3 months
         }),
+        sale_delay_seconds: None,
     };
     assert!(result.is_valid_at(START_TIMESTAMP_SECONDS));
     assert!(result.validate(&init()).is_ok());
@@ -141,6 +142,7 @@ fn create_generic_committed_swap() -> Swap {
         )],
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         finalize_swap_in_progress: None,
+        decentralization_sale_open_timestamp_seconds: None,
     }
 }
 
@@ -256,6 +258,62 @@ fn test_open() {
     }
     // Check that state is updated.
     assert_eq!(swap.sns_token_e8s().unwrap(), params.sns_token_e8s);
+    assert_eq!(swap.lifecycle(), Open);
+}
+
+#[test]
+fn test_open_with_delay() {
+    let delay_seconds = 42;
+    let init = init();
+    let mut swap = Swap::new(init);
+    let account = Account {
+        owner: SWAP_CANISTER_ID.get(),
+        subaccount: None,
+    };
+    let params = Params {
+        sale_delay_seconds: Some(delay_seconds),
+        ..params()
+    };
+    let open_request = OpenRequest {
+        params: Some(params.clone()),
+        cf_participants: vec![],
+        open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
+    };
+
+    let r = swap
+        .open(
+            SWAP_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                account,
+                Ok(Tokens::from_e8s(params.sns_token_e8s)),
+            )]),
+            START_TIMESTAMP_SECONDS,
+            open_request,
+        )
+        .now_or_never()
+        .unwrap();
+    assert!(r.is_ok());
+
+    // Check that state is updated.
+    assert_eq!(swap.sns_token_e8s().unwrap(), params.sns_token_e8s);
+    assert_eq!(swap.lifecycle(), Adopted);
+
+    // Try opening before delay elapses, it should NOT succeed.
+    let timestamp_before_delay = START_TIMESTAMP_SECONDS + delay_seconds - 1;
+    assert!(!swap.can_open(START_TIMESTAMP_SECONDS));
+    assert!(!swap.can_open(timestamp_before_delay));
+    assert!(!swap.try_open_after_delay(timestamp_before_delay));
+    assert_eq!(swap.lifecycle(), Adopted);
+
+    // Try opening after delay elapses, it should succeed.
+    let timestamp_after_delay = START_TIMESTAMP_SECONDS + delay_seconds + 1;
+    assert!(swap.can_open(timestamp_after_delay));
+    assert!(swap.try_open_after_delay(timestamp_after_delay));
+    assert_eq!(swap.lifecycle(), Open);
+
+    // Repeated opening fails.
+    assert!(!swap.can_open(timestamp_after_delay));
+    assert!(!swap.try_open_after_delay(timestamp_after_delay));
     assert_eq!(swap.lifecycle(), Open);
 }
 
@@ -686,6 +744,9 @@ fn test_scenario_happy() {
     }
     assert_eq!(swap.lifecycle(), Open);
     assert_eq!(swap.sns_token_e8s().unwrap(), 200_000 * E8);
+    // Cannot (re)-open, as already opened.
+    assert!(!swap.can_open(END_TIMESTAMP_SECONDS));
+    assert!(!swap.try_open_after_delay(END_TIMESTAMP_SECONDS));
     // Cannot commit or abort, as the swap is not due yet.
     assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
     // Deposit 900 ICP from one buyer.
@@ -770,11 +831,17 @@ fn test_scenario_happy() {
     assert!(swap.sufficient_participation());
     // Cannot commit if the swap is not due.
     assert!(!swap.can_commit(END_TIMESTAMP_SECONDS - 1));
+    // Cannot open while still open.
+    assert_eq!(swap.lifecycle(), Open);
+    assert!(!swap.can_open(END_TIMESTAMP_SECONDS));
     // Can commit if the swap is due.
     assert!(swap.can_commit(END_TIMESTAMP_SECONDS));
     // This should commit...
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Committed);
+    // Should not be able to re-open after commit.
+    assert!(!swap.can_open(END_TIMESTAMP_SECONDS));
+    assert!(!swap.try_open_after_delay(END_TIMESTAMP_SECONDS));
     // Check that buyer balances are correct. Total SNS balance is
     // 200k and total ICP is 2k.
     verify_participant_balances(&swap, &TEST_USER1_PRINCIPAL, 900 * E8, 90000 * E8);
@@ -1002,6 +1069,7 @@ async fn test_finalize_swap_ok() {
             count: 3,
             dissolve_delay_interval_seconds: 7890000, // 3 months
         }),
+        sale_delay_seconds: None,
     };
     let mut swap = Swap {
         lifecycle: Open as i32,
@@ -1016,6 +1084,7 @@ async fn test_finalize_swap_ok() {
         neuron_recipes: vec![],
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         finalize_swap_in_progress: None,
+        decentralization_sale_open_timestamp_seconds: None,
     };
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Committed);
@@ -1262,6 +1331,7 @@ async fn test_finalize_swap_abort() {
             count: 12,
             dissolve_delay_interval_seconds: 7890000, // 3 months
         }),
+        sale_delay_seconds: None,
     };
     let buyer_principal_id = PrincipalId::new_user_test_id(8502);
     let mut swap = Swap {
@@ -1275,10 +1345,14 @@ async fn test_finalize_swap_abort() {
         neuron_recipes: vec![],
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         finalize_swap_in_progress: None,
+        decentralization_sale_open_timestamp_seconds: None,
     };
 
     assert!(swap.try_commit_or_abort(/* now_seconds: */ END_TIMESTAMP_SECONDS + 1));
     assert_eq!(swap.lifecycle(), Aborted);
+    // Cannot open when aborted.
+    assert!(!swap.can_open(END_TIMESTAMP_SECONDS + 1));
+    assert!(!swap.try_open_after_delay(END_TIMESTAMP_SECONDS + 1));
 
     // These clients should have no calls observed and therefore no calls mocked
     let mut sns_governance_client = SpySnsGovernanceClient::default();

@@ -762,6 +762,7 @@ pub fn open_sns_token_swap_payload_for_tests(
                 count: 1,
                 dissolve_delay_interval_seconds: 30 * DAYS.as_secs(),
             }),
+            sale_delay_seconds: None,
         }),
         community_fund_investment_e8s: Some(0),
     }

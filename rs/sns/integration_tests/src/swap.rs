@@ -489,6 +489,7 @@ fn begin_swap(
                     count: neuron_basket_count,
                     dissolve_delay_interval_seconds: 7890000, // 3 months,
                 }),
+                sale_delay_seconds: None,
             }),
             // This is not sufficient to make the swap an automatic success.
             community_fund_investment_e8s: Some(
