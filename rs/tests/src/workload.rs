@@ -52,7 +52,7 @@ pub struct Workload<T> {
 
 /// Fully defines a call to be executed against a canister.
 /// An Agent is needed to submit this request to a replica.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Request {
     Query(CallSpec),
     Update(CallSpec),
@@ -68,7 +68,7 @@ impl Request {
 }
 
 /// Part of the canister call ([`Request`]) definition.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CallSpec {
     pub canister_id: Principal,
     pub method_name: String,

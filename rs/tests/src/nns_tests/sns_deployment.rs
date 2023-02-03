@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::str::FromStr;
 use std::time::Instant;
 #[allow(unused)]
 use std::time::{Duration, SystemTime};
@@ -9,13 +11,16 @@ use ic_canister_client_sender::ed25519_public_key_to_der;
 use ic_crypto_sha::Sha256;
 use ic_icrc1::Account;
 
-use ic_icrc1_agent::{Icrc1Agent, TransferArg};
+use ic_icrc1_agent::{CallMode, Icrc1Agent, TransferArg};
+use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::proposal::Action;
 use ic_nns_governance::pb::v1::{NnsFunction, OpenSnsTokenSwap, Proposal};
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 
+use ic_rosetta_api::models::RosettaSupportedKeyPair;
+use ic_rosetta_test_utils::EdKeypair;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
 use ic_sns_swap::pb::v1::{
@@ -27,8 +32,8 @@ use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
     SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
 };
-use ic_types::crypto::UserPublicKey;
 use ic_types::{Cycles, Height};
+use icp_ledger::{AccountIdentifier, Subaccount};
 use serde::{Deserialize, Serialize};
 use slog::info;
 
@@ -37,13 +42,13 @@ use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot,
-    SnsCanisterEnvVars,
+    IcNodeSnapshot, NnsCustomizations, SnsCanisterEnvVars,
 };
 use crate::nns::{
     get_governance_canister, submit_external_proposal_with_test_id,
     vote_execute_proposal_assert_executed,
 };
-use crate::orchestrator::utils::rw_message::install_nns_and_check_progress;
+use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use crate::util::{
     assert_create_agent, assert_create_agent_with_identity, block_on, delay, runtime_from_url,
     to_principal_id, UniversalCanister,
@@ -63,9 +68,9 @@ use crate::driver::ic::{
     AmountOfMemoryKiB, ImageSizeGiB, InternetComputer, NrOfVCPUs, Subnet, VmResources,
 };
 use crate::driver::test_env::TestEnvAttribute;
-use ic_canister_client::{Ed25519KeyPair, Sender};
+use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER1_PUBKEY,
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
 };
 use ic_nns_constants::{LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
@@ -82,6 +87,18 @@ const DAYS: Duration = Duration::from_secs(24 * 60 * 60);
 
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
 const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(5); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
+
+// This constant is simply an encoding of a CanisterId(x) for some small value of x.
+// x is the position of the sale (a.k.a. swap) canister in the SNS application subnet.
+const SNS_SALE_CANISTER_ID: &str = "5j7vn-7yaaa-aaaaa-qaaca-cai";
+
+pub const SNS_SALE_PARTICIPANTS: [(&str, u64, u64); 4] = [
+    //   name   tokens  seed
+    ("ali", 1, 123),
+    ("bob", 3, 234),
+    ("cat", 7, 345),
+    ("dav", 11, 456),
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnsClient {
@@ -178,7 +195,7 @@ impl SnsClient {
     }
 }
 
-pub fn sns_setup(env: TestEnv) {
+fn setup(env: TestEnv, sale_participants: Vec<SaleParticipant>) {
     env.ensure_group_setup_created();
 
     PrometheusVm::default()
@@ -210,15 +227,143 @@ pub fn sns_setup(env: TestEnv) {
 
     env.sync_prometheus_config_with_topology();
 
-    install_nns(&env);
+    // Set up the initial ICP ledger
+    let mut ledger_balances = HashMap::new();
+    for participant in sale_participants.clone() {
+        let account_identifier = participant.sns_account_identifier();
+        ledger_balances.insert(account_identifier, participant.starting_balance);
+    }
+    let nns_customizations = NnsCustomizations {
+        ledger_balances: Some(ledger_balances),
+    };
+
+    // Install NNS with ledger customizations
+    install_nns(&env, nns_customizations);
+
+    // Check that the balances are as expected
+    let ledger_agent = {
+        let nns_node = env.get_first_healthy_nns_node_snapshot();
+        let agent = block_on(assert_create_agent(nns_node.get_public_url().as_str()));
+        let ledger_canister_id = Principal::try_from(LEDGER_CANISTER_ID.get()).unwrap();
+        Icrc1Agent {
+            agent,
+            ledger_canister_id,
+        }
+    };
+    for participant in sale_participants {
+        let subaccount = Some(principal_to_subaccount(&participant.principal_id));
+        let owner = PrincipalId::from_str(SNS_SALE_CANISTER_ID)
+            .expect("cannot parse PrincipalId of the SNS sale (a.k.a. swap) canister");
+        let account = Account { owner, subaccount };
+        let observed = block_on(ledger_agent.balance_of(account, CallMode::Query)).unwrap();
+        let expected = Nat::from(participant.starting_balance.get_e8s());
+        let name = participant.name;
+        assert_eq!(observed, expected, "{name}'s expected balance ({expected:?}) did not match their actual balance ({observed:?})");
+    }
 
     install_sns(&env);
 }
 
-pub fn install_nns(env: &TestEnv) {
+pub fn sns_setup(env: TestEnv) {
+    setup(env, vec![]);
+}
+
+pub fn sns_setup_with_many_sale_participants(env: TestEnv) {
+    // Generate random identities for all the participants
+    let participants: Vec<SaleParticipant> = SNS_SALE_PARTICIPANTS
+        .into_iter()
+        .map(|(name, starting_balance, seed)| {
+            SaleParticipant::random(name, Tokens::from_tokens(starting_balance).unwrap(), seed)
+        })
+        .collect();
+
+    // Make sure these participants are available after the setup
+    participants.write_attribute(&env);
+
+    // Run the actual setup
+    setup(env, participants);
+}
+
+pub fn init_participants(env: TestEnv) {
     let log = env.logger();
     let start_time = Instant::now();
-    install_nns_and_check_progress(env.topology_snapshot());
+
+    let participants = Vec::<SaleParticipant>::read_attribute(&env);
+    participants.write_attribute(&env); // FIXME remove this line
+    let participants_str: Vec<String> = participants.iter().map(|p| p.name.clone()).collect();
+
+    let sns_client = SnsClient::read_attribute(&env);
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let request_provider = SnsRequestProvider::from_sns_client(&sns_client);
+
+    for participant in participants {
+        let sns_agent = SnsAgent::new_with_identity(&app_node, participant.clone());
+        let request = request_provider.refresh_buyer_tokens(Some(participant.principal_id));
+        info!(
+            log,
+            "Submitting request {request:?} from {:?} ...", participant.principal_id
+        );
+        let res = block_on(sns_agent.update(request)).unwrap();
+        Decode!(res.as_slice(), RefreshBuyerTokensResponse).expect("failed to decode");
+        info!(
+            log,
+            "Update call from {} to `sns_sale.refresh_buyer_tokens` returned {res:?} (elapsed {:?})",
+            participant.name,
+            start_time.elapsed()
+        );
+    }
+
+    info!(
+        log,
+        "==== Successfully added {} participants ({:?}) to the token sale (elapsed {:?}) ====",
+        participants_str.len(),
+        participants_str,
+        start_time.elapsed()
+    );
+}
+
+pub fn check_all_participants(env: TestEnv) {
+    let log = env.logger();
+    let start_time = Instant::now();
+
+    let participants = Vec::<SaleParticipant>::read_attribute(&env);
+    participants.write_attribute(&env); // FIXME remove this line
+
+    let participants_str: Vec<String> = participants.iter().map(|p| p.name.clone()).collect();
+
+    let sns_client = SnsClient::read_attribute(&env);
+    let request_provider = SnsRequestProvider::from_sns_client(&sns_client);
+
+    let app_node = env.get_first_healthy_application_node_snapshot();
+
+    for participant in participants {
+        let sns_agent = SnsAgent::new_with_identity(&app_node, participant.clone());
+        let request = request_provider.get_buyer_state(participant.principal_id, CallMode::Query);
+        info!(log, "Submitting request {request:?} ...");
+        let res = block_on(sns_agent.query(request)).unwrap();
+        let res = Decode!(res.as_slice(), GetBuyerStateResponse).expect("failed to decode");
+        info!(
+            log,
+            "Query call from {} to `sns_sale.get_buyer_state` returned {res:?} (elapsed {:?})",
+            participant.name,
+            start_time.elapsed()
+        );
+        assert!(res.buyer_state.is_some());
+    }
+
+    info!(
+        log,
+        "==== Successfully checked {} participants ({:?}) to the token sale (elapsed {:?}) ====",
+        participants_str.len(),
+        participants_str,
+        start_time.elapsed()
+    );
+}
+
+pub fn install_nns(env: &TestEnv, customizations: NnsCustomizations) {
+    let log = env.logger();
+    let start_time = Instant::now();
+    install_nns_with_customizations_and_check_progress(env.topology_snapshot(), customizations);
     info!(
         log,
         "=========== The NNS has been successfully installed in {:?} ==========",
@@ -229,7 +374,16 @@ pub fn install_nns(env: &TestEnv) {
 pub fn install_sns(env: &TestEnv) {
     let log = env.logger();
     let start_time = Instant::now();
-    SnsClient::install_sns_and_check_healthy(env);
+    let sns_client = SnsClient::install_sns_and_check_healthy(env);
+    {
+        let observed = sns_client.sns_canisters.swap().get();
+        let expected = PrincipalId::from_str(SNS_SALE_CANISTER_ID)
+            .expect("cannot parse PrincipalId of the SNS sale (a.k.a. swap) canister");
+        assert_eq!(
+            observed, expected,
+            "SNS sale canister got unexpected PrincipalId {observed:?} (expected {expected:?}"
+        );
+    }
     info!(
         log,
         "========== The SNS has been installed successfully in {:?} ===========",
@@ -251,16 +405,12 @@ pub fn initiate_token_swap(env: TestEnv) {
 }
 
 pub struct SnsRequestProvider {
-    // The Principal of the canister issuing the request
-    pub sender: Principal,
     pub sns_canisters: SnsCanisterIds,
 }
 
 impl SnsRequestProvider {
     pub fn from_sns_client(sns_client: &SnsClient) -> Self {
-        let wallet_canister = sns_client.get_wallet_canister_principal();
         Self {
-            sender: wallet_canister,
             sns_canisters: sns_client.sns_canisters,
         }
     }
@@ -270,25 +420,34 @@ impl SnsRequestProvider {
         Self::from_sns_client(&sns_client)
     }
 
-    pub fn get_state(&self) -> Request {
+    fn spec_to_req(spec: CallSpec, mode: CallMode) -> Request {
+        match mode {
+            CallMode::Query => Request::Query(spec),
+            CallMode::Update => Request::Update(spec),
+        }
+    }
+
+    pub fn get_state(&self, mode: CallMode) -> Request {
         let swap_canister = self.sns_canisters.swap().get().into();
-        Request::Query(CallSpec::new(
+        let spec = CallSpec::new(
             swap_canister,
             "get_state",
             Encode!(&GetStateRequest {}).unwrap(),
-        ))
+        );
+        Self::spec_to_req(spec, mode)
     }
 
-    pub fn get_buyer_state(&self, buyer: PrincipalId) -> Request {
+    pub fn get_buyer_state(&self, buyer: PrincipalId, mode: CallMode) -> Request {
         let swap_canister = self.sns_canisters.swap().get().into();
-        Request::Query(CallSpec::new(
+        let spec = CallSpec::new(
             swap_canister,
             "get_buyer_state",
             Encode!(&GetBuyerStateRequest {
                 principal_id: Some(buyer)
             })
             .unwrap(),
-        ))
+        );
+        Self::spec_to_req(spec, mode)
     }
 
     pub fn refresh_buyer_tokens(&self, buyer: Option<PrincipalId>) -> Request {
@@ -312,6 +471,22 @@ pub struct SnsAgent {
 }
 
 impl SnsAgent {
+    pub fn new(app_node: &IcNodeSnapshot) -> Self {
+        let agent = block_on(assert_create_agent(app_node.get_public_url().as_str()));
+        Self { agent }
+    }
+
+    pub fn new_with_identity(
+        app_node: &IcNodeSnapshot,
+        identity: impl Identity + Clone + 'static,
+    ) -> Self {
+        let agent = block_on(assert_create_agent_with_identity(
+            app_node.get_public_url().as_str(),
+            identity,
+        ));
+        Self { agent }
+    }
+
     async fn query(&self, request: Request) -> Result<Vec<u8>, AgentError> {
         let spec = request.spec();
         self.agent
@@ -331,29 +506,72 @@ impl SnsAgent {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SnsUsers {
+    participants: Vec<SaleParticipant>,
+}
+
+impl TestEnvAttribute for SnsUsers {
+    fn attribute_name() -> String {
+        "sns_users".to_string()
+    }
+}
+
+/// An SNS sale participant.
+/// Warning: This type should be used for testing purposes only.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SaleParticipant {
+    name: String,
+    secret_key: [u8; 32],
+    public_key: [u8; 32],
     principal_id: PrincipalId,
-    user_public_key: UserPublicKey,
-    key_pair: Ed25519KeyPair,
+    starting_balance: Tokens,
+}
+
+impl TestEnvAttribute for Vec<SaleParticipant> {
+    fn attribute_name() -> String {
+        "sns_sale_participants".to_string()
+    }
 }
 
 impl SaleParticipant {
-    fn public_key_der(&self) -> Vec<u8> {
-        let pk = self.user_public_key.key.clone();
-        ed25519_public_key_to_der(pk)
+    pub fn random(name: &str, starting_balance: Tokens, seed: u64) -> Self {
+        let key_pair = EdKeypair::generate_from_u64(seed);
+        let principal_id = key_pair.generate_principal_id().unwrap();
+        Self {
+            name: name.to_string(),
+            principal_id,
+            secret_key: key_pair.secret_key,
+            public_key: key_pair.public_key,
+            starting_balance,
+        }
+    }
+
+    pub fn key_pair(&self) -> EdKeypair {
+        EdKeypair {
+            secret_key: self.secret_key,
+            public_key: self.public_key,
+        }
+    }
+
+    pub fn sns_account_identifier(&self) -> AccountIdentifier {
+        let sns_subaccount = Some(Subaccount(principal_to_subaccount(&self.principal_id)));
+        let sns_account = PrincipalId::from_str(SNS_SALE_CANISTER_ID)
+            .expect("cannot parse PrincipalId of the SNS sale (a.k.a. swap) canister");
+        AccountIdentifier::new(sns_account, sns_subaccount)
     }
 }
 
 impl Identity for SaleParticipant {
     fn sender(&self) -> Result<Principal, String> {
-        let pk_der = self.public_key_der();
-        Ok(Principal::self_authenticating(pk_der))
+        let principal = Principal::try_from(self.principal_id).unwrap();
+        Ok(principal)
     }
 
     fn sign(&self, msg: &[u8]) -> Result<Signature, String> {
-        let signature = self.key_pair.sign(msg.as_ref());
-        let pk_der = self.public_key_der();
+        let signature = self.key_pair().sign(msg.as_ref());
+        let pk = self.key_pair().get_pb_key();
+        let pk_der = ed25519_public_key_to_der(pk);
         Ok(Signature {
             signature: Some(signature.as_ref().to_vec()),
             public_key: Some(pk_der),
@@ -362,6 +580,19 @@ impl Identity for SaleParticipant {
 }
 
 pub fn add_one_participant(env: TestEnv) {
+    // Runbook:
+    // Our goal is to establish that the wealthy user does not initially participate in the token sale.
+    // For this purpose, we submit three calls:
+    //   1. refresh_buyer_tokens (update) from the default user - should return an error
+    //   2. refresh_buyer_tokens (update) from the wealthy user - should return an error
+    //   3. get_buyer_state (query) from the default user (should return "none" for the buyer state)
+    // Afterwards, we will transfer some ICPs from this user's main account to their SNS sale subaccount.
+    // Finally, we will check that the user's participate has been set up correctly after the transaction.
+    // For this purpose, we submit three more calls:
+    //   4. refresh_buyer_tokens (update) from the default user - should return res4
+    //   5. refresh_buyer_tokens (update) from the wealthy user - should return res5; it should be that res5 == res4
+    //   6. get_buyer_state (query) from the default user (should return "some" for the buyer state)
+
     let log = env.logger();
     let start_time = Instant::now();
 
@@ -371,9 +602,11 @@ pub fn add_one_participant(env: TestEnv) {
 
     // Set up the wealthy users' account (this one has 200_000 ICP at start; see `install_nns_canisters`)
     let wealthy_user_identity = SaleParticipant {
+        name: "wealthy_sale_participant".to_string(),
         principal_id: *TEST_USER1_PRINCIPAL,
-        user_public_key: (*TEST_USER1_PUBKEY).clone(),
-        key_pair: *TEST_USER1_KEYPAIR,
+        secret_key: TEST_USER1_KEYPAIR.secret_key,
+        public_key: TEST_USER1_KEYPAIR.public_key,
+        starting_balance: Tokens::from_tokens(200_000).unwrap(),
     };
 
     info!(log, "Obtaining an agent to talk to the ICP Ledger ...");
@@ -393,19 +626,9 @@ pub fn add_one_participant(env: TestEnv) {
         log,
         "Obtaining two alternative agents to talk to the SNS sale canister ..."
     );
-    let default_sns_agent = {
-        let app_node = env.get_first_healthy_application_node_snapshot();
-        let agent = block_on(assert_create_agent(app_node.get_public_url().as_str()));
-        SnsAgent { agent }
-    };
-    let wealthy_sns_agent = {
-        let app_node = env.get_first_healthy_application_node_snapshot();
-        let agent = block_on(assert_create_agent_with_identity(
-            app_node.get_public_url().as_str(),
-            wealthy_user_identity.clone(),
-        ));
-        SnsAgent { agent }
-    };
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let default_sns_agent = SnsAgent::new(&app_node);
+    let wealthy_sns_agent = SnsAgent::new_with_identity(&app_node, wealthy_user_identity.clone());
     info!(
         log,
         "All three agents are ready (elapsed {:?})",
@@ -442,7 +665,8 @@ pub fn add_one_participant(env: TestEnv) {
         "Validating the pre-transfer state via the `get_buyer_state` endpoint ..."
     );
     let res_3 = {
-        let request = request_provider.get_buyer_state(wealthy_user_identity.principal_id);
+        let request =
+            request_provider.get_buyer_state(wealthy_user_identity.principal_id, CallMode::Query);
         let res = block_on(default_sns_agent.query(request)).unwrap();
         Decode!(res.as_slice(), GetBuyerStateResponse).expect("failed to decode")
     };
@@ -524,7 +748,7 @@ pub fn add_one_participant(env: TestEnv) {
         "Third update call to `sns_sale.refresh_buyer_tokens` returned {res_4:?} (elapsed {:?})",
         start_time.elapsed()
     );
-    // Use the wealthy user's identity refresh_buyer_tokens for "self"
+    // Use the wealthy user's identity to call refresh_buyer_tokens for "self"
     let res_5 = {
         let request = request_provider.refresh_buyer_tokens(None);
         let res = block_on(wealthy_sns_agent.update(request)).unwrap();
@@ -536,14 +760,15 @@ pub fn add_one_participant(env: TestEnv) {
         start_time.elapsed()
     );
     assert_eq!(res_4, res_5, "sns_sale.refresh_buyer_tokens(Some({:?})) = {res_4:?}, but sns_sale.refresh_buyer_tokens(None) = {res_5:?}", wealthy_user_identity.principal_id);
-    info!(log, "After setting up sale participation, the response from `sns_sale.refresh_buyer_tokens` is {res_1:?}");
+    info!(log, "After setting up sale participation, the response from `sns_sale.refresh_buyer_tokens` is {res_4:?}");
 
     info!(
         log,
         "Validating the participation setup via the `get_buyer_state` endpoint ..."
     );
     let res_6 = {
-        let request = request_provider.get_buyer_state(wealthy_user_identity.principal_id);
+        let request =
+            request_provider.get_buyer_state(wealthy_user_identity.principal_id, CallMode::Query);
         let res = block_on(default_sns_agent.query(request)).unwrap();
         Decode!(res.as_slice(), GetBuyerStateResponse).expect("failed to decode")
     };
@@ -564,17 +789,15 @@ pub fn add_one_participant(env: TestEnv) {
 }
 
 pub fn workload_rps400_get_state_query(env: TestEnv) {
-    let req = SnsRequestProvider::from_env(&env).get_state();
+    let req = SnsRequestProvider::from_env(&env).get_state(CallMode::Query);
     generate_sns_workload(env, 400, WORKLOAD_GENERATION_DURATION, req);
 }
-
 pub fn workload_rps800_get_state_query(env: TestEnv) {
-    let req = SnsRequestProvider::from_env(&env).get_state();
+    let req = SnsRequestProvider::from_env(&env).get_state(CallMode::Query);
     generate_sns_workload(env, 800, WORKLOAD_GENERATION_DURATION, req);
 }
-
 pub fn workload_rps1200_get_state_query(env: TestEnv) {
-    let req = SnsRequestProvider::from_env(&env).get_state();
+    let req = SnsRequestProvider::from_env(&env).get_state(CallMode::Query);
     generate_sns_workload(env, 1_200, WORKLOAD_GENERATION_DURATION, req);
 }
 
@@ -582,12 +805,10 @@ pub fn workload_rps400_refresh_buyer_tokens(env: TestEnv) {
     let req = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
     generate_sns_workload(env, 400, WORKLOAD_GENERATION_DURATION, req);
 }
-
 pub fn workload_rps800_refresh_buyer_tokens(env: TestEnv) {
     let req = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
     generate_sns_workload(env, 800, WORKLOAD_GENERATION_DURATION, req);
 }
-
 pub fn workload_rps1200_refresh_buyer_tokens(env: TestEnv) {
     let req = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
     generate_sns_workload(env, 1_200, WORKLOAD_GENERATION_DURATION, req);
@@ -750,6 +971,7 @@ pub fn open_sns_token_swap_payload_for_tests(
 ) -> OpenSnsTokenSwap {
     OpenSnsTokenSwap {
         target_swap_canister_id: Some(sns_swap_canister_id),
+        // Taken (mostly) from https://github.com/open-ic/open-chat/blob/master/sns_proposal.sh
         params: Some(Params {
             min_participants: 1,
             min_icp_e8s: 20 * E8,
