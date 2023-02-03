@@ -52,9 +52,6 @@ pub struct SnsInitPayload {
     /// The minimum dissolve_delay in seconds a neuron must have to be able to cast votes on proposals.
     #[prost(uint64, optional, tag = "12")]
     pub neuron_minimum_dissolve_delay_to_vote_seconds: ::core::option::Option<u64>,
-    /// The initial config file used to set up this SNS.
-    #[prost(string, optional, tag = "13")]
-    pub sns_initialization_parameters: ::core::option::Option<::prost::alloc::string::String>,
     /// The amount of rewards is proportional to token_supply * current_rate. In
     /// turn, current_rate is somewhere between these two values. In the first
     /// reward period, it is the initial growth rate, and after the growth rate
