@@ -280,9 +280,9 @@ impl TryFrom<SignedRequestBytes> for SignedIngress {
     }
 }
 
-/// The conversion from 'HttpRequestEnvelope<HttpCallContent>' to
-/// 'SignedIngress' goes through serialization first, because the
-/// actual encoded bytes has to be part of 'SignedIngress'.
+/// The conversion from `HttpRequestEnvelope<HttpCallContent>` to
+/// `SignedIngress` goes through serialization first, because the
+/// actual encoded bytes has to be part of `SignedIngress`.
 impl TryFrom<HttpRequestEnvelope<HttpCallContent>> for SignedIngress {
     type Error = HttpRequestError;
 

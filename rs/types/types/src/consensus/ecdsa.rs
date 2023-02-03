@@ -661,7 +661,7 @@ pub enum EcdsaMessage {
 
 /// EcdsaArtifactId is the unique identifier for the artifacts. It is made of a prefix + crypto
 /// hash of the message itself:
-/// EcdsaArtifactId = <EcdsaPrefix, CryptoHash<Message>>
+/// EcdsaArtifactId = `<EcdsaPrefix, CryptoHash<Message>>`
 /// EcdsaPrefix     = <8 byte group tag, 8 byte meta info hash>
 ///
 /// Two kinds of look up are possible with this:

@@ -10,7 +10,7 @@ use std::{
     fmt,
 };
 
-/// The length of a [`MessageId`] is 32: https://sdk.dfinity.org/docs/interface-spec/index.html#api-request-id)
+/// The length of a [`MessageId`] is 32: `<https://sdk.dfinity.org/docs/interface-spec/index.html#api-request-id>`
 pub const EXPECTED_MESSAGE_ID_LENGTH: usize = 32;
 
 /// The ID used to uniquely identify a user's ingress message.

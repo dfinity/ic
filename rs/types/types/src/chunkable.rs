@@ -9,7 +9,7 @@
 //!   not the full one. In order to save bandwidth transferring
 //!   the full artifact that doesn't fit in memory doesn't make sense.
 //!
-//! For more context please check https://youtu.be/WaNJINjGleg
+//! For more context please check `<https://youtu.be/WaNJINjGleg>`
 //!
 use crate::{artifact::Artifact, crypto::CryptoHash};
 use bincode::{deserialize, serialize};
@@ -53,11 +53,11 @@ pub trait ChunkableArtifact {
     /// Retrieves the artifact chunk with the given ID.
     ///
     /// The chunk ID for single-chunked artifacts must be
-    /// [`CHUNKID_UNIT_CHUNK`].
+    /// `CHUNKID_UNIT_CHUNK`.
     fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk>;
 }
 
-/// Basic chunking interface for [`SingleChunked`] artifact tracker.
+/// Basic chunking interface for [`crate::single_chunked::SingleChunked`] artifact tracker.
 pub trait Chunkable {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>>;
     fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode>;
