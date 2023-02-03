@@ -82,12 +82,12 @@ fn test_get_init_config_file() {
                 .await
                 .expect("Error calling get_sns_initialization_parameters api");
 
-        let sns_cli_init_config: SnsCliInitConfig = serde_yaml::from_str(
-            &get_sns_initialization_parameters_response.sns_initialization_parameters,
-        )
-        .unwrap();
+        let expected_initialization_parameters = serde_yaml::to_string(&sns_init_payload).unwrap();
 
-        assert_eq!(sns_cli_init_config, get_test_sns_cli_init_config());
+        assert_eq!(
+            get_sns_initialization_parameters_response.sns_initialization_parameters,
+            expected_initialization_parameters
+        );
 
         Ok(())
     });

@@ -57,8 +57,8 @@ message SnsInitPayload {
   // The minimum dissolve_delay in seconds a neuron must have to be able to cast votes on proposals.
   optional uint64 neuron_minimum_dissolve_delay_to_vote_seconds = 12;
 
-  // The initial config file used to set up this SNS.
-  optional string sns_initialization_parameters = 13;
+  reserved 13;
+  reserved "sns_initialization_parameters";
 
   // The amount of rewards is proportional to token_supply * current_rate. In
   // turn, current_rate is somewhere between these two values. In the first

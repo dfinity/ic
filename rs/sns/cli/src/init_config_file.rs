@@ -440,9 +440,6 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             sns_cli_init_config.final_reward_rate_basis_points()?;
 
         Ok(SnsInitPayload {
-            sns_initialization_parameters: Some(get_config_file_contents(
-                sns_cli_init_config.clone(),
-            )),
             transaction_fee_e8s: sns_cli_init_config.sns_ledger.transaction_fee_e8s,
             token_name: sns_cli_init_config.sns_ledger.token_name,
             token_symbol: sns_cli_init_config.sns_ledger.token_symbol,
@@ -1110,15 +1107,7 @@ wait_for_quiet_deadline_increase_seconds: 1000
         let resulting_payload: SnsCliInitConfig = serde_yaml::from_str(&file_contents).unwrap();
         resulting_payload.validate().unwrap();
 
-        let sns_init_payload = SnsInitPayload::try_from(resulting_payload.clone())
-            .expect("Expected to be able to convert");
-        assert_eq!(
-            serde_yaml::from_str::<SnsCliInitConfig>(
-                &sns_init_payload.sns_initialization_parameters.unwrap()
-            )
-            .unwrap(),
-            resulting_payload
-        );
+        SnsInitPayload::try_from(resulting_payload).expect("Expected to be able to convert");
 
         // We add a string repeating the field "name", this should fail
         let mut file_contents = file_contents;
@@ -1129,9 +1118,8 @@ wait_for_quiet_deadline_increase_seconds: 1000
     #[test]
     fn test_try_from_sns_cli_init_config() {
         let sns_cli_init_config = SnsCliInitConfig::with_test_values();
-        let try_from_result = SnsInitPayload::try_from(sns_cli_init_config.clone());
 
-        let sns_init_payload = match try_from_result {
+        let sns_init_payload = match SnsInitPayload::try_from(sns_cli_init_config.clone()) {
             Ok(sns_init_payload) => sns_init_payload,
             Err(reason) => panic!(
                 "Could not convert SnsCliInitConfig to SnsInitPayload: {}",
@@ -1151,7 +1139,6 @@ wait_for_quiet_deadline_increase_seconds: 1000
             name,
             description,
             neuron_minimum_dissolve_delay_to_vote_seconds,
-            sns_initialization_parameters,
             initial_reward_rate_basis_points,
             final_reward_rate_basis_points,
             reward_rate_transition_duration_seconds,
@@ -1164,10 +1151,6 @@ wait_for_quiet_deadline_increase_seconds: 1000
             initial_token_distribution,
         } = sns_init_payload;
 
-        assert_eq!(
-            get_config_file_contents(sns_cli_init_config.clone()),
-            sns_initialization_parameters.unwrap()
-        );
         assert_eq!(
             sns_cli_init_config.sns_ledger.transaction_fee_e8s,
             transaction_fee_e8s

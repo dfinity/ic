@@ -93,7 +93,6 @@ type SnsInitPayload = record {
   initial_reward_rate_basis_points : opt nat64;
   wait_for_quiet_deadline_increase_seconds : opt nat64;
   transaction_fee_e8s : opt nat64;
-  sns_initialization_parameters : opt text;
   max_age_bonus_percentage : opt nat64;
   initial_token_distribution : opt InitialTokenDistribution;
   reward_rate_transition_duration_seconds : opt nat64;

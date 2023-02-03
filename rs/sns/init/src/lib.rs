@@ -109,7 +109,6 @@ impl SnsInitPayload {
             url: None,
             name: None,
             description: None,
-            sns_initialization_parameters: Some("".to_string()),
             max_dissolve_delay_seconds: nervous_system_parameters_default
                 .max_dissolve_delay_seconds,
             max_neuron_age_seconds_for_age_bonus: nervous_system_parameters_default
@@ -179,10 +178,8 @@ impl SnsInitPayload {
 
         governance.neurons = self.get_initial_neurons(&parameters)?;
 
-        governance.sns_initialization_parameters = self
-            .sns_initialization_parameters
-            .clone()
-            .expect("sns_initialization_parameters not set");
+        governance.sns_initialization_parameters = serde_yaml::to_string(self)
+            .map_err(|e| anyhow!(format!("Could not create initialization parameters {}", e)))?;
 
         Ok(governance)
     }
@@ -354,7 +351,6 @@ impl SnsInitPayload {
             name: _,
             description: _,
             neuron_minimum_dissolve_delay_to_vote_seconds,
-            sns_initialization_parameters: _,
             reward_rate_transition_duration_seconds,
             initial_reward_rate_basis_points,
             final_reward_rate_basis_points,
@@ -1025,6 +1021,41 @@ mod test {
 
         // Assert that the Governance canister would accept this init payload
         assert!(ValidGovernanceProto::try_from(governance).is_ok());
+    }
+
+    #[test]
+    fn test_governance_init_args_has_generated_config() {
+        // Build an sns_init_payload with defaults for non-governance related configuration.
+        let sns_init_payload = SnsInitPayload {
+            token_name: Some("ServiceNervousSystem Coin".to_string()),
+            token_symbol: Some("SNS".to_string()),
+            initial_token_distribution: Some(FractionalDeveloperVotingPower(
+                FractionalDVP::with_valid_values_for_testing(),
+            )),
+            proposal_reject_cost_e8s: Some(10_000),
+            neuron_minimum_stake_e8s: Some(100_000_000),
+            ..SnsInitPayload::with_valid_values_for_testing()
+        };
+
+        // Assert that this payload is valid in the view of the library
+        assert!(sns_init_payload.validate().is_ok());
+
+        // Create valid CanisterIds
+        let sns_canister_ids = create_canister_ids();
+
+        // Build the SnsCanisterInitPayloads including SNS Governance
+        let canister_payloads = sns_init_payload
+            .build_canister_payloads(&sns_canister_ids, None, false)
+            .expect("Expected SnsInitPayload to be a valid payload");
+
+        let governance = canister_payloads.governance;
+
+        // Assert that the Governance canister's params match the SnsInitPayload
+        assert_eq!(
+            serde_yaml::from_str::<SnsInitPayload>(&governance.sns_initialization_parameters)
+                .unwrap(),
+            sns_init_payload
+        );
     }
 
     #[test]
