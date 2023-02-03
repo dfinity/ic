@@ -172,8 +172,6 @@ sf1-dll03.sf1.dfinity.network: sf1-dll03.sf1.dfinity.network
 sf1-dll04.sf1.dfinity.network: sf1-dll04.sf1.dfinity.network
 sf1-pyr01.sf1.dfinity.network: sf1-pyr01.sf1.dfinity.network
 sf1-pyr02.sf1.dfinity.network: sf1-pyr02.sf1.dfinity.network
-sf1-pyr03.sf1.dfinity.network: sf1-pyr03.sf1.dfinity.network
-sf1-pyr04.sf1.dfinity.network: sf1-pyr04.sf1.dfinity.network
 sf1-pyr05.sf1.dfinity.network: sf1-pyr05.sf1.dfinity.network
 sf1-pyr06.sf1.dfinity.network: sf1-pyr06.sf1.dfinity.network
 sf1-pyr07.sf1.dfinity.network: sf1-pyr07.sf1.dfinity.network
@@ -215,9 +213,7 @@ sf1-spm32.sf1.dfinity.network: sf1-spm32.sf1.dfinity.network
 sf1-spm33.sf1.dfinity.network: sf1-spm33.sf1.dfinity.network
 sf1-spm34.sf1.dfinity.network: sf1-spm34.sf1.dfinity.network
 zh1-dll01.zh1.dfinity.network: zh1-dll01.zh1.dfinity.network
-zh1-pyr01.zh1.dfinity.network: zh1-pyr01.zh1.dfinity.network
 zh1-pyr02.zh1.dfinity.network: zh1-pyr02.zh1.dfinity.network
-zh1-pyr03.zh1.dfinity.network: zh1-pyr03.zh1.dfinity.network
 zh1-pyr04.zh1.dfinity.network: zh1-pyr04.zh1.dfinity.network
 zh1-pyr05.zh1.dfinity.network: zh1-pyr05.zh1.dfinity.network
 zh1-pyr06.zh1.dfinity.network: zh1-pyr06.zh1.dfinity.network
