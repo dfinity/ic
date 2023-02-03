@@ -252,7 +252,9 @@ fn ensure_unique_paths(paths: &[&Path]) {
 #[cfg(test)]
 pub mod builder {
     use super::*;
+    use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
+    use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_test_utilities::FastForwardTimeSource;
@@ -354,6 +356,15 @@ pub mod builder {
                 time_source: self.time_source,
                 logger: self.logger,
             }
+        }
+
+        pub fn with_mock_stores(
+            self,
+        ) -> LocalCspVaultBuilder<R, MockSecretKeyStore, MockSecretKeyStore, MockPublicKeyStore>
+        {
+            self.with_canister_secret_key_store(MockSecretKeyStore::new())
+                .with_node_secret_key_store(MockSecretKeyStore::new())
+                .with_public_key_store(MockPublicKeyStore::new())
         }
 
         pub fn with_public_key_store<VaultPks: PublicKeyStore + 'static>(

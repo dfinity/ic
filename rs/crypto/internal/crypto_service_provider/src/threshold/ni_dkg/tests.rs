@@ -5,7 +5,6 @@ mod test_retention;
 
 use super::*;
 use crate::key_id::KeyId;
-use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::threshold::tests::util::test_threshold_signatures;
 use crate::types as csp_types;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
@@ -24,7 +23,7 @@ use rand_chacha::ChaCha20Rng;
 mod gen_dealing_encryption_key_pair_tests {
     use super::*;
     use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
-    use crate::CspSecretKeyStoreChecker;
+    use crate::{CspSecretKeyStoreChecker, LocalCspVault};
     use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;
     use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
         CspDkgCreateFsKeyError, InternalError,
@@ -32,7 +31,9 @@ mod gen_dealing_encryption_key_pair_tests {
 
     #[test]
     fn should_correctly_generate_dealing_encryption_key_pair() {
-        let csp = Csp::with_rng(rng());
+        let csp = Csp::builder()
+            .with_vault(LocalCspVault::builder().with_rng(rng()).build())
+            .build();
         let (public_key, pop) = csp
             .gen_dealing_encryption_key_pair(NODE_1)
             .expect("error generating NI-DKG encryption dealing key pair");
@@ -57,7 +58,7 @@ mod gen_dealing_encryption_key_pair_tests {
 
     #[test]
     fn should_fail_with_internal_error_if_dealing_encryption_pubkey_already_set() {
-        let csp = Csp::with_rng(rng());
+        let csp = Csp::builder().build();
         let node_id = NODE_1;
 
         assert!(csp.gen_dealing_encryption_key_pair(node_id).is_ok());
@@ -77,11 +78,16 @@ mod gen_dealing_encryption_key_pair_tests {
     #[test]
     fn should_fail_with_internal_error_on_duplicate_secret_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
-        let csp = Csp::of(
-            rng(),
-            secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
-            MockPublicKeyStore::new(),
-        );
+        let csp = Csp::builder()
+            .with_vault(
+                LocalCspVault::builder()
+                    .with_mock_stores()
+                    .with_node_secret_key_store(
+                        secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
+                    )
+                    .build(),
+            )
+            .build();
 
         let result = csp.gen_dealing_encryption_key_pair(NODE_1);
 

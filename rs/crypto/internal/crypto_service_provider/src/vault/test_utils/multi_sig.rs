@@ -1,25 +1,15 @@
 #![allow(clippy::unwrap_used)]
 use crate::api::CspSigner;
 use crate::keygen::utils::committee_signing_pk_to_proto;
-use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::types::CspPublicKey;
 use crate::vault::api::{CspMultiSignatureError, CspMultiSignatureKeygenError, CspVault};
 use crate::Csp;
 use crate::KeyId;
 use assert_matches::assert_matches;
 use ic_types::crypto::AlgorithmId;
-use rand::{thread_rng, Rng, SeedableRng};
-use rand_chacha::ChaChaRng;
+use rand::{thread_rng, Rng};
 use std::sync::Arc;
 use strum::IntoEnumIterator;
-
-fn multi_sig_verifier() -> impl CspSigner {
-    let dummy_secret_key_store = TempSecretKeyStore::new();
-    let dummy_public_key_store = TempPublicKeyStore::new();
-    let csprng = ChaChaRng::from_seed(thread_rng().gen::<[u8; 32]>());
-    Csp::of(csprng, dummy_secret_key_store, dummy_public_key_store)
-}
 
 pub fn should_generate_committee_signing_key_pair_and_store_keys(csp_vault: Arc<dyn CspVault>) {
     let (pk, pop) = csp_vault
@@ -82,7 +72,7 @@ pub fn should_generate_verifiable_pop(csp_vault: Arc<dyn CspVault>) {
         .gen_committee_signing_key_pair()
         .expect("Failed to generate key pair with PoP");
 
-    let verifier = multi_sig_verifier();
+    let verifier = Csp::builder().build();
     assert!(verifier
         .verify_pop(&pop, AlgorithmId::MultiBls12_381, public_key)
         .is_ok());
@@ -98,7 +88,7 @@ pub fn should_multi_sign_and_verify_with_generated_key(csp_vault: Arc<dyn CspVau
     let msg_len: usize = rng.gen_range(0..1024);
     let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
 
-    let verifier = multi_sig_verifier();
+    let verifier = Csp::builder().build();
     let sig = csp_vault
         .multi_sign(AlgorithmId::MultiBls12_381, &msg, key_id)
         .expect("failed to generate signature");

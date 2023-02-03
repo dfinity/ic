@@ -1,12 +1,10 @@
 #![allow(clippy::unwrap_used)]
 use crate::api::CspSigner;
 use crate::key_id::KeyId;
-use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::types::CspPublicKey;
 use crate::vault::api::CspTlsKeygenError;
 use crate::vault::api::{CspTlsSignError, CspVault};
-use crate::{CryptoServiceProvider, Csp};
+use crate::Csp;
 use assert_matches::assert_matches;
 use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
@@ -185,7 +183,7 @@ pub fn should_sign_with_valid_key(csp_vault: Arc<dyn CspVault>) {
 }
 
 pub fn should_sign_verifiably(csp_vault: Arc<dyn CspVault>) {
-    let verifier = verifier();
+    let verifier = Csp::builder().build();
     let public_key_cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");
@@ -261,13 +259,6 @@ pub fn should_fail_to_sign_if_secret_key_in_store_has_invalid_length(
                 .to_string()
         }
     );
-}
-
-fn verifier() -> impl CryptoServiceProvider {
-    let dummy_secret_key_store = TempSecretKeyStore::new();
-    let dummy_public_key_store = TempPublicKeyStore::new();
-    let csprng = ChaCha20Rng::from_seed(thread_rng().gen::<[u8; 32]>());
-    Csp::of(csprng, dummy_secret_key_store, dummy_public_key_store)
 }
 
 pub fn ed25519_csp_pubkey_from_tls_pubkey_cert(public_key_cert: &TlsPublicKeyCert) -> CspPublicKey {
