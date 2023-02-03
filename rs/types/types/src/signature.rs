@@ -10,7 +10,7 @@ pub struct BasicSignature<T> {
     pub signer: NodeId,
 }
 
-/// BasicSigned<T> captures a value of type T and a BasicSignature on it
+/// `BasicSigned<T>` captures a value of type T and a BasicSignature on it
 pub type BasicSigned<T> = Signed<T, BasicSignature<T>>;
 
 /// BasicSignatureBatch captures a collection of basic signatures on the same value and

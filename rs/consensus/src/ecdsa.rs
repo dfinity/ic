@@ -38,7 +38,7 @@
 //! different types, because some transcripts should share a random value, while
 //! others need to share the product of two other transcripts. Complete
 //! transcripts will be included in blocks via the functions
-//! [create_data_payload] and [create_summary_payload].
+//! `create_data_payload` and `create_summary_payload`.
 //!
 //! # [EcdsaImpl] behavior
 //! The ECDSA component is responsible for adding artifacts to the ECDSA

@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt};
 
 /// Describes the fields of a canister update call as defined in
-/// https://sdk.dfinity.org/docs/interface-spec/index.html#api-update.
+/// `<https://sdk.dfinity.org/docs/interface-spec/index.html#api-update>`.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct HttpCanisterUpdate {
@@ -89,7 +89,7 @@ impl HttpCallContent {
 }
 
 /// Describes the fields of a canister query call (a query from a user to a
-/// canister) as defined in https://sdk.dfinity.org/docs/interface-spec/index.html#api-query.
+/// canister) as defined in `<https://sdk.dfinity.org/docs/interface-spec/index.html#api-query>`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HttpUserQuery {
     pub canister_id: Blob,
@@ -127,7 +127,7 @@ impl HttpQueryContent {
     }
 }
 
-/// A `read_state` request as defined in https://sdk.dfinity.org/docs/interface-spec/index.html#api-request-read-state.
+/// A `read_state` request as defined in `<https://sdk.dfinity.org/docs/interface-spec/index.html#api-request-read-state>`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HttpReadState {
     pub sender: Blob,
@@ -212,7 +212,7 @@ impl HttpReadState {
 }
 
 /// A request envelope as defined in
-/// https://sdk.dfinity.org/docs/interface-spec/index.html#authentication.
+/// `<https://sdk.dfinity.org/docs/interface-spec/index.html#authentication>`.
 ///
 /// The content is either [`HttpCallContent`], [`HttpQueryContent`] or
 /// [`HttpReadStateContent`].
@@ -430,7 +430,7 @@ impl From<CanisterIdError> for HttpRequestError {
 }
 
 /// Describes a delegation map as defined in
-/// https://sdk.dfinity.org/docs/interface-spec/index.html#certification-delegation.
+/// `<https://sdk.dfinity.org/docs/interface-spec/index.html#certification-delegation>`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct Delegation {
@@ -504,7 +504,7 @@ impl SignedBytesWithoutDomainSeparator for Delegation {
 }
 
 /// Describes a delegation as defined in
-/// https://sdk.dfinity.org/docs/interface-spec/index.html#certification-delegation.
+/// `<https://sdk.dfinity.org/docs/interface-spec/index.html#certification-delegation>`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(Arbitrary))]
 pub struct SignedDelegation {
@@ -579,7 +579,7 @@ pub struct HttpReadStateResponse {
     pub certificate: Blob,
 }
 
-/// A `Certificate` as defined in https://sdk.dfinity.org/docs/interface-spec/index.html#_certificate
+/// A `Certificate` as defined in `<https://sdk.dfinity.org/docs/interface-spec/index.html#_certificate>`
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Certificate {
     pub tree: MixedHashTree,
@@ -588,7 +588,7 @@ pub struct Certificate {
     pub delegation: Option<CertificateDelegation>,
 }
 
-/// A `CertificateDelegation` as defined in https://smartcontracts.org/docs/interface-spec/index.html#certification-delegation
+/// A `CertificateDelegation` as defined in `<https://smartcontracts.org/docs/interface-spec/index.html#certification-delegation>`
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CertificateDelegation {
     pub subnet_id: Blob,
@@ -614,12 +614,12 @@ pub enum ReplicaHealthStatus {
     /// certified height, this is a signal that execution is lagging
     /// consensus, and that consensus needs to be throttled.
     /// More information can be found in the whitepaper
-    /// https://internetcomputer.org/whitepaper.pdf
+    /// `<https://internetcomputer.org/whitepaper.pdf>`
     /// under "Per-round certified state" section(s).
     ///
     /// If execution (or certification) is lagging significantly on this replica,
     /// then we better not serve queries because we risk returning stale data.
-    /// According to the IC's spec - https://internetcomputer.org/docs/current/references/ic-interface-spec#query_call,
+    /// According to the IC's spec - `<https://internetcomputer.org/docs/current/references/ic-interface-spec#query_call>`,
     /// we should execute queries on "recent enough" state tree.
     CertifiedStateBehind,
     /// Signals that the replica can serve all types of API requests.

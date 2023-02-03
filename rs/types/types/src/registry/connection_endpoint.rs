@@ -55,7 +55,7 @@ impl From<&pbProtocol> for Protocol {
 /// ```
 ///
 /// For endpoints that use custom protocols (e.g. P2P), we can define a custom
-/// URI scheme as per https://tools.ietf.org/html/rfc7595#section-3.8.
+/// URI scheme as per `<https://tools.ietf.org/html/rfc7595#section-3.8>`.
 ///
 /// For example:
 /// ```text
