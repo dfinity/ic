@@ -2803,12 +2803,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
             chunk_bytes[&reused_label] + chunk_bytes[&compared_label]
         );
 
-        let checkpoint_root = state_manager
-            .state_layout()
-            .checkpoint(height(2))
-            .unwrap()
-            .raw_path()
-            .to_path_buf();
+        let checkpoint = state_manager.state_layout().checkpoint(height(2)).unwrap();
 
         let mut thread_pool = scoped_threadpool::Pool::new(NUM_THREADS);
 
@@ -2817,7 +2812,7 @@ fn can_reuse_chunk_hashes_when_computing_manifest() {
             &ManifestMetrics::new(&MetricsRegistry::new()),
             &no_op_logger(),
             CURRENT_STATE_SYNC_VERSION,
-            &checkpoint_root,
+            &checkpoint,
             DEFAULT_CHUNK_SIZE,
             None,
         )

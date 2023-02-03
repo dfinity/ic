@@ -771,7 +771,7 @@ fn dirty_chunks_of_file(
 /// Computes the bitmap of chunks modified since the base state.
 fn dirty_pages_to_dirty_chunks(
     manifest_delta: &ManifestDelta,
-    checkpoint_root_path: &Path,
+    checkpoint: &CheckpointLayout<ReadOnly>,
     files: &[FileWithSize],
     max_chunk_size: u32,
 ) -> Result<BTreeMap<PathBuf, BitVec>, CheckpointError> {
@@ -788,11 +788,6 @@ fn dirty_pages_to_dirty_chunks(
         "chunk size must be a multiple of page size for incremental computation to work correctly"
     );
 
-    // The field `height` of the checkpoint layout is not used here.
-    // The checkpoint layout is only used to get the file path of canister heap.
-    let checkpoint_layout: CheckpointLayout<ReadOnly> =
-        CheckpointLayout::new_untracked(PathBuf::from(checkpoint_root_path), Height::from(0))?;
-
     let mut dirty_chunks: BTreeMap<PathBuf, BitVec> = Default::default();
     for dirty_page in &manifest_delta.dirty_memory_pages {
         if dirty_page.height != manifest_delta.base_height {
@@ -800,11 +795,11 @@ fn dirty_pages_to_dirty_chunks(
         }
 
         let path = match dirty_page.file_type {
-            FileType::PageMap(page_type) => page_type.path(&checkpoint_layout),
+            FileType::PageMap(page_type) => page_type.path(checkpoint),
             FileType::WasmBinary(canister_id) => {
                 assert!(dirty_page.page_delta_indices.is_empty());
 
-                checkpoint_layout
+                checkpoint
                     .canister(&canister_id)
                     .map(|can| can.wasm().raw_path().to_owned())
             }
@@ -812,7 +807,7 @@ fn dirty_pages_to_dirty_chunks(
 
         if let Ok(path) = path {
             let relative_path = path
-                .strip_prefix(checkpoint_root_path)
+                .strip_prefix(checkpoint.raw_path())
                 .expect("failed to strip path prefix");
 
             if let Some(chunks_bitmap) = dirty_chunks_of_file(
@@ -835,12 +830,12 @@ pub fn compute_manifest(
     metrics: &ManifestMetrics,
     log: &ReplicaLogger,
     version: u32,
-    checkpoint_root_path: &Path,
+    checkpoint: &CheckpointLayout<ReadOnly>,
     max_chunk_size: u32,
     opt_manifest_delta: Option<ManifestDelta>,
 ) -> Result<Manifest, CheckpointError> {
     let mut files = Vec::new();
-    files_with_sizes(checkpoint_root_path, "".into(), &mut files)?;
+    files_with_sizes(checkpoint.raw_path(), "".into(), &mut files)?;
     // We sort the table to make sure that the table is the same on all replicas
     files.sort_unstable_by(|lhs, rhs| lhs.0.cmp(&rhs.0));
 
@@ -854,7 +849,7 @@ pub fn compute_manifest(
             if uses_chunk_size(&manifest_delta.base_manifest, max_chunk_size) {
                 let dirty_file_chunks = dirty_pages_to_dirty_chunks(
                     &manifest_delta,
-                    checkpoint_root_path,
+                    checkpoint,
                     &files,
                     max_chunk_size,
                 )?;
@@ -880,7 +875,7 @@ pub fn compute_manifest(
         build_chunk_table_sequential(
             &metrics,
             log,
-            checkpoint_root_path,
+            checkpoint.raw_path(),
             files.clone(),
             max_chunk_size,
             chunk_actions.clone(),
@@ -891,7 +886,7 @@ pub fn compute_manifest(
         thread_pool,
         metrics,
         log,
-        checkpoint_root_path,
+        checkpoint.raw_path(),
         files,
         max_chunk_size,
         chunk_actions,

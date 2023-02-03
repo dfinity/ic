@@ -8,18 +8,18 @@ use crate::manifest::{
 };
 
 use ic_crypto_sha::Sha256;
+use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use ic_state_layout::CheckpointLayout;
+use ic_types::state_sync::MetaManifest;
 use ic_types::{
     crypto::CryptoHash,
     state_sync::{
         decode_manifest, encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest,
         FILE_GROUP_CHUNK_ID_OFFSET,
     },
-    CryptoHashOfState,
+    CryptoHashOfState, Height,
 };
-
-use ic_logger::replica_logger::no_op_logger;
-use ic_types::state_sync::MetaManifest;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 
@@ -266,7 +266,7 @@ fn test_simple_manifest_computation() {
             &manifest_metrics,
             &no_op_logger(),
             STATE_SYNC_V1,
-            root,
+            &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
             1024,
             None,
         )
@@ -282,7 +282,7 @@ fn test_simple_manifest_computation() {
             &manifest_metrics,
             &no_op_logger(),
             STATE_SYNC_V2,
-            root,
+            &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
             1024,
             None,
         )
@@ -631,7 +631,7 @@ fn test_diff_manifest() {
         &manifest_metrics,
         &no_op_logger(),
         CURRENT_STATE_SYNC_VERSION,
-        root,
+        &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         1024 * 1024,
         None,
     )
@@ -647,7 +647,7 @@ fn test_diff_manifest() {
         &manifest_metrics,
         &no_op_logger(),
         CURRENT_STATE_SYNC_VERSION,
-        root,
+        &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         1024 * 1024,
         None,
     )
@@ -699,7 +699,7 @@ fn test_filter_all_zero_chunks() {
         &manifest_metrics,
         &no_op_logger(),
         CURRENT_STATE_SYNC_VERSION,
-        root,
+        &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         1024 * 1024,
         None,
     )
@@ -812,7 +812,7 @@ fn test_hash_plan() {
         &manifest_metrics,
         &no_op_logger(),
         CURRENT_STATE_SYNC_VERSION,
-        root,
+        &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         max_chunk_size,
         None,
     )
@@ -829,7 +829,7 @@ fn test_hash_plan() {
         &manifest_metrics,
         &no_op_logger(),
         CURRENT_STATE_SYNC_VERSION,
-        root,
+        &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
         max_chunk_size,
         None,
     )
