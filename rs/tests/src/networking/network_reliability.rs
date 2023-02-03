@@ -80,14 +80,22 @@ pub struct Config {
 pub fn setup(env: TestEnv, config: Config) {
     env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
+    let vm_resources = VmResources {
+        vcpus: Some(NrOfVCPUs::new(8)),
+        memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
+        boot_image_minimal_size_gibibytes: None,
+    };
     InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(config.nodes_system_subnet))
-        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_app_subnet))
-        .with_default_vm_resources(VmResources {
-            vcpus: Some(NrOfVCPUs::new(8)),
-            memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
-            boot_image_minimal_size_gibibytes: None,
-        })
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_default_vm_resources(vm_resources)
+                .add_nodes(config.nodes_system_subnet),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_default_vm_resources(vm_resources)
+                .add_nodes(config.nodes_app_subnet),
+        )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
 }

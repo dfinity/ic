@@ -86,18 +86,25 @@ pub fn config(
 ) {
     env.ensure_group_setup_created();
     let logger = env.logger();
-
     PrometheusVm::default()
         .start(&env)
         .expect("failed to start prometheus VM");
+    let vm_resources = VmResources {
+        vcpus: Some(NrOfVCPUs::new(8)),
+        memory_kibibytes: None,
+        boot_image_minimal_size_gibibytes,
+    };
     InternetComputer::new()
-        .add_subnet(Subnet::new(SubnetType::System).add_nodes(nodes_nns_subnet))
-        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(nodes_app_subnet))
-        .with_default_vm_resources(VmResources {
-            vcpus: Some(NrOfVCPUs::new(8)),
-            memory_kibibytes: None,
-            boot_image_minimal_size_gibibytes,
-        })
+        .add_subnet(
+            Subnet::new(SubnetType::System)
+                .with_default_vm_resources(vm_resources)
+                .add_nodes(nodes_nns_subnet),
+        )
+        .add_subnet(
+            Subnet::new(SubnetType::Application)
+                .with_default_vm_resources(vm_resources)
+                .add_nodes(nodes_app_subnet),
+        )
         .setup_and_start(&env)
         .expect("Failed to setup IC under test.");
     env.sync_prometheus_config_with_topology();
