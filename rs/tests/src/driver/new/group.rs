@@ -29,6 +29,7 @@ use crate::driver::{
     test_env_api::HasIcDependencies,
     test_setup::GroupSetup,
 };
+use serde::{Deserialize, Serialize};
 
 use anyhow::{bail, Result};
 use clap::Parser;
@@ -105,6 +106,15 @@ const ROOT_TASK_NAME: &str = "root";
 const KEEPALIVE_TASK_NAME: &str = "keepalive";
 const SETUP_TASK_NAME: &str = "setup";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
+
+#[derive(Deserialize, Serialize)]
+struct SetupResult;
+
+impl TestEnvAttribute for SetupResult {
+    fn attribute_name() -> String {
+        String::from("setup_succeeded")
+    }
+}
 
 fn is_task_visible_to_user(task_id: &TaskId) -> bool {
     matches!(task_id, TaskId::Test(task_name) if task_name.ne(ROOT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX) && !task_name.starts_with("dummy("))
@@ -291,8 +301,11 @@ impl SystemTestSubGroup {
                     let group_ctx = ctx.group_ctx.clone();
                     move || {
                         debug!(logger, ">>> test_fn({})", &task_id);
-                        // Assumption: this function will be called after setup finishes
                         let env = get_or_create_env(group_ctx, task_id).unwrap();
+                        // This function will only be called after setup finishes
+                        if SetupResult::try_read_attribute(&env).is_err() {
+                            panic!("Failed to find SetupResult attribute after setup. Cancelling test function.");
+                        }
                         task_fn(env)
                     }
                 };
@@ -538,7 +551,8 @@ impl SystemTestGroup {
                 move || {
                     debug!(logger, ">>> setup_fn");
                     let env = get_setup_env(group_ctx);
-                    setup_fn(env)
+                    setup_fn(env.clone());
+                    SetupResult {}.write_attribute(&env);
                 },
                 &mut compose_ctx,
             );
