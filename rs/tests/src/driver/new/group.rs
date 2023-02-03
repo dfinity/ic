@@ -507,7 +507,7 @@ impl SystemTestGroup {
                                         )
                                     )
                                 };
-                                info!(
+                                debug!(
                                     logger,
                                     "Group {} TTL set to +{:?} from now (Farm endpoint: {:?})",
                                     group_name,

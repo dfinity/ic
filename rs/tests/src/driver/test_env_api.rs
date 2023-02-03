@@ -170,7 +170,7 @@ use ic_types::malicious_behaviour::MaliciousBehaviour;
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
-use icp_ledger::{LedgerCanisterInitPayload, Tokens};
+use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use slog::{info, warn, Logger};
 use ssh2::Session;
 use std::collections::{HashMap, HashSet};
@@ -1216,14 +1216,28 @@ pub trait NnsInstallationExt {
     /// proposals in testing.
     fn install_nns_canisters(&self) -> Result<()>;
 
+    fn install_nns_canisters_with_customizations(
+        &self,
+        customizations: NnsCustomizations,
+    ) -> Result<()>;
+
     fn install_nns_canisters_at_ids(&self) -> Result<()>;
+}
+
+#[derive(Default)]
+pub struct NnsCustomizations {
+    /// Summarizes the custom parameters that a newly installed NNS should have.
+    pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
 }
 
 impl<T> NnsInstallationExt for T
 where
     T: HasIcName + HasPublicApiUrl,
 {
-    fn install_nns_canisters(&self) -> Result<()> {
+    fn install_nns_canisters_with_customizations(
+        &self,
+        customizations: NnsCustomizations,
+    ) -> Result<()> {
         let test_env = self.test_env();
         test_env.set_nns_canisters_env_vars()?;
         let log = test_env.logger();
@@ -1235,8 +1249,19 @@ where
         };
         info!(log, "Wait for node reporting healthy status");
         self.await_status_is_healthy().unwrap();
-        install_nns_canisters(&log, url, &prep_dir, true, false);
+        install_nns_canisters(
+            &log,
+            url,
+            &prep_dir,
+            true,
+            false,
+            customizations.ledger_balances,
+        );
         Ok(())
+    }
+
+    fn install_nns_canisters(&self) -> Result<()> {
+        self.install_nns_canisters_with_customizations(NnsCustomizations::default())
     }
 
     fn install_nns_canisters_at_ids(&self) -> Result<()> {
@@ -1251,7 +1276,7 @@ where
         };
         info!(log, "Wait for node reporting healthy status");
         self.await_status_is_healthy().unwrap();
-        install_nns_canisters(&log, url, &prep_dir, true, true);
+        install_nns_canisters(&log, url, &prep_dir, true, true, None);
         Ok(())
     }
 }
@@ -1536,6 +1561,7 @@ pub fn install_nns_canisters(
     ic_prep_state_dir: &IcPrepStateDir,
     nns_test_neurons_present: bool,
     install_at_ids: bool,
+    ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
 ) {
     let rt = Rt::new().expect("Could not create tokio runtime.");
     info!(
@@ -1545,14 +1571,18 @@ pub fn install_nns_canisters(
     rt.block_on(async move {
         let mut init_payloads = NnsInitPayloadsBuilder::new();
         if nns_test_neurons_present {
-            let mut ledger_balances = HashMap::new();
+            let mut ledger_balances = if let Some(ledger_balances) = ledger_balances {
+                ledger_balances
+            } else {
+                HashMap::new()
+            };
             ledger_balances.insert(
                 LIFELINE_CANISTER_ID.get().into(),
-                Tokens::from_tokens(10000).unwrap(),
+                Tokens::from_tokens(10_000).unwrap(),
             );
             ledger_balances.insert(
                 (*TEST_USER1_PRINCIPAL).into(),
-                Tokens::from_tokens(200000).unwrap(),
+                Tokens::from_tokens(200_000).unwrap(),
             );
             info!(logger, "Initial ledger: {:?}", ledger_balances);
             let mut ledger_init_payload = LedgerCanisterInitPayload::builder()

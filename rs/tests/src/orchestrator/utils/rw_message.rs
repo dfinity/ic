@@ -210,7 +210,10 @@ pub(crate) fn cert_state_makes_no_progress_with_retries(
     .expect("System shouldn't make progress!");
 }
 
-pub(crate) fn install_nns_and_check_progress(topology: TopologySnapshot) {
+pub(crate) fn install_nns_with_customizations_and_check_progress(
+    topology: TopologySnapshot,
+    customizations: NnsCustomizations,
+) {
     let logger = topology.test_env().logger();
     // Perfrom IC checks prior to canister installation.
     // 1. Check that all subnet nodes are healthy.
@@ -233,7 +236,7 @@ pub(crate) fn install_nns_and_check_progress(topology: TopologySnapshot) {
         .nodes()
         .next()
         .unwrap()
-        .install_nns_canisters()
+        .install_nns_canisters_with_customizations(customizations)
         .expect("NNS canisters not installed");
     info!(logger, "NNS canisters are installed.");
 
@@ -251,4 +254,8 @@ pub(crate) fn install_nns_and_check_progress(topology: TopologySnapshot) {
             });
         }
     });
+}
+
+pub(crate) fn install_nns_and_check_progress(topology: TopologySnapshot) {
+    install_nns_with_customizations_and_check_progress(topology, NnsCustomizations::default());
 }
