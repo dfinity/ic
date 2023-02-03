@@ -1215,6 +1215,15 @@ fn persist_metadata_or_die(
 }
 
 impl StateManagerImpl {
+    pub fn flush_manifest_thread(&self) {
+        let (sender, recv) = unbounded();
+        self.compute_manifest_request_sender
+            .send(ComputeManifestRequest::Wait { sender })
+            .expect("failed to send ComputeManifestRequest Wait message");
+        recv.recv()
+            .expect("failed to wait for ComputeManifest thread");
+    }
+
     /// Height for the initial default state.
     const INITIAL_STATE_HEIGHT: Height = Height::new(0);
 
@@ -2258,12 +2267,10 @@ impl StateManagerImpl {
                 .make_checkpoint_step_duration
                 .with_label_values(&["wait_for_manifest"])
                 .start_timer();
-            let (sender, recv) = unbounded();
-            self.compute_manifest_request_sender
-                .send(ComputeManifestRequest::Wait { sender })
-                .expect("failed to send ComputeManifestRequest Wait message");
-            recv.recv()
-                .expect("failed to wait for ComputeManifest thread");
+            // We need the previous manifest computation to complete because:
+            //   1) We need it it speed up the next manifest computation using ManifestDelta
+            //   2) We don't want to run too much ahead of the latest ready manifest.
+            self.flush_manifest_thread();
         }
         let previous_checkpoint_info = {
             let states = self.states.read();
