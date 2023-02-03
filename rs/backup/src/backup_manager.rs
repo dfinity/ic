@@ -28,7 +28,7 @@ const DEFAULT_SYNC_PERIOD: u64 = 30;
 const DEFAULT_REPLAY_PERIOD: u64 = 240;
 const DEFAULT_VERSIONS_HOT: usize = 2;
 const SECONDS_IN_DAY: u64 = 24u64 * 60 * 60;
-const COLD_STORAGE_PERIOD: u64 = SECONDS_IN_DAY;
+const COLD_STORAGE_PERIOD: u64 = 60 * 60; // each hour
 
 struct SubnetBackup {
     pub nodes_syncing: usize,
@@ -385,11 +385,6 @@ fn sync_subnet(m: Arc<BackupManager>, i: usize) {
     let mut sync_last_time = Instant::now() - b.sync_period;
     loop {
         if sync_last_time.elapsed() > b.sync_period {
-            // announce the current version of the ic-backup on each sync
-            b.backup_helper
-                .notification_client
-                .push_metrics_version(m.version);
-
             match b.backup_helper.collect_nodes(b.nodes_syncing) {
                 Ok(nodes) => {
                     sync_last_time = Instant::now();
@@ -398,7 +393,7 @@ fn sync_subnet(m: Arc<BackupManager>, i: usize) {
                 Err(e) => error!(m.log, "Error fetching subnet node list: {:?}", e),
             }
         }
-        // Have a small break before the next check for sync
+
         sleep_secs(30);
     }
 }
@@ -422,7 +417,6 @@ fn replay_subnets(m: Arc<BackupManager>, thread_id: u32) {
             }
         }
 
-        // Have a small break before the next check for replays
         sleep_secs(30);
     }
 }
@@ -433,6 +427,11 @@ fn cold_store(m: Arc<BackupManager>) {
     loop {
         for i in 0..size {
             let b = &m.subnet_backups[i];
+
+            // announce the current version of the ic-backup on each cold storage check
+            b.backup_helper
+                .notification_client
+                .push_metrics_version(m.version);
 
             let subnet_id = &b.backup_helper.subnet_id;
             match b.backup_helper.need_cold_storage_move() {
@@ -460,7 +459,7 @@ fn cold_store(m: Arc<BackupManager>) {
                     .report_failure_slack(msg);
             }
         }
-        // make checks for cold storage archiving only once per day or so
+
         sleep_secs(COLD_STORAGE_PERIOD);
     }
 }
