@@ -189,6 +189,7 @@ const DEALLOCATE_PAGES_NAME: &str = "deallocate_pages";
 const INTERNAL_TRAP_FUN_NAME: &str = "internal_trap";
 const TABLE_STR: &str = "table";
 const CANISTER_COUNTER_INSTRUCTIONS_STR: &str = "canister counter_instructions";
+const CANISTER_COUNTER_DIRTY_PAGES_STR: &str = "canister counter_dirty_pages";
 const CANISTER_START_STR: &str = "canister_start";
 
 /// There is one byte for each OS page in the wasm heap.
@@ -330,7 +331,9 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
 #[derive(Default)]
 pub struct ExportModuleData {
     pub instructions_counter_ix: u32,
+    pub dirty_pages_counter_ix: Option<u32>,
     pub decr_instruction_counter_fn: u32,
+    pub count_clean_pages_fn: Option<u32>,
     pub start_fn_ix: Option<u32>,
 }
 
@@ -371,9 +374,24 @@ pub(super) fn instrument(
     let num_functions = (module.functions.len() + num_imported_functions) as u32;
     let num_globals = (module.globals.len() + num_imported_globals) as u32;
 
+    let dirty_pages_counter_ix;
+    let count_clean_pages_fn;
+    match wasm_native_stable_memory {
+        FlagStatus::Enabled => {
+            dirty_pages_counter_ix = Some(num_globals + 1);
+            count_clean_pages_fn = Some(num_functions + 1);
+        }
+        FlagStatus::Disabled => {
+            dirty_pages_counter_ix = None;
+            count_clean_pages_fn = None;
+        }
+    };
+
     let export_module_data = ExportModuleData {
         instructions_counter_ix: num_globals,
+        dirty_pages_counter_ix,
         decr_instruction_counter_fn: num_functions,
+        count_clean_pages_fn,
         start_fn_ix: module.start,
     };
 
@@ -411,10 +429,21 @@ pub(super) fn instrument(
     }
 
     let mut extra_data: Option<Vec<u8>> = None;
-    module = export_additional_symbols(module, &export_module_data, &mut extra_data);
+    module = export_additional_symbols(
+        module,
+        &export_module_data,
+        &mut extra_data,
+        wasm_native_stable_memory,
+        stable_memory_index + 1,
+    );
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
-        replace_system_api_functions(&mut module, stable_memory_index)
+        replace_system_api_functions(
+            &mut module,
+            stable_memory_index,
+            export_module_data.count_clean_pages_fn.unwrap(),
+            export_module_data.dirty_pages_counter_ix.unwrap(),
+        )
     }
 
     let exported_functions = module
@@ -487,7 +516,12 @@ fn calculate_api_indexes(module: &Module<'_>) -> BTreeMap<SystemApiFunc, u32> {
         .collect()
 }
 
-fn replace_system_api_functions(module: &mut Module<'_>, stable_memory_index: u32) {
+fn replace_system_api_functions(
+    module: &mut Module<'_>,
+    stable_memory_index: u32,
+    count_clean_pages_fn_index: u32,
+    dirty_pages_counter_index: u32,
+) {
     let api_indexes = calculate_api_indexes(module);
     let number_of_func_imports = module
         .imports
@@ -498,7 +532,11 @@ fn replace_system_api_functions(module: &mut Module<'_>, stable_memory_index: u3
     // Collect a single map of all the function indexes that need to be
     // replaced.
     let mut func_index_replacements = BTreeMap::new();
-    for (api, (ty, body)) in replacement_functions(stable_memory_index) {
+    for (api, (ty, body)) in replacement_functions(
+        stable_memory_index,
+        count_clean_pages_fn_index,
+        dirty_pages_counter_index,
+    ) {
         if let Some(old_index) = api_indexes.get(&api) {
             let type_idx = add_type(module, ty);
             let new_index = (number_of_func_imports + module.functions.len()) as u32;
@@ -516,12 +554,14 @@ fn replace_system_api_functions(module: &mut Module<'_>, stable_memory_index: u3
 
 // Helper function used by instrumentation to export additional symbols.
 //
-// Returns the new module or an error if a symbol is not reserved.
+// Returns the new module or panics in debug mode if a symbol is not reserved.
 #[doc(hidden)] // pub for usage in tests
 pub fn export_additional_symbols<'a>(
     mut module: Module<'a>,
     export_module_data: &ExportModuleData,
     extra_data: &'a mut Option<Vec<u8>>,
+    wasm_native_stable_memory: FlagStatus,
+    stable_memory_bytemap_index: u32,
 ) -> Module<'a> {
     // push function to decrement the instruction counter
 
@@ -567,6 +607,57 @@ pub fn export_additional_symbols<'a>(
     module.functions.push(type_idx);
     module.code_sections.push(func_body);
 
+    if wasm_native_stable_memory == FlagStatus::Enabled {
+        // function to count dirty pages in a given range
+        let func_type = Type::Func(FuncType::new([ValType::I32, ValType::I32], [ValType::I32]));
+        let it = 2; // iterator index
+        let acc = 3; // accumulator index
+        let instructions = vec![
+            I32Const { value: 0 },
+            LocalSet { local_index: acc },
+            LocalGet { local_index: 0 },
+            LocalSet { local_index: it },
+            Loop {
+                blockty: BlockType::Empty,
+            },
+            LocalGet { local_index: it },
+            // TODO read in bigger chunks (i64Load)
+            I32Load8U {
+                memarg: wasmparser::MemArg {
+                    align: 0,
+                    max_align: 0,
+                    offset: 0,
+                    memory: stable_memory_bytemap_index,
+                },
+            },
+            LocalGet { local_index: acc },
+            I32Add,
+            LocalSet { local_index: acc },
+            LocalGet { local_index: it },
+            I32Const { value: 1 },
+            I32Add,
+            LocalTee { local_index: it },
+            LocalGet { local_index: 1 },
+            I32LtU,
+            BrIf { relative_depth: 0 },
+            End,
+            // clean pages = len - dirty_count
+            LocalGet { local_index: 1 },
+            LocalGet { local_index: 0 },
+            I32Sub,
+            LocalGet { local_index: acc },
+            I32Sub,
+            End,
+        ];
+        let func_body = wasm_transform::Body {
+            locals: vec![(2, ValType::I32)],
+            instructions,
+        };
+        let type_idx = add_type(&mut module, func_type);
+        module.functions.push(type_idx);
+        module.code_sections.push(func_body);
+    }
+
     // globals must be exported to be accessible to hypervisor or persisted
     let counter_export = Export {
         name: CANISTER_COUNTER_INSTRUCTIONS_STR,
@@ -575,6 +666,16 @@ pub fn export_additional_symbols<'a>(
     };
     debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&counter_export.name));
     module.exports.push(counter_export);
+
+    if let Some(index) = export_module_data.dirty_pages_counter_ix {
+        let export = Export {
+            name: CANISTER_COUNTER_DIRTY_PAGES_STR,
+            kind: ExternalKind::Global,
+            index,
+        };
+        debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&export.name));
+        module.exports.push(export);
+    }
 
     if let Some(index) = export_module_data.start_fn_ix {
         // push canister_start
@@ -602,6 +703,17 @@ pub fn export_additional_symbols<'a>(
         },
         init_expr: ConstExpr::new(extra_data.as_ref().unwrap(), 0),
     });
+
+    if wasm_native_stable_memory == FlagStatus::Enabled {
+        // push the dirty page counter
+        module.globals.push(Global {
+            ty: GlobalType {
+                content_type: ValType::I64,
+                mutable: true,
+            },
+            init_expr: ConstExpr::new(extra_data.as_ref().unwrap(), 0),
+        });
+    }
 
     module
 }
