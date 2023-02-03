@@ -1051,7 +1051,7 @@ impl Neuron {
             recent_ballots: self.recent_ballots.clone(),
             voting_power: self.voting_power(now_seconds),
             created_timestamp_seconds: self.created_timestamp_seconds,
-            stake_e8s: self.stake_e8s(),
+            stake_e8s: self.minted_stake_e8s(),
             joined_community_fund_timestamp_seconds: self.joined_community_fund_timestamp_seconds,
             known_neuron_data: self.known_neuron_data.as_ref().cloned(),
         }
@@ -1877,10 +1877,10 @@ impl GovernanceProto {
         };
 
         for (_, neuron) in self.neurons.iter() {
-            metrics.total_staked_e8s += neuron.stake_e8s();
+            metrics.total_staked_e8s += neuron.minted_stake_e8s();
 
             if neuron.joined_community_fund_timestamp_seconds.unwrap_or(0) > 0 {
-                metrics.community_fund_total_staked_e8s += neuron.stake_e8s();
+                metrics.community_fund_total_staked_e8s += neuron.minted_stake_e8s();
                 metrics.community_fund_total_maturity_e8s_equivalent +=
                     neuron.maturity_e8s_equivalent;
             }
@@ -1899,7 +1899,7 @@ impl GovernanceProto {
             if dissolve_delay_seconds < 6 * ONE_MONTH_SECONDS {
                 metrics.neurons_with_less_than_6_months_dissolve_delay_count += 1;
                 metrics.neurons_with_less_than_6_months_dissolve_delay_e8s +=
-                    neuron.cached_neuron_stake_e8s;
+                    neuron.minted_stake_e8s();
             }
 
             match neuron.state(now) {
@@ -1917,7 +1917,7 @@ impl GovernanceProto {
                         .dissolving_neurons_e8s_buckets
                         .entry(bucket)
                         .or_insert(0.0);
-                    *e8s_entry += neuron.cached_neuron_stake_e8s as f64;
+                    *e8s_entry += neuron.minted_stake_e8s() as f64;
 
                     let count_entry = metrics
                         .dissolving_neurons_count_buckets
@@ -1933,7 +1933,7 @@ impl GovernanceProto {
                         .not_dissolving_neurons_e8s_buckets
                         .entry(bucket)
                         .or_insert(0.0);
-                    *e8s_entry += neuron.cached_neuron_stake_e8s as f64;
+                    *e8s_entry += neuron.minted_stake_e8s() as f64;
 
                     let count_entry = metrics
                         .not_dissolving_neurons_count_buckets
