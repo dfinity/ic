@@ -25,7 +25,7 @@ use crate::util::block_on;
 use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
-        test_env::TestEnv,
+        test_env::{SshKeyGen, TestEnv},
         test_env_api::*,
     },
     orchestrator::utils::upgrade::get_assigned_replica_version,
@@ -42,6 +42,8 @@ const SUBNET_SIZE: usize = 4;
 const NUM_READ_RETRIES: usize = 10;
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen(ADMIN).expect("ssh admin keygen failed");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)

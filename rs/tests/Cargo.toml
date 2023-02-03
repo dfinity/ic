@@ -418,6 +418,10 @@ name = "ic-systest-network-reliability"
 path = "bin/network_reliability_test.rs"
 
 [[bin]]
+name = "ic-systest-unstuck-subnet"
+path = "bin/unstuck_subnet_test.rs"
+
+[[bin]]
 name = "ic-systest-distributed"
 path = "bin/distributed_test.rs"
 
