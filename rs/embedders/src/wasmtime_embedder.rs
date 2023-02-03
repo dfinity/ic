@@ -756,7 +756,21 @@ impl<S: SystemApi> WasmtimeInstance<S> {
         self.instance_stats.direct_write_count += access.direct_write_count;
 
         let stable_memory_dirty_pages: Vec<_> = match self.wasm_native_stable_memory {
-            FlagStatus::Enabled => access.stable_dirty_pages,
+            FlagStatus::Enabled => {
+                #[cfg(debug_assertions)]
+                if result.is_ok() {
+                    assert_eq!(
+                        access.stable_dirty_pages.len() as i64,
+                        self.instance
+                            .get_global(&mut self.store, "canister counter_dirty_pages")
+                            .unwrap()
+                            .get(&mut self.store)
+                            .i64()
+                            .unwrap()
+                    );
+                }
+                access.stable_dirty_pages
+            }
             FlagStatus::Disabled => self
                 .store
                 .data()

@@ -23,7 +23,11 @@ use wasmparser::{ExternalKind, Operator, Type, TypeRef, ValType};
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
-pub const RESERVED_SYMBOLS: [&str; 2] = ["canister counter_instructions", "canister_start"];
+pub const RESERVED_SYMBOLS: [&str; 3] = [
+    "canister counter_instructions",
+    "canister_start",
+    "canister counter_dirty_pages",
+];
 
 const WASM_FUNCTION_COMPLEXITY_LIMIT: usize = 15_000;
 const WASM_FUNCTION_SIZE_LIMIT: usize = 1_000_000;

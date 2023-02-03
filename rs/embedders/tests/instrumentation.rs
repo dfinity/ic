@@ -201,7 +201,13 @@ fn test_exports_only_reserved_symbols() {
 
     let module = Module::parse(wasm.as_slice(), false).unwrap();
     let mut extra_data = None;
-    let module = export_additional_symbols(module, &ExportModuleData::default(), &mut extra_data);
+    let module = export_additional_symbols(
+        module,
+        &ExportModuleData::default(),
+        &mut extra_data,
+        ic_config::flag_status::FlagStatus::Disabled,
+        0,
+    );
 
     for export in module.exports {
         assert!(RESERVED_SYMBOLS.contains(&export.name))

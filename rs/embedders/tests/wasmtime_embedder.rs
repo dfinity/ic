@@ -779,6 +779,104 @@ mod test {
     }
 
     #[test]
+    fn multiple_stable_write() {
+        let wat = r#"
+            (module
+                (import "ic0" "stable_grow"
+                    (func $ic0_stable_grow (param $pages i32) (result i32)))
+                (import "ic0" "stable_read"
+                    (func $ic0_stable_read (param $dst i32) (param $offset i32) (param $size i32)))
+                (import "ic0" "stable_write"
+                    (func $ic0_stable_write (param $offset i32) (param $src i32) (param $size i32)))
+
+                (func $test (export "canister_update test")
+
+                    (i32.store (i32.const 10) (i32.const 72))
+                    (i32.store (i32.const 11) (i32.const 101))
+                    (i32.store (i32.const 12) (i32.const 108))
+                    (i32.store (i32.const 13) (i32.const 108))
+                    (i32.store (i32.const 14) (i32.const 111))
+
+                    (drop (call $ic0_stable_grow (i32.const 30)))
+                    ;; touch page 0
+                    (call $ic0_stable_write (i32.const 100) (i32.const 10) (i32.const 5))
+                    ;; touch page 0 and 1
+                    (call $ic0_stable_write (i32.const 4094) (i32.const 10) (i32.const 5))
+                    ;; touch page 5 and 6
+                    (call $ic0_stable_write (i32.const 24574) (i32.const 10) (i32.const 5))
+                    ;; touch page 4 and 5
+                    (call $ic0_stable_write (i32.const 20478) (i32.const 10) (i32.const 5))
+                    ;; touch pages 5-14
+                    (call $ic0_stable_write (i32.const 20480) (i32.const 0) (i32.const 40960))
+                    (call $ic0_stable_read (i32.const 0) (i32.const 100) (i32.const 5))
+                )
+                (table funcref (elem $test))
+                (memory (export "memory") 5)
+            )"#;
+        let mut config = ic_config::embedders::Config::default();
+        config.feature_flags.wasm_native_stable_memory =
+            ic_config::flag_status::FlagStatus::Enabled;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config)
+            .with_wat(wat)
+            .build();
+        let _res = instance
+            .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+            .unwrap();
+        // one dirty heap page and 13 stable
+        assert_eq!(instance.get_stats().dirty_pages, 1 + 13);
+    }
+
+    #[test]
+    fn multiple_stable64_write() {
+        let wat = r#"
+            (module
+                (import "ic0" "stable_grow"
+                    (func $ic0_stable_grow (param $pages i32) (result i32)))
+                (import "ic0" "stable64_read"
+                    (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+                (import "ic0" "stable64_write"
+                    (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+
+                (func $test (export "canister_update test")
+
+                    (i32.store (i32.const 10) (i32.const 72))
+                    (i32.store (i32.const 11) (i32.const 101))
+                    (i32.store (i32.const 12) (i32.const 108))
+                    (i32.store (i32.const 13) (i32.const 108))
+                    (i32.store (i32.const 14) (i32.const 111))
+
+                    (drop (call $ic0_stable_grow (i32.const 30)))
+                    ;; touch page 0
+                    (call $ic0_stable64_write (i64.const 100) (i64.const 10) (i64.const 5))
+                    ;; touch page 0 and 1
+                    (call $ic0_stable64_write (i64.const 4094) (i64.const 10) (i64.const 5))
+                    ;; touch page 5 and 6
+                    (call $ic0_stable64_write (i64.const 24574) (i64.const 10) (i64.const 5))
+                    ;; touch page 4 and 5
+                    (call $ic0_stable64_write (i64.const 20478) (i64.const 10) (i64.const 5))
+                    ;; touch pages 5-14
+                    (call $ic0_stable64_write (i64.const 20480) (i64.const 0) (i64.const 40960))
+                    (call $ic0_stable64_read (i64.const 0) (i64.const 100) (i64.const 5))
+                )
+                (table funcref (elem $test))
+                (memory (export "memory") 5)
+            )"#;
+        let mut config = ic_config::embedders::Config::default();
+        config.feature_flags.wasm_native_stable_memory =
+            ic_config::flag_status::FlagStatus::Enabled;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config)
+            .with_wat(wat)
+            .build();
+        let _res = instance
+            .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
+            .unwrap();
+        // one dirty heap page and 13 stable
+        assert_eq!(instance.get_stats().dirty_pages, 1 + 13);
+    }
+
+    #[test]
     fn stable_read_out_of_bounds() {
         fn func_ref(name: &str) -> FuncRef {
             FuncRef::Method(WasmMethod::Update(name.to_string()))

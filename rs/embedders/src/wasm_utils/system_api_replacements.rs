@@ -11,6 +11,8 @@ const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
 
 pub(super) fn replacement_functions(
     stable_memory_index: u32,
+    count_clean_pages_fn_index: u32,
+    dirty_pages_counter_index: u32,
 ) -> Vec<(SystemApiFunc, (Type, Body<'static>))> {
     use Operator::*;
     let page_size_shift = PAGE_SIZE.trailing_zeros() as i32;
@@ -368,7 +370,7 @@ pub(super) fn replacement_functions(
                     [],
                 )),
                 Body {
-                    locals: vec![],
+                    locals: vec![(3, ValType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt
                     instructions: vec![
                         // If memory is too big for 32bit api, we trap
                         MemorySize {
@@ -434,12 +436,7 @@ pub(super) fn replacement_functions(
                             value: page_size_shift,
                         },
                         I32ShrU,
-                        // value to fill with
-                        I32Const { value: 1 },
-                        // calculate b_size
-                        // b_end = (dst + size - 1) / PAGE_SIZE + 1
-                        // b_len = b_end - b_start
-
+                        LocalTee { local_index: 3 }, // store b_start
                         // b_end
                         LocalGet { local_index: 0 },
                         LocalGet { local_index: 2 },
@@ -452,12 +449,23 @@ pub(super) fn replacement_functions(
                         I32ShrU,
                         I32Const { value: 1 },
                         I32Add,
-                        // b_start
-                        LocalGet { local_index: 0 },
-                        I32Const {
-                            value: page_size_shift,
+                        LocalTee { local_index: 4 }, // store b_end
+                        // count pages already dirty
+                        Call {
+                            function_index: count_clean_pages_fn_index,
                         },
-                        I32ShrU,
+                        // TODO get complexity and bail if too high
+                        // for now store in local and set the global when succeeded
+                        LocalSet { local_index: 5 },
+                        // perform memory fill
+                        LocalGet { local_index: 3 }, //b_start
+                        // value to fill with
+                        I32Const { value: 1 },
+                        // calculate b_size
+                        // b_end = (dst + size - 1) / PAGE_SIZE + 1
+                        // b_len = b_end - b_start
+                        LocalGet { local_index: 4 }, //b_end
+                        LocalGet { local_index: 3 }, //b_start
                         // b_end - b_start
                         I32Sub,
                         MemoryFill {
@@ -472,6 +480,15 @@ pub(super) fn replacement_functions(
                             dst_mem: stable_memory_index,
                             src_mem: 0,
                         },
+                        LocalGet { local_index: 5 },
+                        I64ExtendI32U,
+                        GlobalGet {
+                            global_index: dirty_pages_counter_index,
+                        },
+                        I64Add,
+                        GlobalSet {
+                            global_index: dirty_pages_counter_index,
+                        },
                         End,
                     ],
                 },
@@ -485,7 +502,7 @@ pub(super) fn replacement_functions(
                     [],
                 )),
                 Body {
-                    locals: vec![],
+                    locals: vec![(3, ValType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt
                     instructions: vec![
                         // if size is 0 we return
                         // (correctness of the code that follows depends on the size being > 0)
@@ -578,12 +595,7 @@ pub(super) fn replacement_functions(
                         },
                         I64ShrU,
                         I32WrapI64,
-                        // value to fill with
-                        I32Const { value: 1 },
-                        // calculate b_size
-                        // b_end = (dst + size - 1) / PAGE_SIZE + 1
-                        // b_len = b_end - b_start
-
+                        LocalTee { local_index: 3 }, // store b_start
                         // b_end
                         LocalGet { local_index: 0 },
                         LocalGet { local_index: 2 },
@@ -596,15 +608,26 @@ pub(super) fn replacement_functions(
                         I64ShrU,
                         I64Const { value: 1 },
                         I64Add,
-                        // b_start
-                        LocalGet { local_index: 0 },
-                        I64Const {
-                            value: page_size_shift as i64,
-                        },
-                        I64ShrU,
-                        // b_end - b_start
-                        I64Sub,
                         I32WrapI64,
+                        LocalTee { local_index: 4 }, // store b_end
+                        // count pages already dirty
+                        Call {
+                            function_index: count_clean_pages_fn_index,
+                        },
+                        // TODO get complexity and bail if too high
+                        // for now store in local and set the global when succeeded
+                        LocalSet { local_index: 5 },
+                        // perform memory fill
+                        LocalGet { local_index: 3 }, //b_start
+                        // value to fill with
+                        I32Const { value: 1 },
+                        // calculate b_size
+                        // b_end = (dst + size - 1) / PAGE_SIZE + 1
+                        // b_len = b_end - b_start
+                        LocalGet { local_index: 4 }, //b_end
+                        LocalGet { local_index: 3 }, //b_start
+                        // b_end - b_start
+                        I32Sub,
                         MemoryFill {
                             mem: stable_memory_bytemap_index,
                         },
@@ -617,6 +640,15 @@ pub(super) fn replacement_functions(
                         MemoryCopy {
                             dst_mem: stable_memory_index,
                             src_mem: 0,
+                        },
+                        LocalGet { local_index: 5 },
+                        I64ExtendI32U,
+                        GlobalGet {
+                            global_index: dirty_pages_counter_index,
+                        },
+                        I64Add,
+                        GlobalSet {
+                            global_index: dirty_pages_counter_index,
                         },
                         End,
                     ],
