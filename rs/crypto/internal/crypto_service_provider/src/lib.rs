@@ -30,9 +30,7 @@ use crate::api::{
     NodePublicKeyDataError, ThresholdSignatureCspClient,
 };
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
-use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
-use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, ExternalPublicKeys};
 use crate::vault::api::{CspPublicKeyStoreError, CspVault};
@@ -305,6 +303,55 @@ impl NodePublicKeyData for Csp {
     }
 }
 
+#[cfg(test)]
+pub mod builder {
+    use super::*;
+    use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
+    use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
+    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+
+    pub struct CspBuilder<V> {
+        vault: Box<dyn FnOnce() -> V>,
+        logger: ReplicaLogger,
+        metrics: CryptoMetrics,
+    }
+
+    impl Csp {
+        pub fn builder() -> CspBuilder<
+            LocalCspVault<
+                ReproducibleRng,
+                TempSecretKeyStore,
+                TempSecretKeyStore,
+                TempPublicKeyStore,
+            >,
+        > {
+            CspBuilder {
+                vault: Box::new(|| LocalCspVault::builder().build()),
+                logger: no_op_logger(),
+                metrics: CryptoMetrics::none(),
+            }
+        }
+    }
+
+    impl<V: CspVault + 'static> CspBuilder<V> {
+        pub fn with_vault<W: CspVault + 'static>(self, vault: W) -> CspBuilder<W> {
+            CspBuilder {
+                vault: Box::new(|| vault),
+                logger: self.logger,
+                metrics: self.metrics,
+            }
+        }
+
+        pub fn build(self) -> Csp {
+            Csp {
+                csp_vault: Arc::new((self.vault)()),
+                logger: self.logger,
+                metrics: Arc::new(self.metrics),
+            }
+        }
+    }
+}
+
 impl Csp {
     /// Creates a crypto service provider for testing.
     ///
@@ -328,9 +375,5 @@ impl Csp {
             logger: no_op_logger(),
             metrics: Arc::new(CryptoMetrics::none()),
         }
-    }
-
-    pub fn with_rng<R: Rng + CryptoRng + Send + Sync + 'static>(rng: R) -> Self {
-        Csp::of(rng, TempSecretKeyStore::new(), TempPublicKeyStore::new())
     }
 }

@@ -2,7 +2,6 @@
 use super::*;
 use crate::keygen::fixtures::multi_bls_test_vector;
 use crate::keygen::utils::node_signing_pk_to_proto;
-use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
 use assert_matches::assert_matches;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
@@ -14,13 +13,15 @@ use rand::Rng;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
+const FIXED_SEED: u64 = 42;
+
 mod gen_node_siging_key_pair_tests {
     use super::*;
     use crate::NodePublicKeyData;
 
     #[test]
     fn should_correctly_generate_node_signing_keys() {
-        let csp = Csp::with_rng(rng());
+        let csp = csp_with_fixed_seed();
         let public_key = csp.gen_node_signing_key_pair().unwrap();
         let key_id = KeyId::try_from(&public_key).unwrap();
 
@@ -48,7 +49,7 @@ mod gen_node_siging_key_pair_tests {
 
     #[test]
     fn should_fail_with_internal_error_if_node_signing_public_key_already_set() {
-        let csp = Csp::with_rng(rng());
+        let csp = Csp::builder().build();
 
         assert!(csp.gen_node_signing_key_pair().is_ok());
         let result = csp.gen_node_signing_key_pair();
@@ -68,11 +69,17 @@ mod gen_node_siging_key_pair_tests {
     #[should_panic(expected = "has already been inserted")]
     fn should_panic_upon_duplicate_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
-        let csp = Csp::of(
-            rng(),
-            secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
-            MockPublicKeyStore::new(),
-        );
+        use crate::LocalCspVault;
+        let csp = Csp::builder()
+            .with_vault(
+                LocalCspVault::builder()
+                    .with_mock_stores()
+                    .with_node_secret_key_store(
+                        secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
+                    )
+                    .build(),
+            )
+            .build();
 
         let _ = csp.gen_node_signing_key_pair();
     }
@@ -86,8 +93,7 @@ mod gen_key_pair_with_pop_tests {
     #[test]
     fn should_correctly_generate_committee_signing_keys() {
         let test_vector = multi_bls_test_vector();
-        let csprng = csprng_seeded_with(test_vector.seed);
-        let csp = Csp::with_rng(csprng);
+        let csp = csp_seeded_with(test_vector.seed);
         let (public_key, pop) = csp.gen_committee_signing_key_pair().unwrap();
         let key_id = KeyId::try_from(&public_key).unwrap();
 
@@ -108,18 +114,24 @@ mod gen_key_pair_with_pop_tests {
     #[should_panic(expected = "has already been inserted")]
     fn should_panic_upon_duplicate_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
-        let csp = Csp::of(
-            rng(),
-            secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
-            MockPublicKeyStore::new(),
-        );
+        use crate::LocalCspVault;
+        let csp = Csp::builder()
+            .with_vault(
+                LocalCspVault::builder()
+                    .with_mock_stores()
+                    .with_node_secret_key_store(
+                        secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
+                    )
+                    .build(),
+            )
+            .build();
 
         let _ = csp.gen_committee_signing_key_pair();
     }
 
     #[test]
     fn should_fail_with_internal_error_if_committee_signing_public_key_already_set() {
-        let csp = Csp::with_rng(rng());
+        let csp = Csp::builder().build();
 
         assert!(csp.gen_committee_signing_key_pair().is_ok());
 
@@ -146,8 +158,7 @@ mod idkg_create_mega_key_pair_tests {
     #[test]
     fn should_correctly_create_mega_key_pair() {
         let test_vector = mega_test_vector();
-        let csprng = csprng_seeded_with(test_vector.seed);
-        let csp = Csp::with_rng(csprng);
+        let csp = csp_seeded_with(test_vector.seed);
         let public_key = csp
             .idkg_gen_dealing_encryption_key_pair()
             .expect("failed creating MEGa key pair");
@@ -158,11 +169,17 @@ mod idkg_create_mega_key_pair_tests {
     #[test]
     fn should_fail_upon_duplicate_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
-        let csp = Csp::of(
-            rng(),
-            secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
-            MockPublicKeyStore::new(),
-        );
+        use crate::LocalCspVault;
+        let csp = Csp::builder()
+            .with_vault(
+                LocalCspVault::builder()
+                    .with_mock_stores()
+                    .with_node_secret_key_store(
+                        secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
+                    )
+                    .build(),
+            )
+            .build();
 
         let result = csp.idkg_gen_dealing_encryption_key_pair();
 
@@ -174,11 +191,17 @@ mod idkg_create_mega_key_pair_tests {
 
     #[test]
     fn should_handle_serialization_failure_upon_insert() {
-        let csp = Csp::of(
-            rng(),
-            secret_key_store_with_serialization_error_on_insert(),
-            MockPublicKeyStore::new(),
-        );
+        use crate::LocalCspVault;
+        let csp = Csp::builder()
+            .with_vault(
+                LocalCspVault::builder()
+                    .with_mock_stores()
+                    .with_node_secret_key_store(
+                        secret_key_store_with_serialization_error_on_insert(),
+                    )
+                    .build(),
+            )
+            .build();
 
         let result = csp.idkg_gen_dealing_encryption_key_pair();
 
@@ -191,11 +214,15 @@ mod idkg_create_mega_key_pair_tests {
 
     #[test]
     fn should_handle_io_error_upon_insert() {
-        let csp = Csp::of(
-            rng(),
-            secret_key_store_with_io_error_on_insert(),
-            MockPublicKeyStore::new(),
-        );
+        use crate::LocalCspVault;
+        let csp = Csp::builder()
+            .with_vault(
+                LocalCspVault::builder()
+                    .with_mock_stores()
+                    .with_node_secret_key_store(secret_key_store_with_io_error_on_insert())
+                    .build(),
+            )
+            .build();
 
         let result = csp.idkg_gen_dealing_encryption_key_pair();
 
@@ -256,25 +283,30 @@ mod tls {
     use std::collections::BTreeSet;
 
     const NODE_1: u64 = 4241;
-    const FIXED_SEED: u64 = 42;
     const NOT_AFTER: &str = "99991231235959Z";
 
     #[test]
     #[should_panic(expected = "has already been inserted")]
     fn should_panic_if_secret_key_insertion_yields_duplicate_error() {
         let duplicated_key_id = KeyId::from([42; 32]);
-        let csp = Csp::of(
-            rng(),
-            secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
-            MockPublicKeyStore::new(),
-        );
+        use crate::LocalCspVault;
+        let csp = Csp::builder()
+            .with_vault(
+                LocalCspVault::builder()
+                    .with_mock_stores()
+                    .with_node_secret_key_store(
+                        secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
+                    )
+                    .build(),
+            )
+            .build();
 
         let _ = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
     }
 
     #[test]
     fn should_return_der_encoded_self_signed_certificate() {
-        let csp = Csp::with_rng(rng());
+        let csp = Csp::builder().build();
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -288,7 +320,7 @@ mod tls {
 
     #[test]
     fn should_set_cert_subject_cn_as_node_id() {
-        let csp = Csp::with_rng(rng());
+        let csp = Csp::builder().build();
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -303,7 +335,7 @@ mod tls {
 
     #[test]
     fn should_use_stable_node_id_string_representation_as_subject_cn() {
-        let csp = Csp::with_rng(rng());
+        let csp = Csp::builder().build();
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -315,7 +347,7 @@ mod tls {
 
     #[test]
     fn should_set_cert_issuer_cn_as_node_id() {
-        let csp = Csp::with_rng(rng());
+        let csp = Csp::builder().build();
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -333,7 +365,7 @@ mod tls {
 
     #[test]
     fn should_not_set_cert_subject_alt_name() {
-        let csp = Csp::with_rng(rng());
+        let csp = Csp::builder().build();
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -345,7 +377,7 @@ mod tls {
 
     #[test]
     fn should_set_random_cert_serial_number() {
-        let csp = Csp::with_rng(csprng_seeded_with(FIXED_SEED));
+        let csp = csp_with_fixed_seed();
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -362,7 +394,7 @@ mod tls {
         const SAMPLE_SIZE: usize = 20;
         let mut serial_samples = BTreeSet::new();
         for i in 0..SAMPLE_SIZE {
-            let cert = Csp::with_rng(csprng_seeded_with(i as u64))
+            let cert = csp_seeded_with(i as u64)
                 .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
                 .expect("error generating TLS certificate");
             serial_samples.insert(serial_number(&cert));
@@ -372,7 +404,7 @@ mod tls {
 
     #[test]
     fn should_set_cert_not_after_correctly() {
-        let csp = Csp::with_rng(rng());
+        let csp = Csp::builder().build();
         let not_after = NOT_AFTER;
 
         let cert = csp
@@ -384,7 +416,7 @@ mod tls {
 
     #[test]
     fn should_panic_on_invalid_not_after_date() {
-        let csp = Csp::with_rng(rng());
+        let csp = Csp::builder().build();
         let invalid_not_after = "invalid_not_after_date";
 
         let result = csp.gen_tls_key_pair(node_test_id(NODE_1), invalid_not_after);
@@ -395,7 +427,7 @@ mod tls {
 
     #[test]
     fn should_panic_if_not_after_date_is_in_the_past() {
-        let csp = Csp::with_rng(rng());
+        let csp = Csp::builder().build();
         let date_in_the_past = "20211004235959Z";
 
         let result = csp.gen_tls_key_pair(node_test_id(NODE_1), date_in_the_past);
@@ -414,7 +446,7 @@ mod tls {
 
     #[test]
     fn should_fail_with_internal_error_if_tls_public_key_certificate_already_set() {
-        let csp = Csp::with_rng(rng());
+        let csp = Csp::builder().build();
 
         assert!(csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -431,6 +463,18 @@ mod tls {
     }
 }
 
-fn rng() -> impl CryptoRng + Rng {
-    csprng_seeded_with(42)
+fn csp_seeded_with(seed: u64) -> Csp {
+    use crate::LocalCspVault;
+
+    Csp::builder()
+        .with_vault(
+            LocalCspVault::builder()
+                .with_rng(ChaCha20Rng::seed_from_u64(seed))
+                .build(),
+        )
+        .build()
+}
+
+fn csp_with_fixed_seed() -> Csp {
+    csp_seeded_with(FIXED_SEED)
 }

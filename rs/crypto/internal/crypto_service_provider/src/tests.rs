@@ -4,16 +4,12 @@ mod csp_tests {
     use crate::api::CspTlsHandshakeSignerProvider;
     use crate::api::{CspKeyGenerator, CspSecretKeyStoreChecker};
     use crate::vault::test_utils::tls::ed25519_csp_pubkey_from_tls_pubkey_cert;
-    use crate::CryptoRng;
     use crate::Csp;
     use crate::CspPublicKey;
     use crate::KeyId;
-    use crate::Rng;
     use ic_crypto_tls_interfaces::TlsPublicKeyCert;
     use ic_types::crypto::AlgorithmId;
     use ic_types_test_utils::ids::node_test_id;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha20Rng;
 
     mod node_public_key_data {
         use super::*;
@@ -24,7 +20,7 @@ mod csp_tests {
 
         #[test]
         fn should_return_empty_when_no_public_keys() {
-            let csp = Csp::with_rng(csprng());
+            let csp = Csp::builder().build();
 
             let current_node_public_keys = csp
                 .current_node_public_keys()
@@ -44,7 +40,7 @@ mod csp_tests {
 
         #[test]
         fn should_return_zero_key_count_when_no_public_keys() {
-            let csp = Csp::with_rng(csprng());
+            let csp = Csp::builder().build();
 
             let key_count = csp
                 .idkg_dealing_encryption_pubkeys_count()
@@ -120,7 +116,7 @@ mod csp_tests {
     }
 
     fn csp_with_node_signing_key_pair() -> (Csp, CspPublicKey) {
-        let csp = Csp::with_rng(csprng());
+        let csp = Csp::builder().build();
         let public_key = csp
             .gen_node_signing_key_pair()
             .expect("error generating public/private key pair");
@@ -130,14 +126,10 @@ mod csp_tests {
     fn csp_with_tls_key_pair() -> (Csp, TlsPublicKeyCert) {
         const NODE_1: u64 = 4241;
         const NOT_AFTER: &str = "99991231235959Z";
-        let csp = Csp::with_rng(csprng());
+        let csp = Csp::builder().build();
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("error generating TLS key pair");
         (csp, cert)
-    }
-
-    fn csprng() -> impl CryptoRng + Rng {
-        ChaCha20Rng::seed_from_u64(42)
     }
 }

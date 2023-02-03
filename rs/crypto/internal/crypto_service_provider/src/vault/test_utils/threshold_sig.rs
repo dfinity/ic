@@ -1,17 +1,14 @@
 use crate::api::{CspThresholdSignError, ThresholdSignatureCspClient};
 use crate::key_id::KeyId;
-use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
 use crate::vault::api::CspVault;
-use crate::Csp;
+use crate::{Csp, LocalCspVault};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::test_utils::select_n;
 use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_csp_pub_coeffs;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
-use rand::{Rng, SeedableRng};
-use rand_chacha::ChaChaRng;
+use rand::Rng;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
 
@@ -86,12 +83,13 @@ pub fn test_threshold_signatures(
         }
     }
     // Verify each individual signature:
-    let verifier = {
-        let dummy_secret_key_store = TempSecretKeyStore::new();
-        let dummy_public_key_store = TempPublicKeyStore::new();
-        let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
-        Csp::of(csprng, dummy_secret_key_store, dummy_public_key_store)
-    };
+    let verifier = Csp::builder()
+        .with_vault(
+            LocalCspVault::builder()
+                .with_rng(Seed::from_rng(&mut rng).into_rng())
+                .build(),
+        )
+        .build();
     for (index, signature) in signatures.iter().enumerate() {
         let public_key = match verifier.threshold_individual_public_key(
             AlgorithmId::ThresBls12_381,

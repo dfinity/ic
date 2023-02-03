@@ -2,6 +2,7 @@
 pub mod cache;
 
 use super::*;
+use crate::LocalCspVault;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::config::dealers::NiDkgDealers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
@@ -55,7 +56,9 @@ impl MockNode {
     }
     pub fn from_node_id(rng: &mut ChaCha20Rng, node_id: NodeId) -> Self {
         let csprng = ChaCha20Rng::from_seed(rng.gen::<[u8; 32]>());
-        let csp = Csp::with_rng(csprng);
+        let csp = Csp::builder()
+            .with_vault(LocalCspVault::builder().with_rng(csprng).build())
+            .build();
         Self { node_id, csp }
     }
 
