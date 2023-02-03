@@ -283,6 +283,7 @@ fn starting_height_independent_of_remove_states_below() {
         insert_dummy_canister(&mut state, canister_test_id(300));
         state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
 
+        state_manager.flush_manifest_thread();
         state_manager.remove_states_below(height(2));
 
         let canister_id: Vec<CanisterId> = vec![
@@ -809,14 +810,9 @@ fn can_remove_checkpoints() {
             };
 
             state_manager.commit_and_certify(state, height(i), scope.clone());
-
-            if scope == CertificationScope::Full {
-                // We need to wait for hashing to complete, otherwise the
-                // checkpoint can be retained until the hashing is complete.
-                wait_for_checkpoint(&state_manager, height(i));
-            }
         }
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
+        state_manager.flush_manifest_thread();
         state_manager.remove_states_below(height(4));
 
         for h in 1..4 {
@@ -896,6 +892,9 @@ fn cannot_remove_latest_height_or_checkpoint() {
             Some(&height(10))
         );
 
+        // We need to wait for hashing to complete, otherwise the
+        // checkpoint can be retained until the hashing is complete.
+        state_manager.flush_manifest_thread();
         state_manager.remove_states_below(height(20));
         state_manager.remove_inmemory_states_below(height(20));
 
@@ -917,6 +916,7 @@ fn cannot_remove_latest_height_or_checkpoint() {
             .list_state_heights(CERT_ANY)
             .contains(&height(10)));
 
+        state_manager.flush_manifest_thread();
         state_manager.remove_states_below(height(20));
         state_manager.remove_inmemory_states_below(height(20));
 
@@ -946,13 +946,11 @@ fn can_remove_checkpoints_and_noncheckpoints_separately() {
             };
 
             state_manager.commit_and_certify(state, height(i), scope.clone());
-
-            if scope == CertificationScope::Full {
-                // We need to wait for hashing to complete, otherwise the
-                // checkpoint can be retained until the hashing is complete.
-                wait_for_checkpoint(&state_manager, height(i));
-            }
         }
+        // We need to wait for hashing to complete, otherwise the
+        // checkpoint can be retained until the hashing is complete.
+        state_manager.flush_manifest_thread();
+
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
         state_manager.remove_inmemory_states_below(height(6));
 
@@ -1008,14 +1006,9 @@ fn can_keep_last_checkpoint_and_higher_states_after_removal() {
             };
 
             state_manager.commit_and_certify(state, height(i), scope.clone());
-
-            if scope == CertificationScope::Full {
-                // We need to wait for hashing to complete, otherwise the
-                // checkpoint can be retained until the hashing is complete.
-                wait_for_checkpoint(&state_manager, height(i));
-            }
         }
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
+        state_manager.flush_manifest_thread();
         state_manager.remove_states_below(height(10));
 
         for h in 1..=7 {
@@ -1061,14 +1054,9 @@ fn should_restart_from_the_latest_checkpoint_requested_to_remove() {
             };
 
             state_manager.commit_and_certify(state, height(i), scope.clone());
-
-            if scope == CertificationScope::Full {
-                // We need to wait for hashing to complete, otherwise the
-                // checkpoint can be retained until the hashing is complete.
-                wait_for_checkpoint(&state_manager, height(i));
-            }
         }
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
+        state_manager.flush_manifest_thread();
         state_manager.remove_states_below(height(7));
 
         for h in 1..6 {
@@ -1222,13 +1210,8 @@ fn can_keep_the_latest_snapshot_after_removal() {
             };
 
             state_manager.commit_and_certify(state, height(i), scope.clone());
-
-            if scope == CertificationScope::Full {
-                // We need to wait for hashing to complete, otherwise the
-                // checkpoint can be retained until the hashing is complete.
-                wait_for_checkpoint(&state_manager, height(i));
-            }
         }
+        state_manager.flush_manifest_thread();
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
 
         for i in 1..20 {
@@ -1257,10 +1240,8 @@ fn can_purge_intermediate_snapshots() {
             };
 
             state_manager.commit_and_certify(state, height(i), scope.clone());
-            if scope == CertificationScope::Full {
-                wait_for_checkpoint(&state_manager, height(i));
-            }
         }
+        state_manager.flush_manifest_thread();
         assert_eq!(state_manager.list_state_heights(CERT_ANY), heights);
 
         // Checkpoint @5 is kept because it is the latest checkpoint at or below the
@@ -1350,6 +1331,7 @@ fn latest_certified_state_is_not_removed() {
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(4), CertificationScope::Metadata);
 
+        state_manager.flush_manifest_thread();
         state_manager.remove_states_below(height(4));
         assert_eq!(height(4), state_manager.latest_state_height());
         assert_eq!(height(1), state_manager.latest_certified_height());
@@ -2420,7 +2402,7 @@ fn can_commit_below_state_sync() {
             );
             // Check committing an old state doesn't panic
             dst_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-            wait_for_checkpoint(&*dst_state_manager, height(1));
+            dst_state_manager.flush_manifest_thread();
 
             // take_tip should update the tip to the synced checkpoint
             let (tip_height, _state) = dst_state_manager.take_tip();
@@ -2462,7 +2444,7 @@ fn can_state_sync_below_commit() {
 
             let (_height, state) = dst_state_manager.take_tip();
             dst_state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
-            wait_for_checkpoint(&*dst_state_manager, height(2));
+            dst_state_manager.flush_manifest_thread();
 
             let (_height, state) = dst_state_manager.take_tip();
             dst_state_manager.remove_states_below(height(2));
@@ -2482,12 +2464,12 @@ fn can_state_sync_below_commit() {
                 vec![height(1), height(2)]
             );
             dst_state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
-            wait_for_checkpoint(&*dst_state_manager, height(3));
 
             let (tip_height, _state) = dst_state_manager.take_tip();
             assert_eq!(tip_height, height(3));
             assert_eq!(dst_state_manager.latest_state_height(), height(3));
             // state 1 should be removeable
+            dst_state_manager.flush_manifest_thread();
             dst_state_manager.remove_states_below(height(3));
             assert_eq!(dst_state_manager.checkpoint_heights(), vec![height(3)]);
             assert_error_counters(dst_metrics);
@@ -3146,7 +3128,7 @@ fn remove_too_many_diverged_checkpoints() {
             let (j, state) = state_manager.take_tip();
             debug_assert_eq!(height(i), j);
             state_manager.commit_and_certify(state, height(i + 1), CertificationScope::Full);
-            wait_for_checkpoint(&state_manager, height(i + 1));
+            state_manager.flush_manifest_thread();
         }
 
         let (_, state) = state_manager.take_tip();
