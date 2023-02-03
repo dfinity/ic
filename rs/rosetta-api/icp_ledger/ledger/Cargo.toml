@@ -4,6 +4,10 @@ version = "0.8.0"
 authors = ["The Internet Computer Project Developers"]
 edition = "2021"
 
+[[bin]]
+name = "ledger-canister"
+path = "src/main.rs"
+
 [dependencies]
 async-trait = "0.1.57"
 candid = "0.8.1"
