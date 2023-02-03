@@ -11,9 +11,36 @@ if ! which podman >/dev/null 2>&1; then
     exit 1
 fi
 
+usage() {
+    cat <<EOF
+Container Dev & Build Environment Script.
+
+Usage: $0 -h | --help, -f | --full
+
+    -f | --full  Use full container image (dfinity/ic-build)
+    -h | --help  Print help
+
+Script uses dfinity/ic-build-bazel image by default.
+EOF
+}
+
+IMAGE="docker.io/dfinity/ic-build-bazel"
+BUILD_ARGS=(--bazel)
+while test $# -gt 0; do
+    case "$1" in
+        -h | --help) usage && exit 0 ;;
+        -f | --full)
+            IMAGE="docker.io/dfinity/ic-build"
+            BUILD_ARGS=()
+            shift
+            ;;
+        *) usage && exit 1 ;;
+    esac
+done
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-IMAGE_TAG="$(cat $REPO_ROOT/gitlab-ci/container/TAG)"
-IMAGE="docker.io/dfinity/ic-build-bazel:$IMAGE_TAG"
+IMAGE_TAG=$("$REPO_ROOT"/gitlab-ci/container/get-image-tag.sh)
+IMAGE="$IMAGE:$IMAGE_TAG"
 if ! sudo podman image exists $IMAGE; then
     if grep 'index.docker.io' $HOME/.docker/config.json >/dev/null 2>&1; then
         # copy credentials for root
@@ -23,9 +50,11 @@ if ! sudo podman image exists $IMAGE; then
         sudo podman login --authfile $ROOT_HOME/.docker/config.json docker.io
     fi
     if ! sudo podman pull $IMAGE; then
-        # failback to latest in case $IMAGE_TAG was not yet pushed to dockerhub
-        IMAGE="docker.io/dfinity/ic-build-bazel:latest"
-        sudo podman pull $IMAGE
+        # fallback to building the image
+        docker() { sudo podman "$@" --network=host; }
+        export -f docker
+        "$REPO_ROOT"/gitlab-ci/container/build-image.sh "${BUILD_ARGS[@]}"
+        unset -f docker
     fi
 fi
 

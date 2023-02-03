@@ -42,18 +42,18 @@ container-autobuild-protected:
 
         # push new image to dockerhub
         docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
-        docker push dfinity/ic-build:"$TAG"
-        docker push dfinity/ic-build:latest
-        docker push dfinity/ic-build-bazel:"$TAG"
-        docker push dfinity/ic-build-bazel:latest
+        docker push docker.io/dfinity/ic-build:"$TAG"
+        docker push docker.io/dfinity/ic-build:latest
+        docker push docker.io/dfinity/ic-build-bazel:"$TAG"
+        docker push docker.io/dfinity/ic-build-bazel:latest
         PUSHED=true
       fi 
 
       # case where pushing docker image on 1st try failed
       if [ "$EXISTS" != "true" ] && [ "${PUSHED:-}" != "true" ]; then
         docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
-        docker push dfinity/ic-build:"$TAG"
-        docker push dfinity/ic-build-bazel:"$TAG"
+        docker push docker.io/dfinity/ic-build:"$TAG"
+        docker push docker.io/dfinity/ic-build-bazel:"$TAG"
       fi
 
       echo -e "\e[0Ksection_start:$(date +%s):sys_info[collapsed=true]\r\e[0KClick here to see system info"

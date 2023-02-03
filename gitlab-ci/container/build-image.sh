@@ -33,8 +33,8 @@ build_args=("${DOCKER_BUILD_ARGS:---rm=true}")
 
 DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
     -t ic-build-bazel:"$DOCKER_IMG_TAG" \
-    -t dfinity/ic-build-bazel:"$DOCKER_IMG_TAG" \
-    -t dfinity/ic-build-bazel:latest \
+    -t docker.io/dfinity/ic-build-bazel:"$DOCKER_IMG_TAG" \
+    -t docker.io/dfinity/ic-build-bazel:latest \
     -t registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:"$DOCKER_IMG_TAG" \
     --build-arg BAZEL_VERSION="${BAZEL_VERSION}" \
     -f Dockerfile.bazel .
@@ -47,16 +47,16 @@ fi
 # build the dependencies image
 DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
     -t ic-build-src:"$DOCKER_IMG_TAG" \
-    -t dfinity/ic-build-src:"$DOCKER_IMG_TAG" \
-    -t dfinity/ic-build-src:latest \
+    -t docker.io/dfinity/ic-build-src:"$DOCKER_IMG_TAG" \
+    -t docker.io/dfinity/ic-build-src:latest \
     -t registry.gitlab.com/dfinity-lab/core/docker/ic-build-src:"$DOCKER_IMG_TAG" \
     -f Dockerfile.src .
 
 # build the container image
 DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
     -t ic-build:"$DOCKER_IMG_TAG" \
-    -t dfinity/ic-build:"$DOCKER_IMG_TAG" \
-    -t dfinity/ic-build:latest \
+    -t docker.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
+    -t docker.io/dfinity/ic-build:latest \
     -t registry.gitlab.com/dfinity-lab/core/docker/ic-build:"$DOCKER_IMG_TAG" \
     --build-arg SRC_IMG_PATH="dfinity/ic-build-src:$DOCKER_IMG_TAG" \
     --build-arg BAZEL_VERSION="${BAZEL_VERSION}" \
