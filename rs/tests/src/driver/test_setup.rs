@@ -26,7 +26,13 @@ impl GroupSetup {
         // binary_name-timestamp
         let mut res = Self::default();
         let exec_path = std::env::current_exe().expect("could not acquire parent process path");
-        let fname = exec_path.file_name().unwrap().to_str().unwrap();
+        let fname = exec_path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .strip_suffix("_bin")
+            .expect("Expected the binary to have a '_bin' suffix!");
         let time = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("bad things")
