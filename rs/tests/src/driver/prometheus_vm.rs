@@ -23,7 +23,11 @@ use super::{
     test_setup::GroupSetup,
     universal_vm::{UniversalVm, UniversalVms},
 };
-use crate::driver::{test_env::TestEnvAttribute, test_env_api::HasDependencies};
+use crate::driver::{
+    farm::{DnsRecord, DnsRecordType},
+    test_env::TestEnvAttribute,
+    test_env_api::{CreateDnsRecords, HasDependencies},
+};
 
 const PROMETHEUS_VM_NAME: &str = "prometheus";
 
@@ -34,7 +38,7 @@ const PROMETHEUS_VM_NAME: &str = "prometheus";
 /// Please also keep this in sync with the PROMETHEUS_VM_DISK_IMG_SHA256 variable in:
 /// /scalability/common/farm.py.
 const DEFAULT_PROMETHEUS_VM_IMG_SHA256: &str =
-    "c8ec611778a36a3926cedc100f4bcbf058ce5540347e299da54e221c8a19bdaf";
+    "ead206708d7e8325cfcee688560a30537169fba4392a7dae219ea284412102d8";
 
 fn get_default_prometheus_vm_img_url() -> String {
     format!("http://download.proxy-global.dfinity.network:8080/farm/prometheus-vm/{DEFAULT_PROMETHEUS_VM_IMG_SHA256}/x86_64-linux/prometheus-vm.img.zst")
@@ -46,11 +50,12 @@ const PROMETHEUS_CONFIG_DIR_NAME: &str = "prometheus";
 
 const PROMETHEUS_SCRAPING_TARGETS_DIR: &str = "/etc/prometheus";
 
-const PROMETHEUS_WEB_UI_PORT: u16 = 9090;
 const REPLICA_METRICS_PORT: u16 = 9090;
 const ORCHESTRATOR_METRICS_PORT: u16 = 9091;
 const NODE_EXPORTER_METRICS_PORT: u16 = 9100;
-const GRAFANA_PORT: u16 = 3000;
+
+const PROMETHEUS_DOMAIN_NAME: &str = "prometheus";
+const GRAFANA_DOMAIN_NAME: &str = "grafana";
 
 pub const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 pub const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
@@ -145,17 +150,26 @@ chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
         // Log the Prometheus URL so users can browse to it while the test is running.
         let deployed_prometheus_vm = env.get_deployed_universal_vm(&vm_name).unwrap();
         let prometheus_vm = deployed_prometheus_vm.get_vm().unwrap();
+        let ipv6 = prometheus_vm.ipv6.to_string();
+        let suffix = env.create_dns_records(vec![
+            DnsRecord {
+                name: PROMETHEUS_DOMAIN_NAME.to_string(),
+                record_type: DnsRecordType::AAAA,
+                records: vec![ipv6.clone()],
+            },
+            DnsRecord {
+                name: GRAFANA_DOMAIN_NAME.to_string(),
+                record_type: DnsRecordType::AAAA,
+                records: vec![ipv6],
+            },
+        ]);
+        let prometheus_fqdn = format!("{PROMETHEUS_DOMAIN_NAME}.{suffix}");
+        let grafana_fqdn = format!("{GRAFANA_DOMAIN_NAME}.{suffix}");
+        info!(log, "Prometheus Web UI at http://{prometheus_fqdn}",);
+        info!(log, "Grafana at http://{grafana_fqdn}",);
         info!(
             log,
-            "Prometheus Web UI at http://[{:?}]:{PROMETHEUS_WEB_UI_PORT}", prometheus_vm.ipv6
-        );
-        info!(
-            log,
-            "Grafana at http://[{:?}]:{GRAFANA_PORT}", prometheus_vm.ipv6
-        );
-        info!(
-            log,
-            "IC Progress Clock at http://[{:?}]:{GRAFANA_PORT}/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now", prometheus_vm.ipv6
+            "IC Progress Clock at http://{grafana_fqdn}/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now"
         );
         Ok(())
     }
