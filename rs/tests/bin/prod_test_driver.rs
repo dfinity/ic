@@ -620,14 +620,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 ).with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
-                    "unstuck_subnet_test_pot",
-                    orchestrator::unstuck_subnet_test::config,
-                    par(vec![sys_t(
-                        "unstuck_subnet_test",
-                        orchestrator::unstuck_subnet_test::test,
-                    )]),
-                ).with_alert(ENG_CONSENSUS_CHANNEL),
-                pot_with_setup(
                     "upgrade_with_alternative_urls_pot",
                     orchestrator::upgrade_with_alternative_urls::config,
                     par(vec![sys_t(
