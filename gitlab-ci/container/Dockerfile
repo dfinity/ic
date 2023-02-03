@@ -33,6 +33,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         grub-efi-amd64-bin podman buildah && \
     gem install asciidoctor-diagram rouge
 
+COPY --from=docker/buildx-bin:latest /buildx /usr/libexec/docker/cli-plugins/docker-buildx
+
 # Add the `${USER}` user, and the required folders
 ARG USER=ubuntu
 ARG UID=1000
