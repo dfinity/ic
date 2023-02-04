@@ -1,6 +1,6 @@
 use ic_embedders::wasm_executor::SliceExecutionOutput;
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, OutOfInstructionsHandler,
+    ExecutionComplexity, HypervisorError, HypervisorResult, OutOfInstructionsHandler,
 };
 use ic_types::NumInstructions;
 use std::sync::{Arc, Condvar, Mutex};
@@ -33,6 +33,9 @@ struct State {
     // The number of instructions that have been executed so far.
     // Invariant: it does not exceed `total_instruction_limit`.
     instructions_executed: i64,
+
+    // The execution complexity accumulated at the beginning of the round.
+    execution_complexity: ExecutionComplexity,
 }
 
 impl State {
@@ -44,6 +47,7 @@ impl State {
             max_slice_instruction_limit,
             slice_instruction_limit: max_slice_instruction_limit,
             instructions_executed: 0,
+            execution_complexity: ExecutionComplexity::default(),
         };
         result.check_invariants();
         result
@@ -94,12 +98,21 @@ impl State {
             .max(0)
     }
 
+    /// Returns the newly observed execution complexity in the current slice.
+    fn newly_observed_complexity(
+        &self,
+        execution_complexity: &ExecutionComplexity,
+    ) -> ExecutionComplexity {
+        execution_complexity - &self.execution_complexity
+    }
+
     /// Updates the state to prepare for the next slice.
-    fn update(&mut self, instruction_counter: i64) {
+    fn update(&mut self, instruction_counter: i64, execution_complexity: ExecutionComplexity) {
         self.instructions_executed = self
             .instructions_executed
             .saturating_add(self.newly_executed(instruction_counter));
         self.slice_instruction_limit = self.next_slice_instruction_limit(instruction_counter);
+        self.execution_complexity = execution_complexity;
         self.check_invariants();
     }
 
@@ -155,7 +168,11 @@ impl DeterministicTimeSlicing {
     // - transitions to `Paused` if it is possible to continue the execution in
     //   the next slice.
     // - or returns the `InstructionLimitExceeded` error.
-    fn try_pause(&self, instruction_counter: i64) -> Result<SliceExecutionOutput, HypervisorError> {
+    fn try_pause(
+        &self,
+        instruction_counter: i64,
+        execution_complexity: ExecutionComplexity,
+    ) -> Result<SliceExecutionOutput, HypervisorError> {
         let mut state = self.state.lock().unwrap();
         assert_eq!(state.execution_status, ExecutionStatus::Running);
         if state.is_last_slice() {
@@ -163,6 +180,7 @@ impl DeterministicTimeSlicing {
         }
 
         let newly_executed = state.newly_executed(instruction_counter);
+        let newly_observed_complexity = state.newly_observed_complexity(&execution_complexity);
         if state.next_slice_instruction_limit(instruction_counter) == 0 {
             // If the next slice doesn't have any instructions left, then
             // execution will fail anyway, so we can return the error now.
@@ -174,10 +192,11 @@ impl DeterministicTimeSlicing {
 
         // At this pont we know that the next slice will be able to run, so we
         // can commit the state changes and pause now.
-        state.update(instruction_counter);
+        state.update(instruction_counter, execution_complexity);
         state.execution_status = ExecutionStatus::Paused;
         Ok(SliceExecutionOutput {
             executed_instructions: NumInstructions::from(newly_executed as u64),
+            execution_complexity: newly_observed_complexity,
         })
     }
 
@@ -251,8 +270,14 @@ impl DeterministicTimeSlicingHandler {
 }
 
 impl OutOfInstructionsHandler for DeterministicTimeSlicingHandler {
-    fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64> {
-        let slice = self.dts.try_pause(instruction_counter)?;
+    fn out_of_instructions(
+        &self,
+        instruction_counter: i64,
+        execution_complexity: ExecutionComplexity,
+    ) -> HypervisorResult<i64> {
+        let slice = self
+            .dts
+            .try_pause(instruction_counter, execution_complexity)?;
         let paused = PausedExecution {
             dts: self.dts.clone(),
         };

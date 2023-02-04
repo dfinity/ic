@@ -15,7 +15,7 @@ use ic_types::{
         AnonymousQuery, AnonymousQueryResponse, CertificateDelegation, HttpQueryResponse,
         MessageId, SignedIngressContent, UserQuery,
     },
-    Cycles, ExecutionRound, Height, NumInstructions, NumPages, Randomness, Time,
+    CpuComplexity, Cycles, ExecutionRound, Height, NumInstructions, NumPages, Randomness, Time,
 };
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -73,23 +73,46 @@ pub enum PerformanceCounterType {
 ///
 /// For now, the complexity counters do not translate into Cycles, but they are rather
 /// used to prevent too complex messages to slow down the whole subnet.
-/// TODO: EXC-1029: Computation Cost (take into account memory, disk, and network complexity)
 ///
-#[derive(Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ExecutionComplexity {
-    /// The CPU complexity accumulated.
-    pub cpu: NumInstructions,
+    /// Accumulated CPU complexity, in instructions.
+    pub cpu: CpuComplexity,
     /// The number of dirty pages in stable memory.
     pub stable_dirty_pages: NumPages,
 }
 
 impl ExecutionComplexity {
-    pub fn new() -> Self {
-        ExecutionComplexity::default()
+    /// Execution complexity with maximum values.
+    pub const MAX: Self = Self {
+        cpu: CpuComplexity::new(i64::MAX),
+        stable_dirty_pages: NumPages::new(u64::MAX),
+    };
+
+    /// Creates execution complexity with a specified CPU complexity.
+    pub fn with_cpu(cpu: NumInstructions) -> Self {
+        Self {
+            cpu: (cpu.get() as i64).into(),
+            ..Default::default()
+        }
+    }
+
+    /// Returns true if the CPU complexity reached the specified
+    /// instructions limit.
+    pub fn cpu_reached(&self, limit: NumInstructions) -> bool {
+        self.cpu.get() >= limit.get() as i64
+    }
+
+    /// Returns the maximum of each complexity.
+    pub fn max(&self, rhs: Self) -> Self {
+        Self {
+            cpu: self.cpu.max(rhs.cpu),
+            stable_dirty_pages: self.stable_dirty_pages.max(rhs.stable_dirty_pages),
+        }
     }
 }
 
-impl ops::Add<&ExecutionComplexity> for &ExecutionComplexity {
+impl ops::Add for &ExecutionComplexity {
     type Output = ExecutionComplexity;
 
     fn add(self, rhs: &ExecutionComplexity) -> ExecutionComplexity {
@@ -101,6 +124,31 @@ impl ops::Add<&ExecutionComplexity> for &ExecutionComplexity {
                 .saturating_add(rhs.stable_dirty_pages.get())
                 .into(),
         }
+    }
+}
+
+impl ops::Sub for &ExecutionComplexity {
+    type Output = ExecutionComplexity;
+
+    fn sub(self, rhs: &ExecutionComplexity) -> ExecutionComplexity {
+        ExecutionComplexity {
+            cpu: self.cpu - rhs.cpu,
+            stable_dirty_pages: self
+                .stable_dirty_pages
+                .get()
+                .saturating_sub(rhs.stable_dirty_pages.get())
+                .into(),
+        }
+    }
+}
+
+impl fmt::Display for ExecutionComplexity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{{ cpu = {} stable_dirty_pages = {} }}",
+            self.cpu, self.stable_dirty_pages,
+        )
     }
 }
 
@@ -305,7 +353,11 @@ pub trait OutOfInstructionsHandler {
     // If it is impossible to recover from the out-of-instructions error then
     // the function returns `Err(HypervisorError::InstructionLimitExceeded)`.
     // Otherwise, the function returns a new positive instruction counter.
-    fn out_of_instructions(&self, instruction_counter: i64) -> HypervisorResult<i64>;
+    fn out_of_instructions(
+        &self,
+        instruction_counter: i64,
+        execution_complexity: ExecutionComplexity,
+    ) -> HypervisorResult<i64>;
 }
 
 /// Indicates the type of stable memory API being used.
@@ -343,11 +395,11 @@ pub enum StableGrowOutcome {
 
 /// A trait for providing all necessary imports to a Wasm module.
 pub trait SystemApi {
-    /// Stores the total execution complexity.
-    fn set_total_execution_complexity(&mut self, complexity: ExecutionComplexity);
+    /// Stores the complexity accumulated during the message execution.
+    fn set_execution_complexity(&mut self, complexity: ExecutionComplexity);
 
-    /// Returns the total execution complexity accumulated so far.
-    fn get_total_execution_complexity(&self) -> &ExecutionComplexity;
+    /// Returns the accumulated execution complexity.
+    fn execution_complexity(&self) -> &ExecutionComplexity;
 
     /// Stores the execution error, so that the user can evaluate it later.
     fn set_execution_error(&mut self, error: HypervisorError);
@@ -950,11 +1002,11 @@ impl fmt::Display for WasmExecutionOutput {
             },
             Err(err) => format!("{}", err),
         };
-        write!(f, "wasm_result => [{}], instructions left => {}, instace_stats => [ accessed pages => {}, dirty pages => {}]",
+        write!(f, "wasm_result => [{}], instructions left => {}, instance_stats => [ accessed pages => {}, dirty pages => {}]",
                wasm_result_str,
                self.num_instructions_left,
                self.instance_stats.accessed_pages,
-               self.instance_stats.dirty_pages
+               self.instance_stats.dirty_pages,
         )
     }
 }

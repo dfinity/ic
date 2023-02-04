@@ -10,7 +10,7 @@ use ic_execution_environment::{
     as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionEnvironment,
     ExecutionResponse, RoundLimits,
 };
-use ic_interfaces::messages::CanisterMessageOrTask;
+use ic_interfaces::{execution_environment::ExecutionComplexity, messages::CanisterMessageOrTask};
 use ic_types::ingress::{IngressState, IngressStatus};
 use lazy_static::lazy_static;
 
@@ -340,6 +340,7 @@ pub fn bench_execute_update(c: &mut Criterion) {
                 instructions: as_round_instructions(
                     execution_parameters.instruction_limits.message(),
                 ),
+                execution_complexity: ExecutionComplexity::MAX,
                 subnet_available_memory,
                 compute_allocation_used: 0,
             };

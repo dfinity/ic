@@ -13,7 +13,9 @@ use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{CanisterStatusType, EcdsaKeyId, Method as Ic00Method};
-use ic_interfaces::execution_environment::{ExecutionRoundType, RegistryExecutionSettings};
+use ic_interfaces::execution_environment::{
+    ExecutionComplexity, ExecutionRoundType, RegistryExecutionSettings,
+};
 use ic_interfaces::{
     execution_environment::{IngressHistoryWriter, Scheduler},
     messages::CanisterMessage,
@@ -51,6 +53,16 @@ use round_schedule::*;
 /// Only log potentially spammy messages this often (in rounds). With a block
 /// rate around 1.0, this will result in logging about once every 10 minutes.
 const SPAMMY_LOG_INTERVAL_ROUNDS: u64 = 10 * 60;
+
+/// Ideally we would split the per-round limit between subnet messages and
+/// canister messages, so that their sum cannot exceed the limit. That would
+/// make the limit for canister messages variable, which would break assumptions
+/// of the scheduling algorithm. The next best thing we can do is to limit
+/// subnet messages on top of the fixed limit for canister messages.
+/// The value of the limit for subnet messages is chosen quite arbitrarily
+/// as 1/16 of the fixed limit. Any other value in the same ballpark would
+/// work here.
+const SUBNET_MESSAGES_LIMIT_FRACTION: u64 = 16;
 
 #[cfg(test)]
 pub(crate) mod test_utilities;
@@ -400,10 +412,9 @@ impl SchedulerImpl {
             let messages = NumMessages::from(message_instructions.map(|_| 1).unwrap_or(0));
             measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
 
-            // Break when reached the instructions limit or
-            // found a canister that has a long install code message in progress.
-            if round_limits.instructions <= RoundInstructions::from(0) || ongoing_long_install_code
-            {
+            // Break when round limits are reached or found a canister
+            // that has a long install code message in progress.
+            if round_limits.reached() || ongoing_long_install_code {
                 break;
             }
         }
@@ -475,7 +486,7 @@ impl SchedulerImpl {
                     break;
                 }
 
-                if round_limits.instructions <= RoundInstructions::from(0) {
+                if round_limits.reached() {
                     break;
                 }
             }
@@ -622,7 +633,7 @@ impl SchedulerImpl {
                     .inc();
             }
 
-            if round_limits.instructions <= RoundInstructions::from(0) {
+            if round_limits.reached() {
                 self.metrics
                     .inner_round_loop_consumed_max_instructions
                     .inc();
@@ -733,7 +744,7 @@ impl SchedulerImpl {
 
         // If there are no more instructions left, then skip execution and
         // return unchanged canisters.
-        if round_limits.instructions <= RoundInstructions::from(0) {
+        if round_limits.reached() {
             return (
                 canisters_by_thread.into_iter().flatten().collect(),
                 vec![],
@@ -747,9 +758,10 @@ impl SchedulerImpl {
             .map(|_| Default::default())
             .collect();
 
-        // Distribute subnet available memory equaly between the threads.
+        // Distribute subnet available memory equally between the threads.
         let round_limits_per_thread = RoundLimits {
             instructions: round_limits.instructions,
+            execution_complexity: round_limits.execution_complexity.clone(),
             subnet_available_memory: (round_limits.subnet_available_memory
                 / self.config.scheduler_cores as i64),
             compute_allocation_used: round_limits.compute_allocation_used,
@@ -772,6 +784,7 @@ impl SchedulerImpl {
                 let deterministic_time_slicing = self.deterministic_time_slicing;
                 let round_limits = RoundLimits {
                     instructions: round_limits.instructions,
+                    execution_complexity: round_limits.execution_complexity.clone(),
                     subnet_available_memory: round_limits_per_thread.subnet_available_memory,
                     compute_allocation_used: round_limits.compute_allocation_used,
                 };
@@ -801,6 +814,7 @@ impl SchedulerImpl {
         let mut ingress_results = Vec::new();
         let mut total_instructions_executed = NumInstructions::from(0);
         let mut max_instructions_executed_per_thread = NumInstructions::from(0);
+        let mut max_execution_complexity_per_thread = ExecutionComplexity::default();
         let mut heap_delta = NumBytes::from(0);
         for mut result in results_by_thread.into_iter() {
             canisters.append(&mut result.canisters);
@@ -811,6 +825,11 @@ impl SchedulerImpl {
             total_instructions_executed += instructions_executed;
             max_instructions_executed_per_thread =
                 max_instructions_executed_per_thread.max(instructions_executed);
+
+            let execution_complexity = &round_limits_per_thread.execution_complexity
+                - &result.round_limits.execution_complexity;
+            max_execution_complexity_per_thread =
+                max_execution_complexity_per_thread.max(execution_complexity);
 
             self.metrics.compute_utilization_per_core.observe(
                 instructions_executed.get() as f64
@@ -830,6 +849,8 @@ impl SchedulerImpl {
         // Since there are multiple threads, we update the global limit using
         // the thread that executed the most instructions.
         round_limits.instructions -= as_round_instructions(max_instructions_executed_per_thread);
+        round_limits.execution_complexity =
+            &round_limits.execution_complexity - &max_execution_complexity_per_thread;
 
         self.metrics
             .instructions_consumed_per_round
@@ -1323,16 +1344,13 @@ impl Scheduler for SchedulerImpl {
             }
         }
 
-        // Ideally we would split the per-round limit between subnet messages and
-        // canister messages, so that their sum cannot exceed the limit. That would
-        // make the limit for canister messages variable, which would break assumptions
-        // of the scheduling algorithm. The next best thing we can do is to limit
-        // subnet messages on top of the fixed limit for canister messages.
-        // The value of the limit for subnet messages is chosen quite arbitrarily
-        // as 1/16 of the fixed limit. Any other value in the same ballpark would
-        // work here.
         let mut round_limits = RoundLimits {
-            instructions: as_round_instructions(self.config.max_instructions_per_round / 16),
+            instructions: as_round_instructions(
+                self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
+            ),
+            execution_complexity: ExecutionComplexity::with_cpu(
+                self.config.max_instructions_per_round / SUBNET_MESSAGES_LIMIT_FRACTION,
+            ),
             subnet_available_memory: self.exec_env.subnet_available_memory(&state),
             compute_allocation_used: state.total_compute_allocation(),
         };
@@ -1368,7 +1386,7 @@ impl Scheduler for SchedulerImpl {
                     as_num_instructions(instructions_before - round_limits.instructions);
                 let messages = NumMessages::from(message_instructions.map(|_| 1).unwrap_or(0));
                 measurement_scope.add(round_instructions_executed, NumSlices::from(1), messages);
-                if round_limits.instructions <= RoundInstructions::from(0) {
+                if round_limits.reached() {
                     break;
                 }
             }
@@ -1393,6 +1411,7 @@ impl Scheduler for SchedulerImpl {
             // messages that do not consume instructions. To allow that, we set
             // the number available instructions to 1 if it is not positive.
             round_limits.instructions = round_limits.instructions.max(RoundInstructions::from(1));
+            round_limits.execution_complexity.cpu = round_limits.instructions.get().into();
 
             state = self.drain_subnet_queues(
                 state,
@@ -1425,6 +1444,7 @@ impl Scheduler for SchedulerImpl {
         round_limits.instructions = as_round_instructions(self.config.max_instructions_per_round)
             - as_round_instructions(max_instructions_per_slice)
             + RoundInstructions::from(1);
+        round_limits.execution_complexity.cpu = round_limits.instructions.get().into();
 
         let round_schedule;
         {
@@ -1676,9 +1696,7 @@ fn execute_canisters_on_thread(
     for (rank, mut canister) in canisters_to_execute.into_iter().enumerate() {
         // If no more instructions are left or if heap delta is already too
         // large, then skip execution of the canister and keep its old state.
-        if round_limits.instructions <= RoundInstructions::from(0)
-            || total_heap_delta >= config.max_heap_delta_per_iteration
-        {
+        if round_limits.reached() || total_heap_delta >= config.max_heap_delta_per_iteration {
             canisters.push(canister);
             continue;
         }
@@ -1696,7 +1714,7 @@ fn execute_canisters_on_thread(
                 NextExecution::StartNew | NextExecution::ContinueLong => {}
             }
 
-            if round_limits.instructions <= RoundInstructions::from(0) {
+            if round_limits.reached() {
                 canister
                     .system_state
                     .canister_metrics

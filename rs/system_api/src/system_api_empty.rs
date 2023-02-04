@@ -16,10 +16,10 @@ const MESSAGE_UNIMPLEMENTED: &str =
 pub struct SystemApiEmpty;
 
 impl SystemApi for SystemApiEmpty {
-    fn set_total_execution_complexity(&mut self, _complexity: ExecutionComplexity) {
+    fn set_execution_complexity(&mut self, _complexity: ExecutionComplexity) {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn get_total_execution_complexity(&self) -> &ExecutionComplexity {
+    fn execution_complexity(&self) -> &ExecutionComplexity {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn set_execution_error(&mut self, _error: HypervisorError) {

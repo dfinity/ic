@@ -1,7 +1,7 @@
 use crate::execution_environment::{as_round_instructions, RoundLimits};
 use crate::Hypervisor;
 use ic_error_types::{ErrorCode, UserError};
-use ic_interfaces::execution_environment::SubnetAvailableMemory;
+use ic_interfaces::execution_environment::{ExecutionComplexity, SubnetAvailableMemory};
 use ic_logger::{fatal, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, NetworkTopology};
@@ -60,6 +60,7 @@ pub fn execute_inspect_message(
     );
     let mut round_limits = RoundLimits {
         instructions: as_round_instructions(message_instruction_limit),
+        execution_complexity: ExecutionComplexity::with_cpu(message_instruction_limit),
         subnet_available_memory,
         // Ignore compute allocation
         compute_allocation_used: 0,

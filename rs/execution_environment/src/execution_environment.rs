@@ -34,7 +34,8 @@ use ic_ic00_types::{
 };
 use ic_interfaces::{
     execution_environment::{
-        ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
+        ExecutionComplexity, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
+        SubnetAvailableMemory,
     },
     messages::{
         CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, CanisterTask,
@@ -193,6 +194,9 @@ pub struct RoundLimits {
     /// Keeps track of remaining instructions in this execution round.
     pub instructions: RoundInstructions,
 
+    /// Keeps track of remaining execution complexities.
+    pub execution_complexity: ExecutionComplexity,
+
     /// Keeps track of the available storage memory. It decreases if
     /// - Wasm execution grows the Wasm/stable memory.
     /// - Wasm execution pushes a new request to the output queue.
@@ -201,6 +205,15 @@ pub struct RoundLimits {
     // TODO would be nice to change that to available, but this requires
     // a lot of changes since available allocation sits in CanisterManager config
     pub compute_allocation_used: u64,
+}
+
+impl RoundLimits {
+    /// Returns true if any of the round limits is reached.
+    pub fn reached(&self) -> bool {
+        self.instructions <= RoundInstructions::from(0)
+        // TODO: RUN-531 re-enable after the round tests are added
+        // || self.execution_complexity.cpu <= CpuComplexity::from(0)
+    }
 }
 
 /// Represent a paused execution that can be resumed or aborted.
@@ -1482,6 +1495,7 @@ impl ExecutionEnvironment {
         let subnet_available_memory = subnet_memory_capacity(&self.config);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(max_instructions_per_query),
+            execution_complexity: ExecutionComplexity::with_cpu(max_instructions_per_query),
             subnet_available_memory,
             // Ignore compute allocation
             compute_allocation_used: 0,

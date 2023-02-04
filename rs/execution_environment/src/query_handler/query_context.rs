@@ -48,7 +48,9 @@ use ic_config::flag_status::FlagStatus;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{ExecutionMode, HypervisorError, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
+};
 use ic_logger::{debug, error, fatal, warn, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -174,6 +176,7 @@ impl<'a> QueryContext<'a> {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let round_limits = RoundLimits {
             instructions: as_round_instructions(max_instructions_per_query),
+            execution_complexity: ExecutionComplexity::with_cpu(max_instructions_per_query),
             subnet_available_memory,
             // Ignore compute allocation
             compute_allocation_used: 0,

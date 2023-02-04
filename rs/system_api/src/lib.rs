@@ -737,8 +737,8 @@ pub struct SystemApiImpl {
     /// starts a new slice.
     instructions_executed_before_current_slice: i64,
 
-    /// Tracks the total execution complexity.
-    total_execution_complexity: ExecutionComplexity,
+    /// Tracks the complexity accumulated during the message execution.
+    execution_complexity: ExecutionComplexity,
 }
 
 impl SystemApiImpl {
@@ -773,7 +773,7 @@ impl SystemApiImpl {
             log,
             current_slice_instruction_limit: i64::try_from(slice_limit).unwrap_or(i64::MAX),
             instructions_executed_before_current_slice: 0,
-            total_execution_complexity: ExecutionComplexity::new(),
+            execution_complexity: ExecutionComplexity::default(),
         }
     }
 
@@ -1179,12 +1179,12 @@ impl SystemApiImpl {
 }
 
 impl SystemApi for SystemApiImpl {
-    fn set_total_execution_complexity(&mut self, complexity: ExecutionComplexity) {
-        self.total_execution_complexity = complexity
+    fn set_execution_complexity(&mut self, complexity: ExecutionComplexity) {
+        self.execution_complexity = complexity
     }
 
-    fn get_total_execution_complexity(&self) -> &ExecutionComplexity {
-        &self.total_execution_complexity
+    fn execution_complexity(&self) -> &ExecutionComplexity {
+        &self.execution_complexity
     }
 
     fn set_execution_error(&mut self, error: HypervisorError) {
@@ -2328,9 +2328,10 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn out_of_instructions(&mut self, instruction_counter: i64) -> HypervisorResult<i64> {
+        let execution_complexity = self.execution_complexity().clone();
         let result = self
             .out_of_instructions_handler
-            .out_of_instructions(instruction_counter);
+            .out_of_instructions(instruction_counter, execution_complexity);
         if let Ok(new_slice_instruction_limit) = result {
             // A new slice has started, update the instruction sum and limit.
             let slice_instructions = self
@@ -2772,7 +2773,11 @@ impl SystemApi for SystemApiImpl {
 pub struct DefaultOutOfInstructionsHandler {}
 
 impl OutOfInstructionsHandler for DefaultOutOfInstructionsHandler {
-    fn out_of_instructions(&self, _instruction_counter: i64) -> HypervisorResult<i64> {
+    fn out_of_instructions(
+        &self,
+        _instruction_counter: i64,
+        _execution_complexity: ExecutionComplexity,
+    ) -> HypervisorResult<i64> {
         Err(HypervisorError::InstructionLimitExceeded)
     }
 }

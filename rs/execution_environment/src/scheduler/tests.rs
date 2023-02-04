@@ -8,7 +8,11 @@ use candid::Encode;
 use ic00::{
     CanisterHttpRequestArgs, HttpMethod, SignWithECDSAArgs, TransformContext, TransformFunc,
 };
-use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfigs};
+use ic_base_types::PrincipalId;
+use ic_config::{
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig, SubnetConfigs},
+};
 use ic_error_types::RejectCode;
 use ic_ic00_types::{
     self as ic00, CanisterIdRecord, CanisterStatusType, EcdsaCurve, EmptyBlob, Method, Payload as _,
@@ -20,6 +24,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::{
     mock_time,
     state::{get_running_canister, get_stopped_canister, get_stopping_canister},
@@ -46,6 +51,93 @@ fn assert_floats_are_equal(val0: f64, val1: f64) {
         assert!(val0 - val1 < 0.1);
     } else {
         assert!(val1 - val0 < 0.1);
+    }
+}
+
+fn complexity_env(
+    system_calls_per_slice: u64,
+    system_calls_per_round: u64,
+    system_calls_per_message: u64,
+) -> StateMachine {
+    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+    let performance_counter_complexity = 5 * 50;
+    StateMachineBuilder::new()
+        .with_subnet_type(SubnetType::Application)
+        .with_config(Some(StateMachineConfig::new(
+            SubnetConfig {
+                scheduler_config: SchedulerConfig {
+                    scheduler_cores: 2,
+                    max_instructions_per_round: (system_calls_per_round
+                        * performance_counter_complexity)
+                        .into(),
+                    max_instructions_per_message: (system_calls_per_message
+                        * performance_counter_complexity)
+                        .into(),
+                    max_instructions_per_message_without_dts: (system_calls_per_slice
+                        * performance_counter_complexity)
+                        .into(),
+                    max_instructions_per_slice: (system_calls_per_slice
+                        * performance_counter_complexity)
+                        .into(),
+                    instruction_overhead_per_message: NumInstructions::from(0),
+                    instruction_overhead_per_canister: NumInstructions::from(0),
+                    ..subnet_config.scheduler_config
+                },
+                ..subnet_config
+            },
+            HypervisorConfig {
+                deterministic_time_slicing: FlagStatus::Enabled,
+                cost_to_compile_wasm_instruction: 0.into(),
+                ..Default::default()
+            },
+        )))
+        .build()
+}
+
+fn complexity_canister(env: &StateMachine) -> CanisterId {
+    let wat = r#"
+        (module
+            (import "ic0" "performance_counter"
+                (func $ic0_performance_counter (param i32) (result i64)))
+            (import "ic0" "msg_reply" (func $ic0_msg_reply))
+            (import "ic0" "msg_arg_data_size"
+                (func $ic0_msg_arg_data_size (result i32)))
+            (memory 1)
+
+            (func (export "canister_update system_calls")
+                (local $i i32)
+                (local.set $i (call $ic0_msg_arg_data_size))
+                (loop $loop
+                    (drop (call $ic0_performance_counter (i32.const 0)))
+                    (local.tee $i (i32.sub (local.get $i) (i32.const 1)))
+                    (br_if $loop)
+                )
+                (call $ic0_msg_reply)
+            )
+        )"#;
+    let binary = wat::parse_str(wat).unwrap();
+
+    env.install_canister_with_cycles(binary, vec![], None, Cycles::new(100_000_000_000))
+        .unwrap()
+}
+
+fn execute_system_calls(
+    env: &StateMachine,
+    canister_id: &CanisterId,
+    system_calls: usize,
+) -> MessageId {
+    env.send_ingress(
+        PrincipalId::new_anonymous(),
+        *canister_id,
+        "system_calls",
+        vec![0; system_calls],
+    )
+}
+
+fn ingress_state(env: &StateMachine, message_id: &MessageId) -> IngressState {
+    match env.ingress_status(message_id) {
+        IngressStatus::Known { state, .. } => state,
+        IngressStatus::Unknown => unreachable!("Expected a known ingress status."),
     }
 }
 
@@ -260,6 +352,106 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
             .get(),
         1
     );
+}
+
+#[test]
+#[ignore]
+fn inner_loop_stops_when_max_complexity_per_round_consumed() {
+    // Create a canister with 3 input messages. 2 of them consume all
+    // the complexity per round. The 2 messages are executed in the first
+    // iteration of the loop and then the loop breaks.
+    let mut test = SchedulerTestBuilder::new()
+        .with_scheduler_config(SchedulerConfig {
+            scheduler_cores: 2,
+            max_instructions_per_round: NumInstructions::new(100),
+            max_instructions_per_message: NumInstructions::new(50),
+            max_instructions_per_message_without_dts: NumInstructions::from(50),
+            max_instructions_per_slice: NumInstructions::new(50),
+            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            instruction_overhead_per_canister_for_finalization: NumInstructions::from(0),
+            ..SchedulerConfig::application_subnet()
+        })
+        .build();
+
+    let canister_id = test.create_canister();
+    test.send_ingress(
+        canister_id,
+        instructions(1).execution_complexity(ExecutionComplexity::with_cpu(50.into())),
+    );
+    test.send_ingress(
+        canister_id,
+        instructions(1).execution_complexity(ExecutionComplexity::with_cpu(50.into())),
+    );
+    test.send_ingress(
+        canister_id,
+        instructions(1).execution_complexity(ExecutionComplexity::with_cpu(50.into())),
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    assert_eq!(test.ingress_queue_size(canister_id), 1);
+    let metrics = &test.scheduler().metrics;
+    assert_eq!(metrics.execute_round_called.get(), 1);
+    assert_eq!(metrics.inner_round_loop_consumed_max_instructions.get(), 1);
+    assert_eq!(
+        metrics
+            .inner_loop_consumed_non_zero_instructions_count
+            .get(),
+        1
+    );
+}
+
+#[test]
+fn each_too_complex_message_aborts_execution() {
+    let env = complexity_env(1, 1, 1);
+    let canister_id = complexity_canister(&env);
+
+    for _ in 0..10 {
+        let message_id = execute_system_calls(&env, &canister_id, 2);
+
+        // Message limit is set to one system call, while we're executing two.
+        let state = ingress_state(&env, &message_id);
+        let err = match state {
+            IngressState::Failed(err) => err,
+            _ => unreachable!("Expected a failed state but got: {state:?}"),
+        };
+        assert_eq!(ErrorCode::CanisterInstructionLimitExceeded, err.code());
+        env.tick();
+    }
+}
+
+#[test]
+fn each_too_complex_message_aborts_dts_execution() {
+    // The overhead of the performance counter is 200, while its complexity is 250, so:
+    //     11 * 200 (executed instructions) < 10 * 250 (instructions limit)
+    // but
+    //     11 * 250 (observed complexity) > 10 * 250 (instructions limit)
+    // So we're sure the execution aborts due to the complexity.
+    let env = complexity_env(1, 1, 10);
+    let canister_id = complexity_canister(&env);
+
+    for _ in 0..10 {
+        let message_id = execute_system_calls(&env, &canister_id, 11);
+
+        // Message limit is set to 10 system calls, while we're executing 11.
+        // As we slice execution using instructions, not complexity, to execute
+        // 11 system calls ~200 instructions each it will take 11*200/250 = ~9 rounds
+        // After the first 8 rounds the message should be still in progress.
+        for _ in 1..8 {
+            let state = ingress_state(&env, &message_id);
+            assert_eq!(IngressState::Processing, state);
+            env.tick();
+        }
+
+        // After the fifth round the message should fail.
+        let state = ingress_state(&env, &message_id);
+
+        let err = match state {
+            IngressState::Failed(err) => err,
+            _ => unreachable!("Expected a failed state but got: {state:?}"),
+        };
+        assert_eq!(ErrorCode::CanisterInstructionLimitExceeded, err.code());
+    }
 }
 
 #[test]
