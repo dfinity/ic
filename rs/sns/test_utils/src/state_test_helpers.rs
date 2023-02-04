@@ -22,7 +22,7 @@ use ic_sns_root::pb::v1::{
     RegisterDappCanistersResponse,
 };
 use ic_sns_root::{CanisterIdRecord, CanisterStatusResultV2};
-use ic_sns_swap::pb::v1::{self as swap_pb, RefreshBuyerTokensRequest};
+use ic_sns_swap::pb::v1::{self as swap_pb, GetOpenTicketResponse, RefreshBuyerTokensRequest};
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 use icp_ledger::{AccountIdentifier, Memo, TransferArgs, DEFAULT_TRANSFER_FEE};
@@ -476,4 +476,16 @@ impl Scenario {
             &self.configuration.swap,
         );
     }
+}
+
+pub fn get_open_ticket(
+    env: &StateMachine,
+    swap_id: CanisterId,
+    sender: PrincipalId,
+) -> GetOpenTicketResponse {
+    let args = Encode!(&swap_pb::GetOpenTicketRequest {}).unwrap();
+    let res = env
+        .query_as(sender, swap_id, "get_open_ticket", args)
+        .unwrap();
+    Decode!(&res.bytes(), GetOpenTicketResponse).unwrap()
 }

@@ -814,6 +814,137 @@ message GetDerivedStateResponse {
   optional double sns_tokens_per_icp = 2;
 }
 
+// ICRC-1 Account. See https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1
+message ICRC1Account {
+  ic_base_types.pb.v1.PrincipalId owner = 1;
+  optional bytes subaccount = 2;
+}
+
+// A device for ensuring that retrying (direct) participation does not result
+// in multiple participation. Basically, this records a user's intent to
+// participate BEFORE moving any funds.
+//
+// How this is used: before any money is sent, a user's agent must first look
+// for an existing ticket. If one does not exist, then, a new one is created
+// for the current participation that is now being attempted (for the first time).
+//
+// If there is already a ticket, then the new participation must be aborted.
+// The surprise existence of the ticket indicates that there is a pending participation.
+// In this case the user's agent must attempt to perform the same participation as
+// stated in the ticket before doing anything else.
+message Ticket {
+  // Unique ID of the ticket
+  uint64 ticket_id = 1;
+
+  // The account of the ticket.
+  //
+  // account.owner is the owner of this ticket.
+  ICRC1Account account = 2;
+
+  // The user-set amount of the ticket in ICP e8s
+  uint64 amount_icp_e8s = 3;
+
+  // The timestamp of creation of this ticket
+  uint64 creation_time = 4;
+}
+
+// Request struct for the method `get_open_ticket`
+message GetOpenTicketRequest {}
+
+// Response struct for the method `get_open_ticket`
+message GetOpenTicketResponse {
+  // Request was completed successfully.
+  message Ok {
+    // If there is an open sale ticket for the caller then this field contains it
+    optional Ticket ticket = 1;
+  }
+
+  // Request was not successful, and no ticket was creatd.
+  message Err {
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+
+      TYPE_SALE_NOT_OPEN = 1;
+
+      TYPE_SALE_CLOSED = 2;
+    }
+
+    optional Type error_type = 1;
+  }
+
+  oneof result {
+    Ok ok = 1;
+    Err err = 2;
+  }
+}
+
+// Request struct for the method `new_sale_ticket`
+message NewSaleTicketRequest {
+  // The user-set amount of the ticket in ICP e8s
+  uint64 amount_icp_e8s = 1;
+
+  // The subaccount of the caller to be used for the ticket
+  optional bytes subaccount = 2;
+}
+
+// Response struct for the method `new_sale_ticket`
+message NewSaleTicketResponse {
+  // Request was completed successfully.
+  message Ok {
+    // The created ticket.
+    Ticket ticket = 1;
+  }
+
+  // Request was not successful, and no ticket was creatd.
+  message Err {
+    message InvalidUserAmount {
+      uint64 min_amount_icp_e8s_included = 1;
+      uint64 max_amount_icp_e8s_included = 2;
+    }
+
+    enum Type {
+      TYPE_UNSPECIFIED = 0;
+
+      TYPE_SALE_NOT_OPEN = 1;
+
+      TYPE_SALE_CLOSED = 2;
+
+      // There is already an open ticket associated with the caller.
+      //
+      // When this is the `error_type`, then the field existing_ticket
+      // is set and contains the ticket itself.
+      TYPE_TICKET_EXISTS = 3;
+
+      // The amount sent by the user is not within the Sale parameters.
+      //
+      // When this is the `error_type`, then the field invalid_user_amount
+      // is set and describes minimum and maximum amounts.
+      TYPE_INVALID_USER_AMOUNT = 4;
+
+      // The specified subaccount is not a valid subaccount (length != 32 bytes).
+      TYPE_INVALID_SUBACCOUNT = 5;
+
+      // The specified principal is forbidden from creating tickets.
+      TYPE_INVALID_PRINCIPAL = 6;
+    }
+
+    Type error_type = 1;
+
+    // When `error_type` is `INVALID_USER_AMOUNT` then this field
+    // describes the minimum and maximum amounts.
+    optional InvalidUserAmount invalid_user_amount = 2;
+
+    // When `error_type` is `TICKET_EXISTS` then this field
+    // contains the ticket that already exists.
+    optional Ticket existing_ticket = 3;
+  }
+
+  oneof result {
+    Ok ok = 1;
+    Err err = 2;
+  }
+}
+
 // Request struct for the method `list_direct_participants`. This method
 // paginates over all direct participants in the decentralization sale.
 // Direct participants are participants who did not participate via the

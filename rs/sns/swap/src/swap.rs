@@ -2,6 +2,7 @@ use crate::clients::{NnsGovernanceClient, SnsGovernanceClient, SnsRootClient};
 use crate::logs::{ERROR, INFO};
 use crate::memory;
 use crate::pb::v1::{
+    get_open_ticket_response, new_sale_ticket_response,
     params::NeuronBasketConstructionParameters,
     restore_dapp_controllers_response, set_dapp_controllers_call_result, set_mode_call_result,
     set_mode_call_result::SetModeResult,
@@ -11,13 +12,14 @@ use crate::pb::v1::{
     BuyerState, CanisterCallError, CfInvestment, DerivedState, DirectInvestment,
     ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateRequest,
     GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetLifecycleRequest,
-    GetLifecycleResponse, GetSaleParametersRequest, GetSaleParametersResponse, Init, Lifecycle,
-    ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
-    ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
-    ListSnsNeuronRecipesResponse, OpenRequest, OpenResponse, Participant,
+    GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse, GetSaleParametersRequest,
+    GetSaleParametersResponse, Init, Lifecycle, ListCommunityFundParticipantsRequest,
+    ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
+    ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
+    NewSaleTicketRequest, NewSaleTicketResponse, OpenRequest, OpenResponse, Participant,
     RefreshBuyerTokensResponse, RestoreDappControllersResponse, SetDappControllersCallResult,
     SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult,
-    TransferableAmount,
+    Ticket, TransferableAmount,
 };
 use crate::types::{ScheduledVestingEvent, TransferResult};
 #[cfg(target_arch = "wasm32")]
@@ -37,10 +39,12 @@ use ic_sns_governance::{
         ClaimSwapNeuronsRequest, ClaimedSwapNeuronStatus, NeuronId, SetMode, SetModeResponse,
     },
 };
-use ic_stable_structures::GrowFailed;
+use ic_stable_structures::storable::Blob;
+use ic_stable_structures::{BoundedStorable, GrowFailed, Storable};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use itertools::{Either, Itertools};
 use maplit::btreemap;
+use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
 use std::collections::BTreeMap;
 use std::{
@@ -52,7 +56,7 @@ use std::{
 
 // TODO(NNS1-1589): Get these from the canonical location.
 use crate::pb::v1::{
-    settle_community_fund_participation, GovernanceError, SetDappControllersRequest,
+    settle_community_fund_participation, GovernanceError, Icrc1Account, SetDappControllersRequest,
     SetDappControllersResponse, SettleCommunityFundParticipation,
 };
 
@@ -1751,6 +1755,82 @@ impl Swap {
             .into()
     }
 
+    pub fn new_sale_ticket(
+        &self,
+        request: &NewSaleTicketRequest,
+        caller: PrincipalId,
+        time: u64,
+    ) -> NewSaleTicketResponse {
+        if self.lifecycle() < Lifecycle::Open {
+            return NewSaleTicketResponse::err_sale_not_open();
+        }
+        if self.lifecycle() > Lifecycle::Open {
+            return NewSaleTicketResponse::err_sale_closed();
+        }
+        if caller.is_anonymous() {
+            return NewSaleTicketResponse::err_invalid_principal();
+        }
+        // subaccounts must be 32 bytes
+        if request
+            .subaccount
+            .as_ref()
+            .map_or(false, |subaccount| subaccount.len() != 32)
+        {
+            return NewSaleTicketResponse::err_invalid_subaccount();
+        }
+        let principal = Blob::from_bytes(caller.as_slice().into());
+        if let Some(ticket) = memory::OPEN_TICKETS_MEMORY.with(|m| m.borrow().get(&principal)) {
+            return NewSaleTicketResponse::err_ticket_exists(ticket);
+        }
+
+        // Check that there are still available tokens
+        let params = self
+            .params
+            .as_ref()
+            .expect("Expected params to be set because lifecycle is OPEN");
+        let old_balance_e8s = self
+            .buyers
+            .get(&caller.to_string())
+            .map_or(0, |buyer_state| buyer_state.amount_icp_e8s());
+        let amount_icp_e8s = match compute_participation_increment(
+            self.participant_total_icp_e8s(),
+            params.max_icp_e8s,
+            params.min_participant_icp_e8s,
+            params.max_participant_icp_e8s,
+            old_balance_e8s,
+            request.amount_icp_e8s,
+        ) {
+            Ok(amount_icp_e8s) => amount_icp_e8s,
+            Err((min, max)) => return NewSaleTicketResponse::err_invalid_user_amount(min, max),
+        };
+
+        let account = Some(Icrc1Account {
+            owner: Some(caller),
+            subaccount: request.subaccount.clone(),
+        });
+
+        let ticket = memory::OPEN_TICKETS_MEMORY.with(|m| {
+            let ticket_id = m
+                .borrow()
+                .iter()
+                .map(|t| t.1.ticket_id)
+                .max()
+                .map_or(0, |id| id + 1);
+
+            // the amount_icp_e8s is the actual_increment_e8s of the user and not necessarily was the user put in the ticket.
+            // This can potentially reduce the amount of tokens to transfer/refund
+            let ticket = Ticket {
+                ticket_id,
+                account,
+                amount_icp_e8s,
+                creation_time: time,
+            };
+            m.borrow_mut().insert(principal, ticket.clone());
+            ticket
+        });
+        NewSaleTicketResponse::ok(ticket)
+    }
+
     //
     // --- predicates on the state ---------------------------------------------
     //
@@ -1905,6 +1985,30 @@ impl Swap {
         }
     }
 
+    /// If there is an open sale ticket for the caller then it returns it;
+    /// otherwise returns none.
+    ///
+    /// Returns an error if
+    ///  - the sale is not open
+    ///  - the sale is closed
+    ///
+    pub fn get_open_ticket(
+        &self,
+        _request: &GetOpenTicketRequest,
+        caller: PrincipalId,
+    ) -> GetOpenTicketResponse {
+        if self.lifecycle() < Lifecycle::Open {
+            return GetOpenTicketResponse::err_sale_not_open();
+        }
+        if self.lifecycle() > Lifecycle::Open {
+            return GetOpenTicketResponse::err_sale_closed();
+        }
+
+        let principal = Blob::from_bytes(caller.as_slice().into());
+        let maybe_ticket = memory::OPEN_TICKETS_MEMORY.with(|m| m.borrow().get(&principal));
+        GetOpenTicketResponse::ok(maybe_ticket)
+    }
+
     pub fn list_direct_participants(
         &self,
         list_direct_participants_request: ListDirectParticipantsRequest,
@@ -2021,6 +2125,53 @@ impl Swap {
     }
 }
 
+/// Computes the actual participation increment for a user
+///
+/// # Arguments
+///
+/// * `tot_participation` - The current amount of tokens commited to
+///                         the sale by all users.
+/// * `max_tot_participation` - The maximum amount of tokens that can
+///                             be commited to the sale.
+/// * `min_user_participation` - The minimum amount of tokens that a
+///                              user must commit to participate to the sale.
+/// * `max_user_participation` - The maximum amount of tokens that a
+///                              user can commit to participate to the sale.
+/// * `user_participation` - The current amount of tokens commited to the
+///                          sale by the user that requested the increment.
+/// * `requested_increment` - The amount of tokens by which the user wants
+///                           to increase its participation in the sale.
+fn compute_participation_increment(
+    tot_participation: u64,
+    max_tot_participation: u64,
+    min_user_participation: u64,
+    max_user_participation: u64,
+    user_participation: u64,
+    requested_increment: u64,
+) -> Result<u64, (u64, u64)> {
+    if tot_participation >= max_tot_participation {
+        return Err((0, 0));
+    }
+    let max_available_increment = max_tot_participation - tot_participation;
+    if user_participation.saturating_add(max_available_increment) < min_user_participation {
+        return Err((0, 0));
+    }
+    let requested_user_participation = user_participation.saturating_add(requested_increment);
+    if requested_increment == 0
+        || requested_user_participation < min_user_participation
+        || requested_user_participation > max_user_participation
+    {
+        let min_user_increment =
+            std::cmp::max(1, min_user_participation.saturating_sub(user_participation));
+        let max_user_increment = std::cmp::min(
+            max_user_participation.saturating_sub(user_participation),
+            max_available_increment,
+        );
+        return Err((min_user_increment, max_user_increment));
+    }
+    Ok(std::cmp::min(max_available_increment, requested_increment))
+}
+
 pub fn is_valid_principal(p: &str) -> bool {
     !p.is_empty() && PrincipalId::from_str(p).is_ok()
 }
@@ -2047,6 +2198,135 @@ fn string_to_principal(maybe_principal_id: &String) -> Option<PrincipalId> {
             );
             None
         }
+    }
+}
+
+impl Storable for Ticket {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        self.encode_to_vec().into()
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        Self::decode(&bytes[..]).expect("Cannot decode ticket")
+    }
+}
+
+impl BoundedStorable for Ticket {
+    // [Ticket] is stored protocol-buffer encoded. The length
+    // is variable but when all fields are using the max
+    // number of bytes then the size is the following
+    //
+    //   11 + // 08 + encode_varint(u64::MAX)
+    //   70 + // 12 + 44 +
+    //        //    0a + encode_bytes(principal [32 bytes])
+    //        //    12 + encode_bytes(subaccount [32 bytes])
+    //   11 + // 18 + encode_varint(u64::MAX) +
+    //   11 + // 20 + encode_varint(u64::MAX)
+    //= 103 (*2 to be sure)
+    const MAX_SIZE: u32 = 206;
+
+    // The size is not fixed because of base 128 variants and
+    // different size principals
+    const IS_FIXED_SIZE: bool = false;
+}
+
+impl GetOpenTicketResponse {
+    pub fn ok(ticket: Option<Ticket>) -> Self {
+        Self {
+            result: Some(get_open_ticket_response::Result::Ok(
+                get_open_ticket_response::Ok { ticket },
+            )),
+        }
+    }
+
+    pub fn err(err: get_open_ticket_response::Err) -> Self {
+        Self {
+            result: Some(get_open_ticket_response::Result::Err(err)),
+        }
+    }
+
+    pub fn err_sale_not_open() -> Self {
+        Self::err(get_open_ticket_response::Err {
+            error_type: Some(get_open_ticket_response::err::Type::SaleNotOpen as i32),
+        })
+    }
+
+    pub fn err_sale_closed() -> Self {
+        Self::err(get_open_ticket_response::Err {
+            error_type: Some(get_open_ticket_response::err::Type::SaleClosed as i32),
+        })
+    }
+}
+
+impl NewSaleTicketResponse {
+    pub fn ok(ticket: Ticket) -> Self {
+        Self {
+            result: Some(new_sale_ticket_response::Result::Ok(
+                new_sale_ticket_response::Ok {
+                    ticket: Some(ticket),
+                },
+            )),
+        }
+    }
+
+    pub fn err(err: new_sale_ticket_response::Err) -> Self {
+        Self {
+            result: Some(new_sale_ticket_response::Result::Err(err)),
+        }
+    }
+
+    pub fn err_sale_not_open() -> Self {
+        Self::err(new_sale_ticket_response::Err {
+            error_type: new_sale_ticket_response::err::Type::SaleNotOpen as i32,
+            invalid_user_amount: None,
+            existing_ticket: None,
+        })
+    }
+
+    pub fn err_sale_closed() -> Self {
+        Self::err(new_sale_ticket_response::Err {
+            error_type: new_sale_ticket_response::err::Type::SaleClosed as i32,
+            invalid_user_amount: None,
+            existing_ticket: None,
+        })
+    }
+
+    pub fn err_invalid_principal() -> Self {
+        Self::err(new_sale_ticket_response::Err {
+            error_type: new_sale_ticket_response::err::Type::InvalidPrincipal as i32,
+            invalid_user_amount: None,
+            existing_ticket: None,
+        })
+    }
+
+    pub fn err_ticket_exists(ticket: Ticket) -> Self {
+        Self::err(new_sale_ticket_response::Err {
+            error_type: new_sale_ticket_response::err::Type::TicketExists as i32,
+            invalid_user_amount: None,
+            existing_ticket: Some(ticket),
+        })
+    }
+
+    pub fn err_invalid_subaccount() -> Self {
+        Self::err(new_sale_ticket_response::Err {
+            error_type: new_sale_ticket_response::err::Type::InvalidSubaccount as i32,
+            invalid_user_amount: None,
+            existing_ticket: None,
+        })
+    }
+
+    pub fn err_invalid_user_amount(
+        min_amount_icp_e8s_included: u64,
+        max_amount_icp_e8s_included: u64,
+    ) -> Self {
+        Self::err(new_sale_ticket_response::Err {
+            error_type: new_sale_ticket_response::err::Type::InvalidUserAmount as i32,
+            invalid_user_amount: Some(new_sale_ticket_response::err::InvalidUserAmount {
+                min_amount_icp_e8s_included,
+                max_amount_icp_e8s_included,
+            }),
+            existing_ticket: None,
+        })
     }
 }
 
@@ -2458,6 +2738,92 @@ mod tests {
             }
         }
     }
+
+    // Structure that represents the arguments of [compute_participation_increment]
+    // and the expected result. See that method for a description of each argument.
+    //
+    // This structure exists so that it can be printed out when tests fail.
+    #[derive(Debug)]
+    struct ComputeParticipationIncrementScenario {
+        tot_participation: u64,
+        max_tot_participation: u64,
+        min_user_participation: u64,
+        max_user_participation: u64,
+        user_participation: u64,
+        requested_increment: u64,
+        expected_result: Result<u64, (u64, u64)>,
+    }
+
+    #[test]
+    fn test_compute_participation_increment() {
+        let scenarios = vec![
+            ComputeParticipationIncrementScenario {
+                tot_participation: 0,
+                max_tot_participation: 100,
+                min_user_participation: 1,
+                max_user_participation: 10,
+                user_participation: 0,
+                requested_increment: 1,
+                expected_result: Ok(1),
+            },
+            // no more tokens available in the sale
+            ComputeParticipationIncrementScenario {
+                tot_participation: 100,
+                max_tot_participation: 100,
+                min_user_participation: 1,
+                max_user_participation: 10,
+                user_participation: 0,
+                requested_increment: 1,
+                expected_result: Err((0, 0)),
+            },
+            // requested_increment is invalid (0)
+            ComputeParticipationIncrementScenario {
+                tot_participation: 1,
+                max_tot_participation: 100,
+                min_user_participation: 1,
+                max_user_participation: 10,
+                user_participation: 0,
+                requested_increment: 0,
+                expected_result: Err((1, 10)),
+            },
+            // requested_increment is invalid (> max_user_participation)
+            ComputeParticipationIncrementScenario {
+                tot_participation: 1,
+                max_tot_participation: 100,
+                min_user_participation: 1,
+                max_user_participation: 10,
+                user_participation: 0,
+                requested_increment: 20,
+                expected_result: Err((1, 10)),
+            },
+            // requested_increment is invalid (< min_user_participation)
+            ComputeParticipationIncrementScenario {
+                tot_participation: 1,
+                max_tot_participation: 100,
+                min_user_participation: 2,
+                max_user_participation: 10,
+                user_participation: 0,
+                requested_increment: 1,
+                expected_result: Err((2, 10)),
+            },
+        ];
+        for scenario in scenarios {
+            let result = compute_participation_increment(
+                scenario.tot_participation,
+                scenario.max_tot_participation,
+                scenario.min_user_participation,
+                scenario.max_user_participation,
+                scenario.user_participation,
+                scenario.requested_increment,
+            );
+            assert_eq!(
+                result, scenario.expected_result,
+                "Scenario {:#?} failed",
+                scenario
+            );
+        }
+    }
+
     #[test]
     fn test_list_sns_neuron_recipes() {
         let dummy_recipe = |investor_principal: PrincipalId| SnsNeuronRecipe {
