@@ -1502,6 +1502,325 @@ pub struct GetDerivedStateResponse {
     #[prost(double, optional, tag = "2")]
     pub sns_tokens_per_icp: ::core::option::Option<f64>,
 }
+/// ICRC-1 Account. See <https://github.com/dfinity/ICRC-1/tree/main/standards/ICRC-1>
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Icrc1Account {
+    #[prost(message, optional, tag = "1")]
+    pub owner: ::core::option::Option<::ic_base_types::PrincipalId>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub subaccount: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+/// A device for ensuring that retrying (direct) participation does not result
+/// in multiple participation. Basically, this records a user's intent to
+/// participate BEFORE moving any funds.
+///
+/// How this is used: before any money is sent, a user's agent must first look
+/// for an existing ticket. If one does not exist, then, a new one is created
+/// for the current participation that is now being attempted (for the first time).
+///
+/// If there is already a ticket, then the new participation must be aborted.
+/// The surprise existence of the ticket indicates that there is a pending participation.
+/// In this case the user's agent must attempt to perform the same participation as
+/// stated in the ticket before doing anything else.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Ticket {
+    /// Unique ID of the ticket
+    #[prost(uint64, tag = "1")]
+    pub ticket_id: u64,
+    /// The account of the ticket.
+    ///
+    /// account.owner is the owner of this ticket.
+    #[prost(message, optional, tag = "2")]
+    pub account: ::core::option::Option<Icrc1Account>,
+    /// The user-set amount of the ticket in ICP e8s
+    #[prost(uint64, tag = "3")]
+    pub amount_icp_e8s: u64,
+    /// The timestamp of creation of this ticket
+    #[prost(uint64, tag = "4")]
+    pub creation_time: u64,
+}
+/// Request struct for the method `get_open_ticket`
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetOpenTicketRequest {}
+/// Response struct for the method `get_open_ticket`
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetOpenTicketResponse {
+    #[prost(oneof = "get_open_ticket_response::Result", tags = "1, 2")]
+    pub result: ::core::option::Option<get_open_ticket_response::Result>,
+}
+/// Nested message and enum types in `GetOpenTicketResponse`.
+pub mod get_open_ticket_response {
+    /// Request was completed successfully.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Ok {
+        /// If there is an open sale ticket for the caller then this field contains it
+        #[prost(message, optional, tag = "1")]
+        pub ticket: ::core::option::Option<super::Ticket>,
+    }
+    /// Request was not successful, and no ticket was creatd.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Err {
+        #[prost(enumeration = "err::Type", optional, tag = "1")]
+        pub error_type: ::core::option::Option<i32>,
+    }
+    /// Nested message and enum types in `Err`.
+    pub mod err {
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            Copy,
+            Debug,
+            PartialEq,
+            Eq,
+            Hash,
+            PartialOrd,
+            Ord,
+            ::prost::Enumeration,
+        )]
+        #[repr(i32)]
+        pub enum Type {
+            Unspecified = 0,
+            SaleNotOpen = 1,
+            SaleClosed = 2,
+        }
+        impl Type {
+            /// String value of the enum field names used in the ProtoBuf definition.
+            ///
+            /// The values are not transformed in any way and thus are considered stable
+            /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+            pub fn as_str_name(&self) -> &'static str {
+                match self {
+                    Type::Unspecified => "TYPE_UNSPECIFIED",
+                    Type::SaleNotOpen => "TYPE_SALE_NOT_OPEN",
+                    Type::SaleClosed => "TYPE_SALE_CLOSED",
+                }
+            }
+        }
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Ok(Ok),
+        #[prost(message, tag = "2")]
+        Err(Err),
+    }
+}
+/// Request struct for the method `new_sale_ticket`
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NewSaleTicketRequest {
+    /// The user-set amount of the ticket in ICP e8s
+    #[prost(uint64, tag = "1")]
+    pub amount_icp_e8s: u64,
+    /// The subaccount of the caller to be used for the ticket
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub subaccount: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+/// Response struct for the method `new_sale_ticket`
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NewSaleTicketResponse {
+    #[prost(oneof = "new_sale_ticket_response::Result", tags = "1, 2")]
+    pub result: ::core::option::Option<new_sale_ticket_response::Result>,
+}
+/// Nested message and enum types in `NewSaleTicketResponse`.
+pub mod new_sale_ticket_response {
+    /// Request was completed successfully.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Ok {
+        /// The created ticket.
+        #[prost(message, optional, tag = "1")]
+        pub ticket: ::core::option::Option<super::Ticket>,
+    }
+    /// Request was not successful, and no ticket was creatd.
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Err {
+        #[prost(enumeration = "err::Type", tag = "1")]
+        pub error_type: i32,
+        /// When `error_type` is `INVALID_USER_AMOUNT` then this field
+        /// describes the minimum and maximum amounts.
+        #[prost(message, optional, tag = "2")]
+        pub invalid_user_amount: ::core::option::Option<err::InvalidUserAmount>,
+        /// When `error_type` is `TICKET_EXISTS` then this field
+        /// contains the ticket that already exists.
+        #[prost(message, optional, tag = "3")]
+        pub existing_ticket: ::core::option::Option<super::Ticket>,
+    }
+    /// Nested message and enum types in `Err`.
+    pub mod err {
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
+        pub struct InvalidUserAmount {
+            #[prost(uint64, tag = "1")]
+            pub min_amount_icp_e8s_included: u64,
+            #[prost(uint64, tag = "2")]
+            pub max_amount_icp_e8s_included: u64,
+        }
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            Copy,
+            Debug,
+            PartialEq,
+            Eq,
+            Hash,
+            PartialOrd,
+            Ord,
+            ::prost::Enumeration,
+        )]
+        #[repr(i32)]
+        pub enum Type {
+            Unspecified = 0,
+            SaleNotOpen = 1,
+            SaleClosed = 2,
+            /// There is already an open ticket associated with the caller.
+            ///
+            /// When this is the `error_type`, then the field existing_ticket
+            /// is set and contains the ticket itself.
+            TicketExists = 3,
+            /// The amount sent by the user is not within the Sale parameters.
+            ///
+            /// When this is the `error_type`, then the field invalid_user_amount
+            /// is set and describes minimum and maximum amounts.
+            InvalidUserAmount = 4,
+            /// The specified subaccount is not a valid subaccount (length != 32 bytes).
+            InvalidSubaccount = 5,
+            /// The specified principal is forbidden from creating tickets.
+            InvalidPrincipal = 6,
+        }
+        impl Type {
+            /// String value of the enum field names used in the ProtoBuf definition.
+            ///
+            /// The values are not transformed in any way and thus are considered stable
+            /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+            pub fn as_str_name(&self) -> &'static str {
+                match self {
+                    Type::Unspecified => "TYPE_UNSPECIFIED",
+                    Type::SaleNotOpen => "TYPE_SALE_NOT_OPEN",
+                    Type::SaleClosed => "TYPE_SALE_CLOSED",
+                    Type::TicketExists => "TYPE_TICKET_EXISTS",
+                    Type::InvalidUserAmount => "TYPE_INVALID_USER_AMOUNT",
+                    Type::InvalidSubaccount => "TYPE_INVALID_SUBACCOUNT",
+                    Type::InvalidPrincipal => "TYPE_INVALID_PRINCIPAL",
+                }
+            }
+        }
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Result {
+        #[prost(message, tag = "1")]
+        Ok(Ok),
+        #[prost(message, tag = "2")]
+        Err(Err),
+    }
+}
 /// Request struct for the method `list_direct_participants`. This method
 /// paginates over all direct participants in the decentralization sale.
 /// Direct participants are participants who did not participate via the

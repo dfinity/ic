@@ -1,12 +1,16 @@
 use ic_base_types::PrincipalId;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    DefaultMemoryImpl,
+    storable::Blob,
+    DefaultMemoryImpl, StableBTreeMap, Vec as StableVec,
 };
 use std::cell::RefCell;
 
-const UPGRADES_MEM_ID: MemoryId = MemoryId::new(0);
-const BUYERS_INDEX_LIST_MEM_ID: MemoryId = MemoryId::new(2);
+use crate::pb::v1::Ticket;
+
+const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
+const OPEN_TICKETS_MEMORY_ID: MemoryId = MemoryId::new(1);
+const BUYERS_INDEX_LIST_MEMORY_ID: MemoryId = MemoryId::new(2);
 
 thread_local! {
 
@@ -15,17 +19,21 @@ thread_local! {
     );
 
     // The memory where the swap canister must write and read its state during an upgrade.
-    pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|mm|
-        RefCell::new(mm.borrow().get(UPGRADES_MEM_ID)));
+    pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
+        RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
+
+    // The stable bmap where the swap canister keeps open tickets. The key is the Principal.
+    pub static OPEN_TICKETS_MEMORY: RefCell<StableBTreeMap<Blob<32>, Ticket, VirtualMemory<DefaultMemoryImpl>>> =
+        MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(OPEN_TICKETS_MEMORY_ID))));
 
     /// The `BUYERS_LIST_INDEX` gives an ordered list index of the Swap::buyers map. This is used to
     /// determine which Principals participated in what order, and allows for limit + offset
     /// pagination.
-    pub static BUYERS_LIST_INDEX: RefCell<ic_stable_structures::Vec<PrincipalId, VirtualMemory<DefaultMemoryImpl>>> =
+    pub static BUYERS_LIST_INDEX: RefCell<StableVec<PrincipalId, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager|
             RefCell::new(
-                ic_stable_structures::Vec::init(
-                    memory_manager.borrow().get(BUYERS_INDEX_LIST_MEM_ID)
+                StableVec::init(
+                    memory_manager.borrow().get(BUYERS_INDEX_LIST_MEMORY_ID)
                 )
                 .expect("Expected to initialize the BUYERS_LIST_INDEX without error")
             )

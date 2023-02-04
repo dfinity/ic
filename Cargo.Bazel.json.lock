@@ -1,5 +1,5 @@
 {
-  "checksum": "60d61135317544152cf062ac73034624249f78113a963f4bf31911ee15b9a519",
+  "checksum": "4467347e99811b26f99fe2d97f114eb65290b0a771f70249b2e3502fbbb8624d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7532,7 +7532,7 @@
               "target": "clap_lex"
             },
             {
-              "id": "is-terminal 0.4.2",
+              "id": "is-terminal 0.4.3",
               "target": "is_terminal"
             },
             {
@@ -12369,7 +12369,7 @@
               "target": "form_urlencoded"
             },
             {
-              "id": "fs_extra 1.2.0",
+              "id": "fs_extra 1.3.0",
               "target": "fs_extra"
             },
             {
@@ -12498,7 +12498,7 @@
               "target": "ic_stable_structures"
             },
             {
-              "id": "ic-test-state-machine-client 1.0.0",
+              "id": "ic-test-state-machine-client 1.1.0",
               "target": "ic_test_state_machine_client"
             },
             {
@@ -12754,7 +12754,7 @@
               "target": "pretty_assertions"
             },
             {
-              "id": "priority-queue 1.3.0",
+              "id": "priority-queue 1.3.1",
               "target": "priority_queue"
             },
             {
@@ -13183,7 +13183,7 @@
               "target": "wast"
             },
             {
-              "id": "wat 1.0.56",
+              "id": "wat 1.0.57",
               "target": "wat"
             },
             {
@@ -15682,13 +15682,13 @@
       },
       "license": "Apache-2.0"
     },
-    "fs_extra 1.2.0": {
+    "fs_extra 1.3.0": {
       "name": "fs_extra",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/fs_extra/1.2.0/download",
-          "sha256": "2022715d62ab30faffd124d40b76f4134a550a87792276512b18d63272333394"
+          "url": "https://crates.io/api/v1/crates/fs_extra/1.3.0/download",
+          "sha256": "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
         }
       },
       "targets": [
@@ -15710,8 +15710,8 @@
         "compile_data_glob": [
           "**"
         ],
-        "edition": "2015",
-        "version": "1.2.0"
+        "edition": "2018",
+        "version": "1.3.0"
       },
       "license": "MIT"
     },
@@ -17758,6 +17758,42 @@
       },
       "license": "MIT/Apache-2.0"
     },
+    "hermit-abi 0.3.0": {
+      "name": "hermit-abi",
+      "version": "0.3.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/hermit-abi/0.3.0/download",
+          "sha256": "856b5cb0902c2b6d65d5fd97dfa30f9b70c7538e770b98eab5ed52d8db923e01"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hermit_abi",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "hermit_abi",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default"
+        ],
+        "edition": "2021",
+        "version": "0.3.0"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
     "hex 0.4.3": {
       "name": "hex",
       "version": "0.4.3",
@@ -19662,13 +19698,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-test-state-machine-client 1.0.0": {
+    "ic-test-state-machine-client 1.1.0": {
       "name": "ic-test-state-machine-client",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-test-state-machine-client/1.0.0/download",
-          "sha256": "9ae4ddf50287c60610fcdfe5514dba46a9a9ecc165bec07af6ac1c88b8b85b81"
+          "url": "https://crates.io/api/v1/crates/ic-test-state-machine-client/1.1.0/download",
+          "sha256": "3c8f6ec5f623db2267e0bd97d540d873bfe87f001e9282a80c119f1c44d233c2"
         }
       },
       "targets": [
@@ -19716,7 +19752,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.0"
+        "version": "1.1.0"
       },
       "license": "Apache-2.0"
     },
@@ -21414,13 +21450,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "is-terminal 0.4.2": {
+    "is-terminal 0.4.3": {
       "name": "is-terminal",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/is-terminal/0.4.2/download",
-          "sha256": "28dfb6c8100ccc63462345b67d1bbc3679177c75ee4bf59bf29c8b1d110b8189"
+          "url": "https://crates.io/api/v1/crates/is-terminal/0.4.3/download",
+          "sha256": "22e18b0a45d56fe973d6db23972bf5bc46f988a4a2385deac9cc29572f09daef"
         }
       },
       "targets": [
@@ -21452,26 +21488,26 @@
           "selects": {
             "cfg(not(any(windows, target_os = \"hermit\", target_os = \"unknown\")))": [
               {
-                "id": "rustix 0.36.7",
+                "id": "rustix 0.36.8",
                 "target": "rustix"
               }
             ],
             "cfg(target_os = \"hermit\")": [
               {
-                "id": "hermit-abi 0.2.6",
+                "id": "hermit-abi 0.3.0",
                 "target": "hermit_abi"
               }
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.42.0",
+                "id": "windows-sys 0.45.0",
                 "target": "windows_sys"
               }
             ]
           }
         },
         "edition": "2018",
-        "version": "0.4.2"
+        "version": "0.4.3"
       },
       "license": "MIT"
     },
@@ -21716,7 +21752,7 @@
               "target": "cc"
             },
             {
-              "id": "fs_extra 1.2.0",
+              "id": "fs_extra 1.3.0",
               "target": "fs_extra"
             }
           ],
@@ -25199,7 +25235,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustix 0.36.7",
+              "id": "rustix 0.36.8",
               "target": "rustix"
             }
           ],
@@ -32512,13 +32548,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "priority-queue 1.3.0": {
+    "priority-queue 1.3.1": {
       "name": "priority-queue",
-      "version": "1.3.0",
+      "version": "1.3.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/priority-queue/1.3.0/download",
-          "sha256": "d7685ca4cc0b3ad748c22ce6803e23b55b9206ef7715b965ebeaf41639238fdc"
+          "url": "https://crates.io/api/v1/crates/priority-queue/1.3.1/download",
+          "sha256": "5ca9c6be70d989d21a136eb86c2d83e4b328447fac4a88dace2143c179c86267"
         }
       },
       "targets": [
@@ -32562,7 +32598,7 @@
               "target": "indexmap"
             },
             {
-              "id": "priority-queue 1.3.0",
+              "id": "priority-queue 1.3.1",
               "target": "build_script_build"
             },
             {
@@ -32573,7 +32609,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.3.0"
+        "version": "1.3.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -33105,7 +33141,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "rustix 0.36.7",
+              "id": "rustix 0.36.8",
               "target": "rustix"
             }
           ],
@@ -37493,13 +37529,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "rustix 0.36.7": {
+    "rustix 0.36.8": {
       "name": "rustix",
-      "version": "0.36.7",
+      "version": "0.36.8",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rustix/0.36.7/download",
-          "sha256": "d4fdebc4b395b7fbb9ab11e462e20ed9051e7b16e42d24042c776eca0ac81b03"
+          "url": "https://crates.io/api/v1/crates/rustix/0.36.8/download",
+          "sha256": "f43abb88211988493c1abb44a70efa56ff0ce98f233b7b276146f1f3f7ba9644"
         }
       },
       "targets": [
@@ -37557,7 +37593,7 @@
               "target": "io_lifetimes"
             },
             {
-              "id": "rustix 0.36.7",
+              "id": "rustix 0.36.8",
               "target": "build_script_build"
             }
           ],
@@ -37591,14 +37627,14 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.42.0",
+                "id": "windows-sys 0.45.0",
                 "target": "windows_sys"
               }
             ]
           }
         },
         "edition": "2018",
-        "version": "0.36.7"
+        "version": "0.36.8"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -48299,18 +48335,6 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
             "srcs": {
@@ -48325,6 +48349,18 @@
           "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -49285,13 +49321,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasm-encoder 0.22.0": {
+    "wasm-encoder 0.22.1": {
       "name": "wasm-encoder",
-      "version": "0.22.0",
+      "version": "0.22.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasm-encoder/0.22.0/download",
-          "sha256": "ef126be0e14bdf355ac1a8b41afc89195289e5c7179f80118e3abddb472f0810"
+          "url": "https://crates.io/api/v1/crates/wasm-encoder/0.22.1/download",
+          "sha256": "9a584273ccc2d9311f1dd19dc3fb26054661fa3e373d53ede5d1144ba07a9acd"
         }
       },
       "targets": [
@@ -49323,7 +49359,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.22.0"
+        "version": "0.22.1"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -50229,7 +50265,7 @@
             ],
             "cfg(unix)": [
               {
-                "id": "rustix 0.36.7",
+                "id": "rustix 0.36.8",
                 "target": "rustix"
               }
             ]
@@ -50375,13 +50411,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wast 52.0.2": {
+    "wast 52.0.3": {
       "name": "wast",
-      "version": "52.0.2",
+      "version": "52.0.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wast/52.0.2/download",
-          "sha256": "707a9fd59b0144c530f0a31f21737036ffea6ece492918cae0843dd09b6f9bc9"
+          "url": "https://crates.io/api/v1/crates/wast/52.0.3/download",
+          "sha256": "15942180f265280eede7bc38b239e9770031d1821c02d905284216c645316430"
         }
       },
       "targets": [
@@ -50422,24 +50458,24 @@
               "target": "unicode_width"
             },
             {
-              "id": "wasm-encoder 0.22.0",
+              "id": "wasm-encoder 0.22.1",
               "target": "wasm_encoder"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "52.0.2"
+        "version": "52.0.3"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wat 1.0.56": {
+    "wat 1.0.57": {
       "name": "wat",
-      "version": "1.0.56",
+      "version": "1.0.57",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wat/1.0.56/download",
-          "sha256": "91d73cbaa81acc2f8a3303e2289205c971d99c89245c2f56ab8765c4daabc2be"
+          "url": "https://crates.io/api/v1/crates/wat/1.0.57/download",
+          "sha256": "37212100d4cbe6f0f6ff6e707f1e5a5b5b675f0451231ed9e4235e234e127ed3"
         }
       },
       "targets": [
@@ -50464,14 +50500,14 @@
         "deps": {
           "common": [
             {
-              "id": "wast 52.0.2",
+              "id": "wast 52.0.3",
               "target": "wast"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.56"
+        "version": "1.0.57"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -51261,8 +51297,6 @@
         "crate_features": [
           "Win32",
           "Win32_Foundation",
-          "Win32_NetworkManagement",
-          "Win32_NetworkManagement_IpHelper",
           "Win32_Networking",
           "Win32_Networking_WinSock",
           "Win32_Security",
@@ -51403,12 +51437,15 @@
         "crate_features": [
           "Win32",
           "Win32_Foundation",
+          "Win32_NetworkManagement",
+          "Win32_NetworkManagement_IpHelper",
           "Win32_Networking",
           "Win32_Networking_WinSock",
           "Win32_Security",
           "Win32_Storage",
           "Win32_Storage_FileSystem",
           "Win32_System",
+          "Win32_System_Console",
           "Win32_System_IO",
           "Win32_System_LibraryLoader",
           "Win32_System_SystemServices",

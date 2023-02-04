@@ -24,12 +24,13 @@ use ic_sns_swap::{
         ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapRequest, FinalizeSwapResponse,
         GetBuyerStateRequest, GetBuyerStateResponse, GetBuyersTotalRequest, GetBuyersTotalResponse,
         GetCanisterStatusRequest, GetDerivedStateRequest, GetDerivedStateResponse, GetInitRequest,
-        GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetSaleParametersRequest,
-        GetSaleParametersResponse, GetStateRequest, GetStateResponse, Init,
-        ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
-        ListDirectParticipantsRequest, ListDirectParticipantsResponse, OpenRequest, OpenResponse,
-        RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, RestoreDappControllersRequest,
-        RestoreDappControllersResponse, Swap,
+        GetInitResponse, GetLifecycleRequest, GetLifecycleResponse, GetOpenTicketRequest,
+        GetOpenTicketResponse, GetSaleParametersRequest, GetSaleParametersResponse,
+        GetStateRequest, GetStateResponse, Init, ListCommunityFundParticipantsRequest,
+        ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
+        ListDirectParticipantsResponse, NewSaleTicketRequest, NewSaleTicketResponse, OpenRequest,
+        OpenResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
+        RestoreDappControllersRequest, RestoreDappControllersResponse, Swap,
     },
 };
 use ic_stable_structures::{writer::Writer, Memory};
@@ -314,6 +315,28 @@ fn get_derived_state() {
 async fn get_derived_state_(_request: GetDerivedStateRequest) -> GetDerivedStateResponse {
     log!(INFO, "get_derived_state");
     swap().derived_state().into()
+}
+
+#[export_name = "canister_query get_open_ticket"]
+fn get_open_ticket() {
+    over_async(candid_one, get_open_ticket_)
+}
+
+#[candid_method(query, rename = "get_open_ticket")]
+async fn get_open_ticket_(request: GetOpenTicketRequest) -> GetOpenTicketResponse {
+    log!(INFO, "get_open_ticket");
+    swap().get_open_ticket(&request, caller())
+}
+
+#[export_name = "canister_update new_sale_ticket"]
+fn new_sale_ticket() {
+    over_async(candid_one, new_sale_ticket_)
+}
+
+#[candid_method(update, rename = "new_sale_ticket")]
+async fn new_sale_ticket_(request: NewSaleTicketRequest) -> NewSaleTicketResponse {
+    log!(INFO, "new_sale_ticket");
+    swap().new_sale_ticket(&request, caller(), dfn_core::api::time_nanos())
 }
 
 /// Lists direct participants in the Sale.
