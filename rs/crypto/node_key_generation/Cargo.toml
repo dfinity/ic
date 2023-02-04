@@ -15,7 +15,7 @@ ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.24.2", features = ["full"] }
 
 [dev-dependencies]
 assert_matches = "1.5.0"

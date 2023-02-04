@@ -71,6 +71,6 @@ ic-nns-test-utils = {path="../../nns/test_utils"}
 ic-nns-test-utils-macros = {path="../../nns/test_utils_macros"}
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 registry-canister-protobuf-generator = { path = "./protobuf_generator" }
-tokio = { version = "1.15.0", features = [ "time" ] }
+tokio = { version = "1.24.2", features = [ "time" ] }
 tempfile = "3.1.0"
 itertools = "0.10.3"

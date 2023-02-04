@@ -30,7 +30,7 @@ prometheus = { version = "0.12.0", features = [ "process" ] }
 rand = "0.8"
 rand_chacha = "0.3"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.24.2", features = ["full"] }
 
 [dev-dependencies]
 assert_matches = "1.3.0"

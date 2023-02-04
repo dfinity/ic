@@ -16,6 +16,6 @@ log4rs = "1.1.1"
 rand = "0.8"
 rand_distr = "0.4"
 tempfile = "3.1.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.24.2", features = ["full"] }
 serde = "1.0"
 serde_bytes = "0.11"

@@ -75,7 +75,7 @@ lazy_static = "1.4.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 pretty_assertions = "1.0"
 on_wire = { path = "../../rust_canisters/on_wire" }
-tokio = { version = "1.17.0", features = ["time"] }
+tokio = { version = "1.24.2", features = ["time"] }
 wat = "1.0.52"
 rust_decimal = "1.25"
 rust_decimal_macros = "1.25"

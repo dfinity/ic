@@ -45,7 +45,7 @@ slog_derive = "0.2.0"
 strum = "0.23.0"
 strum_macros = "0.23.0"
 thiserror = "1.0"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.24.2", features = ["full"] }
 url = { version = "2.1.1", features = ["serde"] }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 

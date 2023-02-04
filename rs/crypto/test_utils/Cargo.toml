@@ -21,5 +21,5 @@ openssl = "0.10.29"
 rand = "0.8"
 serde = { version = "1.0.99", features = [ "derive" ] }
 strum_macros = "0.23.0"
-tokio = { version = "1.15.0", features = ["net"] }
+tokio = { version = "1.24.2", features = ["net"] }
 tokio-openssl = "0.6.0"

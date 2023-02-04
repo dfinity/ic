@@ -20,6 +20,6 @@ ic-test-utilities-logger = { path = "../../test_utilities/logger" }
 ic-transport = { path = "../../transport" }
 ic-types-test-utils = { path = "../../types/types_test_utils"}
 mockall = "0.11.2"
-tokio = { version = "1.15.0", features = ["full"] }
+tokio = { version = "1.24.2", features = ["full"] }
 tower = "0.4.12"
 tower-test = "0.4.0"
