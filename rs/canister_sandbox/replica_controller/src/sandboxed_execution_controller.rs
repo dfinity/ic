@@ -676,7 +676,7 @@ impl WasmExecutor for SandboxedExecutionController {
                     subnet_available_memory,
                     next_wasm_memory_id,
                     next_stable_memory_id,
-                    sandox_safe_system_state: sandbox_safe_system_state,
+                    sandbox_safe_system_state,
                     wasm_reserved_pages: get_wasm_reserved_pages(execution_state),
                 },
             })

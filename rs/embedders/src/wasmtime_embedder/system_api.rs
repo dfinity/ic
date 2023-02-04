@@ -154,7 +154,7 @@ fn charge_for_system_api_call<S: SystemApi>(
     caller: &mut Caller<'_, StoreData<S>>,
     system_api_overhead: NumInstructions,
     num_bytes: u32,
-    complexity: &ExecutionComplexity,
+    complexity: ExecutionComplexity,
     dirty_page_cost: NumInstructions,
     stable_memory_dirty_page_limit: NumPages,
 ) -> Result<(), anyhow::Error> {
@@ -293,42 +293,42 @@ fn observe_execution_complexity<S: SystemApi>(
     log: &ReplicaLogger,
     canister_id: CanisterId,
     caller: &mut Caller<'_, StoreData<S>>,
-    complexity: &ExecutionComplexity,
+    complexity: ExecutionComplexity,
     stable_memory_dirty_page_limit: NumPages,
 ) -> Result<(), anyhow::Error> {
     #[allow(non_upper_case_globals)]
     const KiB: u64 = 1024;
 
     let system_api = &mut caller.data_mut().system_api;
-    let total_complexity = system_api.get_total_execution_complexity() + complexity;
-    if system_api.subnet_type() != SubnetType::System {
-        // TODO: RUN-126: Implement per-round complexity that combines complexities of
-        //       multiple messages.
-        // Note: for install messages the CPU Limit will be > 1s, but it will be addressed with DTS
-        let message_instruction_limit = system_api.message_instruction_limit();
-        if total_complexity.cpu > message_instruction_limit {
-            error!(
-                log,
-                "Canister {}: Error exceeding CPU complexity limit: (observed:{}, limit:{})",
-                canister_id,
-                total_complexity.cpu,
-                message_instruction_limit,
-            );
-            return Err(process_err(
-                caller,
-                HypervisorError::InstructionLimitExceeded,
-            ));
-        } else if total_complexity.stable_dirty_pages > stable_memory_dirty_page_limit {
-            let error = HypervisorError::MemoryAccessLimitExceeded(
+    let total_complexity = system_api.execution_complexity() + &complexity;
+    match system_api.subnet_type() {
+        SubnetType::System => {}
+        SubnetType::Application | SubnetType::VerifiedApplication => {
+            let message_instruction_limit = system_api.message_instruction_limit();
+            if total_complexity.cpu_reached(message_instruction_limit) {
+                error!(
+                    log,
+                    "Canister {}: Error exceeding CPU complexity limit: (observed:{}, limit:{})",
+                    canister_id,
+                    total_complexity.cpu,
+                    message_instruction_limit,
+                );
+                return Err(process_err(
+                    caller,
+                    HypervisorError::InstructionLimitExceeded,
+                ));
+            } else if total_complexity.stable_dirty_pages > stable_memory_dirty_page_limit {
+                let error = HypervisorError::MemoryAccessLimitExceeded(
                 format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB, modified: {} KB.",
                     stable_memory_dirty_page_limit * (PAGE_SIZE as u64 / KiB),
                     total_complexity.stable_dirty_pages.get() * (PAGE_SIZE as u64 / KiB),
                 ),
             );
-            return Err(process_err(caller, error));
+                return Err(process_err(caller, error));
+            }
         }
     }
-    system_api.set_total_execution_complexity(total_complexity);
+    system_api.set_execution_complexity(total_complexity);
     Ok(())
 }
 
@@ -410,7 +410,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_CALLER_COPY,
                         ..Default::default()
                     },
@@ -466,7 +466,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     system_api_complexity::overhead::MSG_ARG_DATA_COPY,
                     size as u32,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_ARG_DATA_COPY,
                         ..Default::default()
                     },
@@ -509,7 +509,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     system_api_complexity::overhead::MSG_METHOD_NAME_COPY,
                     size as u32,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_METHOD_NAME_COPY,
                         ..Default::default()
                     },
@@ -552,7 +552,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     system_api_complexity::overhead::MSG_REPLY_DATA_APPEND,
                     size as u32,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_REPLY_DATA_APPEND,
                         ..Default::default()
                     },
@@ -594,7 +594,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     system_api_complexity::overhead::MSG_REJECT,
                     size as u32,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_REJECT,
                         ..Default::default()
                     },
@@ -632,7 +632,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     system_api_complexity::overhead::MSG_REJECT_MSG_COPY,
                     size as u32,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_REJECT_MSG_COPY,
                         ..Default::default()
                     },
@@ -678,7 +678,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CANISTER_SELF_COPY,
                         ..Default::default()
                     },
@@ -723,7 +723,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CONTROLLER_COPY,
                         ..Default::default()
                     },
@@ -751,7 +751,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     system_api_complexity::overhead::DEBUG_PRINT,
                     length as u32,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::DEBUG_PRINT,
                         ..Default::default()
                     },
@@ -787,7 +787,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     system_api_complexity::overhead::TRAP,
                     length as u32,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::TRAP,
                         ..Default::default()
                     },
@@ -817,7 +817,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CALL_NEW,
                         ..Default::default()
                     },
@@ -850,7 +850,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     system_api_complexity::overhead::CALL_DATA_APPEND,
                     size as u32,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CALL_DATA_APPEND,
                         ..Default::default()
                     },
@@ -906,7 +906,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CALL_PERFORM,
                         ..Default::default()
                     },
@@ -940,7 +940,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_GROW,
                         ..Default::default()
                     },
@@ -962,7 +962,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     system_api_complexity::overhead::STABLE_READ,
                     size as u32,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_READ,
                         ..Default::default()
                     },
@@ -996,7 +996,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     system_api_complexity::overhead::STABLE_WRITE,
                     size,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE_WRITE,
                         stable_dirty_pages,
                     },
@@ -1032,7 +1032,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE64_GROW,
                         ..Default::default()
                     },
@@ -1056,7 +1056,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     system_api_complexity::overhead::STABLE64_READ,
                     size as u32,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE64_READ,
                         ..Default::default()
                     },
@@ -1090,7 +1090,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     system_api_complexity::overhead::STABLE64_WRITE,
                     size as u32,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::STABLE64_WRITE,
                         stable_dirty_pages,
                     },
@@ -1136,7 +1136,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &mut caller,
                     system_api_complexity::overhead::PERFORMANCE_COUNTER,
                     0,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::PERFORMANCE_COUNTER,
                         ..Default::default()
                     },
@@ -1179,7 +1179,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CANISTER_CYCLES_BALANCE128,
                         ..Default::default()
                     },
@@ -1219,7 +1219,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_CYCLES_AVAILABLE128,
                         ..Default::default()
                     },
@@ -1259,7 +1259,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_CYCLES_REFUNDED128,
                         ..Default::default()
                     },
@@ -1297,7 +1297,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::MSG_CYCLES_ACCEPT128,
                         ..Default::default()
                     },
@@ -1398,7 +1398,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::CERTIFIED_DATA_SET,
                         ..Default::default()
                     },
@@ -1436,7 +1436,7 @@ pub(crate) fn syscalls<S: SystemApi>(
                     &log,
                     canister_id,
                     &mut caller,
-                    &ExecutionComplexity {
+                    ExecutionComplexity {
                         cpu: system_api_complexity::cpu::DATA_CERTIFICATE_COPY,
                         ..Default::default()
                     },

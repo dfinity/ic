@@ -29,8 +29,8 @@ use ic_ic00_types::{
 };
 use ic_interfaces::{
     execution_environment::{
-        ExecutionMode, IngressHistoryWriter, QueryHandler, RegistryExecutionSettings,
-        SubnetAvailableMemory,
+        ExecutionComplexity, ExecutionMode, IngressHistoryWriter, QueryHandler,
+        RegistryExecutionSettings, SubnetAvailableMemory,
     },
     messages::{CanisterCall, CanisterMessage, CanisterTask},
 };
@@ -818,6 +818,7 @@ impl ExecutionTest {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
+            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
@@ -896,6 +897,7 @@ impl ExecutionTest {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
+            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
@@ -992,6 +994,7 @@ impl ExecutionTest {
         let maybe_canister_id = get_canister_id_if_install_code(message.clone());
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
+            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
@@ -1042,6 +1045,7 @@ impl ExecutionTest {
         let canister_ids: Vec<CanisterId> = canisters.keys().copied().collect();
         let mut round_limits = RoundLimits {
             instructions: RoundInstructions::from(i64::MAX),
+            execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: self.subnet_available_memory,
             compute_allocation_used,
         };
@@ -1116,6 +1120,7 @@ impl ExecutionTest {
                 state.put_canister_states(canisters);
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
+                    execution_complexity: ExecutionComplexity::MAX,
                     subnet_available_memory: self.subnet_available_memory,
                     compute_allocation_used,
                 };
@@ -1139,6 +1144,7 @@ impl ExecutionTest {
             NextExecution::StartNew | NextExecution::ContinueLong => {
                 let mut round_limits = RoundLimits {
                     instructions: RoundInstructions::from(i64::MAX),
+                    execution_complexity: ExecutionComplexity::MAX,
                     subnet_available_memory: self.subnet_available_memory,
                     compute_allocation_used,
                 };

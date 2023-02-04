@@ -308,7 +308,7 @@ mod test {
         let total_cpu_complexity = instance
             .into_store_data()
             .system_api
-            .get_total_execution_complexity()
+            .execution_complexity()
             .cpu;
         let expected_cpu_complexity =
             system_api_complexity::cpu::CALL_NEW + system_api_complexity::cpu::CALL_PERFORM;
@@ -329,7 +329,7 @@ mod test {
                 PrincipalId::new_user_test_id(0),
                 0.into(),
             ))
-            .with_num_instructions((expected_cpu_complexity - 1).into())
+            .with_num_instructions((expected_cpu_complexity as u64 - 1).into())
             .with_subnet_type(subnet_type)
             .build();
 
@@ -359,7 +359,7 @@ mod test {
                 PrincipalId::new_user_test_id(0),
                 0.into(),
             ))
-            .with_num_instructions((expected_cpu_complexity - 1).into())
+            .with_num_instructions((expected_cpu_complexity as u64 - 1).into())
             .with_subnet_type(subnet_type)
             .build();
 

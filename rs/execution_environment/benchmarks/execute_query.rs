@@ -9,7 +9,7 @@ use ic_execution_environment::{
     execution::nonreplicated_query::execute_non_replicated_query, ExecutionEnvironment,
     NonReplicatedQueryKind, RoundLimits,
 };
-use ic_interfaces::execution_environment::ExecutionMode;
+use ic_interfaces::execution_environment::{ExecutionComplexity, ExecutionMode};
 use ic_types::methods::WasmMethod;
 use ic_types::PrincipalId;
 
@@ -57,6 +57,7 @@ pub fn bench_execute_query(c: &mut Criterion) {
                 instructions: as_round_instructions(
                     execution_parameters.instruction_limits.message(),
                 ),
+                execution_complexity: ExecutionComplexity::MAX,
                 subnet_available_memory,
                 compute_allocation_used: 0,
             };

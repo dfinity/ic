@@ -249,7 +249,7 @@ mod tests {
             subnet_available_memory: SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
             next_wasm_memory_id,
             next_stable_memory_id,
-            sandox_safe_system_state: sandbox_safe_system_state(),
+            sandbox_safe_system_state: sandbox_safe_system_state(),
             wasm_reserved_pages: NumWasmPages::from(0),
         }
     }
@@ -273,7 +273,7 @@ mod tests {
             subnet_available_memory: SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
             next_wasm_memory_id: MemoryId::new(),
             next_stable_memory_id: MemoryId::new(),
-            sandox_safe_system_state: sandbox_safe_system_state(),
+            sandbox_safe_system_state: sandbox_safe_system_state(),
             wasm_reserved_pages: NumWasmPages::from(0),
         }
     }

@@ -145,7 +145,7 @@ impl Execution {
             exec_input.canister_current_memory_usage,
             exec_input.execution_parameters,
             exec_input.subnet_available_memory,
-            exec_input.sandox_safe_system_state,
+            exec_input.sandbox_safe_system_state,
             &self.embedder_cache,
             &self.sandbox_manager.embedder,
             &mut wasm_memory,
