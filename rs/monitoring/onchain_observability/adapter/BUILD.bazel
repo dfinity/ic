@@ -4,17 +4,23 @@ package(default_visibility = ["//visibility:private"])
 
 DEPENDENCIES = [
     "//rs/async_utils",
+    "//rs/types/base_types",
     "//rs/config",
     "//rs/monitoring/logger",
     "@crate_index//:clap",
-    "@crate_index//:serde",
+    "@crate_index//:hyper",
+    "@crate_index//:itertools",
+    "@crate_index//:prometheus-parse",
     "@crate_index//:serde_json",
+    "@crate_index//:serde",
     "@crate_index//:slog",
-    "@crate_index//:tokio",
     "@crate_index//:thiserror",
+    "@crate_index//:tokio",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
 
 ALIASES = {}
 

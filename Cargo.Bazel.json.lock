@@ -1,5 +1,5 @@
 {
-  "checksum": "4467347e99811b26f99fe2d97f114eb65290b0a771f70249b2e3502fbbb8624d",
+  "checksum": "aeb2cb3f963dd0d2fe570e1adce27542fe8f7a3aaaafbe417bb66829fb6aae5e",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -890,7 +890,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -973,7 +973,7 @@
               "target": "actix_router"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -1560,13 +1560,13 @@
       },
       "license": "MIT"
     },
-    "anyhow 1.0.68": {
+    "anyhow 1.0.69": {
       "name": "anyhow",
-      "version": "1.0.68",
+      "version": "1.0.69",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/anyhow/1.0.68/download",
-          "sha256": "2cb2f989d18dd141ab8ae82f64d1a8cdd37e0840f73a406896cf5e99502fab61"
+          "url": "https://crates.io/api/v1/crates/anyhow/1.0.69/download",
+          "sha256": "224afbd727c3d6e4b90103ece64b8d1b67fbb1973b1046c2281eed3f3803f800"
         }
       },
       "targets": [
@@ -1607,14 +1607,14 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.68"
+        "version": "1.0.69"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -2083,7 +2083,7 @@
               "target": "askama_shared"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -2203,7 +2203,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -2215,7 +2215,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -2269,7 +2269,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             }
           ],
@@ -2451,7 +2451,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -2607,7 +2607,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -2673,7 +2673,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -2942,7 +2942,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -3794,7 +3794,7 @@
               "target": "peeking_take_while"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -3925,7 +3925,7 @@
               "target": "either"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -4271,7 +4271,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             }
           ],
@@ -4321,7 +4321,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             }
           ],
@@ -4563,13 +4563,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "borsh 0.9.3": {
+    "borsh 0.10.0": {
       "name": "borsh",
-      "version": "0.9.3",
+      "version": "0.10.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/borsh/0.9.3/download",
-          "sha256": "15bf3650200d8bffa99015595e10f1fbd17de07abbc25bb067da79e769939bfa"
+          "url": "https://crates.io/api/v1/crates/borsh/0.10.0/download",
+          "sha256": "822462c1e7b17b31961798a6874b36daea6818e99e0cb7d3b7b0fa3c477751c3"
         }
       },
       "targets": [
@@ -4609,7 +4609,7 @@
         "deps": {
           "common": [
             {
-              "id": "hashbrown 0.11.2",
+              "id": "hashbrown 0.13.2",
               "target": "hashbrown"
             }
           ],
@@ -4619,23 +4619,23 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "borsh-derive 0.9.3",
+              "id": "borsh-derive 0.10.0",
               "target": "borsh_derive"
             }
           ],
           "selects": {}
         },
-        "version": "0.9.3"
+        "version": "0.10.0"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "borsh-derive 0.9.3": {
+    "borsh-derive 0.10.0": {
       "name": "borsh-derive",
-      "version": "0.9.3",
+      "version": "0.10.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/borsh-derive/0.9.3/download",
-          "sha256": "6441c552f230375d18e3cc377677914d2ca2b0d36e52129fe15450a2dce46775"
+          "url": "https://crates.io/api/v1/crates/borsh-derive/0.10.0/download",
+          "sha256": "37626c9e941a687ee9abef6065b44c379478ae563b7483c613dd705ef1dff59e"
         }
       },
       "targets": [
@@ -4660,11 +4660,11 @@
         "deps": {
           "common": [
             {
-              "id": "borsh-derive-internal 0.9.3",
+              "id": "borsh-derive-internal 0.10.0",
               "target": "borsh_derive_internal"
             },
             {
-              "id": "borsh-schema-derive-internal 0.9.3",
+              "id": "borsh-schema-derive-internal 0.10.0",
               "target": "borsh_schema_derive_internal"
             },
             {
@@ -4672,7 +4672,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -4683,17 +4683,17 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.9.3"
+        "version": "0.10.0"
       },
       "license": "Apache-2.0"
     },
-    "borsh-derive-internal 0.9.3": {
+    "borsh-derive-internal 0.10.0": {
       "name": "borsh-derive-internal",
-      "version": "0.9.3",
+      "version": "0.10.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/borsh-derive-internal/0.9.3/download",
-          "sha256": "5449c28a7b352f2d1e592a8a28bf139bc71afb0764a14f3c02500935d8c44065"
+          "url": "https://crates.io/api/v1/crates/borsh-derive-internal/0.10.0/download",
+          "sha256": "61820b4c5693eafb998b1e67485423c923db4a75f72585c247bdee32bad81e7b"
         }
       },
       "targets": [
@@ -4718,7 +4718,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -4733,17 +4733,17 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.9.3"
+        "version": "0.10.0"
       },
       "license": "Apache-2.0"
     },
-    "borsh-schema-derive-internal 0.9.3": {
+    "borsh-schema-derive-internal 0.10.0": {
       "name": "borsh-schema-derive-internal",
-      "version": "0.9.3",
+      "version": "0.10.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/borsh-schema-derive-internal/0.9.3/download",
-          "sha256": "cdbd5696d8bfa21d53d9fe39a714a18538bad11492a42d066dbbc395fb1951c0"
+          "url": "https://crates.io/api/v1/crates/borsh-schema-derive-internal/0.10.0/download",
+          "sha256": "c76cdbfa13def20d1f8af3ae7b3c6771f06352a74221d8851262ac384c122b8e"
         }
       },
       "targets": [
@@ -4768,7 +4768,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -4783,7 +4783,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.9.3"
+        "version": "0.10.0"
       },
       "license": "Apache-2.0"
     },
@@ -5190,7 +5190,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -5230,7 +5230,7 @@
               "target": "rustc_version"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -5350,7 +5350,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -5382,7 +5382,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -5390,7 +5390,7 @@
               "target": "quote"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -5617,7 +5617,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -5950,7 +5950,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -6010,7 +6010,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.8",
+              "id": "serde_bytes 0.11.9",
               "target": "serde_bytes"
             },
             {
@@ -6095,7 +6095,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -6159,7 +6159,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.8",
+              "id": "serde_bytes 0.11.9",
               "target": "serde_bytes"
             },
             {
@@ -6240,7 +6240,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -6294,7 +6294,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -6405,7 +6405,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             }
           ],
@@ -6639,7 +6639,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -7606,7 +7606,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -7667,7 +7667,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -7851,7 +7851,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -7883,7 +7883,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -8190,7 +8190,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -8244,7 +8244,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -9752,7 +9752,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -11045,7 +11045,7 @@
               "target": "ident_case"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -11620,7 +11620,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -11702,7 +11702,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -11794,7 +11794,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -12104,7 +12104,7 @@
               "target": "actix_web"
             },
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -12758,7 +12758,7 @@
               "target": "priority_queue"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -12768,6 +12768,10 @@
             {
               "id": "prometheus 0.13.3",
               "target": "prometheus"
+            },
+            {
+              "id": "prometheus-parse 0.2.3",
+              "target": "prometheus_parse"
             },
             {
               "id": "proptest 1.0.0",
@@ -12866,7 +12870,7 @@
               "target": "rusqlite"
             },
             {
-              "id": "rust_decimal 1.28.0",
+              "id": "rust_decimal 1.28.1",
               "target": "rust_decimal"
             },
             {
@@ -12906,7 +12910,7 @@
               "target": "serde_bytes_repr"
             },
             {
-              "id": "serde_bytes 0.11.8",
+              "id": "serde_bytes 0.11.9",
               "target": "serde_bytes"
             },
             {
@@ -12914,7 +12918,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -13273,7 +13277,7 @@
               "target": "prost_derive"
             },
             {
-              "id": "rust_decimal_macros 1.28.0",
+              "id": "rust_decimal_macros 1.28.1",
               "target": "rust_decimal_macros"
             },
             {
@@ -13538,7 +13542,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -13865,7 +13869,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -14193,7 +14197,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -14251,7 +14255,7 @@
               "target": "num_traits"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -14681,7 +14685,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             }
           ],
@@ -15248,7 +15252,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -16248,7 +16252,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -16925,7 +16929,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -16975,7 +16979,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -17025,7 +17029,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -17341,53 +17345,6 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "hashbrown 0.11.2": {
-      "name": "hashbrown",
-      "version": "0.11.2",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/hashbrown/0.11.2/download",
-          "sha256": "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "hashbrown",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "hashbrown",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "ahash",
-          "default",
-          "inline-more"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "ahash 0.7.6",
-              "target": "ahash"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.11.2"
-      },
-      "license": "Apache-2.0/MIT"
-    },
     "hashbrown 0.12.3": {
       "name": "hashbrown",
       "version": "0.12.3",
@@ -17433,6 +17390,53 @@
         },
         "edition": "2021",
         "version": "0.12.3"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
+    "hashbrown 0.13.2": {
+      "name": "hashbrown",
+      "version": "0.13.2",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/hashbrown/0.13.2/download",
+          "sha256": "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "hashbrown",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "hashbrown",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "ahash",
+          "default",
+          "inline-more"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "ahash 0.8.3",
+              "target": "ahash"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.13.2"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -18466,7 +18470,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -19142,7 +19146,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.8",
+              "id": "serde_bytes 0.11.9",
               "target": "serde_bytes"
             },
             {
@@ -19331,7 +19335,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.8",
+              "id": "serde_bytes 0.11.9",
               "target": "serde_bytes"
             },
             {
@@ -19390,7 +19394,7 @@
               "target": "candid"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -19452,7 +19456,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.8",
+              "id": "serde_bytes 0.11.9",
               "target": "serde_bytes"
             },
             {
@@ -19584,7 +19588,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.8",
+              "id": "serde_bytes 0.11.9",
               "target": "serde_bytes"
             },
             {
@@ -19745,7 +19749,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.8",
+              "id": "serde_bytes 0.11.9",
               "target": "serde_bytes"
             }
           ],
@@ -19808,7 +19812,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.8",
+              "id": "serde_bytes 0.11.9",
               "target": "serde_bytes"
             },
             {
@@ -19879,7 +19883,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.8",
+              "id": "serde_bytes 0.11.9",
               "target": "serde_bytes"
             },
             {
@@ -19964,7 +19968,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_bytes 0.11.8",
+              "id": "serde_bytes 0.11.9",
               "target": "serde_bytes"
             },
             {
@@ -20103,7 +20107,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -20987,7 +20991,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -21103,7 +21107,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -21938,7 +21942,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -22055,7 +22059,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             }
           ],
@@ -22541,7 +22545,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -24503,7 +24507,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -24543,7 +24547,7 @@
               "target": "serde_value"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -24679,7 +24683,7 @@
               "target": "fnv"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -26293,7 +26297,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -26347,7 +26351,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -26401,7 +26405,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -26677,7 +26681,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -28468,7 +28472,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -29063,7 +29067,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -30877,7 +30881,7 @@
               "target": "pest_meta"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -31223,7 +31227,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -32527,7 +32531,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -32767,7 +32771,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -32856,7 +32860,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -33011,13 +33015,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "proc-macro2 1.0.50": {
+    "proc-macro2 1.0.51": {
       "name": "proc-macro2",
-      "version": "1.0.50",
+      "version": "1.0.51",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/proc-macro2/1.0.50/download",
-          "sha256": "6ef7d57beacfaf2d8aee5937dab7b7f28de3cb8b1828479bb5de2a7106f2bae2"
+          "url": "https://crates.io/api/v1/crates/proc-macro2/1.0.51/download",
+          "sha256": "5d727cae5b39d21da60fa540906919ad737832fe0b1c165da3a34d6548c849d6"
         }
       },
       "targets": [
@@ -33058,7 +33062,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "build_script_build"
             },
             {
@@ -33069,7 +33073,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.50"
+        "version": "1.0.51"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -33321,6 +33325,60 @@
         "data_glob": [
           "**"
         ]
+      },
+      "license": "Apache-2.0"
+    },
+    "prometheus-parse 0.2.3": {
+      "name": "prometheus-parse",
+      "version": "0.2.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/prometheus-parse/0.2.3/download",
+          "sha256": "ef7a8ed15bcffc55fe0328931ef20d393bb89ad704756a37bd20cffb4804f306"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "prometheus_parse",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "prometheus_parse",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "chrono 0.4.19",
+              "target": "chrono"
+            },
+            {
+              "id": "itertools 0.10.5",
+              "target": "itertools"
+            },
+            {
+              "id": "lazy_static 1.4.0",
+              "target": "lazy_static"
+            },
+            {
+              "id": "regex 1.7.1",
+              "target": "regex"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.2.3"
       },
       "license": "Apache-2.0"
     },
@@ -33649,7 +33707,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -33657,7 +33715,7 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -33925,7 +33983,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -34235,7 +34293,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -35838,7 +35896,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -36256,7 +36314,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -36362,7 +36420,7 @@
                 "target": "js_sys"
               },
               {
-                "id": "serde_json 1.0.91",
+                "id": "serde_json 1.0.92",
                 "target": "serde_json"
               },
               {
@@ -36872,7 +36930,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -37222,13 +37280,13 @@
       },
       "license": "MIT"
     },
-    "rust_decimal 1.28.0": {
+    "rust_decimal 1.28.1": {
       "name": "rust_decimal",
-      "version": "1.28.0",
+      "version": "1.28.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rust_decimal/1.28.0/download",
-          "sha256": "7fe32e8c89834541077a5c5bbe5691aa69324361e27e6aeb3552a737db4a70c8"
+          "url": "https://crates.io/api/v1/crates/rust_decimal/1.28.1/download",
+          "sha256": "e13cf35f7140155d02ba4ec3294373d513a3c7baa8364c162b030e33c61520a8"
         }
       },
       "targets": [
@@ -37274,7 +37332,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "borsh 0.9.3",
+              "id": "borsh 0.10.0",
               "target": "borsh"
             },
             {
@@ -37302,7 +37360,7 @@
               "target": "rkyv"
             },
             {
-              "id": "rust_decimal 1.28.0",
+              "id": "rust_decimal 1.28.1",
               "target": "build_script_build"
             },
             {
@@ -37310,14 +37368,14 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.28.0"
+        "version": "1.28.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -37326,13 +37384,13 @@
       },
       "license": "MIT"
     },
-    "rust_decimal_macros 1.28.0": {
+    "rust_decimal_macros 1.28.1": {
       "name": "rust_decimal_macros",
-      "version": "1.28.0",
+      "version": "1.28.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rust_decimal_macros/1.28.0/download",
-          "sha256": "d71a78314ee3b7e684f34f1574fe0935cac8eb453217974473be82f032d9b4ee"
+          "url": "https://crates.io/api/v1/crates/rust_decimal_macros/1.28.1/download",
+          "sha256": "f79c1532c5088b44236d74c7dd9d80a1c57a433e02694fced7b5a670dc562ce5"
         }
       },
       "targets": [
@@ -37364,14 +37422,14 @@
               "target": "quote"
             },
             {
-              "id": "rust_decimal 1.28.0",
+              "id": "rust_decimal 1.28.1",
               "target": "rust_decimal"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.28.0"
+        "version": "1.28.1"
       },
       "license": "MIT"
     },
@@ -39045,13 +39103,13 @@
       },
       "license": "MIT"
     },
-    "serde_bytes 0.11.8": {
+    "serde_bytes 0.11.9": {
       "name": "serde_bytes",
-      "version": "0.11.8",
+      "version": "0.11.9",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/serde_bytes/0.11.8/download",
-          "sha256": "718dc5fff5b36f99093fc49b280cfc96ce6fc824317783bff5a1fed0c7a64819"
+          "url": "https://crates.io/api/v1/crates/serde_bytes/0.11.9/download",
+          "sha256": "416bda436f9aab92e02c8e10d49a15ddd339cea90b6e340fe51ed97abb548294"
         }
       },
       "targets": [
@@ -39087,7 +39145,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.11.8"
+        "version": "0.11.9"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -39187,7 +39245,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -39215,13 +39273,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "serde_json 1.0.91": {
+    "serde_json 1.0.92": {
       "name": "serde_json",
-      "version": "1.0.91",
+      "version": "1.0.92",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/serde_json/1.0.91/download",
-          "sha256": "877c235533714907a8c2464236f5c4b2a17262ef1bd71f38f35ea592c8da6883"
+          "url": "https://crates.io/api/v1/crates/serde_json/1.0.92/download",
+          "sha256": "7434af0dc1cbd59268aa98b4c22c131c0584d2232f6fb166efb993e2832e896a"
         }
       },
       "targets": [
@@ -39276,14 +39334,14 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.91"
+        "version": "1.0.92"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -39464,7 +39522,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -39628,7 +39686,7 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -39804,7 +39862,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -41187,7 +41245,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -41398,7 +41456,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -42146,7 +42204,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -42205,7 +42263,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -42344,7 +42402,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -42407,7 +42465,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -42898,7 +42956,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -43036,7 +43094,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -43252,7 +43310,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -43362,7 +43420,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -43765,7 +43823,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -44012,7 +44070,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -44197,7 +44255,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -44630,7 +44688,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             }
           ],
@@ -44954,7 +45012,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -45266,7 +45324,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             }
           ],
@@ -45914,7 +45972,7 @@
               "target": "prettyplease"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -46422,7 +46480,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -46762,7 +46820,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -46832,7 +46890,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             }
           ],
@@ -48335,6 +48393,18 @@
         },
         {
           "Binary": {
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
             "srcs": {
@@ -48349,18 +48419,6 @@
           "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -48475,7 +48533,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -48546,7 +48604,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -48710,7 +48768,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             },
             {
@@ -48987,7 +49045,7 @@
               "target": "once_cell"
             },
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -49150,7 +49208,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -49577,7 +49635,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -49640,7 +49698,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -49813,7 +49871,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -49903,7 +49961,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -49989,7 +50047,7 @@
               "target": "addr2line"
             },
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -50202,7 +50260,7 @@
         "deps": {
           "common": [
             {
-              "id": "anyhow 1.0.68",
+              "id": "anyhow 1.0.69",
               "target": "anyhow"
             },
             {
@@ -52203,7 +52261,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.91",
+              "id": "serde_json 1.0.92",
               "target": "serde_json"
             }
           ],
@@ -52579,7 +52637,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.50",
+              "id": "proc-macro2 1.0.51",
               "target": "proc_macro2"
             },
             {
@@ -52811,7 +52869,7 @@
     "alloc-stdlib 0.2.2",
     "assert_cmd 0.12.2",
     "bindgen 0.59.2",
-    "borsh 0.9.3",
+    "borsh 0.10.0",
     "brotli 3.3.4",
     "brotli-decompressor 2.3.4",
     "cc 1.0.79",
