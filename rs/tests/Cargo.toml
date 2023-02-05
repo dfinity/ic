@@ -194,6 +194,22 @@ name = "ic-systest-tecdsa-signature-life-cycle"
 path = "bin/tecdsa_signature_life_cycle_test.rs"
 
 [[bin]]
+name = "ic-systest-tecdsa-signature-fails-without-cycles"
+path = "bin/tecdsa_signature_fails_without_cycles_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-signature-from-nns-without-cycles"
+path = "bin/tecdsa_signature_from_nns_without_cycles_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-signature-from-other-subnet"
+path = "bin/tecdsa_signature_from_other_subnet_test.rs"
+
+[[bin]]
+name = "ic-systest-tecdsa-signature-same-subnet"
+path = "bin/tecdsa_signature_same_subnet_test.rs"
+
+[[bin]]
 name = "ic-systest-tecdsa-signature-timeout"
 path = "bin/tecdsa_signature_timeout_test.rs"
 

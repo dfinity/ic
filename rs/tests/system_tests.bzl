@@ -70,8 +70,8 @@ def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", flaky
     """
 
     # Names are used as part of domain names; thus, limit their length
-    if len(name) > 40:
-        fail("Name of system test group too long (max 40): " + name)
+    if len(name) > 50:
+        fail("Name of system test group too long (max 50): " + name)
 
     bin_name = name + "_bin"
 
