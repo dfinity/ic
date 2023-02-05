@@ -2,7 +2,7 @@ use clap::Parser;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
     canister_http, driver::driver_setup::initialize_env, execution, ledger_tests, message_routing,
-    networking, nns_tests, orchestrator, rosetta_test, tecdsa, wasm_generator_test,
+    networking, nns_tests, orchestrator, rosetta_test, wasm_generator_test,
     workload_counter_canister_test,
 };
 use ic_tests::{
@@ -529,12 +529,10 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 pot_with_setup(
                     "boundary_subnet_workload_pot",
                     networking::subnet_update_workload::boundary_config,
-                    seq(vec![
-                        sys_t(
-                            "boundary_subnet_update_workload_test",
-                            networking::subnet_update_workload::boundary_test,
-                        ),
-                    ]),
+                    seq(vec![sys_t(
+                        "boundary_subnet_update_workload_test",
+                        networking::subnet_update_workload::boundary_test,
+                    )]),
                 ),
                 pot_with_setup(
                     "basic_health_pot_single_host",
@@ -578,39 +576,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "nns_backup_test",
                         orchestrator::nns_backup::test,
                     )]),
-                ).with_alert(ENG_CONSENSUS_CHANNEL),
-                pot_with_setup(
-                    "tecdsa_signature_same_subnet_pot",
-                    tecdsa::tecdsa_signature_test::config,
-                    seq(vec![sys_t(
-                        "test_threshold_ecdsa_signature_same_subnet",
-                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_same_subnet,
-                    )])
-                ).with_alert(ENG_CONSENSUS_CHANNEL),
-                pot_with_setup(
-                    "tecdsa_signature_from_other_subnet_pot",
-                    tecdsa::tecdsa_signature_test::config,
-                    seq(vec![sys_t(
-                        "test_threshold_ecdsa_signature_from_other_subnet",
-                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_other_subnet,
-                    )])
-                ).with_alert(ENG_CONSENSUS_CHANNEL),
-                pot_with_setup(
-                    "tecdsa_signature_fails_without_cycles_pot",
-                    tecdsa::tecdsa_signature_test::config,
-                    seq(vec![sys_t(
-                        "test_threshold_ecdsa_signature_fails_without_cycles",
-                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_fails_without_cycles,
-                    )])
-                ).with_alert(ENG_CONSENSUS_CHANNEL),
-                pot_with_setup(
-                    "tecdsa_signature_from_nns_without_cycles_pot",
-                    tecdsa::tecdsa_signature_test::config,
-                    seq(vec![sys_t(
-                        "test_threshold_ecdsa_signature_from_nns_without_cycles",
-                        tecdsa::tecdsa_signature_test::test_threshold_ecdsa_signature_from_nns_without_cycles,
-                    )])
-                ).with_alert(ENG_CONSENSUS_CHANNEL),
+                )
+                .with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "unassigned_node_upgrade_test_pot",
                     orchestrator::unassigned_node_upgrade_test::config,
@@ -618,7 +585,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "unassigned_node_upgrade_test",
                         orchestrator::unassigned_node_upgrade_test::test,
                     )]),
-                ).with_alert(ENG_CONSENSUS_CHANNEL),
+                )
+                .with_alert(ENG_CONSENSUS_CHANNEL),
                 pot_with_setup(
                     "upgrade_with_alternative_urls_pot",
                     orchestrator::upgrade_with_alternative_urls::config,
@@ -626,7 +594,8 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "upgrade_with_alternative_urls",
                         orchestrator::upgrade_with_alternative_urls::test,
                     )]),
-                ).with_alert(ENG_CONSENSUS_CHANNEL),
+                )
+                .with_alert(ENG_CONSENSUS_CHANNEL),
             ],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
