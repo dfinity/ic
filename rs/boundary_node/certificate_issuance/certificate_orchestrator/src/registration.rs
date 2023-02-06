@@ -9,6 +9,7 @@ use ic_cdk::caller;
 use ic_stable_structures::StableBTreeMap;
 use mockall::automock;
 use priority_queue::PriorityQueue;
+use prometheus::labels;
 
 cfg_if::cfg_if! {
     if #[cfg(test)] {
@@ -21,7 +22,7 @@ cfg_if::cfg_if! {
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
     id::Generate,
-    LocalRef, Memory, REGISTRATION_EXPIRATION_TTL,
+    LocalRef, Memory, WithMetrics, REGISTRATION_EXPIRATION_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -120,6 +121,25 @@ impl<T: Create, A: Authorize> Create for WithAuthorize<T, A> {
         };
 
         self.0.create(domain, canister)
+    }
+}
+
+impl<T: Create> Create for WithMetrics<T> {
+    fn create(&self, domain: &str, canister: &Principal) -> Result<Id, CreateError> {
+        let out = self.0.create(domain, canister);
+
+        self.1.with(|c| {
+            c.borrow()
+                .with(&labels! {
+                    "status" => match out {
+                        Ok(_) => "ok",
+                        Err(_) => "fail",
+                    },
+                })
+                .inc()
+        });
+
+        out
     }
 }
 
@@ -273,6 +293,25 @@ impl<T: Update, A: Authorize> Update for WithAuthorize<T, A> {
     }
 }
 
+impl<T: Update> Update for WithMetrics<T> {
+    fn update(&self, id: &str, typ: UpdateType) -> Result<(), UpdateError> {
+        let out = self.0.update(id, typ);
+
+        self.1.with(|c| {
+            c.borrow()
+                .with(&labels! {
+                    "status" => match out {
+                        Ok(_) => "ok",
+                        Err(_) => "fail",
+                    },
+                })
+                .inc()
+        });
+
+        out
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum RemoveError {
     #[error("Not found")]
@@ -352,6 +391,25 @@ impl<T: Remove, A: Authorize> Remove for WithAuthorize<T, A> {
         };
 
         self.0.remove(id)
+    }
+}
+
+impl<T: Remove> Remove for WithMetrics<T> {
+    fn remove(&self, id: &str) -> Result<(), RemoveError> {
+        let out = self.0.remove(id);
+
+        self.1.with(|c| {
+            c.borrow()
+                .with(&labels! {
+                    "status" => match out {
+                        Ok(_) => "ok",
+                        Err(_) => "fail",
+                    },
+                })
+                .inc()
+        });
+
+        out
     }
 }
 

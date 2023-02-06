@@ -4,6 +4,7 @@ use certificate_orchestrator_interface::{Id, Registration};
 use ic_cdk::caller;
 use ic_stable_structures::StableBTreeMap;
 use priority_queue::PriorityQueue;
+use prometheus::labels;
 
 cfg_if::cfg_if! {
     if #[cfg(test)] {
@@ -15,7 +16,7 @@ cfg_if::cfg_if! {
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
-    LocalRef, Memory, IN_PROGRESS_TTL,
+    LocalRef, Memory, WithMetrics, IN_PROGRESS_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -75,6 +76,25 @@ impl<T: Queue, A: Authorize> Queue for WithAuthorize<T, A> {
         };
 
         self.0.queue(id, timestamp)
+    }
+}
+
+impl<T: Queue> Queue for WithMetrics<T> {
+    fn queue(&self, id: Id, timestamp: u64) -> Result<(), QueueError> {
+        let out = self.0.queue(id, timestamp);
+
+        self.1.with(|c| {
+            c.borrow()
+                .with(&labels! {
+                    "status" => match out {
+                        Ok(_) => "ok",
+                        Err(_) => "fail",
+                    },
+                })
+                .inc()
+        });
+
+        out
     }
 }
 
@@ -174,6 +194,29 @@ impl<T: Dispense, A: Authorize> Dispense for WithAuthorize<T, A> {
             });
         };
 
+        self.0.peek()
+    }
+}
+
+impl<T: Dispense> Dispense for WithMetrics<T> {
+    fn dispense(&self) -> Result<Id, DispenseError> {
+        let out = self.0.dispense();
+
+        self.1.with(|c| {
+            c.borrow()
+                .with(&labels! {
+                    "status" => match out {
+                        Ok(_) => "ok",
+                        Err(_) => "fail",
+                    },
+                })
+                .inc()
+        });
+
+        out
+    }
+
+    fn peek(&self) -> Result<Id, DispenseError> {
         self.0.peek()
     }
 }

@@ -162,6 +162,9 @@ service: (InitArg) -> {
     dispenseTask: () -> (DispenseTaskResponse);
     peekTask: () -> (DispenseTaskResponse) query;
 
+    // Metrics
+    metrics: () -> (text) query;
+
     // ACL
     listAllowedPrincipals: () -> (LisAllowedPrincipalsResponse) query;
     addAllowedPrincipal: (principal) -> (ModifyAllowedPrincipalResponse);

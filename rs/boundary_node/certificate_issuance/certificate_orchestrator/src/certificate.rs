@@ -2,10 +2,11 @@ use anyhow::anyhow;
 use certificate_orchestrator_interface::{EncryptedPair, ExportPackage, Id, Registration};
 use ic_cdk::caller;
 use ic_stable_structures::StableBTreeMap;
+use prometheus::labels;
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
-    LocalRef, Memory,
+    LocalRef, Memory, WithMetrics,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -67,6 +68,25 @@ impl<T: Upload, A: Authorize> Upload for WithAuthorize<T, A> {
         };
 
         self.0.upload(id, pair)
+    }
+}
+
+impl<T: Upload> Upload for WithMetrics<T> {
+    fn upload(&self, id: &Id, pair: EncryptedPair) -> Result<(), UploadError> {
+        let out = self.0.upload(id, pair);
+
+        self.1.with(|c| {
+            c.borrow()
+                .with(&labels! {
+                    "status" => match out {
+                        Ok(_) => "ok",
+                        Err(_) => "fail",
+                    },
+                })
+                .inc()
+        });
+
+        out
     }
 }
 
