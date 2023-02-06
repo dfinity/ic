@@ -26,7 +26,7 @@ use super::utils::rw_message::install_nns_and_check_progress;
 use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
-        test_env::TestEnv,
+        test_env::{SshKeyGen, TestEnv},
         test_env_api::*,
     },
     orchestrator::utils::upgrade::{
@@ -43,6 +43,8 @@ use std::convert::TryFrom;
 const DKG_INTERVAL: u64 = 9;
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen(ADMIN).expect("ssh admin keygen failed");
     InternetComputer::new()
         .add_subnet(
             Subnet::fast_single_node(SubnetType::System)

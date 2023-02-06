@@ -1016,6 +1016,17 @@ system_test(
 )
 
 system_test(
+    name = "upgrade_with_alternative_urls",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_hourly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
     name = "unstuck_subnet_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
