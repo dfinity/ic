@@ -40,9 +40,9 @@ if ((${VERSION} < 13)); then
     ./ic-backup --config-file config.json5 upgrade
     set_config_version 13
 fi
-if ((${VERSION} < 15)); then
-    download_backup_binary "0b5288abc445a460631cbdec81b0447ba3980e6f"
-    set_config_version 15
+if ((${VERSION} < 16)); then
+    download_backup_binary "5b43f5b35307460ecb0f75d5ab8a32e687a09a13"
+    set_config_version 16
 fi
 
 sudo systemctl start ic-backup.service
