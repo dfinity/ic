@@ -9190,6 +9190,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-tvl-canister"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "candid",
+ "ciborium",
+ "futures",
+ "ic-base-types",
+ "ic-canisters-http-types",
+ "ic-cdk",
+ "ic-cdk-macros",
+ "ic-metrics-encoder",
+ "ic-stable-structures 0.5.0",
+ "num-traits",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-types"
 version = "0.8.0"
 dependencies = [

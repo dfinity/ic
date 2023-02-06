@@ -1,0 +1,21 @@
+{
+  "canisters": {
+    "xrc": {
+      "type": "custom",
+      "candid": "xrc/xrc.did",
+      "wasm": "xrc/xrc.wasm.gz",
+      "remote": {
+        "candid": "xrc/xrc.did",
+        "id": {
+          "ic": "uf6dk-hyaaa-aaaaq-qaaaq-cai"
+        }
+      }
+    },
+    "tvl": {
+      "type": "custom",
+      "candid": "tvl.did",
+      "build": "bazel build tvl_canister",
+      "wasm": "../../../bazel-bin/rs/rosetta-api/tvl/tvl_canister.wasm"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+[package]
+name = "ic-tvl-canister"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ic-tvl-canister"
+path = "src/main.rs"
+
+[dependencies]
+async-trait = "0.1.59"
+candid = "0.8.4"
+ciborium = "0.2"
+futures = "0.3.25"
+ic-base-types = { path = "../../types/base_types" }
+ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
+ic-cdk = { version = "0.6.8", features = ["timers"] }
+ic-cdk-macros = "0.6.8"
+ic-metrics-encoder = "1"
+ic-stable-structures = "0.5.0"
+num-traits = "0.2.15"
+serde = "1.0"
+serde_bytes = "0.11"
