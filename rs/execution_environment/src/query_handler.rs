@@ -2,6 +2,7 @@
 //! query methods via query calls.
 
 mod query_context;
+mod query_scheduler;
 #[cfg(test)]
 mod tests;
 
@@ -34,11 +35,13 @@ use std::{
     convert::Infallible,
     future::Future,
     pin::Pin,
-    sync::{Arc, Mutex},
+    sync::Arc,
     task::{Context, Poll},
 };
 use tokio::sync::oneshot;
 use tower::{limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder};
+
+pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
 
 /// Convert an object into CBOR binary.
 fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
@@ -101,7 +104,7 @@ pub struct InternalHttpQueryHandler {
 pub(crate) struct HttpQueryHandler {
     internal: Arc<dyn QueryHandler<State = ReplicatedState>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    threadpool: Arc<Mutex<threadpool::ThreadPool>>,
+    query_scheduler: QueryScheduler,
 }
 
 impl InternalHttpQueryHandler {
@@ -171,13 +174,13 @@ impl HttpQueryHandler {
     pub(crate) fn new_service(
         concurrency_buffer: GlobalConcurrencyLimitLayer,
         internal: Arc<dyn QueryHandler<State = ReplicatedState>>,
-        threadpool: Arc<Mutex<threadpool::ThreadPool>>,
+        query_scheduler: QueryScheduler,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> QueryExecutionService {
         let base_service = BoxCloneService::new(Self {
             internal,
             state_reader,
-            threadpool,
+            query_scheduler,
         });
         ServiceBuilder::new()
             .layer(concurrency_buffer)
@@ -215,11 +218,12 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
         let internal = Arc::clone(&self.internal);
         let state_reader = Arc::clone(&self.state_reader);
         let (tx, rx) = oneshot::channel();
-        let threadpool = self.threadpool.lock().unwrap().clone();
-        threadpool.execute(move || {
+        let canister_id = query.receiver;
+        self.query_scheduler.push(canister_id, move || {
+            let start = std::time::Instant::now();
             if !tx.is_closed() {
                 // We managed to upgrade the weak pointer, so the query was not cancelled.
-                // Canceling the query after this point will have to effect: the query will
+                // Canceling the query after this point will have no effect: the query will
                 // be executed anyway. That is fine because the execution will take O(ms).
                 let result = match get_latest_certified_state_and_data_certificate(
                     state_reader,
@@ -254,6 +258,7 @@ impl Service<(UserQuery, Option<CertificateDelegation>)> for HttpQueryHandler {
 
                 let _ = tx.send(Ok(http_query_response));
             }
+            start.elapsed()
         });
         Box::pin(async move {
             rx.await

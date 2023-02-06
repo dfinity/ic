@@ -279,7 +279,7 @@ impl SandboxManager {
                 paused_executions: HashMap::new(),
                 workers_for_replicated_execution: threadpool::ThreadPool::new(1),
                 workers_for_non_replicated_execution: threadpool::ThreadPool::new(
-                    config.query_execution_threads,
+                    config.query_execution_threads_per_canister,
                 ),
                 workers_for_cleanup: threadpool::ThreadPool::new(1),
             }),
