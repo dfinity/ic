@@ -20,6 +20,7 @@ use ic_stable_structures::{
     DefaultMemoryImpl, StableBTreeMap,
 };
 use priority_queue::PriorityQueue;
+use prometheus::{CounterVec, Encoder, Opts, Registry, TextEncoder};
 
 use crate::{
     acl::{Authorize, AuthorizeError, Authorizer, WithAuthorize},
@@ -78,6 +79,90 @@ const MEMORY_ID_ENCRYPTED_CERTIFICATES: u8 = 6;
 const MEMORY_ID_TASKS: u8 = 7;
 const MEMORY_ID_EXPIRATIONS: u8 = 8;
 const MEMORY_ID_RETRIES: u8 = 9;
+
+// Metrics
+
+thread_local! {
+    static COUNTER_CREATE_REGISTRATION_TOTAL: RefCell<CounterVec> = RefCell::new({
+        CounterVec::new(Opts::new(
+            "create_registration_total", // name
+            "number of times create_registration was called", // help
+        ), &["status"]).unwrap()
+    });
+
+    static COUNTER_UPDATE_REGISTRATION_TOTAL: RefCell<CounterVec> = RefCell::new({
+        CounterVec::new(Opts::new(
+            "update_registration_total", // name
+            "number of times update_registration was called", // help
+        ), &["status"]).unwrap()
+    });
+
+    static COUNTER_REMOVE_REGISTRATION_TOTAL: RefCell<CounterVec> = RefCell::new({
+        CounterVec::new(Opts::new(
+            "remove_registration_total", // name
+            "number of times remove_registration was called", // help
+        ), &["status"]).unwrap()
+    });
+
+    static COUNTER_UPLOAD_CERTIFICATE_TOTAL: RefCell<CounterVec> = RefCell::new({
+        CounterVec::new(Opts::new(
+            "upload_certificate_total", // name
+            "number of times upload_certificate was called", // help
+        ), &["status"]).unwrap()
+    });
+
+    static COUNTER_QUEUE_TASK_TOTAL: RefCell<CounterVec> = RefCell::new({
+        CounterVec::new(Opts::new(
+            "queue_task_total", // name
+            "number of times queue_task was called", // help
+        ), &["status"]).unwrap()
+    });
+
+    static COUNTER_DISPENSE_TASK_TOTAL: RefCell<CounterVec> = RefCell::new({
+        CounterVec::new(Opts::new(
+            "dispense_task_total", // name
+            "number of times dispense_task was called", // help
+        ), &["status"]).unwrap()
+    });
+
+    static METRICS_REGISTRY: RefCell<Registry> = RefCell::new({
+        let r = Registry::new();
+
+        COUNTER_CREATE_REGISTRATION_TOTAL.with(|c| {
+            let c = Box::new(c.borrow().to_owned());
+            r.register(c).unwrap();
+        });
+
+        COUNTER_UPDATE_REGISTRATION_TOTAL.with(|c| {
+            let c = Box::new(c.borrow().to_owned());
+            r.register(c).unwrap();
+        });
+
+        COUNTER_REMOVE_REGISTRATION_TOTAL.with(|c| {
+            let c = Box::new(c.borrow().to_owned());
+            r.register(c).unwrap();
+        });
+
+        COUNTER_UPLOAD_CERTIFICATE_TOTAL.with(|c| {
+            let c = Box::new(c.borrow().to_owned());
+            r.register(c).unwrap();
+        });
+
+        COUNTER_QUEUE_TASK_TOTAL.with(|c| {
+            let c = Box::new(c.borrow().to_owned());
+            r.register(c).unwrap();
+        });
+
+        COUNTER_DISPENSE_TASK_TOTAL.with(|c| {
+            let c = Box::new(c.borrow().to_owned());
+            r.register(c).unwrap();
+        });
+
+        r
+    });
+}
+
+pub struct WithMetrics<T>(pub T, LocalRef<CounterVec>);
 
 // ACLs
 thread_local! {
@@ -169,6 +254,7 @@ thread_local! {
     static CREATOR: RefCell<Box<dyn Create>> = RefCell::new({
         let c = Creator::new(&ID_GENERATOR, &REGISTRATIONS, &NAMES, &EXPIRATIONS);
         let c = WithAuthorize(c, &MAIN_AUTHORIZER);
+        let c = WithMetrics(c, &COUNTER_CREATE_REGISTRATION_TOTAL);
         Box::new(c)
     });
 
@@ -181,12 +267,14 @@ thread_local! {
     static UPDATER: RefCell<Box<dyn Update>> = RefCell::new({
         let u = Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES);
         let u = WithAuthorize(u, &MAIN_AUTHORIZER);
+        let u = WithMetrics(u, &COUNTER_UPDATE_REGISTRATION_TOTAL);
         Box::new(u)
     });
 
     static REMOVER: RefCell<Box<dyn Remove>> = RefCell::new({
         let r = Remover::new(&REGISTRATIONS, &NAMES, &TASKS, &EXPIRATIONS, &RETRIES, &ENCRYPTED_CERTIFICATES);
         let r = WithAuthorize(r, &MAIN_AUTHORIZER);
+        let r = WithMetrics(r, &COUNTER_REMOVE_REGISTRATION_TOTAL);
         Box::new(r)
     });
 }
@@ -196,6 +284,7 @@ thread_local! {
     static UPLOADER: RefCell<Box<dyn Upload>> = RefCell::new({
         let u = Uploader::new(&ENCRYPTED_CERTIFICATES, &REGISTRATIONS);
         let u = WithAuthorize(u, &MAIN_AUTHORIZER);
+        let u = WithMetrics(u, &COUNTER_UPLOAD_CERTIFICATE_TOTAL);
         Box::new(u)
     });
 
@@ -212,12 +301,14 @@ thread_local! {
     static QUEUER: RefCell<Box<dyn Queue>> = RefCell::new({
         let q = Queuer::new(&TASKS, &REGISTRATIONS);
         let q = WithAuthorize(q, &MAIN_AUTHORIZER);
+        let q = WithMetrics(q, &COUNTER_QUEUE_TASK_TOTAL);
         Box::new(q)
     });
 
     static DISPENSER: RefCell<Box<dyn Dispense>> = RefCell::new({
         let d = Dispenser::new(&TASKS, &RETRIES);
         let d = WithAuthorize(d, &MAIN_AUTHORIZER);
+        let d = WithMetrics(d, &COUNTER_DISPENSE_TASK_TOTAL);
         Box::new(d)
     });
 }
@@ -481,6 +572,34 @@ fn peek_task() -> DispenseTaskResponse {
             }
         }),
     }
+}
+
+// Metrics
+
+#[query(name = "metrics")]
+fn metrics() -> String {
+    if let Err(err) = MAIN_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
+        trap(match err {
+            AuthorizeError::Unauthorized => "unauthorized",
+            AuthorizeError::UnexpectedError(_) => "unexpected error",
+        });
+    }
+
+    METRICS_REGISTRY.with(|r| {
+        let mfs = r.borrow().gather();
+
+        let mut buffer = vec![];
+        let enc = TextEncoder::new();
+
+        if let Err(err) = enc.encode(&mfs, &mut buffer) {
+            trap(&format!("failed to encode metrics: {err}"));
+        };
+
+        match String::from_utf8(buffer) {
+            Ok(v) => v,
+            Err(err) => trap(&format!("failed to serialize metrics buffer: {err}")),
+        }
+    })
 }
 
 // ACLs

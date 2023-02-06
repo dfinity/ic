@@ -2,9 +2,10 @@
   "version": 1,
   "canisters": {
     "certificate_orchestrator": {
+      "type": "custom",
       "candid": "interface.did",
-      "package": "certificate_orchestrator",
-      "type": "rust"
+      "build": "build.sh",
+      "wasm": "target/wasm32-unknown-unknown/release/certificate_orchestrator.wasm.gz"
     }
   }
 }
