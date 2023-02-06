@@ -57,8 +57,9 @@ impl NotificationClient {
         }
 
         let url = format!(
-            "http://prometheus.mainnet.dfinity.network:9091/metrics/job/backup-pod/instance/{}",
-            self.backup_instance
+            "http://prometheus.mainnet.dfinity.network:9091/metrics/job/backup-pod/instance/{}/ic_subnet/{}",
+            self.backup_instance,
+            self.subnet
         );
         let content_type = "Content-type: application/octet-stream".to_string();
 
@@ -69,8 +70,7 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_last_restored_height gauge\n\
             # HELP backup_last_restored_height The height of the last restored state on a backup pod.\n\
-            backup_last_restored_height{{ic=\"mercury\", ic_subnet=\"{}\"}} {}\n",
-            self.subnet,
+            backup_last_restored_height{{ic=\"mercury\"}} {}\n",
             height,
         );
         self.push_metrics(message)
@@ -80,8 +80,8 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_replay_time_minutes gauge\n\
             # HELP backup_replay_time_minutes Time spent on a replay.\n\
-            backup_replay_time_minutes{{ic=\"mercury\", ic_subnet=\"{}\"}} {}\n",
-            self.subnet, minutes,
+            backup_replay_time_minutes{{ic=\"mercury\"}} {}\n",
+            minutes,
         );
         self.push_metrics(message)
     }
@@ -90,8 +90,7 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_sync_minutes gauge\n\
             # HELP backup_sync_minutes The time it took a backup pod to sync artifacts from NNS nodes.\n\
-            backup_sync_minutes{{ic=\"mercury\", ic_subnet=\"{}\"}} {}\n",
-            self.subnet,
+            backup_sync_minutes{{ic=\"mercury\"}} {}\n",
             minutes,
         );
         self.push_metrics(message)
@@ -101,9 +100,9 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_disk_usage gauge\n\
             # HELP backup_disk_usage The allocation percentage of some resource on a backup pod.\n\
-            backup_disk_usage{{ic=\"mercury\", ic_subnet=\"{}\", resource=\"space\"}} {}\n\
-            backup_disk_usage{{ic=\"mercury\", ic_subnet=\"{}\", resource=\"inodes\"}} {}\n",
-            self.subnet, space, self.subnet, inodes,
+            backup_disk_usage{{ic=\"mercury\", resource=\"space\"}} {}\n\
+            backup_disk_usage{{ic=\"mercury\", resource=\"inodes\"}} {}\n",
+            space, inodes,
         );
         self.push_metrics(message)
     }
@@ -111,8 +110,7 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_version_number gauge\n\
             # HELP backup_version_number The current version of the ic-backup tool that is running on this pod.\n\
-            backup_version_number{{ic=\"mercury\", ic_subnet=\"{}\"}} {}\n",
-            self.subnet,
+            backup_version_number{{ic=\"mercury\"}} {}\n",
             version,
         );
         self.push_metrics(message)
