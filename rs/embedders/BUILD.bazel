@@ -151,7 +151,6 @@ rust_bench(
     deps = [
         "//rs/rust_canisters/canister_test",
         "//rs/types/base_types",
-        "//rs/state_machine_tests",
         "@crate_index//:candid",
     ] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
