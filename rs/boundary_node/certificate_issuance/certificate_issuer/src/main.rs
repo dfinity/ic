@@ -48,6 +48,7 @@ use trust_dns_resolver::{
 
 use crate::{
     acme::Acme,
+    acme_idna::WithIDNA,
     certificate::{CanisterExporter, CanisterUploader, Export},
     check::{Check, Checker},
     cloudflare::Cloudflare,
@@ -59,6 +60,7 @@ use crate::{
 };
 
 mod acme;
+mod acme_idna;
 mod api;
 mod certificate;
 mod check;
@@ -351,18 +353,21 @@ async fn main() -> Result<(), Error> {
 
     let acme_client = Acme::new(acme_account);
 
+    let acme_order = WithIDNA(acme_client.clone());
     let acme_order = WithMetrics(
-        acme_client.clone(),
+        acme_order,
         MetricParams::new(&meter, SERVICE_NAME, "acme_create_order"),
     );
 
+    let acme_ready = WithIDNA(acme_client.clone());
     let acme_ready = WithMetrics(
-        acme_client.clone(),
+        acme_ready,
         MetricParams::new(&meter, SERVICE_NAME, "acme_ready_order"),
     );
 
+    let acme_finalize = WithIDNA(acme_client.clone());
     let acme_finalize = WithMetrics(
-        acme_client.clone(),
+        acme_finalize,
         MetricParams::new(&meter, SERVICE_NAME, "acme_finalize_order"),
     );
 

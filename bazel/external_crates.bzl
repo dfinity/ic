@@ -478,6 +478,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "ic-wasm": crate.spec(
                 version = "^0.1.3",
             ),
+            "idna": crate.spec(
+                version = "^0.3.0",
+            ),
             "indicatif": crate.spec(
                 version = "^0.15",
                 features = [

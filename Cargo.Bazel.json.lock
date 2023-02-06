@@ -1,5 +1,5 @@
 {
-  "checksum": "aeb2cb3f963dd0d2fe570e1adce27542fe8f7a3aaaafbe417bb66829fb6aae5e",
+  "checksum": "47f3ff2045b8468fce28ba4dcca7eb662594d25b9d6f44e94ae40f187fac9c57",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12514,6 +12514,10 @@
               "target": "ic_bls12_381"
             },
             {
+              "id": "idna 0.3.0",
+              "target": "idna"
+            },
+            {
               "id": "indicatif 0.15.0",
               "target": "indicatif"
             },
@@ -12774,7 +12778,7 @@
               "target": "prometheus_parse"
             },
             {
-              "id": "proptest 1.0.0",
+              "id": "proptest 1.1.0",
               "target": "proptest"
             },
             {
@@ -33382,13 +33386,13 @@
       },
       "license": "Apache-2.0"
     },
-    "proptest 1.0.0": {
+    "proptest 1.1.0": {
       "name": "proptest",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/proptest/1.0.0/download",
-          "sha256": "1e0d9cc07f18492d879586c92b485def06bc850da3118075cd45d50e9c95b0e5"
+          "url": "https://crates.io/api/v1/crates/proptest/1.1.0/download",
+          "sha256": "29f1b898011ce9595050a68e60f90bad083ff2987a695a42357134c8381fba70"
         }
       },
       "targets": [
@@ -33472,12 +33476,16 @@
             {
               "id": "tempfile 3.3.0",
               "target": "tempfile"
+            },
+            {
+              "id": "unarray 0.1.4",
+              "target": "unarray"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.0"
+        "version": "1.1.0"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -47448,6 +47456,39 @@
       },
       "license": "MIT OR Apache-2.0"
     },
+    "unarray 0.1.4": {
+      "name": "unarray",
+      "version": "0.1.4",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/unarray/0.1.4/download",
+          "sha256": "eaea85b334db583fe3274d12b4cd1880032beab409c0d774be044d4480ab9a94"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "unarray",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "unarray",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.1.4"
+      },
+      "license": "MIT OR Apache-2.0"
+    },
     "unicase 2.6.0": {
       "name": "unicase",
       "version": "2.6.0",
@@ -48393,18 +48434,6 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
             "srcs": {
@@ -48419,6 +48448,18 @@
           "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

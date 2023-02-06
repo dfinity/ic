@@ -22,6 +22,7 @@ hyper = { version = "0.14.20", features = ["full"] }
 hyper-rustls = "0.23.0"
 ic-agent = "0.22.0"
 ic-utils = { version = "0.22.0", features = ["raw"] }
+idna = "0.3.0"
 instant-acme = "0.1.0"
 mockall = "0.11.3"
 opentelemetry = "0.18.0"

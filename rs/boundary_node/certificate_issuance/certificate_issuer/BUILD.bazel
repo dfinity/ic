@@ -17,6 +17,7 @@ DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-utils",
+    "@crate_index//:idna",
     "@crate_index//:instant-acme",
     "@crate_index//:mockall",
     "@crate_index//:opentelemetry_0_18_0",
