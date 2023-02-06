@@ -3,7 +3,7 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use ic_prep_lib::subnet_configuration::constants::{NNS_SUBNET_SIZE, SMALL_APP_SUBNET_MAX_SIZE};
+use ic_prep_lib::subnet_configuration::constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_tests::driver::ic::ImageSizeGiB;
 use ic_tests::driver::new::group::SystemTestGroup;
 use ic_tests::networking::replica_query_workload::test;
@@ -27,7 +27,7 @@ fn main() -> Result<()> {
     let config = |env| {
         config(
             env,
-            NNS_SUBNET_SIZE,
+            SMALL_APP_SUBNET_MAX_SIZE,
             SMALL_APP_SUBNET_MAX_SIZE,
             USE_BOUNDARY_NODE,
             // Since this is a long-running test, it accumulates a lot of disk space.
