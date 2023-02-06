@@ -1,0 +1,37 @@
+
+type InitArgs = record {
+    governance_id : principal;
+    xrc_id : principal;
+    update_period: nat64;
+};
+
+type TimeseriesEntry = record {
+    time_sec: nat;
+    value: nat;
+};
+
+type TimeseriesResult = record {
+    timeseries: vec TimeseriesEntry;
+};
+
+type TvlResult = record {
+    time_sec: nat;
+    tvl: nat;
+};
+
+type TvlTimeseriesResult = record {
+    timeseries: vec TvlResult;
+};
+
+type TvlResultError = record {
+    message: text;
+};
+
+type Result_tvl = variant { Ok : TvlResult; Err : TvlResultError };
+
+service : (InitArgs) -> {
+    get_tvl : () -> (Result_tvl);
+    get_tvl_timeseries : () -> (TvlTimeseriesResult);
+    get_xr_timeseries : () -> (TimeseriesResult);
+    get_locked_e8s_timeseries : () -> (TimeseriesResult);
+};
