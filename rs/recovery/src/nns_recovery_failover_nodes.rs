@@ -249,7 +249,7 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
 
             StepType::DownloadParentNNSStore => {
                 if let Some(ip) = self.params.parent_nns_host_ip {
-                    Ok(Box::new(self.recovery.get_download_regsitry_store_step(
+                    Ok(Box::new(self.recovery.get_download_registry_store_step(
                         ip,
                         self.params.subnet_id,
                     )))

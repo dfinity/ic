@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -56,6 +56,10 @@ DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
+DEV_DEPENDENCIES = [
+    "//rs/test_utilities",
+]
+
 MACRO_DEPENDENCIES = []
 
 ALIASES = {}
@@ -81,4 +85,10 @@ rust_binary(
 rust_doc_test(
     name = "replay_doc_test",
     crate = ":replay",
+)
+
+rust_test(
+    name = "replay_test",
+    crate = ":replay",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

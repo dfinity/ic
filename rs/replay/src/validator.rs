@@ -2,12 +2,16 @@ use std::sync::{Arc, RwLock};
 
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl};
 use ic_config::{artifact_pool::ArtifactPoolConfig, Config};
-use ic_consensus::consensus::{
-    dkg_key_manager::DkgKeyManager, pool_reader::PoolReader, validator::Validator, ConsensusCrypto,
-    Membership, ValidatorMetrics,
+use ic_consensus::{
+    certification::CertificationCrypto,
+    consensus::{
+        dkg_key_manager::DkgKeyManager, pool_reader::PoolReader, utils, validator::Validator,
+        ConsensusCrypto, Membership, ValidatorMetrics,
+    },
 };
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
+    certification::Verifier,
     consensus_pool::{
         ChangeAction, ConsensusPool, ConsensusPoolCache, HeightIndexedPool, MutableConsensusPool,
     },
@@ -22,12 +26,13 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
+        certification::{Certification, CertificationShare},
         Block, CatchUpPackage, ConsensusMessage, ConsensusMessageHash, ConsensusMessageHashable,
-        HasBlockHash,
+        HasBlockHash, HasCommittee,
     },
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
-    Height, NodeId, SubnetId,
+    Height, NodeId, PrincipalId, SubnetId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -77,8 +82,13 @@ pub struct ReplayValidator {
     cfg: Config,
     pub replica_cfg: ReplicaConfig,
     validator: Validator,
-    crypto: Arc<dyn ConsensusCrypto>,
+    verifier: Arc<dyn Verifier>,
+    membership: Arc<Membership>,
+    pool_cache: Arc<dyn ConsensusPoolCache>,
+    consensus_crypto: Arc<dyn ConsensusCrypto>,
+    certification_crypto: Arc<dyn CertificationCrypto>,
     metrics_registry: MetricsRegistry,
+    registry: Arc<dyn RegistryClient>,
     log: ReplicaLogger,
     time_source: Arc<dyn TimeSource>,
 }
@@ -86,9 +96,10 @@ pub struct ReplayValidator {
 impl ReplayValidator {
     pub fn new(
         cfg: Config,
-        node_id: NodeId,
         subnet_id: SubnetId,
-        crypto: Arc<dyn ConsensusCrypto>,
+        consensus_crypto: Arc<dyn ConsensusCrypto>,
+        certification_crypto: Arc<dyn CertificationCrypto>,
+        verifier: Arc<dyn Verifier>,
         pool_cache: Arc<dyn ConsensusPoolCache>,
         registry: Arc<dyn RegistryClient>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -96,16 +107,21 @@ impl ReplayValidator {
         log: ReplicaLogger,
     ) -> Self {
         let metrics_registry = MetricsRegistry::new();
-        let membership = Membership::new(pool_cache, registry.clone(), subnet_id);
+        let membership = Arc::new(Membership::new(
+            pool_cache.clone(),
+            registry.clone(),
+            subnet_id,
+        ));
         let time_source = Arc::new(SysTimeSource::new());
         let dkg_pool = RwLock::new(DkgPoolImpl::new(metrics_registry.clone()));
+        let node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         let replica_cfg = ReplicaConfig::new(node_id, subnet_id);
 
         let validator = Validator::new(
             replica_cfg.clone(),
-            Arc::new(membership),
-            registry,
-            Arc::clone(&crypto),
+            membership.clone(),
+            registry.clone(),
+            consensus_crypto.clone(),
             Arc::new(MockPayloadBuilder {}) as Arc<_>,
             state_manager,
             message_routing,
@@ -119,7 +135,12 @@ impl ReplayValidator {
             cfg,
             replica_cfg,
             validator,
-            crypto,
+            verifier,
+            membership,
+            registry,
+            pool_cache,
+            consensus_crypto,
+            certification_crypto,
             metrics_registry,
             log,
             time_source,
@@ -135,7 +156,7 @@ impl ReplayValidator {
     pub fn new_key_manager(&self, pool_reader: &PoolReader) -> DkgKeyManager {
         DkgKeyManager::new(
             self.metrics_registry.clone(),
-            self.crypto.clone(),
+            self.consensus_crypto.clone(),
             self.log.clone(),
             pool_reader,
         )
@@ -207,6 +228,48 @@ impl ReplayValidator {
     pub fn push_dedup(&self, to: &mut Vec<InvalidArtifact>, artifact: InvalidArtifact) {
         if !to.iter().any(|x| x.eq(&artifact)) {
             to.push(artifact);
+        }
+    }
+
+    /// Verify the given certification against the state of the registry version at that height.
+    /// We do not verify that the certification contains the same state hash as our local one.
+    /// We treat transient errors as permanent.
+    pub fn verify_certification(&self, certification: &Certification) -> Result<(), String> {
+        let registry_version =
+            utils::registry_version_at_height(self.pool_cache.as_ref(), certification.height)
+                .unwrap_or_else(|| self.registry.get_latest_version());
+
+        self.verifier
+            .validate(self.replica_cfg.subnet_id, certification, registry_version)
+            .map_err(|e| format!("{:?}", e))
+    }
+
+    /// Verify the given certification share against the membership defined by the local consensus pool cache
+    /// We do not verify that the certification contains the same state hash as our local one.
+    /// We treat transient errors as permanent.
+    pub fn verify_share(&self, share: &CertificationShare) -> Result<(), String> {
+        let signer = share.signed.signature.signer;
+        match self.membership.node_belongs_to_threshold_committee(
+            signer,
+            share.height,
+            Certification::committee(),
+        ) {
+            // In case of an error, we simply skip this artifact.
+            Err(e) => Err(format!("Failed to determine membership: {:?}", e)),
+            // If the signer does not belong to the signers committee at the
+            // given height, reject this artifact.
+            Ok(false) => Err("Signer does not belong to committee.".into()),
+            // The signer is valid.
+            Ok(true) => {
+                // Verify the signature.
+                let dkg_id =
+                    utils::active_high_threshold_transcript(self.pool_cache.as_ref(), share.height)
+                        .ok_or_else(|| "Failed to get active transcript.".to_string())?
+                        .dkg_id;
+                self.certification_crypto
+                    .verify(&share.signed, dkg_id)
+                    .map_err(|e| e.to_string())
+            }
         }
     }
 

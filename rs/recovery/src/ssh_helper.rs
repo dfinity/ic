@@ -1,10 +1,13 @@
 use crate::cli::wait_for_confirmation;
 use crate::command_helper::exec_cmd;
+use crate::error::RecoveryError;
 use crate::RecoveryResult;
-use slog::{info, Logger};
+use slog::{info, warn, Logger};
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::Command;
+use std::thread;
+use std::time;
 
 const SSH_ARGS: &[&str] = &[
     "-o",
@@ -79,6 +82,17 @@ impl SshHelper {
     /// Return `true` if this SSH helper can establish a connection to the configured host
     pub fn can_connect(&self) -> bool {
         self.ssh("echo 1;".to_string()).is_ok()
+    }
+
+    pub fn wait_for_access(&self) -> RecoveryResult<()> {
+        for _ in 0..20 {
+            if self.can_connect() {
+                return Ok(());
+            }
+            warn!(self.logger, "No SSH access, retrying...");
+            thread::sleep(time::Duration::from_secs(5));
+        }
+        Err(RecoveryError::UnexpectedError("No SSH access".into()))
     }
 }
 

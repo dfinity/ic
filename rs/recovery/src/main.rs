@@ -1,17 +1,12 @@
 //! The main function of ic-recovery processes command line arguments.
 //! Calls the corresponding recovery process CLI.
 use clap::Parser;
-use ic_recovery::cli;
 use ic_recovery::cmd::{RecoveryToolArgs, SubCommand};
 use ic_recovery::RecoveryArgs;
-use slog::{o, Drain};
+use ic_recovery::{cli, util};
 
 fn main() {
-    let decorator = slog_term::TermDecorator::new().build();
-    let drain = slog_term::FullFormat::new(decorator).build().fuse();
-    let drain = slog_async::Async::new(drain).build().fuse();
-
-    let logger = slog::Logger::root(drain, o!());
+    let logger = util::make_logger();
 
     let args = RecoveryToolArgs::parse();
     let recovery_args = RecoveryArgs {

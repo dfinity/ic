@@ -9,11 +9,15 @@ candid = "0.8.1"
 clap = { version = "3.1.6", features = ["derive"] }
 futures = "0.3.25"
 hex = "0.4.2"
+ic-artifact-pool = { path = "../artifact_pool" }
 ic-base-types = { path = "../types/base_types/" }
+ic-config = { path = "../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../crypto/utils/threshold_sig_der" }
 ic-cup-explorer = { path = "../cup_explorer" }
 ic-logger = { path = "../monitoring/logger" }
 ic-http-utils = { path = "../http_utils" }
+ic-interfaces = { path = "../interfaces" }
+ic-metrics = { path = "../monitoring/metrics" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
@@ -37,6 +41,10 @@ strum = "0.23.0"
 strum_macros = "0.23.0"
 tokio = { version = "1.15.0", features = ["full"] }
 url = { version = "2.1.1", features = ["serde"] }
+
+[dev-dependencies]
+tempfile = "3.1.0"
+ic-test-utilities = { path = "../test_utilities" }
 
 [[bin]]
 name = "ic-recovery"
