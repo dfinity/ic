@@ -90,7 +90,7 @@ pub fn config(
         .start(&env)
         .expect("failed to start prometheus VM");
     let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(8)),
+        vcpus: Some(NrOfVCPUs::new(12)),
         memory_kibibytes: None,
         boot_image_minimal_size_gibibytes,
     };
