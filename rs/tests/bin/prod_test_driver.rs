@@ -587,15 +587,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 )
                 .with_alert(ENG_CONSENSUS_CHANNEL),
-                pot_with_setup(
-                    "upgrade_with_alternative_urls_pot",
-                    orchestrator::upgrade_with_alternative_urls::config,
-                    par(vec![sys_t(
-                        "upgrade_with_alternative_urls",
-                        orchestrator::upgrade_with_alternative_urls::test,
-                    )]),
-                )
-                .with_alert(ENG_CONSENSUS_CHANNEL),
             ],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
