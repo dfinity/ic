@@ -102,7 +102,7 @@ impl Finalize for Acme {
             .context("failed to create new order")?;
 
         if state.status != OrderStatus::Ready {
-            return Err(anyhow!("order is not ready"));
+            return Err(anyhow!("order is not ready: {:?}", state.status));
         }
 
         let cert = Certificate::from_params({

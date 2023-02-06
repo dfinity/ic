@@ -1446,6 +1446,7 @@ dependencies = [
  "hyper-rustls",
  "ic-agent",
  "ic-utils 0.22.0",
+ "idna 0.3.0",
  "instant-acme",
  "mockall 0.11.3",
  "opentelemetry 0.18.0",
