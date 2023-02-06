@@ -409,7 +409,20 @@ impl StateLayout {
         WriteOnly::check_dir(&self.diverged_state_markers())?;
         WriteOnly::check_dir(&self.fs_tmp())?;
         WriteOnly::check_dir(&self.tip_path())?;
-        WriteOnly::check_dir(&self.tmp())
+        WriteOnly::check_dir(&self.tmp())?;
+        for path in [
+            &self.backups(),
+            &self.checkpoints(),
+            &self.diverged_checkpoints(),
+            &self.diverged_state_markers(),
+        ] {
+            sync_path(path).map_err(|err| LayoutError::IoError {
+                path: path.clone(),
+                message: "Could not sync StateLayout during init".to_string(),
+                io_err: err,
+            })?
+        }
+        Ok(())
     }
 
     /// Create tip handler. Could only be called once as TipHandler is an exclusive owner of the
@@ -787,16 +800,20 @@ impl StateLayout {
     pub fn mark_checkpoint_diverged(&self, height: Height) -> Result<(), LayoutError> {
         let cp_name = self.checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
-        let diverged_checkpoints_dir = self.diverged_checkpoints();
 
-        let dst_path = diverged_checkpoints_dir.join(&cp_name);
+        let dst_path = self.diverged_checkpoints().join(&cp_name);
 
         match std::fs::rename(&cp_path, dst_path) {
-            Ok(()) => sync_path(self.checkpoints()).map_err(|err| LayoutError::IoError {
-                path: self.checkpoints(),
-                message: "Failed to sync checkpoints".to_string(),
-                io_err: err,
-            }),
+            Ok(()) => {
+                for path in [&self.checkpoints(), &self.diverged_checkpoints()] {
+                    sync_path(path).map_err(|err| LayoutError::IoError {
+                        path: path.clone(),
+                        message: "Failed to sync checkpoints".to_string(),
+                        io_err: err,
+                    })?
+                }
+                Ok(())
+            }
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
             other => other.map_err(|err| LayoutError::IoError {
                 path: cp_path,
@@ -818,7 +835,11 @@ impl StateLayout {
     ///   h ∈ self.diverged_state_heights()
     pub fn create_diverged_state_marker(&self, height: Height) -> Result<(), LayoutError> {
         open_for_write(&self.diverged_state_marker_path(height))?;
-        Ok(())
+        sync_path(self.diverged_state_markers()).map_err(|err| LayoutError::IoError {
+            path: self.diverged_state_markers(),
+            message: "Failed to sync diverged state markers".to_string(),
+            io_err: err,
+        })
     }
 
     /// Removes a diverged checkpoint given its height.
