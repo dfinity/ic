@@ -119,6 +119,18 @@ symlink_dir(
 
 SUBNET_RECOVERY_RUNTIME_DEPS = [":recovery/binaries"]
 
+symlink_dir(
+    name = "backup/binaries",
+    targets = {
+        "//rs/backup:ic-backup": "ic-backup",
+        "//rs/replay:ic-replay": "ic-replay",
+        "//rs/canister_sandbox/sandbox_launcher": "sandbox_launcher",
+        "//rs/canister_sandbox": "canister_sandbox",
+    },
+)
+
+BACKUP_RUNTIME_DEPS = [":backup/binaries"]
+
 MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]
 
 rust_binary(
@@ -631,15 +643,13 @@ system_test(
 system_test(
     name = "backup_manager_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS,
+        MAINNET_REVISION_RUNTIME_DEPS +
+        BACKUP_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 

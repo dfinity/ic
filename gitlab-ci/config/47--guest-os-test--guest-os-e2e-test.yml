@@ -129,35 +129,6 @@ rosetta-pre-master:
       . "${CI_PROJECT_DIR}/rs/tests/prepare-rosetta-deps.sh"
     - *run-farm-based-test
 
-upgrade-compatibility-pre-master:
-  extends: .system-tests
-  needs:
-    - job: wait-for-bazel-test-all
-      artifacts: false
-  artifacts:
-    paths:
-    - "working_dir/"
-  variables:
-    SUITE_NAME: "upgrade_compatibility"
-  script:
-    - |
-      # release
-      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
-          --git-rev="$CI_COMMIT_SHA" --remote-path="release" \
-          --out="artifacts/release"
-
-      mkdir -p test-tools-tmp
-      IC_ADMIN="test-tools-tmp/ic-admin"
-      gunzip -c "artifacts/release/ic-admin.gz" > "${IC_ADMIN}"
-      chmod +x "${IC_ADMIN}"
-
-      # read target version from testnet/mainnet_revisions.json
-      # the target version is updated by the release team upon release
-      ROOT_SUBNET_ID="tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
-      TARGET_VERSION=$(jq -r ".subnets.\"${ROOT_SUBNET_ID}\"" testnet/mainnet_revisions.json)
-      export TARGET_VERSION
-    - *run-farm-based-test
-
 .build-and-test-monpoly-docker-e2e: &build-and-test-monpoly-docker-e2e |
   # build monpoly_pipeline container image
   docker build --build-arg MONPOLY_PIPELINE_GIT_REVISION="${CI_COMMIT_SHA}" -t monpoly_pipeline:"${CI_COMMIT_SHA}" ./policy-monitoring

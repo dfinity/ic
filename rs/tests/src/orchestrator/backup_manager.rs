@@ -10,8 +10,10 @@ It makes sure we can restore the subnet state and archive all backup snapshots.
 
 Runbook::
 . Deploy an IC with 4 node NNS. The replica version is of the current branch.
+. Copy prebuilt ic-backup and add ic-replay tools for this version.
+. Download the binaries of the ic-replay for the mainnet version.
 . Generate SSH credentials for the backup user.
-. Download the ic-backup tool and create a configuration file for it.
+. Create a configuration file for ic-backup.
 . Start the backup process in a separate thread.
 . Upgrade the subnet to the replica version of the master branch.
 . Wait for backup and archive of a new version checkpoint.
@@ -43,12 +45,12 @@ use ic_backup::util::sleep_secs;
 use ic_recovery::file_sync_helper::{download_binary, write_file};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
-use slog::info;
+use slog::{info, Logger};
 use std::ffi::OsStr;
+use std::fs;
 use std::net::IpAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::{env, fs};
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
@@ -77,8 +79,6 @@ pub fn test(env: TestEnv) {
         .to_path_buf();
     let backup_dir = root_dir.join("backup");
     fs::create_dir_all(backup_dir.clone()).expect("failure creating backup directory");
-    let bin_dir = root_dir.join("bin");
-    fs::create_dir_all(bin_dir.clone()).expect("failure creating bin directory");
     let config_dir = root_dir.join("config");
     fs::create_dir_all(config_dir.clone()).expect("failure creating config directory");
     let cold_storage_dir = tempfile::TempDir::new()
@@ -91,6 +91,24 @@ pub fn test(env: TestEnv) {
     let subnet_id = env.topology_snapshot().root_subnet_id();
     let replica_version = get_assigned_replica_version(&nns_node).unwrap();
     let initial_replica_version = ReplicaVersion::try_from(replica_version.clone()).unwrap();
+
+    let backup_binaries_dir = backup_dir.join("binaries").join(&replica_version);
+    fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
+
+    // Copy all the binaries needed for the replay of the current version in order to avoid downloading them
+    let testing_dir = env.get_dependency_path("rs/tests");
+    let binaries_path = testing_dir.join("backup/binaries");
+    copy_file(&binaries_path, &backup_binaries_dir, "ic-replay");
+    copy_file(&binaries_path, &backup_binaries_dir, "sandbox_launcher");
+    copy_file(&binaries_path, &backup_binaries_dir, "canister_sandbox");
+
+    let mainnet_version = env
+        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
+        .expect("could not read mainnet version!");
+
+    // Download all the binaries needed for the replay of the mainnet version
+    // This can be moved to the bazel script and completely avoid downloading them
+    download_mainnet_binaries(&log, &backup_dir, &mainnet_version);
 
     // Generate keypair and store the private key
     info!(log, "Create backup user credentials");
@@ -116,16 +134,6 @@ pub fn test(env: TestEnv) {
         .prep_dir("")
         .expect("missing NNS public key")
         .root_public_key_path();
-
-    info!(log, "Fetch ic-backup binary");
-    let backup_exe = "ic-backup".to_string();
-    assert!(block_on(download_binary(
-        &log,
-        initial_replica_version.clone(),
-        backup_exe.clone(),
-        bin_dir.clone(),
-    ))
-    .is_ok());
 
     info!(log, "Generate config file for ic-backup");
     let subnet = SubnetConfig {
@@ -164,7 +172,10 @@ pub fn test(env: TestEnv) {
     write_file(&config_file, config_str).expect("writing config file failed");
 
     info!(log, "Start the backup process in a separate thread");
-    let mut command = Command::new(bin_dir.join(backup_exe));
+
+    let ic_backup_path = binaries_path.join("ic-backup");
+
+    let mut command = Command::new(ic_backup_path);
     command.arg("--config-file").arg(config_file);
     info!(log, "Will execute: {:?}", command);
 
@@ -176,12 +187,10 @@ pub fn test(env: TestEnv) {
     info!(log, "Started process: {}", child.id());
 
     info!(log, "Elect the mainnet replica version");
-    let target_version =
-        env::var("TARGET_VERSION").expect("Environment variable $TARGET_VERSION is not set!");
-    info!(log, "TARGET_VERSION: {}", target_version);
+    info!(log, "TARGET_VERSION: {}", mainnet_version);
     block_on(bless_public_replica_version(
         &nns_node,
-        &target_version,
+        &mainnet_version,
         UpdateImageType::Image,
         UpdateImageType::Image,
         &log,
@@ -190,12 +199,12 @@ pub fn test(env: TestEnv) {
     info!(log, "Proposal to upgrade the subnet replica version");
     block_on(update_subnet_replica_version(
         &nns_node,
-        &ReplicaVersion::try_from(target_version.clone()).expect("bad TARGET_VERSION string"),
+        &ReplicaVersion::try_from(mainnet_version.clone()).expect("bad TARGET_VERSION string"),
         subnet_id,
     ));
 
     info!(log, "Wait until the upgrade happens");
-    assert_assigned_replica_version(&nns_node, &target_version, env.logger());
+    assert_assigned_replica_version(&nns_node, &mainnet_version, env.logger());
 
     let checkpoint_dir = backup_dir
         .join("data")
@@ -209,7 +218,7 @@ pub fn test(env: TestEnv) {
     let new_spool_dir = backup_dir
         .join("spool")
         .join(subnet_id.to_string())
-        .join(target_version)
+        .join(mainnet_version)
         .join("0");
     let archive_dir = backup_dir.join("archive").join(subnet_id.to_string());
 
@@ -242,6 +251,14 @@ pub fn test(env: TestEnv) {
     child.kill().expect("Error killing backup process");
 }
 
+fn copy_file(binaries_path: &Path, backup_binaries_dir: &Path, file_name: &str) {
+    fs::copy(
+        binaries_path.join(file_name),
+        backup_binaries_dir.join(file_name),
+    )
+    .expect("failed to copy file");
+}
+
 fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {
     if !dir.exists() {
         return 0u64;
@@ -262,4 +279,29 @@ fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {
             .fold(0u64, |a: u64, b: u64| -> u64 { a.max(b) }),
         Err(_) => 0,
     }
+}
+
+fn download_mainnet_binaries(log: &Logger, backup_dir: &Path, mainnet_version: &str) {
+    let binaries_dir = backup_dir.join("binaries").join(mainnet_version);
+    let replica_version = ReplicaVersion::try_from(mainnet_version).unwrap();
+    fs::create_dir_all(&binaries_dir).expect("failure creating backup binaries directory");
+    download_binary_file(log, &replica_version, &binaries_dir, "ic-replay");
+    download_binary_file(log, &replica_version, &binaries_dir, "sandbox_launcher");
+    download_binary_file(log, &replica_version, &binaries_dir, "canister_sandbox");
+}
+
+fn download_binary_file(
+    log: &Logger,
+    replica_version: &ReplicaVersion,
+    binaries_dir: &Path,
+    binary: &str,
+) {
+    info!(log, "Downloading binary: {binary}");
+    block_on(download_binary(
+        log,
+        replica_version.clone(),
+        binary.to_string(),
+        binaries_dir.to_path_buf(),
+    ))
+    .expect("error downloading binaty");
 }

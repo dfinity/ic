@@ -659,21 +659,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
 
     m.add_suite(
         suite(
-            "upgrade_compatibility",
-            vec![pot_with_setup(
-                "backup_manager_pot",
-                orchestrator::backup_manager::config,
-                par(vec![sys_t(
-                    "backup_manager_test",
-                    orchestrator::backup_manager::test,
-                )]),
-            )],
-        )
-        .with_alert(ENG_CONSENSUS_CHANNEL),
-    );
-
-    m.add_suite(
-        suite(
             "rosetta",
             vec![pot_with_setup(
                 "rosetta_pot",
