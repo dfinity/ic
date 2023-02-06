@@ -149,6 +149,7 @@ impl Engine {
         call_payload: Vec<u8>,
         canister_id: &CanisterId,
         periodic_output: bool,
+        random_query_payload: bool,
     ) -> Vec<Fact> {
         let requests: usize = ((time_secs * rpms) as f64 / 1000f64).ceil() as usize;
         if requests == 0 {
@@ -197,7 +198,8 @@ impl Engine {
             FUTURE_STARTED.inc();
             tx_handles.push(tokio::task::spawn(async move {
                 REQUEST_STARTING.inc();
-                Engine::execute_request(agent, tx, time_origin, &plan, n).await;
+                Engine::execute_request(agent, tx, time_origin, &plan, n, random_query_payload)
+                    .await;
             }));
         }
         for tx_handle in tx_handles {
@@ -220,8 +222,9 @@ impl Engine {
         time_origin: Instant,
         plan: &Plan,
         n: usize,
+        random_query_payload: bool,
     ) -> bool {
-        match plan.generate_call(n) {
+        match plan.generate_call(n, random_query_payload) {
             EngineCall::Read { method, arg } => {
                 Engine::execute_query(&agent, tx, time_origin, plan, method, arg, n)
                     .await
