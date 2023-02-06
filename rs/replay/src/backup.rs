@@ -1,10 +1,10 @@
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
 use ic_consensus::consensus::{dkg_key_manager::DkgKeyManager, pool_reader::PoolReader};
+use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
     consensus_pool::{ChangeAction, MutableConsensusPool},
-    crypto::MultiSigVerifier,
     time_source::SysTimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -162,6 +162,7 @@ pub(super) fn heights_to_artifacts_metadata(
 /// points which require the execution state to catch up.
 pub(crate) fn deserialize_consensus_artifacts(
     registry_client: Arc<dyn RegistryClient>,
+    crypto: Arc<dyn CryptoComponentForVerificationOnly>,
     pool: &mut ConsensusPoolImpl,
     height_to_batches: &mut BTreeMap<Height, HeightArtifacts>,
     subnet_id: SubnetId,
@@ -172,7 +173,6 @@ pub(crate) fn deserialize_consensus_artifacts(
 ) -> ExitPoint {
     let time_source = validator.get_timesource();
     let mut last_cup_height: Option<Height> = None;
-    let crypto = ic_crypto_for_verification_only::new(registry_client.clone());
 
     loop {
         let height = match height_to_batches.iter().next() {

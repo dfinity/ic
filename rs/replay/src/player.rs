@@ -17,9 +17,9 @@ use ic_consensus::{
         batch_delivery::deliver_batches, pool_reader::PoolReader, utils::crypto_hashable_to_seed,
     },
 };
+use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
-use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
 use ic_interfaces::{
     certification::CertificationPool,
     execution_environment::{IngressHistoryReader, QueryHandler},
@@ -38,6 +38,7 @@ use ic_protobuf::registry::{
 };
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::deserialize_registry_value;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_keys::{make_blessed_replica_version_key, make_subnet_record_key};
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -51,6 +52,7 @@ use ic_registry_transport::{
 use ic_replica::setup::get_subnet_type;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
+use ic_types::consensus::certification::CertificationShare;
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
     batch::{Batch, BatchPayload, IngressPayload},
@@ -58,15 +60,17 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::UserQuery,
     time::current_time,
-    CryptoHashOfState, Height, NodeId, PrincipalId, Randomness, RegistryVersion, ReplicaVersion,
-    SubnetId, Time, UserId,
+    CryptoHashOfState, Height, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SubnetId,
+    Time, UserId,
 };
 use ic_types::{
     consensus::CatchUpContentProtobufBytes,
     crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
 };
+use ic_types::{CryptoHashOfPartialState, NodeId};
 use serde::{Deserialize, Serialize};
 use slog_async::AsyncGuard;
+use std::collections::{HashMap, HashSet};
 use std::{
     collections::BTreeMap,
     path::{Path, PathBuf},
@@ -95,6 +99,8 @@ pub enum ReplayError {
     UpgradeDetected(StateParams),
     /// Can't proceed because artifact validation failed after the given height.
     ValidationIncomplete(Height, Vec<InvalidArtifact>),
+    /// Replay was successful, but manual inspection is required to choose correct state.
+    ManualInspectionRequired(StateParams),
 }
 
 pub type ReplayResult = Result<StateParams, ReplayError>;
@@ -106,6 +112,7 @@ pub struct Player {
     message_routing: Arc<dyn MessageRouting>,
     consensus_pool: Option<ConsensusPoolImpl>,
     validator: Option<ReplayValidator>,
+    crypto: Arc<dyn CryptoComponentForVerificationOnly>,
     http_query_handler: Arc<dyn QueryHandler<State = ReplicatedState>>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     certification_pool: Option<CertificationPoolImpl>,
@@ -292,7 +299,7 @@ impl Player {
 
         let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
         let state_manager = Arc::new(StateManagerImpl::new(
-            verifier,
+            verifier.clone(),
             subnet_id,
             subnet_type,
             log.clone(),
@@ -332,13 +339,13 @@ impl Player {
             )
         });
 
-        let dummy_node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         let validator = consensus_pool.as_ref().map(|pool| {
             ReplayValidator::new(
                 cfg,
-                dummy_node_id,
                 subnet_id,
-                crypto,
+                crypto.clone(),
+                crypto.clone(),
+                verifier,
                 pool.get_cache().clone(),
                 registry.clone(),
                 state_manager.clone(),
@@ -352,6 +359,7 @@ impl Player {
             message_routing,
             consensus_pool,
             validator,
+            crypto,
             http_query_handler: execution_service.sync_query_handler,
             ingress_history_reader: execution_service.ingress_history_reader,
             certification_pool,
@@ -373,9 +381,9 @@ impl Player {
         self
     }
 
-    /// Replay past finalized but un-executed blocks by delivering ingress
-    /// messages for execution, and make a full checkpoint of the latest
-    /// state when they all finish.
+    /// In case a consensus pool was supplied, replay past finalized but
+    /// un-executed blocks by delivering ingress messages for execution,
+    /// and make a full checkpoint of the latest state when they all finish.
     ///
     /// It takes a function argument, which can be used to make extra ingress
     /// messages for execution, which are delivered after the last finalized
@@ -386,67 +394,16 @@ impl Player {
         &self,
         extra: F,
     ) -> ReplayResult {
-        let mut invalid_artifacts = Vec::new();
-        if let (Some(consensus_pool), Some(certification_pool)) =
-            (&self.consensus_pool, &self.certification_pool)
-        {
-            match self.verify_latest_cup() {
-                Err(ReplayError::UpgradeDetected(_)) | Ok(_) => {}
-                other => other?,
+        let (inspection_required, invalid_artifacts) =
+            if let (Some(consensus_pool), Some(certification_pool), Some(validator)) = (
+                &self.consensus_pool,
+                &self.certification_pool,
+                &self.validator,
+            ) {
+                self.replay_consensus_pool(consensus_pool, certification_pool, validator)?
+            } else {
+                Default::default()
             };
-
-            let pool_reader = &PoolReader::new(consensus_pool);
-            let finalized_height = pool_reader.get_finalized_height();
-            let target_height = Some(
-                finalized_height.min(
-                    self.replay_target_height
-                        .map(Height::from)
-                        .unwrap_or_else(|| finalized_height),
-                ),
-            );
-
-            // Validate artifacts in temporary pool
-            if let Some(validator) = self.validator.as_ref() {
-                invalid_artifacts.append(&mut validator.validate_in_tmp_pool(
-                    consensus_pool,
-                    self.get_latest_cup().cup,
-                    target_height.unwrap(),
-                )?);
-            }
-            if !invalid_artifacts.is_empty() {
-                println!("Invalid artifacts:");
-                invalid_artifacts.iter().for_each(|a| println!("{:?}", a));
-            }
-
-            let last_batch_height =
-                self.deliver_batches(self.message_routing.as_ref(), pool_reader, target_height);
-            self.wait_for_state(last_batch_height);
-            // We only want to persist the checkpoint after the latest batch.
-            self.state_manager.remove_states_below(last_batch_height);
-
-            // Redeliver certifications to state manager. It will panic if there is any
-            // mismatch.
-            print!("Redelivering certifications:");
-            let mut cert_heights =
-                Vec::from_iter(certification_pool.certified_heights().into_iter());
-            cert_heights.sort();
-            for (i, &h) in cert_heights.iter().enumerate() {
-                if i > 0 && cert_heights[i - 1].increment() != h {
-                    println!(
-                        "Missing certifications starting at height {:?}",
-                        cert_heights[i - 1].increment()
-                    );
-                }
-                let certification = certification_pool
-                    .certification_at_height(h)
-                    .unwrap_or_else(|| panic!("Missing certification at height {:?}", h));
-                self.state_manager
-                    .deliver_state_certification(certification);
-                print!(" {}", h);
-            }
-            println!();
-            println!("All blocks successfully replayed.");
-        }
 
         let (latest_context_time, extra_batch_delivery) = self.deliver_extra_batch(
             self.message_routing.as_ref(),
@@ -482,7 +439,148 @@ impl Player {
         let state_params =
             self.get_latest_state_params(Some(latest_context_time), invalid_artifacts);
         println!("Latest registry version: {}", state_params.registry_version);
-        Ok(state_params)
+
+        if inspection_required {
+            Err(ReplayError::ManualInspectionRequired(state_params))
+        } else {
+            Ok(state_params)
+        }
+    }
+
+    // Validate and replay artifacts in the given consensus and certification pools.
+    fn replay_consensus_pool(
+        &self,
+        consensus_pool: &ConsensusPoolImpl,
+        certification_pool: &CertificationPoolImpl,
+        validator: &ReplayValidator,
+    ) -> Result<(bool, Vec<InvalidArtifact>), ReplayError> {
+        match self.verify_latest_cup() {
+            Err(ReplayError::UpgradeDetected(_)) | Ok(_) => {}
+            other => other?,
+        };
+
+        let pool_reader = &PoolReader::new(consensus_pool);
+        let finalized_height = pool_reader.get_finalized_height();
+        let target_height = Some(
+            finalized_height.min(
+                self.replay_target_height
+                    .map(Height::from)
+                    .unwrap_or_else(|| finalized_height),
+            ),
+        );
+
+        // Validate artifacts in temporary pool
+        let mut invalid_artifacts = Vec::new();
+        invalid_artifacts.append(&mut validator.validate_in_tmp_pool(
+            consensus_pool,
+            self.get_latest_cup().cup,
+            target_height.unwrap(),
+        )?);
+        if !invalid_artifacts.is_empty() {
+            println!("Invalid artifacts:");
+            invalid_artifacts.iter().for_each(|a| println!("{:?}", a));
+        }
+
+        let last_batch_height =
+            self.deliver_batches(self.message_routing.as_ref(), pool_reader, target_height);
+        self.wait_for_state(last_batch_height);
+
+        // Redeliver certifications to state manager. It will panic if there is any
+        // mismatch.
+        let manual_inspection_required =
+            self.redeliver_certifications(certification_pool, validator);
+
+        println!("All blocks successfully replayed.");
+        // We only want to persist the checkpoint after the latest batch.
+        self.state_manager.remove_states_below(last_batch_height);
+
+        Ok((manual_inspection_required, invalid_artifacts))
+    }
+
+    // Verify and redeliver all full certifications found in the certification pool.
+    // This function panics if for any height the hash of the full certification does not match the locally
+    // computed one or if verification of a certification (share) fails.
+    // For all locally computed state heights for which we can't find full a certification, compare the state's
+    // hash to the certification shares found at that height. See `is_manual_share_investigation_required` for details.
+    // Returns whether manual inspection is required or not.
+    fn redeliver_certifications(
+        &self,
+        certification_pool: &CertificationPoolImpl,
+        validator: &ReplayValidator,
+    ) -> bool {
+        print!("Redelivering certifications:");
+        let mut cert_heights = Vec::from_iter(certification_pool.certified_heights().into_iter());
+        cert_heights.sort();
+        for (i, &h) in cert_heights.iter().enumerate() {
+            if i > 0 && cert_heights[i - 1].increment() != h {
+                println!(
+                    "\nMissing certifications starting at height {:?}",
+                    cert_heights[i - 1].increment()
+                );
+            }
+            let certification = certification_pool
+                .certification_at_height(h)
+                .unwrap_or_else(|| panic!("Missing certification at height {:?}", h));
+            validator
+                .verify_certification(&certification)
+                .map_err(|e| {
+                    panic!(
+                        "\nFailed to verify certification at height {h}: {e}. \
+                    If this is a recovery, find and delete the offending certification pool. \
+                    Delete the combined certification pool and reset the replay checkpoint. \
+                    Then restart recovery from the combine certifications step."
+                    )
+                })
+                .ok();
+            self.state_manager
+                .deliver_state_certification(certification);
+            print!(" {}", h);
+        }
+        println!();
+
+        println!("Comparing uncertified state hashes to certification shares:");
+        self.registry.poll_once().ok();
+        let f = match self
+            .registry
+            .get_subnet_size(self.subnet_id, self.registry.get_latest_version())
+        {
+            Ok(Some(size)) => (size - 1) / 3,
+            err => {
+                println!("Failed to determine subnet size: {err:?}, continuing with f = 0!");
+                0
+            }
+        };
+
+        let verify = |s: &CertificationShare| {
+            validator
+                .verify_share(s)
+                .map_err(|e| {
+                    panic!(
+                        "\nFailed to verify {s:?}: {e}. \
+                If this is a recovery, find and delete the offending certification pool. \
+                Delete the combined certification pool and reset the replay checkpoint. \
+                Then restart recovery from the merge certification pools step."
+                    )
+                })
+                .is_ok()
+        };
+
+        let malicious_nodes = find_malicious_nodes(certification_pool, &verify);
+
+        // Get heights and local state hashes without a full certification
+        let mut missing_certifications = self.state_manager.list_state_hashes_to_certify();
+        missing_certifications.sort_by_key(|(height, _)| height.get());
+        missing_certifications
+            .into_iter()
+            .fold(false, |ret, (height, hash)| {
+                ret | is_manual_share_investigation_required(
+                    certification_pool,
+                    &malicious_nodes,
+                    height,
+                    hash,
+                    f,
+                )
+            })
     }
 
     // Blocks until the state at the given height is committed.
@@ -846,6 +944,7 @@ impl Player {
         loop {
             let result = backup::deserialize_consensus_artifacts(
                 self.registry.clone(),
+                self.crypto.clone(),
                 self.consensus_pool.as_mut().unwrap(),
                 &mut height_to_batches,
                 self.subnet_id,
@@ -961,8 +1060,7 @@ impl Player {
 
         // Verify the CUP signature.
         let protobuf = last_cup_with_proto.protobuf;
-        let crypto = ic_crypto_for_verification_only::new(self.registry.clone());
-        crypto
+        self.crypto
             .verify_combined_threshold_sig_by_public_key(
                 &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature)),
                 &CatchUpContentProtobufBytes(protobuf.content),
@@ -1009,6 +1107,124 @@ impl Player {
 
         Ok(())
     }
+}
+
+/// Return the set of signers that created multiple valid certification shares for the same height
+fn find_malicious_nodes(
+    certification_pool: &CertificationPoolImpl,
+    verify: &dyn Fn(&CertificationShare) -> bool,
+) -> HashSet<NodeId> {
+    let mut malicious = HashSet::new();
+    if let Some(range) = certification_pool
+        .persistent_pool
+        .certification_shares()
+        .height_range()
+    {
+        for h in range.min.get()..=range.max.get() {
+            let shares = certification_pool
+                .shares_at_height(Height::from(h))
+                .filter(verify)
+                .map(|s| (s.signed.content, s.signed.signature.signer))
+                .collect::<HashSet<_>>();
+            let signers =
+                shares
+                    .into_iter()
+                    .map(|(_, signer)| signer)
+                    .fold(HashMap::new(), |mut acc, s| {
+                        acc.entry(s).and_modify(|e| *e += 1).or_insert(1);
+                        acc
+                    });
+            signers
+                .into_iter()
+                .filter(|(_, c)| *c > 1)
+                .for_each(|(s, c)| {
+                    println!(
+                        "Node {s} created {c} shares for height {h}. Ignoring all of its shares."
+                    );
+                    malicious.insert(s);
+                });
+        }
+    }
+    malicious
+}
+
+// Find all certification shares at the given heights and count which hashes occurred how many times. Shares created
+// by malicious nodes (those creating more than one share for the same height) are ignored while counting.
+//
+// This is necessary in order to detect non-determinism:
+// Consider a subnet of size n=3f+1. Suppose f+1 honest nodes agree on one execution path, while the
+// remaining f honest nodes as well as the ic-replay tool agree on a different second path. Moreover,
+// suppose that f-2 bad nodes are unreachable, while the two reachable bad nodes pretend to follow the
+// second path. Note that an adversary would be able to create a certification for the first path from
+// the f+1 honest certification shares and the f nodes that he controls.
+//
+// For that reason, after counting certification shares, there are three possible actions:
+// 1. If there is no hash with f+1 or more certification shares, continue with the next height.
+// 2. If there is exactly one hash with f+1 or more certification shares, ensure that it matches the locally
+//    computed one, otherwise indicate that manual inspection is required.
+// 3. If there are multiple hashes with f+1 or more certification shares, then there is no perfect way to choose
+//    the correct state. Return that manual inspection is required. During this inspeciton:
+//    a) Repetitively run the ic-replay tool to produce full states for all hashes with f+1 or more shares.
+//    b) Inspect how these states differ, estimate how bad it would be if certifications for all of them were issued.
+//    c) Decide which of both states is "preferable" to continue the subnet from and recover the subnet from there.
+fn is_manual_share_investigation_required(
+    certification_pool: &CertificationPoolImpl,
+    malicious_nodes: &HashSet<NodeId>,
+    height: Height,
+    computed_hash: CryptoHashOfPartialState,
+    f: usize,
+) -> bool {
+    println!("{height}: {computed_hash:?}");
+    let certified_hashes =
+        get_share_certified_hashes(height, f, certification_pool, malicious_nodes);
+    match &certified_hashes[..] {
+        [share_hash] => {
+            println!("Found enough shares to produce ONE valid certification.");
+            if &computed_hash != share_hash {
+                println!("Hash mismatch! State divergence detected for outstanding shares!");
+            } else {
+                println!("Produced state hash matches certification shares!");
+            }
+            &computed_hash != share_hash
+        }
+        [] => false,
+        other => {
+            println!("Found {} different hashes with enough shares to produce valid certifications, investigate manually!", other.len());
+            true
+        }
+    }
+}
+
+/// Return state hashes for the given height with at least f + 1 valid shares, excluding shares
+/// created by malicious nodes.
+fn get_share_certified_hashes(
+    height: Height,
+    f: usize,
+    certification_pool: &CertificationPoolImpl,
+    malicious_nodes: &HashSet<NodeId>,
+) -> Vec<CryptoHashOfPartialState> {
+    let shares = certification_pool
+        .shares_at_height(height)
+        .filter(|c| !malicious_nodes.contains(&c.signed.signature.signer))
+        .map(|s| (s.signed.content, s.signed.signature.signer))
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .map(|(content, _)| content.hash);
+
+    let counter = shares.fold(HashMap::new(), |mut acc, hash| {
+        acc.entry(hash).and_modify(|e| *e += 1).or_insert(1);
+        acc
+    });
+
+    if !counter.is_empty() {
+        println!("Number of unique shares per hash at this height: {counter:#?}");
+    }
+
+    // Only keep hashes with at least f+1 shares
+    counter
+        .into_iter()
+        .filter_map(|(k, v)| (v > f).then_some(k))
+        .collect::<Vec<_>>()
 }
 
 fn write_records_to_local_store(
@@ -1088,5 +1304,135 @@ fn get_state_hash<T>(
             }
         }
         std::thread::sleep(WAIT_DURATION);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ic_logger::replica_logger::no_op_logger;
+    use ic_test_utilities::{consensus::fake::FakeSigner, types::ids::node_test_id};
+    use ic_types::{
+        artifact::CertificationMessage,
+        consensus::certification::{CertificationContent, CertificationShare},
+        crypto::{CryptoHash, Signed},
+        signature::ThresholdSignatureShare,
+    };
+
+    use super::*;
+
+    fn make_share(height: u64, hash: Vec<u8>, node_id: u64) -> CertificationMessage {
+        CertificationMessage::CertificationShare(CertificationShare {
+            height: Height::from(height),
+            signed: Signed {
+                content: CertificationContent::new(CryptoHash(hash).into()),
+                signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
+            },
+        })
+    }
+
+    #[test]
+    fn test_get_share_certified_hashes() {
+        let tmp = tempfile::tempdir().expect("Could not create a temp dir");
+        let pool = CertificationPoolImpl::new(
+            ArtifactPoolConfig::new(tmp.path().to_path_buf()),
+            no_op_logger(),
+            MetricsRegistry::new(),
+        );
+        let verify = |_: &CertificationShare| true;
+        let f = 2;
+
+        // Node 7 is malicious and create mutliple shares for height 3. All of its shares shoud be ignored.
+        let shares = vec![
+            // Height 1:
+            // 3 shares for hash "1"
+            make_share(1, vec![1], 1),
+            make_share(1, vec![1], 2),
+            make_share(1, vec![1], 3),
+            // 3 shares for hash "2", but one of them is from malicious node 7
+            // (should be ignored)
+            make_share(1, vec![2], 4),
+            make_share(1, vec![2], 5),
+            make_share(1, vec![2], 7),
+            // Height 2:
+            // 1 share for hash "2"
+            make_share(2, vec![2], 5),
+            // Height 3:
+            // 3 shares for hash "1"
+            make_share(3, vec![1], 1),
+            make_share(3, vec![1], 2),
+            make_share(3, vec![1], 3),
+            // 4 shares for hash "2"
+            make_share(3, vec![2], 4),
+            make_share(3, vec![2], 5),
+            make_share(3, vec![2], 6),
+            make_share(3, vec![2], 7),
+            // 1 share for hash "3" by malicious node 7
+            make_share(3, vec![3], 7),
+        ];
+
+        shares
+            .into_iter()
+            .for_each(|s| pool.persistent_pool.insert(s));
+
+        let malicious = find_malicious_nodes(&pool, &verify);
+        assert_eq!(malicious.len(), 1);
+        assert_eq!(*malicious.iter().next().unwrap(), node_test_id(7));
+
+        let hashes = get_share_certified_hashes(Height::from(1), f, &pool, &malicious);
+        assert_eq!(hashes.len(), 1);
+        assert_eq!(hashes[0].get_ref().0, vec![1]);
+        assert!(!is_manual_share_investigation_required(
+            &pool,
+            &malicious,
+            Height::from(1),
+            CryptoHash(vec![1]).into(),
+            f
+        ));
+        assert!(is_manual_share_investigation_required(
+            &pool,
+            &malicious,
+            Height::from(1),
+            CryptoHash(vec![2]).into(),
+            f
+        ));
+
+        let hashes = get_share_certified_hashes(Height::from(2), f, &pool, &malicious);
+        assert!(!is_manual_share_investigation_required(
+            &pool,
+            &malicious,
+            Height::from(2),
+            CryptoHash(vec![1]).into(),
+            f
+        ));
+        assert!(hashes.is_empty());
+
+        let hashes = get_share_certified_hashes(Height::from(3), f, &pool, &malicious);
+        assert_eq!(hashes.len(), 2);
+        assert_ne!(hashes[0], hashes[1]);
+        assert!(hashes
+            .into_iter()
+            .map(|h| h.get().0)
+            .all(|h| h == vec![1] || h == vec![2]));
+        assert!(is_manual_share_investigation_required(
+            &pool,
+            &malicious,
+            Height::from(3),
+            CryptoHash(vec![1]).into(),
+            f
+        ));
+        assert!(is_manual_share_investigation_required(
+            &pool,
+            &malicious,
+            Height::from(3),
+            CryptoHash(vec![2]).into(),
+            f
+        ));
+        assert!(is_manual_share_investigation_required(
+            &pool,
+            &malicious,
+            Height::from(3),
+            CryptoHash(vec![3]).into(),
+            f
+        ));
     }
 }

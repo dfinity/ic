@@ -2,6 +2,7 @@ use crate::cli::wait_for_confirmation;
 use crate::command_helper::exec_cmd;
 use crate::error::{RecoveryError, RecoveryResult};
 use crate::ssh_helper;
+use core::time;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
@@ -9,6 +10,7 @@ use std::fs::{self, File, ReadDir};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::thread;
 
 /// Given the name and replica version of a binary, download the artifact to the
 /// target directory, unzip it, and add executable permissions.
@@ -52,6 +54,34 @@ pub async fn download_binary(
     }
 
     Ok(file)
+}
+
+pub fn rsync_with_retries(
+    logger: &Logger,
+    excludes: Vec<&str>,
+    src: &str,
+    target: &str,
+    require_confirmation: bool,
+    key_file: Option<&PathBuf>,
+    retries: usize,
+) -> RecoveryResult<Option<String>> {
+    for _ in 0..retries {
+        match rsync(
+            logger,
+            excludes.clone(),
+            src,
+            target,
+            require_confirmation,
+            key_file,
+        ) {
+            Err(e) => {
+                warn!(logger, "Rsync failed: {:?}, retrying...", e);
+            }
+            success => return success,
+        }
+        thread::sleep(time::Duration::from_secs(10));
+    }
+    Err(RecoveryError::UnexpectedError("All retries failed".into()))
 }
 
 /// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) and options `--delete`, `-acP`.

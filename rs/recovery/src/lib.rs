@@ -57,13 +57,22 @@ pub mod recovery_iterator;
 pub mod replay_helper;
 pub(crate) mod ssh_helper;
 pub mod steps;
-pub(crate) mod util;
+pub mod util;
 
 pub const IC_DATA_PATH: &str = "/var/lib/ic/data";
 pub const IC_STATE_DIR: &str = "data/ic_state";
 pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
+pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
-pub const IC_STATE_EXCLUDES: &[&str] = &["images", "tip", "backups", "fs_tmp", "cups", "recovery"];
+pub const IC_STATE_EXCLUDES: &[&str] = &[
+    "images",
+    "tip",
+    "backups",
+    "fs_tmp",
+    "cups",
+    "recovery",
+    IC_REGISTRY_LOCAL_STORE,
+];
 pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
 pub const IC_REGISTRY_LOCAL_STORE: &str = "ic_registry_local_store";
@@ -132,7 +141,7 @@ impl Recovery {
         let binary_dir = recovery_dir.join("binaries");
         let data_dir = recovery_dir.join("original_data");
         let work_dir = recovery_dir.join("working_dir");
-        let local_store_path = recovery_dir.join("local_store");
+        let local_store_path = work_dir.join("data").join(IC_REGISTRY_LOCAL_STORE);
         let nns_pem = recovery_dir.join("nns.pem");
         let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
         let registry_client = Arc::new(RegistryClientImpl::new(local_store.clone(), None));
@@ -375,6 +384,28 @@ impl Recovery {
             info!(logger, "{}", res);
         }
         Ok(())
+    }
+
+    /// Return a [DownloadCertificationsStep] downloading the certification pools of all reachable
+    /// nodes in the given subnet to the recovery data directory using the readonly account.
+    pub fn get_download_certs_step(&self, subnet_id: SubnetId) -> impl Step {
+        DownloadCertificationsStep {
+            logger: self.logger.clone(),
+            subnet_id,
+            registry_client: self.registry_client.clone(),
+            work_dir: self.work_dir.clone(),
+            require_confirmation: self.ssh_confirmation,
+            key_file: self.key_file.clone(),
+        }
+    }
+
+    /// Return a [MergeCertificationPoolsStep] moving certifications and share from all
+    /// downloaded pools into a new pool to be used during replay.
+    pub fn get_merge_certification_pools_step(&self) -> impl Step {
+        MergeCertificationPoolsStep {
+            logger: self.logger.clone(),
+            work_dir: self.work_dir.clone(),
+        }
     }
 
     /// Return a [DownloadIcStateStep] downloading the ic_state of the given
@@ -900,7 +931,7 @@ impl Recovery {
     }
 
     /// Return a [DownloadRegistryStoreStep] to download the registry store containing entries for the given [SubnetId] from the given download node
-    pub fn get_download_regsitry_store_step(
+    pub fn get_download_registry_store_step(
         &self,
         download_node: IpAddr,
         original_nns_id: SubnetId,

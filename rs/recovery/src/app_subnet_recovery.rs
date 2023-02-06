@@ -18,6 +18,8 @@ use crate::{NeuronArgs, Recovery, Step};
 #[derive(Debug, Copy, Clone, EnumIter)]
 pub enum StepType {
     Halt,
+    DownloadCertifications,
+    MergeCertificationPools,
     DownloadState,
     ICReplay,
     ValidateReplayOutput,
@@ -126,12 +128,14 @@ impl RecoveryIterator<StepType> for AppSubnetRecovery {
                 }
             }
 
-            StepType::DownloadState => {
+            StepType::DownloadCertifications => {
                 info!(&self.logger, "Ensure subnet is halted.");
                 // This can hardly be automated as currently the notion of "subnet is halted" is unclear,
                 // especially in the presence of failures.
                 wait_for_confirmation(&self.logger);
+            }
 
+            StepType::DownloadState => {
                 // We could pick a node with highest finalization height automatically,
                 // but we might have a preference between nodes of the same finalization height.
                 print_height_info(
@@ -197,6 +201,24 @@ impl RecoveryIterator<StepType> for AppSubnetRecovery {
                     true,
                     &keys,
                 )))
+            }
+
+            StepType::DownloadCertifications => {
+                if self.params.pub_key.is_some() {
+                    Ok(Box::new(
+                        self.recovery.get_download_certs_step(self.params.subnet_id),
+                    ))
+                } else {
+                    Err(RecoveryError::StepSkipped)
+                }
+            }
+
+            StepType::MergeCertificationPools => {
+                if self.params.pub_key.is_some() {
+                    Ok(Box::new(self.recovery.get_merge_certification_pools_step()))
+                } else {
+                    Err(RecoveryError::StepSkipped)
+                }
             }
 
             StepType::DownloadState => {

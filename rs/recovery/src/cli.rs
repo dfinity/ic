@@ -155,6 +155,7 @@ pub fn print_height_info(
     registry_client: Arc<RegistryClientImpl>,
     subnet_id: SubnetId,
 ) {
+    info!(logger, "Collecting node heights from metrics...");
     info!(logger, "Select a node with highest finalization height:");
     match get_node_heights_from_metrics(logger, registry_client, subnet_id) {
         Ok(heights) => info!(logger, "{:#?}", heights),

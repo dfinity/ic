@@ -1,12 +1,16 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/artifact_pool",
+    "//rs/config",
     "//rs/crypto/utils/threshold_sig_der",
     "//rs/cup_explorer",
     "//rs/http_utils",
+    "//rs/interfaces",
     "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
     "//rs/orchestrator/registry_replicator",
     "//rs/protobuf",
     "//rs/registry/client",
@@ -37,6 +41,11 @@ DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
+DEV_DEPENDENCIES = [
+    "//rs/test_utilities",
+    "@crate_index//:tempfile",
+]
+
 MACRO_DEPENDENCIES = [
     "@crate_index//:strum_macros",
 ]
@@ -60,4 +69,11 @@ rust_binary(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":recovery"],
+)
+
+rust_test(
+    name = "recovery_test",
+    crate = ":recovery",
+    data = ["ic_public_key.pem"],
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

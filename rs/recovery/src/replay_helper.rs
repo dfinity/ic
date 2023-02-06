@@ -38,14 +38,14 @@ pub async fn replay(
     let output_file = output.clone();
     tokio::task::spawn_blocking(move || match ic_replay::replay(args) {
         Ok(state_params) | Err(ReplayError::UpgradeDetected(state_params)) => {
-            let json = serde_json::to_string(&state_params).map_err(|e| {
-                RecoveryError::invalid_output_error(format!(
-                    "failed to serialize ic-replay output: {}",
-                    e
-                ))
-            })?;
-            println!("{:?}", state_params);
-            write_file(&output_file, json)
+            store_replay_output(state_params, output_file)
+        }
+        Err(ReplayError::ManualInspectionRequired(state_params)) => {
+            store_replay_output(state_params, output_file)?;
+            Err(RecoveryError::OutputError(
+                "Replay finished successfully, but manual inspection and/or re-run is recommended."
+                    .into(),
+            ))
         }
         Err(err) => Err(RecoveryError::invalid_output_error(format!(
             "Unexpected response: {:?}",
@@ -58,6 +58,14 @@ pub async fn replay(
     })??;
 
     read_output(output)
+}
+
+pub fn store_replay_output(state_params: StateParams, output_file: PathBuf) -> RecoveryResult<()> {
+    let json = serde_json::to_string(&state_params).map_err(|e| {
+        RecoveryError::invalid_output_error(format!("failed to serialize ic-replay output: {}", e))
+    })?;
+    println!("{:?}", state_params);
+    write_file(&output_file, json)
 }
 
 /// Read the replay output written to the given file.

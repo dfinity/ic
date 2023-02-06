@@ -1,22 +1,28 @@
 use crate::admin_helper::IcAdmin;
 use crate::command_helper::exec_cmd;
 use crate::error::{RecoveryError, RecoveryResult};
-use crate::file_sync_helper::{remove_dir, rsync};
+use crate::file_sync_helper::{create_dir, read_dir, remove_dir, rsync, rsync_with_retries};
 use crate::ssh_helper::SshHelper;
 use crate::util::{block_on, parse_hex_str};
 use crate::{
-    get_member_ips, get_node_heights_from_metrics, replay_helper, ADMIN, CHECKPOINTS, IC_STATE,
-    NEW_IC_STATE, READONLY,
+    get_member_ips, get_node_heights_from_metrics, replay_helper, ADMIN, CHECKPOINTS,
+    IC_CERTIFICATIONS_PATH, IC_STATE, NEW_IC_STATE, READONLY,
 };
 use crate::{
     Recovery, IC_CHECKPOINTS_PATH, IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE,
     IC_STATE_EXCLUDES,
 };
+use ic_artifact_pool::certification_pool::CertificationPoolImpl;
 use ic_base_types::CanisterId;
+use ic_config::artifact_pool::ArtifactPoolConfig;
+use ic_interfaces::certification::CertificationPool;
+use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
+use ic_types::artifact::CertificationMessage;
 use ic_types::{Height, SubnetId};
-use slog::{info, Logger};
+use slog::{debug, info, warn, Logger};
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::Command;
@@ -54,6 +60,200 @@ impl Step for AdminStep {
         Recovery::exec_admin_cmd(&self.logger, &self.ic_admin_cmd)
     }
 }
+
+pub struct DownloadCertificationsStep {
+    pub logger: Logger,
+    pub subnet_id: SubnetId,
+    pub registry_client: Arc<RegistryClientImpl>,
+    pub work_dir: PathBuf,
+    pub require_confirmation: bool,
+    pub key_file: Option<PathBuf>,
+}
+
+impl Step for DownloadCertificationsStep {
+    fn descr(&self) -> String {
+        format!(
+            "Download certification pools from all reachable nodes to {:?}.",
+            self.work_dir.join("certifications")
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let cert_path = format!("{IC_DATA_PATH}/{IC_CERTIFICATIONS_PATH}");
+        let ips = get_member_ips(self.registry_client.clone(), self.subnet_id)?;
+        let downloaded_at_least_once = ips.iter().fold(false, |success, ip| {
+            let data_src = format!("{READONLY}@[{ip}]:{cert_path}");
+            let target = self.work_dir.join("certifications").join(ip.to_string());
+            if let Err(e) = create_dir(&target) {
+                warn!(self.logger, "Failed to create target dir: {:?}", e);
+                return success;
+            }
+
+            info!(self.logger, "Downloading certifications from {ip} ...");
+            let res = rsync_with_retries(
+                &self.logger,
+                vec![],
+                &data_src,
+                &target.display().to_string(),
+                self.require_confirmation,
+                self.key_file.as_ref(),
+                5,
+            )
+            .map_err(|e| warn!(self.logger, "Failed to download certifications: {:?}", e));
+
+            success || res.is_ok()
+        });
+
+        if !downloaded_at_least_once {
+            Err(RecoveryError::invalid_output_error(
+                "Failed to download certifications from any node.".into(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+}
+
+pub struct MergeCertificationPoolsStep {
+    pub logger: Logger,
+    pub work_dir: PathBuf,
+}
+
+impl Step for MergeCertificationPoolsStep {
+    fn descr(&self) -> String {
+        format!(
+            "Analyze certifications found in {:?} and move them to a new pool in {:?} for replay. \
+            Note that we do not verify signatures yet but will do so later during replay. If at that \
+            point we encounter any invalid signatures, delete the offending and merged certification \
+            pools and restart recovery from here.",
+            self.work_dir.join("certifications"),
+            self.work_dir.join("data/ic_consensus_pool")
+        )
+    }
+
+    fn exec(&self) -> RecoveryResult<()> {
+        let pools = read_dir(&self.work_dir.join("certifications"))?
+            .flat_map(|r| r.map_err(|e| warn!(self.logger, "Failed to read dir: {:?}", e)))
+            .map(|dir| {
+                let pool = CertificationPoolImpl::new(
+                    ArtifactPoolConfig::new(dir.path()),
+                    self.logger.clone().into(),
+                    MetricsRegistry::new(),
+                );
+                let ip = dir.file_name().to_string_lossy().to_string();
+
+                (ip, pool)
+            })
+            .collect::<HashMap<String, CertificationPoolImpl>>();
+
+        // Analyze and move full certifications
+        let new_pool = CertificationPoolImpl::new(
+            ArtifactPoolConfig::new(self.work_dir.join("data/ic_consensus_pool")),
+            self.logger.clone().into(),
+            MetricsRegistry::new(),
+        );
+
+        info!(
+            self.logger,
+            "Moving certifications of all nodes to new pool."
+        );
+        pools.iter().for_each(|(ip, p)| {
+            p.persistent_pool.certifications().get_all().for_each(|c| {
+                if let Some(cert) = new_pool.certification_at_height(c.height) {
+                    if cert != c {
+                        warn!(
+                            self.logger,
+                            "{ip}: Found two certifications for height {}: ", c.height
+                        );
+                        warn!(self.logger, "Existing: {:#?}", cert);
+                        warn!(self.logger, "New (ignored): {:#?}", c);
+                    }
+                } else {
+                    debug!(
+                        self.logger,
+                        "Height {}: inserting certification from node {ip}", c.height
+                    );
+                    new_pool
+                        .persistent_pool
+                        .insert(CertificationMessage::Certification(c))
+                }
+            })
+        });
+
+        let max_full_cert = new_pool.persistent_pool.certifications().get_highest().ok();
+
+        if let Some(cert) = max_full_cert.as_ref() {
+            info!(
+                self.logger,
+                "Maximum full certification height accross all nodes: {}, hash: {:?}",
+                cert.height,
+                cert.signed.content.hash
+            );
+        }
+
+        // Analyze and move shares
+        let max_cert_share = pools
+            .values()
+            .flat_map(|p| {
+                p.persistent_pool
+                    .certification_shares()
+                    .get_highest_iter()
+                    .next()
+            })
+            .max_by_key(|c| c.height);
+
+        let min_share_height = pools
+            .values()
+            .flat_map(|p| p.persistent_pool.certification_shares().height_range())
+            .map(|range| range.min.get())
+            .min();
+
+        // Find the min and max height of certification shares higher than than the highest full certification
+        let (min, max) = match (max_full_cert, max_cert_share) {
+            (None, None) => {
+                return Err(RecoveryError::UnexpectedError(
+                    "Did not find any certifications or certification shares in pools.".into(),
+                ));
+            }
+            (Some(f), Some(s)) => (f.height.get() + 1, s.height.get()),
+            (Some(_), None) => return Ok(()),
+            (None, Some(s)) => (
+                min_share_height.unwrap_or_else(|| s.height.get()),
+                s.height.get(),
+            ),
+        };
+
+        if min > max {
+            info!(self.logger, "No higher certification shares found.");
+            return Ok(());
+        }
+
+        for h in min..=max {
+            let height = Height::from(h);
+            info!(
+                self.logger,
+                "Moving certification shares of height {height} to new pool."
+            );
+            let shares = pools
+                .iter()
+                .flat_map(|(ip, p)| p.shares_at_height(height).map(|s| (s, ip.clone())))
+                .collect::<HashMap<_, _>>();
+
+            shares.into_iter().for_each(|(s, ip)| {
+                debug!(
+                    self.logger,
+                    "Inserting share from node {ip}: {:?}", s.signed
+                );
+                new_pool
+                    .persistent_pool
+                    .insert(CertificationMessage::CertificationShare(s))
+            });
+        }
+
+        Ok(())
+    }
+}
+
 pub struct DownloadIcStateStep {
     pub logger: Logger,
     pub try_readonly: bool,
@@ -95,16 +295,8 @@ impl Step for DownloadIcStateStep {
             self.require_confirmation,
             self.key_file.clone(),
         );
-        let mut access_granted = false;
-        for _ in 0..20 {
-            if ssh_helper.can_connect() {
-                access_granted = true;
-                break;
-            }
-            info!(self.logger, "No SSH access, retrying...");
-            thread::sleep(time::Duration::from_secs(5));
-        }
-        if !access_granted {
+
+        if ssh_helper.wait_for_access().is_err() {
             ssh_helper.account = ADMIN.to_string();
             if !ssh_helper.can_connect() {
                 return Err(RecoveryError::invalid_output_error(
@@ -135,6 +327,12 @@ impl Step for DownloadIcStateStep {
             excludes.push(cp);
         });
 
+        // If we have readonly access, we do not download certifications again.
+        if self.try_readonly {
+            excludes.push("certification");
+            excludes.push("certifications");
+        }
+
         let target = if self.keep_downloaded_state {
             &self.target
         } else {
@@ -143,7 +341,7 @@ impl Step for DownloadIcStateStep {
 
         rsync(
             &self.logger,
-            excludes,
+            excludes.clone(),
             &data_src,
             target,
             self.require_confirmation,
@@ -162,7 +360,7 @@ impl Step for DownloadIcStateStep {
         if self.keep_downloaded_state {
             rsync(
                 &self.logger,
-                vec![],
+                excludes,
                 &format!("{}/", self.target),
                 &self.working_dir,
                 false,
@@ -832,5 +1030,192 @@ impl Step for UploadAndHostTarStep {
         ssh_helper.ssh("daemonize $(which python3) -m http.server --bind :: 8081".to_string())?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ic_test_utilities::{
+        consensus::fake::{Fake, FakeSigner},
+        types::ids::node_test_id,
+    };
+    use ic_types::{
+        consensus::certification::{Certification, CertificationContent, CertificationShare},
+        crypto::{CryptoHash, Signed},
+        signature::{ThresholdSignature, ThresholdSignatureShare},
+    };
+    use tempfile::TempDir;
+
+    use super::*;
+
+    fn make_certifcation(height: u64, hash: Vec<u8>) -> CertificationMessage {
+        CertificationMessage::Certification(Certification {
+            height: Height::from(height),
+            signed: Signed {
+                content: CertificationContent::new(CryptoHash(hash).into()),
+                signature: ThresholdSignature::fake(),
+            },
+        })
+    }
+
+    fn make_share(height: u64, hash: Vec<u8>, node_id: u64) -> CertificationMessage {
+        CertificationMessage::CertificationShare(CertificationShare {
+            height: Height::from(height),
+            signed: Signed {
+                content: CertificationContent::new(CryptoHash(hash).into()),
+                signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
+            },
+        })
+    }
+
+    fn setup_merge_certs(
+        logger: &Logger,
+    ) -> (TempDir, CertificationPoolImpl, CertificationPoolImpl) {
+        let tmp = tempfile::tempdir().expect("Could not create a temp dir");
+        let work_dir = tmp.path().to_path_buf();
+        let pool1 = CertificationPoolImpl::new(
+            ArtifactPoolConfig::new(work_dir.join("certifications/ip1")),
+            logger.clone().into(),
+            MetricsRegistry::new(),
+        );
+        let pool2 = CertificationPoolImpl::new(
+            ArtifactPoolConfig::new(work_dir.join("certifications/ip2")),
+            logger.clone().into(),
+            MetricsRegistry::new(),
+        );
+        (tmp, pool1, pool2)
+    }
+
+    #[test]
+    fn error_if_no_certifications_found() {
+        let logger = crate::util::make_logger();
+        let (tmp, _, _) = setup_merge_certs(&logger);
+        let work_dir = tmp.path().to_path_buf();
+        let step = MergeCertificationPoolsStep {
+            logger: logger.clone(),
+            work_dir,
+        };
+        assert!(
+            matches!(step.exec(), Err(RecoveryError::UnexpectedError(e)) if e.starts_with("Did not find any certifications"))
+        );
+    }
+
+    #[test]
+    fn full_certifications_are_merged_correctly() {
+        let logger = crate::util::make_logger();
+        let (tmp, pool1, pool2) = setup_merge_certs(&logger);
+        let work_dir = tmp.path().to_path_buf();
+
+        let step = MergeCertificationPoolsStep {
+            logger: logger.clone(),
+            work_dir: work_dir.clone(),
+        };
+
+        // Add two different certifications for height 1 to both pools,
+        // only one of them should be kept after the merge.
+        let cert1 = make_certifcation(1, vec![1, 2, 3]);
+        let cert1_2 = make_certifcation(1, vec![4, 5, 6]);
+        pool1.persistent_pool.insert(cert1);
+        pool2.persistent_pool.insert(cert1_2);
+
+        // Add the same certification for height 2 to both pools,
+        // it should only exists in the merged pool once.
+        let cert2 = make_certifcation(2, vec![1, 2, 3]);
+        pool1.persistent_pool.insert(cert2.clone());
+        pool2.persistent_pool.insert(cert2);
+
+        // Add two more certifications for heights 3 and 4, one to each pool.
+        let cert3 = make_certifcation(3, vec![1, 2, 3]);
+        let cert4 = make_certifcation(4, vec![1, 2, 3]);
+        pool1.persistent_pool.insert(cert4);
+        pool2.persistent_pool.insert(cert3);
+
+        // Add a share at height 3 to one pool. It should not be added to the
+        // merged pool as it is lower than the highest full certification (4).
+        let share3 = make_share(3, vec![1], 1);
+        pool1.persistent_pool.insert(share3);
+
+        step.exec().expect("Failed to execute step.");
+
+        let new_pool = CertificationPoolImpl::new(
+            ArtifactPoolConfig::new(work_dir.join("data/ic_consensus_pool")),
+            logger.clone().into(),
+            MetricsRegistry::new(),
+        );
+
+        assert_eq!(
+            new_pool.persistent_pool.certifications().get_all().count(),
+            4 // One for each height 1-4
+        );
+        assert_eq!(
+            new_pool
+                .persistent_pool
+                .certification_shares()
+                .get_all()
+                .count(),
+            0
+        );
+        let range = new_pool
+            .persistent_pool
+            .certifications()
+            .height_range()
+            .expect("no height range");
+        assert_eq!((range.min.get(), range.max.get()), (1, 4));
+    }
+
+    #[test]
+    fn shares_are_merged_correctly() {
+        let logger = crate::util::make_logger();
+        let (tmp, pool1, pool2) = setup_merge_certs(&logger);
+        let work_dir = tmp.path().to_path_buf();
+
+        let step = MergeCertificationPoolsStep {
+            logger: logger.clone(),
+            work_dir: work_dir.clone(),
+        };
+
+        // Add a full certification at height 4
+        let cert4 = make_certifcation(4, vec![1, 2, 3]);
+
+        // Shares below or equal to the heighest full share should be ignored.
+        let share3 = make_share(3, vec![3], 1);
+        let share4 = make_share(4, vec![4], 2);
+
+        // These shares should be included in the new pool
+        let share5 = make_share(5, vec![5], 1);
+        let share6 = make_share(6, vec![6], 1);
+        let share6_2 = make_share(6, vec![6, 2], 2);
+
+        pool1.persistent_pool.insert(cert4);
+        pool1.persistent_pool.insert(share3);
+        pool1.persistent_pool.insert(share4);
+        pool1.persistent_pool.insert(share5.clone());
+        pool1.persistent_pool.insert(share6_2);
+
+        pool2.persistent_pool.insert(share5);
+        pool2.persistent_pool.insert(share6);
+
+        step.exec().expect("Failed to execute step.");
+
+        let new_pool = CertificationPoolImpl::new(
+            ArtifactPoolConfig::new(work_dir.join("data/ic_consensus_pool")),
+            logger.clone().into(),
+            MetricsRegistry::new(),
+        );
+
+        assert_eq!(
+            new_pool
+                .persistent_pool
+                .certification_shares()
+                .get_all()
+                .count(),
+            3 // share5, share6, share6_2
+        );
+        let range = new_pool
+            .persistent_pool
+            .certification_shares()
+            .height_range()
+            .expect("no height range");
+        assert_eq!((range.min.get(), range.max.get()), (5, 6));
     }
 }
