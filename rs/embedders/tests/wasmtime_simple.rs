@@ -22,6 +22,11 @@ pub fn wasmtime_instantiate_and_call_run(wasm: &BinaryEncodedWasm) {
                 (func (export "update_available_memory") (param i32 i32) (result i32)
                     i32.const 42
                 )
+                (func (export "try_grow_stable_memory") (param i64 i64 i32) (result i64)
+                    i64.const 0
+                )
+                (func (export "deallocate_pages") (param i64))
+                (func (export "internal_trap") (param i32))
             )"#,
         )
         .unwrap();
@@ -29,6 +34,9 @@ pub fn wasmtime_instantiate_and_call_run(wasm: &BinaryEncodedWasm) {
         let mut e = HashMap::new();
         e.insert("out_of_instructions".to_string(), 0);
         e.insert("update_available_memory".to_string(), 1);
+        e.insert("try_grow_stable_memory".to_string(), 2);
+        e.insert("deallocate_pages".to_string(), 3);
+        e.insert("internal_trap".to_string(), 4);
         (i, e)
     };
 
