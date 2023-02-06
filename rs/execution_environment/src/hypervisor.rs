@@ -186,7 +186,8 @@ impl Hypervisor {
         dirty_page_overhead: NumInstructions,
     ) -> Self {
         let mut embedder_config = EmbeddersConfig::new();
-        embedder_config.query_execution_threads = config.query_execution_threads;
+        embedder_config.query_execution_threads_per_canister =
+            config.query_execution_threads_per_canister;
         embedder_config.feature_flags.rate_limiting_of_debug_prints =
             config.rate_limiting_of_debug_prints;
         embedder_config.cost_to_compile_wasm_instruction = config.cost_to_compile_wasm_instruction;

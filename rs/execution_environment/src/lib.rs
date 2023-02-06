@@ -36,11 +36,11 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
 use ic_types::{messages::CallContextId, SubnetId};
 use ingress_filter::IngressFilter;
-use query_handler::HttpQueryHandler;
 pub use query_handler::InternalHttpQueryHandler;
+use query_handler::{HttpQueryHandler, QueryScheduler, QuerySchedulerFlag};
 pub use scheduler::RoundSchedule;
 use scheduler::SchedulerImpl;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tower::limit::GlobalConcurrencyLimitLayer;
 
 const MAX_INFLIGHT_QUERIES_PER_THREAD: usize = 100;
@@ -140,34 +140,34 @@ impl ExecutionServices {
             Arc::clone(&cycles_account_manager),
             config.composite_queries,
         ));
-        let threadpool = threadpool::Builder::new()
-            .num_threads(config.query_execution_threads)
-            .thread_name("query_execution".into())
-            .thread_stack_size(8_192_000)
-            .build();
 
-        let threadpool = Arc::new(Mutex::new(threadpool));
+        let query_scheduler = QueryScheduler::new(
+            config.query_execution_threads_total,
+            config.query_execution_threads_per_canister,
+            config.query_scheduling_time_slice_per_canister,
+            QuerySchedulerFlag::UseOldSchedulingAlgorithm,
+        );
 
         let concurrency_buffer = GlobalConcurrencyLimitLayer::new(
-            config.query_execution_threads * MAX_INFLIGHT_QUERIES_PER_THREAD,
+            config.query_execution_threads_total * MAX_INFLIGHT_QUERIES_PER_THREAD,
         );
         // Creating the async services require that a tokio runtime context is available.
 
         let async_query_handler = HttpQueryHandler::new_service(
             concurrency_buffer.clone(),
             Arc::clone(&sync_query_handler) as Arc<_>,
-            Arc::clone(&threadpool),
+            query_scheduler.clone(),
             Arc::clone(&state_reader),
         );
         let ingress_filter = IngressFilter::new_service(
             concurrency_buffer.clone(),
-            Arc::clone(&threadpool),
+            query_scheduler.clone(),
             Arc::clone(&state_reader),
             Arc::clone(&exec_env),
         );
         let anonymous_query_handler = AnonymousQueryHandler::new_service(
             concurrency_buffer,
-            threadpool,
+            query_scheduler,
             Arc::clone(&state_reader),
             Arc::clone(&exec_env),
             scheduler_config.max_instructions_per_message_without_dts,

@@ -1,5 +1,5 @@
 use crate::{
-    embedders::{self, QUERY_EXECUTION_THREADS},
+    embedders::{self, QUERY_EXECUTION_THREADS_PER_CANISTER},
     flag_status::FlagStatus,
     subnet_config::MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS,
 };
@@ -59,6 +59,25 @@ pub(crate) const MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL: u64 = 5_000_000_000;
 /// This would allow 100 calls with the current MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL
 pub const INSTRUCTION_OVERHEAD_PER_QUERY_CALL: u64 = 50_000_000;
 
+/// The number of query execution threads overall for all canisters.
+/// See also `QUERY_EXECUTION_THREADS_PER_CANISTER`.
+const QUERY_EXECUTION_THREADS_TOTAL: usize = 4;
+
+/// When a canister is scheduled for query execution, it is allowed to run for
+/// this amount of time. This limit controls how many queries the canister
+/// executes when it is scheduled. The limit does not control the duration of an
+/// individual query. In the worst case, a single query may exceed this limit if
+/// it executes the maximum number of instructions. In that case, the canister
+/// would execute only that one query. Generally, we expect queries to finish in
+/// a few milliseconds, so multiple queries will run in a slice.
+///
+/// The current value of 20ms is chosen arbitrarily. Any value between 10ms and
+/// 100ms would work reasonably well. Reducing the value increases the overhead
+/// of synchronization to fetch queries and also increases "unfairness" in the
+/// presence of canisters that execute long-running queries. Increasing the
+/// value increases the user-visible latency of the queries.
+const QUERY_SCHEDULING_TIME_SLICE_PER_CANISTER: Duration = Duration::from_millis(20);
+
 // The ID of the Bitcoin testnet canister.
 const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 
@@ -111,8 +130,15 @@ pub struct Config {
     /// Indicates whether canisters sandboxing is enabled or not.
     pub canister_sandboxing_flag: FlagStatus,
 
-    /// The number of threads to use for query execution.
-    pub query_execution_threads: usize,
+    /// The number of threads to use for query execution per canister.
+    pub query_execution_threads_per_canister: usize,
+
+    /// The number of threads to use for query execution overall.
+    pub query_execution_threads_total: usize,
+
+    /// When a canister is scheduled for query execution, it is allowed to run for
+    /// this amount of time.
+    pub query_scheduling_time_slice_per_canister: Duration,
 
     /// The maximum depth of the query call tree.
     pub max_query_call_depth: usize,
@@ -197,7 +223,9 @@ impl Default for Config {
             // Spec).
             max_controllers: 10,
             canister_sandboxing_flag: FlagStatus::Enabled,
-            query_execution_threads: QUERY_EXECUTION_THREADS,
+            query_execution_threads_per_canister: QUERY_EXECUTION_THREADS_PER_CANISTER,
+            query_execution_threads_total: QUERY_EXECUTION_THREADS_TOTAL,
+            query_scheduling_time_slice_per_canister: QUERY_SCHEDULING_TIME_SLICE_PER_CANISTER,
             max_query_call_depth: MAX_QUERY_CALL_DEPTH,
             max_instructions_per_composite_query_call: NumInstructions::from(
                 MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL,

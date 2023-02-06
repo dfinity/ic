@@ -19,8 +19,9 @@ pub(crate) const MAX_CUSTOM_SECTIONS: usize = 16;
 // The total size of the exported custom sections in bytes.
 // The size should not exceed 1MiB.
 pub(crate) const MAX_CUSTOM_SECTIONS_SIZE: NumBytes = NumBytes::new(1048576);
-/// The number of threads to use for query execution.
-pub(crate) const QUERY_EXECUTION_THREADS: usize = 2;
+/// The number of threads to use for query execution per canister.
+/// See also `QUERY_EXECUTION_THREADS_TOTAL`.
+pub(crate) const QUERY_EXECUTION_THREADS_PER_CANISTER: usize = 2;
 
 /// In terms of execution time, compiling 1 WASM instructions takes as much time
 /// as actually executing 6_000 instructions. Only public for use in tests.
@@ -72,7 +73,7 @@ impl Default for FeatureFlags {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Config {
     pub max_wasm_stack_size: usize,
-    pub query_execution_threads: usize,
+    pub query_execution_threads_per_canister: usize,
 
     /// Maximum number of globals allowed in a Wasm module.
     pub max_globals: usize,
@@ -117,7 +118,7 @@ impl Config {
     pub fn new() -> Self {
         Config {
             max_wasm_stack_size: 5 * 1024 * 1024,
-            query_execution_threads: QUERY_EXECUTION_THREADS,
+            query_execution_threads_per_canister: QUERY_EXECUTION_THREADS_PER_CANISTER,
             max_globals: MAX_GLOBALS,
             max_functions: MAX_FUNCTIONS,
             max_custom_sections: MAX_CUSTOM_SECTIONS,
