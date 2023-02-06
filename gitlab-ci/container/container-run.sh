@@ -26,7 +26,8 @@ EOF
 
 IMAGE="docker.io/dfinity/ic-build-bazel"
 BUILD_ARGS=(--bazel)
-while test $# -gt 0; do
+CTR=0
+while test $# -gt $CTR; do
     case "$1" in
         -h | --help) usage && exit 0 ;;
         -f | --full)
@@ -34,7 +35,7 @@ while test $# -gt 0; do
             BUILD_ARGS=()
             shift
             ;;
-        *) usage && exit 1 ;;
+        *) let CTR=CTR+1 ;;
     esac
 done
 
