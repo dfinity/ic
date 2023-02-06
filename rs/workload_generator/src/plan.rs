@@ -2,6 +2,7 @@ use crate::RequestType;
 use byte_unit::Byte;
 use candid::Encode;
 use ic_types::CanisterId;
+use rand::RngCore;
 
 #[derive(Clone)]
 pub struct Plan {
@@ -40,12 +41,19 @@ impl Plan {
         }
     }
 
-    pub fn generate_call(&self, n: usize) -> EngineCall {
+    pub fn generate_call(&self, n: usize, random_query_payload: bool) -> EngineCall {
         match self.request_type {
             // "read" is specific to the counter canister
             RequestType::QueryCounter => EngineCall::Read {
                 method: String::from("read"),
-                arg: vec![0; self.call_payload_size.get_bytes() as usize],
+                arg: {
+                    let mut payload = vec![0u8; self.call_payload_size.get_bytes() as usize];
+                    if random_query_payload {
+                        let mut rng = rand::thread_rng();
+                        rng.fill_bytes(&mut payload);
+                    }
+                    payload
+                },
             },
             // "write" is specific to the counter canister
             RequestType::UpdateCounter => EngineCall::Write {

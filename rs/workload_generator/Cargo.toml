@@ -27,6 +27,7 @@ indicatif = { version = "0.15", features = [ "improved_unicode" ] }
 lazy_static = "1.4.0"
 leaky-bucket = "0.11.0"
 prometheus = { version = "0.12.0", features = [ "process" ] }
+rand = "0.8.4"
 regex = "1.3.9"
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_cbor = "0.11.1"

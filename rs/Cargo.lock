@@ -9396,6 +9396,7 @@ dependencies = [
  "lazy_static",
  "leaky-bucket",
  "prometheus 0.12.0",
+ "rand 0.8.5",
  "regex",
  "serde",
  "serde_cbor",

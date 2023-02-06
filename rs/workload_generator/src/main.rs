@@ -268,6 +268,12 @@ async fn main() {
                 .takes_value(true)
                 .help("The number of seconds to wait before timing out ingress messages."),
         )
+        .arg(
+            Arg::new("random-query-payload")
+                .long("random-query-payload")
+                .takes_value(false)
+                .help("If specified, each query gets a random payload to prevent caching on the boundary nodes."),
+        )
 
         .get_matches();
 
@@ -331,6 +337,8 @@ async fn main() {
     let _guard = slog_scope::set_global_logger(log);
 
     let periodic_output = matches.is_present("periodic-output");
+
+    let random_query_payload = matches.is_present("random-query-payload");
 
     let call_payload_size = Byte::from_str(matches.value_of("payload-size").unwrap_or("0").trim())
         .expect("Could not parse the value of --payload-size");
@@ -538,6 +546,7 @@ async fn main() {
                     call_payload,
                     &canister_id,
                     periodic_output,
+                    random_query_payload,
                 )
                 .await;
 
