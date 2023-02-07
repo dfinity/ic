@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -euo pipefail
 
 # Before running this benchmark, first start DFX (version 12.1) with:
 # $ dfx start --log tee --logfile benchmark-log-$(date +"%Y-%m-%d").txt --clean
@@ -12,7 +14,8 @@ NETWORK=local
 echo "=== Setting up ICRC1 Index canister benchmark environment ==="
 
 echo "Step 1: creating icrc1-ledger canister..."
-dfx deploy icrc1-ledger --network $NETWORK --argument "(record {
+dfx deploy icrc1-ledger --network $NETWORK --argument "(variant {
+  Init = record {
     token_symbol = \"TEX\";
     token_name = \"Token example\";
     minting_account = record { owner = principal \"$PRINCIPAL\" };
@@ -25,6 +28,7 @@ dfx deploy icrc1-ledger --network $NETWORK --argument "(record {
         controller_id = principal \"$PRINCIPAL\";
         cycles_for_archive_creation = opt 4_000_000_000_000;
     };
+  }
 })"
 CANISTER_ID_LEDGER=$(dfx canister id icrc1-ledger)
 echo "Canister id of ledger is $CANISTER_ID_LEDGER"
