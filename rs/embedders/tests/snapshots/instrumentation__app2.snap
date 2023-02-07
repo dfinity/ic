@@ -6,7 +6,6 @@ expression: out
   (type (;0;) (func (param i64) (result i64)))
   (type (;1;) (func))
   (type (;2;) (func (param i32 i32) (result i32)))
-  (type (;3;) (func (param i32) (result i32)))
   (import "__" "out_of_instructions" (func $compute (;0;) (type 1)))
   (import "__" "update_available_memory" (func $tenfold (;1;) (type 2)))
   (func $inc (;2;) (type 0) (param i64) (result i64)
@@ -125,11 +124,19 @@ expression: out
     i64.const 1
     i64.add
   )
-  (func (;5;) (type 3) (param i32) (result i32)
+  (func (;5;) (type 0) (param i64) (result i64)
+    (local i64)
     global.get 0
     local.get 0
-    i64.extend_i32_u
     i64.sub
+    local.tee 1
+    global.get 0
+    i64.gt_s
+    if (result i64) ;; label = @1
+      i64.const -9223372036854775808
+    else
+      local.get 1
+    end
     global.set 0
     global.get 0
     i64.const 0

@@ -114,6 +114,7 @@ use super::system_api_replacements::replacement_functions;
 use super::validation::API_VERSION_IC0;
 use super::{InstrumentationOutput, Segments, SystemApiFunc};
 use ic_config::flag_status::FlagStatus;
+use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_sys::PAGE_SIZE;
 use ic_types::{methods::WasmMethod, MAX_WASM_MEMORY_IN_BYTES};
@@ -328,13 +329,16 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
     module
 }
 
+/// Indices of functions, globals, etc that will be need in the later parts of
+/// instrumentation.
 #[derive(Default)]
-pub struct ExportModuleData {
+pub(super) struct SpecialIndices {
     pub instructions_counter_ix: u32,
     pub dirty_pages_counter_ix: Option<u32>,
     pub decr_instruction_counter_fn: u32,
     pub count_clean_pages_fn: Option<u32>,
     pub start_fn_ix: Option<u32>,
+    pub stable_memory_index: u32,
 }
 
 /// Takes a Wasm binary and inserts the instructions metering and memory grow
@@ -347,6 +351,7 @@ pub(super) fn instrument(
     cost_to_compile_wasm_instruction: NumInstructions,
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
+    subnet_type: SubnetType,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
     let stable_memory_index;
     let mut module = inject_helper_functions(module, wasm_native_stable_memory);
@@ -387,21 +392,22 @@ pub(super) fn instrument(
         }
     };
 
-    let export_module_data = ExportModuleData {
+    let special_indices = SpecialIndices {
         instructions_counter_ix: num_globals,
         dirty_pages_counter_ix,
         decr_instruction_counter_fn: num_functions,
         count_clean_pages_fn,
         start_fn_ix: module.start,
+        stable_memory_index,
     };
 
-    if export_module_data.start_fn_ix.is_some() {
+    if special_indices.start_fn_ix.is_some() {
         module.start = None;
     }
 
     // inject instructions counter decrementation
     for func_body in &mut module.code_sections {
-        inject_metering(&mut func_body.instructions, &export_module_data);
+        inject_metering(&mut func_body.instructions, &special_indices);
     }
 
     // Collect all the function types of the locally defined functions inside the
@@ -431,19 +437,13 @@ pub(super) fn instrument(
     let mut extra_data: Option<Vec<u8>> = None;
     module = export_additional_symbols(
         module,
-        &export_module_data,
+        &special_indices,
         &mut extra_data,
         wasm_native_stable_memory,
-        stable_memory_index + 1,
     );
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
-        replace_system_api_functions(
-            &mut module,
-            stable_memory_index,
-            export_module_data.count_clean_pages_fn.unwrap(),
-            export_module_data.dirty_pages_counter_ix.unwrap(),
-        )
+        replace_system_api_functions(&mut module, special_indices, subnet_type)
     }
 
     let exported_functions = module
@@ -518,9 +518,8 @@ fn calculate_api_indexes(module: &Module<'_>) -> BTreeMap<SystemApiFunc, u32> {
 
 fn replace_system_api_functions(
     module: &mut Module<'_>,
-    stable_memory_index: u32,
-    count_clean_pages_fn_index: u32,
-    dirty_pages_counter_index: u32,
+    special_indices: SpecialIndices,
+    subnet_type: SubnetType,
 ) {
     let api_indexes = calculate_api_indexes(module);
     let number_of_func_imports = module
@@ -532,11 +531,7 @@ fn replace_system_api_functions(
     // Collect a single map of all the function indexes that need to be
     // replaced.
     let mut func_index_replacements = BTreeMap::new();
-    for (api, (ty, body)) in replacement_functions(
-        stable_memory_index,
-        count_clean_pages_fn_index,
-        dirty_pages_counter_index,
-    ) {
+    for (api, (ty, body)) in replacement_functions(special_indices, subnet_type) {
         if let Some(old_index) = api_indexes.get(&api) {
             let type_idx = add_type(module, ty);
             let new_index = (number_of_func_imports + module.functions.len()) as u32;
@@ -555,34 +550,46 @@ fn replace_system_api_functions(
 // Helper function used by instrumentation to export additional symbols.
 //
 // Returns the new module or panics in debug mode if a symbol is not reserved.
-#[doc(hidden)] // pub for usage in tests
-pub fn export_additional_symbols<'a>(
+fn export_additional_symbols<'a>(
     mut module: Module<'a>,
-    export_module_data: &ExportModuleData,
+    special_indices: &SpecialIndices,
     extra_data: &'a mut Option<Vec<u8>>,
     wasm_native_stable_memory: FlagStatus,
-    stable_memory_bytemap_index: u32,
 ) -> Module<'a> {
     // push function to decrement the instruction counter
 
-    let func_type = Type::Func(FuncType::new([ValType::I32], [ValType::I32]));
+    let func_type = Type::Func(FuncType::new([ValType::I64], [ValType::I64]));
 
     use Operator::*;
 
     let instructions = vec![
         // Subtract the parameter amount from the instruction counter
         GlobalGet {
-            global_index: export_module_data.instructions_counter_ix,
+            global_index: special_indices.instructions_counter_ix,
         },
         LocalGet { local_index: 0 },
-        I64ExtendI32U,
         I64Sub,
-        GlobalSet {
-            global_index: export_module_data.instructions_counter_ix,
-        },
-        // Call out_of_instructions() if `counter < 0`.
+        // Store the new counter value in the local
+        LocalTee { local_index: 1 },
+        // If `new_counter > old_counter` there was underflow, so set counter to
+        // minimum value. Otherwise set it to the new counter value.
         GlobalGet {
-            global_index: export_module_data.instructions_counter_ix,
+            global_index: special_indices.instructions_counter_ix,
+        },
+        I64GtS,
+        If {
+            blockty: BlockType::Type(ValType::I64),
+        },
+        I64Const { value: i64::MIN },
+        Else,
+        LocalGet { local_index: 1 },
+        End,
+        GlobalSet {
+            global_index: special_indices.instructions_counter_ix,
+        },
+        // Call out_of_instructions() if `new_counter < 0`.
+        GlobalGet {
+            global_index: special_indices.instructions_counter_ix,
         },
         I64Const { value: 0 },
         I64LtS,
@@ -599,7 +606,7 @@ pub fn export_additional_symbols<'a>(
     ];
 
     let func_body = wasm_transform::Body {
-        locals: vec![],
+        locals: vec![(1, ValType::I64)],
         instructions,
     };
 
@@ -627,7 +634,9 @@ pub fn export_additional_symbols<'a>(
                     align: 0,
                     max_align: 0,
                     offset: 0,
-                    memory: stable_memory_bytemap_index,
+                    // We assume the bytemap for stable memory is always
+                    // inserted directly after the stable memory.
+                    memory: special_indices.stable_memory_index + 1,
                 },
             },
             LocalGet { local_index: acc },
@@ -662,12 +671,12 @@ pub fn export_additional_symbols<'a>(
     let counter_export = Export {
         name: CANISTER_COUNTER_INSTRUCTIONS_STR,
         kind: ExternalKind::Global,
-        index: export_module_data.instructions_counter_ix,
+        index: special_indices.instructions_counter_ix,
     };
     debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&counter_export.name));
     module.exports.push(counter_export);
 
-    if let Some(index) = export_module_data.dirty_pages_counter_ix {
+    if let Some(index) = special_indices.dirty_pages_counter_ix {
         let export = Export {
             name: CANISTER_COUNTER_DIRTY_PAGES_STR,
             kind: ExternalKind::Global,
@@ -677,7 +686,7 @@ pub fn export_additional_symbols<'a>(
         module.exports.push(export);
     }
 
-    if let Some(index) = export_module_data.start_fn_ix {
+    if let Some(index) = special_indices.start_fn_ix {
         // push canister_start
         let start_export = Export {
             name: CANISTER_START_STR,
@@ -780,7 +789,7 @@ impl InjectionPoint {
 // - we insert a function call before each dynamic cost instruction which
 //   performs an overflow check and then decrements the counter by the value at
 //   the top of the stack.
-fn inject_metering(code: &mut Vec<Operator>, export_data_module: &ExportModuleData) {
+fn inject_metering(code: &mut Vec<Operator>, export_data_module: &SpecialIndices) {
     let points = injections(code);
     let points = points.iter().filter(|point| match point.cost_detail {
         InjectionPointCostDetail::StaticCost {
@@ -828,9 +837,16 @@ fn inject_metering(code: &mut Vec<Operator>, export_data_module: &ExportModuleDa
                 }
             }
             InjectionPointCostDetail::DynamicCost => {
-                elems.extend_from_slice(&[Call {
-                    function_index: export_data_module.decr_instruction_counter_fn,
-                }]);
+                elems.extend_from_slice(&[
+                    I64ExtendI32U,
+                    Call {
+                        function_index: export_data_module.decr_instruction_counter_fn,
+                    },
+                    // decr_instruction_counter returns it's argument unchanged,
+                    // so we can convert back to I32 without worrying about
+                    // overflows.
+                    I32WrapI64,
+                ]);
             }
         }
         last_injection_position = point.position;

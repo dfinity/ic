@@ -30,6 +30,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
+const STABLE_OP_BYTES: u64 = 37;
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
@@ -102,6 +103,10 @@ fn make_module_wat(heap_size: usize) -> String {
         (func $ic0_stable_grow (param $pages i32) (result i32)))
       (import "ic0" "stable_read"
         (func $ic0_stable_read (param $dst i32) (param $offset i32) (param $size i32)))
+      (import "ic0" "stable64_read"
+        (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+      (import "ic0" "stable_write"
+        (func $ic0_stable_write (param $offset i32) (param $src i32) (param $size i32)))
 
       (func $dump_heap
         (call $msg_reply_data_append (i32.const 0) (i32.mul (memory.size) (i32.const 0x10000)))
@@ -136,11 +141,32 @@ fn make_module_wat(heap_size: usize) -> String {
         (call $ic0_stable_read (i32.const 0) (i32.const 0) (i32.const 0))
       )
 
+      ;; stable_read of non-zero length
+      (func $test_stable_read_nonzero
+        (drop (call $ic0_stable_grow (i32.const 1)))
+        (call $ic0_stable_read (i32.const 0) (i32.const 0) (i32.const {STABLE_OP_BYTES}))
+      )
+
+      ;; stable64_read of non-zero length
+      (func $test_stable64_read_nonzero
+        (drop (call $ic0_stable_grow (i32.const 1)))
+        (call $ic0_stable64_read (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))
+      )
+
+      ;; stable_write of non-zero length
+      (func $test_stable_write_nonzero
+        (drop (call $ic0_stable_grow (i32.const 1)))
+        (call $ic0_stable_write (i32.const 0) (i32.const 0) (i32.const {STABLE_OP_BYTES}))
+      )
+
       (memory $memory {HEAP_SIZE})
       (export "memory" (memory $memory))
       (export "canister_query dump_heap" (func $dump_heap))
       (export "canister_update write_bytes" (func $write_bytes))
       (export "canister_update test_stable_read" (func $test_stable_read))
+      (export "canister_update test_stable_read_nonzero" (func $test_stable_read_nonzero))
+      (export "canister_update test_stable64_read_nonzero" (func $test_stable_read_nonzero))
+      (export "canister_update test_stable_write_nonzero" (func $test_stable_write_nonzero))
     )"#,
         HEAP_SIZE = heap_size
     )
@@ -658,31 +684,97 @@ mod tests {
         })
     }
 
-    #[test]
-    fn test_system_api_charges() {
-        with_test_replica_logger(|log| {
-            let subnet_type = SubnetType::Application;
+    mod stable_api_charges {
+        //! These tests check the proper instructions are charged for various
+        //! stable API operations.  Each function contains a single stable read
+        //! or write, in addition to 7 instructions required for setup.
 
-            let max_num_instructions = NumInstructions::new(1000);
+        use super::{
+            get_num_instructions_consumed, SubnetType, MAX_NUM_INSTRUCTIONS, STABLE_OP_BYTES,
+        };
+        use ic_logger::replica_logger::no_op_logger;
 
+        const SETUP_INSTRUCTION_OVERHEAD: u64 = 7;
+
+        #[test]
+        fn empty_stable_read_charge() {
             let instructions_consumed_without_data = get_num_instructions_consumed(
-                log,
+                no_op_logger(),
                 "test_stable_read",
                 vec![],
-                max_num_instructions,
-                subnet_type,
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::Application,
             )
             .unwrap();
-            // The `test_stable_read()` snippet consists of 7 instructions: 4 constants,
-            // stable_grow(), stable_read(), drop.
-            // Check that the number of consumed instructions get adjusted for the
-            // `stable_read()` System API call overhead.
+            // Additional charge for an empty read should just be the overhead.
             assert_eq!(
                 instructions_consumed_without_data.get(),
-                7 + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
-                    .get()
+                SETUP_INSTRUCTION_OVERHEAD
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
+                        .get()
             );
-        })
+        }
+
+        #[test]
+        fn nonempty_stable_read_charge() {
+            let instructions_consumed_without_data = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable_read_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::Application,
+            )
+            .unwrap();
+            // Read of `STABLE_OP_BYTES` should cost an additional instruction
+            // for each byte.
+            assert_eq!(
+                instructions_consumed_without_data.get(),
+                SETUP_INSTRUCTION_OVERHEAD
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
+                        .get()
+                    + STABLE_OP_BYTES
+            );
+        }
+
+        #[test]
+        fn nonempty_stable64_read_charge() {
+            let instructions_consumed_without_data = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable64_read_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::Application,
+            )
+            .unwrap();
+            // Read of `STABLE_OP_BYTES` should cost an additional instruction
+            // for each byte.
+            assert_eq!(
+                instructions_consumed_without_data.get(),
+                SETUP_INSTRUCTION_OVERHEAD
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE64_READ
+                        .get()
+                    + STABLE_OP_BYTES
+            );
+        }
+
+        #[test]
+        fn stable_read_charge_system_subnet() {
+            let instructions_consumed_without_data = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable_read_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::System,
+            )
+            .unwrap();
+            // Only the fixed cost is charged on system subnets.
+            assert_eq!(
+                instructions_consumed_without_data.get(),
+                SETUP_INSTRUCTION_OVERHEAD
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
+                        .get()
+            );
+        }
     }
 
     #[test]
@@ -805,7 +897,10 @@ mod tests {
         let wat = make_module_wat(2 * TEST_NUM_PAGES);
         let wasm = wat2wasm(&wat).unwrap();
 
-        let config = Config::default();
+        let config = Config {
+            subnet_type,
+            ..Config::default()
+        };
         let embedder = WasmtimeEmbedder::new(config, log.clone());
         let (cache, result) = compile(&embedder, &wasm);
         result.unwrap();

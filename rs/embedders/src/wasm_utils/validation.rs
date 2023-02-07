@@ -17,16 +17,18 @@ use wasmtime::Config;
 
 use crate::{
     wasm_utils::wasm_transform::{DataSegment, DataSegmentKind, Module},
-    wasmtime_embedder::WASM_HEAP_MEMORY_NAME,
+    wasmtime_embedder::{STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_MEMORY_NAME},
 };
 use wasmparser::{ExternalKind, Operator, Type, TypeRef, ValType};
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests
-pub const RESERVED_SYMBOLS: [&str; 3] = [
+pub const RESERVED_SYMBOLS: [&str; 5] = [
     "canister counter_instructions",
     "canister_start",
     "canister counter_dirty_pages",
+    STABLE_MEMORY_NAME,
+    STABLE_BYTEMAP_MEMORY_NAME,
 ];
 
 const WASM_FUNCTION_COMPLEXITY_LIMIT: usize = 15_000;
