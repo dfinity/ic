@@ -22,10 +22,7 @@ end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::{
-    test_env::{SshKeyGen, TestEnv},
-    test_env_api::*,
-};
+use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::subnet_recovery::{enable_ecdsa_on_nns, run_ecdsa_signature_test};
 use crate::util::MessageCanister;
 use crate::{
@@ -56,8 +53,6 @@ use std::thread;
 const DKG_INTERVAL: u64 = 19;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
-    env.ssh_keygen(ADMIN).expect("ssh admin keygen failed");
     InternetComputer::new()
         .add_subnet(
             Subnet::fast_single_node(SubnetType::System)
