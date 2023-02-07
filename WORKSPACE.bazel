@@ -5,7 +5,7 @@ workspace(
 
 load("//third_party/lmdb-0.9.70:repository.bzl", "lmdb_repository")
 load("//third_party/lmdb-rkv-0.14.99:repository.bzl", "lmdb_rkv_repository")
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
 load("@bazel_tools//tools/build_defs/repo:git.bzl", "git_repository", "new_git_repository")
 
 http_archive(
@@ -325,6 +325,13 @@ http_archive(
 load("@aspect_bazel_lib//lib:repositories.bzl", "aspect_bazel_lib_dependencies")
 
 aspect_bazel_lib_dependencies()
+
+# TLA+ tools
+http_jar(
+    name = "tlaplus",
+    sha256 = "fa18543e44ed5974a85bd2c60c0dc16620ae117680ea8e693d2691999ed90b22",
+    url = "https://github.com/tlaplus/tlaplus/releases/download/v1.7.2/tla2tools.jar",
+)
 
 # Official WebAssembly test suite.
 # To be used for testing libraries that handle canister Wasm code.

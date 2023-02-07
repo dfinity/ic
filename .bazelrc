@@ -8,6 +8,10 @@ build:ci --config=lint
 build:lint --config=fmt
 build:lint --config=clippy
 
+# Use hermetic JDK
+# See https://bazel.build/docs/bazel-and-java#hermetic-testing
+common --java_runtime_version=remotejdk_17
+
 common --experimental_allow_tags_propagation
 build --nosandbox_default_allow_network
 build --incompatible_strict_action_env # use an environment with a static value for PATH and do not inherit LD_LIBRARY_PATH
