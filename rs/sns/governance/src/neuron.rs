@@ -180,7 +180,7 @@ impl Neuron {
         max_age_bonus_percentage: u64,
     ) -> u64 {
         // We compute the stake adjustments in u128.
-        let stake = self.stake_e8s() as u128;
+        let stake = self.voting_power_stake_e8s() as u128;
         // Dissolve delay is capped to max_dissolve_delay_seconds, but we cap it
         // again here to make sure, e.g., if this changes in the future.
         let d = std::cmp::min(
@@ -529,6 +529,17 @@ impl Neuron {
     pub fn stake_e8s(&self) -> u64 {
         self.cached_neuron_stake_e8s
             .saturating_sub(self.neuron_fees_e8s)
+    }
+
+    /// Returns the current stake of this Neuron as used as an input
+    /// for the voting power calculation.
+    ///
+    /// It it is determined as the sum of staked tokens and staked maturity
+    /// minus fees occured for rejected proposals made by this neuron.
+    fn voting_power_stake_e8s(&self) -> u64 {
+        self.cached_neuron_stake_e8s
+            .saturating_sub(self.neuron_fees_e8s)
+            .saturating_add(self.staked_maturity_e8s_equivalent.unwrap_or(0))
     }
 
     /// Updates the stake of this neuron to `new_stake` and adjust this neuron's
@@ -1014,5 +1025,43 @@ mod tests {
                 max_age_bonus_percentage
             );
         }
+    }
+
+    /// Tests that the normal stake is computed as
+    /// cached neuron stake - neurons fees.  
+    #[test]
+    fn test_neuron_normal_stake() {
+        // create neuron with staked maturity
+        let neuron_id = NeuronId { id: vec![1, 2, 3] };
+        let neuron = Neuron {
+            id: Some(neuron_id),
+            cached_neuron_stake_e8s: 100,
+            neuron_fees_e8s: 10,
+            staked_maturity_e8s_equivalent: Some(50),
+            ..Default::default()
+        };
+
+        // The normal stake should corresponds to cached_neuron_stake - fees
+        let normal_stake: u64 = neuron.stake_e8s();
+        assert_eq!(normal_stake, 100 - 10);
+    }
+
+    /// Tests that the voting power stake is computed as
+    /// cached neuron stake - neurons fees + staked maturity.  
+    #[test]
+    fn test_neuron_voting_power_stake() {
+        // create neuron with staked maturity
+        let neuron_id = NeuronId { id: vec![1, 2, 3] };
+        let neuron = Neuron {
+            id: Some(neuron_id),
+            cached_neuron_stake_e8s: 100,
+            neuron_fees_e8s: 10,
+            staked_maturity_e8s_equivalent: Some(50),
+            ..Default::default()
+        };
+
+        // The voting power stake should correspond to cached stake - fee + staked maturity
+        let voting_power_stake: u64 = neuron.voting_power_stake_e8s();
+        assert_eq!(voting_power_stake, 100 - 10 + 50);
     }
 }

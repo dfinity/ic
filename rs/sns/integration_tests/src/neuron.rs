@@ -3368,7 +3368,9 @@ fn assert_neuron_voting_power(
 ) {
     // Compute the stake in the same way as Governance. In a sense this a regression test
     // that the stake is computed in the way it is expected.
-    let stake = neuron.stake_e8s() as u128;
+    let staked_tokens = neuron.stake_e8s() as u128;
+    let staked_maturity: u128 = neuron.staked_maturity_e8s_equivalent.unwrap_or(0) as u128;
+    let stake: u128 = staked_tokens + staked_maturity;
     let max_dissolve_delay_seconds = *params.max_dissolve_delay_seconds.as_ref().unwrap();
     let max_neuron_age_for_age_bonus = *params.max_neuron_age_for_age_bonus.as_ref().unwrap();
 
