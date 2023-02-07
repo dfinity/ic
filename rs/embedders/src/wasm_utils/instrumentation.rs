@@ -916,18 +916,31 @@ fn write_barrier_instructions<'a>(
 
 fn inject_mem_barrier(func_body: &mut wasm_transform::Body, func_type: &FuncType) {
     use Operator::*;
+    let mut val_i32_needed = false;
+    let mut val_i64_needed = false;
+    let mut val_f32_needed = false;
+    let mut val_f64_needed = false;
+
     let mut injection_points: Vec<usize> = Vec::new();
     {
         for (idx, instr) in func_body.instructions.iter().enumerate() {
             match instr {
                 I32Store { .. } | I32Store8 { .. } | I32Store16 { .. } => {
+                    val_i32_needed = true;
                     injection_points.push(idx)
                 }
                 I64Store { .. } | I64Store8 { .. } | I64Store16 { .. } | I64Store32 { .. } => {
+                    val_i64_needed = true;
                     injection_points.push(idx)
                 }
-                F32Store { .. } => injection_points.push(idx),
-                F64Store { .. } => injection_points.push(idx),
+                F32Store { .. } => {
+                    val_f32_needed = true;
+                    injection_points.push(idx)
+                }
+                F64Store { .. } => {
+                    val_f64_needed = true;
+                    injection_points.push(idx)
+                }
                 _ => (),
             }
         }
@@ -939,15 +952,48 @@ fn inject_mem_barrier(func_body: &mut wasm_transform::Body, func_type: &FuncType
         // The locals are stored as a vector of (count, ValType), so summing over the first field gives
         // the total number of locals.
         let n_locals: u32 = func_body.locals.iter().map(|x| x.0).sum();
-        let arg_i32_addr_idx = func_type.params().len() as u32 + n_locals;
-        let arg_i32_val_idx = arg_i32_addr_idx + 1;
-        func_body.locals.push((2, ValType::I32));
-        let arg_i64_val_idx = arg_i32_val_idx + 1;
-        func_body.locals.push((1, ValType::I64));
-        let arg_f32_val_idx = arg_i64_val_idx + 1;
-        func_body.locals.push((1, ValType::F32));
-        let arg_f64_val_idx = arg_f32_val_idx + 1;
-        func_body.locals.push((1, ValType::F64));
+        let mut next_local = func_type.params().len() as u32 + n_locals;
+        let arg_i32_addr_idx = next_local;
+        next_local += 1;
+
+        // conditionally add following locals
+        let arg_i32_val_idx;
+        let arg_i64_val_idx;
+        let arg_f32_val_idx;
+        let arg_f64_val_idx;
+
+        if val_i32_needed {
+            arg_i32_val_idx = next_local;
+            next_local += 1;
+            func_body.locals.push((2, ValType::I32)); // addr and val locals
+        } else {
+            arg_i32_val_idx = u32::MAX; // not used
+            func_body.locals.push((1, ValType::I32)); // only addr local
+        }
+
+        if val_i64_needed {
+            arg_i64_val_idx = next_local;
+            next_local += 1;
+            func_body.locals.push((1, ValType::I64));
+        } else {
+            arg_i64_val_idx = u32::MAX;
+        }
+
+        if val_f32_needed {
+            arg_f32_val_idx = next_local;
+            next_local += 1;
+            func_body.locals.push((1, ValType::F32));
+        } else {
+            arg_f32_val_idx = u32::MAX;
+        }
+
+        if val_f64_needed {
+            arg_f64_val_idx = next_local;
+            // next_local += 1;
+            func_body.locals.push((1, ValType::F64));
+        } else {
+            arg_f64_val_idx = u32::MAX;
+        }
 
         let orig_elems = &func_body.instructions;
         let mut elems: Vec<Operator> = Vec::new();
