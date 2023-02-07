@@ -374,3 +374,13 @@ http_file(
     sha256 = "5f179b2e8bdd637043a223a8ee1be6563ffa699dec071f84c8f8487a9dc8d54c",
     url = "https://github.com/dfinity/internet-identity/releases/download/release-2023-01-16/internet_identity_test.wasm",
 )
+
+# SNS aggregator canister (https://github.com/dfinity/nns-dapp/releases/tag/tip)
+
+http_file(
+    name = "sns_aggregator",
+    downloaded_file_path = "sns_aggregator.wasm",
+    sha256 = "428b21acccfa442101096d95f74ab8368724d0e87e14d08f21d9a3bed77b69f3",
+    # Keep this dependency while the aggregator release process is WIP (IDX-2661)
+    url = "https://github.com/dfinity/nns-dapp/releases/download/ci-pin/sns_aggregator2.wasm",
+)

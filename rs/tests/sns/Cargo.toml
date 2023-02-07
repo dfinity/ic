@@ -163,3 +163,7 @@ path = "bin/sale_mass_participation.rs"
 [[bin]]
 name = "ic-systest-sns-init-sale-scalability-experiment"
 path = "bin/sns_init_sale_scalability_experiment.rs"
+
+[[bin]]
+name = "ic-systest-sns-aggregation-canister-test"
+path = "bin/aggregation_canister_test.rs"
