@@ -80,6 +80,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "actix-web": crate.spec(
                 version = "^4.0.0-beta.6",
             ),
+            "addr": crate.spec(
+                version = "=0.15.6",
+                features = [
+                    "idna",
+                ],
+            ),
             "arbitrary": crate.spec(
                 version = "=1.1.3",
             ),

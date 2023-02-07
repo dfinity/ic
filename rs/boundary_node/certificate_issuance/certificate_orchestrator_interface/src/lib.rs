@@ -27,12 +27,20 @@ impl Storable for EncryptedPair {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct Name(String);
 
-pub const NAME_MAX_LEN: u32 = 64;
+// NAME_MAX_LEN is the maximum length a name is allowed to have.
+// Based on https://en.wikipedia.org/wiki/Domain_name#Domain_name_syntax
+pub const NAME_MAX_LEN: u32 = 253;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum NameError {
     #[error("Name has size '{0}' but must not exceed size {}", NAME_MAX_LEN)]
     InvalidSize(usize),
+
+    #[error("domains with a dot suffix are not supported")]
+    DotSuffix,
+
+    #[error("Name is not a valid domain: '{0}'")]
+    InvalidDomain(String),
 }
 
 impl From<Name> for String {
@@ -49,7 +57,21 @@ impl TryFrom<&str> for Name {
             return Err(NameError::InvalidSize(value.len()));
         }
 
-        Ok(Self(value.into()))
+        if value.ends_with('.') {
+            return Err(NameError::DotSuffix);
+        }
+
+        // Ensure it's a valid domain name
+        let name = addr::parse_domain_name(value)
+            .map_err(|err| NameError::InvalidDomain(err.to_string()))?;
+
+        if name.as_str().matches('.').count() == 0 {
+            return Err(NameError::InvalidDomain(format!(
+                "domain is not supported: {value}"
+            )));
+        }
+
+        Ok(Self(name.as_str().into()))
     }
 }
 
@@ -257,4 +279,50 @@ pub enum ListAllowedPrincipalsError {
 pub enum ListAllowedPrincipalsResponse {
     Ok(Vec<Principal>),
     Err(ListAllowedPrincipalsError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn name_ok_idna() {
+        assert_eq!(Name::try_from("rüdi.com"), Ok(Name("rüdi.com".to_string())),);
+    }
+
+    #[test]
+    fn name_invalid_size() {
+        let n = (NAME_MAX_LEN + 1) as usize;
+
+        assert_eq!(
+            Name::try_from("a".repeat(n).as_str()),
+            Err(NameError::InvalidSize(n)),
+        );
+    }
+
+    #[test]
+    fn name_invalid_format() {
+        assert_eq!(
+            Name::try_from(""),
+            Err(NameError::InvalidDomain(
+                "'' contains an empty label".to_string()
+            )),
+        );
+
+        assert_eq!(
+            Name::try_from("exa\nmple.com"),
+            Err(NameError::InvalidDomain(
+                "'exa\nmple.com' contains an illegal character".to_string()
+            )),
+        );
+
+        assert_eq!(
+            Name::try_from("example"),
+            Err(NameError::InvalidDomain(
+                "domain is not supported: example".to_string()
+            )),
+        );
+
+        assert_eq!(Name::try_from("example."), Err(NameError::DotSuffix),);
+    }
 }
