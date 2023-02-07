@@ -1,0 +1,23 @@
+# See https://lamport.azurewebsites.net/tla/tools.html for the
+# description of the TLA+ command-line tools.
+
+java_binary(
+    name = "sany",
+    main_class = "tla2sany.SANY",
+    visibility = ["//visibility:public"],
+    runtime_deps = ["@tlaplus//jar"],
+)
+
+java_binary(
+    name = "tlc",
+    main_class = "tlc2.TLC",
+    visibility = ["//visibility:public"],
+    runtime_deps = ["@tlaplus//jar"],
+)
+
+java_binary(
+    name = "tla2latex",
+    main_class = "tla2tex.TLA",
+    visibility = ["//visibility:public"],
+    runtime_deps = ["@tlaplus//jar"],
+)
