@@ -319,6 +319,7 @@ type ProposalData = record {
   ballots : vec record { text; Ballot };
   reward_event_round : nat64;
   failed_timestamp_seconds : nat64;
+  reward_event_end_timestamp_seconds : opt nat64;
   proposal_creation_timestamp_seconds : nat64;
   initial_voting_period_seconds : nat64;
   reject_cost_e8s : nat64;
@@ -342,6 +343,7 @@ type Result = variant { Error : GovernanceError; Neuron : Neuron };
 type Result_1 = variant { Error : GovernanceError; Proposal : ProposalData };
 type RewardEvent = record {
   actual_timestamp_seconds : nat64;
+  end_timestamp_seconds : opt nat64;
   distributed_e8s_equivalent : nat64;
   round : nat64;
   settled_proposals : vec ProposalId;

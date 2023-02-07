@@ -65,6 +65,11 @@ impl GovernanceCanisterInitPayloadBuilder {
         self
     }
 
+    pub fn with_genesis_timestamp_seconds(&mut self, genesis_timestamp_seconds: u64) -> &mut Self {
+        self.proto.genesis_timestamp_seconds = genesis_timestamp_seconds;
+        self
+    }
+
     pub fn build(&mut self) -> Governance {
         self.proto.clone()
     }

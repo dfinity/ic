@@ -14,9 +14,7 @@
 //! * Floating point makes code easier since the reward pool is specified as a
 //!   fraction of the total Token supply.
 
-use crate::logs::ERROR;
-use crate::{governance::log_prefix, pb::v1::VotingRewardsParameters, types::ONE_DAY_SECONDS};
-use ic_canister_log::log;
+use crate::{pb::v1::VotingRewardsParameters, types::ONE_DAY_SECONDS};
 use ic_nervous_system_common::i2d;
 use lazy_static::lazy_static;
 use rust_decimal::Decimal;
@@ -30,6 +28,8 @@ lazy_static! {
 
     // Astronomers, avert your eyes!
     pub static ref NOMINAL_DAYS_PER_YEAR: Decimal = dec!(365.25);
+
+    pub static ref GENESIS: Instant = Instant::from_seconds_since_genesis(dec!(0));
 }
 
 // ---- NON-BOILERPLATE CODE STARTS HERE ----------------------------------
@@ -55,9 +55,29 @@ pub struct Instant {
     days_since_start_time: Decimal,
 }
 
+impl Instant {
+    pub fn from_seconds_since_genesis(seconds: Decimal) -> Self {
+        Self {
+            days_since_start_time: seconds * *DAYS_PER_SECOND,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Duration {
-    pub days: Decimal,
+    days: Decimal,
+}
+
+impl Duration {
+    pub fn from_secs(seconds: Decimal) -> Self {
+        Self {
+            days: seconds * *DAYS_PER_SECOND,
+        }
+    }
+
+    pub fn as_secs(&self) -> Decimal {
+        self.days * *SECONDS_PER_DAY
+    }
 }
 
 /// A dimensionless quantity divided by a duration.
@@ -184,36 +204,29 @@ impl VotingRewardsParameters {
     /// The growth rate varies with time. The schedule is very much analogous to
     /// the one used by NNS, which is documented here:
     /// https://wiki.internetcomputer.org/wiki/Staking,_voting_and_rewards#Voting_Rewards
-    pub fn reward_rate(&self, round: u64) -> RewardRate {
-        let round_duration_seconds = self
-            .round_duration_seconds
-            .expect("round_duration_seconds unset");
-        let days_per_round = i2d(round_duration_seconds) * *DAYS_PER_SECOND;
-        let t = Instant {
-            days_since_start_time: i2d(round) * days_per_round,
-        };
-
-        // t cannot be before start_time, because days_since_start_time_unsigned is unsigned.
-
-        if t >= self.rate_transition_end_instant() {
-            return self.final_reward_rate();
-        }
-
-        // Calculate "variable reward_rate", i.e. rate on top of the final
-        // growth rate that should apply at instant t.
+    pub fn reward_rate_at(&self, now: Instant) -> RewardRate {
         let reward_rate_transition_duration_seconds = self
             .reward_rate_transition_duration_seconds
             .expect("reward_rate_transition_duration_seconds unset");
-        let transition_round_count =
-            reward_rate_transition_duration_seconds / round_duration_seconds;
-        let transition = LinearMap::new(dec!(1)..i2d(transition_round_count), dec!(1)..dec!(0));
-        // s linearly varies from 1 -> 0 as t varies from
-        // start_instant -> rate_transition_end_instant
-        let s = transition.apply(i2d(round));
-        // s2 varies quadratically from 1 -> 0 (again, as t varies from
-        // start_instant to rate_transition_end_instant), and flattens out as t
-        // approaches rate_transition_end_instant.
+
+        let time_since_genesis = now - *GENESIS;
+        if time_since_genesis.as_secs() >= i2d(reward_rate_transition_duration_seconds) {
+            return self.final_reward_rate();
+        }
+
+        // s linearly varies from 1 -> 0 as seconds_since_genesis varies from 0
+        // to reward_rate_transition_duration_seconds.
+        let transition = LinearMap::new(
+            dec!(0)..i2d(reward_rate_transition_duration_seconds),
+            dec!(1)..dec!(0),
+        );
+        let s = transition.apply(time_since_genesis.as_secs());
+        // s2 varies quadratically from 1 -> 0 (again, as seconds_since_genesis
+        // varies from 0 to reward_rate_transition_duration_seconds), and
+        // flattens out as seconds_since_genesis approaches
+        // reward_rate_transition_duration_seconds.
         let s2 = s * s;
+
         // This looks backwards, but we think of variable rate as being added to
         // final growth rate, not initial, and the amount to add is up to
         // initial - final (where initial is thought of as being greater than
@@ -224,40 +237,6 @@ impl VotingRewardsParameters {
         let variable_reward_rate = s2 * dr;
 
         self.final_reward_rate() + variable_reward_rate
-    }
-
-    /// The number of rounds of voting rewards that have elapsed since start
-    /// time (which is the genesis of the SNS, stored in
-    /// `governance.proto.genesis_timestamp_seconds`).
-    ///
-    /// E.g. starting from genesis, once round_duration has elapsed (or
-    /// shortly thereafter), then this would return 1.
-    pub fn most_recent_round(
-        &self,
-        timestamp_seconds: u64,
-        sns_genesis_timestamp_seconds: u64,
-    ) -> u64 {
-        if timestamp_seconds < sns_genesis_timestamp_seconds {
-            log!(
-                ERROR,
-                "{}ERROR: timestamp_seconds ({}) less that sns_genesis ({})",
-                log_prefix(),
-                timestamp_seconds,
-                sns_genesis_timestamp_seconds,
-            );
-            return 0;
-        }
-
-        let d_seconds = timestamp_seconds - sns_genesis_timestamp_seconds;
-        let round_duration_seconds = self
-            .round_duration_seconds
-            .expect("round_duration_seconds unset");
-        assert!(
-            round_duration_seconds > 0,
-            "round_duration_seconds not positive: {}",
-            round_duration_seconds
-        );
-        d_seconds / round_duration_seconds
     }
 
     /// The length of a reward round.
@@ -498,6 +477,12 @@ mod test {
         final_reward_rate_basis_points: Some(100),   // 1%
     };
 
+    fn round_number_to_instant(r: u64) -> Instant {
+        Instant::from_seconds_since_genesis(i2d(r * VOTING_REWARDS_PARAMETERS
+            .round_duration_seconds
+            .unwrap()))
+    }
+
     #[test]
     fn test_subject_validates() {
         assert_is_ok(VOTING_REWARDS_PARAMETERS.validate());
@@ -510,9 +495,10 @@ mod test {
             reward_rate_transition_duration_seconds: Some(0),
             ..VOTING_REWARDS_PARAMETERS
         };
-        for i in 0..100 {
+        for round_number in 1..=100 {
             assert_eq!(
-                parameters_with_zero_transition_duration_seconds.reward_rate(i),
+                parameters_with_zero_transition_duration_seconds
+                    .reward_rate_at(round_number_to_instant(round_number),),
                 expected,
             );
         }
@@ -526,21 +512,33 @@ mod test {
             ..VOTING_REWARDS_PARAMETERS
         };
         let expected = RewardRate::from_basis_points(100);
-        assert_eq!(parameters.reward_rate(100), expected,);
+        assert_eq!(
+            parameters.reward_rate_at(round_number_to_instant(100)),
+            expected,
+        );
     }
 
     #[test]
     fn reward_rate_flattens_out() {
         let expected = RewardRate::from_basis_points(100);
-        assert_eq!(VOTING_REWARDS_PARAMETERS.reward_rate(42), expected,);
-        assert_eq!(VOTING_REWARDS_PARAMETERS.reward_rate(42 + 5), expected,);
-        assert_eq!(VOTING_REWARDS_PARAMETERS.reward_rate(123456), expected,);
+        assert_eq!(
+            VOTING_REWARDS_PARAMETERS.reward_rate_at(round_number_to_instant(42)),
+            expected
+        );
+        assert_eq!(
+            VOTING_REWARDS_PARAMETERS.reward_rate_at(round_number_to_instant(42 + 5)),
+            expected
+        );
+        assert_eq!(
+            VOTING_REWARDS_PARAMETERS.reward_rate_at(round_number_to_instant(123456)),
+            expected
+        );
     }
 
     #[test]
     fn reward_for_first_day() {
         assert_eq!(
-            VOTING_REWARDS_PARAMETERS.reward_rate(1),
+            VOTING_REWARDS_PARAMETERS.reward_rate_at(round_number_to_instant(0)),
             RewardRate::from_basis_points(200),
         );
     }
@@ -553,7 +551,8 @@ mod test {
         let r_f = VOTING_REWARDS_PARAMETERS.final_reward_rate();
 
         for round in 2..TRANSITION_ROUND_COUNT {
-            let reward_rate = VOTING_REWARDS_PARAMETERS.reward_rate(round);
+            let reward_rate =
+                VOTING_REWARDS_PARAMETERS.reward_rate_at(round_number_to_instant(round));
             assert!(
                 reward_rate < r_i,
                 "round = {}, r_i = {:#?}, reward_rate = {:#?}",
@@ -574,9 +573,12 @@ mod test {
     #[test]
     fn reward_is_convex_and_decreasing() {
         for reward_round in 1..=(TRANSITION_ROUND_COUNT - 2) {
-            let previous = VOTING_REWARDS_PARAMETERS.reward_rate(reward_round);
-            let current = VOTING_REWARDS_PARAMETERS.reward_rate(reward_round + 1);
-            let next = VOTING_REWARDS_PARAMETERS.reward_rate(reward_round + 2);
+            let previous =
+                VOTING_REWARDS_PARAMETERS.reward_rate_at(round_number_to_instant(reward_round));
+            let current =
+                VOTING_REWARDS_PARAMETERS.reward_rate_at(round_number_to_instant(reward_round + 1));
+            let next =
+                VOTING_REWARDS_PARAMETERS.reward_rate_at(round_number_to_instant(reward_round + 2));
             // First "derivative" is negative.
             assert!(previous > current);
             assert!(current > next);

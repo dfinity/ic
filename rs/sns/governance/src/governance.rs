@@ -636,9 +636,9 @@ impl Governance {
         nns_ledger: Box<dyn ICRC1Ledger>,
     ) -> Self {
         let mut proto = proto.into_inner();
+        let now = env.now();
 
         if proto.genesis_timestamp_seconds == 0 {
-            let now = env.now();
             proto.genesis_timestamp_seconds = now;
 
             // Neurons available at genesis should have their timestamp
@@ -654,10 +654,11 @@ impl Governance {
             // This is required to be able to compute accurately the rewards for the
             // very first reward distribution.
             proto.latest_reward_event = Some(RewardEvent {
-                actual_timestamp_seconds: env.now(),
+                actual_timestamp_seconds: now,
                 round: 0,
                 settled_proposals: vec![],
                 distributed_e8s_equivalent: 0,
+                end_timestamp_seconds: Some(now),
             })
         }
 
@@ -2836,6 +2837,8 @@ impl Governance {
             failure_reason: ProposalData::default().failure_reason,
             reward_event_round: ProposalData::default().reward_event_round,
             wait_for_quiet_state: ProposalData::default().wait_for_quiet_state,
+            reward_event_end_timestamp_seconds: ProposalData::default()
+                .reward_event_end_timestamp_seconds,
         };
 
         proposal_data.wait_for_quiet_state = Some(WaitForQuietState {
@@ -4124,19 +4127,35 @@ impl Governance {
     /// Returns `true` if rewards should be distributed (which is the case if
     /// enough time has passed since the last reward event) and `false` otherwise
     fn should_distribute_rewards(&self) -> bool {
+        let now = self.env.now();
+
         let voting_rewards_parameters =
             match &self.nervous_system_parameters().voting_rewards_parameters {
                 None => return false,
                 Some(ok) => ok,
             };
-
         if !voting_rewards_parameters.rewards_enabled() {
             return false;
         }
 
-        voting_rewards_parameters
-            .most_recent_round(self.env.now(), self.proto.genesis_timestamp_seconds)
-            > self.latest_reward_event().round
+        let seconds_since_last_reward_event = now.saturating_sub(
+            self.latest_reward_event()
+                .end_timestamp_seconds
+                .unwrap_or_default(),
+        );
+        let round_duration_seconds = match voting_rewards_parameters.round_duration_seconds {
+            Some(s) => s,
+            None => {
+                log!(
+                    ERROR,
+                    "round_duration_seconds unset:\n{:#?}",
+                    voting_rewards_parameters,
+                );
+                return false;
+            }
+        };
+
+        seconds_since_last_reward_event > round_duration_seconds
     }
 
     /// Creates a reward event.
@@ -4148,6 +4167,7 @@ impl Governance {
     /// * associates those proposals to the new reward event and cleans their ballots
     fn distribute_rewards(&mut self, supply: Tokens) {
         log!(INFO, "distribute_rewards. Supply: {:?}", supply);
+        let now = self.env.now();
 
         // VotingRewardsParameters should always be set,
         // but we check and return early just in case.
@@ -4173,27 +4193,44 @@ impl Governance {
             return;
         }
 
-        let most_recent_round: u64 = voting_rewards_parameters
-            .most_recent_round(self.env.now(), self.proto.genesis_timestamp_seconds);
+        let round_duration_seconds = match voting_rewards_parameters.round_duration_seconds {
+            Some(s) => s,
+            None => {
+                log!(
+                    ERROR,
+                    "round_duration_seconds not set:\n{:#?}",
+                    voting_rewards_parameters,
+                );
+                return;
+            }
+        };
 
-        if most_recent_round <= self.latest_reward_event().round {
+        let reward_start_timestamp_seconds = self
+            .latest_reward_event()
+            .end_timestamp_seconds
+            .unwrap_or_default();
+        let new_rounds_count = now
+            .saturating_sub(reward_start_timestamp_seconds)
+            .saturating_div(round_duration_seconds);
+        if new_rounds_count == 0 {
             // This may happen, in case consider_distributing_rewards was called
             // several times at almost the same time. This is
             // harmless, just abandon.
             return;
         }
-
         // Log if we are about to "back fill".
-        if most_recent_round > 1 + self.latest_reward_event().round {
+        if new_rounds_count > 1 {
             log!(
-                ERROR,
+                INFO,
                 "Some reward distribution should have happened, but were missed. \
-                 It is now {} periods since rewards start time, and the last distribution \
-                 nominally happened at {} periods since rewards start time.",
-                most_recent_round,
-                self.latest_reward_event().round
+                 It is now {}. Whereas, latest_reward_event:\n{:#?}",
+                now,
+                self.latest_reward_event(),
             );
         }
+        let reward_event_end_timestamp_seconds = new_rounds_count
+            .saturating_mul(round_duration_seconds)
+            .saturating_add(reward_start_timestamp_seconds);
 
         // What's going on here looks a little complex, but it's just a slightly
         // more advanced version of non-compounding interest. The main
@@ -4208,21 +4245,25 @@ impl Governance {
         // length of a reward round is used as the duration. The rate is
         // calculated using VotingRewardsParameters::reward_rate, because it
         // varies from round to round.
-        let rounds = (self.latest_reward_event().round + 1)..=most_recent_round;
-        let fraction: Decimal = rounds
-            .map(|round| {
-                // Internally, RewardWeight has a (private) per_year field;
-                // whereas, Duration has a (private) field named days. The *
-                // operator correctly takes this into account.
-                voting_rewards_parameters.reward_rate(round)
-                    * voting_rewards_parameters.round_duration()
-            })
-            .sum();
-        debug_assert!(fraction >= dec!(0), "{}", fraction);
+        let rewards_purse_e8s = {
+            let mut result = dec!(0);
+            let supply = i2d(supply.get_e8s());
 
-        // Because of rounding (and other shenanigans), it is possible that some
-        // portion of this amount ends up not being actually distributed.
-        let rewards_purse_e8s = fraction * i2d(supply.get_e8s());
+            for i in 1..=new_rounds_count {
+                let seconds_since_genesis = round_duration_seconds
+                    .saturating_mul(i)
+                    .saturating_add(reward_start_timestamp_seconds)
+                    .saturating_sub(self.proto.genesis_timestamp_seconds);
+
+                let current_reward_rate = voting_rewards_parameters.reward_rate_at(
+                    crate::reward::Instant::from_seconds_since_genesis(i2d(seconds_since_genesis)),
+                );
+
+                result += current_reward_rate * voting_rewards_parameters.round_duration() * supply;
+            }
+
+            result
+        };
         debug_assert!(rewards_purse_e8s >= dec!(0), "{}", rewards_purse_e8s);
 
         let considered_proposals: Vec<ProposalId> =
@@ -4276,9 +4317,8 @@ impl Governance {
             neuron_id_to_reward_shares,
         );
 
-        // As noted in an earlier comment, this could differ from
-        // rewards_purse_e8s due to rounding, and other degenerate
-        // circumstances.
+        // Because of rounding (and other shenanigans), it is possible that some
+        // portion of this amount ends up not being actually distributed.
         let mut distributed_e8s_equivalent = 0_u64;
         // Now that we know the size of the pie (rewards_purse_e8s), and how
         // much of it each neuron is supposed to get (*_reward_shares), we now
@@ -4353,7 +4393,9 @@ impl Governance {
             rewards_purse_e8s,
         );
 
-        let now = self.env.now();
+        // This field is deprecated. People should really use end_timestamp_seconds
+        // instead. This value can still be used if round duration is not changed.
+        let new_reward_event_round = self.latest_reward_event().round + new_rounds_count;
         // Settle proposals.
         for pid in considered_proposals.iter() {
             // Before considering a proposal for reward, it must be fully processed --
@@ -4413,7 +4455,8 @@ impl Governance {
 
             // This is where the proposal becomes Settled, at least in the eyes
             // of the ProposalData::reward_status method.
-            p.reward_event_round = most_recent_round;
+            p.reward_event_end_timestamp_seconds = Some(reward_event_end_timestamp_seconds);
+            p.reward_event_round = new_reward_event_round;
 
             // Ballots are used to determine two things:
             //   1. (obviously and primarily) whether to execute the proposal.
@@ -4426,10 +4469,11 @@ impl Governance {
 
         // Conclude this round of rewards.
         self.proto.latest_reward_event = Some(RewardEvent {
-            round: most_recent_round,
+            round: new_reward_event_round,
             actual_timestamp_seconds: now,
             settled_proposals: considered_proposals,
             distributed_e8s_equivalent,
+            end_timestamp_seconds: Some(reward_event_end_timestamp_seconds),
         })
     }
 

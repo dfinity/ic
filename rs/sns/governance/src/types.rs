@@ -1423,12 +1423,13 @@ impl fmt::Display for RewardEvent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "RewardEvent {{ round: {} distributed_e8s_equivalent: {}\
+            "RewardEvent {{ end_timestamp_seconds: {} distributed_e8s_equivalent: {}\
                    actual_timestamp_seconds: {} settled_proposals: <vec of size {}> }})",
-            self.round,
+            self.end_timestamp_seconds.unwrap_or_default(),
             self.distributed_e8s_equivalent,
             self.actual_timestamp_seconds,
-            self.settled_proposals.len()
+            self.settled_proposals.len(),
+            // The `round` field is not shown, because it is deprecated.
         )
     }
 }
