@@ -31,6 +31,7 @@ use prometheus::{histogram_opts, labels, Histogram, IntCounter};
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
+use std::time::Duration;
 
 #[derive(Debug, PartialEq, Eq)]
 enum AdvertSource {
@@ -128,7 +129,6 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
         let shutdown = Arc::new(AtomicBool::new(false));
 
         // Spawn the processor thread
-        let sender_cl = sender.clone();
         let pending_artifacts_cl = pending_artifacts.clone();
         let shutdown_cl = shutdown.clone();
         let handle = ThreadBuilder::new()
@@ -139,7 +139,6 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
                     time_source,
                     client,
                     Box::new(send_advert),
-                    sender_cl,
                     receiver,
                     ArtifactProcessorMetrics::new(metrics_registry, Artifact::TAG.to_string()),
                     shutdown_cl,
@@ -170,19 +169,26 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
         time_source: Arc<SysTimeSource>,
         client: Box<dyn ArtifactProcessor<Artifact>>,
         send_advert: Box<S>,
-        sender: Sender<ProcessRequest>,
         receiver: Receiver<ProcessRequest>,
         mut metrics: ArtifactProcessorMetrics,
         shutdown: Arc<AtomicBool>,
     ) {
-        let recv_timeout = std::time::Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC);
+        let mut last_on_state_change_result = ProcessingResult::StateUnchanged;
         loop {
+            // TODO: assess impact of continued processing in same
+            // iteration if StateChanged
+            let recv_timeout = match last_on_state_change_result {
+                ProcessingResult::StateChanged => Duration::from_millis(0),
+                ProcessingResult::StateUnchanged => {
+                    Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
+                }
+            };
             let ret = receiver.recv_timeout(recv_timeout);
             if shutdown.load(SeqCst) {
                 return;
             }
 
-            match ret {
+            last_on_state_change_result = match ret {
                 Ok(_) | Err(RecvTimeoutError::Timeout) => {
                     time_source.update_time().ok();
 
@@ -196,17 +202,11 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
                     let (adverts, result) = metrics
                         .with_metrics(|| client.process_changes(time_source.as_ref(), artifacts));
 
-                    if let ProcessingResult::StateChanged = result {
-                        // TODO: assess impact of continued processing in same
-                        // iteration if StateChanged, get rid of sending self messages
-                        sender
-                            .send(ProcessRequest)
-                            .unwrap_or_else(|err| panic!("Failed to send request: {:?}", err));
-                    }
                     adverts.into_iter().for_each(&send_advert);
+                    result
                 }
                 Err(RecvTimeoutError::Disconnected) => return,
-            }
+            };
         }
     }
 }
