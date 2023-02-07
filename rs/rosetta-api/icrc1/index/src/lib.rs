@@ -271,7 +271,7 @@ async fn build_index() -> Result<(), String> {
 /// Compute the waiting time before next indexing
 pub fn compute_wait_time(indexed_tx_count: usize) -> u64 {
     if indexed_tx_count >= MAX_TRANSACTIONS_PER_RESPONSE {
-        // If we indexed more than MAX_SPEED_TRESHOLD,
+        // If we indexed more than MAX_SPEED_THRESHOLD,
         // we index again on the next heartbeat.
         return 0;
     }
