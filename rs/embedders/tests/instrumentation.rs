@@ -1,10 +1,7 @@
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_embedders::{
     wasm_utils::{
-        instrumentation::{export_additional_symbols, ExportModuleData},
-        validate_and_instrument_for_testing,
-        validation::RESERVED_SYMBOLS,
-        wasm_transform::Module,
+        validate_and_instrument_for_testing, validation::RESERVED_SYMBOLS, wasm_transform::Module,
         Segments,
     },
     WasmtimeEmbedder,
@@ -199,15 +196,12 @@ fn test_exports_only_reserved_symbols() {
     .map(BinaryEncodedWasm::new)
     .unwrap();
 
-    let module = Module::parse(wasm.as_slice(), false).unwrap();
-    let mut extra_data = None;
-    let module = export_additional_symbols(
-        module,
-        &ExportModuleData::default(),
-        &mut extra_data,
-        ic_config::flag_status::FlagStatus::Disabled,
-        0,
-    );
+    let (_, instrumentation_details) = validate_and_instrument_for_testing(
+        &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
+        &wasm,
+    )
+    .unwrap();
+    let module = Module::parse(instrumentation_details.binary.as_slice(), true).unwrap();
 
     for export in module.exports {
         assert!(RESERVED_SYMBOLS.contains(&export.name))

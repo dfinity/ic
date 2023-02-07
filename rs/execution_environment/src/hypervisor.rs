@@ -193,6 +193,7 @@ impl Hypervisor {
         embedder_config.cost_to_compile_wasm_instruction = config.cost_to_compile_wasm_instruction;
         embedder_config.max_sandbox_count = config.max_sandbox_count;
         embedder_config.max_sandbox_idle_time = config.max_sandbox_idle_time;
+        embedder_config.subnet_type = own_subnet_type;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
             FlagStatus::Enabled => {

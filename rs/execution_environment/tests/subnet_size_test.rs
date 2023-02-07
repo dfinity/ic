@@ -30,7 +30,7 @@ pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 
 const TEST_SUBNET_SIZE_MAX: usize = 34;
 const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(100 * B as u128);
-const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 996_000;
+const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 1_038_000;
 const TEST_CANISTER_EXECUTE_INGRESS_INSTRUCTIONS: u64 = 30;
 
 /// This is a canister that keeps a counter on the heap and exposes various test

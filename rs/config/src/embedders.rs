@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use ic_base_types::NumBytes;
+use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
 use ic_types::{NumInstructions, NumPages};
 use serde::{Deserialize, Serialize};
@@ -112,6 +113,10 @@ pub struct Config {
     /// A sandbox process may be evicted after it has been idle for this
     /// duration and sandbox process eviction is activated.
     pub max_sandbox_idle_time: Duration,
+
+    /// The type of the local subnet. The default value here should be replaced
+    /// with the correct value at runtime when the hypervisor is created.
+    pub subnet_type: SubnetType,
 }
 
 impl Config {
@@ -130,6 +135,7 @@ impl Config {
             min_sandbox_count: DEFAULT_MIN_SANDBOX_COUNT,
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
+            subnet_type: SubnetType::Application,
         }
     }
 }

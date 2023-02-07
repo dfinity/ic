@@ -1,19 +1,39 @@
-use crate::wasm_utils::instrumentation::InjectedImports;
-use crate::InternalErrorCode;
+//! Wasm implementations of the "ic0" "stable*" APIs to be injected into the
+//! module and replace the imported functions.
+//!
+//! The functions will generally replace read/write/grow/size operations with
+//! memory.copy/memory.grow/memory.size operations on the injected additional
+//! stable memory. Additional work is needed to:
+//!
+//! - properly report errors in a backwards-compatible way
+//! - convert between integer types and check for overflows
+//! - track accesses and dirty pages
+//! - charge for instructions
+//!
+
+use crate::{
+    wasm_utils::instrumentation::InjectedImports,
+    wasmtime_embedder::system_api_complexity::overhead, InternalErrorCode,
+};
 use ic_interfaces::execution_environment::StableMemoryApi;
+use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
 use wasmparser::{BlockType, FuncType, Operator, Type, ValType};
 use wasmtime_environ::WASM_PAGE_SIZE;
 
-use super::{wasm_transform::Body, SystemApiFunc};
+use super::{instrumentation::SpecialIndices, wasm_transform::Body, SystemApiFunc};
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
 
 pub(super) fn replacement_functions(
-    stable_memory_index: u32,
-    count_clean_pages_fn_index: u32,
-    dirty_pages_counter_index: u32,
+    special_indices: SpecialIndices,
+    subnet_type: SubnetType,
 ) -> Vec<(SystemApiFunc, (Type, Body<'static>))> {
+    let count_clean_pages_fn_index = special_indices.count_clean_pages_fn.unwrap();
+    let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix.unwrap();
+    let stable_memory_index = special_indices.stable_memory_index;
+    let decr_instruction_counter_fn = special_indices.decr_instruction_counter_fn;
+
     use Operator::*;
     let page_size_shift = PAGE_SIZE.trailing_zeros() as i32;
     let stable_memory_bytemap_index = stable_memory_index + 1;
@@ -195,6 +215,24 @@ pub(super) fn replacement_functions(
                 Body {
                     locals: vec![],
                     instructions: vec![
+                        // Decrement instruction counter by the size of the copy
+                        // and fixed overhead.  On system subnets this charge is
+                        // skipped.
+                        match subnet_type {
+                            SubnetType::System => I32Const { value: 0 },
+                            SubnetType::Application | SubnetType::VerifiedApplication => {
+                                LocalGet { local_index: 2 }
+                            }
+                        },
+                        I64ExtendI32U,
+                        I64Const {
+                            value: overhead::STABLE_READ.get() as i64,
+                        },
+                        I64Add,
+                        Call {
+                            function_index: decr_instruction_counter_fn,
+                        },
+                        Drop,
                         // If memory is too big for 32bit api, we trap
                         MemorySize {
                             mem: stable_memory_index,
@@ -263,6 +301,23 @@ pub(super) fn replacement_functions(
                 Body {
                     locals: vec![],
                     instructions: vec![
+                        // Decrement instruction counter by the size of the copy
+                        // and fixed overhead.  On system subnets this charge is
+                        // skipped.
+                        match subnet_type {
+                            SubnetType::System => I64Const { value: 0 },
+                            SubnetType::Application | SubnetType::VerifiedApplication => {
+                                LocalGet { local_index: 2 }
+                            }
+                        },
+                        I64Const {
+                            value: overhead::STABLE64_READ.get() as i64,
+                        },
+                        I64Add,
+                        Call {
+                            function_index: decr_instruction_counter_fn,
+                        },
+                        Drop,
                         // if size is 0 we return
                         // (correctness of the code that follows depends on the size being > 0)
                         // note that we won't return errors if addresses are out of bounds
@@ -372,6 +427,24 @@ pub(super) fn replacement_functions(
                 Body {
                     locals: vec![(3, ValType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt
                     instructions: vec![
+                        // Decrement instruction counter by the size of the copy
+                        // and fixed overhead.  On system subnets this charge is
+                        // skipped.
+                        match subnet_type {
+                            SubnetType::System => I32Const { value: 0 },
+                            SubnetType::Application | SubnetType::VerifiedApplication => {
+                                LocalGet { local_index: 2 }
+                            }
+                        },
+                        I64ExtendI32U,
+                        I64Const {
+                            value: overhead::STABLE_WRITE.get() as i64,
+                        },
+                        I64Add,
+                        Call {
+                            function_index: decr_instruction_counter_fn,
+                        },
+                        Drop,
                         // If memory is too big for 32bit api, we trap
                         MemorySize {
                             mem: stable_memory_index,
@@ -504,6 +577,23 @@ pub(super) fn replacement_functions(
                 Body {
                     locals: vec![(3, ValType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt
                     instructions: vec![
+                        // Decrement instruction counter by the size of the copy
+                        // and fixed overhead.  On system subnets this charge is
+                        // skipped.
+                        match subnet_type {
+                            SubnetType::System => I64Const { value: 0 },
+                            SubnetType::Application | SubnetType::VerifiedApplication => {
+                                LocalGet { local_index: 2 }
+                            }
+                        },
+                        I64Const {
+                            value: overhead::STABLE64_WRITE.get() as i64,
+                        },
+                        I64Add,
+                        Call {
+                            function_index: decr_instruction_counter_fn,
+                        },
+                        Drop,
                         // if size is 0 we return
                         // (correctness of the code that follows depends on the size being > 0)
                         // note that we won't return errors if addresses are out of bounds
