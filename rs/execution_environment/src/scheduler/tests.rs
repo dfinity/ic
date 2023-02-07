@@ -416,6 +416,7 @@ fn each_too_complex_message_aborts_execution() {
             _ => unreachable!("Expected a failed state but got: {state:?}"),
         };
         assert_eq!(ErrorCode::CanisterInstructionLimitExceeded, err.code());
+        assert!(err.description().contains("too many System API calls"));
         env.tick();
     }
 }
@@ -451,6 +452,7 @@ fn each_too_complex_message_aborts_dts_execution() {
             _ => unreachable!("Expected a failed state but got: {state:?}"),
         };
         assert_eq!(ErrorCode::CanisterInstructionLimitExceeded, err.code());
+        assert!(err.description().contains("too many System API calls"));
     }
 }
 

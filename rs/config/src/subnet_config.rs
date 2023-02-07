@@ -13,12 +13,14 @@ const B: u64 = 1_000_000_000;
 const M: u64 = 1_000_000;
 
 // The limit on the number of instructions a message is allowed to executed.
-// Going above the limit results in an `InstructionLimitExceeded` error.
+// Going above the limit results in an `InstructionLimitExceeded` or
+// `ExecutionComplexityLimitExceeded` error.
 pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE: NumInstructions = NumInstructions::new(20 * B);
 
 // The limit on the number of instructions a message is allowed to execute
 // without deterministic time slicing.
-// Going above the limit results in an `InstructionLimitExceeded` error.
+// Going above the limit results in an `InstructionLimitExceeded` or
+// `ExecutionComplexityLimitExceeded` error.
 pub(crate) const MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS: NumInstructions =
     NumInstructions::new(5 * B);
 
