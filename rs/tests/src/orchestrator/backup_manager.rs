@@ -147,8 +147,8 @@ pub fn test(env: TestEnv) {
     };
 
     let cold_storage = Some(ColdStorage {
-        cold_storage_dir,
-        versions_hot: 2,
+        cold_storage_dir: cold_storage_dir.clone(),
+        versions_hot: 1,
     });
 
     let config = Config {
@@ -175,8 +175,8 @@ pub fn test(env: TestEnv) {
 
     let ic_backup_path = binaries_path.join("ic-backup");
 
-    let mut command = Command::new(ic_backup_path);
-    command.arg("--config-file").arg(config_file);
+    let mut command = Command::new(&ic_backup_path);
+    command.arg("--config-file").arg(&config_file);
     info!(log, "Will execute: {:?}", command);
 
     let mut child = command
@@ -247,8 +247,44 @@ pub fn test(env: TestEnv) {
         sleep_secs(5);
     }
 
+    info!(log, "Restart and wait for the cold storage to happen");
+    child.kill().expect("Error killing backup process");
+
+    let mut command = Command::new(ic_backup_path);
+    command.arg("--config-file").arg(config_file);
+    info!(log, "Will execute: {:?}", command);
+    let mut child = command
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("Failed to start backup process");
+    info!(log, "Started process: {}", child.id());
+
+    assert!(cold_storage_exists(
+        cold_storage_dir.join(subnet_id.to_string())
+    ));
+    info!(log, "Artifacts and states are moved to cold storage");
+
     info!(log, "Kill child process");
     child.kill().expect("Error killing backup process");
+}
+
+fn cold_storage_exists(cold_storage_dir: PathBuf) -> bool {
+    for _ in 0..12 {
+        if dir_exists_and_have_file(&cold_storage_dir.join("states"))
+            && dir_exists_and_have_file(&cold_storage_dir.join("artifacts"))
+        {
+            return true;
+        }
+        sleep_secs(10);
+    }
+    false
+}
+
+fn dir_exists_and_have_file(dir: &PathBuf) -> bool {
+    if !dir.exists() {
+        return false;
+    }
+    fs::read_dir(dir).unwrap().next().is_some()
 }
 
 fn copy_file(binaries_path: &Path, backup_binaries_dir: &Path, file_name: &str) {
