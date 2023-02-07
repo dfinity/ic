@@ -723,9 +723,6 @@ filegroup(
 system_test(
     name = "rosetta_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -840,9 +837,6 @@ CANISTER_HTTP_RUNTIME_DEPS = [
 system_test(
     name = "canister_http_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "allow_to_fail",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
@@ -876,7 +870,6 @@ system_test(
     name = "canister_http_fault_tolerance_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "allow_to_fail",
         "manual",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS

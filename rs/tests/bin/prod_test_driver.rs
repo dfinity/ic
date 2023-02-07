@@ -2,8 +2,7 @@ use clap::Parser;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
     canister_http, driver::driver_setup::initialize_env, execution, ledger_tests, message_routing,
-    networking, nns_tests, orchestrator, rosetta_test, wasm_generator_test,
-    workload_counter_canister_test,
+    networking, nns_tests, orchestrator, wasm_generator_test, workload_counter_canister_test,
 };
 use ic_tests::{
     driver::{
@@ -335,11 +334,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 ),
                  */
                 pot_with_setup(
-                    "canister_http",
-                    canister_http::lib::config,
-                    par(vec![sys_t("http_basic", canister_http::http_basic::test)]),
-                ),
-                pot_with_setup(
                     "firewall_priority_pot",
                     networking::firewall_priority::config,
                     par(vec![sys_t(
@@ -476,26 +470,14 @@ fn get_test_suites() -> HashMap<String, Suite> {
     m.add_suite(
         suite(
             "staging", //runs nightly, allowed to fail
-            vec![
-                pot_with_setup(
-                    "xnet_120_subnets_pot",
-                    xnet_nightly_120_subnets.clone().build(),
-                    par(vec![sys_t(
-                        "xnet_slo_120_subnets_test",
-                        xnet_nightly_120_subnets.test(),
-                    )]),
-                ),
-                // NOTE: This test is already bazelified, however, stability of the test needs to be explored.
-                // TODO: Provided that test is reliable, make it part of the rc.
-                pot_with_setup(
-                    "canister_http_fault_tolerance",
-                    canister_http::lib::config,
-                    par(vec![sys_t(
-                        "http_fault_tolerance",
-                        canister_http::http_fault_tolerance::test,
-                    )]),
-                ),
-            ],
+            vec![pot_with_setup(
+                "xnet_120_subnets_pot",
+                xnet_nightly_120_subnets.clone().build(),
+                par(vec![sys_t(
+                    "xnet_slo_120_subnets_test",
+                    xnet_nightly_120_subnets.test(),
+                )]),
+            )],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
     );
@@ -597,22 +579,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )]),
             )],
         )
-        .with_alert(TEST_FAILURE_CHANNEL),
-    );
-
-    m.add_suite(
-        suite(
-            "rosetta",
-            vec![pot_with_setup(
-                "rosetta_pot",
-                rosetta_test::config,
-                par(vec![sys_t(
-                    "rosetta_test_everything",
-                    rosetta_test::test_everything,
-                )]),
-            )],
-        )
-        .with_alert(ENG_FINANCIAL_INTEGRATION)
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 

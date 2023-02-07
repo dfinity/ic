@@ -118,17 +118,6 @@ test-prod-test-driver-e2e:
             | tee "${WORKING_DIR}/unstructured-logs.log" \
             | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
 
-rosetta-pre-master:
-  extends: .system-tests
-  variables:
-    SUITE_NAME: "rosetta"
-  script:
-    - |
-      # Ensure that rosetta 3rd-party dependencies are available
-      # shellcheck disable=SC1090
-      . "${CI_PROJECT_DIR}/rs/tests/prepare-rosetta-deps.sh"
-    - *run-farm-based-test
-
 .build-and-test-monpoly-docker-e2e: &build-and-test-monpoly-docker-e2e |
   # build monpoly_pipeline container image
   docker build --build-arg MONPOLY_PIPELINE_GIT_REVISION="${CI_COMMIT_SHA}" -t monpoly_pipeline:"${CI_COMMIT_SHA}" ./policy-monitoring
