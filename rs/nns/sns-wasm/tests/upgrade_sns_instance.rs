@@ -878,17 +878,12 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
 
     let deployed_version = version_response.deployed_version.unwrap();
     assert_eq!(deployed_version, old_version_plus_governance);
-    // Ensure the recorded archive_wasm_hash is not the same as the one contained in ledger
-    let ledgers_archive_wasm_hash = build_archive_sns_wasm().sha256_hash().to_vec();
-    assert_ne!(
-        deployed_version.archive_wasm_hash,
-        ledgers_archive_wasm_hash
-    );
 
+    // Ensure we are still mismatched between running archive version and deployed_version.archive_wasm_hash
     let running_archive_statuses = get_canister_statuses(SnsCanisterType::Archive, &machine, root);
     assert!(running_archive_statuses
         .iter()
-        .all(|s| { s.module_hash().unwrap() == ledgers_archive_wasm_hash }));
+        .all(|s| { s.module_hash().unwrap() != deployed_version.archive_wasm_hash }));
 
     // After checking version stuff, ensure proposal executed (not failed)
     state_test_helpers::sns_wait_for_proposal_execution(&machine, governance, proposal_id);

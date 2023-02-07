@@ -13,7 +13,6 @@ CANISTERS = {
     "http_counter.wasm": "//rs/tests/test_canisters/http_counter",
     "ic-ckbtc-minter.wasm": "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
     "ic-ckbtc-minter_debug.wasm": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
-    "ic-icrc1-archive.wasm": "//rs/rosetta-api/icrc1/archive:archive_canister",
     "ic-icrc1-index.wasm": "//rs/rosetta-api/icrc1/index:index_canister",
     "ic-icrc1-ledger.wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "ic-nervous-system-common-test-canister.wasm": "//rs/nervous_system/common/test_canister",
@@ -21,7 +20,6 @@ CANISTERS = {
     "inter_canister_error_handling.wasm": "//rs/rust_canisters/tests:inter_canister_error_handling",
     "kv_store.wasm": "//rs/tests/test_canisters/kv_store",
     "json.wasm": "//rs/rust_canisters/tests:json",
-    "ledger-archive-node-canister.wasm": "//rs/rosetta-api/icp_ledger/archive:ledger-archive-node-canister-wasm",
     "ledger-canister.wasm": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm",
     "ledger-canister_notify-method.wasm": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
     "lifeline.wasm": "//rs/nns/handlers/lifeline:lifeline_actor",
@@ -96,16 +94,26 @@ CANISTERS_MAX_SIZE_IN_BYTES = {
     for (name, target) in CANISTERS.items()
 ]
 
+COMPRESSED_CANISTERS = {
+    "ic-btc-canister.wasm.gz": "@btc_canister//file",
+    "ic-icrc1-archive.wasm.gz": "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
+    "ledger-archive-node-canister.wasm.gz": "//rs/rosetta-api/icp_ledger/archive:ledger_archive_node_canister.wasm.gz",
+}
+
 # `bazel cquery --output=files` that is used by build-ic script does not show external sources of `filegroup` targets.
-copy_file(
-    name = "copy_ic-btc-canister.wasm.gz",
-    src = "@btc_canister//file",
-    out = "ic-btc-canister.wasm.gz",
-)
+[
+    copy_file(
+        name = "copy_" + compressed_file_name,
+        src = target,
+        out = compressed_file_name,
+    )
+    for (compressed_file_name, target) in COMPRESSED_CANISTERS.items()
+]
 
 filegroup(
     name = "canisters",
-    srcs = [name + ".gz" for name in CANISTERS] + [":ic-btc-canister.wasm.gz"],
+    srcs = [name + ".gz" for name in CANISTERS] +
+           [name for name in COMPRESSED_CANISTERS],
     visibility = ["//visibility:public"],
 )
 
