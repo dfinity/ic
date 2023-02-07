@@ -103,8 +103,8 @@ pub struct DeployArgs {
     /// Saves the returned canister IDs in the specified json file.
     ///
     /// Default: canister_ids.json
-    #[structopt(long)]
-    save_to: Option<String>,
+    #[structopt(default_value = "canister_ids.json", long)]
+    save_to: PathBuf,
 
     /// Saves the SNS canister IDs in the specified json file for sns-quill.
     ///
