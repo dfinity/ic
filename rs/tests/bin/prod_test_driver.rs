@@ -552,6 +552,15 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 .with_alert(TEST_FAILURE_CHANNEL)
                 .with_alert(ENG_TESTING_CHANNEL),
                 pot_with_setup(
+                    "nns_backup_pot",
+                    orchestrator::nns_backup::config,
+                    par(vec![sys_t(
+                        "nns_backup_test",
+                        orchestrator::nns_backup::test,
+                    )]),
+                )
+                .with_alert(ENG_CONSENSUS_CHANNEL),
+                pot_with_setup(
                     "unassigned_node_upgrade_test_pot",
                     orchestrator::unassigned_node_upgrade_test::config,
                     par(vec![sys_t(
