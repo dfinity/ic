@@ -2511,6 +2511,11 @@ pub mod claim_swap_neurons_request {
         /// This field is required.
         #[prost(message, optional, tag = "7")]
         pub neuron_id: ::core::option::Option<super::NeuronId>,
+        /// The list of NeuronIds that the created Neuron will follow on all SNS Proposal
+        /// Actions known to governance at the time. Additional followees and following
+        /// relations can be added after neuron creation.
+        #[prost(message, repeated, tag = "8")]
+        pub followees: ::prost::alloc::vec::Vec<super::NeuronId>,
     }
 }
 /// The response for the `claim_swap_neurons` method.
@@ -2863,6 +2868,9 @@ pub enum ClaimSwapNeuronsError {
     /// The caller of `claim_swap_neurons` was unauthorized. No
     /// requested neurons were claimed if this error is returned.
     Unauthorized = 1,
+    /// The Governance canister encountered an internal error. No
+    /// requested neurons were claimed if this error is returned.
+    Internal = 2,
 }
 impl ClaimSwapNeuronsError {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -2873,6 +2881,7 @@ impl ClaimSwapNeuronsError {
         match self {
             ClaimSwapNeuronsError::Unspecified => "CLAIM_SWAP_NEURONS_ERROR_UNSPECIFIED",
             ClaimSwapNeuronsError::Unauthorized => "CLAIM_SWAP_NEURONS_ERROR_UNAUTHORIZED",
+            ClaimSwapNeuronsError::Internal => "CLAIM_SWAP_NEURONS_ERROR_INTERNAL",
         }
     }
 }

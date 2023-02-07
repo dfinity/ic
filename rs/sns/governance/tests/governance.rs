@@ -1811,20 +1811,30 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
         .parameters
         .as_mut()
         .unwrap()
-        .max_number_of_neurons = Some(0);
+        .max_number_of_neurons = Some(1);
 
     // Create a neuron id so the test can identify the correct item in the response
-    let test_neuron_id = NeuronId::new_test_neuron_id(1);
+    let test_neuron_id_success = NeuronId::new_test_neuron_id(1);
+    let test_neuron_id_failure = NeuronId::new_test_neuron_id(2);
 
     // Create a request with a NeuronParameter should succeed
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![NeuronParameters {
-            neuron_id: Some(test_neuron_id.clone()),
-            controller: Some(PrincipalId::new_user_test_id(1000)),
-            stake_e8s: Some(E8),
-            dissolve_delay_seconds: Some(0),
-            ..Default::default() // The rest of the parameters are not required for this test
-        }],
+        neuron_parameters: vec![
+            NeuronParameters {
+                neuron_id: Some(test_neuron_id_success.clone()),
+                controller: Some(PrincipalId::new_user_test_id(1000)),
+                stake_e8s: Some(E8),
+                dissolve_delay_seconds: Some(0),
+                ..Default::default() // The rest of the parameters are not required for this test
+            },
+            NeuronParameters {
+                neuron_id: Some(test_neuron_id_failure.clone()),
+                controller: Some(PrincipalId::new_user_test_id(1000)),
+                stake_e8s: Some(E8),
+                dissolve_delay_seconds: Some(0),
+                ..Default::default() // The rest of the parameters are not required for this test
+            },
+        ],
     };
 
     // Call the method
@@ -1838,10 +1848,16 @@ fn test_claim_swap_neurons_reports_failure_if_neuron_cannot_be_added() {
         response,
         ClaimSwapNeuronsResponse {
             claim_swap_neurons_result: Some(ClaimSwapNeuronsResult::Ok(ClaimedSwapNeurons {
-                swap_neurons: vec![SwapNeuron {
-                    id: Some(test_neuron_id),
-                    status: ClaimedSwapNeuronStatus::MemoryExhausted as i32,
-                }],
+                swap_neurons: vec![
+                    SwapNeuron {
+                        id: Some(test_neuron_id_success),
+                        status: ClaimedSwapNeuronStatus::Success as i32,
+                    },
+                    SwapNeuron {
+                        id: Some(test_neuron_id_failure),
+                        status: ClaimedSwapNeuronStatus::MemoryExhausted as i32
+                    }
+                ],
             })),
         }
     );
@@ -1852,25 +1868,31 @@ fn test_claim_swap_neurons_succeeds() {
     // Set up the test environment with default sale canister id.
     let mut canister_fixture = GovernanceCanisterFixtureBuilder::new().create();
 
-    let neuron_parameters_1 = NeuronParameters {
+    let direct_participant_neuron_params = NeuronParameters {
         neuron_id: Some(NeuronId::new_test_neuron_id(1)),
         controller: Some(PrincipalId::new_user_test_id(1000)),
+        hotkey: None,
         stake_e8s: Some(E8),
         dissolve_delay_seconds: Some(0),
-        ..Default::default() // The rest of the parameters are not required for this test
+        source_nns_neuron_id: None,
+        followees: vec![NeuronId::new_test_neuron_id(10)],
     };
 
-    let neuron_parameters_2 = NeuronParameters {
+    let cf_participant_neuron_params = NeuronParameters {
         neuron_id: Some(NeuronId::new_test_neuron_id(2)),
         controller: Some(PrincipalId::new_user_test_id(1001)),
         hotkey: Some(PrincipalId::new_user_test_id(1002)),
         stake_e8s: Some(2 * E8),
         dissolve_delay_seconds: Some(ONE_MONTH_SECONDS),
         source_nns_neuron_id: Some(2),
+        followees: vec![NeuronId::new_test_neuron_id(20)],
     };
 
     let request = ClaimSwapNeuronsRequest {
-        neuron_parameters: vec![neuron_parameters_1.clone(), neuron_parameters_2.clone()],
+        neuron_parameters: vec![
+            direct_participant_neuron_params.clone(),
+            cf_participant_neuron_params.clone(),
+        ],
     };
 
     // Call the method
@@ -1889,56 +1911,77 @@ fn test_claim_swap_neurons_succeeds() {
     };
 
     // Assert that each NeuronParameter has a response and that it has the correct status
-    let swap_neuron_1 = swap_neurons
+    let direct_participant_swap_neuron = swap_neurons
         .iter()
-        .find(|s| s.id == neuron_parameters_1.neuron_id)
+        .find(|s| s.id == direct_participant_neuron_params.neuron_id)
         .unwrap();
     assert_eq!(
-        swap_neuron_1.status,
+        direct_participant_swap_neuron.status,
         ClaimedSwapNeuronStatus::Success as i32
     );
 
-    let swap_neuron_2 = swap_neurons
+    let cf_participant_swap_neuron = swap_neurons
         .iter()
-        .find(|s| s.id == neuron_parameters_2.neuron_id)
+        .find(|s| s.id == cf_participant_neuron_params.neuron_id)
         .unwrap();
     assert_eq!(
-        swap_neuron_2.status,
+        cf_participant_swap_neuron.status,
         ClaimedSwapNeuronStatus::Success as i32
     );
 
-    let neuron_1 = canister_fixture.get_neuron(neuron_parameters_1.neuron_id.as_ref().unwrap());
-    assert_eq!(neuron_1.id, neuron_parameters_1.neuron_id);
+    // Asserts on Direct Participant
+    let direct_participant_neuron =
+        canister_fixture.get_neuron(direct_participant_neuron_params.neuron_id.as_ref().unwrap());
     assert_eq!(
-        neuron_1.cached_neuron_stake_e8s,
-        neuron_parameters_1.stake_e8s()
+        direct_participant_neuron.id,
+        direct_participant_neuron_params.neuron_id
     );
     assert_eq!(
-        neuron_1.dissolve_state,
+        direct_participant_neuron.cached_neuron_stake_e8s,
+        direct_participant_neuron_params.stake_e8s()
+    );
+    assert_eq!(
+        direct_participant_neuron.dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
-            neuron_parameters_1.dissolve_delay_seconds()
+            direct_participant_neuron_params.dissolve_delay_seconds()
         ))
     );
-    assert_eq!(neuron_1.source_nns_neuron_id, None);
-    assert_eq!(neuron_1.maturity_e8s_equivalent, 0);
-    assert_eq!(neuron_1.neuron_fees_e8s, 0);
+    assert_eq!(direct_participant_neuron.source_nns_neuron_id, None);
+    assert_eq!(direct_participant_neuron.maturity_e8s_equivalent, 0);
+    assert_eq!(direct_participant_neuron.neuron_fees_e8s, 0);
+    assert_eq!(direct_participant_neuron.auto_stake_maturity, None);
+    for followees in direct_participant_neuron.followees.values() {
+        assert_eq!(
+            followees.followees,
+            direct_participant_neuron_params.followees
+        );
+    }
 
-    let neuron_2 = canister_fixture.get_neuron(neuron_parameters_2.neuron_id.as_ref().unwrap());
-    assert_eq!(neuron_2.id, neuron_parameters_2.neuron_id);
+    // Asserts on CF Participant
+    let cf_participant_neuron =
+        canister_fixture.get_neuron(cf_participant_neuron_params.neuron_id.as_ref().unwrap());
     assert_eq!(
-        neuron_2.cached_neuron_stake_e8s,
-        neuron_parameters_2.stake_e8s()
+        cf_participant_neuron.id,
+        cf_participant_neuron_params.neuron_id
     );
     assert_eq!(
-        neuron_2.dissolve_state,
+        cf_participant_neuron.cached_neuron_stake_e8s,
+        cf_participant_neuron_params.stake_e8s()
+    );
+    assert_eq!(
+        cf_participant_neuron.dissolve_state,
         Some(DissolveState::DissolveDelaySeconds(
-            neuron_parameters_2.dissolve_delay_seconds()
+            cf_participant_neuron_params.dissolve_delay_seconds()
         ))
     );
     assert_eq!(
-        neuron_2.source_nns_neuron_id,
-        neuron_parameters_2.source_nns_neuron_id
+        cf_participant_neuron.source_nns_neuron_id,
+        cf_participant_neuron_params.source_nns_neuron_id
     );
-    assert_eq!(neuron_2.maturity_e8s_equivalent, 0);
-    assert_eq!(neuron_2.neuron_fees_e8s, 0);
+    assert_eq!(cf_participant_neuron.maturity_e8s_equivalent, 0);
+    assert_eq!(cf_participant_neuron.neuron_fees_e8s, 0);
+    assert_eq!(cf_participant_neuron.auto_stake_maturity, Some(true));
+    for followees in cf_participant_neuron.followees.values() {
+        assert_eq!(followees.followees, cf_participant_neuron_params.followees);
+    }
 }

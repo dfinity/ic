@@ -40,7 +40,7 @@ use ic_nns_test_utils::{
 };
 use ic_sns_governance::pb::v1::{
     self as sns_governance_pb, governance::Mode as SnsGovernanceMode, ListNeurons,
-    NervousSystemParameters,
+    NervousSystemParameters, NeuronPermission, NeuronPermissionType,
 };
 use ic_sns_init::pb::v1::{
     sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
@@ -54,9 +54,13 @@ use ic_sns_swap::pb::v1::{
     GetStateRequest, GetStateResponse, Init, NewSaleTicketResponse, OpenRequest,
     SetDappControllersCallResult, SetDappControllersResponse,
 };
-use ic_sns_test_utils::state_test_helpers::{
-    canister_status, get_open_ticket, participate_in_swap, send_participation_funds,
-    sns_governance_list_neurons, sns_root_register_dapp_canisters, swap_get_state,
+use ic_sns_test_utils::{
+    now_seconds,
+    state_test_helpers::{
+        canister_status, get_open_ticket, participate_in_swap, send_participation_funds,
+        sns_governance_get_nervous_system_parameters, sns_governance_list_neurons,
+        sns_root_register_dapp_canisters, swap_get_state,
+    },
 };
 use ic_sns_wasm::pb::v1::SnsCanisterIds;
 use ic_state_machine_tests::StateMachine;
@@ -1923,6 +1927,11 @@ fn assert_successful_swap_finalizes_correctly(
     // Step 3.3: Inspect SNS neurons.
     let mut assert_sns_neurons_are_configured_correctly =
         |principal_ids: &[PrincipalId], is_community_fund: bool| {
+            let nervous_system_parameters = sns_governance_get_nervous_system_parameters(
+                &mut state_machine,
+                sns_canister_ids.governance.unwrap().try_into().unwrap(),
+            );
+
             for principal_id in principal_ids {
                 // List all neurons that have the principal_id with some permission in it
                 let observed_sns_neurons = sns_governance_list_neurons(
@@ -1939,6 +1948,11 @@ fn assert_successful_swap_finalizes_correctly(
                 .filter(|n| n.source_nns_neuron_id.is_some() == is_community_fund)
                 .collect::<Vec<_>>();
 
+                let claimer_permissions = nervous_system_parameters
+                    .neuron_claimer_permissions
+                    .as_ref()
+                    .expect("Expected neuron_claimer_permissions to be set");
+
                 assert_eq!(
                     observed_sns_neurons.len(),
                     neuron_basket_count as usize,
@@ -1946,7 +1960,113 @@ fn assert_successful_swap_finalizes_correctly(
                     observed_sns_neurons
                 );
 
-                for observed_sns_neuron in &observed_sns_neurons {
+                let longest_dissolve_delay_neuron_id = observed_sns_neurons
+                    .iter()
+                    .max_by(|x, y| {
+                        x.dissolve_delay_seconds(now_seconds(None))
+                            .cmp(&y.dissolve_delay_seconds(now_seconds(None)))
+                    })
+                    .map(|neuron| neuron.id.as_ref().unwrap())
+                    .unwrap()
+                    .clone();
+
+                for mut observed_sns_neuron in observed_sns_neurons {
+                    if is_community_fund {
+                        assert_eq!(
+                            observed_sns_neuron.auto_stake_maturity,
+                            Some(true),
+                            "{:#?}",
+                            observed_sns_neuron,
+                        );
+
+                        observed_sns_neuron
+                            .permissions
+                            .sort_by(|x, y| x.principal.unwrap().cmp(&y.principal.unwrap()));
+                        assert_eq!(
+                            observed_sns_neuron.permissions,
+                            vec![
+                                NeuronPermission {
+                                    principal: Some(*principal_id),
+                                    permission_type: vec![
+                                        NeuronPermissionType::ManageVotingPermission as i32,
+                                        NeuronPermissionType::SubmitProposal as i32,
+                                        NeuronPermissionType::Vote as i32,
+                                    ],
+                                },
+                                NeuronPermission {
+                                    principal: Some(NNS_GOVERNANCE_CANISTER_ID.get()),
+                                    permission_type: claimer_permissions.permissions.clone(),
+                                },
+                            ],
+                            "{:#?}",
+                            observed_sns_neuron,
+                        );
+
+                        assert_eq!(
+                            observed_sns_neuron
+                                .permissions
+                                .iter()
+                                .find(|permission| permission.principal == Some(*principal_id))
+                                .expect("Expected a cf principal to have permissions"),
+                            &NeuronPermission {
+                                principal: Some(*principal_id),
+                                permission_type: vec![
+                                    NeuronPermissionType::ManageVotingPermission as i32,
+                                    NeuronPermissionType::SubmitProposal as i32,
+                                    NeuronPermissionType::Vote as i32,
+                                ],
+                            },
+                            "{:#?}",
+                            observed_sns_neuron,
+                        );
+
+                        assert_eq!(
+                            observed_sns_neuron
+                                .permissions
+                                .iter()
+                                .find(|permission| permission.principal
+                                    == Some(NNS_GOVERNANCE_CANISTER_ID.get()))
+                                .expect("Expected a cf principal to have permissions"),
+                            &NeuronPermission {
+                                principal: Some(NNS_GOVERNANCE_CANISTER_ID.get()),
+                                permission_type: claimer_permissions.permissions.clone(),
+                            },
+                            "{:#?}",
+                            observed_sns_neuron,
+                        )
+                    } else {
+                        assert_eq!(
+                            observed_sns_neuron.auto_stake_maturity, None,
+                            "{:#?}",
+                            observed_sns_neuron,
+                        );
+
+                        assert_eq!(
+                            observed_sns_neuron.permissions,
+                            vec![NeuronPermission {
+                                principal: Some(*principal_id),
+                                permission_type: claimer_permissions.permissions.clone(),
+                            }],
+                            "{:#?}",
+                            observed_sns_neuron,
+                        )
+                    }
+                    if observed_sns_neuron.id.as_ref().unwrap() != &longest_dissolve_delay_neuron_id
+                    {
+                        for followees in observed_sns_neuron.followees.values() {
+                            assert_eq!(
+                                followees.followees,
+                                vec![longest_dissolve_delay_neuron_id.clone()],
+                                "{:#?}",
+                                observed_sns_neuron,
+                            )
+                        }
+                    } else {
+                        for followees in observed_sns_neuron.followees.values() {
+                            assert!(followees.followees.is_empty(), "{:#?}", observed_sns_neuron,)
+                        }
+                    }
+
                     assert_eq!(
                         observed_sns_neuron.maturity_e8s_equivalent, 0,
                         "{:#?}",

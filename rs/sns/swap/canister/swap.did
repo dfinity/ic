@@ -106,11 +106,16 @@ type ListSnsNeuronRecipesRequest = record {
 type ListSnsNeuronRecipesResponse = record {
   sns_neuron_recipes : vec SnsNeuronRecipe;
 };
-type NeuronAttributes = record { dissolve_delay_seconds : nat64; memo : nat64 };
+type NeuronAttributes = record {
+  dissolve_delay_seconds : nat64;
+  memo : nat64;
+  followees : vec NeuronId;
+};
 type NeuronBasketConstructionParameters = record {
   dissolve_delay_interval_seconds : nat64;
   count : nat64;
 };
+type NeuronId = record { id : vec nat8 };
 type NewSaleTicketRequest = record {
   subaccount : opt vec nat8;
   amount_icp_e8s : nat64;

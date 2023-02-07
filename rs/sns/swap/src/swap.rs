@@ -16,10 +16,10 @@ use crate::pb::v1::{
     GetSaleParametersResponse, Init, Lifecycle, ListCommunityFundParticipantsRequest,
     ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
     ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
-    NewSaleTicketRequest, NewSaleTicketResponse, OpenRequest, OpenResponse, Participant,
-    RefreshBuyerTokensResponse, RestoreDappControllersResponse, SetDappControllersCallResult,
-    SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult,
-    Ticket, TransferableAmount,
+    NeuronId as SaleNeuronId, NewSaleTicketRequest, NewSaleTicketResponse, OpenRequest,
+    OpenResponse, Participant, RefreshBuyerTokensResponse, RestoreDappControllersResponse,
+    SetDappControllersCallResult, SetModeCallResult, SettleCommunityFundParticipationResult,
+    SnsNeuronRecipe, Swap, SweepResult, Ticket, TransferableAmount,
 };
 use crate::types::{ScheduledVestingEvent, TransferResult};
 #[cfg(target_arch = "wasm32")]
@@ -397,6 +397,11 @@ impl Swap {
             .as_ref()
             .expect("Expected neuron_basket_construction_parameters to be set");
 
+        let nns_governance_canister_id = self
+            .init_or_panic()
+            .nns_governance()
+            .expect("Expected nns_governance_id to be set.");
+
         // We are selling SNS tokens for the base token (ICP), or, in
         // general, whatever token the ledger referred to as the ICP
         // ledger holds.
@@ -411,7 +416,7 @@ impl Swap {
 
         // Keep track of SNS tokens sold just to check that the amount
         // is correct at the end.
-        let mut total_sns_tokens_sold: u64 = 0;
+        let mut total_sns_tokens_sold_e8s: u64 = 0;
         // Vector of neuron recipes.
         let mut neurons = Vec::new();
         // =====================================================================
@@ -424,35 +429,17 @@ impl Swap {
                 total_participant_icp_e8s,
             );
 
-            // Create the neuron basket for the direct investors. The unique
-            // identifier for an SNS Neuron is the SNS Ledger Subaccount, which
-            // is a hash of PrincipalId and some unique memo. Since direct
-            // investors in the swap use their own principal_id, there are no
-            // neuron id collisions, and each basket can use memos starting at 0.
-            let mut memo = SALE_NEURON_MEMO_RANGE_START;
-            for scheduled_vesting_event in
-                neuron_basket_construction_parameters.generate_vesting_schedule(amount_sns_e8s)
-            {
-                neurons.push(SnsNeuronRecipe {
-                    sns: Some(TransferableAmount {
-                        amount_e8s: scheduled_vesting_event.amount_e8s,
-                        transfer_start_timestamp_seconds: 0,
-                        transfer_success_timestamp_seconds: 0,
-                    }),
-                    investor: Some(Investor::Direct(DirectInvestment {
-                        buyer_principal: buyer_principal.clone(),
-                    })),
-                    neuron_attributes: Some(NeuronAttributes {
-                        memo,
-                        dissolve_delay_seconds: scheduled_vesting_event.dissolve_delay_seconds,
-                    }),
-                    claimed_status: Some(ClaimedStatus::Pending as i32),
-                });
-                total_sns_tokens_sold = total_sns_tokens_sold
-                    .checked_add(scheduled_vesting_event.amount_e8s)
-                    .unwrap();
-                memo += 1;
-            }
+            let parsed_principal = string_to_principal(buyer_principal).unwrap();
+            let direct_participant_sns_neuron_recipes =
+                create_sns_neuron_basket_for_direct_participant(
+                    &parsed_principal,
+                    amount_sns_e8s,
+                    neuron_basket_construction_parameters,
+                    SALE_NEURON_MEMO_RANGE_START,
+                );
+            neurons.extend(direct_participant_sns_neuron_recipes);
+
+            total_sns_tokens_sold_e8s = total_sns_tokens_sold_e8s.saturating_add(amount_sns_e8s);
         }
 
         // Create the neuron basket for the Community Fund investors. The unique
@@ -461,7 +448,7 @@ impl Swap {
         // investors in the swap use the NNS Governance principal_id, there can be
         // neuron id collisions, so there must be a global memo used for all baskets
         // for all CF investors.
-        let mut global_cf_memo = 0;
+        let mut global_cf_memo: u64 = SALE_NEURON_MEMO_RANGE_START;
         for cf_participant in self.cf_participants.iter() {
             for cf_neuron in cf_participant.cf_neurons.iter() {
                 let amount_sns_e8s = Swap::scale(
@@ -470,41 +457,37 @@ impl Swap {
                     total_participant_icp_e8s,
                 );
 
-                for scheduled_vesting_event in
-                    neuron_basket_construction_parameters.generate_vesting_schedule(amount_sns_e8s)
-                {
-                    neurons.push(SnsNeuronRecipe {
-                        sns: Some(TransferableAmount {
-                            amount_e8s: scheduled_vesting_event.amount_e8s,
-                            transfer_start_timestamp_seconds: 0,
-                            transfer_success_timestamp_seconds: 0,
-                        }),
-                        investor: Some(Investor::CommunityFund(CfInvestment {
-                            hotkey_principal: cf_participant.hotkey_principal.clone(),
-                            nns_neuron_id: cf_neuron.nns_neuron_id,
-                        })),
-                        neuron_attributes: Some(NeuronAttributes {
-                            memo: global_cf_memo,
-                            dissolve_delay_seconds: scheduled_vesting_event.dissolve_delay_seconds,
-                        }),
-                        claimed_status: Some(ClaimedStatus::Pending as i32),
-                    });
-                    total_sns_tokens_sold = total_sns_tokens_sold
-                        .checked_add(scheduled_vesting_event.amount_e8s)
-                        .unwrap();
-                    global_cf_memo += 1;
-                }
+                let parsed_principal =
+                    string_to_principal(&cf_participant.hotkey_principal).unwrap();
+                let cf_participants_sns_neuron_recipes =
+                    create_sns_neuron_basket_for_cf_participant(
+                        &parsed_principal,
+                        cf_neuron.nns_neuron_id,
+                        amount_sns_e8s,
+                        neuron_basket_construction_parameters,
+                        global_cf_memo,
+                        nns_governance_canister_id.get(),
+                    );
+
+                // Increment the memo by the number of neuron recipes created.
+                global_cf_memo = global_cf_memo
+                    .checked_add(cf_participants_sns_neuron_recipes.len() as u64)
+                    .unwrap();
+
+                neurons.extend(cf_participants_sns_neuron_recipes);
+                total_sns_tokens_sold_e8s =
+                    total_sns_tokens_sold_e8s.saturating_add(amount_sns_e8s);
             }
         }
-        assert!(total_sns_tokens_sold <= params.sns_token_e8s);
+        assert!(total_sns_tokens_sold_e8s <= params.sns_token_e8s);
         log!(
             INFO,
             "Token swap committed; {} direct investors and {} community fund investors receive a total of {} out of {} (change {});",
 		    self.buyers.len(),
 		    self.cf_participants.len(),
-		    total_sns_tokens_sold,
+		    total_sns_tokens_sold_e8s,
 		    params.sns_token_e8s,
-		    params.sns_token_e8s - total_sns_tokens_sold
+		    params.sns_token_e8s - total_sns_tokens_sold_e8s
         );
         self.neuron_recipes = neurons;
         self.set_lifecycle(Lifecycle::Committed);
@@ -1064,10 +1047,12 @@ impl Swap {
                 }
             };
 
-            let (dissolve_delay_seconds, memo) = match recipe.neuron_attributes.as_ref() {
+            let (dissolve_delay_seconds, memo, followees) = match recipe.neuron_attributes.as_ref()
+            {
                 Some(neuron_attribute) => (
                     neuron_attribute.dissolve_delay_seconds,
                     neuron_attribute.memo,
+                    neuron_attribute.followees.clone(),
                 ),
                 // SnsNeuronRecipe.neuron_attributes should always be present as it is set in `commit`.
                 // In the case of a bug due to programmer error, increment the invalid field.
@@ -1121,6 +1106,22 @@ impl Swap {
             let neuron_id =
                 NeuronId::from(compute_neuron_staking_subaccount_bytes(controller, memo));
 
+            // TODO NNS1-1589: Followees will not be of type SwapNeuronId
+            let followees = followees
+                .into_iter()
+                .filter_map(|sale_neuron_id| match sale_neuron_id.try_into() {
+                    Ok(neuron_id) => Some(neuron_id),
+                    Err(error_message) => {
+                        log!(
+                            ERROR,
+                            "Error converting followee: ({}). Ignoring followee.",
+                            error_message
+                        );
+                        None
+                    }
+                })
+                .collect();
+
             neuron_parameters.push(NeuronParameters {
                 neuron_id: Some(neuron_id.clone()),
                 controller: Some(controller),
@@ -1130,6 +1131,7 @@ impl Swap {
                 stake_e8s: Some(amount_e8s.saturating_sub(sns_transaction_fee_e8s)),
                 dissolve_delay_seconds: Some(dissolve_delay_seconds),
                 source_nns_neuron_id,
+                followees,
             });
 
             claimable_neurons_index.insert(neuron_id, recipe);
@@ -2201,6 +2203,123 @@ fn string_to_principal(maybe_principal_id: &String) -> Option<PrincipalId> {
     }
 }
 
+/// Create the basket of SNS Neuron Recipes for a single direct participant.
+fn create_sns_neuron_basket_for_direct_participant(
+    buyer_principal: &PrincipalId,
+    amount_sns_token_e8s: u64,
+    neuron_basket_construction_parameters: &NeuronBasketConstructionParameters,
+    memo_offset: u64,
+) -> Vec<SnsNeuronRecipe> {
+    let mut recipes = vec![];
+
+    let vesting_schedule =
+        neuron_basket_construction_parameters.generate_vesting_schedule(amount_sns_token_e8s);
+
+    let memo_of_longest_dissolve_delay = memo_offset + (vesting_schedule.len() - 1) as u64;
+    let neuron_id_with_longest_dissolve_delay = SaleNeuronId::from(
+        compute_neuron_staking_subaccount_bytes(*buyer_principal, memo_of_longest_dissolve_delay),
+    );
+
+    // Create the neuron basket for the direct investors. The unique
+    // identifier for an SNS Neuron is the SNS Ledger Subaccount, which
+    // is a hash of PrincipalId and some unique memo. Since direct
+    // investors in the sale use their own principal_id, there are no
+    // neuron id collisions, and each basket can use memos starting at memo_offset.
+    for (i, scheduled_vesting_event) in vesting_schedule.iter().enumerate() {
+        let memo = memo_offset + i as u64;
+        // The SnsNeuronRecipes are set up such that all neurons in a basket will follow
+        // the neuron with the longest dissolve delay
+        let largest_dissolve_delay_neuron = i == vesting_schedule.len() - 1;
+        let followees = if largest_dissolve_delay_neuron {
+            vec![]
+        } else {
+            vec![neuron_id_with_longest_dissolve_delay.clone()]
+        };
+
+        recipes.push(SnsNeuronRecipe {
+            sns: Some(TransferableAmount {
+                amount_e8s: scheduled_vesting_event.amount_e8s,
+                transfer_start_timestamp_seconds: 0,
+                transfer_success_timestamp_seconds: 0,
+            }),
+            investor: Some(Investor::Direct(DirectInvestment {
+                buyer_principal: buyer_principal.to_string(),
+            })),
+            neuron_attributes: Some(NeuronAttributes {
+                memo,
+                dissolve_delay_seconds: scheduled_vesting_event.dissolve_delay_seconds,
+                followees,
+            }),
+            claimed_status: Some(ClaimedStatus::Pending as i32),
+        });
+    }
+
+    recipes
+}
+
+/// Create the basket of SNS Neuron Recipes for a single community fund participant.
+fn create_sns_neuron_basket_for_cf_participant(
+    hotkey_principal: &PrincipalId,
+    nns_neuron_id: u64,
+    amount_sns_token_e8s: u64,
+    neuron_basket_construction_parameters: &NeuronBasketConstructionParameters,
+    memo_offset: u64,
+    nns_governance_canister_id: PrincipalId,
+) -> Vec<SnsNeuronRecipe> {
+    let mut recipes = vec![];
+
+    let vesting_schedule =
+        neuron_basket_construction_parameters.generate_vesting_schedule(amount_sns_token_e8s);
+
+    // Since all CF Participant Neurons are controlled by NNS Governance, a global memo is used.
+    // Each basket uses an offset to start its range of memos.
+    let memo_of_longest_dissolve_delay = memo_offset + (vesting_schedule.len() - 1) as u64;
+    let neuron_id_with_longest_dissolve_delay =
+        SaleNeuronId::from(compute_neuron_staking_subaccount_bytes(
+            nns_governance_canister_id,
+            memo_of_longest_dissolve_delay,
+        ));
+
+    // Create the neuron basket for the community fund investors. The unique
+    // identifier for an SNS Neuron is the SNS Ledger Subaccount, which
+    // is a hash of PrincipalId and some unique memo. Since community
+    // investors in the sale use the NNS Governance principal, there can be
+    // neuron id collisions. Avoiding such collisions is handled by starting the range
+    // of memos in the basket at memo_offset.
+    for (i, scheduled_vesting_event) in vesting_schedule.iter().enumerate() {
+        let memo = memo_offset + i as u64;
+
+        // The SnsNeuronRecipes are set up such that all neurons in a basket will follow
+        // the neuron with the longest dissolve delay
+        let largest_dissolve_delay_neuron = i == vesting_schedule.len() - 1;
+        let followees = if largest_dissolve_delay_neuron {
+            vec![]
+        } else {
+            vec![neuron_id_with_longest_dissolve_delay.clone()]
+        };
+
+        recipes.push(SnsNeuronRecipe {
+            sns: Some(TransferableAmount {
+                amount_e8s: scheduled_vesting_event.amount_e8s,
+                transfer_start_timestamp_seconds: 0,
+                transfer_success_timestamp_seconds: 0,
+            }),
+            investor: Some(Investor::CommunityFund(CfInvestment {
+                hotkey_principal: hotkey_principal.to_string(),
+                nns_neuron_id,
+            })),
+            neuron_attributes: Some(NeuronAttributes {
+                memo,
+                dissolve_delay_seconds: scheduled_vesting_event.dissolve_delay_seconds,
+                followees,
+            }),
+            claimed_status: Some(ClaimedStatus::Pending as i32),
+        });
+    }
+
+    recipes
+}
+
 impl Storable for Ticket {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
         self.encode_to_vec().into()
@@ -2216,12 +2335,12 @@ impl BoundedStorable for Ticket {
     // is variable but when all fields are using the max
     // number of bytes then the size is the following
     //
-    //   11 + // 08 + encode_varint(u64::MAX)
+    //   11 + // 08 + encode_variant(u64::MAX)
     //   70 + // 12 + 44 +
     //        //    0a + encode_bytes(principal [32 bytes])
     //        //    12 + encode_bytes(subaccount [32 bytes])
-    //   11 + // 18 + encode_varint(u64::MAX) +
-    //   11 + // 20 + encode_varint(u64::MAX)
+    //   11 + // 18 + encode_variant(u64::MAX) +
+    //   11 + // 20 + encode_variant(u64::MAX)
     //= 103 (*2 to be sure)
     const MAX_SIZE: u32 = 206;
 
