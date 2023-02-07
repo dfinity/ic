@@ -11,11 +11,9 @@ use certificate_orchestrator_interface::{
     UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse,
     NAME_MAX_LEN,
 };
-use ic_cdk::{
-    api::time, caller, export::Principal, post_upgrade, pre_upgrade, timer::set_timer_interval,
-    trap,
-};
+use ic_cdk::{api::time, caller, export::Principal, post_upgrade, pre_upgrade, trap};
 use ic_cdk_macros::{init, query, update};
+use ic_cdk_timers::set_timer_interval;
 use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     DefaultMemoryImpl, StableBTreeMap,

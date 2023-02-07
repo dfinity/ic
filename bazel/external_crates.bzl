@@ -444,11 +444,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 rev = "0e996988693f2d55fc9533c44dc20ae5310a1894",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.6.8",
-                default_features = False,
-                features = [
-                    "timers",
-                ],
+                version = "0.7.0",
+            ),
+            "ic-cdk-timers": crate.spec(
+                version = "0.1.0",
             ),
             "ic-cdk-macros": crate.spec(
                 version = "^0.6.8",

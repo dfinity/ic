@@ -14,7 +14,8 @@ ciborium = "0.2"
 futures = "0.3.25"
 ic-base-types = { path = "../../types/base_types" }
 ic-canisters-http-types = { path = "../../rust_canisters/http_types" }
-ic-cdk = { version = "0.6.8", features = ["timers"] }
+ic-cdk-timers = "0.1.0"
+ic-cdk = "0.7.0"
 ic-cdk-macros = "0.6.8"
 ic-metrics-encoder = "1"
 ic-stable-structures = "0.5.0"
