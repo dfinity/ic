@@ -66,7 +66,7 @@ impl<P: Parse> Verify for Verifier<P> {
         // Parse common name from public certificate
         let cn = self
             .0
-            .parse(&pkg.pair.0)
+            .parse(&pkg.pair.1)
             .context("failed to parse certificate")?;
 
         // Check that name and common-name match
