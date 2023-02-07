@@ -8476,6 +8476,7 @@ dependencies = [
  "ic-sns-root-protobuf-generator",
  "ic-sns-swap",
  "ic-test-utilities-compare-dirs",
+ "lazy_static",
  "num-traits",
  "prost",
  "serde",

@@ -2616,7 +2616,7 @@ fn swap_load_test() {
     use std::env::var as get_env_var;
 
     // By default, this is 6_400, but can be overridden using MAX_DIRECT_PARTICIPANT_COUNT
-    // environment varaible. Hint: to set this in bazel, use the --test_env
+    // environment variable. Hint: to set this in bazel, use the --test_env
     // flag.
     let max_direct_participant_count = get_env_var("MAX_DIRECT_PARTICIPANT_COUNT")
         .map(|s| s.parse().unwrap())
