@@ -12,7 +12,7 @@ use crate::types::{
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use candid::Nat;
 use candid::Principal;
-use ic_cdk::timer;
+use ic_cdk_timers::set_timer_interval;
 use state::TvlState;
 use std::cell::RefCell;
 use std::time::Duration;
@@ -58,7 +58,7 @@ fn init_state(args: InitArgs) {
 /// Start a recurring update of TVL values.
 fn start_tvl_updater() {
     STATE.with(|s| {
-        let _id = timer::set_timer_interval(
+        let _id = set_timer_interval(
             Duration::from_secs(s.borrow().as_ref().expect("State not set").update_period),
             || ic_cdk::spawn(call_update_tvl()),
         );

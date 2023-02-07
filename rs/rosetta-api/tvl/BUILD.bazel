@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "@crate_index//:ciborium",
     "@crate_index//:futures",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-cdk-timers",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:num-traits",

@@ -1,5 +1,5 @@
 {
-  "checksum": "895c7c0f6bfaeb59c76d4033facc69bd07ddc7323e86b1024778da80943bc4de",
+  "checksum": "f02a13fbd09bb5550ee323522af1bf1e96fef2ba40f6e4223c6b569248f120bb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12525,8 +12525,12 @@
               "target": "ic_btc_validation"
             },
             {
-              "id": "ic-cdk 0.6.10",
+              "id": "ic-cdk 0.7.0",
               "target": "ic_cdk"
+            },
+            {
+              "id": "ic-cdk-timers 0.1.0",
+              "target": "ic_cdk_timers"
             },
             {
               "id": "ic-certified-map 0.3.2",
@@ -19369,9 +19373,6 @@
         "compile_data_glob": [
           "**"
         ],
-        "crate_features": [
-          "timers"
-        ],
         "deps": {
           "common": [
             {
@@ -19381,10 +19382,6 @@
             {
               "id": "cfg-if 1.0.0",
               "target": "cfg_if"
-            },
-            {
-              "id": "futures 0.3.26",
-              "target": "futures"
             },
             {
               "id": "ic0 0.18.9",
@@ -19397,10 +19394,6 @@
             {
               "id": "serde_bytes 0.11.9",
               "target": "serde_bytes"
-            },
-            {
-              "id": "slotmap 1.0.6",
-              "target": "slotmap"
             }
           ],
           "selects": {}
@@ -19416,6 +19409,69 @@
           "selects": {}
         },
         "version": "0.6.10"
+      },
+      "license": "Apache-2.0"
+    },
+    "ic-cdk 0.7.0": {
+      "name": "ic-cdk",
+      "version": "0.7.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ic-cdk/0.7.0/download",
+          "sha256": "bb6d60ecf5b27833f0fe213ed481dcb6d25219abcfd0582eb8a77b20938aae00"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.8.4",
+              "target": "candid"
+            },
+            {
+              "id": "ic0 0.18.9",
+              "target": "ic0"
+            },
+            {
+              "id": "serde 1.0.152",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.9",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "ic-cdk-macros 0.6.8",
+              "target": "ic_cdk_macros"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.7.0"
       },
       "license": "Apache-2.0"
     },
@@ -19478,6 +19534,68 @@
         },
         "edition": "2021",
         "version": "0.6.8"
+      },
+      "license": "Apache-2.0"
+    },
+    "ic-cdk-timers 0.1.0": {
+      "name": "ic-cdk-timers",
+      "version": "0.1.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ic-cdk-timers/0.1.0/download",
+          "sha256": "c400f8048f4f5ba3bd3d5fe9301b9343e8ef2e2749079af8f99d4f317ebbbb14"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_cdk_timers",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_cdk_timers",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "futures 0.3.26",
+              "target": "futures"
+            },
+            {
+              "id": "ic-cdk 0.7.0",
+              "target": "ic_cdk"
+            },
+            {
+              "id": "ic0 0.18.9",
+              "target": "ic0"
+            },
+            {
+              "id": "serde 1.0.152",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.9",
+              "target": "serde_bytes"
+            },
+            {
+              "id": "slotmap 1.0.6",
+              "target": "slotmap"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
       },
       "license": "Apache-2.0"
     },
@@ -20854,7 +20972,7 @@
               "target": "quick_xml"
             },
             {
-              "id": "rgb 0.8.34",
+              "id": "rgb 0.8.35",
               "target": "rgb"
             },
             {
@@ -22396,7 +22514,7 @@
               "target": "lalrpop_util"
             },
             {
-              "id": "petgraph 0.6.2",
+              "id": "petgraph 0.6.3",
               "target": "petgraph"
             },
             {
@@ -31052,13 +31170,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "petgraph 0.6.2": {
+    "petgraph 0.6.3": {
       "name": "petgraph",
-      "version": "0.6.2",
+      "version": "0.6.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/petgraph/0.6.2/download",
-          "sha256": "e6d5014253a1331579ce62aa67443b4a658c5e7dd03d4bc6d302b94474888143"
+          "url": "https://crates.io/api/v1/crates/petgraph/0.6.3/download",
+          "sha256": "4dd7d28ee937e54fe3080c91faa1c3a46c06de6252988a7f4592ba2310ef22a4"
         }
       },
       "targets": [
@@ -31094,9 +31212,9 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.6.2"
+        "version": "0.6.3"
       },
-      "license": "MIT/Apache-2.0"
+      "license": "MIT OR Apache-2.0"
     },
     "phf_shared 0.10.0": {
       "name": "phf_shared",
@@ -33709,7 +33827,7 @@
               "target": "multimap"
             },
             {
-              "id": "petgraph 0.6.2",
+              "id": "petgraph 0.6.3",
               "target": "petgraph"
             },
             {
@@ -36729,13 +36847,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "rgb 0.8.34": {
+    "rgb 0.8.35": {
       "name": "rgb",
-      "version": "0.8.34",
+      "version": "0.8.35",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rgb/0.8.34/download",
-          "sha256": "3603b7d71ca82644f79b5a06d1220e9a58ede60bd32255f698cb1af8838b8db3"
+          "url": "https://crates.io/api/v1/crates/rgb/0.8.35/download",
+          "sha256": "7495acf66551cdb696b7711408144bcd3194fc78e32f3a09e809bfe7dd4a7ce3"
         }
       },
       "targets": [
@@ -36772,7 +36890,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.8.34"
+        "version": "0.8.35"
       },
       "license": "MIT"
     },
