@@ -15,7 +15,9 @@ use ic_base_types::{NumBytes, PrincipalId};
 use ic_canister_log::log;
 use ic_icrc1::endpoints::ArchiveInfo;
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
+use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
+use std::str::FromStr;
 use std::{cell::RefCell, collections::BTreeSet, thread::LocalKey};
 
 use crate::types::Environment;
@@ -23,6 +25,14 @@ use crate::types::Environment;
 use dfn_core::println;
 
 const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
+
+// Copied from /rs/replicated_state/src/canister_state/system_state.rs
+lazy_static! {
+    static ref DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS: PrincipalId =
+        PrincipalId::from_str("ifxlm-aqaaa-multi-pleco-ntrol-lersa-h3ae").unwrap();
+    static ref DEFAULT_PRINCIPAL_ZERO_CONTROLLERS: PrincipalId =
+        PrincipalId::from_str("zrl4w-cqaaa-nocon-troll-eraaa-d5qc").unwrap();
+}
 
 /// Begin Local Copy of Various Candid Type definitions from ic00_types
 ///
@@ -143,6 +153,33 @@ impl CanisterStatusResultV2 {
 
     pub fn idle_cycles_burned_per_day(&self) -> u128 {
         self.idle_cycles_burned_per_day.0.to_u128().unwrap()
+    }
+
+    /// Overrides the default principals that show up in the `controller` field
+    /// of the status returned by the canister execution environment. Once the
+    /// `controllers` field is removed, this function will be unnecessary.
+    /// These default principals show up when canisters have 0 or >1 controllers.
+    ///
+    /// This function just checks if the `controller` field is set to the
+    /// default principal used when there are multiple controllers, and if so,
+    /// sets the controller to be the first principal in the `controllers` field.
+    pub fn fill_controller_field(self) -> Self {
+        let controllers = self.controllers();
+
+        // If the controller is DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS, we want
+        // to override it.
+        if self.controller() != *DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS {
+            return self;
+        }
+
+        // Let's set `controller` to be the first principal in `controllers`.
+        // If `controllers` is empty, we leave `controller` as-is.
+        if let Some(controller) = controllers.first() {
+            let controller = candid::Principal::from(*controller);
+            return Self { controller, ..self };
+        }
+
+        self
     }
 }
 
@@ -331,6 +368,33 @@ impl GetSnsCanistersSummaryResponse {
     pub fn index_canister_summary(&self) -> &CanisterSummary {
         self.index.as_ref().unwrap()
     }
+
+    pub fn map_status(
+        self,
+        f: impl Fn(CanisterStatusResultV2) -> CanisterStatusResultV2 + Copy,
+    ) -> Self {
+        let Self {
+            root,
+            governance,
+            ledger,
+            swap,
+            dapps,
+            archives,
+            index,
+        } = self;
+        Self {
+            root: root.map(|root| root.map_status(f)),
+            governance: governance.map(|governance| governance.map_status(f)),
+            ledger: ledger.map(|ledger| ledger.map_status(f)),
+            swap: swap.map(|swap| swap.map_status(f)),
+            dapps: dapps.into_iter().map(|dapp| dapp.map_status(f)).collect(),
+            archives: archives
+                .into_iter()
+                .map(|archive| archive.map_status(f))
+                .collect(),
+            index: index.map(|index| index.map_status(f)),
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
@@ -353,6 +417,17 @@ impl CanisterSummary {
 
     pub fn status(&self) -> &CanisterStatusResultV2 {
         self.status.as_ref().unwrap()
+    }
+
+    pub fn map_status(self, f: impl Fn(CanisterStatusResultV2) -> CanisterStatusResultV2) -> Self {
+        let Self {
+            canister_id,
+            status,
+        } = self;
+        Self {
+            canister_id,
+            status: status.map(f),
+        }
     }
 }
 
@@ -470,7 +545,7 @@ impl SnsRootCanister {
             archive_canister_summaries.push(archive_summary);
         }
 
-        GetSnsCanistersSummaryResponse {
+        let response = GetSnsCanistersSummaryResponse {
             root: root_canister_summary,
             governance: governance_canister_summary,
             ledger: ledger_canister_summary,
@@ -478,7 +553,13 @@ impl SnsRootCanister {
             dapps: dapp_canister_summaries,
             archives: archive_canister_summaries,
             index: index_canister_summary,
-        }
+        };
+
+        // We have to call `fill_controller_field` on all the statuses to
+        // override the default principals in the `controller` field of the
+        // status returned by the canister execution environment. Once the
+        // `controllers` field is removed, this will be unnecessary.
+        response.map_status(|status| status.fill_controller_field())
     }
 
     /// Return the `PrincipalId`s of all SNS canisters that this root canister
@@ -1042,6 +1123,7 @@ async fn get_owned_canister_summary(
 mod tests {
     use super::*;
     use crate::pb::v1::{set_dapp_controllers_request::CanisterIds, ListSnsCanistersResponse};
+    use candid::Principal;
     use dfn_core::api::now;
     use std::collections::VecDeque;
     use std::sync::{Arc, Mutex};
@@ -1209,19 +1291,26 @@ mod tests {
     impl CanisterStatusResultV2 {
         /// Get a dummy value for CanisterStatusResultV2.
         fn dummy_with_controllers(controllers: Vec<PrincipalId>) -> CanisterStatusResultV2 {
+            // The canister execution environment uses these "default principals"
+            // when the canister has no or multiple controllers.
+            // We imitate that behavior to more closely match the real canister
+            // environment.
+            let controller = match &controllers[..] {
+                [] => *DEFAULT_PRINCIPAL_ZERO_CONTROLLERS,
+                [controller] => *controller,
+                _ => *DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS,
+            };
             CanisterStatusResultV2::new(
                 CanisterStatusType::Running,
-                None, // module_hash
-                *controllers
-                    .first()
-                    .expect("At least one controller is required"), // controller
-                controllers, // controllers
+                None,              // module_hash
+                controller,        // controller
+                controllers,       // controllers
                 NumBytes::new(42), // memory_size
-                43,   // cycles
-                44,   // compute_allocation
-                None, // memory_allocation
-                45,   // freezing_threshold
-                46,   // idle_cycles_burned_per_day
+                43,                // cycles
+                44,                // compute_allocation
+                None,              // memory_allocation
+                45,                // freezing_threshold
+                46,                // idle_cycles_burned_per_day
             )
         }
     }
@@ -3302,7 +3391,7 @@ mod tests {
                 )),
             };
 
-        // Call the code under test which consumes first set of calls
+        // Call the code under test which consumes the first set of calls
         let result_1 = SnsRootCanister::get_sns_canisters_summary(
             &SNS_ROOT_CANISTER,
             &mut management_canister_client,
@@ -3326,7 +3415,7 @@ mod tests {
         );
         assert!(result_1.dapps[1].status.is_some());
 
-        // Call the code under test which consumes first set of calls
+        // Call the code under test which consumes the second set of calls
         let result_2 = SnsRootCanister::get_sns_canisters_summary(
             &SNS_ROOT_CANISTER,
             &mut management_canister_client,
@@ -3521,7 +3610,7 @@ mod tests {
                 )),
             };
 
-        // Call the code under test which consumes first set of calls
+        // Call the code under test which consumes the first set of calls
         let result_1 = SnsRootCanister::get_sns_canisters_summary(
             &SNS_ROOT_CANISTER,
             &mut management_canister_client,
@@ -3545,7 +3634,7 @@ mod tests {
         );
         assert!(result_1.archives[1].status.is_some());
 
-        // Call the code under test which consumes first set of calls
+        // Call the code under test which consumes the second set of calls
         let result_2 = SnsRootCanister::get_sns_canisters_summary(
             &SNS_ROOT_CANISTER,
             &mut management_canister_client,
@@ -3568,6 +3657,204 @@ mod tests {
             Some(expected_archive_canisters_principal_ids[1])
         );
         assert!(result_2.archives[1].status.is_some());
+
+        assert!(
+            management_canister_client.calls.is_empty(),
+            "management_canister_client.calls should be empty"
+        );
+    }
+
+    #[test]
+    fn test_fill_controller_field_overrides_default() {
+        let test_principal = PrincipalId::new_user_test_id(1);
+        let status = CanisterStatusResultV2 {
+            controller: Principal::from(*DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS),
+            ..CanisterStatusResultV2::dummy_with_controllers(vec![test_principal])
+        }
+        .fill_controller_field();
+        assert_eq!(status.controller(), test_principal);
+    }
+
+    #[test]
+    fn test_fill_controller_field_doesnt_override_non_default() {
+        let test_principal = PrincipalId::new_user_test_id(1);
+        let decoy_principal = PrincipalId::new_user_test_id(2);
+        let status = CanisterStatusResultV2 {
+            controller: Principal::from(decoy_principal),
+            ..CanisterStatusResultV2::dummy_with_controllers(vec![test_principal])
+        }
+        .fill_controller_field();
+        assert_eq!(status.controller(), decoy_principal);
+    }
+
+    #[test]
+    fn test_fill_controller_field_doesnt_panic_if_controller_list_empty() {
+        let test_principal = PrincipalId::new_user_test_id(1);
+        let _status = CanisterStatusResultV2 {
+            controller: Principal::from(*DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS),
+            settings: DefiniteCanisterSettingsArgs {
+                controllers: vec![],
+                ..CanisterStatusResultV2::dummy_with_controllers(vec![test_principal]).settings
+            },
+            ..CanisterStatusResultV2::dummy_with_controllers(vec![test_principal])
+        }
+        .fill_controller_field();
+    }
+
+    #[tokio::test]
+    async fn canister_statuses_dont_have_placeholder_controller() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static EXPECTED_DAPP_CANISTERS_PRINCIPAL_IDS: Vec<PrincipalId> =  vec![
+                CanisterId::from_u64(99).get(),
+                CanisterId::from_u64(100).get(),
+            ];
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
+                governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
+                ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
+                swap_canister_id: Some(PrincipalId::new_user_test_id(3)),
+                dapp_canister_ids: EXPECTED_DAPP_CANISTERS_PRINCIPAL_IDS.with(|i| i.clone()),
+                archive_canister_ids: vec![],
+                latest_ledger_archive_poll_timestamp_seconds: None,
+                index_canister_id: Some(PrincipalId::new_user_test_id(4)),
+                testflight: false,
+            });
+        }
+        let extra_controller_id = PrincipalId::new_user_test_id(1005);
+
+        let root_canister_id = CanisterId::from_u64(4);
+
+        let (governance_canister_id, ledger_canister_id, swap_canister_id, index_canister_id) =
+            SNS_ROOT_CANISTER.with(|sns_root| {
+                let sns_root = sns_root.borrow();
+                (
+                    sns_root.governance_canister_id(),
+                    sns_root.ledger_canister_id(),
+                    sns_root.swap_canister_id(),
+                    sns_root.index_canister_id(),
+                )
+            });
+        let expected_dapp_canisters_principal_ids =
+            EXPECTED_DAPP_CANISTERS_PRINCIPAL_IDS.with(|i| i.clone());
+
+        let mut management_canister_client = MockManagementCanisterClient {
+            calls: vec![
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: governance_canister_id,
+                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                        extra_controller_id,
+                        root_canister_id.get(),
+                    ])),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: ledger_canister_id,
+                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                        extra_controller_id,
+                        root_canister_id.get(),
+                    ])),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: index_canister_id,
+                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                        extra_controller_id,
+                        root_canister_id.get(),
+                    ])),
+                },
+                // Error call
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: expected_dapp_canisters_principal_ids[0],
+                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                        extra_controller_id,
+                        root_canister_id.get(),
+                    ])),
+                },
+                ManagementCanisterClientCall::CanisterStatus {
+                    expected_canister_id: expected_dapp_canisters_principal_ids[1],
+                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                        extra_controller_id,
+                        root_canister_id.get(),
+                    ])),
+                },
+            ]
+            .into(),
+        };
+
+        let mut ledger_canister_client = MockLedgerCanisterClient {
+            calls: vec![].into(),
+        };
+
+        let now = now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Could not get the duration.")
+            .as_secs();
+
+        let env =
+            TestEnvironment {
+                now,
+                canister_id: root_canister_id,
+                calls: Arc::new(Mutex::new(
+                    vec![
+                        EnvironmentCall::CallCanister {
+                            expected_canister: CanisterId::try_from(governance_canister_id)
+                                .unwrap(),
+                            expected_method: "get_root_canister_status".to_string(),
+                            expected_bytes: None,
+                            result: Ok(Encode!(&CanisterStatusResultV2::dummy_with_controllers(
+                                vec![extra_controller_id, governance_canister_id]
+                            ))
+                            .unwrap()),
+                        },
+                        EnvironmentCall::CallCanister {
+                            expected_canister: CanisterId::try_from(swap_canister_id).unwrap(),
+                            expected_method: "get_canister_status".to_string(),
+                            expected_bytes: None,
+                            result: Ok(Encode!(&CanisterStatusResultV2::dummy_with_controllers(
+                                vec![extra_controller_id, governance_canister_id]
+                            ))
+                            .unwrap()),
+                        },
+                    ]
+                    .into(),
+                )),
+            };
+
+        // Call the code under test
+        let GetSnsCanistersSummaryResponse {
+            root,
+            governance,
+            ledger,
+            swap,
+            dapps,
+            archives,
+            index,
+        } = SnsRootCanister::get_sns_canisters_summary(
+            &SNS_ROOT_CANISTER,
+            &mut management_canister_client,
+            &mut ledger_canister_client,
+            &env,
+            false,
+        )
+        .await;
+
+        let root = root.unwrap();
+        let governance = governance.unwrap();
+        let ledger = ledger.unwrap();
+        let swap = swap.unwrap();
+        let index = index.unwrap();
+
+        // The controller field should always be "extra_controller_id" since it
+        // came first in the vector we passed.
+        assert_eq!(root.status.unwrap().controller(), extra_controller_id);
+        assert_eq!(governance.status.unwrap().controller(), extra_controller_id);
+        assert_eq!(ledger.status.unwrap().controller(), extra_controller_id);
+        assert_eq!(swap.status.unwrap().controller(), extra_controller_id);
+        assert_eq!(index.status.unwrap().controller(), extra_controller_id);
+        for dapp in dapps {
+            assert_eq!(dapp.status.unwrap().controller(), extra_controller_id);
+        }
+        for archive in archives {
+            assert_eq!(archive.status.unwrap().controller(), extra_controller_id);
+        }
 
         assert!(
             management_canister_client.calls.is_empty(),

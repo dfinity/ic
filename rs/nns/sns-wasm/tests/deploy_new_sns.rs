@@ -279,10 +279,7 @@ fn test_canisters_are_created_and_installed() {
             .await
             .unwrap();
 
-        assert_eq!(
-            response.controllers(),
-            vec![ROOT_CANISTER_ID.get(), swap_canister_id.get()]
-        );
+        assert_eq!(response.controllers(), vec![ROOT_CANISTER_ID.get()]);
 
         // After a caller (on the SNS-WASM whitelist) calls deploy_new_sns, the caller is removed
         // from the whitelist.

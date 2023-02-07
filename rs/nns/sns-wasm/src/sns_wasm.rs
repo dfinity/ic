@@ -712,11 +712,11 @@ where
                     )
                 }),
 
-            // Set NNS-Root and Swap as controller of Swap
+            // Set NNS-Root as controller of Swap
             canister_api
                 .set_controllers(
                     CanisterId::new(canisters.swap.unwrap()).unwrap(),
-                    vec![this_canister_id, canisters.swap.unwrap(), ROOT_CANISTER_ID.get()],
+                    vec![this_canister_id, ROOT_CANISTER_ID.get()],
                 )
                 .await
                 .map_err(|e| {
@@ -765,11 +765,11 @@ where
                 )
                 .await
                 .map_err(|e| format!("Unable to remove SNS-WASM as Root's controller: {}", e)),
-            // Removing self, leaving NNS-Root and Swap
+            // Removing self, leaving NNS-Root
             canister_api
                 .set_controllers(
                     CanisterId::new(canisters.swap.unwrap()).unwrap(),
-                    vec![canisters.swap.unwrap(), ROOT_CANISTER_ID.get()],
+                    vec![ROOT_CANISTER_ID.get()],
                 )
                 .await
                 .map_err(|e| format!("Unable to remove SNS-WASM as Swap's controller: {}", e)),
@@ -2742,10 +2742,7 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (
-                    swap_id,
-                    vec![this_id.get(), swap_id.get(), ROOT_CANISTER_ID.get()],
-                ),
+                (swap_id, vec![this_id.get(), ROOT_CANISTER_ID.get()]),
             ],
             DeployNewSnsResponse {
                 subnet_id: None,
@@ -2817,14 +2814,11 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (
-                    swap_id,
-                    vec![this_id.get(), swap_id.get(), ROOT_CANISTER_ID.get()],
-                ),
+                (swap_id, vec![this_id.get(), ROOT_CANISTER_ID.get()]),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![swap_id.get(), ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![ROOT_CANISTER_ID.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             DeployNewSnsResponse {
@@ -3120,14 +3114,11 @@ mod test {
                 (ledger_id, vec![this_id.get(), root_id.get()]),
                 (index_id, vec![this_id.get(), root_id.get()]),
                 (root_id, vec![this_id.get(), governance_id.get()]),
-                (
-                    swap_id,
-                    vec![this_id.get(), swap_id.get(), ROOT_CANISTER_ID.get()]
-                ),
+                (swap_id, vec![this_id.get(), ROOT_CANISTER_ID.get()]),
                 (governance_id, vec![root_id.get()]),
                 (ledger_id, vec![root_id.get()]),
                 (root_id, vec![governance_id.get()]),
-                (swap_id, vec![swap_id.get(), ROOT_CANISTER_ID.get()]),
+                (swap_id, vec![ROOT_CANISTER_ID.get()]),
                 (index_id, vec![root_id.get()]),
             ],
             set_controllers_calls

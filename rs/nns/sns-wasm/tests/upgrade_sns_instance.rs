@@ -486,12 +486,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
         ledger,
         vec![root.get()],
     );
-    set_controllers(
-        &machine,
-        PrincipalId::new_anonymous(),
-        swap,
-        vec![swap.get()],
-    );
+    set_controllers(&machine, PrincipalId::new_anonymous(), swap, vec![]);
     set_controllers(
         &machine,
         PrincipalId::new_anonymous(),

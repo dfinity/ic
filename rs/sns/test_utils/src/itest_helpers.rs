@@ -420,10 +420,7 @@ impl SnsCanisters<'_> {
             governance.set_controller_with_retries(root_canister_id.get()),
             ledger.set_controller_with_retries(root_canister_id.get()),
             index.set_controller_with_retries(root_canister_id.get()),
-            // Swap Canister is controlled by NNS Root and Swap itself. For the integration tests
-            // add the swap canister as its own controller, and leave the Runtime in control
-            // as well for some amount of control
-            swap.add_controller(swap_canister_id.get()),
+            // Swap is controlled by the NNS root canister, so we don't set any controllers here.
         )
         .unwrap();
 
