@@ -14,6 +14,7 @@ UPLOAD_DIR=/var/www/cgi-bin/artifacts
 SEV_TOOL=/opt/ic/bin/sevtool
 SEV_GUEST_TOOL=/opt/ic/bin/sev-guest-parse-report
 SEV_GUEST_TOOL_GET=/opt/ic/bin/sev-guest-get-report
+ARK_PEM=/opt/ic/share/ark.pem
 
 log() {
     echo "[$(date --rfc-3339='ns')] $@" >>${LOGFILE}
@@ -91,10 +92,15 @@ encrypt_send() {
     # Create a report with its hash
     ${SEV_GUEST_TOOL_GET} -x -f ${BN_DIR}/bn_priv.enc ${BN_DIR}/guest_report.bin >/dev/null 2>&1
     # Rename the .cert files to .pem
+    #
+    # NOTE: .cert files are actually an AMD proprietary format described in
+    # Appendix C of https://www.amd.com/system/files/TechDocs/55766_SEV-KM_API_Specification.pdf
+    # however the sev-host-set-cert-chain program does no verification and since we really need the PEM
+    # we can store those instead using that program.
     for cert in *.cert; do
         mv ${cert} ${cert%.cert}.pem
     done
-    tar -czvf ${BN_DIR}/report_lead.tar.gz -C ${BN_DIR} bn_priv.enc rand.enc guest_report.bin ark.pem ask.pem vcek.pem >/dev/null 2>&1
+    tar -czvf ${BN_DIR}/report_lead.tar.gz -C ${BN_DIR} bn_priv.enc rand.enc guest_report.bin ask.pem vcek.pem >/dev/null 2>&1
     curl --data-binary @${BN_DIR}/report_lead.tar.gz -H "Content-Type: application/octet-stream" http://${IP}/cgi-bin/bn-priv-send.sh >/dev/null 2>&1
     popd >/dev/null
 }
@@ -119,6 +125,8 @@ main() {
 
     log "Report and public key received."
     mv ${work_dir}/guest_report_pem.bin ${work_dir}/guest_report.bin
+    # Copy over hard coded root of trust ARK PEM.
+    cp "${ARK_PEM}" "${work_dir}/"
     # Validate the guest report and its certificate chain
     if validate_pubkey ${work_dir}; then
         log "Guest report validated successfully!"
