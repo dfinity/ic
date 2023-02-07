@@ -48,7 +48,9 @@ use crate::nns::{
     get_governance_canister, submit_external_proposal_with_test_id,
     vote_execute_proposal_assert_executed,
 };
-use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
+use crate::orchestrator::utils::rw_message::{
+    install_nns_and_check_progress, install_nns_with_customizations_and_check_progress,
+};
 use crate::util::{
     assert_create_agent, assert_create_agent_with_identity, block_on, delay, runtime_from_url,
     to_principal_id, UniversalCanister,
@@ -238,7 +240,7 @@ fn setup(env: TestEnv, sale_participants: Vec<SaleParticipant>) {
     };
 
     // Install NNS with ledger customizations
-    install_nns(&env, nns_customizations);
+    install_nns(&env, Some(nns_customizations));
 
     // Check that the balances are as expected
     let ledger_agent = {
@@ -360,10 +362,14 @@ pub fn check_all_participants(env: TestEnv) {
     );
 }
 
-pub fn install_nns(env: &TestEnv, customizations: NnsCustomizations) {
+pub fn install_nns(env: &TestEnv, customizations: Option<NnsCustomizations>) {
     let log = env.logger();
     let start_time = Instant::now();
-    install_nns_with_customizations_and_check_progress(env.topology_snapshot(), customizations);
+    if let Some(customizations) = customizations {
+        install_nns_with_customizations_and_check_progress(env.topology_snapshot(), customizations);
+    } else {
+        install_nns_and_check_progress(env.topology_snapshot());
+    }
     info!(
         log,
         "=========== The NNS has been successfully installed in {:?} ==========",

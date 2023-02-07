@@ -991,7 +991,7 @@ pub trait HasWasm {
 impl<T: HasDependencies> HasWasm for T {
     fn load_wasm<P: AsRef<Path>>(&self, p: P) -> Vec<u8> {
         let mut wasm_bytes = std::fs::read(self.get_dependency_path(&p))
-            .unwrap_or_else(|_| panic!("Could not read WASM from {:?}", p.as_ref()));
+            .unwrap_or_else(|e| panic!("Could not read WASM from {:?}: {e:?}", p.as_ref()));
 
         if p.as_ref().extension().unwrap() == "wat" {
             wasm_bytes = wat::parse_bytes(&wasm_bytes)
@@ -999,8 +999,16 @@ impl<T: HasDependencies> HasWasm for T {
                 .to_vec();
         }
 
-        if !wasm_bytes.starts_with(WASM_MAGIC_BYTES) {
-            panic!("Invalid magic bytes for wasm module: {:?}", p.as_ref());
+        if !(wasm_bytes.starts_with(WASM_MAGIC_BYTES)
+            || wasm_bytes.starts_with(GZIPPED_WASM_MAGIC_BYTES))
+        {
+            let ff: [u8; 4] = wasm_bytes[..4]
+                .try_into()
+                .expect("fewer than 4 bytes in wasm");
+            panic!(
+                "Invalid magic bytes for wasm module: {:?} (first four bytes read as {ff:?})",
+                p.as_ref()
+            );
         }
 
         wasm_bytes
@@ -1620,6 +1628,9 @@ pub fn install_nns_canisters(
 
 /// A short wasm module that is a legal canister binary.
 pub(crate) const WASM_MAGIC_BYTES: &[u8] = &[0, 97, 115, 109];
+
+/// See https://ic-interface-spec.netlify.app/#canister-module-format
+pub(crate) const GZIPPED_WASM_MAGIC_BYTES: &[u8] = &[31, 139, 8, 0];
 
 pub fn prepare_group(group_setup: &GroupSetup, logger: Logger) -> Result<()> {
     info!(logger, "SystemTestGroup.prepare_group");
