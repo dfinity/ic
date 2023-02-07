@@ -23,7 +23,7 @@ end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
 use crate::canister_http::lib::get_universal_vm_address;
-use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
+use crate::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::SshKeyGen;
 use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
@@ -33,7 +33,6 @@ use crate::orchestrator::utils::rw_message::{
 };
 use crate::orchestrator::utils::subnet_recovery::set_sandbox_env_vars;
 use crate::util::block_on;
-use ic_recovery::file_sync_helper;
 use ic_recovery::nns_recovery_failover_nodes::{
     NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs, StepType,
 };
@@ -85,16 +84,11 @@ pub fn test(env: TestEnv) {
     info!(logger, "IC_VERSION_ID: {:?}", ic_version);
 
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
-    let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
-
     info!(
         logger,
         "ssh_authorized_priv_keys_dir: {:?}", ssh_authorized_priv_keys_dir
     );
-    info!(
-        logger,
-        "ssh_authorized_pub_keys_dir: {:?}", ssh_authorized_pub_keys_dir
-    );
+
     // choose a node from the nns subnet
     let mut orig_nns_nodes = topo_broken_ic.root_subnet().nodes();
     let nns_node = orig_nns_nodes.next().expect("there is no NNS node");
@@ -156,9 +150,6 @@ pub fn test(env: TestEnv) {
         msg
     ));
 
-    let pub_key = file_sync_helper::read_file(&ssh_authorized_pub_keys_dir.join(ADMIN))
-        .expect("Couldn't read public key");
-
     let recovery_dir = env.get_dependency_path("rs/tests");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"))
         .expect("Failed to set sandbox env vars");
@@ -172,7 +163,6 @@ pub fn test(env: TestEnv) {
     let subnet_args = NNSRecoveryFailoverNodesArgs {
         subnet_id: topo_broken_ic.root_subnet_id(),
         replica_version: Some(ic_version),
-        pub_key: Some(pub_key),
         aux_ip: None,
         aux_user: None,
         registry_url: None,

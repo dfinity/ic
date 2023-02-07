@@ -206,7 +206,8 @@ impl RecoveryIterator<StepType> for AppSubnetRecovery {
             StepType::DownloadCertifications => {
                 if self.params.pub_key.is_some() {
                     Ok(Box::new(
-                        self.recovery.get_download_certs_step(self.params.subnet_id),
+                        self.recovery
+                            .get_download_certs_step(self.params.subnet_id, false),
                     ))
                 } else {
                     Err(RecoveryError::StepSkipped)

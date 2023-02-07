@@ -26,6 +26,8 @@ pub const CANISTER_CALLER_ID: &str = "r7inp-6aaaa-aaaaa-aaabq-cai";
 #[derive(Debug, Copy, Clone, EnumIter)]
 pub enum StepType {
     StopReplica,
+    DownloadCertifications,
+    MergeCertificationPools,
     DownloadState,
     ProposeToCreateSubnet,
     DownloadParentNNSStore,
@@ -50,10 +52,6 @@ pub struct NNSRecoveryFailoverNodesArgs {
     /// Replica version to start the new NNS with (has to be blessed by parent NNS)
     #[clap(long, parse(try_from_str=::std::convert::TryFrom::try_from))]
     pub replica_version: Option<ReplicaVersion>,
-
-    /// Public ssh key to be deployed to the subnet for read only access
-    #[clap(long)]
-    pub pub_key: Option<String>,
 
     /// IP address of the auxiliary host the registry is uploaded to
     #[clap(long)]
@@ -218,6 +216,15 @@ impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
+            }
+
+            StepType::DownloadCertifications => Ok(Box::new(
+                self.recovery
+                    .get_download_certs_step(self.params.subnet_id, true),
+            )),
+
+            StepType::MergeCertificationPools => {
+                Ok(Box::new(self.recovery.get_merge_certification_pools_step()))
             }
 
             StepType::DownloadState => {
