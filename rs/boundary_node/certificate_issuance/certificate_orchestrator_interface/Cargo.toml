@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+addr = { version = "0.15.6", features = ["idna"] }
 candid = "0.8.4"
 ic-stable-structures = "0.2.0"
 serde = "1.0.148"

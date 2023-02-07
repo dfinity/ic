@@ -1,5 +1,5 @@
 {
-  "checksum": "47f3ff2045b8468fce28ba4dcca7eb662594d25b9d6f44e94ae40f187fac9c57",
+  "checksum": "895c7c0f6bfaeb59c76d4033facc69bd07ddc7323e86b1024778da80943bc4de",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -991,6 +991,58 @@
         "version": "4.1.0"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "addr 0.15.6": {
+      "name": "addr",
+      "version": "0.15.6",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/addr/0.15.6/download",
+          "sha256": "a93b8a41dbe230ad5087cc721f8d41611de654542180586b315d9f4cf6b72bef"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "addr",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "addr",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "idna",
+          "psl",
+          "std"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "psl 2.1.3",
+              "target": "psl"
+            },
+            {
+              "id": "psl-types 2.0.11",
+              "target": "psl_types"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.15.6"
+      },
+      "license": "MIT/Apache-2.0"
     },
     "addr2line 0.17.0": {
       "name": "addr2line",
@@ -12102,6 +12154,10 @@
             {
               "id": "actix-web 4.3.0",
               "target": "actix_web"
+            },
+            {
+              "id": "addr 0.15.6",
+              "target": "addr"
             },
             {
               "id": "anyhow 1.0.69",
@@ -33847,6 +33903,85 @@
       },
       "license": "MIT"
     },
+    "psl 2.1.3": {
+      "name": "psl",
+      "version": "2.1.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/psl/2.1.3/download",
+          "sha256": "2ac31add97d7c393248c273c9f862bcfd396e870db1ff5dec63e0e707db82ae4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "psl",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "psl",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "helpers"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "psl-types 2.0.11",
+              "target": "psl_types"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "2.1.3"
+      },
+      "license": "MIT/Apache-2.0"
+    },
+    "psl-types 2.0.11": {
+      "name": "psl-types",
+      "version": "2.0.11",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/psl-types/2.0.11/download",
+          "sha256": "33cb294fe86a74cbcf50d4445b37da762029549ebeea341421c7c70370f86cac"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "psl_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "psl_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "2.0.11"
+      },
+      "license": "MIT/Apache-2.0"
+    },
     "psm 0.1.21": {
       "name": "psm",
       "version": "0.1.21",
@@ -48434,18 +48569,6 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -48460,6 +48583,18 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
