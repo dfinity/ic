@@ -68,6 +68,7 @@ pub struct DownloadCertificationsStep {
     pub work_dir: PathBuf,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
+    pub admin: bool,
 }
 
 impl Step for DownloadCertificationsStep {
@@ -79,10 +80,11 @@ impl Step for DownloadCertificationsStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
+        let user = if self.admin { ADMIN } else { READONLY };
         let cert_path = format!("{IC_DATA_PATH}/{IC_CERTIFICATIONS_PATH}");
         let ips = get_member_ips(self.registry_client.clone(), self.subnet_id)?;
         let downloaded_at_least_once = ips.iter().fold(false, |success, ip| {
-            let data_src = format!("{READONLY}@[{ip}]:{cert_path}");
+            let data_src = format!("{user}@[{ip}]:{cert_path}");
             let target = self.work_dir.join("certifications").join(ip.to_string());
             if let Err(e) = create_dir(&target) {
                 warn!(self.logger, "Failed to create target dir: {:?}", e);
@@ -327,8 +329,12 @@ impl Step for DownloadIcStateStep {
             excludes.push(cp);
         });
 
-        // If we have readonly access, we do not download certifications again.
-        if self.try_readonly {
+        // If we already have some certifications, we do not download them again.
+        if PathBuf::from(self.working_dir.clone())
+            .join("data/ic_consensus_pool/certification")
+            .exists()
+        {
+            info!(self.logger, "Excluding certifications from download");
             excludes.push("certification");
             excludes.push("certifications");
         }
