@@ -10,7 +10,7 @@ build:lint --config=clippy
 
 # Use hermetic JDK
 # See https://bazel.build/docs/bazel-and-java#hermetic-testing
-common --java_runtime_version=remotejdk_17
+build --java_runtime_version=remotejdk_17
 
 common --experimental_allow_tags_propagation
 build --nosandbox_default_allow_network
