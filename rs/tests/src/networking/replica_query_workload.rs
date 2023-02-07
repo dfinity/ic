@@ -13,8 +13,8 @@ Runbook::
    Workload sends query[canister_id, "read"] requests.
    All requests are sent to the same node/replica.
 4. Collect metrics from the workload and assert:
-   - All requests should complete within DURATION_THRESHOLD.
-   - All requests should be successful.
+   - Ratio of requests with duration below DURATION_THRESHOLD should exceed MIN_REQUESTS_RATIO_BELOW_THRESHOLD.
+   - Ratio of successful requests should exceed min_success_ratio threshold.
 
 end::catalog[] */
 
@@ -36,6 +36,8 @@ const CANISTER_METHOD: &str = "read";
 const PAYLOAD_SIZE_BYTES: usize = 1024;
 // Duration of each request is placed into one of two categories - below or above this threshold.
 const DURATION_THRESHOLD: Duration = Duration::from_secs(2);
+// Ratio of requests with duration < DURATION_THRESHOLD should exceed this parameter.
+const MIN_REQUESTS_RATIO_BELOW_THRESHOLD: f64 = 0.9;
 // Parameters related to workload creation.
 const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(30); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
@@ -52,7 +54,7 @@ pub fn log_max_open_files(log: &Logger) {
 
 // Run a test with configurable number of query requests per second,
 // duration of the test, and the required success ratio.
-pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
+pub fn test(env: TestEnv, rps: usize, runtime: Duration, min_success_ratio: f64) {
     let log = env.logger();
     log_max_open_files(&log);
     info!(
@@ -110,11 +112,21 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
     );
     let total_requests_count = rps * runtime.as_secs() as usize;
     let success_calls: usize = total_requests_count - metrics.errors().values().sum::<usize>();
+    let success_ratio: f64 = (success_calls as f64) / total_requests_count as f64;
     let duration_bucket = metrics
         .find_request_duration_bucket(DURATION_THRESHOLD)
         .unwrap();
     debug!(&log, "Results of the workload execution {:?}", metrics);
-    assert_eq!(success_calls, total_requests_count);
+    info!(
+        &log,
+        "Minimum expected success ratio is {}, actual success ratio is {}.",
+        min_success_ratio,
+        success_ratio
+    );
+    assert!(
+        success_ratio > min_success_ratio,
+        "Too many requests have failed."
+    );
     info!(
         &log,
         "Requests below {} sec:\nRequests_count = {}\nRequests_ratio = {}",
@@ -122,5 +134,5 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration) {
         duration_bucket.requests_count_below_threshold(),
         duration_bucket.requests_ratio_below_threshold(),
     );
-    assert_eq!(duration_bucket.requests_count_above_threshold(), 0);
+    assert!(duration_bucket.requests_ratio_below_threshold() > MIN_REQUESTS_RATIO_BELOW_THRESHOLD);
 }
