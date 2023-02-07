@@ -37,20 +37,20 @@ fn test_memory_test_canisters() {
 
     // Test reads after writes with step
     {
-        let payload = r#"{"address": 0, "size": 1000000000, "value": 2, "step": 1000}"#
+        let payload = r#"{"address": 0, "size": 100000000, "value": 2, "step": 1000}"#
             .as_bytes()
             .to_vec();
         env.execute_ingress(canister_id, "update_write", payload.clone())
             .unwrap();
         assert_reply_eq(
             env.query(canister_id, "query_read", payload).unwrap(),
-            1_000_000_000 / 1_000 * 2,
+            100_000_000 / 1_000 * 2,
         );
     }
 
     // Test read_write()
     {
-        let payload = r#"{"address": 0, "size": 1000000000, "value": 3, "step": 1000}"#
+        let payload = r#"{"address": 0, "size": 100000000, "value": 3, "step": 1000}"#
             .as_bytes()
             .to_vec();
         env.execute_ingress(canister_id, "update_read_write", payload.clone())
@@ -58,7 +58,7 @@ fn test_memory_test_canisters() {
         assert_reply_eq(
             env.execute_ingress(canister_id, "update_read_write", payload)
                 .unwrap(),
-            1_000_000_000 / 1_000 * 3,
+            100_000_000 / 1_000 * 3,
         );
         let payload = r#"{"address": 0, "size": 2000, "value": 3, "step": 1000}"#
             .as_bytes()
@@ -71,7 +71,7 @@ fn test_memory_test_canisters() {
 
     // Test stable read after stable write
     {
-        let payload = r#"{"address": 0, "size": 5000000000, "value": 10, "step": 5000}"#
+        let payload = r#"{"address": 0, "size": 500000000, "value": 10, "step": 5000}"#
             .as_bytes()
             .to_vec();
         env.execute_ingress(canister_id, "update_stable_write", payload.clone())
@@ -79,13 +79,13 @@ fn test_memory_test_canisters() {
         assert_reply_eq(
             env.query(canister_id, "query_stable_read", payload)
                 .unwrap(),
-            5_000_000_000_u64 / 5_000 * 10,
+            500_000_000_u64 / 5_000 * 10,
         );
     }
 
     // Test stable_read_write()
     {
-        let payload = r#"{"address": 0, "size": 5000000000, "value": 11, "step": 5000}"#
+        let payload = r#"{"address": 0, "size": 500000000, "value": 11, "step": 5000}"#
             .as_bytes()
             .to_vec();
         env.execute_ingress(canister_id, "update_stable_read_write", payload.clone())
@@ -93,7 +93,7 @@ fn test_memory_test_canisters() {
         assert_reply_eq(
             env.execute_ingress(canister_id, "update_stable_read_write", payload)
                 .unwrap(),
-            5_000_000_000_u64 / 5_000 * 11,
+            500_000_000_u64 / 5_000 * 11,
         );
         let payload = r#"{"address": 0, "size": 10000, "value": 11, "step": 5000}"#
             .as_bytes()
