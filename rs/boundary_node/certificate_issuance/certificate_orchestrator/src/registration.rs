@@ -503,7 +503,7 @@ mod tests {
     #[test]
     fn get_ok() -> Result<(), Error> {
         let reg = Registration {
-            name: Name::try_from("name")?,
+            name: Name::try_from("name.com")?,
             canister: Principal::from_text("aaaaa-aa")?,
             state: State::Available,
         };
@@ -535,7 +535,7 @@ mod tests {
         let creator = Creator::new(&ID_GENERATOR, &REGISTRATIONS, &NAMES, &EXPIRATIONS);
 
         let id = creator.create(
-            "name",                             // name
+            "name.com",                         // name
             &Principal::from_text("aaaaa-aa")?, // canister
         )?;
 
@@ -547,7 +547,7 @@ mod tests {
         assert_eq!(
             reg,
             Registration {
-                name: Name::try_from("name")?,
+                name: Name::try_from("name.com")?,
                 canister: Principal::from_text("aaaaa-aa")?,
                 state: State::PendingOrder,
             }
@@ -558,7 +558,7 @@ mod tests {
             .with(|names| {
                 names
                     .borrow()
-                    .get(&Name::try_from("name").expect("failed to create name"))
+                    .get(&Name::try_from("name.com").expect("failed to create name"))
             })
             .expect("expected name mapping to exist but none found");
 
@@ -570,7 +570,7 @@ mod tests {
     #[test]
     fn update_canister_ok() -> Result<(), Error> {
         let reg = Registration {
-            name: Name::try_from("name")?,
+            name: Name::try_from("name.com")?,
             canister: Principal::from_text("aaaaa-aa")?,
             state: State::PendingOrder,
         };
@@ -592,7 +592,7 @@ mod tests {
         assert_eq!(
             reg,
             Registration {
-                name: Name::try_from("name")?,
+                name: Name::try_from("name.com")?,
                 canister: Principal::from_text("2ibo7-dia")?,
                 state: State::PendingOrder,
             }
@@ -604,7 +604,7 @@ mod tests {
     #[test]
     fn update_state_ok() -> Result<(), Error> {
         let reg = Registration {
-            name: Name::try_from("name")?,
+            name: Name::try_from("name.com")?,
             canister: Principal::from_text("aaaaa-aa")?,
             state: State::PendingOrder,
         };
@@ -624,7 +624,7 @@ mod tests {
         assert_eq!(
             reg,
             Registration {
-                name: Name::try_from("name")?,
+                name: Name::try_from("name.com")?,
                 canister: Principal::from_text("aaaaa-aa")?,
                 state: State::PendingChallengeResponse,
             }
@@ -659,7 +659,7 @@ mod tests {
                 regs.borrow_mut().insert(
                     "id".into(),
                     Registration {
-                        name: Name::try_from("name").unwrap(),
+                        name: Name::try_from("name.com").unwrap(),
                         canister: Principal::from_text("aaaaa-aa").unwrap(),
                         state: State::PendingOrder,
                     },
@@ -671,7 +671,7 @@ mod tests {
             .with(|names| {
                 names
                     .borrow_mut()
-                    .insert(Name::try_from("name").unwrap(), "id".into())
+                    .insert(Name::try_from("name.com").unwrap(), "id".into())
             })
             .expect("failed to insert name mapping");
 
@@ -723,7 +723,7 @@ mod tests {
             Some(_) => panic!("expected registration to be removed, but it wasn't"),
         };
 
-        match NAMES.with(|names| names.borrow().get(&Name::try_from("name").unwrap())) {
+        match NAMES.with(|names| names.borrow().get(&Name::try_from("name.com").unwrap())) {
             None => {}
             Some(_) => panic!("expected name mapping to be removed, but it wasn't"),
         };
@@ -758,7 +758,7 @@ mod tests {
                 regs.borrow_mut().insert(
                     "id".into(),
                     Registration {
-                        name: Name::try_from("name").unwrap(),
+                        name: Name::try_from("name.com").unwrap(),
                         canister: Principal::from_text("aaaaa-aa").unwrap(),
                         state: State::PendingOrder,
                     },

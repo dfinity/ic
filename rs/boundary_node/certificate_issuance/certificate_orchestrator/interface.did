@@ -146,6 +146,21 @@ type LisAllowedPrincipalsResponse = variant {
     Err: ListAllowedPrincipalsError;
 };
 
+type HeaderField = record { text; text; };
+
+type HttpRequest = record {
+  method: text;
+  url: text;
+  headers: vec HeaderField;
+  body: blob;
+};
+
+type HttpResponse = record {
+  status_code: nat16;
+  headers: vec HeaderField;
+  body: blob;
+};
+
 service: (InitArg) -> {
     // Registrations
     createRegistration: (Name, Canister) -> (CreateRegistrationResponse);
@@ -162,8 +177,8 @@ service: (InitArg) -> {
     dispenseTask: () -> (DispenseTaskResponse);
     peekTask: () -> (DispenseTaskResponse) query;
 
-    // Metrics
-    metrics: () -> (text) query;
+    // Metrics (Http Interface)
+    http_request: (HttpRequest) -> (HttpResponse) query;
 
     // ACL
     listAllowedPrincipals: () -> (LisAllowedPrincipalsResponse) query;

@@ -4,11 +4,12 @@ use candid::{CandidType, Deserialize};
 use certificate_orchestrator_interface::{
     CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError, DispenseTaskResponse,
     EncryptedPair, ExportCertificatesError, ExportCertificatesResponse, GetRegistrationError,
-    GetRegistrationResponse, Id, ListAllowedPrincipalsError, ListAllowedPrincipalsResponse,
-    ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse, Name, QueueTaskError,
-    QueueTaskResponse, Registration, RemoveRegistrationError, RemoveRegistrationResponse,
-    UpdateRegistrationError, UpdateRegistrationResponse, UpdateType, UploadCertificateError,
-    UploadCertificateResponse, NAME_MAX_LEN,
+    GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id,
+    ListAllowedPrincipalsError, ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError,
+    ModifyAllowedPrincipalResponse, Name, QueueTaskError, QueueTaskResponse, Registration,
+    RemoveRegistrationError, RemoveRegistrationResponse, UpdateRegistrationError,
+    UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse,
+    NAME_MAX_LEN,
 };
 use ic_cdk::{
     api::time, caller, export::Principal, post_upgrade, pre_upgrade, timer::set_timer_interval,
@@ -576,16 +577,25 @@ fn peek_task() -> DispenseTaskResponse {
 
 // Metrics
 
-#[query(name = "metrics")]
-fn metrics() -> String {
-    if let Err(err) = MAIN_AUTHORIZER.with(|a| a.borrow().authorize(&caller())) {
-        trap(match err {
-            AuthorizeError::Unauthorized => "unauthorized",
-            AuthorizeError::UnexpectedError(_) => "unexpected error",
-        });
+#[query(name = "http_request")]
+fn http_request(request: HttpRequest) -> HttpResponse {
+    if request.url != "/metrics" {
+        return HttpResponse {
+            status_code: 404,
+            headers: vec![],
+            body: "404 Not Found".as_bytes().to_owned(),
+        };
     }
 
-    METRICS_REGISTRY.with(|r| {
+    if request.method.to_lowercase() != "get" {
+        return HttpResponse {
+            status_code: 405,
+            headers: vec![HeaderField("Allow".into(), "GET".into())],
+            body: "405 Method Not Allowed".as_bytes().to_owned(),
+        };
+    }
+
+    let bs = METRICS_REGISTRY.with(|r| {
         let mfs = r.borrow().gather();
 
         let mut buffer = vec![];
@@ -595,11 +605,14 @@ fn metrics() -> String {
             trap(&format!("failed to encode metrics: {err}"));
         };
 
-        match String::from_utf8(buffer) {
-            Ok(v) => v,
-            Err(err) => trap(&format!("failed to serialize metrics buffer: {err}")),
-        }
-    })
+        buffer
+    });
+
+    HttpResponse {
+        status_code: 200,
+        headers: vec![],
+        body: bs,
+    }
 }
 
 // ACLs
