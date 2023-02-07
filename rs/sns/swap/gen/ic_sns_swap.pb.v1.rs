@@ -509,6 +509,16 @@ pub mod sns_neuron_recipe {
         /// The dissolve delay in seconds that the Neuron will be created with.
         #[prost(uint64, tag = "2")]
         pub dissolve_delay_seconds: u64,
+        /// The list of NeuronIds that the created Neuron will follow on all SNS Proposal
+        /// Actions known to governance at the time. Additional followees and following
+        /// relations can be added after neuron creation.
+        ///
+        /// TODO NNS1-1589 - Due to the dependency cycle, the Sale canister's protobuf cannot directly
+        /// depend on SNS Governance NeuronId type. The followees NeuronId's are
+        /// of a duplicated type, which is converted to SNS governance NeuronId at the time
+        /// of claiming.
+        #[prost(message, repeated, tag = "3")]
+        pub followees: ::prost::alloc::vec::Vec<super::NeuronId>,
     }
     /// The various statuses of creation that a SnsNeuronRecipe can have in an SNS.
     #[derive(
@@ -1276,6 +1286,21 @@ pub mod settle_community_fund_participation {
         #[prost(message, tag = "3")]
         Aborted(Aborted),
     }
+}
+/// The id of a specific neuron, which equals the neuron's subaccount on the ledger canister
+/// (the account that holds the neuron's staked tokens).
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NeuronId {
+    #[prost(bytes = "vec", tag = "1")]
+    pub id: ::prost::alloc::vec::Vec<u8>,
 }
 // END NNS1-1589 HACKS
 

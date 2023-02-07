@@ -99,6 +99,7 @@ pub fn create_single_neuron_recipe(amount_e8s: u64, buyer_principal: String) -> 
         neuron_attributes: Some(NeuronAttributes {
             memo: 0,
             dissolve_delay_seconds: 0,
+            followees: vec![],
         }),
         investor: Some(Direct(DirectInvestment { buyer_principal })),
         claimed_status: Some(ClaimedStatus::Pending as i32),
@@ -252,6 +253,7 @@ pub fn create_generic_sns_neuron_recipes(count: u64) -> Vec<SnsNeuronRecipe> {
             neuron_attributes: Some(NeuronAttributes {
                 memo,
                 dissolve_delay_seconds: ONE_MONTH_SECONDS,
+                followees: vec![],
             }),
             investor: Some(Direct(DirectInvestment {
                 buyer_principal: (*TEST_USER1_PRINCIPAL).to_string(),

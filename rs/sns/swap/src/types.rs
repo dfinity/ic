@@ -4,8 +4,9 @@ use crate::pb::v1::{
     set_mode_call_result::SetModeResult, settle_community_fund_participation_result,
     sns_neuron_recipe::ClaimedStatus, sns_neuron_recipe::Investor, BuyerState, CfInvestment,
     CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpResponse, FinalizeSwapResponse, Init,
-    Lifecycle, OpenRequest, Params, SetDappControllersCallResult, SetModeCallResult,
-    SettleCommunityFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
+    Lifecycle, NeuronId as SaleNeuronId, OpenRequest, Params, SetDappControllersCallResult,
+    SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, SweepResult,
+    TransferableAmount,
 };
 use crate::swap::is_valid_principal;
 use ic_base_types::{CanisterId, PrincipalId};
@@ -14,7 +15,7 @@ use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::ICRC1Ledger;
 use ic_nervous_system_common::SECONDS_PER_DAY;
-use ic_sns_governance::pb::v1::ClaimedSwapNeuronStatus;
+use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
 use std::str::FromStr;
 
 pub fn validate_principal(p: &str) -> Result<(), String> {
@@ -722,9 +723,39 @@ impl From<ClaimedSwapNeuronStatus> for ClaimedStatus {
             ClaimedSwapNeuronStatus::Unspecified => ClaimedStatus::Failed,
             ClaimedSwapNeuronStatus::MemoryExhausted => ClaimedStatus::Failed,
             ClaimedSwapNeuronStatus::Invalid => ClaimedStatus::Invalid,
-            // TODO NNS1-2017 - Neuron collisions are possible and should be
-            // treated as a failure.
             ClaimedSwapNeuronStatus::AlreadyExists => ClaimedStatus::Invalid,
+        }
+    }
+}
+
+// TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
+// SNS governance.proto
+impl From<[u8; 32]> for SaleNeuronId {
+    fn from(value: [u8; 32]) -> Self {
+        Self { id: value.to_vec() }
+    }
+}
+
+// TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
+// SNS governance.proto
+impl From<NeuronId> for SaleNeuronId {
+    fn from(neuron_id: NeuronId) -> Self {
+        Self { id: neuron_id.id }
+    }
+}
+
+// TODO NNS1-1589: Implementation will not longer be needed when swap.proto can depend on
+// SNS governance.proto
+impl TryInto<NeuronId> for SaleNeuronId {
+    type Error = String;
+
+    fn try_into(self) -> Result<NeuronId, Self::Error> {
+        match Subaccount::try_from(self.id) {
+            Ok(subaccount) => Ok(NeuronId::from(subaccount)),
+            Err(err) => Err(format!(
+                "Followee could not be parsed into NeuronId. Err {:?}",
+                err
+            )),
         }
     }
 }

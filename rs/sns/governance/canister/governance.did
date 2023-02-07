@@ -290,6 +290,7 @@ type NeuronParameters = record {
   dissolve_delay_seconds : opt nat64;
   source_nns_neuron_id : opt nat64;
   stake_e8s : opt nat64;
+  followees : vec NeuronId;
   hotkey : opt principal;
   neuron_id : opt NeuronId;
 };

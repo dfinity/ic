@@ -15,7 +15,7 @@ use ic_nns_test_utils::sns_wasm::{
     build_swap_sns_wasm,
 };
 use ic_nns_test_utils::state_test_helpers::set_controllers;
-use ic_sns_governance::pb::v1::{ListNeurons, ListNeuronsResponse};
+use ic_sns_governance::pb::v1::{ListNeurons, ListNeuronsResponse, NervousSystemParameters};
 use ic_sns_init::SnsCanisterInitPayloads;
 use ic_sns_root::pb::v1::{
     RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
@@ -151,10 +151,36 @@ pub fn sns_governance_list_neurons(
     let result = match result {
         WasmResult::Reply(reply) => reply,
         WasmResult::Reject(reject) => {
-            panic!("get_state was rejected by the swap canister: {:#?}", reject)
+            panic!(
+                "list_neurons was rejected by the governance canister: {:#?}",
+                reject
+            )
         }
     };
     Decode!(&result, ListNeuronsResponse).unwrap()
+}
+
+pub fn sns_governance_get_nervous_system_parameters(
+    state_machine: &mut StateMachine,
+    sns_governance_canister_id: CanisterId,
+) -> NervousSystemParameters {
+    let result = state_machine
+        .execute_ingress(
+            sns_governance_canister_id,
+            "get_nervous_system_parameters",
+            Encode!().unwrap(),
+        )
+        .unwrap();
+    let result = match result {
+        WasmResult::Reply(reply) => reply,
+        WasmResult::Reject(reject) => {
+            panic!(
+                "get_nervous_system_parameters was rejected by the governance canister: {:#?}",
+                reject
+            )
+        }
+    };
+    Decode!(&result, NervousSystemParameters).unwrap()
 }
 
 pub fn participate_in_swap(

@@ -1018,17 +1018,17 @@ fn test_scenario_happy() {
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             5_000 * E8,
             neurons_per_investor,
-            TestInvestor::CommunityFund(/* memo */ 0),
+            TestInvestor::CommunityFund(/* memo */ SALE_NEURON_MEMO_RANGE_START),
         ));
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             3_000 * E8,
             neurons_per_investor,
-            TestInvestor::CommunityFund(/* memo */ 3),
+            TestInvestor::CommunityFund(/* memo */ SALE_NEURON_MEMO_RANGE_START + 3),
         ));
         mock_ledger_calls.append(&mut neuron_basket_transfer_fund_calls(
             2_000 * E8,
             neurons_per_investor,
-            TestInvestor::CommunityFund(/* memo */ 6),
+            TestInvestor::CommunityFund(/* memo */ SALE_NEURON_MEMO_RANGE_START + 6),
         ));
 
         let SweepResult {
@@ -3372,6 +3372,7 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_parameters() {
                 neuron_attributes: Some(NeuronAttributes {
                     memo: 10,
                     dissolve_delay_seconds: ONE_MONTH_SECONDS,
+                    followees: vec![NeuronId::new_test_neuron_id(10).try_into().unwrap()],
                 }),
                 investor: Some(Investor::Direct(DirectInvestment {
                     buyer_principal: (*TEST_USER1_PRINCIPAL).to_string(),
@@ -3386,6 +3387,7 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_parameters() {
                 neuron_attributes: Some(NeuronAttributes {
                     memo: 0,
                     dissolve_delay_seconds: 0,
+                    followees: vec![NeuronId::new_test_neuron_id(20).try_into().unwrap()],
                 }),
                 investor: Some(Investor::CommunityFund(CfInvestment {
                     hotkey_principal: (*TEST_USER2_PRINCIPAL).to_string(),
@@ -3435,6 +3437,7 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_parameters() {
                             *TEST_USER1_PRINCIPAL,
                             10
                         ))),
+                        followees: vec![NeuronId::new_test_neuron_id(10)],
                     },
                     NeuronParameters {
                         controller: Some(NNS_GOVERNANCE_CANISTER_ID.get()),
@@ -3446,6 +3449,7 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_parameters() {
                             NNS_GOVERNANCE_CANISTER_ID.get(),
                             0
                         ))),
+                        followees: vec![NeuronId::new_test_neuron_id(20)],
                     }
                 ],
             }

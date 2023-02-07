@@ -427,6 +427,16 @@ message SnsNeuronRecipe {
 
     // The dissolve delay in seconds that the Neuron will be created with.
     uint64 dissolve_delay_seconds = 2;
+
+    // The list of NeuronIds that the created Neuron will follow on all SNS Proposal
+    // Actions known to governance at the time. Additional followees and following
+    // relations can be added after neuron creation.
+    //
+    // TODO NNS1-1589 - Due to the dependency cycle, the Sale canister's protobuf cannot directly
+    // depend on SNS Governance NeuronId type. The followees NeuronId's are
+    // of a duplicated type, which is converted to SNS governance NeuronId at the time
+    // of claiming.
+    repeated NeuronId followees = 3;
   }
 
   // The status of the SnsNeuronRecipe's creation within SNS Governance. This field is
@@ -731,6 +741,12 @@ message SettleCommunityFundParticipation {
   // to be refunded can be found in the ProposalData's cf_participants field.
   message Aborted {
   }
+}
+
+// The id of a specific neuron, which equals the neuron's subaccount on the ledger canister
+// (the account that holds the neuron's staked tokens).
+message NeuronId {
+  bytes id = 1;
 }
 
 // END NNS1-1589 HACKS

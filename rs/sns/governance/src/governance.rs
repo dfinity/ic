@@ -95,10 +95,11 @@ use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 lazy_static! {
     pub static ref NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER: NervousSystemFunction =
         NervousSystemFunction {
-            id: 0,
+            id: *NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER_ID,
             name: "DELETION_MARKER".to_string(),
             ..Default::default()
         };
+    pub static ref NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER_ID: u64 = 0;
 }
 
 /// The maximum payload size that will be included in proposals when `list_proposals` is called.
@@ -731,35 +732,6 @@ impl Governance {
             .build_principal_to_neuron_ids_index(&self.proto.neurons);
     }
 
-    /// Returns the ledger's transaction fee as stored in the service nervous parameters.
-    fn transaction_fee_e8s(&self) -> u64 {
-        self.nervous_system_parameters()
-            .transaction_fee_e8s
-            .expect("NervousSystemParameters must have transaction_fee_e8s")
-    }
-
-    /// Returns the initial voting period of proposals.
-    fn initial_voting_period_seconds(&self) -> u64 {
-        self.nervous_system_parameters()
-            .initial_voting_period_seconds
-            .expect("NervousSystemParameters must have initial_voting_period_seconds")
-    }
-
-    /// Returns the wait for quiet deadline extension period for proposals.
-    fn wait_for_quiet_deadline_increase_seconds(&self) -> u64 {
-        self.nervous_system_parameters()
-            .wait_for_quiet_deadline_increase_seconds
-            .expect("NervousSystemParameters must have wait_for_quiet_deadline_increase_seconds")
-    }
-
-    /// Returns the voting rewards parameters from the nervous system parameters.
-    fn voting_rewards_parameters(&self) -> &VotingRewardsParameters {
-        self.nervous_system_parameters()
-            .voting_rewards_parameters
-            .as_ref()
-            .expect("NervousSystemParameters must have voting_rewards_parameters")
-    }
-
     /// Computes the NeuronId or returns a GovernanceError if a neuron with this ID already exists.
     fn new_neuron_id(
         &mut self,
@@ -1060,7 +1032,7 @@ impl Governance {
         caller: &PrincipalId,
         disburse: &manage_neuron::Disburse,
     ) -> Result<u64, GovernanceError> {
-        let transaction_fee_e8s = self.transaction_fee_e8s();
+        let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
         let neuron = self.get_neuron_result(id)?;
 
         neuron.check_authorized(caller, NeuronPermissionType::Disburse)?;
@@ -1203,7 +1175,7 @@ impl Governance {
             .neuron_minimum_stake_e8s
             .expect("NervousSystemParameters must have neuron_minimum_stake_e8s");
 
-        let transaction_fee_e8s = self.transaction_fee_e8s();
+        let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
 
         // Get the neuron and clone to appease the borrow checker.
         // We'll get a mutable reference when we need to change it later.
@@ -1366,7 +1338,7 @@ impl Governance {
                 "The percentage of maturity to merge must be a value between 1 and 100 (inclusive)."));
         }
 
-        let transaction_fee_e8s = self.transaction_fee_e8s();
+        let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
 
         let mut maturity_to_merge =
             (neuron.maturity_e8s_equivalent * merge_maturity.percentage_to_merge as u64) / 100;
@@ -1543,7 +1515,7 @@ impl Governance {
             .checked_div(100)
             .expect("Error when processing maturity to disburse.");
 
-        let transaction_fee_e8s = self.transaction_fee_e8s();
+        let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
         if maturity_to_disburse < transaction_fee_e8s {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
@@ -2277,7 +2249,7 @@ impl Governance {
     ) -> Result<(), GovernanceError> {
         // Only set `self.proto.parameters` if "applying" the proposed params to the
         // current params results in valid params
-        let new_params = proposed_params.inherit_from(self.nervous_system_parameters());
+        let new_params = proposed_params.inherit_from(self.nervous_system_parameters_or_panic());
 
         log!(
             INFO,
@@ -2525,7 +2497,7 @@ impl Governance {
                     )
                 }),
             TransferFrom::SnsTokenTreasury => {
-                let transaction_fee_e8s = self.transaction_fee_e8s();
+                let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
                 // See ic_sns_init::distributions::FractionalDeveloperVotingPower.insert_treasury_accounts
                 let treasury_subaccount = compute_distribution_subaccount_bytes(
                     self.env.canister_id().get(),
@@ -2556,7 +2528,7 @@ impl Governance {
     }
 
     /// Returns the nervous system parameters
-    fn nervous_system_parameters(&self) -> &NervousSystemParameters {
+    fn nervous_system_parameters_or_panic(&self) -> &NervousSystemParameters {
         self.proto
             .parameters
             .as_ref()
@@ -2565,8 +2537,8 @@ impl Governance {
 
     /// Returns the list of permissions that a principal that claims a neuron will have for
     /// that neuron, as defined in the nervous system parameters' neuron_claimer_permissions.
-    fn neuron_claimer_permissions(&self) -> NeuronPermissionList {
-        self.nervous_system_parameters()
+    fn neuron_claimer_permissions_or_panic(&self) -> NeuronPermissionList {
+        self.nervous_system_parameters_or_panic()
             .neuron_claimer_permissions
             .as_ref()
             .expect("NervousSystemParameters.neuron_claimer_permissions must be present")
@@ -2575,12 +2547,54 @@ impl Governance {
 
     /// Returns the default followees that a newly claimed neuron will have, as defined in
     /// the nervous system parameters' default_followees.
-    fn default_followees(&self) -> DefaultFollowees {
-        self.nervous_system_parameters()
+    fn default_followees_or_panic(&self) -> DefaultFollowees {
+        self.nervous_system_parameters_or_panic()
             .default_followees
             .as_ref()
             .expect("NervousSystemParameters.default_followees must be present")
             .clone()
+    }
+
+    /// Returns the ledger's transaction fee as stored in the service nervous parameters.
+    fn transaction_fee_e8s_or_panic(&self) -> u64 {
+        self.nervous_system_parameters_or_panic()
+            .transaction_fee_e8s
+            .expect("NervousSystemParameters must have transaction_fee_e8s")
+    }
+
+    /// Returns the initial voting period of proposals.
+    fn initial_voting_period_seconds_or_panic(&self) -> u64 {
+        self.nervous_system_parameters_or_panic()
+            .initial_voting_period_seconds
+            .expect("NervousSystemParameters must have initial_voting_period_seconds")
+    }
+
+    /// Returns the wait for quiet deadline extension period for proposals.
+    fn wait_for_quiet_deadline_increase_seconds_or_panic(&self) -> u64 {
+        self.nervous_system_parameters_or_panic()
+            .wait_for_quiet_deadline_increase_seconds
+            .expect("NervousSystemParameters must have wait_for_quiet_deadline_increase_seconds")
+    }
+
+    /// Returns the voting rewards parameters from the nervous system parameters.
+    fn voting_rewards_parameters_or_panic(&self) -> &VotingRewardsParameters {
+        self.nervous_system_parameters_or_panic()
+            .voting_rewards_parameters
+            .as_ref()
+            .expect("NervousSystemParameters must have voting_rewards_parameters")
+    }
+
+    /// Returns the neuron minimum stake e8s from the nervous system parameters.
+    fn neuron_minimum_stake_e8s_or_panic(&self) -> u64 {
+        self.nervous_system_parameters_or_panic()
+            .neuron_minimum_stake_e8s
+            .expect("NervousSystemParameters must have neuron_minimum_stake_e8s")
+    }
+
+    fn max_followees_per_function_or_panic(&self) -> u64 {
+        self.nervous_system_parameters_or_panic()
+            .max_followees_per_function
+            .expect("NervousSystemParameters must have max_followees_per_function")
     }
 
     /// Inserts a proposals that has already been validated in the state.
@@ -2676,7 +2690,7 @@ impl Governance {
         )?;
 
         let reject_cost_e8s = self
-            .nervous_system_parameters()
+            .nervous_system_parameters_or_panic()
             .reject_cost_e8s
             .expect("NervousSystemParameters must have reject_cost_e8s");
 
@@ -2693,7 +2707,7 @@ impl Governance {
         proposer.check_authorized(caller, NeuronPermissionType::SubmitProposal)?;
 
         let min_dissolve_delay_for_vote = self
-            .nervous_system_parameters()
+            .nervous_system_parameters_or_panic()
             .neuron_minimum_dissolve_delay_to_vote_seconds
             .expect("NervousSystemParameters must have min_dissolve_delay_for_vote");
 
@@ -2749,24 +2763,24 @@ impl Governance {
         let mut electoral_roll = BTreeMap::<String, Ballot>::new();
         let mut total_power: u128 = 0;
         let max_dissolve_delay = self
-            .nervous_system_parameters()
+            .nervous_system_parameters_or_panic()
             .max_dissolve_delay_seconds
             .expect("NervousSystemParameters must have max_dissolve_delay_seconds");
         let max_age_bonus = self
-            .nervous_system_parameters()
+            .nervous_system_parameters_or_panic()
             .max_neuron_age_for_age_bonus
             .expect("NervousSystemParameters must have max_neuron_age_for_age_bonus");
         let max_dissolve_delay_bonus_percentage = self
-            .nervous_system_parameters()
+            .nervous_system_parameters_or_panic()
             .max_dissolve_delay_bonus_percentage
             .expect("NervousSystemParameters must have max_dissolve_delay_bonus_percentage");
         let max_age_bonus_percentage = self
-            .nervous_system_parameters()
+            .nervous_system_parameters_or_panic()
             .max_age_bonus_percentage
             .expect("NervousSystemParameters must have max_age_bonus_percentage");
-        let initial_voting_period_seconds = self.initial_voting_period_seconds();
+        let initial_voting_period_seconds = self.initial_voting_period_seconds_or_panic();
         let wait_for_quiet_deadline_increase_seconds =
-            self.wait_for_quiet_deadline_increase_seconds();
+            self.wait_for_quiet_deadline_increase_seconds_or_panic();
 
         for (k, v) in self.proto.neurons.iter() {
             // If this neuron is eligible to vote, record its
@@ -2814,7 +2828,7 @@ impl Governance {
         let proposal_id = ProposalId { id: proposal_num };
 
         // Compute whether the proposal is eligible for rewards
-        let is_eligible_for_rewards = self.voting_rewards_parameters().rewards_enabled();
+        let is_eligible_for_rewards = self.voting_rewards_parameters_or_panic().rewards_enabled();
         // Create the proposal.
         let mut proposal_data = ProposalData {
             action: u64::from(action),
@@ -3156,10 +3170,6 @@ impl Governance {
             }
         }
         if !f.followees.is_empty() {
-            // TODO Since we want the flexibility of using u64 we may need a method that
-            // doesn't allow users submitting a follow to spam "unofficial"
-            // action_type_keys
-
             // Insert the new list of followees for this function_id in
             // the neuron's followees, removing the old list, which has
             // already been removed from the followee index above.
@@ -3272,7 +3282,7 @@ impl Governance {
         // Get the balance of the neuron from the ledger canister.
         let balance = self.ledger.account_balance(account.clone()).await?;
         let min_stake = self
-            .nervous_system_parameters()
+            .nervous_system_parameters_or_panic()
             .neuron_minimum_stake_e8s
             .expect("NervousSystemParameters must have neuron_minimum_stake_e8s");
         if balance.get_e8s() < min_stake {
@@ -3349,13 +3359,13 @@ impl Governance {
             id: Some(neuron_id.clone()),
             permissions: vec![NeuronPermission::new(
                 principal_id,
-                self.neuron_claimer_permissions().permissions,
+                self.neuron_claimer_permissions_or_panic().permissions,
             )],
             cached_neuron_stake_e8s: 0,
             neuron_fees_e8s: 0,
             created_timestamp_seconds: now,
             aging_since_timestamp_seconds: now,
-            followees: self.default_followees().followees,
+            followees: self.default_followees_or_panic().followees,
             maturity_e8s_equivalent: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(0)),
             // A neuron created through the `claim_or_refresh` ManageNeuron command will
@@ -3376,7 +3386,7 @@ impl Governance {
         let account = self.neuron_account_id(subaccount);
         let balance = self.ledger.account_balance(account).await?;
         let min_stake = self
-            .nervous_system_parameters()
+            .nervous_system_parameters_or_panic()
             .neuron_minimum_stake_e8s
             .expect("NervousSystemParameters must have neuron_minimum_stake_e8s");
 
@@ -3426,6 +3436,8 @@ impl Governance {
     ///   canister.
     /// - Each NeuronParameters' `stake_e8s` is at least neuron_minimum_stake_e8s
     ///   as defined in the `NervousSystemParameters`
+    /// - Each NeuronParameters' `followees` does not exceed max_followees_per_function
+    ///   as defined in the `NervousSystemParameters`
     /// - There is available memory in the Governance canister for the newly created
     ///   Neuron.
     /// - The Neuron being claimed must not already exist in Governance.
@@ -3449,15 +3461,31 @@ impl Governance {
             return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Unauthorized);
         }
 
-        let neuron_minimum_stake_e8s = self
-            .nervous_system_parameters()
-            .neuron_minimum_stake_e8s
-            .expect("NervousSystemParameters must have neuron_minimum_stake_e8s");
+        // Validate NervousSystemParameters and it's underlying parameters.
+        match self
+            .proto
+            .parameters
+            .as_ref()
+            .ok_or_else(|| "NervousSystemParameters were not present".to_string())
+            .and_then(|params| params.validate())
+        {
+            Ok(_) => (),
+            Err(message) => {
+                log!(ERROR, "Could not claim_swap_neurons, one or more NervousSystemParameters were not valid. Err: {}", message);
+                return ClaimSwapNeuronsResponse::new_with_error(ClaimSwapNeuronsError::Internal);
+            }
+        }
+
+        // Safe to do with the validation step above
+        let neuron_minimum_stake_e8s = self.neuron_minimum_stake_e8s_or_panic();
+        let max_followees_per_function = self.max_followees_per_function_or_panic();
+        let default_followees = self.default_followees_or_panic().followees;
+        let neuron_claimer_permissions = self.neuron_claimer_permissions_or_panic();
 
         let mut swap_neurons = vec![];
 
-        for neuron_parameter in request.neuron_parameters {
-            match neuron_parameter.validate(neuron_minimum_stake_e8s) {
+        for neuron_parameter in &request.neuron_parameters {
+            match neuron_parameter.validate(neuron_minimum_stake_e8s, max_followees_per_function) {
                 Ok(_) => (),
                 Err(err) => {
                     log!(ERROR, "Failed to claim Sale Neuron due to {:?}", err);
@@ -3484,22 +3512,23 @@ impl Governance {
             let neuron = Neuron {
                 id: Some(neuron_id.clone()),
                 permissions: neuron_parameter
-                    .construct_permissions(self.neuron_claimer_permissions()),
+                    .construct_permissions_or_panic(neuron_claimer_permissions.clone()),
                 cached_neuron_stake_e8s: neuron_parameter.get_stake_e8s_or_panic(),
                 neuron_fees_e8s: 0,
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
-                // TODO NNS1-1720 - Neurons with the same principal should follow the one with the longest dissolve delay
-                followees: self.default_followees().followees,
+                followees: neuron_parameter.construct_followees(
+                    &self.list_valid_function_ids(),
+                    default_followees.clone(),
+                ),
                 maturity_e8s_equivalent: 0,
-                // TODO NNS1-1720 - CF Neurons should be automatically dissolving
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                     neuron_parameter.get_dissolve_delay_seconds_or_panic(),
                 )),
                 voting_power_percentage_multiplier: DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
                 source_nns_neuron_id: neuron_parameter.source_nns_neuron_id,
                 staked_maturity_e8s_equivalent: None,
-                auto_stake_maturity: None,
+                auto_stake_maturity: neuron_parameter.construct_auto_staking_maturity(),
                 vesting_period_seconds: None,
                 disburse_maturity_in_progress: vec![],
             };
@@ -3572,7 +3601,7 @@ impl Governance {
         neuron
             .check_principal_authorized_to_change_permissions(caller, permissions_to_add.clone())?;
 
-        self.nervous_system_parameters()
+        self.nervous_system_parameters_or_panic()
             .check_permissions_are_grantable(permissions_to_add)?;
 
         let principal_id = add_neuron_permissions.principal_id.ok_or_else(|| {
@@ -3588,7 +3617,7 @@ impl Governance {
             .find(|permission| permission.principal == Some(principal_id));
 
         let max_number_of_principals_per_neuron = self
-            .nervous_system_parameters()
+            .nervous_system_parameters_or_panic()
             .max_number_of_principals_per_neuron
             .expect("NervousSystemParameters.max_number_of_principals_per_neuron must be present");
 
@@ -4042,7 +4071,7 @@ impl Governance {
             self.latest_gc_timestamp_seconds
         );
         let max_proposals_to_keep_per_action = self
-            .nervous_system_parameters()
+            .nervous_system_parameters_or_panic()
             .max_proposals_to_keep_per_action
             .expect("NervousSystemParameters must have max_proposals_to_keep_per_action")
             as usize;
@@ -4129,11 +4158,14 @@ impl Governance {
     fn should_distribute_rewards(&self) -> bool {
         let now = self.env.now();
 
-        let voting_rewards_parameters =
-            match &self.nervous_system_parameters().voting_rewards_parameters {
-                None => return false,
-                Some(ok) => ok,
-            };
+        let voting_rewards_parameters = match &self
+            .nervous_system_parameters_or_panic()
+            .voting_rewards_parameters
+        {
+            None => return false,
+            Some(ok) => ok,
+        };
+
         if !voting_rewards_parameters.rewards_enabled() {
             return false;
         }
@@ -4171,18 +4203,20 @@ impl Governance {
 
         // VotingRewardsParameters should always be set,
         // but we check and return early just in case.
-        let voting_rewards_parameters =
-            match &self.nervous_system_parameters().voting_rewards_parameters {
-                Some(voting_rewards_parameters) => voting_rewards_parameters,
-                None => {
-                    log!(
-                        ERROR,
-                        "distribute_rewards called even though \
+        let voting_rewards_parameters = match &self
+            .nervous_system_parameters_or_panic()
+            .voting_rewards_parameters
+        {
+            Some(voting_rewards_parameters) => voting_rewards_parameters,
+            None => {
+                log!(
+                    ERROR,
+                    "distribute_rewards called even though \
                      voting_rewards_parameters not set.",
-                    );
-                    return;
-                }
-            };
+                );
+                return;
+            }
+        };
 
         if !voting_rewards_parameters.rewards_enabled() {
             log!(
@@ -4643,7 +4677,7 @@ impl Governance {
     /// as defined in the nervous system parameters, has already been reached.
     fn check_neuron_population_can_grow(&self) -> Result<(), GovernanceError> {
         let max_number_of_neurons = self
-            .nervous_system_parameters()
+            .nervous_system_parameters_or_panic()
             .max_number_of_neurons
             .expect("NervousSystemParameters must have max_number_of_neurons")
             as usize;
@@ -4728,6 +4762,16 @@ impl Governance {
             owner: self.env.canister_id().get(),
             subaccount: Some(subaccount),
         }
+    }
+
+    /// Returns the list of all valid function_ids that can, for example, be followed on. This
+    /// includes the registered GenericNervousSystemFunctions
+    pub fn list_valid_function_ids(&self) -> Vec<u64> {
+        Action::native_function_ids()
+            .into_iter()
+            .chain(self.proto.id_to_nervous_system_functions.keys().copied())
+            .filter(|function_id| *function_id != *NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER_ID)
+            .collect()
     }
 }
 
@@ -8038,7 +8082,7 @@ mod tests {
             .expect("Missing new neuron!");
         assert_eq!(
             child_neuron.cached_neuron_stake_e8s,
-            split_amount_e8s - setup.governance.transaction_fee_e8s()
+            split_amount_e8s - setup.governance.transaction_fee_e8s_or_panic()
         );
         assert_eq!(child_neuron.maturity_e8s_equivalent, 0);
         assert!(child_neuron.disburse_maturity_in_progress.is_empty());
@@ -8112,7 +8156,7 @@ mod tests {
     async fn test_split_neuron_fails_if_split_amount_too_low() {
         // Step 1: Prepare the world and parameters.
         let mut setup = prepare_setup_for_split_neuron_tests(1_000_000_000, 100);
-        let params = setup.governance.nervous_system_parameters();
+        let params = setup.governance.nervous_system_parameters_or_panic();
         // The requested amount does not account for transaction fee, so the split should fail.
         let split = manage_neuron::Split {
             amount_e8s: params
@@ -8138,7 +8182,7 @@ mod tests {
         // Step 1: Prepare the world and parameters.
         let stake_e8s = 10_000_000_000;
         let mut setup = prepare_setup_for_split_neuron_tests(stake_e8s, 100);
-        let params = setup.governance.nervous_system_parameters();
+        let params = setup.governance.nervous_system_parameters_or_panic();
         // The remaining amount would be below min stake, so the split should fail.
         let split = manage_neuron::Split {
             amount_e8s: stake_e8s + 1

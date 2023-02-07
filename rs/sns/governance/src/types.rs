@@ -17,6 +17,7 @@ use crate::{
         manage_neuron_response::StakeMaturityResponse,
         manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse},
         nervous_system_function::FunctionType,
+        neuron::Followees,
         proposal::Action,
         ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
         DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction, GovernanceError,
@@ -1527,7 +1528,11 @@ impl From<u64> for ProposalId {
 }
 
 impl NeuronParameters {
-    pub(crate) fn validate(&self, neuron_minimum_stake_e8s: u64) -> Result<(), String> {
+    pub(crate) fn validate(
+        &self,
+        neuron_minimum_stake_e8s: u64,
+        max_followees_per_function: u64,
+    ) -> Result<(), String> {
         let mut defects = vec![];
 
         let Self {
@@ -1537,6 +1542,7 @@ impl NeuronParameters {
             dissolve_delay_seconds,
             hotkey: _,
             source_nns_neuron_id: _,
+            followees,
         } = self;
 
         if neuron_id.is_none() {
@@ -1562,6 +1568,15 @@ impl NeuronParameters {
             defects.push("Missing dissolve_delay_seconds".to_string());
         }
 
+        if followees.len() as u64 > max_followees_per_function {
+            defects.push(format!(
+                "Provided number of followees ({}) exceeds the maximum \
+                number of followees per function ({})",
+                followees.len(),
+                max_followees_per_function
+            ));
+        }
+
         if !defects.is_empty() {
             Err(format!(
                 "Could not claim neuron for controller {:?} with NeuronId {:?} due to: {}",
@@ -1572,6 +1587,12 @@ impl NeuronParameters {
         } else {
             Ok(())
         }
+    }
+
+    /// Determines if the requested Neuron is being claimed on behalf of a CommunityFund
+    /// participant in the Sale.
+    pub(crate) fn is_community_fund_neuron(&self) -> bool {
+        self.source_nns_neuron_id.is_some()
     }
 
     pub(crate) fn get_controller_or_panic(&self) -> PrincipalId {
@@ -1601,7 +1622,7 @@ impl NeuronParameters {
             .expect("Expected NeuronId to be present in NeuronParameters")
     }
 
-    pub(crate) fn construct_permissions(
+    pub(crate) fn construct_permissions_or_panic(
         &self,
         neuron_claimer_permissions: NeuronPermissionList,
     ) -> Vec<NeuronPermission> {
@@ -1626,6 +1647,34 @@ impl NeuronParameters {
 
         permissions
     }
+
+    /// Adds `self.followees` entries in `base_followees` that are
+    /// keyed by `function_ids_to_follow`.
+    pub(crate) fn construct_followees(
+        &self,
+        function_ids_to_follow: &[u64],
+        base_followees: BTreeMap<u64, Followees>,
+    ) -> BTreeMap<u64, Followees> {
+        let mut final_followees = base_followees;
+
+        for function_id in function_ids_to_follow {
+            final_followees
+                .entry(*function_id)
+                .or_insert(Followees { followees: vec![] })
+                .followees
+                .extend(self.followees.clone());
+        }
+
+        final_followees
+    }
+
+    pub(crate) fn construct_auto_staking_maturity(&self) -> Option<bool> {
+        if self.is_community_fund_neuron() {
+            Some(true)
+        } else {
+            None
+        }
+    }
 }
 
 impl ClaimSwapNeuronsResponse {
@@ -1646,11 +1695,11 @@ impl ClaimSwapNeuronsResponse {
 
 impl SwapNeuron {
     pub(crate) fn from_neuron_parameters(
-        neuron_parameters: NeuronParameters,
+        neuron_parameters: &NeuronParameters,
         claimed_swap_neuron_status: ClaimedSwapNeuronStatus,
     ) -> Self {
         SwapNeuron {
-            id: neuron_parameters.neuron_id,
+            id: neuron_parameters.neuron_id.clone(),
             status: claimed_swap_neuron_status as i32,
         }
     }
@@ -2712,13 +2761,17 @@ pub(crate) mod tests {
                 dissolve_delay_seconds: Some(3 * ONE_MONTH_SECONDS),
                 source_nns_neuron_id: None,
                 neuron_id: Some(NeuronId::new_test_neuron_id(0)),
+                followees: vec![NeuronId::new_test_neuron_id(1)],
             }
         };
 
         let neuron_minimum_stake_e8s = E8S_PER_TOKEN;
+        let max_followees_per_function = 1;
 
         // Assert that the default is valid
-        assert!(valid_default().validate(neuron_minimum_stake_e8s).is_ok());
+        assert!(valid_default()
+            .validate(neuron_minimum_stake_e8s, max_followees_per_function)
+            .is_ok());
 
         let invalid_neuron_parameters = vec![
             NeuronParameters {
@@ -2741,11 +2794,20 @@ pub(crate) mod tests {
                 dissolve_delay_seconds: None, // No dissolve_delay_seconds specified
                 ..valid_default()
             },
+            NeuronParameters {
+                followees: vec![
+                    NeuronId::new_test_neuron_id(1),
+                    NeuronId::new_test_neuron_id(2),
+                ],
+                ..valid_default()
+            },
         ];
 
         // Assert all invalid neuron parameters produce an error
         for neuron_parameter in invalid_neuron_parameters {
-            assert!(neuron_parameter.validate(neuron_minimum_stake_e8s).is_err());
+            assert!(neuron_parameter
+                .validate(neuron_minimum_stake_e8s, max_followees_per_function)
+                .is_err());
         }
 
         let valid_neuron_parameters = vec![
@@ -2762,7 +2824,9 @@ pub(crate) mod tests {
         // Assert all valid neuron parameters produce valid results
         for neuron_parameter in valid_neuron_parameters {
             assert!(
-                neuron_parameter.validate(neuron_minimum_stake_e8s).is_ok(),
+                neuron_parameter
+                    .validate(neuron_minimum_stake_e8s, max_followees_per_function)
+                    .is_ok(),
                 "{:#?}",
                 neuron_parameter
             );
