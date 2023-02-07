@@ -4,6 +4,7 @@ use anyhow::{anyhow, Context as AnyhowContext};
 use async_trait::async_trait;
 use candid::Principal;
 use hyper::{Body, Request, StatusCode, Uri};
+use mockall::automock;
 use opentelemetry::{Context, KeyValue};
 use serde::Deserialize;
 use tracing::info;
@@ -11,12 +12,16 @@ use tracing::info;
 use crate::{
     http::HttpClient,
     metrics::{MetricParams, WithMetrics},
+    verify::{Verify, VerifyError, WithVerify},
 };
 
 #[derive(Debug, thiserror::Error)]
 pub enum ImportError {
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
+
+    #[error(transparent)]
+    VerificationError(#[from] VerifyError),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -32,6 +37,7 @@ pub struct Package {
     pub pair: Pair,
 }
 
+#[automock]
 #[async_trait]
 pub trait Import: Sync + Send {
     async fn import(&self) -> Result<Vec<Package>, ImportError>;
@@ -114,6 +120,23 @@ impl<T: Import> Import for WithMetrics<T> {
     }
 }
 
+// Wraps an importer with a verifier
+// The importer imports a set of packages as usual, but then passes the packages to the verifier.
+// The verifier parses out the public certificate and compares the common name to the name in the package to make sure they match.
+// This should help eliminate risk of the replica returning a malicious package.
+#[async_trait]
+impl<T: Import, V: Verify> Import for WithVerify<T, V> {
+    async fn import(&self) -> Result<Vec<Package>, ImportError> {
+        let pkgs = self.0.import().await?;
+
+        for pkg in &pkgs {
+            self.1.verify(pkg)?;
+        }
+
+        Ok(pkgs)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,10 +146,10 @@ mod tests {
     use mockall::predicate;
     use std::{str::FromStr, sync::Arc};
 
-    use crate::http::MockHttpClient;
+    use crate::{http::MockHttpClient, verify::MockVerify};
 
     #[tokio::test]
-    async fn test_import() -> Result<(), Error> {
+    async fn import_ok() -> Result<(), Error> {
         let mut http_client = MockHttpClient::new();
         http_client
             .expect_request()
@@ -166,5 +189,95 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn import_verify_multiple() {
+        let mut verifier = MockVerify::new();
+        verifier
+            .expect_verify()
+            .times(3)
+            .with(predicate::in_iter(vec![
+                Package {
+                    name: "name-1".into(),
+                    canister: Principal::from_text("aaaaa-aa").unwrap(),
+                    pair: Pair(vec![], vec![]),
+                },
+                Package {
+                    name: "name-2".into(),
+                    canister: Principal::from_text("aaaaa-aa").unwrap(),
+                    pair: Pair(vec![], vec![]),
+                },
+                Package {
+                    name: "name-3".into(),
+                    canister: Principal::from_text("aaaaa-aa").unwrap(),
+                    pair: Pair(vec![], vec![]),
+                },
+            ]))
+            .returning(|_| Ok(()));
+
+        let mut importer = MockImport::new();
+        importer.expect_import().times(1).returning(|| {
+            Ok(vec![
+                Package {
+                    name: "name-1".into(),
+                    canister: Principal::from_text("aaaaa-aa").unwrap(),
+                    pair: Pair(vec![], vec![]),
+                },
+                Package {
+                    name: "name-2".into(),
+                    canister: Principal::from_text("aaaaa-aa").unwrap(),
+                    pair: Pair(vec![], vec![]),
+                },
+                Package {
+                    name: "name-3".into(),
+                    canister: Principal::from_text("aaaaa-aa").unwrap(),
+                    pair: Pair(vec![], vec![]),
+                },
+            ])
+        });
+
+        let importer = WithVerify(importer, verifier);
+
+        match importer.import().await {
+            Ok(_) => {}
+            other => panic!("expected Ok but got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn import_verify_mismatch() {
+        let mut verifier = MockVerify::new();
+        verifier
+            .expect_verify()
+            .times(1)
+            .with(predicate::eq(Package {
+                name: "name-1".into(),
+                canister: Principal::from_text("aaaaa-aa").unwrap(),
+                pair: Pair(vec![], vec![]),
+            }))
+            .returning(|_| {
+                // Mock an error
+                Err(VerifyError::CommonNameMismatch(
+                    "name-1".into(),
+                    "name-2".into(),
+                ))
+            });
+
+        let mut importer = MockImport::new();
+        importer.expect_import().times(1).returning(|| {
+            Ok(vec![Package {
+                name: "name-1".into(),
+                canister: Principal::from_text("aaaaa-aa").unwrap(),
+                pair: Pair(vec![], vec![]),
+            }])
+        });
+
+        let importer = WithVerify(importer, verifier);
+
+        match importer.import().await {
+            Err(ImportError::VerificationError(_)) => {}
+            other => panic!("expected VerificationError but got {other:?}"),
+        }
     }
 }

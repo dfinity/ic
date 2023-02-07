@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "@crate_index//:tokio",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing",
+    "@crate_index//:x509-parser",
 ]
 
 MACRO_DEPENDENCIES = [
