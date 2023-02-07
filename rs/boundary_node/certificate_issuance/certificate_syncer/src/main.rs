@@ -42,6 +42,7 @@ use crate::{
     persist::{Persister, WithDedup, WithEmpty},
     reload::{Reloader, WithReload},
     render::Renderer,
+    verify::{Parser as CertificateParser, Verifier, WithVerify},
 };
 
 mod http;
@@ -50,6 +51,7 @@ mod metrics;
 mod persist;
 mod reload;
 mod render;
+mod verify;
 
 const SERVICE_NAME: &str = "certificate-syncer";
 
@@ -129,6 +131,7 @@ async fn main() -> Result<(), Error> {
 
     // Certificates
     let importer = CertificatesImporter::new(http_client, cli.certificates_exporter_uri);
+    let importer = WithVerify(importer, Verifier(CertificateParser));
     let importer = WithMetrics(importer, MetricParams::new(&meter, SERVICE_NAME, "import"));
     let importer = Arc::new(importer);
 
