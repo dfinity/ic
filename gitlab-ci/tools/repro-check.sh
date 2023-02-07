@@ -14,6 +14,7 @@ USAGE
 }
 
 build_dev=1
+proposal_id=""
 while getopts 'nhc:p:' flag; do
     case "${flag}" in
         c) git_hash="${OPTARG}" ;;
@@ -59,6 +60,19 @@ PROPOSAL_OUT="$OUT/proposal-img"
 
 mkdir -p "$CI_OUT"
 mkdir -p "$DEV_OUT"
+
+if ! which rclone; then
+    echo "Please install rclone: sudo apt install rclone"
+    read -p "Should I do this for you [yn]?" yn
+    case $yn in
+        [Yy]*)
+            sudo apt install rclone
+            break
+            ;;
+        [Nn]*) exit 1 ;;
+        *) echo "Please answer yes or no." ;;
+    esac
+fi
 
 if ! which diffoscope; then
     echo "Please install diffoscope: sudo apt install diffoscope"
@@ -123,7 +137,7 @@ git clone --quiet "$cwd" .
 git checkout --quiet "$git_hash"
 
 if [ "$build_dev" -eq "1" ]; then
-    ./gitlab-ci/container/build-ic.sh
+    ./gitlab-ci/container/build-ic.sh -i
     mv artifacts/icos/update-img.tar.gz "$DEV_OUT"
 fi
 

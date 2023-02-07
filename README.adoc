@@ -112,12 +112,12 @@ The https://github.com/dfinity/ic/blob/master/gitlab-ci/tools/repro-check.sh[rep
 
 To verify specific git revision:
 ----
-$ ./gitlab-ci/tool/repro-check.sh -c <git revision>
+$ ./gitlab-ci/tools/repro-check.sh -c <git revision>
 ----
 
 To verify specific proposal:
 ----
-$ ./gitlab-ci/tool/repro-check.sh -p <proposal id>
+$ ./gitlab-ci/tools/repro-check.sh -p <proposal id>
 ----
 
 == Contributing
