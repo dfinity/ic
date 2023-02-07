@@ -7,7 +7,7 @@ use certificate_orchestrator_interface::{
     GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id,
     ListAllowedPrincipalsError, ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError,
     ModifyAllowedPrincipalResponse, Name, QueueTaskError, QueueTaskResponse, Registration,
-    RemoveRegistrationError, RemoveRegistrationResponse, UpdateRegistrationError,
+    RemoveRegistrationError, RemoveRegistrationResponse, State, UpdateRegistrationError,
     UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse,
     NAME_MAX_LEN,
 };
@@ -21,7 +21,7 @@ use ic_stable_structures::{
     DefaultMemoryImpl, StableBTreeMap,
 };
 use priority_queue::PriorityQueue;
-use prometheus::{CounterVec, Encoder, Opts, Registry, TextEncoder};
+use prometheus::{CounterVec, Encoder, Gauge, GaugeVec, Opts, Registry, TextEncoder};
 
 use crate::{
     acl::{Authorize, AuthorizeError, Authorizer, WithAuthorize},
@@ -126,6 +126,27 @@ thread_local! {
         ), &["status"]).unwrap()
     });
 
+    static GAUGE_REGISTRATIONS_TOTAL: RefCell<GaugeVec> = RefCell::new({
+        GaugeVec::new(Opts::new(
+            "registrations_total", // name
+            "total number of registrations", // help
+        ), &["state"]).unwrap()
+    });
+
+    static GAUGE_TASKS_TOTAL: RefCell<Gauge> = RefCell::new({
+        Gauge::new(
+            "tasks_total", // name
+            "total number of tasks", // help
+        ).unwrap()
+    });
+
+    static GAUGE_ALLOWED_PRINCIPALS_TOTAL: RefCell<Gauge> = RefCell::new({
+        Gauge::new(
+            "allowed_principals_total", // name
+            "total number of allowed principals", // help
+        ).unwrap()
+    });
+
     static METRICS_REGISTRY: RefCell<Registry> = RefCell::new({
         let r = Registry::new();
 
@@ -157,6 +178,21 @@ thread_local! {
         COUNTER_DISPENSE_TASK_TOTAL.with(|c| {
             let c = Box::new(c.borrow().to_owned());
             r.register(c).unwrap();
+        });
+
+        GAUGE_REGISTRATIONS_TOTAL.with(|g| {
+            let g = Box::new(g.borrow().to_owned());
+            r.register(g).unwrap();
+        });
+
+        GAUGE_TASKS_TOTAL.with(|g| {
+            let g = Box::new(g.borrow().to_owned());
+            r.register(g).unwrap();
+        });
+
+        GAUGE_ALLOWED_PRINCIPALS_TOTAL.with(|g| {
+            let g = Box::new(g.borrow().to_owned());
+            r.register(g).unwrap();
         });
 
         r
@@ -595,6 +631,32 @@ fn http_request(request: HttpRequest) -> HttpResponse {
         };
     }
 
+    // Set Gauges
+    REGISTRATIONS.with(|regs| {
+        GAUGE_REGISTRATIONS_TOTAL.with(|g| {
+            regs.borrow().iter().for_each(|(_, reg)| {
+                g.borrow_mut()
+                    .with_label_values(&[match reg.state {
+                        State::Failed(_) => "failed",
+                        State::PendingOrder => "pendingOrder",
+                        State::PendingChallengeResponse => "pendingChallengeResponse",
+                        State::PendingAcmeApproval => "pendingAcmeApproval",
+                        State::Available => "available",
+                    }])
+                    .inc()
+            });
+        });
+    });
+
+    TASKS.with(|tasks| {
+        GAUGE_TASKS_TOTAL.with(|g| g.borrow_mut().set(tasks.borrow().len() as f64));
+    });
+
+    ALLOWED_PRINCIPALS.with(|tasks| {
+        GAUGE_ALLOWED_PRINCIPALS_TOTAL.with(|g| g.borrow_mut().set(tasks.borrow().len() as f64));
+    });
+
+    // Export metrics
     let bs = METRICS_REGISTRY.with(|r| {
         let mfs = r.borrow().gather();
 
