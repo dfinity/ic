@@ -339,7 +339,7 @@ mod test {
 
         assert_eq!(
             result.err(),
-            Some(HypervisorError::InstructionLimitExceeded)
+            Some(HypervisorError::ExecutionComplexityLimitExceeded)
         );
     }
 

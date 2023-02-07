@@ -315,7 +315,7 @@ fn observe_execution_complexity<S: SystemApi>(
                 );
                 return Err(process_err(
                     caller,
-                    HypervisorError::InstructionLimitExceeded,
+                    HypervisorError::ExecutionComplexityLimitExceeded,
                 ));
             } else if total_complexity.stable_dirty_pages > stable_memory_dirty_page_limit {
                 let error = HypervisorError::MemoryAccessLimitExceeded(
