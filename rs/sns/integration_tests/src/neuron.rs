@@ -1300,6 +1300,7 @@ async fn zero_total_reward_shares() {
             actual_timestamp_seconds: 1,
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
+            end_timestamp_seconds: Some(1),
         }),
         sns_metadata: Some(SnsMetadata {
             logo: Some("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==".to_string()),
@@ -1513,6 +1514,7 @@ async fn couple_of_neurons_who_voted_get_rewards() {
             actual_timestamp_seconds: 1,
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
+            end_timestamp_seconds: Some(1),
         }),
 
         sns_metadata: Some(SnsMetadata {

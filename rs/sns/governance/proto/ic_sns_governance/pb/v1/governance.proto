@@ -700,6 +700,8 @@ message ProposalData {
   // If not specified, the proposal has not (yet) failed to execute.
   GovernanceError failure_reason = 12;
 
+  // OBSOLETE: Superseded by reward_event_end_timestamp_seconds
+  //
   // The reward event round at which rewards for votes on this proposal
   // were distributed.
   //
@@ -738,6 +740,11 @@ message ProposalData {
   // meaning to the one in NervousSystemParameters, and duplicated here so the 
   // parameters can be changed without affecting existing proposals.
   uint64 wait_for_quiet_deadline_increase_seconds = 18;
+
+  // If populated, then the proposal is considered "settled" in terms of voting
+  // rewards. Prior to distribution of rewards, but after votes are no longer
+  // accepted, it is considered "ready to settle".
+  optional uint64 reward_event_end_timestamp_seconds = 19;
 }
 
 // The nervous system's parameters, which are parameters that can be changed, via proposals,
@@ -929,9 +936,11 @@ message NeuronPermissionList {
   repeated NeuronPermissionType permissions = 1;
 }
 
-// TODO: update when rewards are introduced
-// A reward event is an event at which neuron maturity is increased
+// A record of when voting rewards were determined, and neuron maturity
+// increased for participation in voting on proposals.
 message RewardEvent {
+  // DEPRECATED: Use end_timestamp_seconds instead.
+  //
   // Rewards are (calculated and) distributed periodically in "rounds". Round 1
   // begins at start_time and ends at start_time + 1 * round_duration, where
   // start_time and round_duration are specified in VotingRewardsParameters.
@@ -946,10 +955,9 @@ message RewardEvent {
   // are.
   uint64 round = 1;
 
-  // The timestamp at which this reward event took place, in seconds since the unix epoch.
-  //
-  // This does not match the date taken into account for reward computation, which
-  // should always be an (integer) multiple of round_duration after start_time.
+  // Not to be confused with round_end_timestampe_seconds. This is just used to
+  // record when the calculation (of voting rewards) was performed, not the time
+  // range/events (i.e. proposals) that was operated on.
   uint64 actual_timestamp_seconds = 2;
 
   // The list of proposals that were taken into account during
@@ -962,6 +970,23 @@ message RewardEvent {
   // the same scale as governance tokens, maturity is not directly convertible
   // to governance tokens: conversion requires a minting event.
   uint64 distributed_e8s_equivalent = 4;
+
+  // All proposals that were "ready to settle" up to this time were
+  // considered.
+  //
+  // If a proposal is "ready to settle", it simply means that votes are no
+  // longer accepted (votes can still be accepted for reward purposes after the
+  // proposal is decided), but rewards have not yet been given yet (on account
+  // of the proposal).
+  //
+  // The reason this should be used instead of `round` is that the duration of a
+  // round can be changed via proposal. Such changes cause round numbers to be
+  // not comparable without also knowing the associated round duration.
+  //
+  // Being able to change round duration does not exist in NNS (yet), and there
+  // is (currently) no intention to add that feature, but it could be done by
+  // making similar changes.
+  optional uint64 end_timestamp_seconds = 5;
 }
 
 // The representation of the whole governance system, containting all

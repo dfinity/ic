@@ -874,7 +874,7 @@ impl ProposalData {
     /// Returns the proposal's reward status. See [ProposalRewardStatus] in the SNS's
     /// proto for more information.
     pub fn reward_status(&self, now_seconds: u64) -> ProposalRewardStatus {
-        if self.reward_event_round > 0 {
+        if self.reward_event_end_timestamp_seconds.is_some() {
             debug_assert!(
                 self.is_eligible_for_rewards,
                 "Invalid ProposalData: {:#?}",

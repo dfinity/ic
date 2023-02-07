@@ -53,7 +53,6 @@ use maplit::btreemap;
 use on_wire::IntoWire;
 use std::future::Future;
 use std::thread;
-use std::thread::sleep;
 use std::time::{Duration, Instant, SystemTime};
 
 /// Constant nonce to use when generating the subaccount. Using a constant nonce
@@ -170,6 +169,12 @@ impl SnsTestsInitPayloadBuilder {
 
     pub fn with_governance_mode(&mut self, mode: sns_governance_pb::governance::Mode) -> &mut Self {
         self.governance.with_mode(mode);
+        self
+    }
+
+    pub fn with_genesis_timestamp_seconds(&mut self, genesis_timestamp_seconds: u64) -> &mut Self {
+        self.governance
+            .with_genesis_timestamp_seconds(genesis_timestamp_seconds);
         self
     }
 
@@ -938,7 +943,7 @@ impl SnsCanisters<'_> {
 
             d.as_secs_f64() / 60.0
         };
-        while proposal.reward_event_round == 0 {
+        while proposal.reward_event_end_timestamp_seconds.is_none() {
             const TIME_OUT_MINUTES: f64 = 10.0;
             assert!(
                 waiting_for_minutes() < TIME_OUT_MINUTES,
@@ -946,7 +951,7 @@ impl SnsCanisters<'_> {
                 TIME_OUT_MINUTES
             );
 
-            std::thread::sleep(std::time::Duration::from_millis(100));
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             proposal = self.get_proposal(proposal_id).await;
         }
 
@@ -1090,28 +1095,33 @@ impl SnsCanisters<'_> {
     }
 
     /// Await a RewardEvent to be created.
-    pub async fn await_reward_event(&self, last_round: u64) -> RewardEvent {
+    pub async fn await_reward_event_after(&self, last_end_timestamp_seconds: u64) -> RewardEvent {
         for _ in 0..RETRIES_FOR_HEARTBEAT {
             let reward_event = self.get_latest_reward_event().await;
 
-            if reward_event.round > last_round {
+            if reward_event.end_timestamp_seconds.unwrap() > last_end_timestamp_seconds {
                 return reward_event;
             }
-            sleep(Duration::from_millis(100));
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
 
-        panic!("There was no RewardEvent greater than {:?}", last_round)
+        panic!(
+            "Timed out while waiting for RewardEvent with end_timestamp_seconds greater than {:?}",
+            last_end_timestamp_seconds,
+        );
     }
 
-    /// Await a Proposal being rewarded via it's reward_event_round field.
-    pub async fn await_proposal_rewarding(&self, proposal_id: ProposalId) -> u64 {
+    /// Await a Proposal being rewarded. This is detected by inspecting it's
+    /// reward_event_end_timestamp_seconds field (detection used to be via the
+    /// reward_round_event field, but that is now deprecated).
+    pub async fn await_proposal_rewarding(&self, proposal_id: ProposalId) -> ProposalData {
         for _ in 0..RETRIES_FOR_HEARTBEAT {
             let proposal = self.get_proposal(proposal_id).await;
 
-            if proposal.reward_event_round != 0 {
-                return proposal.reward_event_round;
+            if proposal.reward_event_end_timestamp_seconds.is_some() {
+                return proposal;
             }
-            sleep(Duration::from_millis(100));
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
         panic!("Proposal {:?} was not rewarded", proposal_id);
     }
@@ -1138,7 +1148,7 @@ impl SnsCanisters<'_> {
                 return status;
             }
 
-            sleep(Duration::from_millis(100));
+            tokio::time::sleep(Duration::from_millis(100)).await;
         }
         panic!(
             "Canister {} didn't reach the running state after upgrading",
@@ -1156,7 +1166,7 @@ impl SnsCanisters<'_> {
                 return proposal;
             }
 
-            sleep(Duration::from_millis(100));
+            tokio::time::sleep(Duration::from_millis(100)).await;
             proposal = self.get_proposal(*proposal_id).await;
         }
 

@@ -833,6 +833,8 @@ pub struct ProposalData {
     /// If not specified, the proposal has not (yet) failed to execute.
     #[prost(message, optional, tag = "12")]
     pub failure_reason: ::core::option::Option<GovernanceError>,
+    /// OBSOLETE: Superseded by reward_event_end_timestamp_seconds
+    ///
     /// The reward event round at which rewards for votes on this proposal
     /// were distributed.
     ///
@@ -872,6 +874,11 @@ pub struct ProposalData {
     /// parameters can be changed without affecting existing proposals.
     #[prost(uint64, tag = "18")]
     pub wait_for_quiet_deadline_increase_seconds: u64,
+    /// If populated, then the proposal is considered "settled" in terms of voting
+    /// rewards. Prior to distribution of rewards, but after votes are no longer
+    /// accepted, it is considered "ready to settle".
+    #[prost(uint64, optional, tag = "19")]
+    pub reward_event_end_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// The nervous system's parameters, which are parameters that can be changed, via proposals,
 /// by each nervous system community.
@@ -1087,8 +1094,8 @@ pub struct NeuronPermissionList {
     #[prost(enumeration = "NeuronPermissionType", repeated, tag = "1")]
     pub permissions: ::prost::alloc::vec::Vec<i32>,
 }
-/// TODO: update when rewards are introduced
-/// A reward event is an event at which neuron maturity is increased
+/// A record of when voting rewards were determined, and neuron maturity
+/// increased for participation in voting on proposals.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -1098,6 +1105,8 @@ pub struct NeuronPermissionList {
     ::prost::Message,
 )]
 pub struct RewardEvent {
+    /// DEPRECATED: Use end_timestamp_seconds instead.
+    ///
     /// Rewards are (calculated and) distributed periodically in "rounds". Round 1
     /// begins at start_time and ends at start_time + 1 * round_duration, where
     /// start_time and round_duration are specified in VotingRewardsParameters.
@@ -1112,10 +1121,9 @@ pub struct RewardEvent {
     /// are.
     #[prost(uint64, tag = "1")]
     pub round: u64,
-    /// The timestamp at which this reward event took place, in seconds since the unix epoch.
-    ///
-    /// This does not match the date taken into account for reward computation, which
-    /// should always be an (integer) multiple of round_duration after start_time.
+    /// Not to be confused with round_end_timestampe_seconds. This is just used to
+    /// record when the calculation (of voting rewards) was performed, not the time
+    /// range/events (i.e. proposals) that was operated on.
     #[prost(uint64, tag = "2")]
     pub actual_timestamp_seconds: u64,
     /// The list of proposals that were taken into account during
@@ -1129,6 +1137,23 @@ pub struct RewardEvent {
     /// to governance tokens: conversion requires a minting event.
     #[prost(uint64, tag = "4")]
     pub distributed_e8s_equivalent: u64,
+    /// All proposals that were "ready to settle" up to this time were
+    /// considered.
+    ///
+    /// If a proposal is "ready to settle", it simply means that votes are no
+    /// longer accepted (votes can still be accepted for reward purposes after the
+    /// proposal is decided), but rewards have not yet been given yet (on account
+    /// of the proposal).
+    ///
+    /// The reason this should be used instead of `round` is that the duration of a
+    /// round can be changed via proposal. Such changes cause round numbers to be
+    /// not comparable without also knowing the associated round duration.
+    ///
+    /// Being able to change round duration does not exist in NNS (yet), and there
+    /// is (currently) no intention to add that feature, but it could be done by
+    /// making similar changes.
+    #[prost(uint64, optional, tag = "5")]
+    pub end_timestamp_seconds: ::core::option::Option<u64>,
 }
 /// The representation of the whole governance system, containting all
 /// information about the governance system that must be kept
