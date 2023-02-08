@@ -6,6 +6,7 @@ See [Dockerfile.bazel](Dockerfile.bazel) for info about required dependencies.
 
 ## Requirements
 
+- x86-64 based system (at least 8 CPUs, 16 GB MEM/SWAP, 100 GB available disk space)
 - Ubuntu 20.04 or newer
 - [Podman](https://podman.io/getting-started/installation) 
 
