@@ -160,6 +160,10 @@ impl NeuronBasketConstructionParameters {
     /// # Arguments
     /// * `total_amount_e8s` - The total amount of tokens (in e8s) to be chopped up.
     fn generate_vesting_schedule(&self, total_amount_e8s: u64) -> Vec<ScheduledVestingEvent> {
+        assert!(
+            self.count > 0,
+            "NeuronBasketConstructionParameters::count must be greater than zero"
+        );
         let dissolve_delay_seconds_list = (0..(self.count))
             .map(|i| i * self.dissolve_delay_interval_seconds)
             .collect::<Vec<u64>>();
@@ -187,6 +191,7 @@ impl NeuronBasketConstructionParameters {
 /// result is approximately equal to the others. However, unless len divides
 /// total evenly, the elements of result will inevitabley be not equal.
 pub fn apportion_approximately_equally(total: u64, len: u64) -> Vec<u64> {
+    assert!(len > 0, "len must be greater than zero");
     let quotient = total.saturating_div(len);
     let remainder = total % len;
 
@@ -295,18 +300,30 @@ impl Swap {
     /// If the swap is OPEN, tries to commit or abort the swap. Returns
     /// true if a transition was made and false otherwise.
     pub fn try_commit_or_abort(&mut self, now_seconds: u64) -> bool {
+        // If the sale lifecycle is not open, we can't commit or abort it
+        let lifecycle = self.lifecycle();
+        if lifecycle != Lifecycle::Open {
+            return false;
+        }
+
+        // Commit if possible
         if self.can_commit(now_seconds) {
             self.commit(now_seconds);
             return true;
         }
-        let lifecycle = self.lifecycle();
-        if lifecycle == Lifecycle::Open
-            && self.swap_due(now_seconds)
-            && !self.sufficient_participation()
-        {
+
+        // Abort if time is up without reaching sufficient_participation.
+        if self.swap_due(now_seconds) && !self.sufficient_participation() {
             self.abort(now_seconds);
             return true;
         }
+
+        // Abort if max icp is reached without reaching sufficient_participation.
+        if self.icp_target_reached() && !self.sufficient_participation() {
+            self.abort(now_seconds);
+            return true;
+        }
+
         false
     }
 
@@ -493,12 +510,15 @@ impl Swap {
         self.set_lifecycle(Lifecycle::Committed);
     }
 
-    /// Precondition: lifecycle = OPEN && swap_due && not sufficient_participation
+    /// Precondition:
+    ///     lifecycle = OPEN
+    ///     && (swap_due || target_reached)
+    ///     && not sufficient_participation
     ///
     /// Postcondition: lifecycle == ABORTED
     fn abort(&mut self, now_seconds: u64) {
         assert_eq!(self.lifecycle(), Lifecycle::Open);
-        assert!(self.swap_due(now_seconds));
+        assert!(self.swap_due(now_seconds) || self.icp_target_reached());
         assert!(!self.sufficient_participation());
         self.set_lifecycle(Lifecycle::Aborted);
     }
@@ -636,8 +656,7 @@ impl Swap {
             .or_insert_with(|| BuyerState {
                 icp: Some(TransferableAmount {
                     amount_e8s: 0,
-                    transfer_start_timestamp_seconds: 0,
-                    transfer_success_timestamp_seconds: 0,
+                    ..TransferableAmount::default()
                 }),
             });
         let old_amount_icp_e8s = buyer_state.amount_icp_e8s();
@@ -1906,7 +1925,7 @@ impl Swap {
     }
 
     /// The total number of ICP contributed by all buyers is at least
-    /// the target ICP of the swap.
+    /// the target (max) ICP of the swap.
     pub fn icp_target_reached(&self) -> bool {
         if let Some(params) = &self.params {
             return self.participant_total_icp_e8s() >= params.max_icp_e8s;
@@ -2464,22 +2483,39 @@ mod tests {
     use pretty_assertions::assert_eq;
     use proptest::prelude::proptest;
 
-    lazy_static! {
-        static ref PARAMS: Params = Params {
-            min_participants: 7,
-            min_icp_e8s: 10 * E8,
-            max_icp_e8s: 1000 * E8,
-            min_participant_icp_e8s: 2 * E8,
-            max_participant_icp_e8s: 100 * E8,
-            swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
-            sns_token_e8s: 500 * E8,
-            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                count: 12,
-                dissolve_delay_interval_seconds: 30 * SECONDS_PER_DAY,
-            }),
-            sale_delay_seconds: None,
-        };
+    fn i2canister_id_string(i: u64) -> String {
+        CanisterId::try_from(PrincipalId::new_user_test_id(i))
+            .unwrap()
+            .to_string()
     }
+
+    lazy_static! {
+        static ref SWAP: Swap = Swap::new(Init {
+            nns_governance_canister_id: i2canister_id_string(0),
+            sns_governance_canister_id: i2canister_id_string(1),
+            sns_ledger_canister_id: i2canister_id_string(2),
+            icp_ledger_canister_id: i2canister_id_string(3),
+            sns_root_canister_id: i2canister_id_string(4),
+            fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(5).to_string()],
+            transaction_fee_e8s: Some(0),
+            neuron_minimum_stake_e8s: Some(0),
+        });
+    }
+
+    const PARAMS: Params = Params {
+        min_participants: 7,
+        min_icp_e8s: 10 * E8,
+        max_icp_e8s: 1000 * E8,
+        min_participant_icp_e8s: 2 * E8,
+        max_participant_icp_e8s: 100 * E8,
+        swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS,
+        sns_token_e8s: 500 * E8,
+        neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+            count: 12,
+            dissolve_delay_interval_seconds: 30 * SECONDS_PER_DAY,
+        }),
+        sale_delay_seconds: None,
+    };
 
     #[test]
     fn test_get_lifecycle() {
@@ -2657,14 +2693,14 @@ mod tests {
     #[test]
     fn test_get_sale_parameters() {
         let swap = Swap {
-            params: Some(PARAMS.clone()),
+            params: Some(PARAMS),
             ..Default::default()
         };
 
         assert_eq!(
             swap.get_sale_parameters(&GetSaleParametersRequest {}),
             GetSaleParametersResponse {
-                params: Some(PARAMS.clone()),
+                params: Some(PARAMS),
             },
         );
     }
@@ -3003,5 +3039,185 @@ mod tests {
                 sns_neuron_recipes: neuron_recipes[1..3].to_vec()
             }
         );
+    }
+
+    #[test]
+    fn test_try_commit_or_abort_no_buyers_with_time_remaining() {
+        let sale_duration = 100;
+        let time_remaining = 50;
+        let buyers = BTreeMap::new();
+        let mut swap = Swap {
+            lifecycle: Lifecycle::Open as i32,
+            params: Some(Params {
+                min_participants: 1,
+                min_icp_e8s: 10,
+                max_icp_e8s: 100,
+                min_participant_icp_e8s: 1,
+                max_participant_icp_e8s: 20,
+                swap_due_timestamp_seconds: sale_duration,
+                ..PARAMS
+            }),
+            buyers,
+            ..(SWAP.clone())
+        };
+        let result = swap.try_commit_or_abort(sale_duration - time_remaining);
+        assert!(!result);
+        assert_eq!(swap.lifecycle, Lifecycle::Open as i32);
+    }
+
+    #[test]
+    fn test_try_commit_or_abort_not_enough_e8s_with_time_remaining() {
+        let sale_duration = 100;
+        let time_remaining = 50;
+        let buyers = btreemap! {
+            PrincipalId::new_user_test_id(0).to_string() => BuyerState {
+                icp: Some(TransferableAmount {
+                    amount_e8s: 1,
+                    ..TransferableAmount::default()
+                }),
+            },
+        };
+        let mut swap = Swap {
+            lifecycle: Lifecycle::Open as i32,
+            params: Some(Params {
+                min_participants: 1,
+                min_icp_e8s: 10,
+                max_icp_e8s: 100,
+                min_participant_icp_e8s: 10,
+                max_participant_icp_e8s: 20,
+                swap_due_timestamp_seconds: sale_duration,
+                ..PARAMS
+            }),
+            buyers,
+            ..(SWAP.clone())
+        };
+        let result = swap.try_commit_or_abort(sale_duration - time_remaining);
+        assert!(!result);
+        assert_eq!(swap.lifecycle, Lifecycle::Open as i32);
+    }
+
+    #[test]
+    fn test_try_commit_or_abort_enough_e8s_with_time_remaining() {
+        let sale_duration = 100;
+        let time_remaining = 50;
+        let buyers = btreemap! {
+            PrincipalId::new_user_test_id(0).to_string() => BuyerState {
+                icp: Some(TransferableAmount {
+                    amount_e8s: 10,
+                    ..TransferableAmount::default()
+                }),
+            },
+        };
+        let mut swap = Swap {
+            lifecycle: Lifecycle::Open as i32,
+            params: Some(Params {
+                min_participants: 1,
+                min_icp_e8s: 10,
+                max_icp_e8s: 100,
+                min_participant_icp_e8s: 10,
+                max_participant_icp_e8s: 20,
+                swap_due_timestamp_seconds: sale_duration,
+                ..PARAMS
+            }),
+            buyers,
+            ..(SWAP.clone())
+        };
+        let result = swap.try_commit_or_abort(sale_duration - time_remaining);
+        // sale should be open because there is time remaining and we have not
+        // reached the maximum amount of ICP raised
+        assert!(!result);
+        assert_eq!(swap.lifecycle, Lifecycle::Open as i32);
+    }
+
+    #[test]
+    fn test_try_commit_or_abort_max_e8s_with_time_remaining() {
+        let sale_duration = 100;
+        let time_remaining = 50;
+        let buyers = btreemap! {
+            PrincipalId::new_user_test_id(0).to_string() => BuyerState {
+                icp: Some(TransferableAmount {
+                    amount_e8s: 20,
+                    ..TransferableAmount::default()
+                }),
+            },
+        };
+        let mut swap = Swap {
+            lifecycle: Lifecycle::Open as i32,
+            params: Some(Params {
+                min_participants: 1,
+                min_icp_e8s: 10,
+                max_icp_e8s: 20,
+                min_participant_icp_e8s: 10,
+                max_participant_icp_e8s: 20,
+                swap_due_timestamp_seconds: sale_duration,
+                ..PARAMS
+            }),
+            buyers,
+            ..(SWAP.clone())
+        };
+        let result = swap.try_commit_or_abort(sale_duration - time_remaining);
+        // sale should be closed because there is time remaining and we have not
+        // reached the maximum amount of time remaining
+        assert!(result);
+        assert_eq!(swap.lifecycle, Lifecycle::Committed as i32);
+    }
+
+    #[test]
+    fn test_try_commit_or_abort_insufficient_participation_with_time_remaining() {
+        let sale_duration = 100;
+        let time_remaining = 0;
+        let buyers = BTreeMap::new();
+        let mut swap = Swap {
+            lifecycle: Lifecycle::Open as i32,
+            params: Some(Params {
+                min_participants: 1,
+                min_icp_e8s: 10,
+                max_icp_e8s: 20,
+                min_participant_icp_e8s: 10,
+                max_participant_icp_e8s: 20,
+                swap_due_timestamp_seconds: sale_duration,
+                ..PARAMS
+            }),
+            buyers,
+            ..(SWAP.clone())
+        };
+        let result = swap.try_commit_or_abort(sale_duration - time_remaining);
+        // sale should be closed because there is time remaining and we have not
+        // reached the maximum amount of time remaining
+        assert!(result);
+        assert_eq!(swap.lifecycle, Lifecycle::Aborted as i32);
+    }
+
+    #[test]
+    fn test_try_commit_or_abort_insufficient_participation_with_max_icp() {
+        let sale_duration = 100;
+        let time_remaining = 50;
+        let buyers = btreemap! {
+            PrincipalId::new_user_test_id(0).to_string() => BuyerState {
+                icp: Some(TransferableAmount {
+                    amount_e8s: 20,
+                    ..TransferableAmount::default()
+                }),
+            },
+        };
+        let mut swap = Swap {
+            lifecycle: Lifecycle::Open as i32,
+            params: Some(Params {
+                min_participants: 2,
+                min_icp_e8s: 10,
+                max_icp_e8s: 20,
+                min_participant_icp_e8s: 10,
+                max_participant_icp_e8s: 20,
+                swap_due_timestamp_seconds: sale_duration,
+                ..PARAMS
+            }),
+            buyers,
+            ..(SWAP.clone())
+        };
+        let result = swap.try_commit_or_abort(sale_duration - time_remaining);
+        // sale should be closed because there is time remaining and we have not
+        // reached the maximum amount of time remaining
+        assert!(result);
+        assert_eq!(swap.lifecycle, Lifecycle::Aborted as i32);
     }
 }
