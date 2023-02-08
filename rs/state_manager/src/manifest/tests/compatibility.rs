@@ -5,7 +5,7 @@
 //! is inconsistent for the same checkpoint between adjacent replica versions.
 
 use crate::manifest::{
-    manifest_hash, tests::computation::dummy_file_table_and_chunk_table,
+    manifest_hash, tests::computation::dummy_file_table_and_chunk_table, DEFAULT_CHUNK_SIZE,
     MAX_SUPPORTED_STATE_SYNC_VERSION, STATE_SYNC_V1, STATE_SYNC_V2,
 };
 use ic_protobuf::state::sync::v1 as pb;
@@ -539,17 +539,21 @@ fn deterministic_manifest_hash() {
         "24dad2a74373217053106e533da8fa2dc67560e0780df06bdd5ca9eb749d1242".to_owned()
     );
 
-    // Ensure the hash is also stable for the manifest which is larger than the DEFAULT_CHUNK_SIZE after encoding.
+    // Ensure the hash is still stable when the manifest is larger than 100 MiB after encoding.
     let (file_table, chunk_table) = dummy_file_table_and_chunk_table();
     let manifest_v1 = Manifest::new(STATE_SYNC_V1, file_table.clone(), chunk_table.clone());
     assert_eq!(
         hex::encode(manifest_hash(&manifest_v1)),
-        "27333160e73a4658cf36e57af3de98ca05b5c7766cb74fa4d8ed9c0c0967b8ea".to_owned()
+        "18aabe0f8bc12b80bc232c02e0d6ca1b8a078980b7f8799ac992f06696fc1385".to_owned()
     );
     let manifest_v2 = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    assert!(
+        encode_manifest(&manifest_v2).len() > 100 * DEFAULT_CHUNK_SIZE as usize,
+        "The encoded manifest is supposed to be larger than 100 MiB."
+    );
     assert_eq!(
         hex::encode(manifest_hash(&manifest_v2)),
-        "3828fcf2a4191502a484f95969974f087f25fac3888c5fbcdd6de77b208fbab0".to_owned()
+        "8df9274f839167037f02e7bd121a1c272c04d9363907f956b896e92ebd64aa06".to_owned()
     );
 }
 

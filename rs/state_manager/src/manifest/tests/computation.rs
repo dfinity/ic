@@ -138,7 +138,7 @@ fn simple_file_table_and_chunk_table() -> (Vec<FileInfo>, Vec<ChunkInfo>) {
     (file_table, chunk_table)
 }
 
-// The file table and chunk table is used to create a manifest which is larger than 1 MiB after encoding.
+// The file table and chunk table is used to create a manifest which is larger than 100 MiB after encoding.
 pub(crate) fn dummy_file_table_and_chunk_table() -> (Vec<FileInfo>, Vec<ChunkInfo>) {
     let chunk_hash = hash_concat!(14u8, b"ic-state-chunk", vec![0u8; 1000].as_slice());
     let file_hash = hash_concat!(
@@ -163,7 +163,7 @@ pub(crate) fn dummy_file_table_and_chunk_table() -> (Vec<FileInfo>, Vec<ChunkInf
         hash: file_hash,
     };
 
-    (vec![file_info; 100_000], vec![chunk_info; 100_000])
+    (vec![file_info; 1_000_000], vec![chunk_info; 3_000_000])
 }
 
 fn simple_manifest() -> ([u8; 32], Manifest) {
@@ -348,8 +348,8 @@ fn test_validate_sub_manifest() {
     // Test that the provided chunk is out of the range of sub-manifests.
     assert_eq!(
         Err(ChunkValidationError::InvalidChunkIndex {
-            chunk_ix: 9,
-            actual_length: 9
+            chunk_ix: 159,
+            actual_length: 159
         }),
         validate_sub_manifest(num, &[], &meta_manifest)
     );
