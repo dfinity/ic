@@ -352,6 +352,7 @@ pub(super) fn instrument(
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
     subnet_type: SubnetType,
+    dirty_page_overhead: NumInstructions,
 ) -> Result<InstrumentationOutput, WasmInstrumentationError> {
     let stable_memory_index;
     let mut module = inject_helper_functions(module, wasm_native_stable_memory);
@@ -443,7 +444,12 @@ pub(super) fn instrument(
     );
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
-        replace_system_api_functions(&mut module, special_indices, subnet_type)
+        replace_system_api_functions(
+            &mut module,
+            special_indices,
+            subnet_type,
+            dirty_page_overhead,
+        )
     }
 
     let exported_functions = module
@@ -520,6 +526,7 @@ fn replace_system_api_functions(
     module: &mut Module<'_>,
     special_indices: SpecialIndices,
     subnet_type: SubnetType,
+    dirty_page_overhead: NumInstructions,
 ) {
     let api_indexes = calculate_api_indexes(module);
     let number_of_func_imports = module
@@ -531,7 +538,9 @@ fn replace_system_api_functions(
     // Collect a single map of all the function indexes that need to be
     // replaced.
     let mut func_index_replacements = BTreeMap::new();
-    for (api, (ty, body)) in replacement_functions(special_indices, subnet_type) {
+    for (api, (ty, body)) in
+        replacement_functions(special_indices, subnet_type, dirty_page_overhead)
+    {
         if let Some(old_index) = api_indexes.get(&api) {
             let type_idx = add_type(module, ty);
             let new_index = (number_of_func_imports + module.functions.len()) as u32;

@@ -18,6 +18,7 @@ use crate::{
 use ic_interfaces::execution_environment::StableMemoryApi;
 use ic_registry_subnet_type::SubnetType;
 use ic_sys::PAGE_SIZE;
+use ic_types::NumInstructions;
 use wasmparser::{BlockType, FuncType, Operator, Type, ValType};
 use wasmtime_environ::WASM_PAGE_SIZE;
 
@@ -28,6 +29,7 @@ const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
 pub(super) fn replacement_functions(
     special_indices: SpecialIndices,
     subnet_type: SubnetType,
+    dirty_page_overhead: NumInstructions,
 ) -> Vec<(SystemApiFunc, (Type, Body<'static>))> {
     let count_clean_pages_fn_index = special_indices.count_clean_pages_fn.unwrap();
     let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix.unwrap();
@@ -529,7 +531,19 @@ pub(super) fn replacement_functions(
                         },
                         // TODO get complexity and bail if too high
                         // for now store in local and set the global when succeeded
-                        LocalSet { local_index: 5 },
+                        LocalTee { local_index: 5 },
+                        // Decrement instruction counter to charge for dirty pages
+                        I64ExtendI32U,
+                        I64Const {
+                            value: dirty_page_overhead.get().try_into().unwrap(),
+                        },
+                        I64Mul,
+                        // Bounds check above should guarantee that we don't
+                        // overflow as the over head is a small constant.
+                        Call {
+                            function_index: decr_instruction_counter_fn,
+                        },
+                        Drop,
                         // perform memory fill
                         LocalGet { local_index: 3 }, //b_start
                         // value to fill with
@@ -706,7 +720,19 @@ pub(super) fn replacement_functions(
                         },
                         // TODO get complexity and bail if too high
                         // for now store in local and set the global when succeeded
-                        LocalSet { local_index: 5 },
+                        LocalTee { local_index: 5 },
+                        // Decrement instruction counter to charge for dirty pages
+                        I64ExtendI32U,
+                        I64Const {
+                            value: dirty_page_overhead.get().try_into().unwrap(),
+                        },
+                        I64Mul,
+                        // Bounds check above should guarantee that we don't
+                        // overflow as the over head is a small constant.
+                        Call {
+                            function_index: decr_instruction_counter_fn,
+                        },
+                        Drop,
                         // perform memory fill
                         LocalGet { local_index: 3 }, //b_start
                         // value to fill with

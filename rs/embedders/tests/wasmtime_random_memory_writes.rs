@@ -55,7 +55,12 @@ fn test_api_for_update(
         &system_state,
         *cycles_account_manager,
         &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
+        match subnet_type {
+            SubnetType::Application => SchedulerConfig::application_subnet(),
+            SubnetType::System => SchedulerConfig::system_subnet(),
+            SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
+        }
+        .dirty_page_overhead,
     );
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
@@ -107,6 +112,8 @@ fn make_module_wat(heap_size: usize) -> String {
         (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
       (import "ic0" "stable_write"
         (func $ic0_stable_write (param $offset i32) (param $src i32) (param $size i32)))
+      (import "ic0" "stable64_write"
+        (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
 
       (func $dump_heap
         (call $msg_reply_data_append (i32.const 0) (i32.mul (memory.size) (i32.const 0x10000)))
@@ -159,6 +166,12 @@ fn make_module_wat(heap_size: usize) -> String {
         (call $ic0_stable_write (i32.const 0) (i32.const 0) (i32.const {STABLE_OP_BYTES}))
       )
 
+      ;; stable64_write of non-zero length
+      (func $test_stable64_write_nonzero
+        (drop (call $ic0_stable_grow (i32.const 1)))
+        (call $ic0_stable64_write (i64.const 0) (i64.const 0) (i64.const {STABLE_OP_BYTES}))
+      )
+
       (memory $memory {HEAP_SIZE})
       (export "memory" (memory $memory))
       (export "canister_query dump_heap" (func $dump_heap))
@@ -167,6 +180,7 @@ fn make_module_wat(heap_size: usize) -> String {
       (export "canister_update test_stable_read_nonzero" (func $test_stable_read_nonzero))
       (export "canister_update test_stable64_read_nonzero" (func $test_stable_read_nonzero))
       (export "canister_update test_stable_write_nonzero" (func $test_stable_write_nonzero))
+      (export "canister_update test_stable64_write_nonzero" (func $test_stable64_write_nonzero))
     )"#,
         HEAP_SIZE = heap_size
     )
@@ -692,13 +706,14 @@ mod tests {
         use super::{
             get_num_instructions_consumed, SubnetType, MAX_NUM_INSTRUCTIONS, STABLE_OP_BYTES,
         };
+        use ic_config::subnet_config::SchedulerConfig;
         use ic_logger::replica_logger::no_op_logger;
 
         const SETUP_INSTRUCTION_OVERHEAD: u64 = 7;
 
         #[test]
         fn empty_stable_read_charge() {
-            let instructions_consumed_without_data = get_num_instructions_consumed(
+            let instructions_consumed = get_num_instructions_consumed(
                 no_op_logger(),
                 "test_stable_read",
                 vec![],
@@ -708,7 +723,7 @@ mod tests {
             .unwrap();
             // Additional charge for an empty read should just be the overhead.
             assert_eq!(
-                instructions_consumed_without_data.get(),
+                instructions_consumed.get(),
                 SETUP_INSTRUCTION_OVERHEAD
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
@@ -717,7 +732,7 @@ mod tests {
 
         #[test]
         fn nonempty_stable_read_charge() {
-            let instructions_consumed_without_data = get_num_instructions_consumed(
+            let instructions_consumed = get_num_instructions_consumed(
                 no_op_logger(),
                 "test_stable_read_nonzero",
                 vec![],
@@ -728,7 +743,7 @@ mod tests {
             // Read of `STABLE_OP_BYTES` should cost an additional instruction
             // for each byte.
             assert_eq!(
-                instructions_consumed_without_data.get(),
+                instructions_consumed.get(),
                 SETUP_INSTRUCTION_OVERHEAD
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
@@ -738,7 +753,7 @@ mod tests {
 
         #[test]
         fn nonempty_stable64_read_charge() {
-            let instructions_consumed_without_data = get_num_instructions_consumed(
+            let instructions_consumed = get_num_instructions_consumed(
                 no_op_logger(),
                 "test_stable64_read_nonzero",
                 vec![],
@@ -749,7 +764,7 @@ mod tests {
             // Read of `STABLE_OP_BYTES` should cost an additional instruction
             // for each byte.
             assert_eq!(
-                instructions_consumed_without_data.get(),
+                instructions_consumed.get(),
                 SETUP_INSTRUCTION_OVERHEAD
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE64_READ
                         .get()
@@ -759,7 +774,7 @@ mod tests {
 
         #[test]
         fn stable_read_charge_system_subnet() {
-            let instructions_consumed_without_data = get_num_instructions_consumed(
+            let instructions_consumed = get_num_instructions_consumed(
                 no_op_logger(),
                 "test_stable_read_nonzero",
                 vec![],
@@ -769,10 +784,98 @@ mod tests {
             .unwrap();
             // Only the fixed cost is charged on system subnets.
             assert_eq!(
-                instructions_consumed_without_data.get(),
+                instructions_consumed.get(),
                 SETUP_INSTRUCTION_OVERHEAD
                     + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_READ
                         .get()
+            );
+        }
+
+        #[test]
+        fn nonempty_stable_write_charge() {
+            let instructions_consumed = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable_write_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::Application,
+            )
+            .unwrap();
+            // Read of `STABLE_OP_BYTES` should cost an additional instruction
+            // for each byte and an extra charge for one dirty page.
+            assert_eq!(
+                instructions_consumed.get(),
+                SETUP_INSTRUCTION_OVERHEAD
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
+                        .get()
+                    + STABLE_OP_BYTES
+                    + SchedulerConfig::application_subnet()
+                        .dirty_page_overhead
+                        .get()
+            );
+        }
+
+        #[test]
+        fn nonempty_stable_write_charge_system_subnet() {
+            let instructions_consumed = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable_write_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::System,
+            )
+            .unwrap();
+            // Only the extra charge for the dirty page.
+            assert_eq!(
+                instructions_consumed.get(),
+                SETUP_INSTRUCTION_OVERHEAD
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
+                        .get()
+                    + SchedulerConfig::system_subnet().dirty_page_overhead.get()
+            );
+        }
+
+        #[test]
+        fn nonempty_stable64_write_charge() {
+            let instructions_consumed = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable64_write_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::Application,
+            )
+            .unwrap();
+            // Read of `STABLE_OP_BYTES` should cost an additional instruction
+            // for each byte and an extra charge for one dirty page.
+            assert_eq!(
+                instructions_consumed.get(),
+                SETUP_INSTRUCTION_OVERHEAD
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
+                        .get()
+                    + STABLE_OP_BYTES
+                    + SchedulerConfig::application_subnet()
+                        .dirty_page_overhead
+                        .get()
+            );
+        }
+
+        #[test]
+        fn nonempty_stable64_write_charge_system_subnet() {
+            let instructions_consumed = get_num_instructions_consumed(
+                no_op_logger(),
+                "test_stable64_write_nonzero",
+                vec![],
+                MAX_NUM_INSTRUCTIONS,
+                SubnetType::System,
+            )
+            .unwrap();
+            // Only the extra charge for the dirty page.
+            assert_eq!(
+                instructions_consumed.get(),
+                SETUP_INSTRUCTION_OVERHEAD
+                    + ic_embedders::wasmtime_embedder::system_api_complexity::overhead::STABLE_WRITE
+                        .get()
+                    + SchedulerConfig::system_subnet().dirty_page_overhead.get()
             );
         }
     }
@@ -899,6 +1002,12 @@ mod tests {
 
         let config = Config {
             subnet_type,
+            dirty_page_overhead: match subnet_type {
+                SubnetType::System => SchedulerConfig::system_subnet(),
+                SubnetType::Application => SchedulerConfig::application_subnet(),
+                SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
+            }
+            .dirty_page_overhead,
             ..Config::default()
         };
         let embedder = WasmtimeEmbedder::new(config, log.clone());

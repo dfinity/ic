@@ -117,6 +117,12 @@ pub struct Config {
     /// The type of the local subnet. The default value here should be replaced
     /// with the correct value at runtime when the hypervisor is created.
     pub subnet_type: SubnetType,
+
+    /// Dirty page overhead. The number of instructions to charge for each dirty
+    /// page created by a write to stable memory. The default value should be
+    /// replaced with the correct value at runtime when the hypervisor is
+    /// created.
+    pub dirty_page_overhead: NumInstructions,
 }
 
 impl Config {
@@ -136,6 +142,7 @@ impl Config {
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,
             subnet_type: SubnetType::Application,
+            dirty_page_overhead: NumInstructions::new(0),
         }
     }
 }
