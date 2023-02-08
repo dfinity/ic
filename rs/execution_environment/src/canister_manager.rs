@@ -759,7 +759,7 @@ impl CanisterManager {
             CanisterInstallMode::Install | CanisterInstallMode::Reinstall => {
                 execute_install(context, canister, original, round.clone(), round_limits)
             }
-            CanisterInstallMode::Upgrade => {
+            CanisterInstallMode::Upgrade | CanisterInstallMode::UpgradeAndDropStableMemory => {
                 execute_upgrade(context, canister, original, round.clone(), round_limits)
             }
         }

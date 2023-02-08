@@ -38,7 +38,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     page_map, testing::CanisterQueuesTesting, CallContextManager, CallOrigin, CanisterState,
-    CanisterStatus, NumWasmPages, PageMap, ReplicatedState,
+    CanisterStatus, NumWasmPages, PageIndex, PageMap, ReplicatedState,
 };
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::{
@@ -4997,4 +4997,60 @@ fn install_code_cannot_switch_from_reserved_to_best_effort_memory_allocation() {
             .size,
         NumWasmPages::from(10)
     )
+}
+
+#[test]
+fn upgrade_and_drop_stable_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let wat = r#"
+        (module
+            (import "ic0" "stable64_grow"
+                (func $ic0_stable64_grow (param $pages i64) (result i64)))
+            (import "ic0" "stable64_read"
+                (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+            (import "ic0" "stable64_write"
+                (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+
+            (func (export "canister_pre_upgrade")
+                    (i32.store (i32.const 0) (i32.const 42))
+                    (drop (call $ic0_stable64_grow (i64.const 1)))
+                    (call $ic0_stable64_write (i64.const 0) (i64.const 0) (i64.const 1))
+            )
+            (func (export "canister_post_upgrade")
+                    (call $ic0_stable64_read (i64.const 0) (i64.const 0) (i64.const 1))
+            )
+            (memory 1)
+        )"#;
+
+    let id = test.canister_from_wat(wat).unwrap();
+    let wasm = wat::parse_str(wat).unwrap();
+
+    let subnet_available_memory_before = test.subnet_available_memory();
+    test.install_wasm_in_mode(id, CanisterInstallMode::UpgradeAndDropStableMemory, wasm)
+        .unwrap();
+    let subnet_available_memory_after = test.subnet_available_memory();
+
+    assert_eq!(
+        subnet_available_memory_before.get_total_memory(),
+        subnet_available_memory_after.get_total_memory()
+    );
+
+    assert_eq!(
+        NumWasmPages::new(1),
+        test.execution_state(id).wasm_memory.size
+    );
+
+    assert_eq!(
+        42,
+        test.execution_state(id)
+            .wasm_memory
+            .page_map
+            .get_page(PageIndex::new(0))[0],
+    );
+
+    assert_eq!(
+        NumWasmPages::new(0),
+        test.execution_state(id).stable_memory.size
+    );
 }
