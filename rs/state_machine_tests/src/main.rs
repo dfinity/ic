@@ -166,6 +166,9 @@ fn management_call(env: &StateMachine, call: &ParsedCanisterCall, opts: &Opts) {
                 CanisterInstallMode::Upgrade => {
                     env.upgrade_canister(canister_id, settings.wasm_module, settings.arg)
                 }
+                CanisterInstallMode::UpgradeAndDropStableMemory => {
+                    env.upgrade_canister(canister_id, settings.wasm_module, settings.arg)
+                }
             };
             let success = candid::encode_one(()).unwrap();
             send_response(result.map(|_| WasmResult::Reply(success)), opts);

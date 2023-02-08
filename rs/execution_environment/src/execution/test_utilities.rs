@@ -514,18 +514,7 @@ impl ExecutionTest {
         canister_id: CanisterId,
         wasm_binary: Vec<u8>,
     ) -> Result<(), UserError> {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Install,
-            canister_id,
-            wasm_binary,
-            vec![],
-            None,
-            None,
-            None,
-        );
-        let result = self.install_code(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
-        Ok(())
+        self.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, wasm_binary)
     }
 
     pub fn install_canister_with_allocation(
@@ -555,18 +544,7 @@ impl ExecutionTest {
         canister_id: CanisterId,
         wasm_binary: Vec<u8>,
     ) -> Result<(), UserError> {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Reinstall,
-            canister_id,
-            wasm_binary,
-            vec![],
-            None,
-            None,
-            None,
-        );
-        let result = self.install_code(args)?;
-        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
-        Ok(())
+        self.install_wasm_in_mode(canister_id, CanisterInstallMode::Reinstall, wasm_binary)
     }
 
     /// Installs the given canister with the given Wasm binary.
@@ -575,15 +553,17 @@ impl ExecutionTest {
         canister_id: CanisterId,
         wasm_binary: Vec<u8>,
     ) -> Result<(), UserError> {
-        let args = InstallCodeArgs::new(
-            CanisterInstallMode::Upgrade,
-            canister_id,
-            wasm_binary,
-            vec![],
-            None,
-            None,
-            None,
-        );
+        self.install_wasm_in_mode(canister_id, CanisterInstallMode::Upgrade, wasm_binary)
+    }
+
+    /// Installs the given Wasm binary in the given mode to the given canister.
+    pub fn install_wasm_in_mode(
+        &mut self,
+        canister_id: CanisterId,
+        mode: CanisterInstallMode,
+        wasm_binary: Vec<u8>,
+    ) -> Result<(), UserError> {
+        let args = InstallCodeArgs::new(mode, canister_id, wasm_binary, vec![], None, None, None);
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())

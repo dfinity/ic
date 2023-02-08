@@ -355,6 +355,10 @@ pub enum CanisterInstallMode {
     #[serde(rename = "upgrade")]
     #[strum(serialize = "upgrade")]
     Upgrade,
+    /// Upgrade an existing canister and drop the stable memory afterwards.
+    #[serde(rename = "upgrade_and_drop_stable_memory")]
+    #[strum(serialize = "upgrade_and_drop_stable_memory")]
+    UpgradeAndDropStableMemory,
 }
 
 impl Default for CanisterInstallMode {
@@ -365,10 +369,11 @@ impl Default for CanisterInstallMode {
 
 impl CanisterInstallMode {
     pub fn iter() -> Iter<'static, CanisterInstallMode> {
-        static MODES: [CanisterInstallMode; 3] = [
+        static MODES: [CanisterInstallMode; 4] = [
             CanisterInstallMode::Install,
             CanisterInstallMode::Reinstall,
             CanisterInstallMode::Upgrade,
+            CanisterInstallMode::UpgradeAndDropStableMemory,
         ];
         MODES.iter()
     }
@@ -387,6 +392,7 @@ impl TryFrom<String> for CanisterInstallMode {
             "install" => Ok(CanisterInstallMode::Install),
             "reinstall" => Ok(CanisterInstallMode::Reinstall),
             "upgrade" => Ok(CanisterInstallMode::Upgrade),
+            "upgrade_and_drop_stable_memory" => Ok(CanisterInstallMode::UpgradeAndDropStableMemory),
             _ => Err(CanisterInstallModeError(mode.to_string())),
         }
     }
@@ -398,6 +404,7 @@ impl From<CanisterInstallMode> for String {
             CanisterInstallMode::Install => "install",
             CanisterInstallMode::Reinstall => "reinstall",
             CanisterInstallMode::Upgrade => "upgrade",
+            CanisterInstallMode::UpgradeAndDropStableMemory => "upgrade_and_drop_stable_memory",
         };
         res.to_string()
     }

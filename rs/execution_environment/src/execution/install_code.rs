@@ -15,7 +15,7 @@ use ic_interfaces::{
     messages::CanisterCall,
 };
 use ic_logger::{error, fatal, info, warn};
-use ic_replicated_state::{CanisterState, ExecutionState};
+use ic_replicated_state::{num_bytes_try_from, CanisterState, ExecutionState, Memory, PageMap};
 use ic_state_layout::{CanisterLayout, CheckpointLayout, ReadOnly};
 use ic_sys::PAGE_SIZE;
 use ic_system_api::ExecutionParameters;
@@ -186,6 +186,23 @@ impl InstallCodeHelper {
             .system_state
             .apply_cycles_debit(self.canister.canister_id(), round.log);
 
+        // Drop the stable memory if needed.
+        match original.mode {
+            CanisterInstallMode::Install
+            | CanisterInstallMode::Reinstall
+            | CanisterInstallMode::Upgrade => {}
+            CanisterInstallMode::UpgradeAndDropStableMemory => {
+                // The execution state is not empty after `post_upgrade()`.
+                let execution_state = self.canister.execution_state.as_mut().unwrap();
+                self.deallocated_bytes +=
+                    num_bytes_try_from(execution_state.stable_memory.size).unwrap_or_default();
+                let empty_page_map = PageMap::new();
+                let empty_stable_memory =
+                    Memory::new(empty_page_map, ic_replicated_state::NumWasmPages::from(0));
+                execution_state.stable_memory = empty_stable_memory;
+            }
+        };
+
         let mut subnet_available_memory = round_limits.subnet_available_memory;
         subnet_available_memory.increment(self.deallocated_bytes, NumBytes::from(0));
         if let Err(err) = subnet_available_memory
@@ -311,7 +328,9 @@ impl InstallCodeHelper {
                     return Err(CanisterManagerError::CanisterNonEmpty(id));
                 }
             }
-            CanisterInstallMode::Reinstall | CanisterInstallMode::Upgrade => {}
+            CanisterInstallMode::Reinstall
+            | CanisterInstallMode::Upgrade
+            | CanisterInstallMode::UpgradeAndDropStableMemory => {}
         }
 
         if self.canister.scheduler_state.install_code_debit.get() > 0
