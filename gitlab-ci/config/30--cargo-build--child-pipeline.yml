@@ -22,6 +22,10 @@ cargo-build-release-linux:
   extends: 
   - .cargo-build-docker
   - .rules-parent-pipeline-protected-branch-only
+  tags:
+    - dfinity
+    - ubuntu
+    - docker # remove after IDX-2660
   script:
     - |
       set -eExuo pipefail
