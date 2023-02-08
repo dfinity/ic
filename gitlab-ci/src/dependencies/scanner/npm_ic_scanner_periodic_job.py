@@ -39,6 +39,11 @@ REPOS_TO_SCAN = [
         "https://github.com/dfinity/hardware-wallet-cli",
         [Project("hardware-wallet-cli", "hardware-wallet-cli")],
     ),
+    Repository(
+        "gix-components",
+        "https://github.com/dfinity/gix-components",
+        [Project("gix-components", "gix-components")],
+    ),
 ]
 
 if __name__ == "__main__":
