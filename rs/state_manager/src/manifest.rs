@@ -42,7 +42,7 @@ pub const STATE_SYNC_V1: u32 = 1;
 pub const STATE_SYNC_V2: u32 = 2;
 
 /// The version of StateSync protocol that should be used for all newly created manifests.
-pub const CURRENT_STATE_SYNC_VERSION: u32 = STATE_SYNC_V1;
+pub const CURRENT_STATE_SYNC_VERSION: u32 = STATE_SYNC_V2;
 
 /// Maximum supported StateSync version.
 ///
