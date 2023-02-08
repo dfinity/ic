@@ -1,5 +1,3 @@
-#[rustfmt::skip]
-
 use anyhow::Result;
 use std::time::Duration;
 
@@ -18,6 +16,5 @@ fn main() -> Result<()> {
         .add_test(systest!(initiate_token_swap))
         .add_test(systest!(add_one_participant))
         .execute_from_args()?;
-
     Ok(())
 }
