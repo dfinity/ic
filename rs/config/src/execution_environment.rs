@@ -5,7 +5,8 @@ use crate::{
 };
 use ic_base_types::{CanisterId, NumSeconds};
 use ic_types::{
-    Cycles, NumBytes, NumInstructions, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
+    Cycles, NumBytes, NumInstructions, NumPages, MAX_STABLE_MEMORY_IN_BYTES,
+    MAX_WASM_MEMORY_IN_BYTES,
 };
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr, time::Duration};
@@ -193,6 +194,10 @@ pub struct Config {
     /// A sandbox process may be evicted after it has been idle for this
     /// duration and sandbox process eviction is activated.
     pub max_sandbox_idle_time: Duration,
+
+    /// The limit on the number of dirty pages in stable memory that a canister
+    /// can create in a single message.
+    pub stable_memory_dirty_page_limit: NumPages,
 }
 
 impl Default for Config {
@@ -254,6 +259,9 @@ impl Default for Config {
             min_sandbox_count: embedders::DEFAULT_MIN_SANDBOX_COUNT,
             max_sandbox_count: embedders::DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: embedders::DEFAULT_MAX_SANDBOX_IDLE_TIME,
+            stable_memory_dirty_page_limit: NumPages::new(
+                embedders::STABLE_MEMORY_DIRTY_PAGE_LIMIT,
+            ),
         }
     }
 }

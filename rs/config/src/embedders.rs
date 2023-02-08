@@ -51,7 +51,7 @@ const KiB: u64 = 1024;
 const GiB: u64 = KiB * KiB * KiB;
 // Maximum number of stable memory dirty pages that a single message execution
 // is allowed to produce.
-const STABLE_MEMORY_DIRTY_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
+pub const STABLE_MEMORY_DIRTY_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {

@@ -56,7 +56,7 @@ use ic_types::{
         AnonymousQuery, CallbackId, MessageId, RequestOrResponse, Response, UserQuery,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
-    CanisterId, Cycles, NumInstructions, Time, UserId,
+    CanisterId, Cycles, NumInstructions, NumPages, Time, UserId,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
@@ -1363,6 +1363,7 @@ pub struct ExecutionTestBuilder {
     bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<Vec<u8>>>,
     cost_to_compile_wasm_instruction: u64,
     max_instructions_per_composite_query_call: NumInstructions,
+    stable_memory_dirty_page_limit: NumPages,
 }
 
 impl Default for ExecutionTestBuilder {
@@ -1412,6 +1413,8 @@ impl Default for ExecutionTestBuilder {
                 .cost_to_compile_wasm_instruction
                 .get(),
             max_instructions_per_composite_query_call,
+            stable_memory_dirty_page_limit: ic_config::execution_environment::Config::default()
+                .stable_memory_dirty_page_limit,
         }
     }
 }
@@ -1622,6 +1625,14 @@ impl ExecutionTestBuilder {
         self.build_common(Arc::new(routing_table))
     }
 
+    pub fn with_stable_memory_dirty_page_limit(
+        mut self,
+        stable_memory_dirty_page_limit: NumPages,
+    ) -> Self {
+        self.stable_memory_dirty_page_limit = stable_memory_dirty_page_limit;
+        self
+    }
+
     pub fn build(self) -> ExecutionTest {
         let own_range = CanisterIdRange {
             start: CanisterId::from(CANISTER_IDS_PER_SUBNET),
@@ -1736,6 +1747,7 @@ impl ExecutionTestBuilder {
             cost_to_compile_wasm_instruction: self.cost_to_compile_wasm_instruction.into(),
             max_instructions_per_composite_query_call: self
                 .max_instructions_per_composite_query_call,
+            stable_memory_dirty_page_limit: self.stable_memory_dirty_page_limit,
             ..Config::default()
         };
         let hypervisor = Hypervisor::new(

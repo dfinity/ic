@@ -193,6 +193,7 @@ impl Hypervisor {
         embedder_config.cost_to_compile_wasm_instruction = config.cost_to_compile_wasm_instruction;
         embedder_config.max_sandbox_count = config.max_sandbox_count;
         embedder_config.max_sandbox_idle_time = config.max_sandbox_idle_time;
+        embedder_config.stable_memory_dirty_page_limit = config.stable_memory_dirty_page_limit;
         embedder_config.subnet_type = own_subnet_type;
         embedder_config.dirty_page_overhead = dirty_page_overhead;
 
