@@ -136,7 +136,7 @@ impl Service<Request<Vec<u8>>> for CallService {
     fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
         // Actual parsing.
         self.metrics
-            .requests_body_size_bytes
+            .request_body_size_bytes
             .with_label_values(&[ApiReqType::Call.into(), UNKNOWN_LABEL])
             .observe(request.body().len() as f64);
 

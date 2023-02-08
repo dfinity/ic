@@ -79,7 +79,7 @@ impl Service<Request<Vec<u8>>> for CatchUpPackageService {
 
     fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
         self.metrics
-            .requests_body_size_bytes
+            .request_body_size_bytes
             .with_label_values(&[ApiReqType::CatchUpPackage.into(), UNKNOWN_LABEL])
             .observe(request.body().len() as f64);
 

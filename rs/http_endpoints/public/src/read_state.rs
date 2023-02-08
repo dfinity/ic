@@ -98,7 +98,7 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
 
     fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
         self.metrics
-            .requests_body_size_bytes
+            .request_body_size_bytes
             .with_label_values(&[ApiReqType::ReadState.into(), UNKNOWN_LABEL])
             .observe(request.body().len() as f64);
 
@@ -214,7 +214,12 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
                             delegation: delegation_from_nns,
                         })),
                     };
-                    cbor_response(&res)
+                    let (resp, body_size) = cbor_response(&res);
+                    metrics
+                        .response_body_size_bytes
+                        .with_label_values(&[ApiReqType::ReadState.into()])
+                        .observe(body_size as f64);
+                    resp
                 }
                 None => make_plaintext_response(
                     StatusCode::SERVICE_UNAVAILABLE,

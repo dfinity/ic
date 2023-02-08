@@ -82,7 +82,7 @@ impl Service<Request<Vec<u8>>> for QueryService {
 
     fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
         self.metrics
-            .requests_body_size_bytes
+            .request_body_size_bytes
             .with_label_values(&[ApiReqType::Query.into(), UNKNOWN_LABEL])
             .observe(request.body().len() as f64);
         if self.health_status.load() != ReplicaHealthStatus::Healthy {
@@ -181,7 +181,8 @@ impl Service<Request<Vec<u8>>> for QueryService {
         let registry_client = self.registry_client.get_latest_version();
         let malicious_flags = self.malicious_flags.clone();
         let validator_executor = self.validator_executor.clone();
-        Box::pin(async move {
+        let response_body_size_bytes_metric = self.metrics.response_body_size_bytes.clone();
+        async move {
             let get_authorized_canisters_fut = validator_executor.get_authorized_canisters(
                 request.clone(),
                 registry_client,
@@ -204,9 +205,14 @@ impl Service<Request<Vec<u8>>> for QueryService {
                 .call((request.take_content(), delegation_from_nns))
                 .map(|result| {
                     let v = result?;
-                    Ok(cbor_response(&v))
+                    let (resp, body_size) = cbor_response(&v);
+                    response_body_size_bytes_metric
+                        .with_label_values(&[ApiReqType::Query.into()])
+                        .observe(body_size as f64);
+                    Ok(resp)
                 })
                 .await
-        })
+        }
+        .boxed()
     }
 }
