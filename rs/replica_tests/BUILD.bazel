@@ -99,13 +99,12 @@ rust_test(
 
 rust_test_suite(
     name = "replica_tests_integration_tests",
+    timeout = "long",
     srcs = glob(["tests/**/*.rs"]),
     aliases = ALIASES,
     data = DEV_DATA,
     edition = "2021",
     env = DEV_ENV,
-    # https://dfinity.atlassian.net/browse/EXC-1271
-    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":replica_tests"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
