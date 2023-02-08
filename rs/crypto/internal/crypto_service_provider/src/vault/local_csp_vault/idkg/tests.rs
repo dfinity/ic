@@ -1,7 +1,11 @@
+use crate::api::CspCreateMEGaKeyError;
+use crate::secret_key_store::SecretKeyStoreError;
 use crate::vault::api::IDkgProtocolCspVault;
+use crate::vault::local_csp_vault::idkg::SecretKeyStorePersistenceError;
 use crate::vault::test_utils;
 use crate::LocalCspVault;
 use crate::PublicKeyStore;
+use assert_matches::assert_matches;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use std::sync::Arc;
@@ -165,6 +169,56 @@ mod idkg_gen_dealing_encryption_key_pair {
 
         test_utils::idkg::should_fail_with_transient_internal_error_if_storing_idkg_public_key_fails(
             vault,
+        );
+    }
+
+    #[test]
+    fn should_fail_with_transient_internal_error_if_idkg_secret_key_persistence_fails_due_to_io_error(
+    ) {
+        let mut sks_returning_io_error = MockSecretKeyStore::new();
+        let expected_io_error = "cannot write to file".to_string();
+        sks_returning_io_error
+            .expect_insert()
+            .times(1)
+            .return_const(Err(SecretKeyStoreError::PersistenceError(
+                SecretKeyStorePersistenceError::IoError(expected_io_error.clone()),
+            )));
+        let vault = LocalCspVault::builder()
+            .with_node_secret_key_store(sks_returning_io_error)
+            .build();
+
+        let result = vault.idkg_gen_dealing_encryption_key_pair();
+
+        assert_matches!(
+            result,
+            Err(CspCreateMEGaKeyError::TransientInternalError { internal_error })
+            if internal_error.contains(&expected_io_error)
+        );
+    }
+
+    #[test]
+    fn should_fail_with_internal_error_if_idkg_secret_key_persistence_fails_due_to_serialization_error(
+    ) {
+        let mut sks_returning_serialization_error = MockSecretKeyStore::new();
+        let expected_serialization_error = "cannot serialize keys".to_string();
+        sks_returning_serialization_error
+            .expect_insert()
+            .times(1)
+            .return_const(Err(SecretKeyStoreError::PersistenceError(
+                SecretKeyStorePersistenceError::SerializationError(
+                    expected_serialization_error.clone(),
+                ),
+            )));
+        let vault = LocalCspVault::builder()
+            .with_node_secret_key_store(sks_returning_serialization_error)
+            .build();
+
+        let result = vault.idkg_gen_dealing_encryption_key_pair();
+
+        assert_matches!(
+            result,
+            Err(CspCreateMEGaKeyError::InternalError { internal_error })
+            if internal_error.contains(&expected_serialization_error)
         );
     }
 

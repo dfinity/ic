@@ -2,11 +2,17 @@
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
+use crate::secret_key_store::SecretKeyStoreError;
+use crate::secret_key_store::SecretKeyStorePersistenceError;
 use crate::vault::api::NiDkgCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::test_utils;
 use crate::vault::test_utils::ni_dkg::fixtures::MockNetwork;
+use assert_matches::assert_matches;
+use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
+use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateFsKeyError;
 use ic_types_test_utils::ids::NODE_42;
+
 use mockall::Sequence;
 use proptest::prelude::*;
 use std::io;
@@ -100,5 +106,55 @@ fn should_fail_with_transient_internal_error_if_dkg_dealing_encryption_key_persi
         .build_into_arc();
     test_utils::ni_dkg::should_fail_with_transient_internal_error_if_dkg_dealing_encryption_key_persistence_fails(
         vault,
+    );
+}
+
+#[test]
+fn should_fail_with_transient_internal_error_if_nidkg_secret_key_persistence_fails_due_to_io_error()
+{
+    let mut sks_returning_io_error = MockSecretKeyStore::new();
+    let expected_io_error = "cannot write to file".to_string();
+    sks_returning_io_error
+        .expect_insert()
+        .times(1)
+        .return_const(Err(SecretKeyStoreError::PersistenceError(
+            SecretKeyStorePersistenceError::IoError(expected_io_error.clone()),
+        )));
+    let vault = LocalCspVault::builder()
+        .with_node_secret_key_store(sks_returning_io_error)
+        .build();
+
+    let result = vault.gen_dealing_encryption_key_pair(NODE_42);
+
+    assert_matches!(
+        result,
+        Err(CspDkgCreateFsKeyError::TransientInternalError (internal_error))
+        if internal_error.contains(&expected_io_error)
+    );
+}
+
+#[test]
+fn should_fail_with_internal_error_if_nidkg_secret_key_persistence_fails_due_to_serialization_error(
+) {
+    let mut sks_returning_serialization_error = MockSecretKeyStore::new();
+    let expected_serialization_error = "cannot serialize keys".to_string();
+    sks_returning_serialization_error
+        .expect_insert()
+        .times(1)
+        .return_const(Err(SecretKeyStoreError::PersistenceError(
+            SecretKeyStorePersistenceError::SerializationError(
+                expected_serialization_error.clone(),
+            ),
+        )));
+    let vault = LocalCspVault::builder()
+        .with_node_secret_key_store(sks_returning_serialization_error)
+        .build();
+
+    let result = vault.gen_dealing_encryption_key_pair(NODE_42);
+
+    assert_matches!(
+        result,
+        Err(CspDkgCreateFsKeyError::InternalError(InternalError{ internal_error }))
+        if internal_error.contains(&expected_serialization_error)
     );
 }

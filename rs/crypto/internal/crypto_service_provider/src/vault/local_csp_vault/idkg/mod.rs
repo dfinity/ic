@@ -3,7 +3,9 @@ use crate::canister_threshold::{IDKG_MEGA_SCOPE, IDKG_THRESHOLD_KEYS_SCOPE};
 use crate::key_id::KeyId;
 use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use crate::public_key_store::{PublicKeyAddError, PublicKeyRetainError, PublicKeyStore};
-use crate::secret_key_store::{SecretKeyStore, SecretKeyStorePersistenceError};
+use crate::secret_key_store::{
+    SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
+};
 use crate::types::CspSecretKey;
 use crate::vault::api::IDkgProtocolCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
@@ -439,7 +441,27 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let (mut sks_write_lock, mut pks_write_lock) = self.sks_and_pks_write_locks();
         sks_write_lock
             .insert(key_id, csp_secret_key, Some(IDKG_MEGA_SCOPE))
-            .map_err(CspCreateMEGaKeyError::from)
+            .map_err(|sks_error| match sks_error {
+                SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                    CspCreateMEGaKeyError::DuplicateKeyId { key_id }
+                }
+                SecretKeyStoreError::PersistenceError(SecretKeyStorePersistenceError::IoError(e)) => {
+                    CspCreateMEGaKeyError::TransientInternalError {
+                        internal_error: format!(
+                            "Secret key store persistence I/O error while creating MEGa keys: {}",
+                            e
+                        ),
+                    }
+                }
+                SecretKeyStoreError::PersistenceError(
+                    SecretKeyStorePersistenceError::SerializationError(e),
+                ) => CspCreateMEGaKeyError::InternalError {
+                    internal_error: format!(
+                        "Secret key store persistence serialization error while creating MEGa keys: {}",
+                        e
+                    ),
+                },
+            })
             .and_then(|()| {
                 pks_write_lock
                     .add_idkg_dealing_encryption_pubkey(public_key_proto)

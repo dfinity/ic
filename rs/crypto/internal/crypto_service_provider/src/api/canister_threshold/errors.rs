@@ -1,5 +1,4 @@
 //! Errors encountered during CSP canister threshold signature operations.
-use crate::secret_key_store::{SecretKeyStoreError, SecretKeyStorePersistenceError};
 use crate::KeyId;
 use ic_crypto_internal_threshold_sig_ecdsa::ThresholdEcdsaError;
 use ic_interfaces::crypto::IDkgDealingEncryptionKeyRotationError;
@@ -43,32 +42,6 @@ impl std::fmt::Display for CspCreateMEGaKeyError {
                     internal_error
                 )
             }
-        }
-    }
-}
-
-impl From<SecretKeyStoreError> for CspCreateMEGaKeyError {
-    fn from(err: SecretKeyStoreError) -> Self {
-        match err {
-            SecretKeyStoreError::DuplicateKeyId(key_id) => {
-                CspCreateMEGaKeyError::DuplicateKeyId { key_id }
-            }
-            SecretKeyStoreError::PersistenceError(SecretKeyStorePersistenceError::IoError(e)) => {
-                CspCreateMEGaKeyError::TransientInternalError {
-                    internal_error: format!(
-                        "Secret key store persistence I/O error while creating MEGa keys: {}",
-                        e
-                    ),
-                }
-            }
-            SecretKeyStoreError::PersistenceError(
-                SecretKeyStorePersistenceError::SerializationError(e),
-            ) => CspCreateMEGaKeyError::InternalError {
-                internal_error: format!(
-                    "Secret key store persistence serialization error while creating MEGa keys: {}",
-                    e
-                ),
-            },
         }
     }
 }
