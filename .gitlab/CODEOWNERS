@@ -59,9 +59,9 @@ go_deps.bzl               @dfinity-lab/teams/idx
 
 # [Testnet]
 /testnet/                                                  @dfinity-lab/teams/node-team @dfinity-lab/teams/release-team
-/testnet/ansible/                                          @dfinity-lab/teams/dcs
+/testnet/ansible/                                          @dfinity-lab/teams/platform-operations
 /testnet/docs/                                             @dfinity-lab/teams/ic-support-eu @dfinity-lab/teams/ic-support-na
-/testnet/env/                                              @dfinity-lab/teams/dcs
+/testnet/env/                                              @dfinity-lab/teams/platform-operations
 
 /testnet/release/                                          @dfinity-lab/teams/release-team
 /testnet/tests/pipeline/                                   @dfinity-lab/teams/ic-testing-verification
