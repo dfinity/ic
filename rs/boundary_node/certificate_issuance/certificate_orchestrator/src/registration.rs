@@ -131,9 +131,14 @@ impl<T: Create> Create for WithMetrics<T> {
         self.1.with(|c| {
             c.borrow()
                 .with(&labels! {
-                    "status" => match out {
+                    "status" => match &out {
                         Ok(_) => "ok",
-                        Err(_) => "fail",
+                        Err(err) => match err {
+                            CreateError::NameError(_) => "name-error",
+                            CreateError::Duplicate(_) => "duplicate",
+                            CreateError::Unauthorized => "unauthorized",
+                            CreateError::UnexpectedError(_) => "fail",
+                        },
                     },
                 })
                 .inc()
@@ -300,9 +305,13 @@ impl<T: Update> Update for WithMetrics<T> {
         self.1.with(|c| {
             c.borrow()
                 .with(&labels! {
-                    "status" => match out {
+                    "status" => match &out {
                         Ok(_) => "ok",
-                        Err(_) => "fail",
+                        Err(err) => match err {
+                            UpdateError::NotFound => "not-found",
+                            UpdateError::Unauthorized => "unauthorized",
+                            UpdateError::UnexpectedError(_) => "fail",
+                        },
                     },
                 })
                 .inc()
@@ -401,9 +410,13 @@ impl<T: Remove> Remove for WithMetrics<T> {
         self.1.with(|c| {
             c.borrow()
                 .with(&labels! {
-                    "status" => match out {
+                    "status" => match &out {
                         Ok(_) => "ok",
-                        Err(_) => "fail",
+                        Err(err) => match err {
+                            RemoveError::NotFound => "not-found",
+                            RemoveError::Unauthorized => "unauthorized",
+                            RemoveError::UnexpectedError(_) => "fail",
+                        },
                     },
                 })
                 .inc()

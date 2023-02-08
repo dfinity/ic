@@ -78,9 +78,13 @@ impl<T: Upload> Upload for WithMetrics<T> {
         self.1.with(|c| {
             c.borrow()
                 .with(&labels! {
-                    "status" => match out {
+                    "status" => match &out {
                         Ok(_) => "ok",
-                        Err(_) => "fail",
+                        Err(err) => match err {
+                            UploadError::NotFound => "not-found",
+                            UploadError::Unauthorized => "unauthorized",
+                            UploadError::UnexpectedError(_) => "fail",
+                        },
                     },
                 })
                 .inc()
