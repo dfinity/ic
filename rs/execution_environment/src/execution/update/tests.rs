@@ -6,14 +6,13 @@ use ic_error_types::ErrorCode;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{canister_state::NextExecution, CallOrigin};
 use ic_state_machine_tests::{Cycles, WasmResult};
-use ic_types::NumInstructions;
+use ic_sys::PAGE_SIZE;
+use ic_types::{NumInstructions, NumPages};
 use ic_universal_canister::{call_args, wasm};
 
 use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionTest, ExecutionTestBuilder,
 };
-
-const GB: u64 = 1024 * 1024 * 1024;
 
 fn wat_writing_to_each_stable_memory_page(memory_amount: u64) -> String {
     format!(
@@ -26,7 +25,7 @@ fn wat_writing_to_each_stable_memory_page(memory_amount: u64) -> String {
             (import "ic0" "msg_reply" (func $msg_reply))
             (func (export "canister_update go") (local i64)
                 (local.set 0 (i64.const 0))
-                (drop (call $stable_grow (i64.const 524288))) (; maximum allowed ;)
+                (drop (call $stable_grow (i64.const 10)))
                 (loop $loop
                     (call $stable_write (local.get 0) (i64.const 0) (i64.const 1))
                     (local.set 0 (i64.add (local.get 0) (i64.const 4096))) (;increment by OS page size;)
@@ -42,8 +41,10 @@ fn wat_writing_to_each_stable_memory_page(memory_amount: u64) -> String {
 
 #[test]
 fn can_write_to_each_page_in_stable_memory() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let wat = wat_writing_to_each_stable_memory_page(7 * GB);
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(NumPages::new(10))
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64);
     let canister_id = test.canister_from_wat(wat).unwrap();
     let _result = test.ingress(canister_id, "go", vec![]).unwrap();
 }
@@ -300,14 +301,19 @@ fn dirty_pages_are_free_on_system_subnet() {
 
 #[test]
 fn hitting_page_delta_limit_fails_message() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let wat = wat_writing_to_each_stable_memory_page(8 * GB + 1);
+    let mut test = ExecutionTestBuilder::new()
+        .with_stable_memory_dirty_page_limit(NumPages::from(10))
+        .build();
+    let wat = wat_writing_to_each_stable_memory_page(10 * PAGE_SIZE as u64 + 1);
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "go", vec![]).unwrap_err();
     assert_eq!(result.code(), ErrorCode::CanisterMemoryAccessLimitExceeded);
-    assert_eq!(result.description(), "Canister exceeded memory access limits: Exceeded the limit for the \
-    number of modified pages in the stable memory in a single message execution: limit: 8388608 KB, \
-    modified: 8388612 KB.");
+    assert_eq!(
+        result.description(),
+        "Canister exceeded memory access limits: Exceeded the limit for the \
+    number of modified pages in the stable memory in a single message execution: limit: 40 KB, \
+    modified: 44 KB."
+    );
 }
 
 #[test]
