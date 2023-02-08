@@ -19,6 +19,7 @@ lazy_static! {
          key: TEST_NEURON_1_OWNER_KEYPAIR.public_key.to_vec(),
          algorithm_id: AlgorithmId::Ed25519,
     };
+    // TEST_NEURON_1_OWNER_PRINCIPAL is b2ucp-4x6ou-zvxwi-niymn-pvllt-rdxqr-wi4zj-jat5l-ijt2s-vv4f5-4ae
     pub static ref TEST_NEURON_1_OWNER_PRINCIPAL: PrincipalId = PrincipalId::new_self_authenticating(
         &ed25519_public_key_to_der(TEST_NEURON_1_OWNER_PUBKEY.key.clone()));
     pub static ref TEST_NEURON_2_OWNER_KEYPAIR: Ed25519KeyPair = {
@@ -29,6 +30,7 @@ lazy_static! {
          key: TEST_NEURON_2_OWNER_KEYPAIR.public_key.to_vec(),
          algorithm_id: AlgorithmId::Ed25519,
     };
+    // TEST_NEURON_2_OWNER_PRINCIPAL is ivdtc-er3gy-5nsbt-epfob-ubilu-fi6yy-qluo4-ma6uc-ykmsl-y7q74-iae
     pub static ref TEST_NEURON_2_OWNER_PRINCIPAL: PrincipalId = PrincipalId::new_self_authenticating(
         &ed25519_public_key_to_der(TEST_NEURON_2_OWNER_PUBKEY.key.clone()));
     pub static ref TEST_NEURON_3_OWNER_KEYPAIR: Ed25519KeyPair = {
@@ -39,6 +41,7 @@ lazy_static! {
          key: TEST_NEURON_3_OWNER_KEYPAIR.public_key.to_vec(),
          algorithm_id: AlgorithmId::Ed25519,
     };
+    // TEST_NEURON_3_OWNER_PRINCIPAL is 3nsx7-tzfj7-24piv-7mkdz-ifhz5-3ppgw-jcsig-coa6j-xms6b-iqsq5-oae
     pub static ref TEST_NEURON_3_OWNER_PRINCIPAL: PrincipalId = PrincipalId::new_self_authenticating(
         &ed25519_public_key_to_der(TEST_NEURON_3_OWNER_PUBKEY.key.clone()));
 
