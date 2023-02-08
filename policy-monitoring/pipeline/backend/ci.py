@@ -53,7 +53,6 @@ class Ci:
     # Should be in sync with testnet/tests/pipeline/pipeline.yml
     _MONITORED_REGULAR_JOB_TYPES = set(
         [
-            "rosetta-hourly",
             "system-tests-hourly",
             "system-tests-nightly",
             "wasm-generator-hourly",

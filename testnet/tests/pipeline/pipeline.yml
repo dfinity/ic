@@ -228,20 +228,6 @@ system-tests-hourly:
   script:
     - *run-farm-based-test
 
-rosetta-hourly:
-  extends:
-    - .system-tests
-    - .with-monitoring
-  variables:
-    SUITE_NAME: "rosetta"
-    cd_target_env: "HOURLY"
-  script:
-    - |
-      # Ensure that rosetta 3rd-party dependencies are available
-      # shellcheck disable=SC1090
-      . "${CI_PROJECT_DIR}/rs/tests/prepare-rosetta-deps.sh"
-    - *run-farm-based-test
-
 .system-tests-wasm-generator:
   extends: .system-tests
   variables:
