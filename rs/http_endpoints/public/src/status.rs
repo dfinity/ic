@@ -101,6 +101,6 @@ impl Service<Request<Body>> for StatusService {
             replica_health_status: Some(replica_health_status.load()),
             certified_height: Some(self.state_read_executor.latest_certified_height()),
         };
-        Box::pin(async move { Ok(common::cbor_response(&response)) })
+        Box::pin(async move { Ok(common::cbor_response(&response).0) })
     }
 }

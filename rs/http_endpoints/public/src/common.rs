@@ -176,16 +176,18 @@ pub(crate) fn into_cbor<R: Serialize>(r: &R) -> Vec<u8> {
 }
 
 /// Write the "self describing" CBOR tag and serialize the response
-pub(crate) fn cbor_response<R: Serialize>(r: &R) -> Response<Body> {
+pub(crate) fn cbor_response<R: Serialize>(r: &R) -> (Response<Body>, usize) {
     use hyper::header;
-    let mut response = Response::new(Body::from(into_cbor(r)));
+    let cbor = into_cbor(r);
+    let body_size_bytes = cbor.len();
+    let mut response = Response::new(Body::from(cbor));
     *response.status_mut() = StatusCode::OK;
     *response.headers_mut() = get_cors_headers();
     response.headers_mut().insert(
         header::CONTENT_TYPE,
         header::HeaderValue::from_static(CONTENT_TYPE_CBOR),
     );
-    response
+    (response, body_size_bytes)
 }
 
 /// Empty response.
@@ -277,7 +279,7 @@ pub(crate) mod test {
 
     #[test]
     fn test_cbor_response() {
-        let response = cbor_response(b"");
+        let response = cbor_response(b"").0;
         assert_eq!(response.headers().len(), 4);
         assert_eq!(
             response

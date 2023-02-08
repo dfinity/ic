@@ -26,7 +26,8 @@ pub const REQUESTS_LABEL_NAMES: [&str; REQUESTS_NUM_LABELS] = [LABEL_REQUEST_TYP
 #[derive(Clone)]
 pub(crate) struct HttpHandlerMetrics {
     pub(crate) requests: HistogramVec,
-    pub(crate) requests_body_size_bytes: HistogramVec,
+    pub(crate) request_body_size_bytes: HistogramVec,
+    pub(crate) response_body_size_bytes: HistogramVec,
     pub(crate) connections_total: IntCounter,
     pub(crate) health_status_transitions_total: IntCounterVec,
     pub(crate) read_state_request_status_request_ids: Histogram,
@@ -57,12 +58,19 @@ impl HttpHandlerMetrics {
                 // 1ms, 2ms, 5ms, 10ms, 20ms, ..., 10s, 20s, 50s
                 &REQUESTS_LABEL_NAMES,
             ),
-            requests_body_size_bytes: metrics_registry.histogram_vec(
+            request_body_size_bytes: metrics_registry.histogram_vec(
                 "replica_http_request_body_size_bytes",
                 "HTTP/HTTPS request body sizes in bytes.",
                 // 10 B - 5 MB
                 decimal_buckets(1, 6),
                 &REQUESTS_LABEL_NAMES,
+            ),
+            response_body_size_bytes: metrics_registry.histogram_vec(
+                "replica_http_response_body_size_bytes",
+                "Response body sizes in bytes.",
+                // 10 B - 5 MB
+                decimal_buckets(1, 6),
+                &[LABEL_REQUEST_TYPE],
             ),
             connections_total: metrics_registry.int_counter(
                 "replica_http_tcp_connections_total",
