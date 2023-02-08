@@ -209,6 +209,7 @@ fn validate_and_instrument(
         config.feature_flags.write_barrier,
         config.feature_flags.wasm_native_stable_memory,
         config.subnet_type,
+        config.dirty_page_overhead,
     )?;
     Ok((wasm_validation_details, instrumentation_output))
 }

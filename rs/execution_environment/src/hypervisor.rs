@@ -194,6 +194,7 @@ impl Hypervisor {
         embedder_config.max_sandbox_count = config.max_sandbox_count;
         embedder_config.max_sandbox_idle_time = config.max_sandbox_idle_time;
         embedder_config.subnet_type = own_subnet_type;
+        embedder_config.dirty_page_overhead = dirty_page_overhead;
 
         let wasm_executor: Arc<dyn WasmExecutor> = match config.canister_sandboxing_flag {
             FlagStatus::Enabled => {
