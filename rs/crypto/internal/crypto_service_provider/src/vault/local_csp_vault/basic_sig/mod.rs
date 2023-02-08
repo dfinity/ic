@@ -2,7 +2,9 @@
 use crate::key_id::KeyId;
 use crate::keygen::utils::node_signing_pk_to_proto;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::secret_key_store::SecretKeyStore;
+use crate::secret_key_store::{
+    SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
+};
 use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
@@ -78,7 +80,27 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let (mut sks_write_lock, mut pks_write_lock) = self.sks_and_pks_write_locks();
         sks_write_lock
             .insert(key_id, secret_key, None)
-            .map_err(CspBasicSignatureKeygenError::from)
+            .map_err(|sks_error| match sks_error {
+                SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                    CspBasicSignatureKeygenError::DuplicateKeyId { key_id }
+                }
+                SecretKeyStoreError::PersistenceError(SecretKeyStorePersistenceError::IoError(e)) => {
+                    CspBasicSignatureKeygenError::TransientInternalError {
+                        internal_error: format!(
+                            "Error persisting secret key store during CSP basic signature key generation: {}",
+                            e
+                        ),
+                    }
+                }
+                SecretKeyStoreError::PersistenceError(
+                    SecretKeyStorePersistenceError::SerializationError(e),
+                ) => CspBasicSignatureKeygenError::InternalError {
+                    internal_error: format!(
+                        "Error persisting secret key store during CSP basic signature key generation: {}",
+                        e
+                    ),
+                },
+            })
             .and_then(|()| {
                 pks_write_lock
                     .set_once_node_signing_pubkey(public_key_proto)

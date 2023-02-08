@@ -1,8 +1,8 @@
 use crate::key_id::KeyIdInstantiationError;
-use crate::secret_key_store::{panic_due_to_duplicated_key_id, SecretKeyStoreError};
+use crate::secret_key_store::panic_due_to_duplicated_key_id;
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
-    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspTlsKeygenError,
+    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError,
 };
 use ic_types::crypto::CryptoError;
 
@@ -144,52 +144,10 @@ impl From<KeyIdInstantiationError> for CspBasicSignatureKeygenError {
     }
 }
 
-impl From<SecretKeyStoreError> for CspBasicSignatureKeygenError {
-    fn from(err: SecretKeyStoreError) -> Self {
-        match err {
-            SecretKeyStoreError::DuplicateKeyId(key_id) => {
-                CspBasicSignatureKeygenError::DuplicateKeyId { key_id }
-            }
-            SecretKeyStoreError::PersistenceError(e) => {
-                panic!("Error persisting secret key store during CSP basic signature key generation: {}", e)
-            }
-        }
-    }
-}
-
 impl From<KeyIdInstantiationError> for CspMultiSignatureKeygenError {
     fn from(error: KeyIdInstantiationError) -> Self {
         CspMultiSignatureKeygenError::InternalError {
             internal_error: format!("Cannot instantiate KeyId: {:?}", error),
-        }
-    }
-}
-
-impl From<SecretKeyStoreError> for CspMultiSignatureKeygenError {
-    fn from(err: SecretKeyStoreError) -> Self {
-        match err {
-            SecretKeyStoreError::DuplicateKeyId(key_id) => {
-                CspMultiSignatureKeygenError::DuplicateKeyId { key_id }
-            }
-            SecretKeyStoreError::PersistenceError(e) => {
-                panic!("Error persisting secret key store during CSP multi-signature key generation: {}", e)
-            }
-        }
-    }
-}
-
-impl From<SecretKeyStoreError> for CspTlsKeygenError {
-    fn from(err: SecretKeyStoreError) -> Self {
-        match err {
-            SecretKeyStoreError::DuplicateKeyId(key_id) => {
-                CspTlsKeygenError::DuplicateKeyId { key_id }
-            }
-            SecretKeyStoreError::PersistenceError(e) => {
-                panic!(
-                    "Error persisting secret key store during CSP TLS key generation: {}",
-                    e
-                )
-            }
         }
     }
 }

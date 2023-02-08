@@ -1,7 +1,9 @@
 //! TLS handshake operations provided by the CSP vault
 use crate::key_id::KeyId;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::secret_key_store::SecretKeyStore;
+use crate::secret_key_store::{
+    SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
+};
 use crate::types::{CspSecretKey, CspSignature};
 use crate::vault::api::{CspTlsKeygenError, CspTlsSignError, TlsHandshakeCspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
@@ -121,8 +123,14 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         }
                     },
                 )?;
-        let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes)
-            .expect("generated X509 certificate has malformed DER encoding");
+        let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes).map_err(|err| {
+            CspTlsKeygenError::InternalError {
+                internal_error: format!(
+                    "generated X509 certificate has malformed DER encoding: {}",
+                    err
+                ),
+            }
+        })?;
 
         let key_id =
             KeyId::try_from(&x509_pk_cert).map_err(|error| CspTlsKeygenError::InternalError {
@@ -145,7 +153,27 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let (mut sks_write_lock, mut pks_write_lock) = self.sks_and_pks_write_locks();
         sks_write_lock
             .insert(key_id, secret_key, None)
-            .map_err(CspTlsKeygenError::from)
+            .map_err(|sks_error| match sks_error {
+                SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                    CspTlsKeygenError::DuplicateKeyId { key_id }
+                }
+                SecretKeyStoreError::PersistenceError(
+                    SecretKeyStorePersistenceError::SerializationError(serialization_error),
+                ) => CspTlsKeygenError::InternalError {
+                    internal_error: format!(
+                        "Error persisting secret key store during CSP TLS key generation: {}",
+                        serialization_error
+                    ),
+                },
+                SecretKeyStoreError::PersistenceError(SecretKeyStorePersistenceError::IoError(
+                    io_error,
+                )) => CspTlsKeygenError::TransientInternalError {
+                    internal_error: format!(
+                        "Error persisting secret key store during CSP TLS key generation: {}",
+                        io_error
+                    ),
+                },
+            })
             .and_then(|()| {
                 pks_write_lock
                     .set_once_tls_certificate(cert_proto)

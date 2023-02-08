@@ -1,6 +1,8 @@
 use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreError};
+use crate::secret_key_store::{
+    SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
+};
 use crate::threshold::ni_dkg::specialise;
 use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
 use crate::types::{CspPublicCoefficients, CspSecretKey};
@@ -186,12 +188,20 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         key_id
                     ))
                 }
-                SecretKeyStoreError::PersistenceError(io_error) => {
-                    CspDkgCreateFsKeyError::TransientInternalError(format!(
+                SecretKeyStoreError::PersistenceError(SecretKeyStorePersistenceError::IoError(
+                    io_error,
+                )) => CspDkgCreateFsKeyError::TransientInternalError(format!(
+                    "error persisting ni-dkg dealing encryption secret key: {}",
+                    io_error
+                )),
+                SecretKeyStoreError::PersistenceError(
+                    SecretKeyStorePersistenceError::SerializationError(serialization_error),
+                ) => CspDkgCreateFsKeyError::InternalError(InternalError {
+                    internal_error: format!(
                         "error persisting ni-dkg dealing encryption secret key: {}",
-                        io_error
-                    ))
-                }
+                        serialization_error
+                    ),
+                }),
             })
             .and_then(|()| {
                 pks_write_lock
