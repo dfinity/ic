@@ -182,7 +182,7 @@ impl ConfigValidate for ConfigOptional {
             if let Some(uds_path) = &adapters_config.bitcoin_testnet_uds_path {
                 same_uds_paths |= !uds_paths.insert(uds_path.clone());
             }
-            if let Some(uds_path) = &adapters_config.canister_http_uds_path {
+            if let Some(uds_path) = &adapters_config.https_outcalls_uds_path {
                 same_uds_paths |= !uds_paths.insert(uds_path.clone());
             }
             if same_uds_paths {

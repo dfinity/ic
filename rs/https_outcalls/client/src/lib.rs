@@ -24,7 +24,7 @@ pub fn setup_canister_http_client(
     anononymous_query_handler: AnonymousQueryService,
     log: ReplicaLogger,
 ) -> CanisterHttpAdapterClient {
-    match adapter_config.canister_http_uds_path {
+    match adapter_config.https_outcalls_uds_path {
         None => {
             error!(
                 log,
@@ -51,7 +51,7 @@ pub fn setup_canister_http_client(
 
                     // Register canister http adapter metrics with replica metrics. The adapter exposes a
                     // UDS metrics endpoint that can be scraped by the replica process.
-                    if let Some(metrics_uds_path) = adapter_config.canister_http_uds_metrics_path {
+                    if let Some(metrics_uds_path) = adapter_config.https_outcalls_uds_metrics_path {
                         metrics_registry.register_adapter(AdapterMetrics::new(
                             "canisterhttp",
                             metrics_uds_path,

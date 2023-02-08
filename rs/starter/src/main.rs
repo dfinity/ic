@@ -550,7 +550,7 @@ impl CliArgs {
             ecdsa_keyid,
             subnet_type,
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path,
-            canister_http_uds_path: self.canister_http_uds_path,
+            https_outcalls_uds_path: self.canister_http_uds_path,
             use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
         })
     }
@@ -681,7 +681,7 @@ struct ValidatedConfig {
     ecdsa_keyid: Option<EcdsaKeyId>,
     subnet_type: SubnetType,
     bitcoin_testnet_uds_path: Option<PathBuf>,
-    canister_http_uds_path: Option<PathBuf>,
+    https_outcalls_uds_path: Option<PathBuf>,
     use_specified_ids_allocation_range: bool,
 
     // Not intended to ever be read: role is to keep the temp dir from being deleted.
@@ -747,7 +747,7 @@ impl ValidatedConfig {
 
         let adapters_config = Some(AdaptersConfig {
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path.clone(),
-            canister_http_uds_path: self.canister_http_uds_path.clone(),
+            https_outcalls_uds_path: self.https_outcalls_uds_path.clone(),
             ..AdaptersConfig::default()
         });
 
