@@ -29,10 +29,23 @@ host-os-updateimg:
       fi
 
       cd "${CI_PROJECT_DIR}"/ic-os/hostos
-      # shellcheck disable=SC2086  # Expanding BUILD_EXTRA_ARGS into multiple parameters
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-host-update -- \
-      "${CI_PROJECT_DIR}"/gitlab-ci/src/job_scripts/lib/host-os-updateimg.sh \
-        "$BUILD_OUT" "$BUILD_TMP" "$UPLOAD_TARGET" "$VERSION"
+
+      mkdir -p "$BUILD_OUT" "$BUILD_TMP"
+
+      if [ "${POLLUTE_PERMISSIONS}" != "" ]; then
+          chmod -R 777 rootfs
+      fi
+
+      echo "$VERSION" >"${BUILD_TMP}/version.txt"
+      echo "${VERSION}" >"rootfs/opt/ic/share/version.txt"
+      echo "${VERSION}" >"rootfs/boot/version.txt"
+
+      BASE_IMAGE=$(cat "rootfs/docker-base.prod")
+      ../scripts/build-docker-save.sh \
+          --build-arg BASE_IMAGE="${BASE_IMAGE}" \
+          ./rootfs >$BUILD_TMP/rootfs.tar
+
+      ../scripts/build-update-image.sh -o "${BUILD_OUT}/host-update-img.tar.gz" -i $BUILD_TMP/rootfs.tar "$BUILD_EXTRA_ARGS"
 
       "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/openssl-sign.sh "$BUILD_OUT"
 

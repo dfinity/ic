@@ -25,14 +25,26 @@ setup-os-diskimg:
 
       cd "${CI_PROJECT_DIR}"/ic-os/setupos
 
+      mkdir -p "$BUILD_OUT" "$BUILD_TMP"
+      echo "$VERSION" >"${BUILD_TMP}/version.txt"
+
       mkdir -p guestos/disk-img
       "$CI_PROJECT_DIR"/gitlab-ci/tools/download "guest-os/disk-img/disk-img.tar.gz" > guestos/disk-img/disk-img.tar.gz
       mkdir -p hostos/disk-img
       "$CI_PROJECT_DIR"/gitlab-ci/tools/download "host-os/disk-img/disk-img.tar.gz" > hostos/disk-img/disk-img.tar.gz
 
-      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-host-img -- \
-      "${CI_PROJECT_DIR}"/gitlab-ci/src/job_scripts/lib/setup-os-diskimg.sh \
-        "$BUILD_OUT" "$BUILD_TMP" "$UPLOAD_TARGET" "$VERSION"
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-img -- \
+          ./scripts/build-disk-image.sh -o "${BUILD_TMP}/disk.img" -v "$VERSION" -f "./hostos/disk-img/disk-img.tar.gz" -g "./guestos/disk-img/disk-img.tar.gz"
+      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" tar-build-out -- \
+          tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
+          -cvzf "${BUILD_OUT}/disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt
+      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" tar-build-out -- \
+          tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
+          -cvf "${BUILD_OUT}/disk-img.tar.zst" --use-compress-program="zstd --threads=0 -10" \
+          -C "$BUILD_TMP" disk.img version.txt
+      ls -lah "$BUILD_TMP"
+      
+      "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/openssl-sign.sh "$BUILD_OUT"
 
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" rclone -- \
       "${CI_PROJECT_DIR}"/gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" "$BUILD_OUT" "$UPLOAD_TARGET"
