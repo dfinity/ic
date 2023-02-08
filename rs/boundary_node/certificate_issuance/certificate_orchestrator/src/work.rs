@@ -86,9 +86,90 @@ impl<T: Queue> Queue for WithMetrics<T> {
         self.1.with(|c| {
             c.borrow()
                 .with(&labels! {
-                    "status" => match out {
+                    "status" => match &out {
                         Ok(_) => "ok",
-                        Err(_) => "fail",
+                        Err(err) => match err {
+                            QueueError::NotFound => "not-found",
+                            QueueError::Unauthorized => "unauthorized",
+                            QueueError::UnexpectedError(_) => "fail",
+                        },
+                    },
+                })
+                .inc()
+        });
+
+        out
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum PeekError {
+    #[error("No tasks available")]
+    NoTasksAvailable,
+    #[error("Unauthorized")]
+    Unauthorized,
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
+pub trait Peek {
+    fn peek(&self) -> Result<Id, PeekError>;
+}
+
+pub struct Peeker {
+    tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
+}
+
+impl Peeker {
+    pub fn new(tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>) -> Self {
+        Self { tasks }
+    }
+}
+
+impl Peek for Peeker {
+    fn peek(&self) -> Result<Id, PeekError> {
+        self.tasks.with(|tasks| {
+            // Check for available task
+            match tasks.borrow().peek() {
+                None => Err(PeekError::NoTasksAvailable),
+                Some((id, Reverse(timestamp))) => {
+                    if time().lt(timestamp) {
+                        return Err(PeekError::NoTasksAvailable);
+                    }
+                    Ok(id.clone())
+                }
+            }
+        })
+    }
+}
+
+impl<T: Peek, A: Authorize> Peek for WithAuthorize<T, A> {
+    fn peek(&self) -> Result<Id, PeekError> {
+        if let Err(err) = self.1.authorize(&caller()) {
+            return Err(match err {
+                AuthorizeError::Unauthorized => PeekError::Unauthorized,
+                AuthorizeError::UnexpectedError(err) => PeekError::UnexpectedError(err),
+            });
+        };
+
+        self.0.peek()
+    }
+}
+
+impl<T: Peek> Peek for WithMetrics<T> {
+    fn peek(&self) -> Result<Id, PeekError> {
+        let out = self.0.peek();
+
+        self.1.with(|c| {
+            c.borrow()
+                .with(&labels! {
+                    "status" => match &out {
+                        Ok(_) => "ok",
+                        Err(err) => match err {
+                            PeekError::NoTasksAvailable => "no-tasks-available",
+                            PeekError::Unauthorized => "unauthorized",
+                            PeekError::UnexpectedError(_) => "fail",
+                        },
                     },
                 })
                 .inc()
@@ -110,7 +191,6 @@ pub enum DispenseError {
 
 pub trait Dispense {
     fn dispense(&self) -> Result<Id, DispenseError>;
-    fn peek(&self) -> Result<Id, DispenseError>;
 }
 
 pub struct Dispenser {
@@ -157,21 +237,6 @@ impl Dispense for Dispenser {
             Ok(id)
         })
     }
-
-    fn peek(&self) -> Result<Id, DispenseError> {
-        self.tasks.with(|tasks| {
-            // Check for available task
-            match tasks.borrow().peek() {
-                None => Err(DispenseError::NoTasksAvailable),
-                Some((id, Reverse(timestamp))) => {
-                    if time().lt(timestamp) {
-                        return Err(DispenseError::NoTasksAvailable);
-                    }
-                    Ok(id.clone())
-                }
-            }
-        })
-    }
 }
 
 impl<T: Dispense, A: Authorize> Dispense for WithAuthorize<T, A> {
@@ -185,17 +250,6 @@ impl<T: Dispense, A: Authorize> Dispense for WithAuthorize<T, A> {
 
         self.0.dispense()
     }
-
-    fn peek(&self) -> Result<Id, DispenseError> {
-        if let Err(err) = self.1.authorize(&caller()) {
-            return Err(match err {
-                AuthorizeError::Unauthorized => DispenseError::Unauthorized,
-                AuthorizeError::UnexpectedError(err) => DispenseError::UnexpectedError(err),
-            });
-        };
-
-        self.0.peek()
-    }
 }
 
 impl<T: Dispense> Dispense for WithMetrics<T> {
@@ -205,19 +259,19 @@ impl<T: Dispense> Dispense for WithMetrics<T> {
         self.1.with(|c| {
             c.borrow()
                 .with(&labels! {
-                    "status" => match out {
+                    "status" => match &out {
                         Ok(_) => "ok",
-                        Err(_) => "fail",
+                        Err(err) => match err {
+                            DispenseError::NoTasksAvailable => "no-tasks-available",
+                            DispenseError::Unauthorized => "unauthorized",
+                            DispenseError::UnexpectedError(_) => "fail",
+                        },
                     },
                 })
                 .inc()
         });
 
         out
-    }
-
-    fn peek(&self) -> Result<Id, DispenseError> {
-        self.0.peek()
     }
 }
 

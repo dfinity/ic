@@ -245,6 +245,19 @@ pub enum QueueTaskResponse {
 }
 
 #[derive(CandidType, Deserialize)]
+pub enum PeekTaskError {
+    NoTasksAvailable,
+    Unauthorized,
+    UnexpectedError(String),
+}
+
+#[derive(CandidType, Deserialize)]
+pub enum PeekTaskResponse {
+    Ok(Id),
+    Err(PeekTaskError),
+}
+
+#[derive(CandidType, Deserialize)]
 pub enum DispenseTaskError {
     NoTasksAvailable,
     Unauthorized,

@@ -6,10 +6,10 @@ use certificate_orchestrator_interface::{
     EncryptedPair, ExportCertificatesError, ExportCertificatesResponse, GetRegistrationError,
     GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id,
     ListAllowedPrincipalsError, ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError,
-    ModifyAllowedPrincipalResponse, Name, QueueTaskError, QueueTaskResponse, Registration,
-    RemoveRegistrationError, RemoveRegistrationResponse, State, UpdateRegistrationError,
-    UpdateRegistrationResponse, UpdateType, UploadCertificateError, UploadCertificateResponse,
-    NAME_MAX_LEN,
+    ModifyAllowedPrincipalResponse, Name, PeekTaskError, PeekTaskResponse, QueueTaskError,
+    QueueTaskResponse, Registration, RemoveRegistrationError, RemoveRegistrationResponse, State,
+    UpdateRegistrationError, UpdateRegistrationResponse, UpdateType, UploadCertificateError,
+    UploadCertificateResponse, NAME_MAX_LEN,
 };
 use ic_cdk::{api::time, caller, export::Principal, post_upgrade, pre_upgrade, trap};
 use ic_cdk_macros::{init, query, update};
@@ -20,6 +20,7 @@ use ic_stable_structures::{
 };
 use priority_queue::PriorityQueue;
 use prometheus::{CounterVec, Encoder, Gauge, GaugeVec, Opts, Registry, TextEncoder};
+use work::{Peek, PeekError};
 
 use crate::{
     acl::{Authorize, AuthorizeError, Authorizer, WithAuthorize},
@@ -29,7 +30,7 @@ use crate::{
         Create, CreateError, Creator, Expire, Expirer, Get, GetError, Getter, Remove, RemoveError,
         Remover, Update, UpdateError, Updater,
     },
-    work::{Dispense, DispenseError, Dispenser, Queue, QueueError, Queuer, Retrier, Retry},
+    work::{Dispense, DispenseError, Dispenser, Peeker, Queue, QueueError, Queuer, Retrier, Retry},
 };
 
 mod acl;
@@ -81,67 +82,83 @@ const MEMORY_ID_RETRIES: u8 = 9;
 
 // Metrics
 
+const SERVICE_NAME: &str = "certificate_orchestrator";
+
 thread_local! {
     static COUNTER_CREATE_REGISTRATION_TOTAL: RefCell<CounterVec> = RefCell::new({
         CounterVec::new(Opts::new(
-            "create_registration_total", // name
+            format!("{SERVICE_NAME}_create_registration_total"), // name
             "number of times create_registration was called", // help
         ), &["status"]).unwrap()
     });
 
     static COUNTER_UPDATE_REGISTRATION_TOTAL: RefCell<CounterVec> = RefCell::new({
         CounterVec::new(Opts::new(
-            "update_registration_total", // name
+            format!("{SERVICE_NAME}_update_registration_total"), // name
             "number of times update_registration was called", // help
         ), &["status"]).unwrap()
     });
 
     static COUNTER_REMOVE_REGISTRATION_TOTAL: RefCell<CounterVec> = RefCell::new({
         CounterVec::new(Opts::new(
-            "remove_registration_total", // name
+            format!("{SERVICE_NAME}_remove_registration_total"), // name
             "number of times remove_registration was called", // help
         ), &["status"]).unwrap()
     });
 
     static COUNTER_UPLOAD_CERTIFICATE_TOTAL: RefCell<CounterVec> = RefCell::new({
         CounterVec::new(Opts::new(
-            "upload_certificate_total", // name
+            format!("{SERVICE_NAME}_upload_certificate_total"), // name
             "number of times upload_certificate was called", // help
         ), &["status"]).unwrap()
     });
 
     static COUNTER_QUEUE_TASK_TOTAL: RefCell<CounterVec> = RefCell::new({
         CounterVec::new(Opts::new(
-            "queue_task_total", // name
+            format!("{SERVICE_NAME}_queue_task_total"), // name
             "number of times queue_task was called", // help
+        ), &["status"]).unwrap()
+    });
+
+    static COUNTER_PEEK_TASK_TOTAL: RefCell<CounterVec> = RefCell::new({
+        CounterVec::new(Opts::new(
+            format!("{SERVICE_NAME}_peek_task_total"), // name
+            "number of times peek_task was called", // help
         ), &["status"]).unwrap()
     });
 
     static COUNTER_DISPENSE_TASK_TOTAL: RefCell<CounterVec> = RefCell::new({
         CounterVec::new(Opts::new(
-            "dispense_task_total", // name
+            format!("{SERVICE_NAME}_dispense_task_total"), // name
             "number of times dispense_task was called", // help
         ), &["status"]).unwrap()
     });
 
     static GAUGE_REGISTRATIONS_TOTAL: RefCell<GaugeVec> = RefCell::new({
         GaugeVec::new(Opts::new(
-            "registrations_total", // name
+            format!("{SERVICE_NAME}_registrations_total"), // name
             "total number of registrations", // help
         ), &["state"]).unwrap()
     });
 
     static GAUGE_TASKS_TOTAL: RefCell<Gauge> = RefCell::new({
         Gauge::new(
-            "tasks_total", // name
+            format!("{SERVICE_NAME}_tasks_total"), // name
             "total number of tasks", // help
         ).unwrap()
     });
 
     static GAUGE_ALLOWED_PRINCIPALS_TOTAL: RefCell<Gauge> = RefCell::new({
         Gauge::new(
-            "allowed_principals_total", // name
+            format!("{SERVICE_NAME}_allowed_principals_total"), // name
             "total number of allowed principals", // help
+        ).unwrap()
+    });
+
+    static GAUGE_CANISTER_CYCLES_BALANCE: RefCell<Gauge> = RefCell::new({
+        Gauge::new(
+            format!("{SERVICE_NAME}_canister_cycles_balance"), // name
+            "cycles balance available to the canister", // help
         ).unwrap()
     });
 
@@ -173,6 +190,11 @@ thread_local! {
             r.register(c).unwrap();
         });
 
+        COUNTER_PEEK_TASK_TOTAL.with(|c| {
+            let c = Box::new(c.borrow().to_owned());
+            r.register(c).unwrap();
+        });
+
         COUNTER_DISPENSE_TASK_TOTAL.with(|c| {
             let c = Box::new(c.borrow().to_owned());
             r.register(c).unwrap();
@@ -189,6 +211,11 @@ thread_local! {
         });
 
         GAUGE_ALLOWED_PRINCIPALS_TOTAL.with(|g| {
+            let g = Box::new(g.borrow().to_owned());
+            r.register(g).unwrap();
+        });
+
+        GAUGE_CANISTER_CYCLES_BALANCE.with(|g| {
             let g = Box::new(g.borrow().to_owned());
             r.register(g).unwrap();
         });
@@ -338,6 +365,13 @@ thread_local! {
         let q = WithAuthorize(q, &MAIN_AUTHORIZER);
         let q = WithMetrics(q, &COUNTER_QUEUE_TASK_TOTAL);
         Box::new(q)
+    });
+
+    static PEEKER: RefCell<Box<dyn Peek>> = RefCell::new({
+        let d = Peeker::new(&TASKS);
+        let d = WithAuthorize(d, &MAIN_AUTHORIZER);
+        let d = WithMetrics(d, &COUNTER_PEEK_TASK_TOTAL);
+        Box::new(d)
     });
 
     static DISPENSER: RefCell<Box<dyn Dispense>> = RefCell::new({
@@ -581,23 +615,21 @@ fn queue_task(id: Id, timestamp: u64) -> QueueTaskResponse {
     }
 }
 
-#[update(name = "dispenseTask")]
-fn dispense_task() -> DispenseTaskResponse {
-    match DISPENSER.with(|d| d.borrow().dispense()) {
-        Ok(id) => DispenseTaskResponse::Ok(id),
-        Err(err) => DispenseTaskResponse::Err(match err {
-            DispenseError::NoTasksAvailable => DispenseTaskError::NoTasksAvailable,
-            DispenseError::Unauthorized => DispenseTaskError::Unauthorized,
-            DispenseError::UnexpectedError(err) => {
-                DispenseTaskError::UnexpectedError(err.to_string())
-            }
+#[query(name = "peekTask")]
+fn peek_task() -> PeekTaskResponse {
+    match PEEKER.with(|p| p.borrow().peek()) {
+        Ok(id) => PeekTaskResponse::Ok(id),
+        Err(err) => PeekTaskResponse::Err(match err {
+            PeekError::NoTasksAvailable => PeekTaskError::NoTasksAvailable,
+            PeekError::Unauthorized => PeekTaskError::Unauthorized,
+            PeekError::UnexpectedError(err) => PeekTaskError::UnexpectedError(err.to_string()),
         }),
     }
 }
 
-#[query(name = "peekTask")]
-fn peek_task() -> DispenseTaskResponse {
-    match DISPENSER.with(|d| d.borrow().peek()) {
+#[update(name = "dispenseTask")]
+fn dispense_task() -> DispenseTaskResponse {
+    match DISPENSER.with(|d| d.borrow().dispense()) {
         Ok(id) => DispenseTaskResponse::Ok(id),
         Err(err) => DispenseTaskResponse::Err(match err {
             DispenseError::NoTasksAvailable => DispenseTaskError::NoTasksAvailable,
@@ -653,6 +685,9 @@ fn http_request(request: HttpRequest) -> HttpResponse {
     ALLOWED_PRINCIPALS.with(|tasks| {
         GAUGE_ALLOWED_PRINCIPALS_TOTAL.with(|g| g.borrow_mut().set(tasks.borrow().len() as f64));
     });
+
+    GAUGE_CANISTER_CYCLES_BALANCE
+        .with(|g| g.borrow_mut().set(ic_cdk::api::canister_balance() as f64));
 
     // Export metrics
     let bs = METRICS_REGISTRY.with(|r| {

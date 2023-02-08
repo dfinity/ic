@@ -56,7 +56,7 @@ use crate::{
     encode::{Decoder, Encoder},
     metrics::{MetricParams, WithMetrics},
     registration::{Create, Get, Remove, State, Update, UpdateType},
-    work::{Dispense, DispenseError, Process, Queue},
+    work::{Dispense, DispenseError, Peek, PeekError, Process, Queue},
 };
 
 mod acme;
@@ -385,6 +385,9 @@ async fn main() -> Result<(), Error> {
     );
 
     // Work
+    let peeker = work::CanisterPeeker(agent.clone(), cli.orchestrator_canister_id);
+    let peeker = WithMetrics(peeker, MetricParams::new(&meter, SERVICE_NAME, "peek"));
+
     let dispenser = work::CanisterDispenser(agent.clone(), cli.orchestrator_canister_id);
     let dispenser = WithMetrics(
         dispenser,
@@ -425,13 +428,13 @@ async fn main() -> Result<(), Error> {
                 let registration_updater = registration_updater.clone();
 
                 // First check with a query call if there's anything to dispense
-                if let Err(err) = dispenser.peek().await {
+                if let Err(err) = peeker.peek().await {
                     match err {
-                        DispenseError::NoTasksAvailable => {
+                        PeekError::NoTasksAvailable => {
                             sleep(Duration::from_secs(1));
                             continue;
                         }
-                        DispenseError::UnexpectedError(_) => {
+                        PeekError::UnexpectedError(_) => {
                             sleep(Duration::from_secs(1));
                             continue;
                         }

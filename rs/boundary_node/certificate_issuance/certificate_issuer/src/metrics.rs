@@ -19,7 +19,9 @@ use crate::{
         Create, CreateError, Get, GetError, Id, Registration, Remove, RemoveError, Update,
         UpdateError, UpdateType,
     },
-    work::{Dispense, DispenseError, Process, ProcessError, Queue, QueueError, Task},
+    work::{
+        Dispense, DispenseError, Peek, PeekError, Process, ProcessError, Queue, QueueError, Task,
+    },
 };
 
 #[derive(Clone)]
@@ -55,7 +57,14 @@ impl<T: Create> Create for WithMetrics<T> {
 
         let out = self.0.create(name, canister).await;
 
-        let status = if out.is_ok() { "ok" } else { "fail" };
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                CreateError::Duplicate(_) => "duplicate",
+                CreateError::UnexpectedError(_) => "fail",
+            },
+        };
+
         let duration = start_time.elapsed().as_secs_f64();
 
         let labels = &[KeyValue::new("status", status)];
@@ -84,7 +93,14 @@ impl<T: Update> Update for WithMetrics<T> {
 
         let out = self.0.update(id, typ).await;
 
-        let status = if out.is_ok() { "ok" } else { "fail" };
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                UpdateError::NotFound => "not-found",
+                UpdateError::UnexpectedError(_) => "fail",
+            },
+        };
+
         let duration = start_time.elapsed().as_secs_f64();
 
         let labels = &[
@@ -122,7 +138,14 @@ impl<T: Remove> Remove for WithMetrics<T> {
 
         let out = self.0.remove(id).await;
 
-        let status = if out.is_ok() { "ok" } else { "fail" };
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                RemoveError::NotFound => "not-found",
+                RemoveError::UnexpectedError(_) => "fail",
+            },
+        };
+
         let duration = start_time.elapsed().as_secs_f64();
 
         let labels = &[KeyValue::new("status", status)];
@@ -151,7 +174,14 @@ impl<T: Get> Get for WithMetrics<T> {
 
         let out = self.0.get(id).await;
 
-        let status = if out.is_ok() { "ok" } else { "fail" };
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                GetError::NotFound => "not-found",
+                GetError::UnexpectedError(_) => "fail",
+            },
+        };
+
         let duration = start_time.elapsed().as_secs_f64();
 
         let labels = &[KeyValue::new("status", status)];
@@ -180,7 +210,14 @@ impl<T: Queue> Queue for WithMetrics<T> {
 
         let out = self.0.queue(id, t).await;
 
-        let status = if out.is_ok() { "ok" } else { "fail" };
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                QueueError::NotFound => "not-found",
+                QueueError::UnexpectedError(_) => "fail",
+            },
+        };
+
         let duration = start_time.elapsed().as_secs_f64();
 
         let labels = &[KeyValue::new("status", status)];
@@ -203,13 +240,20 @@ impl<T: Queue> Queue for WithMetrics<T> {
 }
 
 #[async_trait]
-impl<T: Dispense> Dispense for WithMetrics<T> {
-    async fn dispense(&self) -> Result<(Id, Task), DispenseError> {
+impl<T: Peek> Peek for WithMetrics<T> {
+    async fn peek(&self) -> Result<Id, PeekError> {
         let start_time = Instant::now();
 
-        let out = self.0.dispense().await;
+        let out = self.0.peek().await;
 
-        let status = if out.is_ok() { "ok" } else { "fail" };
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                PeekError::NoTasksAvailable => "no-tasks-available",
+                PeekError::UnexpectedError(_) => "fail",
+            },
+        };
+
         let duration = start_time.elapsed().as_secs_f64();
 
         let labels = &[KeyValue::new("status", status)];
@@ -229,13 +273,23 @@ impl<T: Dispense> Dispense for WithMetrics<T> {
 
         out
     }
+}
 
-    async fn peek(&self) -> Result<Id, DispenseError> {
+#[async_trait]
+impl<T: Dispense> Dispense for WithMetrics<T> {
+    async fn dispense(&self) -> Result<(Id, Task), DispenseError> {
         let start_time = Instant::now();
 
-        let out = self.0.peek().await;
+        let out = self.0.dispense().await;
 
-        let status = if out.is_ok() { "ok" } else { "fail" };
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                DispenseError::NoTasksAvailable => "no-tasks-available",
+                DispenseError::UnexpectedError(_) => "fail",
+            },
+        };
+
         let duration = start_time.elapsed().as_secs_f64();
 
         let labels = &[KeyValue::new("status", status)];
@@ -264,7 +318,15 @@ impl<T: Process> Process for WithMetrics<T> {
 
         let out = self.0.process(id, task).await;
 
-        let status = if out.is_ok() { "ok" } else { "fail" };
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                ProcessError::AwaitingDnsPropagation => "awaiting-dns-propagation",
+                ProcessError::AwaitingAcmeOrderReady => "awaiting-acme-order-ready",
+                ProcessError::UnexpectedError(_) => "fail",
+            },
+        };
+
         let duration = start_time.elapsed().as_secs_f64();
 
         let labels = &[
@@ -473,7 +535,14 @@ impl<T: certificate::Upload> certificate::Upload for WithMetrics<T> {
 
         let out = self.0.upload(id, pair).await;
 
-        let status = if out.is_ok() { "ok" } else { "fail" };
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                UploadError::NotFound => "not-found",
+                UploadError::UnexpectedError(_) => "fail",
+            },
+        };
+
         let duration = start_time.elapsed().as_secs_f64();
 
         let labels = &[KeyValue::new("status", status)];
@@ -531,7 +600,19 @@ impl<T: Check> Check for WithMetrics<T> {
 
         let out = self.0.check(name).await;
 
-        let status = if out.is_ok() { "ok" } else { "fail" };
+        let status = match &out {
+            Ok(_) => "ok",
+            Err(err) => match err {
+                CheckError::MissingDnsCname { .. } => "missing-dns-cname",
+                CheckError::MissingDnsTxtCanisterId { .. } => "missing-dns-txt-canister-id",
+                CheckError::MultipleDnsTxtCanisterId { .. } => "multiple-dns-txt-canister-id",
+                CheckError::InvalidDnsTxtCanisterId { .. } => "invalid-dns-txt-canister-id",
+                CheckError::KnownDomainsUnavailable { .. } => "known-domains-unavailable",
+                CheckError::MissingKnownDomains { .. } => "missing-known-domains",
+                CheckError::UnexpectedError(_) => "fail",
+            },
+        };
+
         let duration = start_time.elapsed().as_secs_f64();
 
         let labels = &[KeyValue::new("status", status)];
