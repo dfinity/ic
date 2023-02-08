@@ -83,4 +83,4 @@ ubuntu@sf1-gby01:~/AMDSEV/snp-release-2022-04-15$ sudo dmesg | grep  -i -e sev -
 * ```$ virsh create ./bn_sev_vm.xml```
 * ```$ virsh console boundary_nodes_sev_snp-$USER```
 ** Note: control-] to exit
-* ```$ virsh destoy boundary_nodes_sev_snp-$USER```
+* ```$ virsh destroy boundary_nodes_sev_snp-$USER```
