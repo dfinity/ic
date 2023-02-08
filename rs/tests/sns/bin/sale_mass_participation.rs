@@ -17,11 +17,11 @@ use ic_tests::systest;
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_overall_timeout(Duration::from_secs(30 * 60)) // 30 min
+        .with_timeout_per_test(Duration::from_secs(15 * 60)) // 15 min
         .with_setup(sns_setup_with_many_sale_participants)
         .add_test(systest!(initiate_token_swap))
         .add_test(systest!(init_participants))
         .add_test(systest!(check_all_participants))
         .execute_from_args()?;
-
     Ok(())
 }

@@ -18,10 +18,13 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::pb::v1::proposal::Action;
 use ic_nns_governance::pb::v1::{NnsFunction, OpenSnsTokenSwap, Proposal};
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-
 use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;
-use ic_sns_init::pb::v1::SnsInitPayload;
+use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution;
+use ic_sns_init::pb::v1::{
+    AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
+    SnsInitPayload, SwapDistribution, TreasuryDistribution,
+};
 use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
 use ic_sns_swap::pb::v1::{
     GetBuyerStateRequest, GetBuyerStateResponse, GetStateRequest, GetStateResponse, Lifecycle,
@@ -72,7 +75,8 @@ use crate::driver::ic::{
 use crate::driver::test_env::TestEnvAttribute;
 use ic_canister_client::Sender;
 use ic_nervous_system_common_test_keys::{
-    TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_KEYPAIR, TEST_USER1_PRINCIPAL,
+    TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
+    TEST_USER1_PRINCIPAL,
 };
 use ic_nns_constants::{LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
@@ -82,25 +86,21 @@ const WORKLOAD_GENERATION_DURATION: Duration = Duration::from_secs(60);
 const DKG_INTERVAL: u64 = 199;
 const SUBNET_SIZE: usize = 4;
 const UVM_NUM_CPUS: NrOfVCPUs = NrOfVCPUs::new(2);
-const UVM_MEMORY_SIZE: AmountOfMemoryKiB = AmountOfMemoryKiB::new(16777216); // 16 GiB
+const UVM_MEMORY_SIZE: AmountOfMemoryKiB = AmountOfMemoryKiB::new(67108864); // 64 GiB
 const UVM_BOOT_IMAGE_MIN_SIZE: ImageSizeGiB = ImageSizeGiB::new(4);
 
 const DAYS: Duration = Duration::from_secs(24 * 60 * 60);
 
-const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
+const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1_000); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
 const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(5); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
 
 // This constant is simply an encoding of a CanisterId(x) for some small value of x.
 // x is the position of the sale (a.k.a. swap) canister in the SNS application subnet.
 const SNS_SALE_CANISTER_ID: &str = "5j7vn-7yaaa-aaaaa-qaaca-cai";
 
-pub const SNS_SALE_PARTICIPANTS: [(&str, u64, u64); 4] = [
-    //   name   tokens  seed
-    ("ali", 1, 123),
-    ("bob", 3, 234),
-    ("cat", 7, 345),
-    ("dav", 11, 456),
-];
+pub const NUM_SNS_SALE_PARTICIPANTS: usize = 100;
+pub const SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S: u64 = E8;
+pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 150_000 * E8;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SnsClient {
@@ -177,7 +177,48 @@ impl SnsClient {
         block_on(add_subnet_to_sns_deploy_whitelist(&runtime, subnet_id));
 
         info!(log, "Sending deploy_new_sns to SNS WASM canister");
-        let init = SnsInitPayload::with_valid_values_for_testing();
+        let mut init = SnsInitPayload::with_valid_values_for_testing();
+        // let mut init = SnsInitPayload::with_default_values();
+        // Taken from https://github.com/open-ic/open-chat/blob/master/sns.yml
+        init.transaction_fee_e8s = Some(100_000);
+        init.proposal_reject_cost_e8s = Some(1_000_000_000);
+        init.neuron_minimum_stake_e8s = Some(400_000_000);
+        init.neuron_minimum_dissolve_delay_to_vote_seconds = Some(2_629_800);
+        init.reward_rate_transition_duration_seconds = Some(0);
+        // init.initial_reward_rate_percentage = Some(2.5);
+        // init.final_reward_rate_percentage = Some(2.5);
+        init.max_dissolve_delay_seconds = Some(31_557_600);
+        init.max_neuron_age_seconds_for_age_bonus = Some(15_778_800);
+        // init.max_dissolve_delay_bonus_multiplier = Some(2.0);
+        // init.max_age_bonus_multiplier = Some(1.25);
+        init.fallback_controller_principal_ids = vec![TEST_NEURON_1_OWNER_PRINCIPAL.to_string()];
+        init.initial_voting_period_seconds = Some(345_600);
+        init.wait_for_quiet_deadline_increase_seconds = Some(86_400);
+        init.initial_token_distribution =
+            Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
+                FractionalDeveloperVotingPower {
+                    developer_distribution: Some(DeveloperDistribution {
+                        developer_neurons: vec![NeuronDistribution {
+                            controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                            stake_e8s: 230000000000000, // 23%
+                            memo: 0,
+                            dissolve_delay_seconds: 2629800,
+                            vesting_period_seconds: Some(0),
+                        }],
+                    }),
+                    treasury_distribution: Some(TreasuryDistribution {
+                        total_e8s: 5200000000000000, // 52%
+                    }),
+                    swap_distribution: Some(SwapDistribution {
+                        total_e8s: 2500000000000000, // 25%
+                        initial_swap_amount_e8s: 2500000000000000,
+                    }),
+                    airdrop_distribution: Some(AirdropDistribution {
+                        airdrop_neurons: Default::default(),
+                    }),
+                },
+            ));
+
         let res = block_on(deploy_new_sns(&wallet_canister, init)).expect("Deploy new SNS failed");
         info!(log, "Received {res:?}");
         if let Some(error) = res.error {
@@ -191,8 +232,8 @@ impl SnsClient {
             sns_canisters,
             wallet_canister_id,
         };
-        sns_client.write_attribute(env);
         sns_client.assert_state(env, Lifecycle::Pending);
+        sns_client.write_attribute(env);
         sns_client
     }
 }
@@ -231,7 +272,7 @@ fn setup(env: TestEnv, sale_participants: Vec<SaleParticipant>) {
 
     // Set up the initial ICP ledger
     let mut ledger_balances = HashMap::new();
-    for participant in sale_participants.clone() {
+    for participant in sale_participants {
         let account_identifier = participant.sns_account_identifier();
         ledger_balances.insert(account_identifier, participant.starting_balance);
     }
@@ -243,6 +284,7 @@ fn setup(env: TestEnv, sale_participants: Vec<SaleParticipant>) {
     install_nns(&env, Some(nns_customizations));
 
     // Check that the balances are as expected
+    /* FIXME: commented out to save time in manual experiments
     let ledger_agent = {
         let nns_node = env.get_first_healthy_nns_node_snapshot();
         let agent = block_on(assert_create_agent(nns_node.get_public_url().as_str()));
@@ -262,6 +304,7 @@ fn setup(env: TestEnv, sale_participants: Vec<SaleParticipant>) {
         let name = participant.name;
         assert_eq!(observed, expected, "{name}'s expected balance ({expected:?}) did not match their actual balance ({observed:?})");
     }
+    */
 
     install_sns(&env);
 }
@@ -272,10 +315,12 @@ pub fn sns_setup(env: TestEnv) {
 
 pub fn sns_setup_with_many_sale_participants(env: TestEnv) {
     // Generate random identities for all the participants
-    let participants: Vec<SaleParticipant> = SNS_SALE_PARTICIPANTS
-        .into_iter()
-        .map(|(name, starting_balance, seed)| {
-            SaleParticipant::random(name, Tokens::from_tokens(starting_balance).unwrap(), seed)
+    let participants: Vec<SaleParticipant> = (1..NUM_SNS_SALE_PARTICIPANTS + 1)
+        .map(|x| {
+            let name = format!("user_{x}");
+            let starting_balance = Tokens::from_e8s(SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S);
+            let seed = x as u64;
+            SaleParticipant::random(name, starting_balance, seed)
         })
         .collect();
 
@@ -291,7 +336,6 @@ pub fn init_participants(env: TestEnv) {
     let start_time = Instant::now();
 
     let participants = Vec::<SaleParticipant>::read_attribute(&env);
-    participants.write_attribute(&env); // FIXME remove this line
     let participants_str: Vec<String> = participants.iter().map(|p| p.name.clone()).collect();
 
     let sns_client = SnsClient::read_attribute(&env);
@@ -329,7 +373,6 @@ pub fn check_all_participants(env: TestEnv) {
     let start_time = Instant::now();
 
     let participants = Vec::<SaleParticipant>::read_attribute(&env);
-    participants.write_attribute(&env); // FIXME remove this line
 
     let participants_str: Vec<String> = participants.iter().map(|p| p.name.clone()).collect();
 
@@ -400,6 +443,7 @@ pub fn install_sns(env: &TestEnv) {
 pub fn initiate_token_swap(env: TestEnv) {
     let log = env.logger();
     let start_time = Instant::now();
+
     let sns_client = SnsClient::read_attribute(&env);
     sns_client.initiate_token_swap(&env);
     sns_client.assert_state(&env, Lifecycle::Open);
@@ -408,6 +452,54 @@ pub fn initiate_token_swap(env: TestEnv) {
         "==== The SNS token sale has been initialized successfully in {:?} ====",
         start_time.elapsed()
     );
+}
+
+pub fn workload_many_users_rps20_refresh_buyer_tokens(env: TestEnv) {
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let rps: usize = 20;
+    generate_sns_workload_with_many_users(env, rps, Duration::from_secs(10), request);
+}
+
+pub fn workload_many_users_rps100_refresh_buyer_tokens(env: TestEnv) {
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let rps: usize = 100;
+    generate_sns_workload_with_many_users(env, rps, WORKLOAD_GENERATION_DURATION, request);
+}
+
+pub fn workload_many_users_rps200_refresh_buyer_tokens(env: TestEnv) {
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let rps: usize = 200;
+    generate_sns_workload_with_many_users(env, rps, WORKLOAD_GENERATION_DURATION, request);
+}
+
+pub fn workload_many_users_rps400_refresh_buyer_tokens(env: TestEnv) {
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let rps: usize = 400;
+    generate_sns_workload_with_many_users(env, rps, WORKLOAD_GENERATION_DURATION, request);
+}
+
+pub fn generate_sns_workload_with_many_users(
+    env: TestEnv,
+    rps: usize,
+    duration: Duration,
+    request: Request,
+) {
+    let log = env.logger();
+    let plan = RoundRobinPlan::new(vec![request]);
+    let participants = Vec::<SaleParticipant>::read_attribute(&env);
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let agents: Vec<Agent> = participants
+        .iter()
+        .map(|participant| {
+            let sns_agent = SnsAgent::new_with_identity(&app_node, participant.clone());
+            sns_agent.agent
+        })
+        .collect();
+    let workload = Workload::new(agents, rps, duration, plan, log.clone())
+        .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
+        .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
+    let metrics = block_on(workload.execute()).expect("Workload execution has failed.");
+    env.emit_report(format!("{metrics}"));
 }
 
 pub struct SnsRequestProvider {
@@ -426,7 +518,7 @@ impl SnsRequestProvider {
         Self::from_sns_client(&sns_client)
     }
 
-    fn spec_to_req(spec: CallSpec, mode: CallMode) -> Request {
+    fn spec_to_query_req(spec: CallSpec, mode: CallMode) -> Request {
         match mode {
             CallMode::Query => Request::Query(spec),
             CallMode::Update => Request::Update(spec),
@@ -440,7 +532,7 @@ impl SnsRequestProvider {
             "get_state",
             Encode!(&GetStateRequest {}).unwrap(),
         );
-        Self::spec_to_req(spec, mode)
+        Self::spec_to_query_req(spec, mode)
     }
 
     pub fn get_buyer_state(&self, buyer: PrincipalId, mode: CallMode) -> Request {
@@ -453,12 +545,12 @@ impl SnsRequestProvider {
             })
             .unwrap(),
         );
-        Self::spec_to_req(spec, mode)
+        Self::spec_to_query_req(spec, mode)
     }
 
     pub fn refresh_buyer_tokens(&self, buyer: Option<PrincipalId>) -> Request {
         let swap_canister = self.sns_canisters.swap().get().into();
-        Request::Update(CallSpec::new(
+        Request::UpdateE2e(CallSpec::new(
             swap_canister,
             "refresh_buyer_tokens",
             Encode!(&RefreshBuyerTokensRequest {
@@ -541,11 +633,11 @@ impl TestEnvAttribute for Vec<SaleParticipant> {
 }
 
 impl SaleParticipant {
-    pub fn random(name: &str, starting_balance: Tokens, seed: u64) -> Self {
+    pub fn random(name: String, starting_balance: Tokens, seed: u64) -> Self {
         let key_pair = EdKeypair::generate_from_u64(seed);
         let principal_id = key_pair.generate_principal_id().unwrap();
         Self {
-            name: name.to_string(),
+            name,
             principal_id,
             secret_key: key_pair.secret_key,
             public_key: key_pair.public_key,
@@ -807,16 +899,32 @@ pub fn workload_rps1200_get_state_query(env: TestEnv) {
     generate_sns_workload(env, 1_200, WORKLOAD_GENERATION_DURATION, req);
 }
 
+pub fn workload_rps400_get_state_update(env: TestEnv) {
+    let req = SnsRequestProvider::from_env(&env).get_state(CallMode::Update);
+    generate_sns_workload(env, 400, WORKLOAD_GENERATION_DURATION, req);
+}
+pub fn workload_rps800_get_state_update(env: TestEnv) {
+    let req = SnsRequestProvider::from_env(&env).get_state(CallMode::Update);
+    generate_sns_workload(env, 800, WORKLOAD_GENERATION_DURATION, req);
+}
+pub fn workload_rps1200_get_state_update(env: TestEnv) {
+    let req = SnsRequestProvider::from_env(&env).get_state(CallMode::Update);
+    generate_sns_workload(env, 1_200, WORKLOAD_GENERATION_DURATION, req);
+}
+
 pub fn workload_rps400_refresh_buyer_tokens(env: TestEnv) {
-    let req = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let buyer = Some(*TEST_USER1_PRINCIPAL);
+    let req = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer);
     generate_sns_workload(env, 400, WORKLOAD_GENERATION_DURATION, req);
 }
 pub fn workload_rps800_refresh_buyer_tokens(env: TestEnv) {
-    let req = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let buyer = Some(*TEST_USER1_PRINCIPAL);
+    let req = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer);
     generate_sns_workload(env, 800, WORKLOAD_GENERATION_DURATION, req);
 }
 pub fn workload_rps1200_refresh_buyer_tokens(env: TestEnv) {
-    let req = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let buyer = Some(*TEST_USER1_PRINCIPAL);
+    let req = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer);
     generate_sns_workload(env, 1_200, WORKLOAD_GENERATION_DURATION, req);
 }
 
@@ -979,20 +1087,20 @@ pub fn open_sns_token_swap_payload_for_tests(
         target_swap_canister_id: Some(sns_swap_canister_id),
         // Taken (mostly) from https://github.com/open-ic/open-chat/blob/master/sns_proposal.sh
         params: Some(Params {
-            min_participants: 1,
-            min_icp_e8s: 20 * E8,
-            max_icp_e8s: 50 * E8,
-            min_participant_icp_e8s: E8,
-            max_participant_icp_e8s: 12 * E8,
+            min_participants: 100,
+            min_icp_e8s: 500_000 * E8,
+            max_icp_e8s: 1_000_000 * E8,
+            min_participant_icp_e8s: SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
+            max_participant_icp_e8s: SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
             swap_due_timestamp_seconds: two_days_from_now_in_secs(),
-            sns_token_e8s: 100 * E8,
+            sns_token_e8s: 25_000_000 * E8,
             neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                count: 1,
-                dissolve_delay_interval_seconds: 30 * DAYS.as_secs(),
+                count: 5,
+                dissolve_delay_interval_seconds: 7_889_400,
             }),
-            sale_delay_seconds: None,
+            sale_delay_seconds: Some(0),
         }),
-        community_fund_investment_e8s: Some(0),
+        community_fund_investment_e8s: Some(333_333 * E8),
     }
 }
 

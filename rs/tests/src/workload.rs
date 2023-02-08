@@ -12,6 +12,8 @@ use tokio::{
     task::{self, JoinHandle},
 };
 
+use crate::util::delay;
+
 /// Trait defining execution/scheduling plan of the requests against canisters.
 pub trait Plan {
     /// Returns a request object based on the request index.
@@ -55,7 +57,13 @@ pub struct Workload<T> {
 #[derive(Clone, Debug)]
 pub enum Request {
     Query(CallSpec),
+
+    // An update call for which we measure the dispatch duration.
+    // Also suitable for certified query calls.
     Update(CallSpec),
+
+    // Same as `Request::Update`, but the duration will be measured until the call is executed.
+    UpdateE2e(CallSpec),
 }
 
 impl Request {
@@ -63,6 +71,7 @@ impl Request {
         match self {
             Request::Query(spec) => spec,
             Request::Update(spec) => spec,
+            Request::UpdateE2e(spec) => spec,
         }
     }
 }
@@ -443,6 +452,12 @@ async fn execute_request(request: Request, agent: Agent, sender: Sender<RequestR
     let start = Instant::now();
     let call_status = {
         let request_result = match request {
+            Request::UpdateE2e(spec) => agent
+                .update(&spec.canister_id, spec.method_name)
+                .with_arg(spec.payload)
+                .call_and_wait(delay())
+                .await
+                .map(|_| ()),
             Request::Update(spec) => agent
                 .update(&spec.canister_id, spec.method_name)
                 .with_arg(spec.payload)

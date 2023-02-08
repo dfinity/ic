@@ -146,24 +146,28 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "ic-systest-sns-deployment"
-path = "bin/sns_deployment_test.rs"
+path = "bin/deploy_with_sale.rs"
 
 [[bin]]
-name = "ic-systest-sns-sale-simple-load-test"
-path = "bin/sns_sale_simple_load_test.rs"
+name = "ic-systest-sns-sale-mass-participation"
+path = "bin/sale_mass_participation.rs"
 
 [[bin]]
 name = "ic-systest-sns-sale-participation"
 path = "bin/sale_participation.rs"
 
 [[bin]]
-name = "ic-systest-sns-sale-participation"
-path = "bin/sale_mass_participation.rs"
-
-[[bin]]
-name = "ic-systest-sns-init-sale-scalability-experiment"
-path = "bin/sns_init_sale_scalability_experiment.rs"
-
-[[bin]]
 name = "ic-systest-sns-aggregation-canister-test"
 path = "bin/aggregation_canister_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-sale-simple-load-test"
+path = "bin/sns_sale_load_test_1.rs"
+
+[[bin]]
+name = "ic-systest-sns-sale-simple-load-test-2"
+path = "bin/sns_sale_load_test_2.rs"
+
+[[bin]]
+name = "ic-systest-sns-sale-simple-load-test-3"
+path = "bin/sns_sale_load_test_3.rs"
