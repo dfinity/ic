@@ -56,20 +56,28 @@ use tokio::task::spawn_blocking;
 
 #[tokio::main]
 async fn main() {
+    let args = BackupArgs::parse();
+    let level = if args.debug {
+        slog::Level::Debug
+    } else {
+        slog::Level::Info
+    };
+    let filter_fn = move |record: &slog::Record| record.level().is_at_least(level);
+
     // initialize a logger
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::FullFormat::new(decorator).build().fuse();
-    let drain = slog_async::Async::new(drain).build().fuse();
+    let filter = slog::Filter::new(drain, filter_fn).fuse();
+    let drain = slog_async::Async::new(filter).build().fuse();
     let log = slog::Logger::root(drain, o!());
 
-    let args = BackupArgs::parse();
     let rt = Handle::current();
     spawn_blocking(move || {
         match args.subcmd {
             Some(SubCommand::Init) => BackupManager::init(log, args.config_file),
             Some(SubCommand::Upgrade) => BackupManager::upgrade(log, args.config_file),
             _ => {
-                let bm = BackupManager::new(args.config_file, &rt, log);
+                let bm = BackupManager::new(log, args, &rt);
                 Arc::new(bm).do_backups();
             }
         };
