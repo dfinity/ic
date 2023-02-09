@@ -1,6 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench")
-load("//tlaplus:defs.bzl", "tla_module")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -124,11 +123,4 @@ rust_bench(
         "@crate_index//:criterion",
         "@crate_index//:maplit",
     ],
-)
-
-# State manager TLA+ specification
-
-tla_module(
-    name = "spec",
-    src = "spec/StateManager.tla",
 )
