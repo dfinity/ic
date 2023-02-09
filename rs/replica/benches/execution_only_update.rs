@@ -83,6 +83,7 @@ impl BenchReplica {
                     None,
                     None,
                     None,
+                    None,
                 )
                 .encode(),
             )

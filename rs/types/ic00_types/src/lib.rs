@@ -355,10 +355,6 @@ pub enum CanisterInstallMode {
     #[serde(rename = "upgrade")]
     #[strum(serialize = "upgrade")]
     Upgrade,
-    /// Upgrade an existing canister and drop the stable memory afterwards.
-    #[serde(rename = "upgrade_and_drop_stable_memory")]
-    #[strum(serialize = "upgrade_and_drop_stable_memory")]
-    UpgradeAndDropStableMemory,
 }
 
 impl Default for CanisterInstallMode {
@@ -369,11 +365,10 @@ impl Default for CanisterInstallMode {
 
 impl CanisterInstallMode {
     pub fn iter() -> Iter<'static, CanisterInstallMode> {
-        static MODES: [CanisterInstallMode; 4] = [
+        static MODES: [CanisterInstallMode; 3] = [
             CanisterInstallMode::Install,
             CanisterInstallMode::Reinstall,
             CanisterInstallMode::Upgrade,
-            CanisterInstallMode::UpgradeAndDropStableMemory,
         ];
         MODES.iter()
     }
@@ -392,7 +387,6 @@ impl TryFrom<String> for CanisterInstallMode {
             "install" => Ok(CanisterInstallMode::Install),
             "reinstall" => Ok(CanisterInstallMode::Reinstall),
             "upgrade" => Ok(CanisterInstallMode::Upgrade),
-            "upgrade_and_drop_stable_memory" => Ok(CanisterInstallMode::UpgradeAndDropStableMemory),
             _ => Err(CanisterInstallModeError(mode.to_string())),
         }
     }
@@ -404,7 +398,6 @@ impl From<CanisterInstallMode> for String {
             CanisterInstallMode::Install => "install",
             CanisterInstallMode::Reinstall => "reinstall",
             CanisterInstallMode::Upgrade => "upgrade",
-            CanisterInstallMode::UpgradeAndDropStableMemory => "upgrade_and_drop_stable_memory",
         };
         res.to_string()
     }
@@ -421,6 +414,7 @@ impl Payload<'_> for CanisterStatusResultV2 {}
 ///     compute_allocation: opt nat;
 ///     memory_allocation: opt nat;
 ///     query_allocation: opt nat;
+///     unsafe_drop_stable_memory: opt bool;
 /// })`
 #[derive(Clone, CandidType, Deserialize, Debug)]
 pub struct InstallCodeArgs {
@@ -433,6 +427,7 @@ pub struct InstallCodeArgs {
     pub memory_allocation: Option<candid::Nat>,
     pub query_allocation: Option<candid::Nat>,
     pub sender_canister_version: Option<u64>,
+    pub unsafe_drop_stable_memory: Option<bool>,
 }
 
 impl std::fmt::Display for InstallCodeArgs {
@@ -481,6 +476,7 @@ impl InstallCodeArgs {
         compute_allocation: Option<u64>,
         memory_allocation: Option<u64>,
         query_allocation: Option<u64>,
+        unsafe_drop_stable_memory: Option<bool>,
     ) -> Self {
         Self {
             mode,
@@ -491,6 +487,7 @@ impl InstallCodeArgs {
             memory_allocation: memory_allocation.map(candid::Nat::from),
             query_allocation: query_allocation.map(candid::Nat::from),
             sender_canister_version: None,
+            unsafe_drop_stable_memory,
         }
     }
 

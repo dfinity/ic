@@ -95,9 +95,6 @@ async fn install_stable_memory_reader(
 
     match mode {
         Install => panic!("There should be a test for Install"),
-        CanisterInstallMode::UpgradeAndDropStableMemory => {
-            panic!("There should be a test for UpgradeAndDropStableMemory")
-        }
         Upgrade =>
         // The stable memory should have ben preserved
         {

@@ -187,21 +187,16 @@ impl InstallCodeHelper {
             .apply_cycles_debit(self.canister.canister_id(), round.log);
 
         // Drop the stable memory if needed.
-        match original.mode {
-            CanisterInstallMode::Install
-            | CanisterInstallMode::Reinstall
-            | CanisterInstallMode::Upgrade => {}
-            CanisterInstallMode::UpgradeAndDropStableMemory => {
-                // The execution state is not empty after `post_upgrade()`.
-                let execution_state = self.canister.execution_state.as_mut().unwrap();
-                self.deallocated_bytes +=
-                    num_bytes_try_from(execution_state.stable_memory.size).unwrap_or_default();
-                let empty_page_map = PageMap::new();
-                let empty_stable_memory =
-                    Memory::new(empty_page_map, ic_replicated_state::NumWasmPages::from(0));
-                execution_state.stable_memory = empty_stable_memory;
-            }
-        };
+        if original.unsafe_drop_stable_memory {
+            // The execution state is not empty after `post_upgrade()`.
+            let execution_state = self.canister.execution_state.as_mut().unwrap();
+            self.deallocated_bytes +=
+                num_bytes_try_from(execution_state.stable_memory.size).unwrap_or_default();
+            let empty_page_map = PageMap::new();
+            let empty_stable_memory =
+                Memory::new(empty_page_map, ic_replicated_state::NumWasmPages::from(0));
+            execution_state.stable_memory = empty_stable_memory;
+        }
 
         let mut subnet_available_memory = round_limits.subnet_available_memory;
         subnet_available_memory.increment(self.deallocated_bytes, NumBytes::from(0));
@@ -328,9 +323,7 @@ impl InstallCodeHelper {
                     return Err(CanisterManagerError::CanisterNonEmpty(id));
                 }
             }
-            CanisterInstallMode::Reinstall
-            | CanisterInstallMode::Upgrade
-            | CanisterInstallMode::UpgradeAndDropStableMemory => {}
+            CanisterInstallMode::Reinstall | CanisterInstallMode::Upgrade => {}
         }
 
         if self.canister.scheduler_state.install_code_debit.get() > 0
@@ -583,6 +576,7 @@ pub(crate) struct OriginalContext {
     pub requested_memory_allocation: Option<MemoryAllocation>,
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
+    pub unsafe_drop_stable_memory: bool,
 }
 
 pub(crate) fn validate_controller(

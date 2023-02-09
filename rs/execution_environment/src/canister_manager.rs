@@ -140,6 +140,7 @@ pub struct InstallCodeContext {
     pub compute_allocation: Option<ComputeAllocation>,
     pub memory_allocation: Option<MemoryAllocation>,
     pub query_allocation: QueryAllocation,
+    pub unsafe_drop_stable_memory: bool,
 }
 
 /// Errors that can occur when converting from (sender, [`InstallCodeArgs`]) to
@@ -240,6 +241,8 @@ impl TryFrom<(PrincipalId, InstallCodeArgs)> for InstallCodeContext {
         // TODO(EXE-294): Query allocations are not supported and should be deleted.
         let query_allocation = QueryAllocation::default();
 
+        let unsafe_drop_stable_memory = args.unsafe_drop_stable_memory.unwrap_or(false);
+
         Ok(InstallCodeContext {
             sender,
             mode: args.mode,
@@ -249,6 +252,7 @@ impl TryFrom<(PrincipalId, InstallCodeArgs)> for InstallCodeContext {
             compute_allocation,
             memory_allocation,
             query_allocation,
+            unsafe_drop_stable_memory,
         })
     }
 }
@@ -744,6 +748,7 @@ impl CanisterManager {
             requested_memory_allocation: context.memory_allocation,
             sender: context.sender,
             canister_id: canister.canister_id(),
+            unsafe_drop_stable_memory: context.unsafe_drop_stable_memory,
         };
 
         let round = RoundContext {
@@ -759,7 +764,7 @@ impl CanisterManager {
             CanisterInstallMode::Install | CanisterInstallMode::Reinstall => {
                 execute_install(context, canister, original, round.clone(), round_limits)
             }
-            CanisterInstallMode::Upgrade | CanisterInstallMode::UpgradeAndDropStableMemory => {
+            CanisterInstallMode::Upgrade => {
                 execute_upgrade(context, canister, original, round.clone(), round_limits)
             }
         }

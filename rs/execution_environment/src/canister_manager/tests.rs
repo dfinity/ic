@@ -166,6 +166,7 @@ impl Default for InstallCodeContextBuilder {
                 memory_allocation: None,
                 mode: CanisterInstallMode::Install,
                 query_allocation: QueryAllocation::default(),
+                unsafe_drop_stable_memory: false,
             },
         }
     }
@@ -297,6 +298,7 @@ fn install_code(
         context.canister_id,
         context.wasm_module.as_slice().into(),
         context.arg.clone(),
+        None,
         None,
         None,
         None,
@@ -2799,6 +2801,7 @@ fn failed_upgrade_hooks_consume_instructions() {
                 memory_allocation: None,
                 mode: CanisterInstallMode::Install,
                 query_allocation: QueryAllocation::default(),
+                unsafe_drop_stable_memory: false,
             },
             &mut state,
             &mut round_limits,
@@ -2824,6 +2827,7 @@ fn failed_upgrade_hooks_consume_instructions() {
                 memory_allocation: None,
                 mode: CanisterInstallMode::Upgrade,
                 query_allocation: QueryAllocation::default(),
+                unsafe_drop_stable_memory: false,
             },
             &mut state,
             &mut round_limits,
@@ -2942,6 +2946,7 @@ fn failed_install_hooks_consume_instructions() {
                 memory_allocation: None,
                 mode: CanisterInstallMode::Install,
                 query_allocation: QueryAllocation::default(),
+                unsafe_drop_stable_memory: false,
             },
             &mut state,
             &mut round_limits,
@@ -3058,6 +3063,7 @@ fn install_code_respects_instruction_limit() {
             memory_allocation: None,
             mode: CanisterInstallMode::Install,
             query_allocation: QueryAllocation::default(),
+            unsafe_drop_stable_memory: false,
         },
         &mut state,
         &mut round_limits,
@@ -3089,6 +3095,7 @@ fn install_code_respects_instruction_limit() {
             memory_allocation: None,
             mode: CanisterInstallMode::Install,
             query_allocation: QueryAllocation::default(),
+            unsafe_drop_stable_memory: false,
         },
         &mut state,
         &mut round_limits,
@@ -3114,6 +3121,7 @@ fn install_code_respects_instruction_limit() {
             memory_allocation: None,
             mode: CanisterInstallMode::Upgrade,
             query_allocation: QueryAllocation::default(),
+            unsafe_drop_stable_memory: false,
         },
         &mut state,
         &mut round_limits,
@@ -3145,6 +3153,7 @@ fn install_code_respects_instruction_limit() {
             memory_allocation: None,
             mode: CanisterInstallMode::Upgrade,
             query_allocation: QueryAllocation::default(),
+            unsafe_drop_stable_memory: false,
         },
         &mut state,
         &mut round_limits,
@@ -3369,6 +3378,7 @@ fn lower_memory_allocation_than_usage_fails() {
                 memory_allocation: None,
                 mode: CanisterInstallMode::Install,
                 query_allocation: QueryAllocation::default(),
+                unsafe_drop_stable_memory: false,
             },
             &mut state,
             &mut round_limits,
@@ -3429,6 +3439,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 memory_allocation: None,
                 mode: CanisterInstallMode::Install,
                 query_allocation: QueryAllocation::default(),
+                unsafe_drop_stable_memory: false,
             },
             &mut state,
             &mut round_limits,
@@ -3464,6 +3475,7 @@ fn test_install_when_updating_memory_allocation_via_canister_settings() {
                 memory_allocation: None,
                 mode: CanisterInstallMode::Install,
                 query_allocation: QueryAllocation::default(),
+                unsafe_drop_stable_memory: false,
             },
             &mut state,
             &mut round_limits,
@@ -3517,6 +3529,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 memory_allocation: None,
                 mode: CanisterInstallMode::Install,
                 query_allocation: QueryAllocation::default(),
+                unsafe_drop_stable_memory: false,
             },
             &mut state,
             &mut round_limits,
@@ -3543,6 +3556,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 memory_allocation: None,
                 mode: CanisterInstallMode::Upgrade,
                 query_allocation: QueryAllocation::default(),
+                unsafe_drop_stable_memory: false,
             },
             &mut state,
             &mut round_limits,
@@ -3579,6 +3593,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
                 memory_allocation: None,
                 mode: CanisterInstallMode::Upgrade,
                 query_allocation: QueryAllocation::default(),
+                unsafe_drop_stable_memory: false,
             },
             &mut state,
             &mut round_limits,
@@ -3682,6 +3697,7 @@ fn test_install_when_setting_memory_allocation_to_zero() {
                 memory_allocation: None,
                 mode: CanisterInstallMode::Install,
                 query_allocation: QueryAllocation::default(),
+                unsafe_drop_stable_memory: false,
             },
             &mut state,
             &mut round_limits,
@@ -3732,6 +3748,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 memory_allocation: None,
                 mode: CanisterInstallMode::Install,
                 query_allocation: QueryAllocation::default(),
+                unsafe_drop_stable_memory: false,
             },
             &mut state,
             &mut round_limits,
@@ -3761,6 +3778,7 @@ fn test_upgrade_when_setting_memory_allocation_to_zero() {
                 memory_allocation: None,
                 mode: CanisterInstallMode::Upgrade,
                 query_allocation: QueryAllocation::default(),
+                unsafe_drop_stable_memory: false,
             },
             &mut state,
             &mut round_limits,
@@ -4039,6 +4057,7 @@ fn install_code_context_conversion_u128() {
         memory_allocation: Some(candid::Nat::from(u128::MAX)),
         query_allocation: Some(candid::Nat::from(u128::MAX)),
         sender_canister_version: None,
+        unsafe_drop_stable_memory: None,
     };
 
     assert!(InstallCodeContext::try_from((
@@ -5027,7 +5046,7 @@ fn upgrade_and_drop_stable_memory() {
     let wasm = wat::parse_str(wat).unwrap();
 
     let subnet_available_memory_before = test.subnet_available_memory();
-    test.install_wasm_in_mode(id, CanisterInstallMode::UpgradeAndDropStableMemory, wasm)
+    test.upgrade_canister_and_drop_stable_memory(id, wasm)
         .unwrap();
     let subnet_available_memory_after = test.subnet_available_memory();
 
