@@ -438,6 +438,10 @@ name = "ic-systest-unstuck-subnet"
 path = "bin/unstuck_subnet_test.rs"
 
 [[bin]]
+name = "ic-systest-unassigned-node-upgrade"
+path = "bin/unassigned_node_upgrade_test.rs"
+
+[[bin]]
 name = "ic-systest-upgrade-with-alternative-urls"
 path = "bin/upgrade_with_alternative_urls.rs"
 
