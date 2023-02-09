@@ -516,6 +516,8 @@ impl SchedulerImpl {
         let mut total_heap_delta = NumBytes::from(0);
 
         // Add `Heartbeat` and `GlobalTimer` tasks to be executed before input messages.
+        let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
+        let mut non_zero_priority_credit_canister_ids = BTreeSet::new();
         {
             let _timer = self
                 .metrics
@@ -523,6 +525,11 @@ impl SchedulerImpl {
                 .start_timer();
             let now = state.time();
             for canister in state.canisters_iter_mut() {
+                // Remember all non-zero priority_credit canisters to apply it after the round.
+                if canister.scheduler_state.priority_credit != AccumulatedPriority::default() {
+                    non_zero_priority_credit_canister_ids.insert(canister.system_state.canister_id);
+                }
+
                 // Add `Heartbeat` or `GlobalTimer` for running canisters only.
                 match canister.system_state.status {
                     CanisterStatus::Running { .. } => {}
@@ -544,6 +551,7 @@ impl SchedulerImpl {
                                 .system_state
                                 .task_queue
                                 .push_front(ExecutionTask::Heartbeat);
+                            heartbeat_and_timer_canister_ids.insert(canister.canister_id());
                         }
                         if global_timer_has_reached_deadline
                             && canister.exports_global_timer_method()
@@ -552,6 +560,7 @@ impl SchedulerImpl {
                                 .system_state
                                 .task_queue
                                 .push_front(ExecutionTask::GlobalTimer);
+                            heartbeat_and_timer_canister_ids.insert(canister.canister_id());
                         }
                     }
                 }
@@ -658,7 +667,8 @@ impl SchedulerImpl {
                 .start_timer();
             // Remove all remaining `Heartbeat` and `GlobalTimer` tasks
             // because they will be added again in the next round.
-            for canister in state.canisters_iter_mut() {
+            for canister_id in &heartbeat_and_timer_canister_ids {
+                let canister = state.canister_state_mut(canister_id).unwrap();
                 canister.system_state.task_queue.retain(|task| match task {
                     ExecutionTask::Heartbeat | ExecutionTask::GlobalTimer => false,
                     ExecutionTask::PausedExecution(..)
@@ -666,7 +676,10 @@ impl SchedulerImpl {
                     | ExecutionTask::AbortedExecution { .. }
                     | ExecutionTask::AbortedInstallCode { .. } => true,
                 });
-                // Also, apply priority credit for all the finished executions
+            }
+            // Apply priority credit for all the finished executions.
+            for canister_id in &non_zero_priority_credit_canister_ids {
+                let canister = state.canister_state_mut(canister_id).unwrap();
                 match canister.next_execution() {
                     NextExecution::None
                     | NextExecution::StartNew
