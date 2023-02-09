@@ -19,6 +19,7 @@ ic-interfaces-canister-http-adapter-client = { path = "../../interfaces/canister
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-protobuf = { path = "../../protobuf" }
+ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-types = { path = "../../types/types" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
 slog = "2.7.0"

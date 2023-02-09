@@ -6234,6 +6234,7 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
+ "ic-registry-subnet-type",
  "ic-test-utilities",
  "ic-types",
  "prometheus 0.12.0",

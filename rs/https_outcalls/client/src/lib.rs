@@ -10,6 +10,7 @@ use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_canister_http_adapter_client::CanisterHttpAdapterClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_registry_subnet_type::SubnetType;
 use std::convert::TryFrom;
 use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri};
@@ -23,6 +24,7 @@ pub fn setup_canister_http_client(
     adapter_config: AdaptersConfig,
     anononymous_query_handler: AnonymousQueryService,
     log: ReplicaLogger,
+    subnet_type: SubnetType,
 ) -> CanisterHttpAdapterClient {
     match adapter_config.https_outcalls_uds_path {
         None => {
@@ -64,6 +66,7 @@ pub fn setup_canister_http_client(
                         anononymous_query_handler,
                         CANISTER_HTTP_CLIENT_CHANNEL_CAPACITY,
                         metrics_registry.clone(),
+                        subnet_type,
                     ))
                 }
                 Err(e) => {

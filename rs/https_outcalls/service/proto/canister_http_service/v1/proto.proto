@@ -20,6 +20,7 @@ message CanisterHttpSendRequest {
   repeated HttpHeader headers = 3;
   HttpMethod method = 4;
   uint64 max_response_size_bytes = 5;
+  bool socks_proxy_allowed = 6;
 }
 
 message CanisterHttpSendResponse {
