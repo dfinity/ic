@@ -49,8 +49,12 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             crypto.dkg_config => format!("{:?}", params),
         );
         let start_time = self.metrics.now();
-        let result =
-            dealing::create_dealing(&self.csp, &self.node_id, &self.registry_client, params);
+        let result = dealing::create_dealing(
+            &self.csp,
+            &self.node_id,
+            self.registry_client.as_ref(),
+            params,
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::IdkgProtocol,
             MetricsScope::Full,
@@ -86,7 +90,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let start_time = self.metrics.now();
         let result = dealing::verify_dealing_public(
             &self.csp,
-            &self.registry_client,
+            self.registry_client.as_ref(),
             params,
             signed_dealing,
         );
@@ -125,7 +129,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let result = dealing::verify_dealing_private(
             &self.csp,
             &self.node_id,
-            &self.registry_client,
+            self.registry_client.as_ref(),
             params,
             signed_dealing,
         );
@@ -163,7 +167,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let start_time = self.metrics.now();
         let result = dealing::verify_initial_dealings(
             &self.csp,
-            &self.registry_client,
+            self.registry_client.as_ref(),
             params,
             initial_dealings,
         );
@@ -199,8 +203,12 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             crypto.dkg_dealing => format!("dealings: {{ {:?} }}", dealings.keys()),
         );
         let start_time = self.metrics.now();
-        let result =
-            transcript::create_transcript(&self.csp, &self.registry_client, params, dealings);
+        let result = transcript::create_transcript(
+            &self.csp,
+            self.registry_client.as_ref(),
+            params,
+            dealings,
+        );
         self.metrics.observe_parameter_size(
             MetricsDomain::IdkgProtocol,
             "create_transcript",
@@ -243,8 +251,12 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
             crypto.dkg_transcript => format!("{:?}", transcript),
         );
         let start_time = self.metrics.now();
-        let result =
-            transcript::verify_transcript(&self.csp, &self.registry_client, params, transcript);
+        let result = transcript::verify_transcript(
+            &self.csp,
+            self.registry_client.as_ref(),
+            params,
+            transcript,
+        );
         self.metrics.observe_parameter_size(
             MetricsDomain::IdkgProtocol,
             "verify_transcript",
@@ -285,7 +297,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let result = transcript::load_transcript(
             &self.csp,
             &self.node_id,
-            &self.registry_client,
+            self.registry_client.as_ref(),
             transcript,
         );
         self.metrics.observe_parameter_size(
@@ -336,7 +348,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let start_time = self.metrics.now();
         let result = complaint::verify_complaint(
             &self.csp,
-            &self.registry_client,
+            self.registry_client.as_ref(),
             transcript,
             complaint,
             complainer_id,
@@ -385,7 +397,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let result = transcript::open_transcript(
             &self.csp,
             &self.node_id,
-            &self.registry_client,
+            self.registry_client.as_ref(),
             transcript,
             complainer_id,
             complaint,
@@ -477,7 +489,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let result = transcript::load_transcript_with_openings(
             &self.csp,
             &self.node_id,
-            &self.registry_client,
+            self.registry_client.as_ref(),
             transcript,
             openings,
         );
@@ -530,7 +542,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
         let result = retain_active_keys::retain_keys_for_transcripts(
             &self.csp,
             &self.node_id,
-            &self.registry_client,
+            self.registry_client.as_ref(),
             active_transcripts,
         );
         self.metrics.observe_parameter_size(

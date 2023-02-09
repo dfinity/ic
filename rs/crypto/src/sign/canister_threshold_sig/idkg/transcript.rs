@@ -24,11 +24,10 @@ use ic_types::{NodeId, NodeIndex, NumberOfNodes, RegistryVersion};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
-use std::sync::Arc;
 
 pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
     csp_client: &C,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
     dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
 ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
@@ -39,7 +38,7 @@ pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
     for (dealer, dealing) in dealings {
         verify_signature_batch(
             csp_client,
-            &Arc::clone(registry),
+            registry,
             dealing,
             params.verification_threshold(),
             params.registry_version(),
@@ -86,7 +85,7 @@ pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
 
 pub fn verify_transcript<C: CspIDkgProtocol + CspSigner>(
     csp_client: &C,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
     transcript: &IDkgTranscript,
 ) -> Result<(), IDkgVerifyTranscriptError> {
@@ -103,7 +102,7 @@ pub fn verify_transcript<C: CspIDkgProtocol + CspSigner>(
         // Note that signer eligibility is checked in `transcript.verify_consistency_with_params`
         verify_signature_batch(
             csp_client,
-            &Arc::clone(registry),
+            registry,
             signed_dealing,
             transcript.verification_threshold(),
             params.registry_version(),
@@ -139,7 +138,7 @@ pub fn verify_transcript<C: CspIDkgProtocol + CspSigner>(
 pub fn load_transcript<C: CspIDkgProtocol>(
     csp_client: &C,
     self_node_id: &NodeId,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     transcript: &IDkgTranscript,
 ) -> Result<Vec<IDkgComplaint>, IDkgLoadTranscriptError> {
     let self_index = match transcript.receivers.position(*self_node_id) {
@@ -149,8 +148,7 @@ pub fn load_transcript<C: CspIDkgProtocol>(
         }
     };
 
-    let self_mega_pubkey =
-        get_mega_pubkey(self_node_id, registry.as_ref(), transcript.registry_version)?;
+    let self_mega_pubkey = get_mega_pubkey(self_node_id, registry, transcript.registry_version)?;
 
     let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
         .map_err(|e| IDkgLoadTranscriptError::SerializationError {
@@ -176,7 +174,7 @@ pub fn load_transcript<C: CspIDkgProtocol>(
 pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
     csp_client: &C,
     self_node_id: &NodeId,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     transcript: &IDkgTranscript,
     openings: &BTreeMap<IDkgComplaint, BTreeMap<NodeId, IDkgOpening>>,
 ) -> Result<(), IDkgLoadTranscriptError> {
@@ -189,8 +187,7 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
     ensure_sufficient_openings(openings, transcript)?;
     ensure_matching_transcript_ids_and_dealer_ids(openings, transcript)?;
 
-    let self_mega_pubkey =
-        get_mega_pubkey(self_node_id, registry.as_ref(), transcript.registry_version)?;
+    let self_mega_pubkey = get_mega_pubkey(self_node_id, registry, transcript.registry_version)?;
 
     let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
         .map_err(|e| IDkgLoadTranscriptError::SerializationError {
@@ -245,7 +242,7 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
 pub fn open_transcript<C: CspIDkgProtocol>(
     csp_idkg_client: &C,
     self_node_id: &NodeId,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     transcript: &IDkgTranscript,
     complainer_id: NodeId,
     complaint: &IDkgComplaint,
@@ -263,8 +260,7 @@ pub fn open_transcript<C: CspIDkgProtocol>(
     })?;
 
     // Get the MEGa-encryption public key.
-    let opener_public_key =
-        get_mega_pubkey(self_node_id, registry.as_ref(), transcript.registry_version)?;
+    let opener_public_key = get_mega_pubkey(self_node_id, registry, transcript.registry_version)?;
 
     // Extract the accused dealing from the transcript.
     let (dealer_index, internal_dealing) =
@@ -583,7 +579,7 @@ fn signature_batch_err_to_verify_transcript_err(
 
 fn verify_signature_batch<C: CspSigner>(
     csp_client: &C,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     dealing: &BatchSignedIDkgDealing,
     verification_threshold: NumberOfNodes,
     registry_version: RegistryVersion,
@@ -600,7 +596,7 @@ fn verify_signature_batch<C: CspSigner>(
     for (signer, signature) in dealing.signature.signatures_map.iter() {
         BasicSigVerifierInternal::verify_basic_sig(
             csp_client,
-            Arc::clone(registry),
+            registry,
             signature,
             dealing.signed_idkg_dealing(),
             *signer,

@@ -33,7 +33,6 @@ use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, CurrentNodePublic
 use ic_types::registry::RegistryClientError;
 use ic_types::{RegistryVersion, Time};
 use std::convert::TryFrom;
-use std::sync::Arc;
 use std::time::Duration;
 
 impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
@@ -433,7 +432,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         registry_version: RegistryVersion,
     ) -> CryptoResult<PublicKeyProto> {
         let pk_proto = key_from_registry(
-            Arc::clone(&self.registry_client),
+            self.registry_client.as_ref(),
             self.node_id,
             KeyPurpose::NodeSigning,
             registry_version,
@@ -454,7 +453,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         registry_version: RegistryVersion,
     ) -> CryptoResult<PublicKeyProto> {
         let pk_proto = key_from_registry(
-            Arc::clone(&self.registry_client),
+            self.registry_client.as_ref(),
             self.node_id,
             KeyPurpose::CommitteeSigning,
             registry_version,
@@ -469,7 +468,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         registry_version: RegistryVersion,
     ) -> CryptoResult<PublicKeyProto> {
         let pk_proto = key_from_registry(
-            Arc::clone(&self.registry_client),
+            self.registry_client.as_ref(),
             self.node_id,
             KeyPurpose::DkgDealingEncryption,
             registry_version,
@@ -487,7 +486,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         registry_version: RegistryVersion,
     ) -> CryptoResult<PublicKeyProto> {
         let pk_proto = key_from_registry(
-            Arc::clone(&self.registry_client),
+            self.registry_client.as_ref(),
             self.node_id,
             KeyPurpose::IDkgMEGaEncryption,
             registry_version,

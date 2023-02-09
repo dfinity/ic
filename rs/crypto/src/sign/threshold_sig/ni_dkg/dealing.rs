@@ -25,7 +25,7 @@ mod creation {
     pub fn create_dealing<C: NiDkgCspClient>(
         self_node_id: &NodeId,
         ni_dkg_csp_client: &C,
-        registry: &Arc<dyn RegistryClient>,
+        registry: &dyn RegistryClient,
         config: &NiDkgConfig,
     ) -> Result<NiDkgDealing, DkgCreateDealingError> {
         ensure_dealer_eligibility(self_node_id, config)?;
@@ -119,7 +119,7 @@ mod verification {
 
     pub fn verify_dealing<C: NiDkgCspClient>(
         ni_dkg_csp_client: &C,
-        registry: &Arc<dyn RegistryClient>,
+        registry: &dyn RegistryClient,
         config: &NiDkgConfig,
         dealer: &NodeId,
         dealing: &NiDkgDealing,
@@ -194,7 +194,7 @@ fn is_eligible_dealer(node_id: &NodeId, config: &NiDkgConfig) -> bool {
 
 fn csp_dealing_encryption_pubkeys(
     receivers: &NiDkgReceivers,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<BTreeMap<NodeIndex, CspFsEncryptionPublicKey>, DkgEncPubkeyRegistryQueryError> {
     let mut enc_pubkeys = BTreeMap::new();

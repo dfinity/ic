@@ -7,14 +7,13 @@ use ic_crypto_internal_threshold_sig_ecdsa::IDkgComplaintInternal;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::NodeIndex;
 use std::convert::TryFrom;
-use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
 
 pub fn verify_complaint<C: CspIDkgProtocol>(
     csp_idkg_client: &C,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     transcript: &IDkgTranscript,
     complaint: &IDkgComplaint,
     complainer_id: NodeId,
@@ -22,11 +21,8 @@ pub fn verify_complaint<C: CspIDkgProtocol>(
     if transcript.transcript_id != complaint.transcript_id {
         return Err(IDkgVerifyComplaintError::InvalidArgumentMismatchingTranscriptIDs);
     }
-    let complainer_mega_pubkey = get_mega_pubkey(
-        &complainer_id,
-        registry.as_ref(),
-        transcript.registry_version,
-    )?;
+    let complainer_mega_pubkey =
+        get_mega_pubkey(&complainer_id, registry, transcript.registry_version)?;
     let complainer_index = index_of_complainer(complainer_id, transcript)?;
     let internal_complaint = IDkgComplaintInternal::try_from(complaint).map_err(|e| {
         IDkgVerifyComplaintError::SerializationError {

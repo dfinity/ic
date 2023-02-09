@@ -10,7 +10,7 @@ pub struct MultiSigVerifierInternal {}
 impl MultiSigVerifierInternal {
     pub fn verify_multi_sig_individual<S: CspSigner, H: Signable>(
         csp_signer: &S,
-        registry: Arc<dyn RegistryClient>,
+        registry: &dyn RegistryClient,
         signature: &IndividualMultiSigOf<H>,
         message: &H,
         signer: NodeId,
@@ -29,7 +29,7 @@ impl MultiSigVerifierInternal {
     /// signature.
     pub fn combine_multi_sig_individuals<S: CspSigner, H: Signable>(
         csp_signer: &S,
-        registry: Arc<dyn RegistryClient>,
+        registry: &dyn RegistryClient,
         signatures: BTreeMap<NodeId, IndividualMultiSigOf<H>>,
         registry_version: RegistryVersion,
     ) -> CryptoResult<CombinedMultiSigOf<H>> {
@@ -57,7 +57,7 @@ impl MultiSigVerifierInternal {
     /// Verifies a combined signature from a non-empty set of signers.
     pub fn verify_multi_sig_combined<S: CspSigner, H: Signable>(
         csp_signer: &S,
-        registry: Arc<dyn RegistryClient>,
+        registry: &dyn RegistryClient,
         signature: &CombinedMultiSigOf<H>,
         message: &H,
         signers: BTreeSet<NodeId>,
@@ -90,7 +90,7 @@ impl MultiSigVerifierInternal {
 /// - one of the public keys fetched from the registry is invalid
 /// - the public key's algorithms are not all equal
 fn node_ids_to_pubkeys(
-    registry: Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     nodes: BTreeSet<NodeId>,
     key_purpose: KeyPurpose,
     registry_version: RegistryVersion,
@@ -100,12 +100,8 @@ fn node_ids_to_pubkeys(
         let csp_pubkeys: CryptoResult<Vec<CspPublicKey>> = nodes
             .iter()
             .map(|node_id| {
-                let pk_proto = key_from_registry(
-                    Arc::clone(&registry),
-                    node_id.to_owned(),
-                    key_purpose,
-                    registry_version,
-                )?;
+                let pk_proto =
+                    key_from_registry(registry, node_id.to_owned(), key_purpose, registry_version)?;
                 let algorithm_id = AlgorithmId::from(pk_proto.algorithm);
                 algorithm_set.insert(algorithm_id);
                 CspPublicKey::try_from(pk_proto)
@@ -148,7 +144,7 @@ fn node_ids_to_pubkeys(
 /// - the public key's algorithms are not all equal
 /// - one of the given signatures is not valid
 fn node_sigs_to_pubkey_sig_pairs<H>(
-    registry: Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     node_sigs: BTreeMap<NodeId, IndividualMultiSigOf<H>>,
     key_purpose: KeyPurpose,
     registry_version: RegistryVersion,
@@ -161,12 +157,8 @@ where
         let pubkey_sig_pairs: CryptoResult<Vec<(CspPublicKey, CspSignature)>> = node_sigs
             .iter()
             .map(|(node_id, individual_sig)| {
-                let pk_proto = key_from_registry(
-                    Arc::clone(&registry),
-                    node_id.to_owned(),
-                    key_purpose,
-                    registry_version,
-                )?;
+                let pk_proto =
+                    key_from_registry(registry, node_id.to_owned(), key_purpose, registry_version)?;
                 let algorithm_id = AlgorithmId::from(pk_proto.algorithm);
                 algorithm_set.insert(algorithm_id);
 
@@ -205,7 +197,7 @@ pub struct MultiSignerInternal {}
 impl MultiSignerInternal {
     pub fn sign_multi<S: CspSigner, H: Signable>(
         csp_signer: &S,
-        registry: Arc<dyn RegistryClient>,
+        registry: &dyn RegistryClient,
         message: &H,
         signer: NodeId,
         registry_version: RegistryVersion,

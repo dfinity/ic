@@ -339,7 +339,7 @@ impl CryptoComponentFatClient<Csp> {
 }
 
 fn key_from_registry(
-    registry: Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     node_id: NodeId,
     key_purpose: KeyPurpose,
     registry_version: RegistryVersion,

@@ -34,7 +34,7 @@ mod oldest_public_key {
 
     #[test]
     fn should_be_none_when_no_transcripts_and_should_not_query_registry() {
-        let registry = Arc::new(registry_returning_transient_error()) as Arc<_>;
+        let registry = registry_returning_transient_error();
         let mock_csp = MockAllCryptoServiceProvider::new();
         let result = oldest_public_key(&mock_csp, &node_id(), &registry, &HashSet::new());
         assert!(result.is_none());
@@ -47,7 +47,7 @@ mod oldest_public_key {
             node_id(),
             RegistryVersion::new(2),
         ));
-        let registry = Arc::new(registry_returning_transient_error()) as Arc<_>;
+        let registry = registry_returning_transient_error();
         let mock_csp = MockAllCryptoServiceProvider::new();
 
         let result = oldest_public_key(&mock_csp, &node_id(), &registry, &transcripts);
@@ -66,7 +66,7 @@ mod oldest_public_key {
             node_id(),
             RegistryVersion::new(2),
         ));
-        let registry = Arc::new(registry_returning_reproducible_error()) as Arc<_>;
+        let registry = registry_returning_reproducible_error();
         let mock_csp = MockAllCryptoServiceProvider::new();
 
         let result = oldest_public_key(&mock_csp, &node_id(), &registry, &transcripts);
@@ -82,7 +82,7 @@ mod oldest_public_key {
     #[test]
     fn should_return_internal_error_when_public_key_malformed() {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        let registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
+        let registry_client = FakeRegistryClient::new(data_provider.clone());
         let registry_version = RegistryVersion::new(1);
         let mut transcripts = HashSet::new();
         transcripts.insert(idkg_transcript_with_registry_version(
@@ -98,12 +98,7 @@ mod oldest_public_key {
         registry_client.update_to_latest_version();
         let mock_csp = MockAllCryptoServiceProvider::new();
 
-        let result = oldest_public_key(
-            &mock_csp,
-            &node_id(),
-            &(registry_client as Arc<_>),
-            &transcripts,
-        );
+        let result = oldest_public_key(&mock_csp, &node_id(), &registry_client, &transcripts);
 
         assert_matches!(
             result,
@@ -120,7 +115,7 @@ mod oldest_public_key {
             RegistryVersion::new(*registry_versions.iter().min().expect("empty versions"));
         let idkg_public_keys = generate_unique_idkg_public_keys(&registry_versions);
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        let registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
+        let registry_client = FakeRegistryClient::new(data_provider.clone());
         let mut transcripts = HashSet::new();
         for (version, idkg_public_key) in &idkg_public_keys {
             transcripts.insert(idkg_transcript_with_registry_version(node_id(), *version));
@@ -138,14 +133,9 @@ mod oldest_public_key {
             .expect_idkg_observe_minimum_registry_version_in_active_idkg_transcripts()
             .return_const(());
 
-        let result = oldest_public_key(
-            &mock_csp,
-            &node_id(),
-            &(registry_client as Arc<_>),
-            &transcripts,
-        )
-        .expect("missing result")
-        .expect("missing IDKG public key");
+        let result = oldest_public_key(&mock_csp, &node_id(), &registry_client, &transcripts)
+            .expect("missing result")
+            .expect("missing IDKG public key");
 
         assert_eq!(
             result,
@@ -163,7 +153,7 @@ mod oldest_public_key {
             RegistryVersion::new(*registry_versions.iter().min().expect("empty versions"));
         let idkg_public_keys = generate_unique_idkg_public_keys(&registry_versions);
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
-        let registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
+        let registry_client = FakeRegistryClient::new(data_provider.clone());
         let mut transcripts = HashSet::new();
         for (version, idkg_public_key) in &idkg_public_keys {
             transcripts.insert(idkg_transcript_with_registry_version(node_id(), *version));
@@ -182,14 +172,9 @@ mod oldest_public_key {
             .times(1)
             .return_const(());
 
-        let _result = oldest_public_key(
-            &mock_csp,
-            &node_id(),
-            &(registry_client as Arc<_>),
-            &transcripts,
-        )
-        .expect("missing result")
-        .expect("missing IDKG public key");
+        let _result = oldest_public_key(&mock_csp, &node_id(), &registry_client, &transcripts)
+            .expect("missing result")
+            .expect("missing IDKG public key");
     }
 
     fn registry_returning_transient_error() -> impl RegistryClient {

@@ -20,12 +20,11 @@ use ic_types::crypto::canister_threshold_sig::idkg::{
 use ic_types::signature::BasicSignature;
 use ic_types::NodeId;
 use std::convert::TryFrom;
-use std::sync::Arc;
 
 pub fn create_dealing<C: CspIDkgProtocol + CspSigner>(
     csp_client: &C,
     self_node_id: &NodeId,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
 ) -> Result<SignedIDkgDealing, IDkgCreateDealingError> {
     let self_index =
@@ -37,7 +36,7 @@ pub fn create_dealing<C: CspIDkgProtocol + CspSigner>(
 
     let receiver_keys = idkg_encryption_keys_from_registry(
         params.receivers(),
-        registry.as_ref(),
+        registry,
         params.registry_version(),
     )?;
     let receiver_keys_vec = receiver_keys.values().cloned().collect::<Vec<_>>();
@@ -79,31 +78,25 @@ pub fn create_dealing<C: CspIDkgProtocol + CspSigner>(
 
 fn sign_dealing<S: CspSigner>(
     csp_signer: &S,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     dealing: IDkgDealing,
     signer: NodeId,
     registry_version: RegistryVersion,
 ) -> Result<SignedIDkgDealing, IDkgCreateDealingError> {
-    BasicSignerInternal::sign_basic(
-        csp_signer,
-        registry.clone(),
-        &dealing,
-        signer,
-        registry_version,
-    )
-    .map(|signature| SignedIDkgDealing {
-        signature: BasicSignature { signature, signer },
-        content: dealing,
-    })
-    .map_err(|crypto_error| IDkgCreateDealingError::SignatureError {
-        internal_error: format!("{}", crypto_error),
-    })
+    BasicSignerInternal::sign_basic(csp_signer, registry, &dealing, signer, registry_version)
+        .map(|signature| SignedIDkgDealing {
+            signature: BasicSignature { signature, signer },
+            content: dealing,
+        })
+        .map_err(|crypto_error| IDkgCreateDealingError::SignatureError {
+            internal_error: format!("{}", crypto_error),
+        })
 }
 
 pub fn verify_dealing_private<C: CspIDkgProtocol>(
     csp_client: &C,
     self_node_id: &NodeId,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
     signed_dealing: &SignedIDkgDealing,
 ) -> Result<(), IDkgVerifyDealingPrivateError> {
@@ -133,8 +126,7 @@ pub fn verify_dealing_private<C: CspIDkgProtocol>(
     let self_receiver_index = params
         .receiver_index(*self_node_id)
         .ok_or(IDkgVerifyDealingPrivateError::NotAReceiver)?;
-    let self_mega_pubkey =
-        get_mega_pubkey(self_node_id, registry.as_ref(), params.registry_version())?;
+    let self_mega_pubkey = get_mega_pubkey(self_node_id, registry, params.registry_version())?;
 
     csp_client.idkg_verify_dealing_private(
         params.algorithm_id(),
@@ -171,7 +163,7 @@ impl From<MegaKeyFromRegistryError> for IDkgVerifyDealingPrivateError {
 
 pub fn verify_dealing_public<C: CspIDkgProtocol + CspSigner>(
     csp_client: &C,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
     signed_dealing: &SignedIDkgDealing,
 ) -> Result<(), IDkgVerifyDealingPublicError> {
@@ -183,7 +175,7 @@ pub fn verify_dealing_public<C: CspIDkgProtocol + CspSigner>(
     let dealer_id = signed_dealing.dealer_id();
     BasicSigVerifierInternal::verify_basic_sig(
         csp_client,
-        Arc::clone(registry),
+        registry,
         &signed_dealing.signature.signature,
         signed_dealing.idkg_dealing(),
         dealer_id,
@@ -234,7 +226,7 @@ pub fn verify_dealing_public<C: CspIDkgProtocol + CspSigner>(
 
 pub fn verify_initial_dealings<C: CspIDkgProtocol + CspSigner>(
     csp_client: &C,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
     initial_dealings: &InitialIDkgDealings,
 ) -> Result<(), IDkgVerifyInitialDealingsError> {

@@ -25,12 +25,13 @@ use tokio_rustls::TlsAcceptor;
 pub async fn perform_tls_server_handshake<P: CspTlsHandshakeSignerProvider>(
     signer_provider: &P,
     self_node_id: NodeId,
-    registry_client: &Arc<dyn RegistryClient>,
+    registry_client: Arc<dyn RegistryClient>,
     tcp_stream: TcpStream,
     allowed_clients: AllowedClients,
     registry_version: RegistryVersion,
 ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError> {
-    let self_tls_cert = tls_cert_from_registry(registry_client, self_node_id, registry_version)?;
+    let self_tls_cert =
+        tls_cert_from_registry(registry_client.as_ref(), self_node_id, registry_version)?;
     let self_tls_cert_key_id = KeyId::try_from(&self_tls_cert).map_err(|error| {
         TlsServerHandshakeError::MalformedSelfCertificate {
             internal_error: format!("Cannot instantiate KeyId: {:?}", error),
@@ -38,7 +39,7 @@ pub async fn perform_tls_server_handshake<P: CspTlsHandshakeSignerProvider>(
     })?;
     let client_cert_verifier = NodeClientCertVerifier::new_with_mandatory_client_auth(
         allowed_clients.nodes().clone(),
-        Arc::clone(registry_client),
+        registry_client,
         registry_version,
     );
     let ed25519_signing_key =
@@ -64,7 +65,7 @@ pub async fn perform_tls_server_handshake<P: CspTlsHandshakeSignerProvider>(
 pub async fn perform_tls_server_handshake_without_client_auth<P: CspTlsHandshakeSignerProvider>(
     signer_provider: &P,
     self_node_id: NodeId,
-    registry_client: &Arc<dyn RegistryClient>,
+    registry_client: &dyn RegistryClient,
     tcp_stream: TcpStream,
     registry_version: RegistryVersion,
 ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError> {
