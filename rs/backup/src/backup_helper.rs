@@ -10,7 +10,7 @@ use ic_types::{ReplicaVersion, SubnetId};
 use chrono::{DateTime, Utc};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
-use slog::{error, info, warn, Logger};
+use slog::{debug, error, info, warn, Logger};
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs::{create_dir_all, read_dir, remove_dir_all, DirEntry, File};
@@ -40,6 +40,7 @@ pub struct BackupHelper {
     pub artifacts_guard: Mutex<bool>,
     pub daily_replays: usize,
     pub do_cold_storage: bool,
+    pub thread_id: u32,
     pub log: Logger,
 }
 
@@ -129,7 +130,11 @@ impl BackupHelper {
         replica_version: &ReplicaVersion,
         start_height: u64,
     ) -> Result<(), String> {
-        info!(self.log, "Check if there are new artifacts.");
+        debug!(
+            self.log,
+            "[#{}] Check if there are new artifacts.", self.thread_id
+        );
+
         let cup_file = format!(
             "{}/{}/{}/catch_up_package.bin",
             replica_version,
@@ -143,7 +148,11 @@ impl BackupHelper {
         while !self.spool_dir().join(cup_file.as_str()).exists() {
             sleep_secs(30);
         }
-        info!(self.log, "Start downloading binaries.");
+        debug!(
+            self.log,
+            "[#{}] Start downloading binaries.", self.thread_id
+        );
+
         let _guard = self
             .downloads_guard
             .lock()
@@ -244,7 +253,8 @@ impl BackupHelper {
     fn rsync_config(&self, node_ip: &IpAddr, replica_version: &ReplicaVersion) {
         info!(
             self.log,
-            "Sync ic.json5 from the node: {} for replica: {} and subnet_id: {}",
+            "[#{}] Sync ic.json5 from the node: {} for replica: {} and subnet_id: {}",
+            self.thread_id,
             node_ip,
             replica_version,
             self.subnet_id.to_string()
@@ -288,7 +298,8 @@ impl BackupHelper {
         cmd.arg("--timeout=60");
         cmd.args(arguments);
         cmd.arg("--min-size=1").arg(remote_dir).arg(local_dir);
-        info!(self.log, "Will execute: {:?}", cmd);
+        debug!(self.log, "Will execute: {:?}", cmd);
+
         if let Err(e) = exec_cmd(&mut cmd) {
             Err(format!("Error: {}", e))
         } else {
@@ -378,7 +389,7 @@ impl BackupHelper {
                 }
                 Ok(_) => break,
                 Err(err) => {
-                    error!(self.log, "Error replaying: {}", err);
+                    error!(self.log, "[#{}] Error replaying: {}", self.thread_id, err);
                     break;
                 }
             }
@@ -386,7 +397,8 @@ impl BackupHelper {
 
         let finish_height = self.last_state_checkpoint();
         if finish_height > start_height {
-            info!(self.log, "Replay was successful!");
+            debug!(self.log, "[#{}] Replay was successful!", self.thread_id);
+
             if self.archive_state(finish_height).is_ok() {
                 self.notification_client.message_slack(format!(
                     "✅ Successfully restored the state at height *{}*",
@@ -399,7 +411,7 @@ impl BackupHelper {
                     .push_metrics_restored_height(finish_height);
             }
         } else {
-            warn!(self.log, "No progress in the replay!");
+            warn!(self.log, "[#{}] No progress in the replay!", self.thread_id);
             self.notification_client.report_failure_slack(
                 "No height progress after the last replay detected!".to_string(),
             );
@@ -413,13 +425,14 @@ impl BackupHelper {
         let start_height = self.last_state_checkpoint();
         info!(
             self.log,
-            "Replaying from height #{} of subnet {:?} with version {}",
+            "[#{}] Replaying from height #{} of subnet {:?} with version {}",
+            self.thread_id,
             start_height,
             self.subnet_id,
             replica_version
         );
         self.download_binaries(replica_version, start_height)?;
-        info!(self.log, "Binaries are downloaded.");
+        debug!(self.log, "[#{}] Binaries are downloaded.", self.thread_id);
 
         let ic_admin = self.binary_file("ic-replay", replica_version);
         let mut cmd = Command::new(ic_admin);
@@ -434,10 +447,10 @@ impl BackupHelper {
             .arg(&replica_version.to_string())
             .arg(start_height.to_string())
             .stdout(Stdio::piped());
-        info!(self.log, "Will execute: {:?}", cmd);
+        debug!(self.log, "[#{}] Will execute: {:?}", self.thread_id, cmd);
         match exec_cmd(&mut cmd) {
             Err(e) => {
-                error!(self.log, "Error: {}", e.to_string());
+                error!(self.log, "[#{}] Error: {}", self.thread_id, e.to_string());
                 Err(e.to_string())
             }
             Ok(Some(stdout)) => {
@@ -448,17 +461,30 @@ impl BackupHelper {
                     .map_err(|err| format!("Error writing log file: {:?}", err))?;
 
                 if let Some(upgrade_version) = self.check_upgrade_request(stdout) {
-                    info!(self.log, "Upgrade detected to: {}", upgrade_version);
+                    debug!(
+                        self.log,
+                        "[#{}] Upgrade detected to: {}", self.thread_id, upgrade_version
+                    );
+
                     Ok(ReplayResult::UpgradeRequired(
                         ReplicaVersion::try_from(upgrade_version).map_err(|e| e.to_string())?,
                     ))
                 } else {
-                    info!(self.log, "Last height: #{}!", self.last_state_checkpoint());
+                    debug!(
+                        self.log,
+                        "[#{}] Last height: #{}!",
+                        self.thread_id,
+                        self.last_state_checkpoint()
+                    );
+
                     Ok(ReplayResult::Done)
                 }
             }
             Ok(None) => {
-                error!(self.log, "No output from the replay process!");
+                error!(
+                    self.log,
+                    "[#{}] No output from the replay process!", self.thread_id
+                );
                 Err("No ic-replay output".to_string())
             }
         }
@@ -561,8 +587,8 @@ impl BackupHelper {
         let archive_last_dir = self.archive_height_dir(last_height);
         info!(
             self.log,
-            "Archiving: {} to: {}",
-            state_dir.to_string_lossy(),
+            "[#{}] Archiving state to: {}",
+            self.thread_id,
             archive_last_dir.to_string_lossy()
         );
 
@@ -572,7 +598,7 @@ impl BackupHelper {
             cmd.arg("--exclude").arg(dir);
         }
         cmd.arg(state_dir).arg(&archive_last_dir);
-        info!(self.log, "Will execute: {:?}", cmd);
+        debug!(self.log, "[#{}] Will execute: {:?}", self.thread_id, cmd);
         if let Err(e) = exec_cmd(&mut cmd) {
             error!(self.log, "Error: {}", e);
             self.notification_client
@@ -599,7 +625,7 @@ impl BackupHelper {
                 }),
             Err(err) => return Err(format!("Error reading archive checkpoints: {}", err)),
         };
-        info!(self.log, "State archived!");
+        debug!(self.log, "[#{}] State archived!", self.thread_id);
 
         let now: DateTime<Utc> = Utc::now();
         let now_str = format!("{}\n", now.to_rfc2822());
@@ -613,7 +639,10 @@ impl BackupHelper {
             self.get_disk_stats(DiskStats::Inodes),
         ) {
             (Ok(space), Ok(inodes)) => {
-                info!(self.log, "Space: {}% Inodes: {}%", space, inodes);
+                debug!(
+                    self.log,
+                    "[#{}] Space: {}% Inodes: {}%", self.thread_id, space, inodes
+                );
                 self.notification_client
                     .push_metrics_disk_stats(space, inodes);
                 Ok(())
@@ -670,7 +699,7 @@ impl BackupHelper {
             // move artifact dir(s)
             let mut cmd = Command::new("mv");
             cmd.arg(dir).arg(&work_dir);
-            info!(self.log, "Will execute: {:?}", cmd);
+            debug!(self.log, "Will execute: {:?}", cmd);
             exec_cmd(&mut cmd).map_err(|err| format!("Error moving artifacts: {:?}", err))?;
         }
         // we have moved all the artifacts from the spool directory, so don't need the mutex guard anymore
@@ -690,7 +719,7 @@ impl BackupHelper {
                     .file_name()
                     .into_string()
                     .expect("replica version entry in work directory is missing or invalid");
-                info!(self.log, "Packing artifacts of {}", replica_version);
+                debug!(self.log, "Packing artifacts of {}", replica_version);
                 let timestamp = Utc::now().timestamp();
                 let (top_height, _) = fetch_top_height(&pack_dir);
                 let packed_file = format!(
@@ -702,13 +731,13 @@ impl BackupHelper {
                 cmd.arg(&packed_file);
                 cmd.arg("-C").arg(&work_dir);
                 cmd.arg(&replica_version);
-                info!(self.log, "Will execute: {:?}", cmd);
+                debug!(self.log, "Will execute: {:?}", cmd);
                 exec_cmd(&mut cmd).map_err(|err| format!("Error packing artifacts: {:?}", err))?;
 
                 info!(self.log, "Copy packed file of {}", replica_version);
                 let mut cmd2 = Command::new("cp");
                 cmd2.arg(packed_file).arg(&cold_storage_artifacts_dir);
-                info!(self.log, "Will execute: {:?}", cmd2);
+                debug!(self.log, "Will execute: {:?}", cmd2);
                 exec_cmd(&mut cmd2).map_err(|err| format!("Error copying artifacts: {:?}", err))?;
             }
         }
@@ -742,7 +771,7 @@ impl BackupHelper {
                 let mut cmd = Command::new("rsync");
                 cmd.arg("-a");
                 cmd.arg(dir.1).arg(self.cold_storage_states_dir());
-                info!(self.log, "Will execute: {:?}", cmd);
+                debug!(self.log, "Will execute: {:?}", cmd);
                 exec_cmd(&mut cmd).map_err(|err| format!("Error copying states: {:?}", err))?;
                 // skip some of the states if we replay more than one per day
                 if self.daily_replays > 1 {
@@ -757,7 +786,7 @@ impl BackupHelper {
             info!(self.log, "Will move to trash directory {:?}", dir.1);
             let mut cmd = Command::new("mv");
             cmd.arg(dir.1).arg(&trash_dir);
-            info!(self.log, "Will execute: {:?}", cmd);
+            debug!(self.log, "Will execute: {:?}", cmd);
             exec_cmd(&mut cmd).map_err(|err| format!("Error moving artifacts: {:?}", err))?;
         }
 
@@ -775,7 +804,7 @@ impl BackupHelper {
             "✅ {} artifacts of subnet {:?} and states up to height *{}*, saved {}% of space and {}% of inodes.",
             action_text, self.subnet_id, max_height, old_space - new_space, old_inodes - new_inodes
         ));
-        info!(
+        debug!(
             self.log,
             "Finished moving old artifacts and states of subnet {:?} to the cold storage",
             self.subnet_id

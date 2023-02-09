@@ -16,7 +16,6 @@ pub struct SubnetConfig {
     pub sync_period_secs: u64,
     pub replay_period_secs: u64,
     pub thread_id: u32,
-    #[serde(default)]
     pub disable_cold_storage: bool,
 }
 

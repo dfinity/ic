@@ -19,9 +19,13 @@ use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
 use slog::{error, info, Logger};
 use tokio::runtime::Handle;
 
-use crate::config::{ColdStorage, Config, SubnetConfig};
 use crate::util::{block_on, sleep_secs};
-use crate::{backup_helper::BackupHelper, notification_client::NotificationClient};
+use crate::{
+    backup_helper::BackupHelper,
+    cmd::BackupArgs,
+    config::{ColdStorage, Config, SubnetConfig},
+    notification_client::NotificationClient,
+};
 
 const DEFAULT_SYNC_NODES: usize = 5;
 const DEFAULT_SYNC_PERIOD: u64 = 30;
@@ -35,7 +39,6 @@ struct SubnetBackup {
     pub sync_period: Duration,
     pub replay_period: Duration,
     pub backup_helper: BackupHelper,
-    pub thread_id: u32,
 }
 
 pub struct BackupManager {
@@ -49,8 +52,8 @@ pub struct BackupManager {
 }
 
 impl BackupManager {
-    pub fn new(config_file: PathBuf, rt: &Handle, log: Logger) -> Self {
-        let config = Config::load_config(config_file).expect("Config file can't be loaded");
+    pub fn new(log: Logger, args: BackupArgs, rt: &Handle) -> Self {
+        let config = Config::load_config(args.config_file).expect("Config file can't be loaded");
         // verification that all is initialized with the init command
         if config.subnets.is_empty() {
             panic!("No subnets are configured for backup")
@@ -135,6 +138,7 @@ impl BackupManager {
                 artifacts_guard: Mutex::new(true),
                 daily_replays,
                 do_cold_storage,
+                thread_id: s.thread_id,
                 log: log.clone(),
             };
             let sync_period = std::time::Duration::from_secs(s.sync_period_secs);
@@ -144,7 +148,6 @@ impl BackupManager {
                 sync_period,
                 replay_period,
                 backup_helper,
-                thread_id: s.thread_id,
             });
         }
         BackupManager {
@@ -163,7 +166,7 @@ impl BackupManager {
         config
             .save_config(config_file)
             .expect("Config file couldn't be saved");
-        info!(log, "Configuration updated with disable_cold_storage flag");
+        info!(log, "Configuration updated...");
     }
 
     pub fn init(log: Logger, config_file: PathBuf) {
@@ -361,7 +364,7 @@ impl BackupManager {
         for i in 0..size {
             // should we sync the subnet
             if self.subnet_backups[i].replay_period >= Duration::from_secs(1) {
-                let id = self.subnet_backups[i].thread_id;
+                let id = self.subnet_backups[i].backup_helper.thread_id;
                 if !thread_ids.contains(&id) {
                     thread_ids.insert(id);
                     let m = self.clone();
@@ -408,7 +411,7 @@ fn replay_subnets(m: Arc<BackupManager>, thread_id: u32) {
     loop {
         for (i, it) in replay_last_time.iter_mut().enumerate().take(size) {
             let b = &m.subnet_backups[i];
-            if b.thread_id != thread_id {
+            if b.backup_helper.thread_id != thread_id {
                 continue;
             }
             if it.elapsed() > b.replay_period {
