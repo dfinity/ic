@@ -35,9 +35,9 @@ sudo systemctl stop ic-backup.service
 
 VERSION=$(get_config_version)
 
-if ((${VERSION} < 17)); then
-    download_backup_binary "1cbfff88b0317697e423515b38c9bfdd9b23fca3"
-    set_config_version 17
+if ((${VERSION} < 18)); then
+    download_backup_binary "2ad18320bd87702643abcf68d6f111be8f2b314d"
+    set_config_version 18
 fi
 
 sudo systemctl start ic-backup.service
