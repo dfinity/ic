@@ -231,6 +231,7 @@ pub fn construct_ic_stack(
         config.adapters_config,
         execution_services.anonymous_query_handler.clone(),
         replica_logger.clone(),
+        subnet_type,
     );
 
     let state_sync = StateSync::new(state_manager.clone(), replica_logger.clone());

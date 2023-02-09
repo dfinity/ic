@@ -10,6 +10,7 @@ use ic_ic00_types::{CanisterHttpResponsePayload, TransformArgs};
 use ic_interfaces::execution_environment::AnonymousQueryService;
 use ic_interfaces_canister_http_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
 use ic_metrics::MetricsRegistry;
+use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     canister_http::{
         validate_http_headers_and_body, CanisterHttpMethod, CanisterHttpReject,
@@ -56,6 +57,7 @@ pub struct CanisterHttpAdapterClientImpl {
     rx: Receiver<CanisterHttpResponse>,
     anonymous_query_service: AnonymousQueryService,
     metrics: Metrics,
+    subnet_type: SubnetType,
 }
 
 impl CanisterHttpAdapterClientImpl {
@@ -65,6 +67,7 @@ impl CanisterHttpAdapterClientImpl {
         anonymous_query_service: AnonymousQueryService,
         inflight_requests: usize,
         metrics_registry: MetricsRegistry,
+        subnet_type: SubnetType,
     ) -> Self {
         let (tx, rx) = channel(inflight_requests);
         let metrics = Metrics::new(&metrics_registry);
@@ -75,6 +78,7 @@ impl CanisterHttpAdapterClientImpl {
             rx,
             anonymous_query_service,
             metrics,
+            subnet_type,
         }
     }
 }
@@ -108,6 +112,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let mut http_adapter_client = CanisterHttpServiceClient::new(self.grpc_channel.clone());
         let anonymous_query_handler = self.anonymous_query_service.clone();
         let metrics = self.metrics.clone();
+        let _subnet_type = self.subnet_type;
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
         // After receiving the response from the adapter an optional transform is applied by doing an upcall to execution.
@@ -153,6 +158,10 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         })
                         .collect(),
                     body: request_body.unwrap_or_default(),
+                    // Socks proxy is only enabled on system subnets.
+                    // socks_proxy_allowed: matches!(subnet_type, SubnetType::System)
+                    // WIP: enabled when feature is complete.
+                    socks_proxy_allowed: false
                 })
                 .map_err(|grpc_status| {
                     (
@@ -534,6 +543,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
+            SubnetType::Application,
         );
 
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
@@ -588,6 +598,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
+            SubnetType::Application,
         );
 
         assert_eq!(
@@ -643,6 +654,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
+            SubnetType::Application,
         );
 
         assert_eq!(
@@ -703,6 +715,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
+            SubnetType::Application,
         );
 
         assert_eq!(
@@ -786,6 +799,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
+            SubnetType::Application,
         );
 
         // Specify a transform_method name such that the client calls the anonymous query handler.
@@ -860,6 +874,7 @@ mod tests {
             svc,
             100,
             MetricsRegistry::default(),
+            SubnetType::Application,
         );
 
         // Specify a transform_method name such that the client calls the anonymous query handler.
@@ -916,6 +931,7 @@ mod tests {
             svc,
             2,
             MetricsRegistry::default(),
+            SubnetType::Application,
         );
 
         assert_eq!(client.try_receive(), Err(TryReceiveError::Empty));
