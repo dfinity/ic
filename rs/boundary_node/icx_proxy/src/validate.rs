@@ -47,8 +47,10 @@ impl Validate for Validator {
         uri: &Uri,
         response_body: &[u8],
     ) -> Result<(), Cow<'static, str>> {
-        let body_sha = decode_body_to_sha256(response_body, headers_data.encoding.clone())
+        let decoded_body = decode_body(response_body, headers_data.encoding.clone())
             .ok_or("Body could not be decoded")?;
+        let body_sha = hash_body(response_body);
+        let decoded_body_sha = hash_body(&decoded_body);
 
         let cert = headers_data.certificate.as_ref();
         let tree = headers_data.tree.as_ref();
@@ -58,14 +60,27 @@ impl Validate for Validator {
             // This should change in the future, grandfathering in current implementations
             (false, None, None) => return Ok(()),
 
-            (_, Some(Ok(certificate)), Some(Ok(tree))) => validate_body(
-                Certificates { certificate, tree },
-                canister_id,
-                agent,
-                uri,
-                &body_sha,
-            )
-            .map_err(|e| format!("Certificate validation failed: {e}"))?,
+            (_, Some(Ok(certificate)), Some(Ok(tree))) => {
+                // first try to validate the body with the decoded body's hash
+                match validate_body(
+                    Certificates { certificate, tree },
+                    canister_id,
+                    agent,
+                    uri,
+                    &decoded_body_sha,
+                ) {
+                    Ok(true) => true,
+                    // if that fails, try to validate the body using the original body's hash
+                    Ok(false) | Err(_) => validate_body(
+                        Certificates { certificate, tree },
+                        canister_id,
+                        agent,
+                        uri,
+                        &body_sha,
+                    )
+                    .map_err(|e| format!("Certificate validation failed: {e}"))?,
+                }
+            }
 
             (true, _, _) => return Err("Response verification required but not provided".into()),
             (_, Some(_), _) => {
@@ -88,39 +103,39 @@ struct Certificates<'a> {
     tree: &'a Vec<u8>,
 }
 
-fn decode_body_to_sha256(body: &[u8], encoding: Option<String>) -> Option<[u8; 32]> {
-    let mut sha256 = Sha256::new();
-    let mut decoded = [0u8; MAX_CHUNK_SIZE_TO_DECOMPRESS];
+fn decode_body(body: &[u8], encoding: Option<String>) -> Option<Vec<u8>> {
     match encoding.as_deref() {
-        Some("gzip") => {
-            let mut decoder = GzDecoder::new(body);
-            for _ in 0..MAX_CHUNKS_TO_DECOMPRESS {
-                let bytes = decoder.read(&mut decoded).ok()?;
-                if bytes == 0 {
-                    return Some(sha256.finalize().into());
-                }
-                sha256.update(&decoded[0..bytes]);
-            }
-            if decoder.bytes().next().is_some() {
-                return None;
-            }
+        Some("gzip") => body_from_decoder(GzDecoder::new(body)),
+        Some("deflate") => body_from_decoder(DeflateDecoder::new(body)),
+        _ => Some(body.to_vec()),
+    }
+}
+
+fn body_from_decoder<D: Read>(mut decoder: D) -> Option<Vec<u8>> {
+    let mut decoded = Vec::new();
+    let mut buffer = [0u8; MAX_CHUNK_SIZE_TO_DECOMPRESS];
+
+    for _ in 0..MAX_CHUNKS_TO_DECOMPRESS {
+        let bytes = decoder.read(&mut buffer).ok()?;
+
+        if bytes == 0 {
+            return Some(decoded);
         }
-        Some("deflate") => {
-            let mut decoder = DeflateDecoder::new(body);
-            for _ in 0..MAX_CHUNKS_TO_DECOMPRESS {
-                let bytes = decoder.read(&mut decoded).ok()?;
-                if bytes == 0 {
-                    return Some(sha256.finalize().into());
-                }
-                sha256.update(&decoded[0..bytes]);
-            }
-            if decoder.bytes().next().is_some() {
-                return None;
-            }
-        }
-        _ => sha256.update(body),
-    };
-    Some(sha256.finalize().into())
+
+        decoded.extend_from_slice(&buffer[..bytes]);
+    }
+
+    if decoder.bytes().next().is_some() {
+        return None;
+    }
+
+    Some(decoded)
+}
+
+fn hash_body(body: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(body);
+    hasher.finalize().into()
 }
 
 fn validate_body(
