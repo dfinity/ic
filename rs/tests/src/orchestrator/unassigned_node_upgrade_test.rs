@@ -22,7 +22,11 @@ end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
 use crate::{
-    driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*},
+    driver::{
+        ic::InternetComputer,
+        test_env::{SshKeyGen, TestEnv},
+        test_env_api::*,
+    },
     orchestrator::utils::{
         ssh_access::update_ssh_keys_for_all_unassigned_nodes,
         upgrade::fetch_update_file_sha256_with_retry,
@@ -55,6 +59,9 @@ use slog::info;
 use std::convert::TryFrom;
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen(ADMIN).expect("ssh admin keygen failed");
+
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .with_unassigned_nodes(1)
