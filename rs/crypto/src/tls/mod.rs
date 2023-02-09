@@ -42,7 +42,7 @@ where
         let result = rustls::server_handshake::perform_tls_server_handshake(
             &self.csp,
             self.node_id,
-            &self.registry_client,
+            Arc::clone(&self.registry_client),
             tcp_stream,
             allowed_clients,
             registry_version,
@@ -83,7 +83,7 @@ where
         let result = rustls::server_handshake::perform_tls_server_handshake_without_client_auth(
             &self.csp,
             self.node_id,
-            &self.registry_client,
+            self.registry_client.as_ref(),
             tcp_stream,
             registry_version,
         )
@@ -124,7 +124,7 @@ where
         let result = rustls::client_handshake::perform_tls_client_handshake(
             &self.csp,
             self.node_id,
-            &self.registry_client,
+            Arc::clone(&self.registry_client),
             tcp_stream,
             server,
             registry_version,
@@ -191,7 +191,7 @@ fn common_name_entries(cert: &TlsPublicKeyCert) -> X509NameEntries {
 }
 
 fn tls_cert_from_registry(
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     node_id: NodeId,
     registry_version: RegistryVersion,
 ) -> Result<TlsPublicKeyCert, TlsCertFromRegistryError> {

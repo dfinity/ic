@@ -81,7 +81,7 @@ fn should_call_csp_with_correct_arguments() {
         .times(1)
         .return_const(Ok(()));
 
-    let _ = verify_complaint(&csp, &registry, &transcript, &complaint, COMPLAINER);
+    let _ = verify_complaint(&csp, registry.as_ref(), &transcript, &complaint, COMPLAINER);
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn should_fail_on_transcript_id_mismatch() {
     let csp = MockAllCryptoServiceProvider::new();
     let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1));
 
-    let result = verify_complaint(&csp, &registry, &transcript, &complaint, NODE_1);
+    let result = verify_complaint(&csp, registry.as_ref(), &transcript, &complaint, NODE_1);
 
     assert_matches!(
         result,
@@ -138,7 +138,7 @@ fn should_fail_if_dealing_missing_in_transcript() {
     let csp = MockAllCryptoServiceProvider::new();
     let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1));
 
-    let result = verify_complaint(&csp, &registry, &transcript, &complaint, NODE_1);
+    let result = verify_complaint(&csp, registry.as_ref(), &transcript, &complaint, NODE_1);
 
     assert_matches!(
         result,
@@ -176,7 +176,13 @@ fn should_fail_if_complainer_missing_in_transcript() {
     let csp = MockAllCryptoServiceProvider::new();
     let registry = registry_with(mega_encryption_pk_record(COMPLAINER_ID, REG_V1));
 
-    let result = verify_complaint(&csp, &registry, &transcript, &complaint, COMPLAINER_ID);
+    let result = verify_complaint(
+        &csp,
+        registry.as_ref(),
+        &transcript,
+        &complaint,
+        COMPLAINER_ID,
+    );
 
     assert_matches!(
         result,
@@ -209,7 +215,7 @@ fn should_fail_if_deserializing_complaint_fails() {
     let csp = MockAllCryptoServiceProvider::new();
     let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1));
 
-    let result = verify_complaint(&csp, &registry, &transcript, &complaint, NODE_1);
+    let result = verify_complaint(&csp, registry.as_ref(), &transcript, &complaint, NODE_1);
 
     assert_matches!(
         result,
@@ -241,7 +247,7 @@ fn should_fail_if_deserializing_dealing_fails() {
     let csp = MockAllCryptoServiceProvider::new();
     let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1));
 
-    let result = verify_complaint(&csp, &registry, &transcript, &complaint, NODE_1);
+    let result = verify_complaint(&csp, registry.as_ref(), &transcript, &complaint, NODE_1);
 
     assert_matches!(
         result,
@@ -274,7 +280,7 @@ fn should_fail_if_complainer_mega_pubkey_not_in_registry() {
 
     let result = verify_complaint(
         &MockAllCryptoServiceProvider::new(),
-        &registry_missing_complainer_pubkey,
+        registry_missing_complainer_pubkey.as_ref(),
         &transcript,
         &complaint,
         NODE_1,
@@ -312,7 +318,7 @@ fn should_fail_if_complainer_mega_pubkey_is_malformed() {
 
     let result = verify_complaint(
         &MockAllCryptoServiceProvider::new(),
-        &registry_with_malformed_complainer_pubkey,
+        registry_with_malformed_complainer_pubkey.as_ref(),
         &transcript,
         &complaint,
         NODE_1,
@@ -351,7 +357,7 @@ fn should_fail_if_complainer_mega_pubkey_algorithm_is_unsupported() {
 
     let result = verify_complaint(
         &MockAllCryptoServiceProvider::new(),
-        &registry_with_unsupported_complainer_pubkey_algorithm,
+        registry_with_unsupported_complainer_pubkey_algorithm.as_ref(),
         &transcript,
         &complaint,
         NODE_1,
@@ -388,7 +394,7 @@ fn should_fail_if_registry_client_returns_error() {
 
     let result = verify_complaint(
         &MockAllCryptoServiceProvider::new(),
-        &registry_returning_error,
+        registry_returning_error.as_ref(),
         &transcript,
         &complaint,
         NODE_1,
@@ -422,7 +428,7 @@ fn should_return_ok_if_csp_returns_ok() {
     let csp = csp_with_verify_complaint_returning(Ok(()));
     let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1));
 
-    let result = verify_complaint(&csp, &registry, &transcript, &complaint, NODE_1);
+    let result = verify_complaint(&csp, registry.as_ref(), &transcript, &complaint, NODE_1);
 
     assert!(result.is_ok());
 }
@@ -451,7 +457,7 @@ fn should_return_error_if_csp_returns_error() {
     let csp = csp_with_verify_complaint_returning(Err(csp_error.clone()));
     let registry = registry_with(mega_encryption_pk_record(NODE_1, REG_V1));
 
-    let result = verify_complaint(&csp, &registry, &transcript, &complaint, NODE_1);
+    let result = verify_complaint(&csp, registry.as_ref(), &transcript, &complaint, NODE_1);
 
     assert_matches!(result, Err(e) if e == csp_error);
 }

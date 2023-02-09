@@ -397,7 +397,7 @@ fn map_verify_combined_error(error: CryptoError) -> CryptoError {
 impl ThresholdSigVerifierInternal {
     pub fn verify_combined_threshold_sig_by_public_key<C, H>(
         threshold_sig_csp_client: &C,
-        registry: Arc<dyn RegistryClient>,
+        registry: &dyn RegistryClient,
         signature: &CombinedThresholdSigOf<H>,
         message: &H,
         subnet_id: SubnetId,
@@ -427,7 +427,7 @@ impl ThresholdSigVerifierInternal {
 }
 
 fn initial_ni_dkg_transcript_from_registry(
-    registry: Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
     dkg_tag: NiDkgTag,

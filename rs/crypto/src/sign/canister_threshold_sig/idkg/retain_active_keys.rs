@@ -8,7 +8,6 @@ use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use std::collections::{BTreeSet, HashSet};
 use std::convert::TryFrom;
-use std::sync::Arc;
 
 #[cfg(test)]
 mod tests;
@@ -16,7 +15,7 @@ mod tests;
 pub fn retain_keys_for_transcripts<C: CspIDkgProtocol>(
     csp_client: &C,
     node_id: &NodeId,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     active_transcripts: &HashSet<IDkgTranscript>,
 ) -> Result<(), IDkgRetainKeysError> {
     if active_transcripts.is_empty() {
@@ -41,11 +40,11 @@ pub fn retain_keys_for_transcripts<C: CspIDkgProtocol>(
 fn oldest_public_key<C: CspIDkgProtocol>(
     csp_client: &C,
     node_id: &NodeId,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     transcripts: &HashSet<IDkgTranscript>,
 ) -> Option<Result<MEGaPublicKey, IDkgRetainKeysError>> {
     minimum_registry_version(transcripts).map(|version| {
-        match get_mega_pubkey(node_id, registry.as_ref(), version) {
+        match get_mega_pubkey(node_id, registry, version) {
             Ok(oldest_public_key) => {
                 csp_client
                     .idkg_observe_minimum_registry_version_in_active_idkg_transcripts(version);

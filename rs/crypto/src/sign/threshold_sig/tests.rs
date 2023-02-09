@@ -1226,7 +1226,7 @@ mod verify_combined_threshold_sig_by_public_key {
 
         let _ = ThresholdSigVerifierInternal::verify_combined_threshold_sig_by_public_key(
             &csp,
-            registry,
+            registry.as_ref(),
             &combined_sig,
             &message,
             SUBNET_ID,
@@ -1262,7 +1262,7 @@ mod verify_combined_threshold_sig_by_public_key {
 
         let _ = ThresholdSigVerifierInternal::verify_combined_threshold_sig_by_public_key(
             &csp_1,
-            registry,
+            registry.as_ref(),
             &combined_sig,
             &message,
             SUBNET_ID,
@@ -1285,7 +1285,7 @@ mod verify_combined_threshold_sig_by_public_key {
 
         let result = ThresholdSigVerifierInternal::verify_combined_threshold_sig_by_public_key(
             &csp,
-            registry,
+            registry.as_ref(),
             &combined_sig,
             &message,
             SUBNET_ID,
@@ -1303,7 +1303,7 @@ mod verify_combined_threshold_sig_by_public_key {
 
         let result = ThresholdSigVerifierInternal::verify_combined_threshold_sig_by_public_key(
             &csp,
-            registry_returning_none(),
+            registry_returning_none().as_ref(),
             &combined_sig,
             &message,
             SUBNET_ID,
@@ -1327,7 +1327,7 @@ mod verify_combined_threshold_sig_by_public_key {
 
         let result = ThresholdSigVerifierInternal::verify_combined_threshold_sig_by_public_key(
             &csp,
-            registry_returning_none(),
+            registry_returning_none().as_ref(),
             &invalid_sig,
             &message,
             SUBNET_ID,
@@ -1346,7 +1346,7 @@ mod verify_combined_threshold_sig_by_public_key {
 
         let result = ThresholdSigVerifierInternal::verify_combined_threshold_sig_by_public_key(
             &csp,
-            registry,
+            registry.as_ref(),
             &combined_sig,
             &message,
             SUBNET_ID,
@@ -1365,7 +1365,7 @@ mod verify_combined_threshold_sig_by_public_key {
 
         let result = ThresholdSigVerifierInternal::verify_combined_threshold_sig_by_public_key(
             &csp,
-            registry,
+            registry.as_ref(),
             &combined_sig,
             &message,
             SUBNET_ID,
@@ -1383,7 +1383,7 @@ mod verify_combined_threshold_sig_by_public_key {
 
         let result = ThresholdSigVerifierInternal::verify_combined_threshold_sig_by_public_key(
             &csp,
-            registry,
+            registry.as_ref(),
             &combined_sig,
             &message,
             SUBNET_ID,
@@ -1400,7 +1400,7 @@ mod verify_combined_threshold_sig_by_public_key {
 
         let result = ThresholdSigVerifierInternal::verify_combined_threshold_sig_by_public_key(
             &csp,
-            registry,
+            registry.as_ref(),
             &combined_sig,
             &message,
             SUBNET_ID,
@@ -1417,7 +1417,7 @@ mod verify_combined_threshold_sig_by_public_key {
 
         let result = ThresholdSigVerifierInternal::verify_combined_threshold_sig_by_public_key(
             &csp,
-            registry,
+            registry.as_ref(),
             &combined_sig,
             &message,
             SUBNET_ID,

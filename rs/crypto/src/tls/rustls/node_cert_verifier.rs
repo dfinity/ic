@@ -106,7 +106,7 @@ impl ServerCertVerifier for NodeServerCertVerifier {
         verify_node_cert(
             presented_certs,
             &self.allowed_nodes,
-            &self.registry_client,
+            self.registry_client.as_ref(),
             self.registry_version,
         )
         .map(|_| ServerCertVerified::assertion())
@@ -139,7 +139,7 @@ impl ClientCertVerifier for NodeClientCertVerifier {
         verify_node_cert(
             presented_certs,
             &self.allowed_nodes,
-            &self.registry_client,
+            self.registry_client.as_ref(),
             self.registry_version,
         )
         .map(|_| ClientCertVerified::assertion())
@@ -149,7 +149,7 @@ impl ClientCertVerifier for NodeClientCertVerifier {
 fn verify_node_cert(
     presented_certs: &[Certificate],
     allowed_nodes: &SomeOrAllNodes,
-    registry_client: &Arc<dyn RegistryClient>,
+    registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<(), TLSError> {
     ensure_exactly_one_presented_cert(presented_certs)?;
@@ -217,7 +217,7 @@ fn ensure_node_id_in_allowed_nodes(
 
 fn node_cert_from_registry(
     node_id: NodeId,
-    registry_client: &Arc<dyn RegistryClient>,
+    registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<TlsPublicKeyCert, TLSError> {
     tls_cert_from_registry(registry_client, node_id, registry_version).map_err(|e| {

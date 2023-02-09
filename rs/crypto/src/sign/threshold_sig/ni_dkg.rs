@@ -35,8 +35,12 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
             crypto.dkg_config => format!("{}", config),
         );
         let start_time = self.metrics.now();
-        let result =
-            dealing::create_dealing(&self.node_id, &self.csp, &self.registry_client, config);
+        let result = dealing::create_dealing(
+            &self.node_id,
+            &self.csp,
+            self.registry_client.as_ref(),
+            config,
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,
@@ -72,8 +76,13 @@ impl<C: CryptoServiceProvider> NiDkgAlgorithm for CryptoComponentFatClient<C> {
             crypto.dkg_dealing => format!("{}", dealing),
         );
         let start_time = self.metrics.now();
-        let result =
-            dealing::verify_dealing(&self.csp, &self.registry_client, config, &dealer, dealing);
+        let result = dealing::verify_dealing(
+            &self.csp,
+            self.registry_client.as_ref(),
+            config,
+            &dealer,
+            dealing,
+        );
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
             MetricsScope::Full,

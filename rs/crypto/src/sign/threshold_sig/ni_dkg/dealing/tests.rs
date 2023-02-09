@@ -64,7 +64,7 @@ mod create_dealing {
         let _ = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![key_record]),
+            registry_with_records(vec![key_record]).as_ref(),
             &dkg_config,
         );
     }
@@ -84,7 +84,7 @@ mod create_dealing {
         let _ = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]),
+            registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]).as_ref(),
             &dkg_config,
         );
     }
@@ -115,7 +115,7 @@ mod create_dealing {
         let _ = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![key_record_1, key_record_2, key_record_3]),
+            registry_with_records(vec![key_record_1, key_record_2, key_record_3]).as_ref(),
             &dkg_config,
         );
     }
@@ -133,7 +133,7 @@ mod create_dealing {
         let result = create_dealing(
             &not_a_dealer_node,
             &csp,
-            &registry_with_records(vec![dealing_enc_pk_record(NODE_2, REG_V2, PK_VALUE_1)]),
+            registry_with_records(vec![dealing_enc_pk_record(NODE_2, REG_V2, PK_VALUE_1)]).as_ref(),
             &dkg_config,
         );
 
@@ -159,7 +159,7 @@ mod create_dealing {
         let result = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_too_old_latest_version,
+            registry_with_too_old_latest_version.as_ref(),
             &dkg_config,
         );
 
@@ -186,7 +186,7 @@ mod create_dealing {
             &NODE_1,
             &csp,
             // NODE_1 key is missing in registry:
-            &registry_with_missing_receiver_enc_key,
+            registry_with_missing_receiver_enc_key.as_ref(),
             &dkg_config,
         );
 
@@ -218,7 +218,7 @@ mod create_dealing {
         let result = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![key_record]),
+            registry_with_records(vec![key_record]).as_ref(),
             &dkg_config,
         );
 
@@ -242,7 +242,7 @@ mod create_dealing {
         let dealing = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]),
+            registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]).as_ref(),
             &dkg_config,
         );
 
@@ -261,7 +261,7 @@ mod create_dealing {
         let error = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]),
+            registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]).as_ref(),
             &dkg_config,
         )
         .unwrap_err();
@@ -287,7 +287,7 @@ mod create_dealing {
         let _panic = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]),
+            registry_with_records(vec![dealing_enc_pk_record(NODE_1, REG_V2, PK_VALUE_1)]).as_ref(),
             &dkg_config,
         );
     }
@@ -389,7 +389,7 @@ mod create_dealing_with_resharing_transcript {
         let _ = create_dealing(
             &NODE_3,
             &csp,
-            &registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]),
+            registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]).as_ref(),
             &dkg_config,
         );
     }
@@ -408,7 +408,7 @@ mod create_dealing_with_resharing_transcript {
         let error = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]),
+            registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]).as_ref(),
             &dkg_config,
         )
         .unwrap_err();
@@ -436,7 +436,7 @@ mod create_dealing_with_resharing_transcript {
         let _panic = create_dealing(
             &NODE_1,
             &csp,
-            &registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]),
+            registry_with_records(vec![resharing_enc_pk_record, enc_pk_record]).as_ref(),
             &dkg_config,
         );
     }
@@ -508,7 +508,7 @@ mod verify_dealing {
 
         let _ = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_1_enc_pk]),
+            registry_with_records(vec![receiver_1_enc_pk]).as_ref(),
             &dkg_config,
             &DEALER,
             &ni_dkg_dealing(csp_dealing(DEALING_VALUE_1)),
@@ -533,11 +533,12 @@ mod verify_dealing {
 
         let _ = verify_dealing(
             &csp,
-            &registry_with_records(vec![
+            registry_with_records(vec![
                 receiver_1_enc_pk,
                 receiver_2_enc_pk,
                 receiver_3_enc_pk,
-            ]),
+            ])
+            .as_ref(),
             &dkg_config,
             &DEALER,
             &dummy_ni_dkg_dealing(),
@@ -557,7 +558,7 @@ mod verify_dealing {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_enc_pk]),
+            registry_with_records(vec![receiver_enc_pk]).as_ref(),
             &dkg_config,
             &not_a_dealer_node,
             &dummy_ni_dkg_dealing(),
@@ -584,7 +585,7 @@ mod verify_dealing {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_records(vec![old_version_receiver_enc_pk]),
+            registry_with_records(vec![old_version_receiver_enc_pk]).as_ref(),
             &dkg_config,
             &DEALER,
             &dummy_ni_dkg_dealing(),
@@ -613,7 +614,7 @@ mod verify_dealing {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_missing_receiver_enc_key,
+            registry_with_missing_receiver_enc_key.as_ref(),
             &dkg_config,
             &DEALER,
             &dummy_ni_dkg_dealing(),
@@ -648,7 +649,7 @@ mod verify_dealing {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_records(vec![key_record]),
+            registry_with_records(vec![key_record]).as_ref(),
             &dkg_config,
             &DEALER,
             &dummy_ni_dkg_dealing(),
@@ -674,7 +675,7 @@ mod verify_dealing {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_1_enc_pk]),
+            registry_with_records(vec![receiver_1_enc_pk]).as_ref(),
             &dkg_config,
             &DEALER,
             &dummy_ni_dkg_dealing(),
@@ -699,7 +700,7 @@ mod verify_dealing {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_1_enc_pk]),
+            registry_with_records(vec![receiver_1_enc_pk]).as_ref(),
             &dkg_config,
             &DEALER,
             &dummy_ni_dkg_dealing(),
@@ -798,7 +799,7 @@ mod verify_dealing_with_resharing_transcript {
 
         let _ = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_1_enc_pk]),
+            registry_with_records(vec![receiver_1_enc_pk]).as_ref(),
             &dkg_config,
             &NODE_3,
             &ni_dkg_dealing(csp_dealing(DEALING_VALUE_1)),
@@ -817,7 +818,7 @@ mod verify_dealing_with_resharing_transcript {
 
         let result = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_1_enc_pk]),
+            registry_with_records(vec![receiver_1_enc_pk]).as_ref(),
             &dkg_config,
             &NODE_2,
             &ni_dkg_dealing(csp_dealing(DEALING_VALUE_1)),
@@ -843,7 +844,7 @@ mod verify_dealing_with_resharing_transcript {
 
         let error = verify_dealing(
             &csp,
-            &registry_with_records(vec![receiver_1_enc_pk]),
+            registry_with_records(vec![receiver_1_enc_pk]).as_ref(),
             &dkg_config,
             &NODE_2,
             &ni_dkg_dealing(csp_dealing(DEALING_VALUE_1)),

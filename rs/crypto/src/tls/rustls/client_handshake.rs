@@ -19,12 +19,13 @@ use tokio_rustls::TlsConnector;
 pub async fn perform_tls_client_handshake<P: CspTlsHandshakeSignerProvider>(
     signer_provider: &P,
     self_node_id: NodeId,
-    registry_client: &Arc<dyn RegistryClient>,
+    registry_client: Arc<dyn RegistryClient>,
     tcp_stream: TcpStream,
     server: NodeId,
     registry_version: RegistryVersion,
 ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
-    let self_tls_cert = tls_cert_from_registry(registry_client, self_node_id, registry_version)?;
+    let self_tls_cert =
+        tls_cert_from_registry(registry_client.as_ref(), self_node_id, registry_version)?;
     let self_tls_cert_key_id = KeyId::try_from(&self_tls_cert).map_err(|error| {
         TlsClientHandshakeError::MalformedSelfCertificate {
             internal_error: format!("Cannot instantiate KeyId: {:?}", error),
@@ -41,7 +42,7 @@ pub async fn perform_tls_client_handshake<P: CspTlsHandshakeSignerProvider>(
     );
     let server_cert_verifier = NodeServerCertVerifier::new(
         SomeOrAllNodes::new_with_single_node(server),
-        Arc::clone(registry_client),
+        registry_client,
         registry_version,
     );
     config

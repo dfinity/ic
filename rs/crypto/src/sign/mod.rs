@@ -76,7 +76,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentFa
         let start_time = self.metrics.now();
         let result = BasicSignerInternal::sign_basic(
             &self.csp,
-            self.registry_client.clone(),
+            self.registry_client.as_ref(),
             message,
             signer,
             registry_version,
@@ -122,7 +122,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::verify_basic_sig(
             &self.csp,
-            Arc::clone(&self.registry_client),
+            self.registry_client.as_ref(),
             signature,
             message,
             signer,
@@ -196,7 +196,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
         let start_time = self.metrics.now();
         let result = BasicSigVerifierInternal::verify_basic_sig_batch_vartime(
             &self.csp,
-            Arc::clone(&self.registry_client),
+            self.registry_client.as_ref(),
             signature,
             message,
             registry_version,
@@ -284,7 +284,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigner<H> for CryptoComponentFa
         let start_time = self.metrics.now();
         let result = MultiSignerInternal::sign_multi(
             &self.csp,
-            Arc::clone(&self.registry_client),
+            self.registry_client.as_ref(),
             message,
             signer,
             registry_version,
@@ -330,7 +330,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
         let start_time = self.metrics.now();
         let result = MultiSigVerifierInternal::verify_multi_sig_individual(
             &self.csp,
-            Arc::clone(&self.registry_client),
+            self.registry_client.as_ref(),
             signature,
             message,
             signer,
@@ -372,7 +372,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
         let start_time = self.metrics.now();
         let result = MultiSigVerifierInternal::combine_multi_sig_individuals(
             &self.csp,
-            Arc::clone(&self.registry_client),
+            self.registry_client.as_ref(),
             signatures,
             registry_version,
         );
@@ -417,7 +417,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
         let start_time = self.metrics.now();
         let result = MultiSigVerifierInternal::verify_multi_sig_combined(
             &self.csp,
-            Arc::clone(&self.registry_client),
+            self.registry_client.as_ref(),
             signature,
             message,
             signers,
@@ -632,7 +632,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
         let start_time = self.metrics.now();
         let result = ThresholdSigVerifierInternal::verify_combined_threshold_sig_by_public_key(
             &self.csp,
-            Arc::clone(&self.registry_client),
+            self.registry_client.as_ref(),
             signature,
             message,
             subnet_id,
@@ -677,7 +677,7 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
         );
         let start_time = self.metrics.now();
         let result = canister_sig::verify_canister_sig(
-            Arc::clone(&self.registry_client),
+            self.registry_client.as_ref(),
             signature,
             signed_bytes,
             public_key,

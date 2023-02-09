@@ -11,7 +11,7 @@ pub struct BasicSigVerifierInternal {}
 impl BasicSigVerifierInternal {
     pub fn verify_basic_sig<S: CspSigner, H: Signable>(
         csp_signer: &S,
-        registry: Arc<dyn RegistryClient>,
+        registry: &dyn RegistryClient,
         signature: &BasicSigOf<H>,
         message: &H,
         signer: NodeId,
@@ -46,7 +46,7 @@ impl BasicSigVerifierInternal {
 
     pub fn verify_basic_sig_batch_vartime<S: CspSigVerifier, H: Signable>(
         csp_signer: &S,
-        registry: Arc<dyn RegistryClient>,
+        registry: &dyn RegistryClient,
         signature: &BasicSignatureBatch<H>,
         message: &H,
         registry_version: RegistryVersion,
@@ -62,12 +62,8 @@ impl BasicSigVerifierInternal {
         let mut first_algorithm_id: Option<AlgorithmId> = None;
 
         for (signer, signature) in signature.signatures_map.iter() {
-            let pk_proto = key_from_registry(
-                registry.to_owned(),
-                *signer,
-                KeyPurpose::NodeSigning,
-                registry_version,
-            )?;
+            let pk_proto =
+                key_from_registry(registry, *signer, KeyPurpose::NodeSigning, registry_version)?;
 
             let this_algorithm_id = AlgorithmId::from(pk_proto.algorithm);
             match first_algorithm_id {
@@ -106,7 +102,7 @@ pub struct BasicSignerInternal {}
 impl BasicSignerInternal {
     pub fn sign_basic<S: CspSigner, H: Signable>(
         csp_signer: &S,
-        registry: Arc<dyn RegistryClient>,
+        registry: &dyn RegistryClient,
         message: &H,
         signer: NodeId,
         registry_version: RegistryVersion,

@@ -42,7 +42,7 @@ pub fn dealer_index_in_dealers_or_panic(dealers: &NiDkgDealers, dealer: NodeId) 
 
 pub fn csp_encryption_pubkey(
     node_id: &NodeId,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<CspFsEncryptionPublicKey, DkgEncPubkeyRegistryQueryError> {
     let pk_proto = encryption_pubkey(node_id, registry, registry_version)?;
@@ -52,7 +52,7 @@ pub fn csp_encryption_pubkey(
 
 fn encryption_pubkey(
     node_id: &NodeId,
-    registry: &Arc<dyn RegistryClient>,
+    registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<PublicKeyProto, DkgEncPubkeyRegistryQueryError> {
     match registry.get_crypto_key_for_node(
