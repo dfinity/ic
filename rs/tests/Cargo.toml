@@ -354,6 +354,10 @@ name = "ic-systest-boundary-node-snp"
 path = "bin/boundary_nodes_snp_test.rs"
 
 [[bin]]
+name = "ic-systest-boundary-node-update-workload-test"
+path = "bin/boundary_node_update_workload_test.rs"
+
+[[bin]]
 name = "ic-systest-general-execution"
 path = "bin/general_execution_test.rs"
 

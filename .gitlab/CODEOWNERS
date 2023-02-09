@@ -209,6 +209,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/tests/bin/basic_health_test.rs        @dfinity-lab/teams/ic-testing-verification
 /rs/tests/bin/boundary_node_integration_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
 /rs/tests/bin/boundary_nodes_snp_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
+/rs/tests/bin/boundary_node_update_workload_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/networking-team
 /rs/tests/bin/btc_get_balance_test.rs     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
 /rs/tests/bin/canister_http_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /rs/tests/bin/ckbtc_minter_basics_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations

@@ -204,12 +204,6 @@ pub fn large_config(env: TestEnv) {
     )
 }
 
-// Create IC with two subnets, a system subnet and app subnet with 4 nodes each
-// and one boundary node
-pub fn boundary_config(env: TestEnv) {
-    config(env, 4, 4, true, None)
-}
-
 // Run a test with roughly half the rps supported by subnets, sent directly
 // to the replicas (to be extended to 6h)
 pub fn large_subnet_test(env: TestEnv) {
@@ -220,18 +214,6 @@ pub fn large_subnet_test(env: TestEnv) {
         Duration::from_secs(2 * 60 * 60),
         false, //do not use boundary nodes
         0.95,  //min_success_ratio
-    );
-}
-
-// Run a short test (5min) with the max rps we bring across a boundary node
-pub fn boundary_test(env: TestEnv) {
-    test(
-        env,
-        100,  //rps
-        1000, //payload size bytes
-        Duration::from_secs(5 * 60),
-        true, //use boundary nodes
-        0.95, //min_success_ratio
     );
 }
 
