@@ -22,7 +22,7 @@ PUBLIC_KEY_NAME="ic_public_key.pem"
 PUBLIC_KEY_FILE="${TMP_DIR}/${PUBLIC_KEY_NAME}"
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="1cbfff88b0317697e423515b38c9bfdd9b23fca3"
+DEFAULT_BUILD_ID="2ad18320bd87702643abcf68d6f111be8f2b314d"
 echo "Enter the BUILD_ID of the proper ic-backup version:"
 echo "(default: ${DEFAULT_BUILD_ID}):"
 read BUILD_ID
@@ -85,7 +85,7 @@ chmod +x ${BACKUP_EXE}
 
 read -r -d '' CONFIG <<-EOM
 {
-    "version": 17,
+    "version": 18,
     "push_metrics": ${PUSH_METRICS},
     "backup_instance": "${BACKUP_INSTANCE}",
     "nns_url": "${NNS_URL}",
