@@ -16,9 +16,11 @@ TypeInvariant == states \in [
   manifests : SUBSET Nat       \* The set of states for which we computed manifests.
 ]
 
-Init == [ snapshots |-> InitialState, manifests |-> {} ]
+Init == states = [ snapshots |-> InitialState, manifests |-> {} ]
 
-Spec == Init
+Next == UNCHANGED states
+
+Spec == Init /\ [][Next]_states
 
 ================================================================================
 

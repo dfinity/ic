@@ -1,0 +1,12 @@
+load("//tlaplus:defs.bzl", "tla_module", "tlc_test")
+
+tla_module(
+    name = "spec",
+    src = "StateManager.tla",
+)
+
+tlc_test(
+    name = "test",
+    config = "model.cfg",
+    spec = ":spec",
+)
