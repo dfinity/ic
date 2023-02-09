@@ -2849,6 +2849,7 @@ fn test_new_sale_ticket() {
     let ledger_id = state_machine.create_canister(None);
     let swap_id = state_machine.create_canister(None);
     let user0 = PrincipalId::new_user_test_id(0);
+    let user1 = PrincipalId::new_user_test_id(1);
     let minting_account = Account {
         owner: Principal::anonymous().into(),
         subaccount: None,
@@ -3011,12 +3012,22 @@ fn test_new_sale_ticket() {
             panic!("new_sale_ticket returned an error '{:?}'", err)
         }
     };
+    //Ticket id counter starts with 0
+    assert!(ticket.ticket_id == 0);
 
     // ticket can be retrieved
-    assert_eq!(
-        get_open_ticket(&state_machine, swap_id, user0),
-        GetOpenTicketResponse::ok(Some(ticket.clone()))
-    );
+    let ticket_0 = match get_open_ticket(&state_machine, swap_id, user0) {
+        GetOpenTicketResponse {
+            result: Some(get_open_ticket_response::Result::Ok(ref ticket_ok)),
+        } => {
+            assert_eq!(
+                Some(get_open_ticket_response::Result::Ok(ticket_ok.clone())),
+                GetOpenTicketResponse::ok(Some(ticket.clone())).result
+            );
+            ticket_ok.ticket.as_ref().unwrap().clone()
+        }
+        _ => panic!("Open ticket could not be retrieved for user0"),
+    };
 
     // no new ticket can be created and the error contains the old ticket
     let res = new_sale_ticket(
@@ -3027,4 +3038,50 @@ fn test_new_sale_ticket() {
         None,
     );
     assert_eq!(res, NewSaleTicketResponse::err_ticket_exists(ticket));
+
+    // ticket id is still the same as before the error
+    let ticket_0 = match get_open_ticket(&state_machine, swap_id, user0) {
+        GetOpenTicketResponse {
+            result: Some(get_open_ticket_response::Result::Ok(ref ticket_ok)),
+        } => {
+            let retrieved_ticket = ticket_ok.ticket.as_ref().unwrap().clone();
+            assert_eq!(retrieved_ticket.ticket_id.clone(), ticket_0.ticket_id);
+            retrieved_ticket
+        }
+        _ => panic!("Open ticket could not be retrieved for user0"),
+    };
+
+    // Create new ticket for other user
+    let res = new_sale_ticket(
+        &state_machine,
+        swap_id,
+        user1,
+        min_participant_icp_e8s,
+        None,
+    );
+    let ticket = match res.result.unwrap() {
+        swap_pb::new_sale_ticket_response::Result::Ok(swap_pb::new_sale_ticket_response::Ok {
+            ticket,
+        }) => ticket.unwrap(),
+        swap_pb::new_sale_ticket_response::Result::Err(err) => {
+            panic!("new_sale_ticket returned an error '{:?}'", err)
+        }
+    };
+    //Ticket id counter should now be at 1
+    assert!(ticket.ticket_id == 1);
+
+    // Make sure the ticket form user1 has an incremented ticket id
+    let ticket_1 = match get_open_ticket(&state_machine, swap_id, user1) {
+        GetOpenTicketResponse {
+            result: Some(get_open_ticket_response::Result::Ok(ref ticket_ok)),
+        } => {
+            assert_eq!(
+                Some(get_open_ticket_response::Result::Ok(ticket_ok.clone())),
+                GetOpenTicketResponse::ok(Some(ticket)).result
+            );
+            ticket_ok.ticket.as_ref().unwrap().clone()
+        }
+        _ => panic!("Open ticket could not be retrieved for user0"),
+    };
+    assert!(ticket_1.ticket_id > ticket_0.ticket_id);
 }

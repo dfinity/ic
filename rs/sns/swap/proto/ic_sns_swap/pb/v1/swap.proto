@@ -219,6 +219,13 @@ message Swap {
   // (specified via params.sale_delay_seconds) after the adoption of the sale proposal.
   // Gets set when NNS calls open() upon the adoption of the sale proposal.
   optional uint64 decentralization_sale_open_timestamp_seconds = 11;
+
+  // This ticket id counter keeps track of the latest ticket id. Whenever a new
+  // ticket is created this counter is incremented. It ensures that ticket ids
+  // are unique. The ticket IDs are sequential and next_ticket_id is assigned to a 
+  // users new ticket upon successfully requesting a new ticket. It is incremented
+  // after a user requests a new ticket successfully. 
+  optional uint64 next_ticket_id = 12;
 }
 
 // The initialisation data of the canister. Always specified on

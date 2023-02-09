@@ -179,6 +179,13 @@ pub struct Swap {
     /// Gets set when NNS calls open() upon the adoption of the sale proposal.
     #[prost(uint64, optional, tag = "11")]
     pub decentralization_sale_open_timestamp_seconds: ::core::option::Option<u64>,
+    /// This ticket id counter keeps track of the latest ticket id. Whenever a new
+    /// ticket is created this counter is incremented. It ensures that ticket ids
+    /// are unique. The ticket IDs are sequential and next_ticket_id is assigned to a
+    /// users new ticket upon successfully requesting a new ticket. It is incremented
+    /// after a user requests a new ticket successfully.
+    #[prost(uint64, optional, tag = "12")]
+    pub next_ticket_id: ::core::option::Option<u64>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.

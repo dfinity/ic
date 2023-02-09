@@ -143,6 +143,7 @@ fn create_generic_committed_swap() -> Swap {
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         finalize_swap_in_progress: None,
         decentralization_sale_open_timestamp_seconds: None,
+        next_ticket_id: Some(0),
     }
 }
 
@@ -1085,6 +1086,7 @@ async fn test_finalize_swap_ok() {
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         finalize_swap_in_progress: None,
         decentralization_sale_open_timestamp_seconds: None,
+        next_ticket_id: Some(0),
     };
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Committed);
@@ -1346,6 +1348,7 @@ async fn test_finalize_swap_abort() {
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
         finalize_swap_in_progress: None,
         decentralization_sale_open_timestamp_seconds: None,
+        next_ticket_id: Some(0),
     };
 
     assert!(swap.try_commit_or_abort(/* now_seconds: */ END_TIMESTAMP_SECONDS + 1));
@@ -3489,7 +3492,7 @@ async fn test_claim_swap_neurons_batches_claims() {
     let batch_claim_swap_neurons_response =
         compute_multiple_successful_claim_swap_neurons_response(&swap.neuron_recipes)
             .into_iter()
-            .map(|response| SnsGovernanceClientReply::ClaimSwapNeurons(response))
+            .map(SnsGovernanceClientReply::ClaimSwapNeurons)
             .collect();
 
     let mut sns_governance_client = SpySnsGovernanceClient::new(batch_claim_swap_neurons_response);

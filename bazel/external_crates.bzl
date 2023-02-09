@@ -709,7 +709,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.6.1",
             ),
             "priority-queue": crate.spec(
-                version = "^1.3.0",
+                version = "^1.3.1",
                 features = [
                     "serde",
                 ],
