@@ -336,7 +336,7 @@ fn new_sale_ticket() {
 #[candid_method(update, rename = "new_sale_ticket")]
 async fn new_sale_ticket_(request: NewSaleTicketRequest) -> NewSaleTicketResponse {
     log!(INFO, "new_sale_ticket");
-    swap().new_sale_ticket(&request, caller(), dfn_core::api::time_nanos())
+    swap_mut().new_sale_ticket(&request, caller(), dfn_core::api::time_nanos())
 }
 
 /// Lists direct participants in the Sale.

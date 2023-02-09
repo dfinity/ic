@@ -220,6 +220,7 @@ impl Swap {
             open_sns_token_swap_proposal_id: None,
             finalize_swap_in_progress: Some(false),
             decentralization_sale_open_timestamp_seconds: None,
+            next_ticket_id: Some(0),
         }
     }
 
@@ -1777,7 +1778,7 @@ impl Swap {
     }
 
     pub fn new_sale_ticket(
-        &self,
+        &mut self,
         request: &NewSaleTicketRequest,
         caller: PrincipalId,
         time: u64,
@@ -1830,24 +1831,18 @@ impl Swap {
             subaccount: request.subaccount.clone(),
         });
 
-        let ticket = memory::OPEN_TICKETS_MEMORY.with(|m| {
-            let ticket_id = m
-                .borrow()
-                .iter()
-                .map(|t| t.1.ticket_id)
-                .max()
-                .map_or(0, |id| id + 1);
-
-            // the amount_icp_e8s is the actual_increment_e8s of the user and not necessarily was the user put in the ticket.
-            // This can potentially reduce the amount of tokens to transfer/refund
-            let ticket = Ticket {
-                ticket_id,
-                account,
-                amount_icp_e8s,
-                creation_time: time,
-            };
+        let ticket_id = self.next_ticket_id.unwrap_or(0);
+        self.next_ticket_id = Some(ticket_id.saturating_add(1));
+        // the amount_icp_e8s is the actual_increment_e8s of the user and not necessarily was the user put in the ticket.
+        // This can potentially reduce the amount of tokens to transfer/refund
+        let ticket = Ticket {
+            ticket_id,
+            account,
+            amount_icp_e8s,
+            creation_time: time,
+        };
+        memory::OPEN_TICKETS_MEMORY.with(|m| {
             m.borrow_mut().insert(principal, ticket.clone());
-            ticket
         });
         NewSaleTicketResponse::ok(ticket)
     }
@@ -2474,10 +2469,14 @@ fn insert_buyer_into_buyers_list_index(buyer_principal_id: PrincipalId) -> Resul
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
     use crate::pb::v1::{
-        params::NeuronBasketConstructionParameters, CfNeuron, CfParticipant, Params,
+        new_sale_ticket_response::Ok, params::NeuronBasketConstructionParameters, CfNeuron,
+        CfParticipant, Params,
     };
+    use candid::Principal;
     use ic_nervous_system_common::{E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS};
     use lazy_static::lazy_static;
     use pretty_assertions::assert_eq;
@@ -3039,6 +3038,55 @@ mod tests {
                 sns_neuron_recipes: neuron_recipes[1..3].to_vec()
             }
         );
+    }
+
+    proptest! {
+        #[test]
+        fn test_ticket_ids_unique(pids in proptest::collection::vec(0..u64::MAX, 0..1000)) {
+            let mut swap = Swap {
+                lifecycle: Lifecycle::Open as i32,
+                init: Some(Init {
+                    nns_governance_canister_id: Principal::anonymous().to_string(),
+                    sns_governance_canister_id: Principal::anonymous().to_string(),
+                    sns_ledger_canister_id: Principal::anonymous().to_string(),
+                    icp_ledger_canister_id: Principal::anonymous().to_string(),
+                    sns_root_canister_id: Principal::anonymous().to_string(),
+                    fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
+                    transaction_fee_e8s: Some(10_000),
+                    neuron_minimum_stake_e8s: Some(10_010_000),
+                }),
+                params: Some(Params {
+                    min_participants: 1,
+                    min_icp_e8s: 10_010_000,
+                    max_icp_e8s: 20_000_000,
+                    min_participant_icp_e8s: 10_000,
+                    max_participant_icp_e8s: 1_000_000,
+                    swap_due_timestamp_seconds: 0,
+                    sns_token_e8s: 20_000_000,
+                    neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                        count: 1,
+                        dissolve_delay_interval_seconds: 10,
+                    }),
+                    sale_delay_seconds: Some(10),
+                }),
+                cf_participants: vec![],
+                buyers: BTreeMap::new(),
+                neuron_recipes: vec![],
+                open_sns_token_swap_proposal_id: Some(0),
+                finalize_swap_in_progress: Some(false),
+                decentralization_sale_open_timestamp_seconds: Some(1),
+                next_ticket_id: Some(0),
+            };
+            let mut ticket_ids = HashSet::new();
+            for pid in pids {
+                let principal = PrincipalId::new_user_test_id(pid);
+                let ticket = match swap.new_sale_ticket(&NewSaleTicketRequest { amount_icp_e8s: 10_000, subaccount: None}, principal, 0).result.unwrap() {
+                    new_sale_ticket_response::Result::Ok(Ok { ticket }) => ticket.unwrap(),
+                    new_sale_ticket_response::Result::Err(e) => panic!("{:?}", e),
+                };
+                assert_eq!(ticket_ids.replace(ticket.ticket_id), None);
+            }
+        }
     }
 
     #[test]

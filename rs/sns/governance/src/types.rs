@@ -1356,9 +1356,7 @@ impl Action {
 
     /// Returns the native functions, i.e. the ones that are supported directly by the governance canister.
     pub fn native_functions() -> Vec<NervousSystemFunction> {
-        Self::iter()
-            .map(|action| NervousSystemFunction::from(action))
-            .collect()
+        Self::iter().map(NervousSystemFunction::from).collect()
     }
 
     // The current set of valid native function ids, for the purposes of following.

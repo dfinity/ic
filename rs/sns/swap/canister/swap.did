@@ -172,6 +172,7 @@ type SnsNeuronRecipe = record {
 };
 type Swap = record {
   neuron_recipes : vec SnsNeuronRecipe;
+  next_ticket_id : opt nat64;
   decentralization_sale_open_timestamp_seconds : opt nat64;
   finalize_swap_in_progress : opt bool;
   cf_participants : vec CfParticipant;
