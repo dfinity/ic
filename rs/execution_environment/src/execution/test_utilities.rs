@@ -532,6 +532,7 @@ impl ExecutionTest {
             compute_allocation,
             memory_allocation,
             None,
+            None,
         );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
@@ -556,6 +557,27 @@ impl ExecutionTest {
         self.install_wasm_in_mode(canister_id, CanisterInstallMode::Upgrade, wasm_binary)
     }
 
+    /// Upgrades the given canister to the given Wasm binary and drops stable memory.
+    pub fn upgrade_canister_and_drop_stable_memory(
+        &mut self,
+        canister_id: CanisterId,
+        wasm_binary: Vec<u8>,
+    ) -> Result<(), UserError> {
+        let args = InstallCodeArgs::new(
+            CanisterInstallMode::Upgrade,
+            canister_id,
+            wasm_binary,
+            vec![],
+            None,
+            None,
+            None,
+            Some(true),
+        );
+        let result = self.install_code(args)?;
+        assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
+        Ok(())
+    }
+
     /// Installs the given Wasm binary in the given mode to the given canister.
     pub fn install_wasm_in_mode(
         &mut self,
@@ -563,7 +585,16 @@ impl ExecutionTest {
         mode: CanisterInstallMode,
         wasm_binary: Vec<u8>,
     ) -> Result<(), UserError> {
-        let args = InstallCodeArgs::new(mode, canister_id, wasm_binary, vec![], None, None, None);
+        let args = InstallCodeArgs::new(
+            mode,
+            canister_id,
+            wasm_binary,
+            vec![],
+            None,
+            None,
+            None,
+            None,
+        );
         let result = self.install_code(args)?;
         assert_eq!(WasmResult::Reply(EmptyBlob.encode()), result);
         Ok(())
@@ -580,6 +611,7 @@ impl ExecutionTest {
             canister_id,
             wasm_binary,
             vec![],
+            None,
             None,
             None,
             None,
@@ -601,6 +633,7 @@ impl ExecutionTest {
             vec![],
             compute_allocation,
             memory_allocation,
+            None,
             None,
         );
         let result = self.install_code(args)?;

@@ -127,6 +127,7 @@ async fn try_to_create_and_install_canister(
         memory_allocation: proposal.memory_allocation,
         query_allocation: proposal.query_allocation,
         sender_canister_version: Some(dfn_core::api::canister_version()),
+        unsafe_drop_stable_memory: None,
     };
     let install_res: Result<(), (Option<i32>, String)> = call(
         CanisterId::ic_00(),
