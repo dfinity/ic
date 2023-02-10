@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
+import glob
 import itertools
 import os
 import subprocess
 import sys
+import uuid
 
 import gflags
 
@@ -69,6 +71,7 @@ def main(argv):
             "--nns_url",
             ic_url,
             "--no_instrument=True",
+            "--no_prometheus=True",
             f"--prometheus_url=http://[{farm_instance.prometheus_ipv6}]:9090",
             f"--testnet={farm_instance.group_name}",
             "--artifacts_path",
@@ -118,9 +121,37 @@ def main(argv):
                 + base_arguments
             )
 
+            print("📂 Testing for flamegraph generation")
+            test_uuid = str(uuid.uuid4())
+            run(
+                [
+                    "python3",
+                    "experiments/run_system_baseline_experiment.py",
+                    "--iter_duration",
+                    "10",
+                    "--target_rps",
+                    "50",
+                    "--num_workload_generators",
+                    "1",
+                    "--top_level_out_dir",
+                    "foo",
+                    "--second_level_out_dir",
+                    test_uuid,
+                ]
+                + [a for a in base_arguments_load_test if not a.startswith("--no_instrument")]
+            )
+            result_dir = os.path.join("results", "foo", test_uuid, str(1))
+            flamegraph_files = glob.glob(f"{result_dir}/flamegraph_*.svg")
+            assert len(flamegraph_files) == 1, f"There should be exactly one flamegraph, got: {flamegraph_files}"
+            assert (
+                subprocess.run(["grep", "ERROR", flamegraph_files[0]]).returncode != 0
+            ), 'Flamegraph output file was generated, but contains the keyword "ERROR"'
+
             # Benchmarks WITH load generation
             # --------------------------------------------------
             # Turns off replicas, so only load based benchmarks from this point onward.
+            # This means that the replicas on the second subnet will be turned off, and
+            # therefor also Prometheus (i.e. --no_instrument=False) will be broken.
 
             print("📂 Response Payload size experiment")
             run(

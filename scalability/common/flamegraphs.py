@@ -4,6 +4,8 @@ import sys
 import time
 from dataclasses import dataclass
 
+from termcolor import colored
+
 sys.path.insert(1, ".")
 from common import metrics  # noqa
 from common import ssh  # noqa
@@ -50,12 +52,26 @@ class Flamegraph(metrics.Metric):
         """
         if not self.do_instrument:
             return
+        # Try to detect if the perf installation on the target machine is broken. If so, disable flamegraph generation.
+        if ssh.run_ssh_in_parallel(machines, "perf --version") != [0 for _ in machines]:
+            print(
+                colored(
+                    (
+                        "❌ Perf isn't working correctly, disabling flamegraphs for this run. "
+                        "This is most likely due to a missmatch of kernel version for the perf install. "
+                        "The node-team might be able to help with this."
+                    ),
+                    "red",
+                )
+            )
+            self.do_instrument = False
+            return
         r = ssh.run_ssh_in_parallel(machines, "stat flamegraph")
         if r != [0 for _ in machines]:
 
             # Flamegraph binary not installed: installing and configuring
             rcs = ssh.run_ssh_in_parallel(machines, "echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid")
-            assert rcs == [0 for _ in range(len(machines))]
+            assert rcs == [0 for _ in machines]
 
             # Extract flamegraph binary, if not already done
             if not os.path.exists("common/flamegraph"):

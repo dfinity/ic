@@ -132,7 +132,9 @@ def get_http_request_rate_for_timestamp(testnet, load_hosts, timestamp):
     j = json.loads(r.text)
 
     # Ensure the returned data's timestamp matches
-    assert int(j["data"]["result"][0]["value"][0]) == timestamp
+    assert (
+        int(j["data"]["result"][0]["value"][0]) == timestamp
+    ), f"Timestamp incorrect in Prometheus data: {j} with query {query}"
 
     return j
 

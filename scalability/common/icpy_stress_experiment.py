@@ -1,12 +1,15 @@
 import asyncio
 import dataclasses
 import functools
+import json
 import logging
 import math
 import multiprocessing
+import os
 import random
 import statistics
 import time
+import traceback
 import uuid
 from dataclasses import dataclass
 
@@ -42,9 +45,10 @@ class RequestResult:
     num_succ_submit: int
     num_fail_executed: int
     num_succ_executed: int
-    call_time: [float]  # The time from t_start when the request was issued
+    call_time: [float]  # The time from t_start when the request was issued. Request i should be at i * rate
     req_ids: [bytes]
-    durations: [float]  # Duration to
+    # Latency of requests from submission until Suite                                     detects successful execution
+    durations: [float]
     status_codes: {str: int}  # Status code of successfully submitted requests
     exception_histogram: {str: int}
 
@@ -61,6 +65,25 @@ class StressConfiguration:
     pid: int
     tid: int
     total_duration: int
+    method: str
+    payload: bytes
+    use_updates: bool
+
+
+def get_default_stress_configuration() -> StressConfiguration:
+    return StressConfiguration(
+        t_start=0,
+        rate=0,
+        num_requests=0,
+        agents=[],
+        canister_id=None,
+        pid=-1,
+        tid=-1,
+        total_duration=0,
+        method=None,
+        payload=[],
+        use_updates=True,
+    )
 
 
 def reduce_request_result(a: RequestResult, b: RequestResult):
@@ -84,11 +107,36 @@ def reduce_request_result(a: RequestResult, b: RequestResult):
     )
 
 
+async def do_query(agent: Agent, config: StressConfiguration, call_idx: int):
+    """
+    Do a single query call.
+
+    call_idx is the request number. Request number i is triggered at second: i * 1/rps.
+    """
+    canister_id = config.canister_id
+    ms_between_calls = 1000.0 / config.rate
+
+    # Sleep until it's time to issue the query while yielding to other tasks
+    # We add an offset here to avoid the first few messages being sent in batches (if e.g. a lot of time has
+    # already been passed when this code is first running).
+    # We also add a per-task random time 0..ms_between_calls to avoid steps in the distribution, where
+    # each task sends a request exactly at the same time and then waits exactly the same amount.
+    offset_ms = START_OFFSET_MS + random.randint(0, int(ms_between_calls))
+    while (time.time() - config.t_start) * 1000 < offset_ms + (call_idx * ms_between_calls):
+        # sleep(0) is basically a yield: https://docs.python.org/3/library/asyncio-task.html#sleeping
+        await asyncio.sleep(0)
+
+    request_start_time = time.time()
+    result = await agent.query_raw_async(canister_id, config.method, config.payload)
+
+    return request_start_time, result
+
+
 async def submit(agent: Agent, config: StressConfiguration, call_idx: int):
     """
     Submit a single request.
 
-    call_idx the request number. Request number i is triggered at second: i * 1/rps.
+    call_idx is the request number. Request number i is triggered at second: i * 1/rps.
     """
     canister_id = config.canister_id
     ms_between_calls = 1000.0 / config.rate
@@ -100,8 +148,8 @@ async def submit(agent: Agent, config: StressConfiguration, call_idx: int):
         "request_type": "call",
         "sender": agent.identity.sender().bytes,
         "canister_id": Principal.from_str(canister_id).bytes if isinstance(canister_id, str) else canister_id.bytes,
-        "method_name": "write",
-        "arg": [],
+        "method_name": config.method,
+        "arg": config.payload,
         "nonce": uuid.uuid4().bytes,
         "ingress_expiry": agent.get_expiry_date(),
     }
@@ -134,10 +182,8 @@ def __exception_histogram(e: Exception, histogram: dict, known_exceptions: list,
         return
 
     if key not in known_exceptions:
-        logging.warning(
-            f"Add key [{key}] to list of expected exceptions for {label} to silence this exception and just count it"
-        )
-        logging.warning(logging.traceback.format_exc())
+        print(f"Add key [{key}] to list of expected exceptions for {label} to silence this exception and just count it")
+        traceback.print_exc()
 
 
 async def poll(agent: Agent, canister_id, req_id: bytes, status_histogram: dict):
@@ -153,12 +199,42 @@ async def poll(agent: Agent, canister_id, req_id: bytes, status_histogram: dict)
     return status == "replied"
 
 
+async def execute_query_call(config: StressConfiguration):
+    """Execute query calls for the given configuration."""
+    assert not config.use_updates
+    request_idx = config.tid
+    request_result = RequestResult(0, 0, 0, 0, [], [], [], {}, {})
+
+    try:
+
+        agent = config.agents[random.randint(0, len(config.agents) - 1)]
+        # Execute query call - will raise Exception unless successful
+        req_start_time, _result = await do_query(agent, config, request_idx)
+
+        # Request was successful
+        request_result.call_time.append(req_start_time - config.t_start)
+        request_result.durations.append(time.time() - req_start_time)
+        request_result.num_succ_submit += 1
+        request_result.status_codes["replied"] = request_result.status_codes.get("replied", 0) + 1
+
+    except Exception as e:
+        # Submitting failed
+        request_result.num_fail_submit += 1
+        __exception_histogram(
+            e, request_result.exception_histogram, ["ReadTimeout", "ConnectTimeout", "ReadError"], "querying"
+        )
+        request_result.status_codes["exception"] = request_result.status_codes.get("exception", 0) + 1
+
+    return request_result
+
+
 async def execute_update_call(config: StressConfiguration):
     """
     Triggers a single requests at a time calculated from config.tid
 
     There is typically one call to this function per asyncio task.
     """
+    assert config.use_updates
     request_idx = config.tid
     request_result = RequestResult(0, 0, 0, 0, [], [], [], {}, {})
 
@@ -181,7 +257,7 @@ async def execute_update_call(config: StressConfiguration):
             status_ok = await poll(agent, config.canister_id, req_id, request_result.status_codes)
             if status_ok:
                 request_result.num_succ_executed += 1
-                request_result.durations.append(time.time() - config.t_start)
+                request_result.durations.append(time.time() - req_start_time)
             else:
                 request_result.num_fail_executed += 1
 
@@ -200,7 +276,7 @@ async def execute_update_call(config: StressConfiguration):
     return request_result
 
 
-async def run_all_async(config):
+async def run_all_async(config: StressConfiguration):
     """
     Issues update calls at the given rate.
 
@@ -209,7 +285,10 @@ async def run_all_async(config):
     assert config.rate < 1000, "Cannot produce requests at a higher frequency than every ms right now"
     print(f"proc{config.pid:02}: Starting {config.num_requests} calls at rate {config.rate}")
 
-    calls = [execute_update_call(dataclasses.replace(config, tid=i)) for i in range(config.num_requests)]
+    if config.use_updates:
+        calls = [execute_update_call(dataclasses.replace(config, tid=i)) for i in range(config.num_requests)]
+    else:
+        calls = [execute_query_call(dataclasses.replace(config, tid=i)) for i in range(config.num_requests)]
     raw_results = await asyncio.gather(*calls)
 
     # Update result data structure
@@ -276,19 +355,28 @@ class IcPyStressExperiment(BaseExperiment):
         super().__init__(request_type="update")
         self.host_ip = self.get_machine_to_instrument()
         self.host_url = f"http://[{self.host_ip}]:8080"
-        ii_canister_id = get_ii_canister_id(self.host_url)
         if use_delegation:
+            print(f"Running with {FLAGS.num_identities} delegated indentities.")
+            ii_canister_id = get_ii_canister_id(self.host_url)
             with multiprocessing.Pool(FLAGS.num_procs) as pool:
                 # We get all delegates from the same host
                 raw_result = pool.starmap(get_delegation, [(self.host_url, ii_canister_id)] * FLAGS.num_identities)
                 self.identities = [element[0] for element in raw_result]
         else:
+            print(f"Running with {FLAGS.num_identities} different non-delegated identities.")
             self.identities = [Identity() for _ in range(FLAGS.num_identities)]
 
     def get_agents_for_ip(self, u):
         return [Agent(identity, Client(url=f"http://[{u}]:8080")) for identity in self.identities]
 
-    def run_all(self, rps: float, duration: int, target_ipaddresses: [str], canister_id: str):
+    def run_all(
+        self,
+        rps: float,
+        duration: int,
+        target_ipaddresses: [str],
+        canister_id: str,
+        stress_configuration: StressConfiguration = None,
+    ) -> RequestResult:
 
         num_requests = int(math.ceil(rps * duration))
         print(f"Running with load {rps} on targets {target_ipaddresses} for {duration} seconds")
@@ -298,16 +386,32 @@ class IcPyStressExperiment(BaseExperiment):
         for u in target_ipaddresses:
             agents += self.get_agents_for_ip(u)
 
-        config = StressConfiguration(
-            t_start=time.time(),
-            rate=rps / FLAGS.num_procs,
-            num_requests=int(math.ceil(num_requests / FLAGS.num_procs)),
-            agents=agents,
-            canister_id=canister_id,
-            pid=-1,
-            tid=-1,
-            total_duration=duration,
-        )
+        if stress_configuration is None:
+            config = StressConfiguration(
+                t_start=time.time(),
+                rate=rps / FLAGS.num_procs,
+                num_requests=int(math.ceil(num_requests / FLAGS.num_procs)),
+                agents=agents,
+                canister_id=canister_id,
+                pid=-1,
+                tid=-1,
+                total_duration=duration,
+                method="write",
+                payload=[],
+                use_updates=True,
+            )
+        else:
+            config = dataclasses.replace(
+                stress_configuration,
+                t_start=time.time(),
+                rate=rps / FLAGS.num_procs,
+                num_requests=int(math.ceil(num_requests / FLAGS.num_procs)),
+                agents=agents,
+                canister_id=canister_id,
+                pid=-1,
+                tid=-1,
+                total_duration=duration,
+            )
 
         t_start = time.time()
         print(f"Running {FLAGS.num_procs} processes - each with {config.num_requests} requests at {config.rate} rps")
@@ -316,6 +420,13 @@ class IcPyStressExperiment(BaseExperiment):
             raw_result = pool.map(run_proc, [dataclasses.replace(config, pid=i) for i in range(FLAGS.num_procs)])
             result = functools.reduce(reduce_request_result, raw_result)
         print(f"Finished load after {time.time()-t_start}s")
+
+        for exception, num in result.exception_histogram.items():
+            print(f"[EXCEPTION_HISTOGRAM] {exception:40} - {num}")
+
+        for k, v in result.status_codes.items():
+            print("[STATUS_CODE]", k, v)
+
         num_succ = 0
         num_fail = 0
         for status, number in result.status_codes.items():
@@ -328,7 +439,7 @@ class IcPyStressExperiment(BaseExperiment):
         print(f"Failure rate: {executed_failure_rate}")
 
         total_duration = max(result.call_time) - min(result.call_time)
-        print("Average request rate: ", total_duration / (result.num_succ_executed + result.num_fail_executed))
+        print("Average request rate: ", total_duration / (result.num_succ_submit + result.num_fail_submit))
 
         prev = None
         inter_message_time = []
@@ -344,5 +455,10 @@ class IcPyStressExperiment(BaseExperiment):
         result = dataclasses.replace(result, num_succ_executed=num_succ)
         result = dataclasses.replace(result, num_fail_executed=num_fail)
         print(f"Executed failure before: {result.num_succ_executed} {result.num_fail_executed}")
+
+        iteration_uuid = str(uuid.uuid4())
+        with open(os.path.join(self.iter_outdir, "icpy-stresser-results" + iteration_uuid), "w") as f:
+            # Remove request IDs (they are not Json serializable) and write to file
+            f.write(json.dumps(dataclasses.replace(result, req_ids=[]).__dict__, indent=4))
 
         return result

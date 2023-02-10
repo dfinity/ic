@@ -288,6 +288,7 @@ class BaseExperiment:
         print(
             f"Experiment finished. Generating report like: pipenv run common/generate_report.py --base_dir='results/' --git_revision='{self.git_hash}' --timestamp='{self.out_dir_timestamp}'"
         )
+        print(f"📂 Experiment output has been stored in: {self.out_dir}")
 
     def _get_ic_admin_path(self):
         """Return path to ic-admin."""
@@ -347,9 +348,14 @@ class BaseExperiment:
 
     def __store_ic_info(self):
         """Store subnet info for the subnet that we are targeting in the experiment output directory."""
-        jsondata = self._get_subnet_info(self.get_subnet_to_instrument())
-        with open(os.path.join(self.out_dir, "subnet_info.json"), "w") as subnet_file:
-            subnet_file.write(jsondata)
+        try:
+            jsondata = self._get_subnet_info(self.get_subnet_to_instrument())
+            with open(os.path.join(self.out_dir, "subnet_info.json"), "w") as subnet_file:
+                subnet_file.write(jsondata)
+        except subprocess.CalledProcessError as e:
+            if self.has_cache():
+                print(colored(f"Failed to get subnet info. Retry after deleting cache file {FLAGS.cache_path}", "red"))
+                raise e
 
         jsondata = self.__get_topology()
         with open(os.path.join(self.out_dir, "topology.json"), "w") as subnet_file:
