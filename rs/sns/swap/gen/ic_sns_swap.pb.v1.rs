@@ -2009,6 +2009,33 @@ pub struct ListSnsNeuronRecipesResponse {
     #[prost(message, repeated, tag = "1")]
     pub sns_neuron_recipes: ::prost::alloc::vec::Vec<SnsNeuronRecipe>,
 }
+/// Request struct for the method `notfiy_payment_failure`
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NotifyPaymentFailureRequest {}
+/// Response for the method 'notfiy_payment_failure'
+/// Returns the ticket if a ticket was found for the caller and the ticket
+/// was removed successfully. Returns None if no ticket was found for the caller.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct NotifyPaymentFailureResponse {
+    #[prost(message, optional, tag = "1")]
+    pub ticket: ::core::option::Option<Ticket>,
+}
 /// Lifecycle states of the swap canister. The details of their meanings
 /// are provided in the documentation of the `Swap` message.
 #[derive(

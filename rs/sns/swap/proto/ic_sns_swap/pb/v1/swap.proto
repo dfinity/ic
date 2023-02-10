@@ -1042,3 +1042,14 @@ message ListSnsNeuronRecipesRequest {
 message ListSnsNeuronRecipesResponse {
   repeated SnsNeuronRecipe sns_neuron_recipes = 1;
 }
+
+
+// Request struct for the method `notfiy_payment_failure`
+message NotifyPaymentFailureRequest {}
+
+// Response for the method 'notfiy_payment_failure'
+// Returns the ticket if a ticket was found for the caller and the ticket
+// was removed successfully. Returns None if no ticket was found for the caller. 
+message NotifyPaymentFailureResponse {
+  optional Ticket ticket = 1;
+}
