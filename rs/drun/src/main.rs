@@ -7,7 +7,7 @@ use ic_config::{flag_status::FlagStatus, Config, ConfigSource};
 use ic_drun::{run_drun, DrunOptions};
 use std::path::PathBuf;
 
-const DEFAULT_CONFIG_FILE: &str = "ic.toml";
+const DEFAULT_CONFIG_FILE: &str = "ic.json5";
 const DEFAULT_EXTRA_BATCHES: u64 = 0;
 const ARG_CONF: &str = "config";
 const ARG_LOG_FILE: &str = "log-file";
