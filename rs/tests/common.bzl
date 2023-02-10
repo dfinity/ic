@@ -68,6 +68,8 @@ DEPENDENCIES = [
     "//rs/rust_canisters/xnet_test",
     "//rs/sns/init",
     "//rs/sns/swap",
+    "//rs/sns/root",
+    "//rs/sns/governance",
     "//rs/tests/test_canisters/message:lib",
     "//rs/test_utilities",
     "//rs/test_utilities/identity",
