@@ -7365,6 +7365,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-p2p-exp-prototype"
+version = "0.8.0"
+dependencies = [
+ "ic-artifact-manager",
+ "ic-interfaces",
+ "ic-types",
+ "tokio",
+]
+
+[[package]]
 name = "ic-p8s-service-discovery"
 version = "0.8.0"
 dependencies = [
