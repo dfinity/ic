@@ -88,6 +88,8 @@ ic-rosetta-api = { path = "../rosetta-api" }
 ic-rosetta-test-utils = { path = "../rosetta-api/test_utils" }
 ic-sns-init = { path = "../sns/init" }
 ic-sns-swap = { path = "../sns/swap" }
+ic-sns-root = { path = "../sns/root" }
+ic-sns-governance = { path = "../sns/governance" }
 ic-sns-wasm = { path = "../nns/sns-wasm" }
 ic-test-identity = { path = "../test_utilities/identity" }
 ic-test-utilities = { path = "../test_utilities" }
@@ -156,9 +158,20 @@ path = "bin/sale_mass_participation.rs"
 name = "ic-systest-sns-sale-participation"
 path = "bin/sale_participation.rs"
 
-[[bin]]
 name = "ic-systest-sns-aggregation-canister-test"
 path = "bin/aggregation_canister_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-launchpad-direct-load-test"
+path = "bin/launchpad_direct_load_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-launchpad-direct-auth-load-test"
+path = "bin/launchpad_direct_auth_load_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-launchpad-aggregator-load-test"
+path = "bin/launchpad_aggregator_load_test.rs"
 
 [[bin]]
 name = "ic-systest-sns-sale-simple-load-test"

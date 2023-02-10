@@ -86,6 +86,8 @@ ic-rosetta-api = { path = "../rosetta-api" }
 ic-rosetta-test-utils = { path = "../rosetta-api/test_utils" }
 ic-sns-init = { path = "../sns/init" }
 ic-sns-swap = { path = "../sns/swap" }
+ic-sns-root = { path = "../sns/root" }
+ic-sns-governance = { path = "../sns/governance" }
 ic-sns-wasm = { path = "../nns/sns-wasm" }
 ic-test-identity = { path = "../test_utilities/identity" }
 ic-test-utilities = { path = "../test_utilities" }

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::Instant;
-#[allow(unused)]
 use std::time::{Duration, SystemTime};
 
 use candid::{Decode, Encode, Nat, Principal};
@@ -20,20 +19,24 @@ use ic_nns_governance::pb::v1::{NnsFunction, OpenSnsTokenSwap, Proposal};
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;
+use ic_sns_governance::pb::v1::GetMetadataRequest;
 use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution;
 use ic_sns_init::pb::v1::{
     AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
     SnsInitPayload, SwapDistribution, TreasuryDistribution,
 };
+use ic_sns_root::pb::v1::ListSnsCanistersRequest;
 use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
 use ic_sns_swap::pb::v1::{
     GetBuyerStateRequest, GetBuyerStateResponse, GetStateRequest, GetStateResponse, Lifecycle,
     Params, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
 };
 use ic_sns_swap::swap::principal_to_subaccount;
+
 use ic_sns_wasm::pb::v1::{
-    AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
-    SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
+    AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, ListDeployedSnsesRequest,
+    SnsCanisterIds, SnsCanisterType, SnsWasm, UpdateAllowedPrincipalsRequest,
+    UpdateSnsSubnetListRequest,
 };
 use ic_types::{Cycles, Height};
 use icp_ledger::{AccountIdentifier, Subaccount};
@@ -106,6 +109,7 @@ pub const SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S: u64 = 150_000 * E8;
 pub struct SnsClient {
     sns_canisters: SnsCanisterIds,
     wallet_canister_id: PrincipalId,
+    sns_wasm_canister_id: PrincipalId,
 }
 
 impl TestEnvAttribute for SnsClient {
@@ -231,6 +235,7 @@ impl SnsClient {
         let sns_client = SnsClient {
             sns_canisters,
             wallet_canister_id,
+            sns_wasm_canister_id: SNS_WASM_CANISTER_ID.get(),
         };
         sns_client.assert_state(env, Lifecycle::Pending);
         sns_client.write_attribute(env);
@@ -343,7 +348,7 @@ pub fn init_participants(env: TestEnv) {
     let request_provider = SnsRequestProvider::from_sns_client(&sns_client);
 
     for participant in participants {
-        let sns_agent = SnsAgent::new_with_identity(&app_node, participant.clone());
+        let sns_agent = app_node.build_sns_agent_with_identity(participant.clone());
         let request = request_provider.refresh_buyer_tokens(Some(participant.principal_id));
         info!(
             log,
@@ -382,7 +387,7 @@ pub fn check_all_participants(env: TestEnv) {
     let app_node = env.get_first_healthy_application_node_snapshot();
 
     for participant in participants {
-        let sns_agent = SnsAgent::new_with_identity(&app_node, participant.clone());
+        let sns_agent = app_node.build_sns_agent_with_identity(participant.clone());
         let request = request_provider.get_buyer_state(participant.principal_id, CallMode::Query);
         info!(log, "Submitting request {request:?} ...");
         let res = block_on(sns_agent.query(request)).unwrap();
@@ -491,7 +496,7 @@ pub fn generate_sns_workload_with_many_users(
     let agents: Vec<Agent> = participants
         .iter()
         .map(|participant| {
-            let sns_agent = SnsAgent::new_with_identity(&app_node, participant.clone());
+            let sns_agent = app_node.build_sns_agent_with_identity(participant.clone());
             sns_agent.agent
         })
         .collect();
@@ -504,12 +509,14 @@ pub fn generate_sns_workload_with_many_users(
 
 pub struct SnsRequestProvider {
     pub sns_canisters: SnsCanisterIds,
+    pub sns_wasm_canister_id: PrincipalId,
 }
 
 impl SnsRequestProvider {
     pub fn from_sns_client(sns_client: &SnsClient) -> Self {
         Self {
             sns_canisters: sns_client.sns_canisters,
+            sns_wasm_canister_id: sns_client.sns_wasm_canister_id,
         }
     }
 
@@ -521,18 +528,8 @@ impl SnsRequestProvider {
     fn spec_to_query_req(spec: CallSpec, mode: CallMode) -> Request {
         match mode {
             CallMode::Query => Request::Query(spec),
-            CallMode::Update => Request::Update(spec),
+            CallMode::Update => Request::UpdateE2e(spec),
         }
-    }
-
-    pub fn get_state(&self, mode: CallMode) -> Request {
-        let swap_canister = self.sns_canisters.swap().get().into();
-        let spec = CallSpec::new(
-            swap_canister,
-            "get_state",
-            Encode!(&GetStateRequest {}).unwrap(),
-        );
-        Self::spec_to_query_req(spec, mode)
     }
 
     pub fn get_buyer_state(&self, buyer: PrincipalId, mode: CallMode) -> Request {
@@ -561,6 +558,53 @@ impl SnsRequestProvider {
             .unwrap(),
         ))
     }
+
+    // The requests below are used by the aggregator canister
+
+    pub fn list_deployed_snses(&self, mode: CallMode) -> Request {
+        let spec = CallSpec::new(
+            self.sns_wasm_canister_id.into(),
+            "list_deployed_snses",
+            Encode!(&ListDeployedSnsesRequest {}).unwrap(),
+        );
+        Self::spec_to_query_req(spec, mode)
+    }
+
+    pub fn list_sns_canisters(&self, mode: CallMode) -> Request {
+        let root_canister = self.sns_canisters.root().get().into();
+        let spec = CallSpec::new(
+            root_canister,
+            "list_sns_canisters",
+            Encode!(&ListSnsCanistersRequest {}).unwrap(),
+        );
+        Self::spec_to_query_req(spec, mode)
+    }
+
+    pub fn get_metadata(&self, mode: CallMode) -> Request {
+        let governance_canister = self.sns_canisters.governance().get().into();
+        let spec = CallSpec::new(
+            governance_canister,
+            "get_metadata",
+            Encode!(&GetMetadataRequest {}).unwrap(),
+        );
+        Self::spec_to_query_req(spec, mode)
+    }
+
+    pub fn icrc1_metadata(&self, mode: CallMode) -> Request {
+        let ledger_canister = self.sns_canisters.ledger().get().into();
+        let spec = CallSpec::new(ledger_canister, "icrc1_metadata", Encode!().unwrap());
+        Self::spec_to_query_req(spec, mode)
+    }
+
+    pub fn get_state(&self, mode: CallMode) -> Request {
+        let swap_canister = self.sns_canisters.swap().get().into();
+        let spec = CallSpec::new(
+            swap_canister,
+            "get_state",
+            Encode!(&GetStateRequest {}).unwrap(),
+        );
+        Self::spec_to_query_req(spec, mode)
+    }
 }
 
 #[derive(Clone)]
@@ -568,24 +612,32 @@ pub struct SnsAgent {
     pub agent: Agent,
 }
 
-impl SnsAgent {
-    pub fn new(app_node: &IcNodeSnapshot) -> Self {
-        let agent = block_on(assert_create_agent(app_node.get_public_url().as_str()));
-        Self { agent }
+pub trait HasSnsAgentCapability: HasPublicApiUrl + Send + Sync {
+    fn build_sns_agent(&self) -> SnsAgent;
+    fn build_sns_agent_with_identity(&self, identity: impl Identity + Clone + 'static) -> SnsAgent;
+}
+
+impl HasSnsAgentCapability for IcNodeSnapshot {
+    fn build_sns_agent(&self) -> SnsAgent {
+        let agent = block_on(assert_create_agent(self.get_public_url().as_str()));
+        SnsAgent { agent }
     }
 
-    pub fn new_with_identity(
-        app_node: &IcNodeSnapshot,
-        identity: impl Identity + Clone + 'static,
-    ) -> Self {
+    fn build_sns_agent_with_identity(&self, identity: impl Identity + Clone + 'static) -> SnsAgent {
         let agent = block_on(assert_create_agent_with_identity(
-            app_node.get_public_url().as_str(),
+            self.get_public_url().as_str(),
             identity,
         ));
-        Self { agent }
+        SnsAgent { agent }
+    }
+}
+
+impl SnsAgent {
+    pub fn get(&self) -> Agent {
+        self.agent.clone()
     }
 
-    async fn query(&self, request: Request) -> Result<Vec<u8>, AgentError> {
+    pub async fn query(&self, request: Request) -> Result<Vec<u8>, AgentError> {
         let spec = request.spec();
         self.agent
             .query(&spec.canister_id, spec.method_name.clone())
@@ -594,7 +646,7 @@ impl SnsAgent {
             .await
     }
 
-    async fn update(&self, request: Request) -> Result<Vec<u8>, AgentError> {
+    pub async fn update(&self, request: Request) -> Result<Vec<u8>, AgentError> {
         let spec = request.spec();
         self.agent
             .update(&spec.canister_id, spec.method_name.clone())
@@ -725,8 +777,8 @@ pub fn add_one_participant(env: TestEnv) {
         "Obtaining two alternative agents to talk to the SNS sale canister ..."
     );
     let app_node = env.get_first_healthy_application_node_snapshot();
-    let default_sns_agent = SnsAgent::new(&app_node);
-    let wealthy_sns_agent = SnsAgent::new_with_identity(&app_node, wealthy_user_identity.clone());
+    let default_sns_agent = app_node.build_sns_agent();
+    let wealthy_sns_agent = app_node.build_sns_agent_with_identity(wealthy_user_identity.clone());
     info!(
         log,
         "All three agents are ready (elapsed {:?})",
