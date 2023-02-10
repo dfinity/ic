@@ -106,24 +106,24 @@ you will prepare an upgrade proposal and submit it.
 This process will be done on a machine that has an HSM key available.
 
 First, run 
-`./prepare-mainnet-proposal-text.sh  <CANISTER_NAME> <TARGET_VERSION> <PROPOSAL_FILE>`
+`./prepare-nns-upgrade-proposal-text.sh  <CANISTER_NAME> <TARGET_VERSION> <PROPOSAL_FILE>`
 
 `PREVIOUS_COMMIT` can be optionally added as an environment variable if the canister in question does not have its currently  
  deployed commit as canister metadata. 
 
 For example:
-`./prepare-mainnet-proposal-text.sh registry d2d9d63309cf568e3b2c2a0bc366b6850b044792 /tmp/upgrade_registry.md`
+`./prepare-nns-upgrade-proposal-text.sh registry d2d9d63309cf568e3b2c2a0bc366b6850b044792 /tmp/upgrade_registry.md`
 
 Next, you will need to open the file, and edit the section with `TODO ADD FEATURE NOTES` in it, and add a list of features
 to be deployed.  These can be determined by looking at the list of commits generated in the proposal.
 
 Finally, after inspecting the proposal, run 
-`./submit-mainnet-upgrade-proposal.sh <PROPOSAL_FILE> <YOUR_NEURON_ID>`
+`./submit-mainnet-nns-upgrade-proposal.sh <PROPOSAL_FILE> <YOUR_NEURON_ID>`
 
 In this case, it is the neuron id associated with your HSM key (which must be plugged into your computer).
 
 For example:
-`./submit-mainnet-upgrade-proposal.sh /tmp/upgrade_registry.md 123`
+`./submit-mainnet-nns-upgrade-proposal.sh /tmp/upgrade_registry.md 123`
 
 This script will read the proposal and validate the following:
 1. The proposed canister ID is consistent with the human readable canister name in the title.

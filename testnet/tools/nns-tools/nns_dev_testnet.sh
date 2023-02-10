@@ -98,7 +98,7 @@ SUBNET_IP=$(get_node_ip_for_subnet "$NNS_URL" "$NEW_SUBNET_ID")
 SUBNET_URL="http://[$SUBNET_IP]:8080"
 
 step 4 "Create the cycles wallet for our test user" || time (
-    WALLET_CANISTER=$(dfx ledger --network "$NNS_URL" create-canister "$PRINCIPAL" --amount 300 \
+    WALLET_CANISTER=$(dfx ledger --network "$NNS_URL" create-canister "$PRINCIPAL" --amount 10000 \
         | grep "Canister created" \
         | sed 's/.*"\(.*\)"/\1/') # get the CanisterId in quotes
 
