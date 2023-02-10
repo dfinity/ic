@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use super::{system_api, StoreData, NUM_INSTRUCTION_GLOBAL_NAME};
+use super::{system_api, StoreData, INSTRUCTIONS_COUNTER_GLOBAL_NAME};
 use crate::{wasm_utils::validate_and_instrument_for_testing, WasmtimeEmbedder};
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
@@ -108,7 +108,7 @@ fn test_wasmtime_system_api() {
         .expect("failed to instantiate instance");
 
     let global = instance
-        .get_global(&mut store, NUM_INSTRUCTION_GLOBAL_NAME)
+        .get_global(&mut store, INSTRUCTIONS_COUNTER_GLOBAL_NAME)
         .unwrap();
     store.data_mut().num_instructions_global = Some(global);
     global

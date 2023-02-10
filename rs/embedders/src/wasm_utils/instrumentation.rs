@@ -189,8 +189,8 @@ const TRY_GROW_STABLE_MEMORY_FUN_NAME: &str = "try_grow_stable_memory";
 const DEALLOCATE_PAGES_NAME: &str = "deallocate_pages";
 const INTERNAL_TRAP_FUN_NAME: &str = "internal_trap";
 const TABLE_STR: &str = "table";
-const CANISTER_COUNTER_INSTRUCTIONS_STR: &str = "canister counter_instructions";
-const CANISTER_COUNTER_DIRTY_PAGES_STR: &str = "canister counter_dirty_pages";
+pub(crate) const INSTRUCTIONS_COUNTER_GLOBAL_NAME: &str = "canister counter_instructions";
+pub(crate) const DIRTY_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_dirty_pages";
 const CANISTER_START_STR: &str = "canister_start";
 
 /// There is one byte for each OS page in the wasm heap.
@@ -678,7 +678,7 @@ fn export_additional_symbols<'a>(
 
     // globals must be exported to be accessible to hypervisor or persisted
     let counter_export = Export {
-        name: CANISTER_COUNTER_INSTRUCTIONS_STR,
+        name: INSTRUCTIONS_COUNTER_GLOBAL_NAME,
         kind: ExternalKind::Global,
         index: special_indices.instructions_counter_ix,
     };
@@ -687,7 +687,7 @@ fn export_additional_symbols<'a>(
 
     if let Some(index) = special_indices.dirty_pages_counter_ix {
         let export = Export {
-            name: CANISTER_COUNTER_DIRTY_PAGES_STR,
+            name: DIRTY_PAGES_COUNTER_GLOBAL_NAME,
             kind: ExternalKind::Global,
             index,
         };
