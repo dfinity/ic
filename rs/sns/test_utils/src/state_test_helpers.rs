@@ -22,7 +22,10 @@ use ic_sns_root::pb::v1::{
     RegisterDappCanistersResponse,
 };
 use ic_sns_root::{CanisterIdRecord, CanisterStatusResultV2};
-use ic_sns_swap::pb::v1::{self as swap_pb, GetOpenTicketResponse, RefreshBuyerTokensRequest};
+use ic_sns_swap::pb::v1::{
+    self as swap_pb, GetOpenTicketResponse, NewSaleTicketResponse, NotifyPaymentFailureResponse,
+    RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Ticket,
+};
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 use icp_ledger::{AccountIdentifier, Memo, TransferArgs, DEFAULT_TRANSFER_FEE};
@@ -514,4 +517,57 @@ pub fn get_open_ticket(
         .query_as(sender, swap_id, "get_open_ticket", args)
         .unwrap();
     Decode!(&res.bytes(), GetOpenTicketResponse).unwrap()
+}
+
+pub fn new_sale_ticket(
+    env: &StateMachine,
+    swap_id: CanisterId,
+    sender: PrincipalId,
+    amount_icp_e8s: u64,
+    subaccount: Option<Vec<u8>>,
+) -> Result<Ticket, swap_pb::new_sale_ticket_response::Err> {
+    let args = Encode!(&swap_pb::NewSaleTicketRequest {
+        amount_icp_e8s,
+        subaccount,
+    })
+    .unwrap();
+    let res = env
+        .execute_ingress_as(sender, swap_id, "new_sale_ticket", args)
+        .unwrap();
+    match Decode!(&res.bytes(), NewSaleTicketResponse)
+        .unwrap()
+        .result
+        .unwrap()
+    {
+        swap_pb::new_sale_ticket_response::Result::Ok(swap_pb::new_sale_ticket_response::Ok {
+            ticket,
+        }) => Ok(ticket.unwrap()),
+        swap_pb::new_sale_ticket_response::Result::Err(err) => Err(err),
+    }
+}
+pub fn refresh_buyer_token(
+    env: &StateMachine,
+    swap_id: &CanisterId,
+    sender: &PrincipalId,
+) -> Result<RefreshBuyerTokensResponse, String> {
+    let args = Encode!(&RefreshBuyerTokensRequest {
+        buyer: sender.to_string()
+    })
+    .unwrap();
+    match env.execute_ingress_as(*sender, *swap_id, "refresh_buyer_tokens", args) {
+        Ok(res) => Ok(Decode!(&res.bytes(), RefreshBuyerTokensResponse).unwrap()),
+        Err(e) => Err(e.description().to_owned()),
+    }
+}
+
+pub fn notify_payment_failure(
+    env: &StateMachine,
+    swap_id: &CanisterId,
+    sender: &PrincipalId,
+) -> NotifyPaymentFailureResponse {
+    let args = Encode!(&swap_pb::NotifyPaymentFailureRequest {}).unwrap();
+    let res = env
+        .execute_ingress_as(*sender, *swap_id, "notify_payment_failure", args)
+        .unwrap();
+    Decode!(&res.bytes(), NotifyPaymentFailureResponse).unwrap()
 }

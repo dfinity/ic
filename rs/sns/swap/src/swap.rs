@@ -56,8 +56,9 @@ use std::{
 
 // TODO(NNS1-1589): Get these from the canonical location.
 use crate::pb::v1::{
-    settle_community_fund_participation, GovernanceError, Icrc1Account, SetDappControllersRequest,
-    SetDappControllersResponse, SettleCommunityFundParticipation,
+    settle_community_fund_participation, GovernanceError, Icrc1Account,
+    NotifyPaymentFailureResponse, SetDappControllersRequest, SetDappControllersResponse,
+    SettleCommunityFundParticipation,
 };
 
 // The number of bytes that the contents of a ClaimSwapNeuronsRequest can safely consume. This
@@ -567,6 +568,9 @@ impl Swap {
     /// It is assumed that prior to calling this method, tokens have
     /// been transfer by the buyer to a subaccount of the swap
     /// canister (this canister) on the ICP ledger.
+    /// Also, deletes an existing ticket if it has been fully executed
+    /// (i.e. the requested increment is >= that the ticket amount).
+    /// (This allows participation to be increased later.)
     ///
     /// If a ledger transfer was successfully made, but this calls
     /// fails (many reasons are possible), the owner of the ICP sent
@@ -589,6 +593,7 @@ impl Swap {
         if self.icp_target_reached() {
             return Err("The ICP target for this token swap has already been reached.".to_string());
         }
+
         // Look for the token balance of the specified principal's subaccount on 'this' canister.
         let account = Account {
             owner: this_canister.get(),
@@ -618,7 +623,7 @@ impl Swap {
             if participant_total_icp_e8s > max_icp_e8s {
                 log!(
                     ERROR,
-                    "Total amount of ICP bought {} already exceeds the target {}!",
+                    "Total amount of ICP committed {} already exceeds the target {}!",
                     participant_total_icp_e8s,
                     max_icp_e8s
                 );
@@ -683,6 +688,33 @@ impl Swap {
                 max_participant_icp_e8s
             );
         }
+
+        // Try to fetch the current ticket of the buyer
+        let principal = Blob::from_bytes(buyer.as_slice().into());
+        if let Some(ticket_sns_sale_canister) =
+            memory::OPEN_TICKETS_MEMORY.with(|m| m.borrow().get(&principal))
+        {
+            let amount_ticket = ticket_sns_sale_canister.amount_icp_e8s;
+            // If the user has already bought tokens in this sale at a prior to the current purchase the
+            // balance in the subaccount of the SNS sales canister that corresponds to the user will
+            // show both the ICP balance used for the previous buy and the ICP balance used to make
+            // this new purchase of SNS tokens (requested_increment_e8s + old_amount_icp_e8s).
+            // If the ticket has a lower amount specified than what is the requested amount of
+            // tokens according to the ICP balance in the subaccount, this check should pass
+            // and the actual requested amount of tokens will be used.
+            // Lower amounts than specified on the ticket are not excepted.
+            if amount_ticket > requested_increment_e8s {
+                return Err(
+                    format!("The available balance to be topped up ({}) by the buyer is smaller than the amount requested ({}).",requested_increment_e8s,amount_ticket)
+                        ,
+                );
+            }
+            // The requested balance in the ticket matches the balance to be topped up in the sale
+            // --> Delete fully executed ticket, if it exists and proceed with the top up
+            memory::OPEN_TICKETS_MEMORY.with(|m| m.borrow_mut().remove(&principal));
+            // If there exists no ticket for the buyer, the payment flow will simply ignore the ticket
+        }
+
         buyer_state.set_amount_icp_e8s(std::cmp::min(new_balance_e8s, max_participant_icp_e8s));
         log!(
             INFO,
@@ -694,6 +726,7 @@ impl Swap {
         if requested_increment_e8s >= max_increment_e8s {
             log!(INFO, "Swap has reached ICP target of {}", max_icp_e8s);
         }
+
         Ok(RefreshBuyerTokensResponse {
             icp_accepted_participation_e8s: buyer_state.amount_icp_e8s(),
             icp_ledger_account_balance_e8s: e8s,
@@ -742,6 +775,31 @@ impl Swap {
                 ..Default::default()
             })
             .into(),
+        }
+    }
+
+    // Returns the ticket if a ticket was found for the caller and the ticket
+    // was removed successfully. Returns None if no ticket was found for the caller.
+    // Only the owner of a ticket can remove it.
+    pub fn notify_payment_failure(&mut self, caller: &PrincipalId) -> NotifyPaymentFailureResponse {
+        let principal = Blob::from_bytes(caller.as_slice().into());
+        let ticket = match memory::OPEN_TICKETS_MEMORY.with(|m| m.borrow().get(&principal)) {
+            Some(ticket) => ticket,
+            None => return NotifyPaymentFailureResponse { ticket: None },
+        };
+
+        // process ticket.
+        memory::OPEN_TICKETS_MEMORY.with(|m| m.borrow_mut().remove(&principal));
+        log!(
+            INFO,
+            "{}",
+            format!(
+                "Ticket with ID: {} was deleted successfully. Ticket: {:?}",
+                ticket.ticket_id, ticket
+            )
+        );
+        NotifyPaymentFailureResponse {
+            ticket: Some(ticket),
         }
     }
 

@@ -222,6 +222,7 @@ service : (Init) -> {
       ListSnsNeuronRecipesResponse,
     ) query;
   new_sale_ticket : (NewSaleTicketRequest) -> (NewSaleTicketResponse);
+  notify_payment_failure : (record {}) -> (Ok_1);
   open : (OpenRequest) -> (record {});
   refresh_buyer_tokens : (RefreshBuyerTokensRequest) -> (
       RefreshBuyerTokensResponse,

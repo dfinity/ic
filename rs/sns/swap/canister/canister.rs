@@ -12,7 +12,6 @@ use ic_nervous_system_common::{
     serve_logs, serve_metrics, stable_mem_utils::BufferedStableMemReader,
 };
 use ic_sns_governance::ledger::LedgerCanister;
-use ic_sns_swap::pb::v1::{ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse};
 use ic_sns_swap::{
     clients::{
         ManagementCanister, ProdManagementCanister, RealNnsGovernanceClient,
@@ -28,9 +27,11 @@ use ic_sns_swap::{
         GetOpenTicketResponse, GetSaleParametersRequest, GetSaleParametersResponse,
         GetStateRequest, GetStateResponse, Init, ListCommunityFundParticipantsRequest,
         ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
-        ListDirectParticipantsResponse, NewSaleTicketRequest, NewSaleTicketResponse, OpenRequest,
-        OpenResponse, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
-        RestoreDappControllersRequest, RestoreDappControllersResponse, Swap,
+        ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
+        NewSaleTicketRequest, NewSaleTicketResponse, NotifyPaymentFailureRequest,
+        NotifyPaymentFailureResponse, OpenRequest, OpenResponse, RefreshBuyerTokensRequest,
+        RefreshBuyerTokensResponse, RestoreDappControllersRequest, RestoreDappControllersResponse,
+        Swap,
     },
 };
 use ic_stable_structures::{writer::Writer, Memory};
@@ -363,6 +364,17 @@ fn list_sns_neuron_recipes() {
 fn list_sns_neuron_recipes_(request: ListSnsNeuronRecipesRequest) -> ListSnsNeuronRecipesResponse {
     log!(INFO, "list_neuron_recipes");
     swap().list_sns_neuron_recipes(request)
+}
+
+#[export_name = "canister_update notify_payment_failure"]
+fn notify_payment_failure() {
+    over(candid_one, notify_payment_failure_)
+}
+
+#[candid_method(update, rename = "notify_payment_failure")]
+fn notify_payment_failure_(_request: NotifyPaymentFailureRequest) -> NotifyPaymentFailureResponse {
+    log!(INFO, "notify_payment_failure");
+    swap_mut().notify_payment_failure(&caller())
 }
 
 // =============================================================================
