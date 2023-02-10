@@ -16,7 +16,7 @@ use ic_tests::systest;
 /// 3. Check that all participations have been set up correctly via `get_buyer_state`
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_overall_timeout(Duration::from_secs(30 * 60)) // 30 min
+        .with_overall_timeout(Duration::from_secs(25 * 60)) // 25 min
         .with_timeout_per_test(Duration::from_secs(15 * 60)) // 15 min
         .with_setup(sns_setup_with_many_sale_participants)
         .add_test(systest!(initiate_token_swap))
