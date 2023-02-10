@@ -1,11 +1,12 @@
 """Unit tests for workload.py."""
-import os
 import re
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import MagicMock
 
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "../"))
+p = Path(__file__).parents[2]
+sys.path.append(f"{p}/")
 from common import workload  # noqa
 
 

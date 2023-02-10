@@ -23,7 +23,7 @@ for test_idx, test_case in enumerate(output):
     input_str = "\n".join([f"Test_{test_idx}"] + list(test_case) + [""])
     print("Testing with:")
     print(str(input_str))
-    p = subprocess.Popen(["pipenv", "run", "python3", "add_benchmark.py"], stdin=subprocess.PIPE)
+    p = subprocess.Popen(["python3", "add_benchmark.py"], stdin=subprocess.PIPE)
     p.communicate(input=input_str.encode())
     rc = p.wait()
     assert rc == 0

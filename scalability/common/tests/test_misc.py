@@ -1,10 +1,11 @@
 """Unit tests for misc.py."""
-import os
 import sys
 import time
 import unittest
+from pathlib import Path
 
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "../"))
+p = Path(__file__).parents[2]
+sys.path.append(f"{p}/")
 from common import misc  # noqa
 
 

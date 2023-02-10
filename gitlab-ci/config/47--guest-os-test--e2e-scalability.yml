@@ -9,6 +9,7 @@ e2e-scalability-suite-test:
     - scalability/
   script:
     - |
+      set -xeuo pipefail
       # release
       "$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/rclone_download.py \
           --git-rev="$CI_COMMIT_SHA" --remote-path="release" \
@@ -42,10 +43,9 @@ e2e-scalability-suite-test:
       cd "${CI_PROJECT_DIR}/scalability"
 
       # Actual test script, sets up VMs and drives the test.
-      pipenv --python 3
-      pipenv install -r requirements.txt
+      pip3 install -r requirements.txt
 
-      pipenv run python3 "common/tests/e2e-scalability-tests.py" \
+      python3 "common/tests/e2e-scalability-tests.py" \
           --timeout "$GUEST_OS_TEST_TIMEOUT" \
           --ic_os_version "$CI_COMMIT_SHA" \
           --ic_admin_bin "${CI_PROJECT_DIR}/artifacts/release/ic-admin" \

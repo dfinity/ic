@@ -42,6 +42,15 @@ The code is as follows:
  - `report.py` and `generate_report.py`: Scripts to generate HTML reports out of collected measurements from experiment executions.
    - `templates/`: folder for storing templates to generate HTML reports. There is one main`experiment.html.hb` is the main experiment report template, with `experiment_*.html.hb` defining the template for the experiment-specific part of the report. The name of the template file has to match what's given as first argument to `write_summary_file`.
 
+# Upgrading & installing dependencies
+Because python tests can be run in different environments, it makes sense to have a single lock file that can be used to install dependencies. We use a bazel rule to generate this lock file which uses [pip-tools](https://github.com/jazzband/pip-tools) under the hood. To upgrade dependencies:
+1. Add new requirements or change existing ones in `requirements.in`
+1. Update lock file (will generate `requirements.txt`)
+    ```
+    bazel run //scalability:requirements.update
+    ```
+1. Commit changes
+
 # Experiment classes
 
 The suite offers a set of base experiments to build on.

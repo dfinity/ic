@@ -61,6 +61,7 @@ python-scalability-tests:
       echo "Running scalability/common/tests"
       set -euo pipefail
       cd "${CI_PROJECT_DIR}/scalability"
-      pipenv --python 3
-      pipenv install -r requirements.txt
-      for test_file in common/tests/*.py; do { $SHELL_WRAPPER pipenv run python3 -m unittest "$test_file"; } done
+      pip3 install -r requirements.txt
+      python3 -m unittest common/tests/mock_multi.py
+      python3 -m unittest common/tests/mock.py
+      python3 -m unittest common/tests/wizard.py

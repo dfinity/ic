@@ -2,6 +2,7 @@
 import json
 import os
 import unittest
+from pathlib import Path
 
 
 def write_test_summary_map_file(dirname: str, f):
@@ -33,7 +34,9 @@ class Test_Report_Generation(unittest.TestCase):
         import sys
         import tempfile
 
-        sys.path.insert(1, ".")
+        # TODO: see if there is a better way to find "common" module
+        p = Path(__file__).parents[2]
+        sys.path.append(f"{p}/")
         import common.report as report
         import common.workload as workload
 
