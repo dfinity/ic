@@ -147,7 +147,6 @@ enum CspVaultMethod {
     RetainThresholdKeysIfPresent,
     SksContains,
     PksAndSksContains,
-    PksContains,
     CurrentNodePublicKeys,
     CurrentNodePublicKeysWithTimestamps,
     IdkgKeyCount,
@@ -200,7 +199,6 @@ impl CspVaultMethod {
             CspVaultMethod::PksAndSksContains => {
                 (MetricsDomain::KeyManagement, "pks_and_sks_contains")
             }
-            CspVaultMethod::PksContains => (MetricsDomain::KeyManagement, "pks_contains"),
             CspVaultMethod::CurrentNodePublicKeys => {
                 (MetricsDomain::KeyManagement, "current_node_public_keys")
             }
@@ -256,7 +254,6 @@ impl From<&TarpcCspVaultRequest> for CspVaultMethod {
             Req::RetainThresholdKeysIfPresent { .. } => Method::RetainThresholdKeysIfPresent,
             Req::SksContains { .. } => Method::SksContains,
             Req::PksAndSksContains { .. } => Method::PksAndSksContains,
-            Req::PksContains { .. } => Method::PksContains,
             Req::CurrentNodePublicKeys { .. } => Method::CurrentNodePublicKeys,
             Req::CurrentNodePublicKeysWithTimestamps { .. } => {
                 Method::CurrentNodePublicKeysWithTimestamps
@@ -295,7 +292,6 @@ impl From<&TarpcCspVaultResponse> for CspVaultMethod {
             Resp::RetainThresholdKeysIfPresent { .. } => Method::RetainThresholdKeysIfPresent,
             Resp::SksContains { .. } => Method::SksContains,
             Resp::PksAndSksContains { .. } => Method::PksAndSksContains,
-            Resp::PksContains { .. } => Method::PksContains,
             Resp::CurrentNodePublicKeys { .. } => Method::CurrentNodePublicKeys,
             Resp::CurrentNodePublicKeysWithTimestamps { .. } => {
                 Method::CurrentNodePublicKeysWithTimestamps

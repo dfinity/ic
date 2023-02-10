@@ -4,35 +4,24 @@ mod tests;
 use crate::sign::{
     fetch_idkg_dealing_encryption_public_key_from_registry, MegaKeyFromRegistryError,
 };
-use crate::{key_from_registry, CryptoComponentFatClient};
-use ic_crypto_internal_csp::api::CspSecretKeyStoreChecker;
-use ic_crypto_internal_csp::key_id::KeyId;
+use crate::{key_from_registry, tls_certificate_from_registry, CryptoComponentFatClient};
 use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
-use ic_crypto_internal_csp::keygen::utils::{
-    mega_public_key_from_proto, MEGaPublicKeyFromProtoError,
-};
-use ic_crypto_internal_csp::types::conversions::CspPopFromPublicKeyProtoError;
-use ic_crypto_internal_csp::types::{CspPop, CspPublicKey};
+use ic_crypto_internal_csp::types::ExternalPublicKeys;
+use ic_crypto_internal_csp::vault::api::{NodeKeysErrors, PksAndSksContainsErrors};
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_logmon::metrics::{
-    BooleanOperation, BooleanResult, KeyCounts, KeyRotationResult,
+    BooleanOperation, BooleanResult, KeyCounts, KeyRotationResult, MetricsResult,
 };
-use ic_crypto_internal_types::encrypt::forward_secure::{
-    CspFsEncryptionPop, CspFsEncryptionPublicKey,
-};
-use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_interfaces::crypto::{
     CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError,
     IdkgDealingEncPubKeysCountError, KeyManager, PublicKeyRegistrationStatus,
 };
 use ic_logger::{error, info, warn};
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
-use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult, CurrentNodePublicKeys, KeyPurpose};
+use ic_types::crypto::{CryptoError, CryptoResult, CurrentNodePublicKeys, KeyPurpose};
 use ic_types::registry::RegistryClientError;
 use ic_types::{RegistryVersion, Time};
-use std::convert::TryFrom;
 use std::time::Duration;
 
 impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
@@ -40,68 +29,150 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
         &self,
         registry_version: RegistryVersion,
     ) -> CryptoResult<PublicKeyRegistrationStatus> {
-        self.collect_and_store_key_count_metrics(registry_version)?;
-        // Get the public keys from the registry, and ensure that we have the
-        // secret keys locally in the SKS.
-        let keys_in_registry = match self.check_local_key_material(registry_version) {
-            Ok(current_node_public_keys) => current_node_public_keys,
-            Err(err) => {
-                match err {
-                    CryptoError::SecretKeyNotFound { .. }
-                    | CryptoError::TlsSecretKeyNotFound { .. } => {
-                        // This may be due to a malicious entity registering new key(s) for this node.
-                        // Some more drastic action should be taken here; at the moment, we just log and
-                        // return an error, and increment a metric that will raise an alert.
-                        // NOTE: The FIT runbook for this alert (IC_Crypto_KeysInRegistryNotFoundLocally)
-                        // suggests to look for this specific error message in the logs, so if the
-                        // error message is modified, the runbook entry should be adjusted accordingly.
-                        error!(
-                            self.logger,
-                            "One or more secret keys corresponding to node public keys in the registry are missing locally: {:?}",
-                            err
+        // Get the current public keys from the registry, and the number of keys
+        let registry_public_keys_result = self.retrieve_keys_from_registry(registry_version);
+        let registry_public_keys_count = registry_public_keys_result.get_key_count();
+        let registry_public_keys =
+            CryptoResult::<ExternalPublicKeys>::from(registry_public_keys_result);
+
+        match registry_public_keys {
+            Ok(registry_public_keys) => {
+                // If retrieval of public keys from the registry was successful, check to make sure
+                // we have the public keys, and the corresponding secret keys locally
+                let pks_and_sks_contains_result =
+                    self.csp.pks_and_sks_contains(registry_public_keys.clone());
+                match pks_and_sks_contains_result {
+                    Ok(()) => {
+                        self.observe_all_key_counts(
+                            &KeyCounts::new(
+                                PUBLIC_KEY_TYPE_COUNT,
+                                PUBLIC_KEY_TYPE_COUNT,
+                                PUBLIC_KEY_TYPE_COUNT,
+                            ),
+                            MetricsResult::Ok,
                         );
-                        self.metrics.observe_boolean_result(
-                            BooleanOperation::KeyInRegistryMissingLocally,
-                            BooleanResult::True,
-                        );
+                        Ok(())
                     }
-                    _ => {}
-                }
-                return Err(err);
+
+                    Err(PksAndSksContainsErrors::NodeKeysErrors(node_keys_errors)) => {
+                        warn!(
+                            self.logger,
+                            "error while checking keys with registry: {:?}", node_keys_errors
+                        );
+                        // Explicitly make metrics observation of keys found in the registry, but not
+                        // locally - if this occurs, it will trigger a FIT alert
+                        self.observe_keys_in_registry_but_missing_locally(&node_keys_errors);
+                        self.observe_all_key_counts(
+                            &KeyCounts::from(&node_keys_errors),
+                            MetricsResult::Ok,
+                        );
+                        Err(CryptoError::InternalError {
+                            internal_error: format!(
+                                "Error calling pks_and_sks_contains: {:?}",
+                                node_keys_errors
+                            ),
+                        })
+                    }
+
+                    Err(PksAndSksContainsErrors::TransientInternalError(internal_error)) => {
+                        self.observe_all_key_counts(&KeyCounts::ZERO, MetricsResult::Err);
+                        Err(CryptoError::TransientInternalError {
+                            internal_error: format!(
+                                "Transient error calling pks_and_sks_contains: {:?}",
+                                internal_error
+                            ),
+                        })
+                    }
+                }?;
+                // Check to see if the latest iDKG key needs to be registered, or rotated
+                self.check_latest_idkg_dealing_encryption_key_registration_status(
+                    registry_version,
+                    &registry_public_keys.idkg_dealing_encryption_public_key,
+                )
             }
-        };
-        let idkg_dealing_encryption_key = if let Some(ref idkg_dealing_encryption_key) =
-            keys_in_registry.idkg_dealing_encryption_public_key
-        {
-            idkg_dealing_encryption_key.clone()
-        } else {
-            unreachable!()
-        };
-
-        // Make sure that for each public key found in the registry, we also have the public key
-        // locally in the public key store.
-        if !self.csp.pks_contains(keys_in_registry)? {
-            // This may be due to a malicious entity registering new key(s) for this node.
-            // Some more drastic action should be taken here; at the moment, we just log and
-            // return an error, and increment a metric that will raise an alert.
-            // NOTE: The FIT runbook for this alert (IC_Crypto_KeysInRegistryNotFoundLocally)
-            // suggests to look for this specific error message in the logs, so if the
-            // error message is modified, the runbook entry should be adjusted accordingly.
-            error!(
-                self.logger,
-                "One or more node public keys from the registry are missing locally"
-            );
-            self.metrics.observe_boolean_result(
-                BooleanOperation::KeyInRegistryMissingLocally,
-                BooleanResult::True,
-            );
-            return Err(CryptoError::PublicKeyNotFound {
-                node_id: self.node_id,
-                key_purpose: KeyPurpose::Placeholder,
-                registry_version,
-            });
+            Err(err) => {
+                // One or more node keys were missing from the registry - make a metrics observation
+                // and return the first error encountered
+                self.metrics.observe_node_key_counts(
+                    &KeyCounts::new(registry_public_keys_count, 0, 0),
+                    MetricsResult::Err,
+                );
+                Err(err)
+            }
         }
+    }
 
+    fn current_node_public_keys(
+        &self,
+    ) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError> {
+        let result = self.csp.current_node_public_keys()?;
+        Ok(result)
+    }
+
+    fn rotate_idkg_dealing_encryption_keys(
+        &self,
+        registry_version: RegistryVersion,
+    ) -> Result<PublicKeyProto, IDkgDealingEncryptionKeyRotationError> {
+        let key_rotation_result =
+            self.rotate_idkg_dealing_encryption_keys_internal(registry_version);
+        self.record_key_rotation_metrics(&key_rotation_result);
+        convert_key_rotation_outcome(key_rotation_result)
+    }
+
+    fn idkg_dealing_encryption_pubkeys_count(
+        &self,
+    ) -> Result<usize, IdkgDealingEncPubKeysCountError> {
+        let result = self.csp.idkg_dealing_encryption_pubkeys_count()?;
+        Ok(result)
+    }
+}
+
+// Helpers for implementing `KeyManager`-trait.
+impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
+    fn retrieve_keys_from_registry(&self, registry_version: RegistryVersion) -> RegistryKeysResult {
+        let node_signing_public_key = key_from_registry(
+            self.registry_client.as_ref(),
+            self.node_id,
+            KeyPurpose::NodeSigning,
+            registry_version,
+        );
+        let committee_signing_public_key = key_from_registry(
+            self.registry_client.as_ref(),
+            self.node_id,
+            KeyPurpose::CommitteeSigning,
+            registry_version,
+        );
+        let tls_certificate = tls_certificate_from_registry(
+            self.registry_client.as_ref(),
+            self.node_id,
+            registry_version,
+        );
+        let dkg_dealing_encryption_public_key = key_from_registry(
+            self.registry_client.as_ref(),
+            self.node_id,
+            KeyPurpose::DkgDealingEncryption,
+            registry_version,
+        );
+        let idkg_dealing_encryption_public_key = key_from_registry(
+            self.registry_client.as_ref(),
+            self.node_id,
+            KeyPurpose::IDkgMEGaEncryption,
+            registry_version,
+        );
+        RegistryKeysResult {
+            node_signing_key_result: node_signing_public_key,
+            committee_signing_key_result: committee_signing_public_key,
+            tls_certificate_result: tls_certificate,
+            dkg_dealing_encryption_key_result: dkg_dealing_encryption_public_key,
+            idkg_dealing_encryption_key_result: idkg_dealing_encryption_public_key,
+        }
+    }
+
+    fn check_latest_idkg_dealing_encryption_key_registration_status(
+        &self,
+        registry_version: RegistryVersion,
+        registry_idkg_dealing_encryption_public_key: &PublicKeyProto,
+    ) -> CryptoResult<PublicKeyRegistrationStatus> {
         // Get the key rotation period from the subnet config; if it is None, key rotation is disabled
         let key_rotation_period: Duration = if let Some(key_rotation_period) =
             self.get_rotation_period_for_current_node_if_key_rotation_enabled(registry_version)?
@@ -117,18 +188,23 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
 
         // Check if the latest iDKG key we have locally still needs to be registered in the
         // registry, or if it needs to be rotated.
-        if let Some(latest_local_idkg_dealing_encryption_key) = self
-            .current_node_public_keys()?
-            .idkg_dealing_encryption_public_key
+        let current_node_public_keys = match self.current_node_public_keys() {
+            Ok(current_node_public_keys) => current_node_public_keys,
+            Err(CurrentNodePublicKeysError::TransientInternalError(internal_error)) => {
+                return Err(CryptoError::TransientInternalError { internal_error });
+            }
+        };
+        if let Some(latest_local_idkg_dealing_encryption_key) =
+            current_node_public_keys.idkg_dealing_encryption_public_key
         {
-            if idkg_dealing_encryption_key
+            if registry_idkg_dealing_encryption_public_key
                 .equal_ignoring_timestamp(&latest_local_idkg_dealing_encryption_key)
             {
                 self.metrics.observe_boolean_result(
                     BooleanOperation::LatestLocalIdkgKeyExistsInRegistry,
                     BooleanResult::True,
                 );
-                match idkg_dealing_encryption_key.timestamp {
+                match registry_idkg_dealing_encryption_public_key.timestamp {
                     None => {
                         // The key in the registry has no timestamp, so it shall be rotated
                         info!(
@@ -168,87 +244,6 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
             panic!("No iDKG dealing encryption key found locally");
         }
         Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
-    }
-
-    fn collect_and_store_key_count_metrics(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<()> {
-        self.metrics
-            .observe_node_key_counts(self.collect_key_count_metrics(registry_version)?);
-        Ok(())
-    }
-
-    fn current_node_public_keys(
-        &self,
-    ) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError> {
-        let result = self.csp.current_node_public_keys()?;
-        Ok(result)
-    }
-
-    fn rotate_idkg_dealing_encryption_keys(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> Result<PublicKeyProto, IDkgDealingEncryptionKeyRotationError> {
-        let key_rotation_result =
-            self.rotate_idkg_dealing_encryption_keys_internal(registry_version);
-        self.record_key_rotation_metrics(&key_rotation_result);
-        convert_key_rotation_outcome(key_rotation_result)
-    }
-
-    fn idkg_dealing_encryption_pubkeys_count(
-        &self,
-    ) -> Result<usize, IdkgDealingEncPubKeysCountError> {
-        let result = self.csp.idkg_dealing_encryption_pubkeys_count()?;
-        Ok(result)
-    }
-}
-
-// Helpers for implementing `KeyManager`-trait.
-impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
-    pub fn collect_key_count_metrics(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<KeyCounts> {
-        let mut pub_keys_in_reg: u8 = 0;
-        let mut secret_keys_in_sks: u8 = 0;
-        let pub_keys_local = self
-            .current_node_public_keys()?
-            .get_pub_keys_and_cert_count();
-        let reg_and_secret_key_results = vec![
-            self.ensure_node_signing_key_material_is_set_up(registry_version)
-                .map(|_| ()),
-            self.ensure_committee_signing_key_material_is_set_up(registry_version)
-                .map(|_| ()),
-            self.ensure_dkg_dealing_encryption_key_material_is_set_up(registry_version)
-                .map(|_| ()),
-            self.ensure_idkg_dealing_encryption_key_material_is_set_up(registry_version)
-                .map(|_| ()),
-            self.ensure_tls_key_material_is_set_up(registry_version)
-                .map(|_| ()),
-        ];
-        for r in reg_and_secret_key_results.iter() {
-            match r {
-                Ok(_) => {
-                    pub_keys_in_reg += 1;
-                    secret_keys_in_sks += 1;
-                }
-                Err(CryptoError::SecretKeyNotFound { .. }) => {
-                    pub_keys_in_reg += 1;
-                }
-                Err(CryptoError::TlsSecretKeyNotFound { .. }) => {
-                    pub_keys_in_reg += 1;
-                }
-                _ => {}
-            }
-        }
-        let idkg_dealing_encryption_pubkeys_count = self.idkg_dealing_encryption_pubkeys_count()?;
-        Ok(KeyCounts::new(
-            pub_keys_in_reg,
-            pub_keys_local,
-            secret_keys_in_sks,
-            idkg_dealing_encryption_pubkeys_count as u8,
-        ))
     }
 
     fn rotate_idkg_dealing_encryption_keys_internal(
@@ -338,39 +333,6 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         }
     }
 
-    /// Check local key material wrt. what exists in the registry. This function gets the public
-    /// keys and certificates for the node from the registry at the provided registry version, and
-    /// verifies that the corresponding secret keys exist locally.
-    ///
-    /// # Params
-    /// * `registry_version` the registry version to retrieve the public keys and certificates for
-    ///
-    /// # Returns
-    /// A `CurrentNodePublicKey` struct with the keys and certificates from the registry, or an
-    /// error if the retrieval of public keys or certificates from the registry failed, if a
-    /// corresponding secret key was not found locally, or if a key was malformed.
-    fn check_local_key_material(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<CurrentNodePublicKeys> {
-        let node_signing_key = self.ensure_node_signing_key_material_is_set_up(registry_version)?;
-        let committee_signing_key =
-            self.ensure_committee_signing_key_material_is_set_up(registry_version)?;
-        let dkg_dealing_encryption_key =
-            self.ensure_dkg_dealing_encryption_key_material_is_set_up(registry_version)?;
-        let tls_certificate = self.ensure_tls_key_material_is_set_up(registry_version)?;
-        let idkg_dealing_encryption_key =
-            self.ensure_idkg_dealing_encryption_key_material_is_set_up(registry_version)?;
-
-        Ok(CurrentNodePublicKeys {
-            node_signing_public_key: Some(node_signing_key),
-            committee_signing_public_key: Some(committee_signing_key),
-            tls_certificate: Some(tls_certificate),
-            dkg_dealing_encryption_public_key: Some(dkg_dealing_encryption_key),
-            idkg_dealing_encryption_public_key: Some(idkg_dealing_encryption_key),
-        })
-    }
-
     fn record_key_rotation_metrics(
         &self,
         key_rotation_result: &Result<KeyRotationOutcome, IDkgDealingEncryptionKeyRotationError>,
@@ -427,92 +389,6 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         }
     }
 
-    fn ensure_node_signing_key_material_is_set_up(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<PublicKeyProto> {
-        let pk_proto = key_from_registry(
-            self.registry_client.as_ref(),
-            self.node_id,
-            KeyPurpose::NodeSigning,
-            registry_version,
-        )?;
-        if AlgorithmId::from(pk_proto.algorithm) != AlgorithmId::Ed25519 {
-            return Err(CryptoError::PublicKeyNotFound {
-                node_id: self.node_id,
-                key_purpose: KeyPurpose::NodeSigning,
-                registry_version,
-            });
-        }
-        ensure_node_signing_key_material_is_set_up_correctly(pk_proto.clone(), &self.csp)?;
-        Ok(pk_proto)
-    }
-
-    fn ensure_committee_signing_key_material_is_set_up(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<PublicKeyProto> {
-        let pk_proto = key_from_registry(
-            self.registry_client.as_ref(),
-            self.node_id,
-            KeyPurpose::CommitteeSigning,
-            registry_version,
-        )?;
-
-        ensure_committee_signing_key_material_is_set_up_correctly(pk_proto.clone(), &self.csp)?;
-        Ok(pk_proto)
-    }
-
-    fn ensure_dkg_dealing_encryption_key_material_is_set_up(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<PublicKeyProto> {
-        let pk_proto = key_from_registry(
-            self.registry_client.as_ref(),
-            self.node_id,
-            KeyPurpose::DkgDealingEncryption,
-            registry_version,
-        )?;
-
-        ensure_dkg_dealing_encryption_key_material_is_set_up_correctly(
-            pk_proto.clone(),
-            &self.csp,
-        )?;
-        Ok(pk_proto)
-    }
-
-    fn ensure_idkg_dealing_encryption_key_material_is_set_up(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<PublicKeyProto> {
-        let pk_proto = key_from_registry(
-            self.registry_client.as_ref(),
-            self.node_id,
-            KeyPurpose::IDkgMEGaEncryption,
-            registry_version,
-        )?;
-        ensure_idkg_dealing_encryption_key_material_is_set_up_correctly(
-            pk_proto.clone(),
-            &self.csp,
-        )?;
-        Ok(pk_proto)
-    }
-
-    fn ensure_tls_key_material_is_set_up(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<X509PublicKeyCert> {
-        let public_key_cert = self
-            .registry_client
-            .get_tls_certificate(self.node_id, registry_version)?
-            .ok_or(CryptoError::TlsCertNotFound {
-                node_id: self.node_id,
-                registry_version,
-            })?;
-        ensure_tls_key_material_is_set_up_correctly(public_key_cert.clone(), &self.csp)?;
-        Ok(public_key_cert)
-    }
-
     fn get_rotation_period_for_current_node_if_key_rotation_enabled(
         &self,
         registry_version: RegistryVersion,
@@ -567,190 +443,96 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             false
         }
     }
+
+    fn observe_all_key_counts(&self, key_counts: &KeyCounts, metric_result: MetricsResult) {
+        self.metrics
+            .observe_node_key_counts(key_counts, metric_result);
+        self.observe_number_of_idkg_dealing_encryption_public_keys();
+    }
+
+    fn observe_keys_in_registry_but_missing_locally(&self, node_keys_errors: &NodeKeysErrors) {
+        if node_keys_errors.keys_in_registry_missing_locally() {
+            error!(
+                self.logger,
+                "One or more node keys from the registry are missing locally ({:?})",
+                node_keys_errors
+            );
+            self.metrics.observe_boolean_result(
+                BooleanOperation::KeyInRegistryMissingLocally,
+                BooleanResult::True,
+            );
+        }
+    }
+
+    fn observe_number_of_idkg_dealing_encryption_public_keys(&self) {
+        match self.idkg_dealing_encryption_pubkeys_count() {
+            Ok(num_idkg_dealing_encryption_pubkeys) => {
+                self.metrics.observe_idkg_dealing_encryption_pubkey_count(
+                    num_idkg_dealing_encryption_pubkeys,
+                    MetricsResult::Ok,
+                );
+            }
+            Err(IdkgDealingEncPubKeysCountError::TransientInternalError(internal_error)) => {
+                warn!(
+                    self.logger,
+                    "Transient error retrieving local iDKG dealing encryption public key count: {}",
+                    internal_error
+                );
+                self.metrics
+                    .observe_idkg_dealing_encryption_pubkey_count(0, MetricsResult::Err);
+            }
+        };
+    }
 }
+
+struct RegistryKeysResult {
+    pub node_signing_key_result: CryptoResult<PublicKeyProto>,
+    pub committee_signing_key_result: CryptoResult<PublicKeyProto>,
+    pub tls_certificate_result: CryptoResult<X509PublicKeyCert>,
+    pub dkg_dealing_encryption_key_result: CryptoResult<PublicKeyProto>,
+    pub idkg_dealing_encryption_key_result: CryptoResult<PublicKeyProto>,
+}
+
+impl From<RegistryKeysResult> for CryptoResult<ExternalPublicKeys> {
+    fn from(result: RegistryKeysResult) -> Self {
+        Ok(ExternalPublicKeys {
+            node_signing_public_key: result.node_signing_key_result?,
+            committee_signing_public_key: result.committee_signing_key_result?,
+            tls_certificate: result.tls_certificate_result?,
+            dkg_dealing_encryption_public_key: result.dkg_dealing_encryption_key_result?,
+            idkg_dealing_encryption_public_key: result.idkg_dealing_encryption_key_result?,
+        })
+    }
+}
+
+impl RegistryKeysResult {
+    pub fn get_key_count(&self) -> u32 {
+        let mut key_count: u32 = 0;
+        if self.node_signing_key_result.is_ok() {
+            key_count += 1;
+        }
+        if self.committee_signing_key_result.is_ok() {
+            key_count += 1;
+        }
+        if self.tls_certificate_result.is_ok() {
+            key_count += 1;
+        }
+        if self.dkg_dealing_encryption_key_result.is_ok() {
+            key_count += 1;
+        }
+        if self.idkg_dealing_encryption_key_result.is_ok() {
+            key_count += 1;
+        }
+        key_count
+    }
+}
+
+const PUBLIC_KEY_TYPE_COUNT: u32 = 5;
 
 enum KeyRotationOutcome {
     KeyRotated { new_key: PublicKeyProto },
     KeyNotRotated { existing_key: PublicKeyProto },
     RegistryKeyBadOrMissing { existing_key: PublicKeyProto },
-}
-
-pub(crate) fn ensure_node_signing_key_material_is_set_up_correctly(
-    pubkey_proto: PublicKeyProto,
-    csp: &dyn CspSecretKeyStoreChecker,
-) -> CryptoResult<()> {
-    if AlgorithmId::from(pubkey_proto.algorithm) != AlgorithmId::Ed25519 {
-        return Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Ed25519,
-            key_bytes: None,
-            internal_error: format!(
-                "expected public key algorithm Ed25519, but found {:?}",
-                AlgorithmId::from(pubkey_proto.algorithm),
-            ),
-        });
-    }
-    let csp_key = CspPublicKey::try_from(pubkey_proto)?;
-    let key_id = KeyId::try_from(&csp_key)?;
-    if !csp.sks_contains(&key_id)? {
-        return Err(CryptoError::SecretKeyNotFound {
-            algorithm: AlgorithmId::Ed25519,
-            key_id: key_id.to_string(),
-        });
-    }
-    Ok(())
-}
-
-pub(crate) fn ensure_committee_signing_key_material_is_set_up_correctly(
-    pubkey_proto: PublicKeyProto,
-    csp: &dyn CspSecretKeyStoreChecker,
-) -> CryptoResult<()> {
-    if AlgorithmId::from(pubkey_proto.algorithm) != AlgorithmId::MultiBls12_381 {
-        return Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::MultiBls12_381,
-            key_bytes: None,
-            internal_error: format!(
-                "expected public key algorithm MultiBls12_381, but found {:?}",
-                AlgorithmId::from(pubkey_proto.algorithm),
-            ),
-        });
-    }
-    ensure_committe_signing_key_pop_is_well_formed(&pubkey_proto)?;
-    let csp_key = CspPublicKey::try_from(pubkey_proto)?;
-    let key_id = KeyId::try_from(&csp_key)?;
-    if !csp.sks_contains(&key_id)? {
-        return Err(CryptoError::SecretKeyNotFound {
-            algorithm: AlgorithmId::MultiBls12_381,
-            key_id: key_id.to_string(),
-        });
-    }
-    Ok(())
-}
-
-fn ensure_committe_signing_key_pop_is_well_formed(pk_proto: &PublicKeyProto) -> CryptoResult<()> {
-    CspPop::try_from(pk_proto).map_err(|e| match e {
-        CspPopFromPublicKeyProtoError::NoPopForAlgorithm { algorithm } => {
-            CryptoError::MalformedPop {
-                algorithm,
-                pop_bytes: vec![],
-                internal_error: format!("{:?}", e),
-            }
-        }
-        CspPopFromPublicKeyProtoError::MissingProofData => CryptoError::MalformedPop {
-            algorithm: AlgorithmId::MultiBls12_381,
-            pop_bytes: vec![],
-            internal_error: format!("{:?}", e),
-        },
-        CspPopFromPublicKeyProtoError::MalformedPop {
-            pop_bytes,
-            internal_error,
-        } => CryptoError::MalformedPop {
-            algorithm: AlgorithmId::MultiBls12_381,
-            pop_bytes,
-            internal_error,
-        },
-    })?;
-
-    Ok(())
-}
-
-pub(crate) fn ensure_dkg_dealing_encryption_key_material_is_set_up_correctly(
-    pubkey_proto: PublicKeyProto,
-    csp: &dyn CspSecretKeyStoreChecker,
-) -> CryptoResult<()> {
-    if AlgorithmId::from(pubkey_proto.algorithm) != AlgorithmId::Groth20_Bls12_381 {
-        return Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Groth20_Bls12_381,
-            key_bytes: None,
-            internal_error: format!(
-                "expected public key algorithm Groth20_Bls12_381, but found {:?}",
-                AlgorithmId::from(pubkey_proto.algorithm),
-            ),
-        });
-    }
-    let _csp_pop = CspFsEncryptionPop::try_from(&pubkey_proto).map_err(|e| {
-        CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Groth20_Bls12_381,
-            key_bytes: None,
-            internal_error: format!("{:?}", e),
-        }
-    })?;
-    let csp_key = CspFsEncryptionPublicKey::try_from(pubkey_proto).map_err(|e| {
-        CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Groth20_Bls12_381,
-            key_bytes: Some(e.key_bytes),
-            internal_error: e.internal_error,
-        }
-    })?;
-    let key_id = KeyId::from(&csp_key);
-    if !csp.sks_contains(&key_id)? {
-        return Err(CryptoError::SecretKeyNotFound {
-            algorithm: AlgorithmId::Groth20_Bls12_381,
-            key_id: key_id.to_string(),
-        });
-    }
-    Ok(())
-}
-
-pub(crate) fn ensure_idkg_dealing_encryption_key_material_is_set_up_correctly(
-    pubkey_proto: PublicKeyProto,
-    csp: &dyn CspSecretKeyStoreChecker,
-) -> CryptoResult<()> {
-    let idkg_dealing_encryption_pk =
-        mega_public_key_from_proto(&pubkey_proto).map_err(|e| match e {
-            MEGaPublicKeyFromProtoError::UnsupportedAlgorithm { algorithm_id } => {
-                CryptoError::MalformedPublicKey {
-                    algorithm: AlgorithmId::MegaSecp256k1,
-                    key_bytes: None,
-                    internal_error: format!(
-                        "unsupported algorithm ({:?}) of I-DKG dealing encryption key",
-                        algorithm_id,
-                    ),
-                }
-            }
-            MEGaPublicKeyFromProtoError::MalformedPublicKey { key_bytes } => {
-                CryptoError::MalformedPublicKey {
-                    algorithm: AlgorithmId::MegaSecp256k1,
-                    key_bytes: Some(key_bytes),
-                    internal_error: "I-DKG dealing encryption key malformed".to_string(),
-                }
-            }
-        })?;
-
-    let key_id = KeyId::try_from(&idkg_dealing_encryption_pk).map_err(|error| {
-        CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::MegaSecp256k1,
-            key_bytes: Some(idkg_dealing_encryption_pk.serialize()),
-            internal_error: format!("failed to derive key ID from MEGa public key: {}", error),
-        }
-    })?;
-    if !csp.sks_contains(&key_id)? {
-        return Err(CryptoError::SecretKeyNotFound {
-            algorithm: AlgorithmId::MegaSecp256k1,
-            key_id: key_id.to_string(),
-        });
-    }
-    Ok(())
-}
-
-pub(crate) fn ensure_tls_key_material_is_set_up_correctly(
-    pubkey_cert_proto: X509PublicKeyCert,
-    csp: &dyn CspSecretKeyStoreChecker,
-) -> CryptoResult<()> {
-    let public_key_cert = TlsPublicKeyCert::new_from_der(pubkey_cert_proto.certificate_der)
-        .map_err(|e| {
-            CryptoError::MalformedPublicKey {
-                algorithm: AlgorithmId::Tls,
-                key_bytes: None, // The DER is included in the `internal_error` below.
-                internal_error: format!("{}", e),
-            }
-        })?;
-
-    if !csp.sks_contains_tls_key(&public_key_cert)? {
-        return Err(CryptoError::TlsSecretKeyNotFound {
-            certificate_der: public_key_cert.as_der().clone(),
-        });
-    }
-    Ok(())
 }
 
 fn convert_key_rotation_outcome(

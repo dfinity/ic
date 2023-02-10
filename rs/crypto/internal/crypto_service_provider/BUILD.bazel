@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
@@ -119,6 +119,11 @@ rust_test_suite(
     ),
     proc_macro_deps = MACRO_DEPENDENCIES + DEV_MACRO_DEPENDENCIES,
     deps = [":crypto_service_provider"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "crypto_service_provider_doc_test",
+    crate = ":crypto_service_provider",
 )
 
 generated_files_check(

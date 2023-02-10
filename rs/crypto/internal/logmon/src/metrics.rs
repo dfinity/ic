@@ -7,7 +7,7 @@ use core::fmt;
 use ic_metrics::MetricsRegistry;
 use prometheus::{Gauge, HistogramVec, IntCounterVec, IntGaugeVec};
 use std::fmt::{Display, Formatter};
-use std::time;
+use std::ops::Add;
 use std::time::Instant;
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, IntoStaticStr};
@@ -39,7 +39,7 @@ impl CryptoMetrics {
     /// metrics are disabled. This may be relevant for very fast and frequent
     /// operations.
     pub fn now(&self) -> Option<Instant> {
-        self.metrics.as_ref().map(|_| time::Instant::now())
+        self.metrics.as_ref().map(|_| Instant::now())
     }
 
     /// Observes a lock acquisition duration. The `access` label is either
@@ -107,26 +107,42 @@ impl CryptoMetrics {
         }
     }
 
+    /// Observes the iDKG dealing encryption public key count of a node.
+    pub fn observe_idkg_dealing_encryption_pubkey_count(
+        &self,
+        idkg_dealing_encryption_pubkey_count: usize,
+        result: MetricsResult,
+    ) {
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .crypto_idkg_dealing_encryption_pubkey_count
+                .with_label_values(&[&format!("{}", result)])
+                .set(idkg_dealing_encryption_pubkey_count as i64);
+        }
+    }
+
     /// Observes the key counts of a node. For more information about the types of keys contained
-    /// in the `key_counts` parameter, see the [`KeyCounts`] documentation.
-    pub fn observe_node_key_counts(&self, key_counts: KeyCounts) {
+    /// in the `key_counts` parameter, see the [`KeyCounts`] documentation. The `result` parameter
+    /// is used to track whether the key counting operation was successful or not. If the `result`
+    /// was an error, then the key count values cannot be relied upon, but it can be useful to know
+    /// how often, and for how long, the key counting operation failed.
+    pub fn observe_node_key_counts(&self, key_counts: &KeyCounts, result: MetricsResult) {
         if let Some(metrics) = &self.metrics {
             metrics
                 .crypto_key_counts
-                .with_label_values(&[&format!("{}", KeyType::PublicLocal)])
+                .with_label_values(&[&format!("{}", KeyType::PublicLocal), &format!("{}", result)])
                 .set(key_counts.get_pk_local() as i64);
             metrics
                 .crypto_key_counts
-                .with_label_values(&[&format!("{}", KeyType::PublicRegistry)])
+                .with_label_values(&[
+                    &format!("{}", KeyType::PublicRegistry),
+                    &format!("{}", result),
+                ])
                 .set(key_counts.get_pk_registry() as i64);
             metrics
                 .crypto_key_counts
-                .with_label_values(&[&format!("{}", KeyType::SecretSKS)])
+                .with_label_values(&[&format!("{}", KeyType::SecretSKS), &format!("{}", result)])
                 .set(key_counts.get_sk_local() as i64);
-            metrics
-                .crypto_key_counts
-                .with_label_values(&[&format!("{}", KeyType::IdkgDealingEncryptionLocal)])
-                .set(key_counts.get_idkg_pks_local() as i64);
         }
     }
 
@@ -300,41 +316,62 @@ pub enum MessageType {
 ///  - `pk_registry`: The number of node public keys (and TLS x.509 certificates) stored
 ///    in the registry
 ///  - `pk_local`: The number of node public keys (and TLS x.509 certificates) stored
-///    in the local public key store
+///    in the local public key store. For keys that may have multiple revisions, e.g., the iDKG
+///    dealing encryption public keys, at most one is included in the `pk_local` count
 ///  - `sk_local`: The number of node secret keys stored in the local secret key store
-///  - `idkg_pks_local`: The number of iDKG dealing encryption public keys stored in the local
-///    public key store
+#[derive(Debug, PartialEq, Eq)]
 pub struct KeyCounts {
-    pk_registry: u8,
-    pk_local: u8,
-    sk_local: u8,
-    idkg_pks_local: u8,
+    pk_registry: u32,
+    pk_local: u32,
+    sk_local: u32,
 }
 
 impl KeyCounts {
-    pub fn new(pk_registry: u8, pk_local: u8, sk_local: u8, idkg_pks_local: u8) -> Self {
+    pub const ZERO: Self = KeyCounts::new(0, 0, 0);
+
+    pub const ONE: Self = KeyCounts::new(1, 1, 1);
+
+    pub const fn new(pk_registry: u32, pk_local: u32, sk_local: u32) -> Self {
         KeyCounts {
             pk_registry,
             pk_local,
             sk_local,
-            idkg_pks_local,
         }
     }
 
-    pub fn get_pk_registry(&self) -> u8 {
+    pub fn get_pk_registry(&self) -> u32 {
         self.pk_registry
     }
 
-    pub fn get_pk_local(&self) -> u8 {
+    pub fn get_pk_local(&self) -> u32 {
         self.pk_local
     }
 
-    pub fn get_sk_local(&self) -> u8 {
+    pub fn get_sk_local(&self) -> u32 {
         self.sk_local
     }
+}
 
-    pub fn get_idkg_pks_local(&self) -> u8 {
-        self.idkg_pks_local
+/// Add two [`KeyCount`] structs, by adding the individual integer fields within the struct.
+///
+/// # Example
+///```
+///  # use std::ops::Add;
+///  # use ic_crypto_internal_logmon::metrics::KeyCounts;
+///  let lhs = KeyCounts::new(1, 2, 3);
+///  let rhs = KeyCounts::new(5, 10, 15);
+///  let result = lhs + rhs;
+///  assert_eq!(result, KeyCounts::new(6, 12, 18));
+///```
+impl Add for KeyCounts {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        KeyCounts::new(
+            self.pk_registry.add(rhs.pk_registry),
+            self.pk_local.add(rhs.pk_local),
+            self.sk_local.add(rhs.sk_local),
+        )
     }
 }
 
@@ -383,6 +420,9 @@ struct Metrics {
     ///
     /// The 'result' label indicates if the result of the operation was an `Ok(_)`
     pub crypto_iccsa_verification_duration_seconds: HistogramVec,
+
+    /// A gauge vector for the number of iDKG dealing encryption public keys stored locally.
+    pub crypto_idkg_dealing_encryption_pubkey_count: IntGaugeVec,
 
     /// A gauge vector for the different types of keys and certificates of a node. The keys and
     /// certificates that are kept track of are:
@@ -486,13 +526,23 @@ impl Metrics {
             ic_metrics::buckets::decimal_buckets(-4, 1),
             &["method_name", "scope", "domain", "result"],
         );
+        let idkg_dealing_encryption_pubkey_count = r.int_gauge_vec(
+            "crypto_idkg_dealing_encryption_pubkey_count",
+            "Number of iDKG dealing encryption public keys stored locally",
+            &["result"],
+        );
+        for result in MetricsResult::iter() {
+            idkg_dealing_encryption_pubkey_count.with_label_values(&[&format!("{}", result)]);
+        }
         let key_counts = r.int_gauge_vec(
             "crypto_key_counts",
-            "Number of crypto keys stored locally and in the registry",
-            &["key_type"],
+            "Number of crypto keys stored locally and in the registry, and whether the key counting operation was successful or not",
+            &["key_type", "result"],
         );
         for key_type in KeyType::iter() {
-            key_counts.with_label_values(&[&format!("{}", key_type)]);
+            for result in MetricsResult::iter() {
+                key_counts.with_label_values(&[&format!("{}", key_type), &format!("{}", result)]);
+            }
         }
         let boolean_results = r.int_counter_vec(
             "crypto_boolean_results",
@@ -540,6 +590,7 @@ impl Metrics {
                 },
                 &["result"],
             ),
+            crypto_idkg_dealing_encryption_pubkey_count: idkg_dealing_encryption_pubkey_count,
             crypto_key_counts: key_counts,
             crypto_key_rotation_results: rotation_results,
             crypto_boolean_results: boolean_results,

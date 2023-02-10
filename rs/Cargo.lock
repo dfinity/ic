@@ -4934,6 +4934,7 @@ dependencies = [
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-keygen",
  "ic-crypto-test-utils-local-csp-vault",
+ "ic-crypto-test-utils-metrics",
  "ic-crypto-test-utils-multi-sigs",
  "ic-crypto-test-utils-threshold-sigs",
  "ic-crypto-tls-cert-validation",
@@ -5663,6 +5664,17 @@ dependencies = [
  "ic-crypto-tls-interfaces",
  "ic-types",
  "mockall 0.7.2",
+]
+
+[[package]]
+name = "ic-crypto-test-utils-metrics"
+version = "0.8.0"
+dependencies = [
+ "ic-crypto-internal-logmon",
+ "ic-metrics",
+ "prometheus 0.12.0",
+ "strum 0.23.0",
+ "strum_macros 0.23.1",
 ]
 
 [[package]]

@@ -268,16 +268,6 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     }
 
     // PublicKeyStoreCspVault-methods.
-    async fn pks_contains(
-        self,
-        _: context::Context,
-        public_keys: CurrentNodePublicKeys,
-    ) -> Result<bool, CspPublicKeyStoreError> {
-        let vault = self.local_csp_vault;
-        let job = move || vault.pks_contains(public_keys);
-        execute_on_thread_pool(self.thread_pool_handle, job).await
-    }
-
     async fn current_node_public_keys(
         self,
         _: context::Context,

@@ -2,6 +2,7 @@ use crate::CryptoComponentFatClient;
 use ic_crypto_internal_csp::public_key_store::PublicKeyStore;
 use ic_crypto_internal_csp::secret_key_store::SecretKeyStore;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
+use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_types_test_utils::ids::node_test_id;
@@ -29,6 +30,8 @@ pub fn crypto_component_with<S: SecretKeyStore + 'static, P: PublicKeyStore + 's
         no_op_logger(),
         registry_client,
         node_test_id(NODE_ID),
+        Arc::new(CryptoMetrics::none()),
+        None,
     )
 }
 
@@ -41,5 +44,7 @@ pub fn crypto_component_with_csp<C: CryptoServiceProvider>(
         no_op_logger(),
         registry_client,
         node_test_id(NODE_ID),
+        Arc::new(CryptoMetrics::none()),
+        None,
     )
 }

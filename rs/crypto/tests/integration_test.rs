@@ -173,7 +173,11 @@ fn should_fail_check_keys_with_registry_if_no_keys_are_present_in_registry() {
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_matches!(result, Err(CryptoError::PublicKeyNotFound { key_purpose, .. }) if key_purpose == KeyPurpose::NodeSigning);
+    assert_matches!(
+        result,
+        Err(CryptoError::PublicKeyNotFound { key_purpose, .. })
+        if key_purpose == KeyPurpose::NodeSigning
+    );
 }
 
 #[test]
@@ -187,14 +191,11 @@ fn should_fail_check_keys_with_registry_if_node_signing_keys_are_missing_in_regi
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(result.is_err());
-    let is_node_signing_public_key_err = match result.unwrap_err() {
-        CryptoError::PublicKeyNotFound { key_purpose, .. } => {
-            key_purpose == KeyPurpose::NodeSigning
-        }
-        _ => false,
-    };
-    assert!(is_node_signing_public_key_err);
+    assert_matches!(
+        result,
+        Err(CryptoError::PublicKeyNotFound { key_purpose, .. })
+        if key_purpose == KeyPurpose::NodeSigning
+    )
 }
 
 #[test]
@@ -208,14 +209,11 @@ fn should_fail_check_keys_with_registry_if_committee_member_keys_are_missing_in_
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(result.is_err());
-    let is_committee_signing_public_key_err = match result.unwrap_err() {
-        CryptoError::PublicKeyNotFound { key_purpose, .. } => {
-            key_purpose == KeyPurpose::CommitteeSigning
-        }
-        _ => false,
-    };
-    assert!(is_committee_signing_public_key_err);
+    assert_matches!(
+        result,
+        Err(CryptoError::PublicKeyNotFound { key_purpose, .. })
+        if key_purpose == KeyPurpose::CommitteeSigning
+    );
 }
 
 #[test]
@@ -258,7 +256,11 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_key_is_missin
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_matches!(result, Err(CryptoError::PublicKeyNotFound { key_purpose, .. }) if key_purpose == KeyPurpose::IDkgMEGaEncryption);
+    assert_matches!(
+        result,
+        Err(CryptoError::PublicKeyNotFound { key_purpose, .. })
+        if key_purpose == KeyPurpose::IDkgMEGaEncryption
+    );
 }
 
 #[test]
@@ -307,12 +309,8 @@ fn should_fail_check_keys_with_registry_if_tls_cert_is_malformed() {
 
     assert_matches!(
         result,
-        Err(CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Tls,
-            key_bytes: None,
-            internal_error
-        })
-        if internal_error.contains("Error parsing DER")
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("tls_certificate_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed certificate: TlsPublicKeyCertCreationError")
     );
 }
 
@@ -336,12 +334,11 @@ fn should_fail_check_keys_with_registry_if_node_signing_secret_key_is_missing() 
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(result.is_err());
-    let is_secret_key_err = match result.unwrap_err() {
-        CryptoError::SecretKeyNotFound { algorithm, .. } => algorithm == AlgorithmId::Ed25519,
-        _ => false,
-    };
-    assert!(is_secret_key_err);
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("node_signing_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
+    );
 }
 
 #[test]
@@ -364,14 +361,11 @@ fn should_fail_check_keys_with_registry_if_committee_member_secret_key_is_missin
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert!(result.is_err());
-    let is_secret_key_err = match result.unwrap_err() {
-        CryptoError::SecretKeyNotFound { algorithm, .. } => {
-            algorithm == AlgorithmId::MultiBls12_381
-        }
-        _ => false,
-    };
-    assert!(is_secret_key_err);
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
+    );
 }
 
 #[test]
@@ -391,7 +385,11 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_secret_key_is_
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_matches!(result, Err(CryptoError::SecretKeyNotFound { algorithm, key_id: _ }) if algorithm == AlgorithmId::Groth20_Bls12_381);
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
+    );
 }
 
 #[test]
@@ -412,13 +410,10 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pubkey_is_malf
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Groth20_Bls12_381,
-            key_bytes: Some(MALFORMED_DEALING_ENC_KEY_DATA.to_vec()),
-            internal_error: "Wrong data length 13, expected length 48.".to_string()
-        }
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key")
     );
 }
 
@@ -442,13 +437,10 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_missing
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Groth20_Bls12_381,
-            key_bytes: None,
-            internal_error: "MissingProofData".to_string()
-        }
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError{ internal_error })
+        if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key MissingProofData\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
 
@@ -472,15 +464,10 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_empty()
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Groth20_Bls12_381,
-            key_bytes: None,
-            internal_error:
-                "MalformedPop { pop_bytes: [], internal_error: \"EOF while parsing a value\" }"
-                    .to_string()
-        }
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key MalformedPop")
     );
 }
 
@@ -504,13 +491,10 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_malform
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::Groth20_Bls12_381,
-            key_bytes: None,
-            internal_error: "MalformedPop { pop_bytes: [109, 97, 108, 102, 111, 114, 109, 101, 100, 32, 112, 111, 112], internal_error: \"EOF while parsing a value at offset 13\" }".to_string()
-        }
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key MalformedPop")
     );
 }
 
@@ -534,13 +518,10 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_missing() {
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPop {
-            algorithm: AlgorithmId::MultiBls12_381,
-            pop_bytes: vec![0u8; 0],
-            internal_error: "CspPopFromPublicKeyProtoError::MissingProofData".to_string(),
-        }
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key (Missing proof data)\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
 
@@ -564,13 +545,10 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_empty() {
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPop {
-            algorithm: AlgorithmId::MultiBls12_381,
-            pop_bytes: vec![0u8; 0],
-            internal_error: "Wrong pop length 0, expected length 48.".to_string(),
-        }
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key (Malformed Pop)\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
 
@@ -594,13 +572,10 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_malformed() {
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::MalformedPop {
-            algorithm: AlgorithmId::MultiBls12_381,
-            pop_bytes: b"malformed pop".to_vec(),
-            internal_error: "Wrong pop length 13, expected length 48.".to_string(),
-        }
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key (Malformed Pop)\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
 
@@ -618,16 +593,15 @@ fn should_fail_check_keys_with_registry_if_tls_cert_secret_key_is_missing() {
         .add_generated_committee_signing_key_to_registry()
         .add_generated_dkg_dealing_enc_key_to_registry()
         .add_generated_idkg_dealing_enc_key_to_registry()
-        .with_tls_cert_in_registry(cert_without_corresponding_secret_key.clone())
+        .with_tls_cert_in_registry(cert_without_corresponding_secret_key)
         .build(NODE_ID, REG_V1);
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::TlsSecretKeyNotFound {
-            certificate_der: cert_without_corresponding_secret_key.certificate_der,
-        }
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("tls_certificate_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
 
@@ -650,9 +624,10 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_pubkey_algori
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_matches!(result, Err(CryptoError::MalformedPublicKey { algorithm, internal_error, ..})
-            if algorithm == AlgorithmId::MegaSecp256k1
-            && internal_error.contains("unsupported algorithm")
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("idkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key: unsupported algorithm")
     );
 }
 
@@ -674,9 +649,10 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_pubkey_is_mal
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_matches!(result, Err(CryptoError::MalformedPublicKey { algorithm, internal_error, ..})
-            if algorithm == AlgorithmId::MegaSecp256k1
-            && internal_error.contains("malformed")
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("idkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key: I-DKG dealing encryption key malformed\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
 
@@ -697,7 +673,11 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_secret_key_is
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_matches!(result, Err(CryptoError::SecretKeyNotFound { algorithm, ..}) if algorithm == AlgorithmId::MegaSecp256k1);
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("idkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
+    )
 }
 
 #[test]
@@ -735,12 +715,17 @@ fn should_log_error_if_idkg_dealing_encryption_secret_key_missing() {
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert_matches!(result, Err(CryptoError::SecretKeyNotFound { algorithm, ..}) if algorithm == AlgorithmId::MegaSecp256k1);
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("idkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
+    );
     let logs = in_memory_logger.drain_logs();
 
-    LogEntriesAssert::assert_that(logs)
-        .has_len(1)
-        .has_only_one_message_containing(&Level::Error, "One or more secret keys corresponding to node public keys in the registry are missing locally:");
+    LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+        &Level::Error,
+        "One or more node keys from the registry are missing locally",
+    );
 }
 
 #[test]
@@ -806,7 +791,11 @@ fn should_fail_check_keys_with_registry_if_no_idkg_key_in_registry() {
     assert!(idkg_dealing_encryption_pk_in_public_key_store.is_some());
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
-    assert_matches!(result, Err(CryptoError::PublicKeyNotFound { key_purpose, .. }) if key_purpose == KeyPurpose::IDkgMEGaEncryption);
+    assert_matches!(
+        result,
+        Err(CryptoError::PublicKeyNotFound { key_purpose, .. })
+        if key_purpose == KeyPurpose::IDkgMEGaEncryption
+    );
 }
 
 /// If this test fails it means that one of AlgorithmId and AlgorithmIdProto structs was updated but not the other.
@@ -921,8 +910,10 @@ fn should_fail_check_keys_with_registry_if_registry_node_signing_key_has_no_matc
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert_matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
-        if algorithm == AlgorithmId::Ed25519
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("node_signing_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
 
@@ -958,8 +949,10 @@ fn should_fail_check_keys_with_registry_if_registry_committee_signing_public_key
     registry_client.reload();
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
-    assert_matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
-        if algorithm == AlgorithmId::MultiBls12_381
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
 
@@ -996,8 +989,10 @@ fn should_fail_check_keys_with_registry_if_registry_dkg_dealing_encryption_key_h
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert_matches!(result, Err(CryptoError::SecretKeyNotFound {algorithm, .. })
-        if algorithm == AlgorithmId::Groth20_Bls12_381
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
 
@@ -1012,7 +1007,7 @@ fn should_fail_check_keys_with_registry_if_registry_tls_cert_has_no_matching_sec
             Arc::clone(&registry_data) as Arc<_>,
         )
         .build();
-    let (tls_cert_without_corresponding_secret_key, tls_cert_der) = {
+    let (tls_cert_without_corresponding_secret_key, _tls_cert_der) = {
         let mut csprng = ChaChaRng::from_seed([9u8; 32]);
         let not_after = Asn1Time::days_from_now(31).expect("unable to create Asn1Time");
         let common_name = "another_common_name";
@@ -1038,11 +1033,10 @@ fn should_fail_check_keys_with_registry_if_registry_tls_cert_has_no_matching_sec
 
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert_eq!(
-        result.unwrap_err(),
-        CryptoError::TlsSecretKeyNotFound {
-            certificate_der: tls_cert_der,
-        }
+    assert_matches!(
+        result,
+        Err(CryptoError::InternalError { internal_error })
+        if internal_error.contains("tls_certificate_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
 
@@ -1341,7 +1335,7 @@ fn should_return_registration_needed_from_check_keys_with_registry_if_local_idkg
     assert_matches!(
         result,
         Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(missing_pk))
-          if missing_pk == new_idkg_dealing_encryption_key_to_register
+        if missing_pk == new_idkg_dealing_encryption_key_to_register
     );
 }
 

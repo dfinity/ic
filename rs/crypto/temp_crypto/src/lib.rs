@@ -1016,14 +1016,6 @@ impl<C: CryptoServiceProvider> KeyManager for TempCryptoComponentGeneric<C> {
             .check_keys_with_registry(registry_version)
     }
 
-    fn collect_and_store_key_count_metrics(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<()> {
-        self.crypto_component
-            .collect_and_store_key_count_metrics(registry_version)
-    }
-
     fn current_node_public_keys(
         &self,
     ) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError> {
