@@ -7,8 +7,11 @@ from dataclasses import fields
 from statistics import mean
 from statistics import median
 
-from common.misc import mean_or_minus_one
 from termcolor import colored
+
+# TODO: see if there is a better way to find "common" module
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from common.misc import mean_or_minus_one  # noqa: E402
 
 
 class WorkloadGeneratorSummaryUnmatched(Exception):

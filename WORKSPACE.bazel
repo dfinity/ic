@@ -384,3 +384,34 @@ http_file(
     # Keep this dependency while the aggregator release process is WIP (IDX-2661)
     url = "https://github.com/dfinity/nns-dapp/releases/download/ci-pin/sns_aggregator2.wasm",
 )
+
+# Import Python rules
+
+http_archive(
+    name = "rules_python",
+    sha256 = "8c15896f6686beb5c631a4459a3aa8392daccaab805ea899c9d14215074b60ef",
+    strip_prefix = "rules_python-0.17.3",
+    url = "https://github.com/bazelbuild/rules_python/archive/refs/tags/0.17.3.tar.gz",
+)
+
+load("@rules_python//python:repositories.bzl", "python_register_toolchains")
+
+python_register_toolchains(
+    name = "python3_10",
+    python_version = "3.10",
+)
+
+load("@python3_10//:defs.bzl", "interpreter")
+load("@rules_python//python:pip.bzl", "pip_parse")
+
+# pip installation needs to be executed in WORKSPACE
+# if more python modules need to be installed, we will need to create separate rules for them
+pip_parse(
+    name = "scalability_deps",
+    python_interpreter_target = interpreter,
+    requirements_lock = "//scalability:requirements.txt",
+)
+
+load("@scalability_deps//:requirements.bzl", "install_deps")
+
+install_deps()

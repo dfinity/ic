@@ -1,7 +1,11 @@
+import sys
 import unittest
+from pathlib import Path
 from unittest import TestCase
 
-from common.verify_perf import VerifyPerf
+p = Path(__file__).parents[2]
+sys.path.append(f"{p}/")
+from common.verify_perf import VerifyPerf  # noqa: E402
 
 
 class TestVerify(TestCase):

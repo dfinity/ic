@@ -17,9 +17,8 @@ gen-cargo-pipeline:
       cd gitlab-ci/src/
 
       # set-up python dev
-      pipenv --python 3
-      pipenv install -r requirements.txt
-      $SHELL_WRAPPER pipenv run python3 gen_gitlab_cargo_pipeline/gen_pipeline.py \
+      pip3 install -r requirements.txt
+      $SHELL_WRAPPER python3 gen_gitlab_cargo_pipeline/gen_pipeline.py \
         ../../rs/ ../../ic-os -v --out=../../child-pipeline.yml
       
       cd -

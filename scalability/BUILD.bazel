@@ -1,0 +1,235 @@
+load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("@rules_python//python:pip.bzl", "compile_pip_requirements")
+load("@scalability_deps//:requirements.bzl", "all_requirements", "requirement")
+
+# Bazel has an automatic test that checks whether current requirements are up to date
+# Because of this, it's possible that this test could fail if a new version is available even if
+# no python code was changed. To avoid unexpected failures, I added the tag "allow_to_fail"
+compile_pip_requirements(
+    name = "requirements",
+    requirements_in = "requirements.in",
+    requirements_txt = "requirements.txt",
+    tags = [
+        "allow_to_fail",
+        "requires-network",
+    ],
+)
+
+# there were some issues with loading uuid, therefore we need load requirements individually instead of usings all_requirements
+py_library(
+    name = "misc",
+    srcs = ["common/misc.py"],
+    deps = [
+        requirement("python-gflags"),
+        requirement("six"),
+        requirement("termcolor"),
+    ],
+)
+
+py_library(
+    name = "notify_dashboard",
+    srcs = ["common/notify_dashboard.py"],
+    deps = [] + all_requirements,
+)
+
+py_test(
+    name = "test_notify_dashboard",
+    srcs = ["common/tests/test_notify_dashboard.py"],
+    tags = ["requires-network"],
+    deps = [
+        ":misc",
+        ":notify_dashboard",
+    ],
+)
+
+py_test(
+    name = "test_misc",
+    srcs = ["common/tests/test_misc.py"],
+    deps = [":misc"],
+)
+
+py_library(
+    name = "ssh",
+    srcs = ["common/ssh.py"],
+)
+
+py_library(
+    name = "workload",
+    srcs = ["common/workload.py"],
+    deps = [
+        ":misc",
+        ":ssh",
+    ],
+)
+
+py_library(
+    name = "report",
+    srcs = ["common/report.py"],
+    deps = [":misc"],
+)
+
+py_test(
+    name = "test_report",
+    srcs = ["common/tests/test_report.py"],
+    deps = [
+        ":report",
+        ":workload",
+    ],
+)
+
+py_test(
+    name = "test_workload",
+    srcs = ["common/tests/test_workload.py"],
+    deps = [":workload"],
+)
+
+py_library(
+    name = "ansible",
+    srcs = ["common/ansible.py"],
+)
+
+py_library(
+    name = "metrics",
+    srcs = ["common/metrics.py"],
+)
+
+py_library(
+    name = "flamegraphs",
+    srcs = ["common/flamegraphs.py"],
+    deps = [
+        ":metrics",
+        ":ssh",
+    ],
+)
+
+py_library(
+    name = "machine_failure",
+    srcs = ["common/machine_failure.py"],
+)
+
+py_library(
+    name = "prometheus",
+    srcs = ["common/prometheus.py"],
+    deps = [requirement("requests")],
+)
+
+py_library(
+    name = "base_experiment",
+    srcs = ["common/base_experiment.py"],
+    deps = [
+        ":ansible",
+        ":flamegraphs",
+        ":machine_failure",
+        ":misc",
+        ":prometheus",
+        ":report",
+        ":ssh",
+    ],
+)
+
+py_test(
+    name = "test_workload_description",
+    srcs = ["common/tests/test_workload_description.py"],
+    data = ["workloads/mixed-query-update.toml"],
+    deps = [
+        ":base_experiment",
+        ":workload",
+        requirement("python-gflags"),
+        requirement("toml"),
+    ],
+)
+
+py_library(
+    name = "verify_perf",
+    srcs = ["common/verify_perf.py"],
+    deps = [":misc"] + all_requirements,
+)
+
+py_test(
+    name = "test_verify_perf",
+    srcs = ["common/tests/test_verify_perf.py"],
+    deps = [":verify_perf"],
+)
+
+#The following python tests cannot be run in bazel currently, since they rely on absolute paths which would need to be refactored in order for them to run in bazel
+#py_library(
+#    name = "workload_experiment",
+#    srcs = ["common/workload_experiment.py"],
+#    deps = [
+#        ":ansible",
+#        ":base_experiment",
+#        ":prometheus",
+#        ":report",
+#        ":ssh",
+#        ":workload_hooks",
+#        requirement("termcolor"),
+#    ],
+#)
+#
+#py_library(
+#    name = "workload_hooks",
+#    srcs = ["workloads/hooks/workload_hooks.py"],
+#)
+#
+#py_library(
+#    name = "run_mixed_workload_experiment",
+#    srcs = ["experiments/run_mixed_workload_experiment.py"],
+#    deps = [
+#        ":misc",
+#        ":report",
+#        ":workload",
+#        ":workload_experiment",
+#        ":workload_hooks",
+#        requirement("python-gflags"),
+#        requirement("toml"),
+#    ],
+#)
+#
+#py_library(
+#    name = "xrc_hooks",
+#    srcs = ["workloads/hooks/xrc_hooks.py"],
+#    deps = [requirement("ic-py")],
+#)
+#
+#py_test(
+#    name = "mock_multi",
+#    srcs = ["common/tests/mock_multi.py"],
+#    data = ["//publish/canisters:upload"],
+#    deps = [
+#        ":base_experiment",
+#        ":misc",
+#        ":run_mixed_workload_experiment",
+#        ":ssh",
+#        ":workload",
+#        ":xrc_hooks"
+#    ],
+#    tags = ["local"],
+#)
+#
+#py_test(
+#    name = "mock",
+#    srcs = ["common/tests/mock.py"],
+#    data = ["//publish/canisters:upload"],
+#    deps = [
+#        ":base_experiment",
+#        ":misc",
+#        ":report",
+#        ":ssh",
+#        ":workload",
+#        ":workload_experiment",
+#    ],
+#    tags = ["local"],
+#)
+#
+#py_library(
+#    name = "add_benchmark",
+#    srcs = ["add_benchmark.py"],
+#    deps = [requirement("pybars3")]
+#)
+#
+#py_test(
+#    name = "wizard",
+#    srcs = ["common/tests/wizard.py"],
+#    data = glob(["**"]),
+#    deps = [":add_benchmark"],
+#)

@@ -1,10 +1,15 @@
 """Unit tests for notify_dashboard.py."""
 import sys
 import unittest
+from pathlib import Path
 from unittest import TestCase
 
-import common.misc as misc
-from common.notify_dashboard import NotifyDashboard
+p = Path(__file__).parents[2]
+sys.path.append(f"{p}/")
+
+
+import common.misc as misc  # noqa: E402
+from common.notify_dashboard import NotifyDashboard  # noqa: E402
 
 
 class Test_NotifyDashboard(TestCase):
