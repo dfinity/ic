@@ -467,6 +467,7 @@ impl SandboxManager {
         wasm_page_map: PageMapSerialization,
         next_wasm_memory_id: MemoryId,
         canister_id: CanisterId,
+        stable_memory_page_map: PageMapSerialization,
     ) -> HypervisorResult<CreateExecutionStateSuccessReply> {
         // Validate, instrument, and compile the binary.
         let (embedder_cache, compilation_result, serialized_module) =
@@ -479,6 +480,7 @@ impl SandboxManager {
                 wasm_page_map,
                 next_wasm_memory_id,
                 canister_id,
+                stable_memory_page_map,
             )?;
 
         Ok(CreateExecutionStateSuccessReply {
@@ -496,6 +498,7 @@ impl SandboxManager {
         wasm_page_map: PageMapSerialization,
         next_wasm_memory_id: MemoryId,
         canister_id: CanisterId,
+        stable_memory_page_map: PageMapSerialization,
     ) -> HypervisorResult<CreateExecutionStateSerializedSuccessReply> {
         let timer = Instant::now();
         let (embedder_cache, deserialization_time) =
@@ -507,6 +510,7 @@ impl SandboxManager {
                 wasm_page_map,
                 next_wasm_memory_id,
                 canister_id,
+                stable_memory_page_map,
             )?;
         Ok(CreateExecutionStateSerializedSuccessReply {
             wasm_memory_modifications,
@@ -523,11 +527,15 @@ impl SandboxManager {
         wasm_page_map: PageMapSerialization,
         next_wasm_memory_id: MemoryId,
         canister_id: CanisterId,
+        stable_memory_page_map: PageMapSerialization,
     ) -> HypervisorResult<(MemoryModifications, Vec<Global>)> {
         let embedder = Arc::clone(&self.embedder);
 
         let mut wasm_page_map =
             PageMap::deserialize(wasm_page_map, &self.page_allocator_registry).unwrap();
+        let stable_mem_page_map =
+            PageMap::deserialize(stable_memory_page_map, &self.page_allocator_registry).unwrap();
+
         let (exported_globals, wasm_memory_delta, wasm_memory_size) =
             ic_embedders::wasm_executor::get_initial_globals_and_memory(
                 data_segments,
@@ -535,6 +543,7 @@ impl SandboxManager {
                 &embedder,
                 &mut wasm_page_map,
                 canister_id,
+                &stable_mem_page_map,
             )?;
 
         let wasm_memory = Memory::new(wasm_page_map, wasm_memory_size);

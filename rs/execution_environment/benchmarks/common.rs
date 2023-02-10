@@ -20,6 +20,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_INDEX_IN_NNS_SUBNET;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{CallOrigin, CanisterState, NetworkTopology, ReplicatedState};
 use ic_system_api::{ExecutionParameters, InstructionLimits};
 use ic_test_utilities::types::ids::subnet_test_id;
@@ -241,6 +242,7 @@ where
         log.clone(),
         Arc::clone(&cycles_account_manager),
         SchedulerConfig::application_subnet().dirty_page_overhead,
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     ));
     let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> = Arc::new(
         IngressHistoryWriterImpl::new(config.clone(), log.clone(), &metrics_registry),

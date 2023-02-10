@@ -6,6 +6,7 @@ use crate::{
 };
 use ic_logger::{debug, error, fatal, info, trace, warn, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_state_layout::utils::do_copy_overwrite;
 use ic_state_layout::{error::LayoutError, CheckpointLayout, ReadOnly, RwPolicy, StateLayout};
 use ic_sys::mmap::ScopedMmap;
@@ -77,6 +78,7 @@ pub struct IncompleteState {
     own_subnet_type: SubnetType,
     thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
     state_sync_refs: StateSyncRefs,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
 }
@@ -163,6 +165,7 @@ impl IncompleteState {
         own_subnet_type: SubnetType,
         thread_pool: Arc<Mutex<scoped_threadpool::Pool>>,
         state_sync_refs: StateSyncRefs,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         malicious_flags: MaliciousFlags,
     ) -> Self {
         if state_sync_refs.insert(height, root_hash.clone()).is_some() {
@@ -189,6 +192,7 @@ impl IncompleteState {
             own_subnet_type,
             thread_pool,
             state_sync_refs,
+            fd_factory,
             malicious_flags,
         }
     }
@@ -769,6 +773,7 @@ impl IncompleteState {
         state_layout: &StateLayout,
         own_subnet_type: SubnetType,
         thread_pool: &mut scoped_threadpool::Pool,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) {
         let _timer = metrics
             .state_sync_metrics
@@ -790,6 +795,7 @@ impl IncompleteState {
             own_subnet_type,
             &metrics.checkpoint_metrics,
             Some(thread_pool),
+            Arc::clone(&fd_factory),
         ) {
             let elapsed = started_at.elapsed();
             metrics
@@ -1169,6 +1175,7 @@ impl Chunkable for IncompleteState {
                             &self.state_layout,
                             self.own_subnet_type,
                             &mut self.thread_pool.lock().unwrap(),
+                            Arc::clone(&self.fd_factory),
                         );
 
                         let artifact = Self::build_artifact(
@@ -1348,6 +1355,7 @@ impl Chunkable for IncompleteState {
                         &self.state_layout,
                         self.own_subnet_type,
                         &mut self.thread_pool.lock().unwrap(),
+                        Arc::clone(&self.fd_factory),
                     );
 
                     let artifact = Self::build_artifact(

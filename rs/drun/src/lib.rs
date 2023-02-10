@@ -209,6 +209,7 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
             cfg.hypervisor.clone(),
             Arc::clone(&cycles_account_manager),
             Arc::clone(&state_manager) as Arc<_>,
+            state_manager.get_fd_factory(),
         )
         .into_parts();
 

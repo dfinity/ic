@@ -317,6 +317,7 @@ impl Player {
             cfg.hypervisor.clone(),
             Arc::clone(&cycles_account_manager),
             Arc::clone(&state_manager) as Arc<_>,
+            state_manager.get_fd_factory(),
         );
         let message_routing = Arc::new(MessageRoutingImpl::new(
             state_manager.clone(),

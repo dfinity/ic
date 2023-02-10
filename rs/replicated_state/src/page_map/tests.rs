@@ -4,10 +4,12 @@ use super::{
     Buffer, FileDescriptor, PageAllocator, PageAllocatorRegistry, PageDelta, PageIndex, PageMap,
     PageMapSerialization,
 };
+use crate::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_sys::PAGE_SIZE;
 use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES};
 use nix::unistd::dup;
 use std::fs::OpenOptions;
+use std::sync::Arc;
 
 fn assert_equal_page_maps(page_map1: &PageMap, page_map2: &PageMap) {
     assert_eq!(page_map1.num_host_pages(), page_map2.num_host_pages());
@@ -119,7 +121,12 @@ fn persisted_map_is_equivalent_to_the_original() {
     base_map.update(base_pages.as_slice());
     base_map.persist_delta(&heap_file).unwrap();
 
-    let mut original_map = PageMap::open(&heap_file, Height::new(0)).unwrap();
+    let mut original_map = PageMap::open(
+        &heap_file,
+        Height::new(0),
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+    )
+    .unwrap();
 
     assert_eq!(base_map, original_map);
 
@@ -142,7 +149,12 @@ fn persisted_map_is_equivalent_to_the_original() {
     original_map.update(pages);
 
     original_map.persist_delta(&heap_file).unwrap();
-    let persisted_map = PageMap::open(&heap_file, Height::new(0)).unwrap();
+    let persisted_map = PageMap::open(
+        &heap_file,
+        Height::new(0),
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+    )
+    .unwrap();
 
     assert_eq!(persisted_map, original_map);
 }
@@ -157,8 +169,12 @@ fn can_persist_and_load_an_empty_page_map() {
 
     let original_map = PageMap::new_for_testing();
     original_map.persist_delta(&heap_file).unwrap();
-    let persisted_map =
-        PageMap::open(&heap_file, Height::new(0)).expect("opening an empty page map must succeed");
+    let persisted_map = PageMap::open(
+        &heap_file,
+        Height::new(0),
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+    )
+    .expect("opening an empty page map must succeed");
 
     // base_height will be different, but is not part of eq
     assert_eq!(original_map, persisted_map);
@@ -181,7 +197,11 @@ fn returns_an_error_if_file_size_is_not_a_multiple_of_page_size() {
         .write_all(&vec![1; PAGE_SIZE / 2])
         .unwrap();
 
-    match PageMap::open(&heap_file, Height::new(0)) {
+    match PageMap::open(
+        &heap_file,
+        Height::new(0),
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+    ) {
         Err(err) => assert!(
             err.is_invalid_heap_file(),
             "Expected invalid heap file error, got {:?}",

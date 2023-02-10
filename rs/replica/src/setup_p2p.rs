@@ -26,6 +26,7 @@ use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
 use ic_types::{consensus::catchup::CUPWithOriginalProtobuf, NodeId, SubnetId};
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
+
 use std::sync::Arc;
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -125,6 +126,7 @@ pub fn construct_ic_stack(
         subnet_config.cycles_account_manager_config,
     ));
     let verifier = VerifierImpl::new(crypto.clone());
+
     let state_manager = Arc::new(StateManagerImpl::new(
         Arc::new(verifier),
         subnet_id,
@@ -135,6 +137,8 @@ pub fn construct_ic_stack(
         Some(artifact_pools.consensus_pool_cache.starting_height()),
         config.malicious_behaviour.malicious_flags.clone(),
     ));
+    // Get the file descriptor factory object and pass it down the line to the hypervisor
+    let fd_factory = state_manager.get_fd_factory();
     let execution_services = ExecutionServices::setup_execution(
         replica_logger.clone(),
         &metrics_registry,
@@ -144,6 +148,7 @@ pub fn construct_ic_stack(
         config.hypervisor.clone(),
         Arc::clone(&cycles_account_manager),
         Arc::clone(&state_manager) as Arc<_>,
+        Arc::clone(&fd_factory),
     );
 
     let certified_stream_store: Arc<dyn CertifiedStreamStore> =

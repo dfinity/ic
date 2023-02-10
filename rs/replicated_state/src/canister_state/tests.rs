@@ -1,6 +1,7 @@
 use super::*;
 use crate::canister_state::execution_state::WasmMetadata;
 use crate::CallOrigin;
+use crate::Memory;
 use ic_base_types::NumSeconds;
 use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities::mock_time;
@@ -347,8 +348,8 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
         Default::default(),
         execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
         ExportedFunctions::new(Default::default()),
-        Default::default(),
-        Default::default(),
+        Memory::new_for_testing(),
+        Memory::new_for_testing(),
         vec![Global::I64(14)],
         WasmMetadata::default(),
     ));

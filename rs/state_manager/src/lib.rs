@@ -53,6 +53,7 @@ use ic_utils::thread::JoinOnDrop;
 use prometheus::{HistogramVec, IntCounter, IntCounterVec, IntGauge};
 use prost::Message;
 use std::convert::{From, TryFrom};
+use std::fs::File;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -64,6 +65,11 @@ use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Mutex,
 };
+
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
+use std::os::unix::io::RawFd;
+use std::os::unix::prelude::IntoRawFd;
+use uuid::Uuid;
 
 /// The number of threads that state manager starts to construct checkpoints.
 /// It is exported as public for use in tests and benchmarks.
@@ -637,6 +643,7 @@ pub struct StateManagerImpl {
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
     _tip_thread_handle: JoinOnDrop<()>,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
 }
 
@@ -645,6 +652,7 @@ fn load_checkpoint(
     height: Height,
     metrics: &StateManagerMetrics,
     own_subnet_type: SubnetType,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<ReplicatedState, CheckpointError> {
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
 
@@ -661,6 +669,7 @@ fn load_checkpoint(
                 own_subnet_type,
                 &metrics.checkpoint_metrics,
                 Some(&mut thread_pool),
+                Arc::clone(&fd_factory),
             )
         })
 }
@@ -1053,10 +1062,13 @@ pub fn get_dirty_pages(
 /// We execute this procedure before making a checkpoint because we
 /// don't want those deltas to be persisted to TIP as we apply deltas
 /// incrementally after every round.
-fn strip_page_map_deltas(state: &mut ReplicatedState) {
+fn strip_page_map_deltas(
+    state: &mut ReplicatedState,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+) {
     PageMapType::list_all(state).into_iter().for_each(|entry| {
         if let Some(page_map) = entry.get_mut(state) {
-            page_map.strip_all_deltas();
+            page_map.strip_all_deltas(Arc::clone(&fd_factory));
         }
     });
 
@@ -1248,6 +1260,11 @@ impl StateManagerImpl {
             .unwrap_or_else(|err| fatal!(&log, "Failed to init state layout: {:?}", err));
         info!(log, "StateLayout init took {:?}", starting_time.elapsed());
 
+        // Create the file descriptor factory that is used to create files for PageMaps.
+        let page_delta_path = state_layout.page_deltas();
+        let fd_factory: Arc<dyn PageAllocatorFileDescriptor> =
+            Arc::new(PageAllocatorFileDescriptorImpl::new(page_delta_path));
+
         let (_tip_thread_handle, tip_channel) = spawn_tip_thread(
             log.clone(),
             state_layout.capture_tip_handler(),
@@ -1334,6 +1351,7 @@ impl StateManagerImpl {
                     &cp_layout,
                     own_subnet_type,
                     &metrics.checkpoint_metrics,
+                    Arc::clone(&fd_factory),
                 )
                 .unwrap_or_else(|err| {
                     fatal!(log, "Failed to load checkpoint @{}: {}", height, err)
@@ -1496,8 +1514,15 @@ impl StateManagerImpl {
             persist_metadata_guard,
             tip_channel,
             _tip_thread_handle,
+            fd_factory,
             malicious_flags,
         }
+    }
+    /// Returns the Page Allocator file descriptor factory. This will then be
+    /// used down the line in hypervisor and state to pass to the page allocators
+    /// that are instantiated by the page maps
+    pub fn get_fd_factory(&self) -> Arc<dyn PageAllocatorFileDescriptor> {
+        Arc::clone(&self.fd_factory)
     }
 
     /// Returns `StateLayout` pointing to the directory managed by this
@@ -2297,7 +2322,7 @@ impl StateManagerImpl {
 
         // We don't need to persist the deltas to the tip because we
         // flush deltas separately every round, see flush_page_maps.
-        strip_page_map_deltas(state);
+        strip_page_map_deltas(state, self.get_fd_factory());
         let result = {
             checkpoint::make_checkpoint(
                 state,
@@ -2305,6 +2330,7 @@ impl StateManagerImpl {
                 &self.tip_channel,
                 &self.metrics.checkpoint_metrics,
                 &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
+                self.get_fd_factory(),
             )
         };
 
@@ -2339,6 +2365,7 @@ impl StateManagerImpl {
                             &layout,
                             self.own_subnet_type,
                             &self.metrics.checkpoint_metrics,
+                            self.get_fd_factory(),
                         )
                     })
                     .unwrap_or_else(|err| {
@@ -2625,7 +2652,7 @@ impl StateManager for StateManagerImpl {
 
                     match self.state_layout.clone_checkpoint(checkpoint_height, height) {
                         Ok(_) => {
-                            let state = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type)
+                            let state = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type, Arc::clone(&self.get_fd_factory()))
                                 .expect("failed to load checkpoint");
                             self.on_synced_checkpoint(state, height, manifest, root_hash);
                             return;
@@ -3096,6 +3123,7 @@ impl StateReader for StateManagerImpl {
                 height,
                 &self.metrics,
                 self.own_subnet_type,
+                Arc::clone(&self.get_fd_factory()),
             ) {
                 Ok(state) => Ok(Labeled::new(height, Arc::new(state))),
                 Err(CheckpointError::NotFound(_)) => Err(StateManagerError::StateRemoved(height)),
@@ -3417,5 +3445,51 @@ fn maliciously_return_wrong_hash(
         CryptoHashOfState::from(CryptoHash(
             crate::manifest::manifest_hash(manifest).to_vec(),
         ))
+    }
+}
+
+#[derive(Debug)]
+pub struct PageAllocatorFileDescriptorImpl {
+    root: PathBuf,
+}
+
+impl PageAllocatorFileDescriptor for PageAllocatorFileDescriptorImpl {
+    /// Create a file using that unique name to back memory pages
+    fn get_fd(&self) -> RawFd {
+        // create a string uuid
+        let uuid_str = Uuid::new_v4().to_string();
+        let uuid_str_file = uuid_str + ".mem";
+        // first clone the root
+        let mut file_path = self.root.clone();
+        // add the unique uuid value
+        file_path.push(uuid_str_file);
+        // open the file and return the fd
+        match File::options()
+            .create_new(true)
+            .read(true)
+            .write(true)
+            .open(&file_path)
+        {
+            Err(why) => panic!(
+                "MmapPageAllocatorCore failed to create the backing file {}",
+                why
+            ),
+            Ok(file) => {
+                let crnt_fd = file.into_raw_fd();
+                // In Unix-based systems, when deleting a file while there are still open file
+                // descriptors pointing to it, the file still exists and can be used. It will
+                // finally be deleted when the last file descriptor pointing to it is closed.
+                std::fs::remove_file(file_path.as_path()).expect(
+                    "Error when deleting the file backing up the heap delta page allocator",
+                );
+                crnt_fd
+            }
+        }
+    }
+}
+
+impl PageAllocatorFileDescriptorImpl {
+    pub fn new(root: PathBuf) -> Self {
+        Self { root }
     }
 }

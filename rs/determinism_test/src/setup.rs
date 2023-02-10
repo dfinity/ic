@@ -141,6 +141,7 @@ pub(crate) fn setup() -> (
         config.hypervisor.clone(),
         Arc::clone(&cycles_account_manager),
         Arc::clone(&state_manager) as Arc<_>,
+        Arc::clone(&state_manager.get_fd_factory()),
     );
 
     let message_routing = MessageRoutingImpl::new(

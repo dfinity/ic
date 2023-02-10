@@ -26,6 +26,7 @@ use std::fs::{File, OpenOptions};
 use std::ops::Range;
 use std::os::unix::io::RawFd;
 use std::path::Path;
+use std::sync::Arc;
 
 // When persisting PageDeltas, the maximum gap between dirty pages
 // that can be combined into a single vectorized write
@@ -317,16 +318,16 @@ pub struct PageMap {
 #[cfg_attr(feature = "cargo-clippy", allow(clippy::new_without_default))]
 impl PageMap {
     /// Creates a new page map that always returns zeroed pages.
-    pub fn new() -> Self {
-        // Ensure that the hardcoded constant matches the OS page size.
-        assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
+    /// The allocator of this page map is backed by the file descriptor
+    /// the page map is instantiated with.
+    pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
         Self {
             checkpoint: Default::default(),
             base_height: Default::default(),
             page_delta: Default::default(),
             round_delta: Default::default(),
             has_stripped_round_deltas: false,
-            page_allocator: PageAllocator::new(),
+            page_allocator: PageAllocator::new(fd_factory),
         }
     }
 
@@ -345,7 +346,11 @@ impl PageMap {
     /// Creates a page map backed by the provided heap file.
     ///
     /// Note that the file is assumed to be read-only.
-    pub fn open(heap_file: &Path, base_height: Height) -> Result<Self, PersistenceError> {
+    pub fn open(
+        heap_file: &Path,
+        base_height: Height,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    ) -> Result<Self, PersistenceError> {
         let checkpoint = Checkpoint::open(heap_file)?;
         Ok(Self {
             checkpoint,
@@ -353,7 +358,7 @@ impl PageMap {
             page_delta: Default::default(),
             round_delta: Default::default(),
             has_stripped_round_deltas: false,
-            page_allocator: PageAllocator::new(),
+            page_allocator: PageAllocator::new(fd_factory),
         })
     }
 
@@ -491,7 +496,7 @@ impl PageMap {
     }
 
     /// Removes the page delta from this page map.
-    pub fn strip_all_deltas(&mut self) {
+    pub fn strip_all_deltas(&mut self, fd_factory: Arc<dyn PageAllocatorFileDescriptor>) {
         // Ensure that all pages are dropped before we drop the page allocator.
         // This is not necessary for correctness in the current implementation,
         // because page destructors are currently trivial. Nevertheless, it is
@@ -500,7 +505,7 @@ impl PageMap {
             std::mem::take(&mut self.page_delta);
             std::mem::take(&mut self.round_delta);
         }
-        self.page_allocator = PageAllocator::new();
+        self.page_allocator = PageAllocator::new(Arc::clone(&fd_factory));
     }
 
     /// Removes the round delta from this page map.
@@ -633,9 +638,9 @@ impl PageMap {
 
 impl From<&[u8]> for PageMap {
     fn from(bytes: &[u8]) -> Self {
-        let mut buf = Buffer::new(PageMap::new());
+        let mut buf = Buffer::new(PageMap::new_for_testing());
         buf.write(bytes, 0);
-        let mut page_map = PageMap::new();
+        let mut page_map = PageMap::new_for_testing();
         page_map.update(&buf.dirty_pages().collect::<Vec<_>>());
         page_map
     }
@@ -790,6 +795,43 @@ pub struct PageMapSerialization {
     pub round_delta: PageDeltaSerialization,
     pub has_stripped_round_deltas: bool,
     pub page_allocator: PageAllocatorSerialization,
+}
+
+/// Interface for generating unique file descriptors
+/// that back the mmap-based page allocators instantiated by PageMaps
+pub trait PageAllocatorFileDescriptor: Send + Sync + std::fmt::Debug {
+    fn get_fd(&self) -> RawFd;
+}
+
+/// Simple implementation that can instantiate give file descriptors to temp file system
+#[derive(Debug, Copy, Clone)]
+pub struct TestPageAllocatorFileDescriptorImpl;
+
+impl PageAllocatorFileDescriptor for TestPageAllocatorFileDescriptorImpl {
+    fn get_fd(&self) -> RawFd {
+        use std::os::unix::io::IntoRawFd;
+        match tempfile::tempfile() {
+            Ok(file) => file.into_raw_fd(),
+            Err(err) => {
+                panic!(
+                    "TempPageAllocatorFileDescriptorImpl failed to create the backing file {}",
+                    err
+                )
+            }
+        }
+    }
+}
+
+impl TestPageAllocatorFileDescriptorImpl {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for TestPageAllocatorFileDescriptorImpl {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]

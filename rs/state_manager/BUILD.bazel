@@ -35,6 +35,7 @@ rust_library(
         "@crate_index//:bit-vec",
         "@crate_index//:crossbeam-channel",
         "@crate_index//:hex",
+        "@crate_index//:libc",
         "@crate_index//:nix",
         "@crate_index//:parking_lot",
         "@crate_index//:prometheus",
@@ -45,6 +46,7 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
         "@crate_index//:slog",
+        "@crate_index//:uuid",
     ],
 )
 

@@ -33,7 +33,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     canister_state::execution_state::{self, WasmMetadata},
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, ReplicatedState,
+    CanisterState, ExecutionState, ExportedFunctions, InputQueueType, Memory, ReplicatedState,
 };
 use ic_system_api::{
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges},
@@ -1167,8 +1167,8 @@ impl TestWasmExecutorCore {
             Default::default(),
             execution_state::WasmBinary::new(canister_module),
             ExportedFunctions::new(exported_functions.into_iter().collect()),
-            Default::default(),
-            Default::default(),
+            Memory::new_for_testing(),
+            Memory::new_for_testing(),
             vec![],
             WasmMetadata::default(),
         );

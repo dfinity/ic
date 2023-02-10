@@ -36,6 +36,8 @@ serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
 tree-deserializer = { path = "../tree_deserializer" }
+uuid = { version = "1.2.1", features = ["v4", "serde"] }
+libc = "0.2.91"
 
 [lib]
 bench = false

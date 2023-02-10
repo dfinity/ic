@@ -42,6 +42,7 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{
     canister_state::NextExecution,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
@@ -146,7 +147,7 @@ pub fn default_memory_for_system_api() -> Option<Memory> {
         .wasm_native_stable_memory
     {
         FlagStatus::Enabled => None,
-        FlagStatus::Disabled => Some(Memory::default()),
+        FlagStatus::Disabled => Some(Memory::new_for_testing()),
     }
 }
 
@@ -1750,6 +1751,7 @@ impl ExecutionTestBuilder {
             stable_memory_dirty_page_limit: self.stable_memory_dirty_page_limit,
             ..Config::default()
         };
+
         let hypervisor = Hypervisor::new(
             config.clone(),
             &metrics_registry,
@@ -1766,6 +1768,7 @@ impl ExecutionTestBuilder {
                     SchedulerConfig::verified_application_subnet().dirty_page_overhead
                 }
             },
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         let hypervisor = Arc::new(hypervisor);
         let ingress_history_writer =

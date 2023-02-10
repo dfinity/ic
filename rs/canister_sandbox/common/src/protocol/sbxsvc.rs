@@ -240,11 +240,13 @@ pub struct CreateExecutionStateRequest {
     pub wasm_page_map: PageMapSerialization,
     pub next_wasm_memory_id: MemoryId,
     pub canister_id: CanisterId,
+    pub stable_memory_page_map: PageMapSerialization,
 }
 
 impl EnumerateInnerFileDescriptors for CreateExecutionStateRequest {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         self.wasm_page_map.enumerate_fds(fds);
+        self.stable_memory_page_map.enumerate_fds(fds);
     }
 }
 
@@ -272,11 +274,13 @@ pub struct CreateExecutionStateSerializedRequest {
     pub wasm_page_map: PageMapSerialization,
     pub next_wasm_memory_id: MemoryId,
     pub canister_id: CanisterId,
+    pub stable_memory_page_map: PageMapSerialization,
 }
 
 impl EnumerateInnerFileDescriptors for CreateExecutionStateSerializedRequest {
     fn enumerate_fds<'a>(&'a mut self, fds: &mut Vec<&'a mut std::os::unix::io::RawFd>) {
         self.wasm_page_map.enumerate_fds(fds);
+        self.stable_memory_page_map.enumerate_fds(fds);
     }
 }
 

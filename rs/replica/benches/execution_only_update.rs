@@ -210,6 +210,7 @@ fn criterion_calls(criterion: &mut Criterion) {
             ExecutionConfig::default(),
             Arc::clone(&cycles_account_manager),
             Arc::clone(&state_manager) as Arc<_>,
+            Arc::clone(&state_manager.get_fd_factory()),
         )
         .into_parts();
 

@@ -1,5 +1,6 @@
 use super::*;
 use ic_metrics::MetricsRegistry;
+use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::crypto::CryptoHash;
 use tempfile::TempDir;
@@ -104,6 +105,7 @@ fn incomplete_state_for_tests(
         SubnetType::Application,
         Arc::new(Mutex::new(scoped_threadpool::Pool::new(NUM_THREADS))),
         state_sync_refs,
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         MaliciousFlags::default(),
     );
 

@@ -156,6 +156,8 @@ pub struct UtxoSet {
     pub network: Network,
 }
 
+// TODO: This code will be removed with the removal of the bitcoin canister code.
+// The code path should not be used anyway in production.
 impl UtxoSet {
     fn new(network: BitcoinNetwork) -> Self {
         Self {
@@ -164,10 +166,10 @@ impl UtxoSet {
                 BitcoinNetwork::Testnet => Network::Testnet,
                 BitcoinNetwork::Regtest => Network::Regtest,
             },
-            utxos_small: PageMap::new(),
-            utxos_medium: PageMap::new(),
+            utxos_small: PageMap::new_for_testing(),
+            utxos_medium: PageMap::new_for_testing(),
             utxos_large: BTreeMap::default(),
-            address_outpoints: PageMap::new(),
+            address_outpoints: PageMap::new_for_testing(),
         }
     }
 }

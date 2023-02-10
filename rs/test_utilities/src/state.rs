@@ -327,7 +327,7 @@ impl CanisterStateBuilder {
                 NumWasmPages::new((data.len() / WASM_PAGE_SIZE_BYTES) + 1),
             )
         } else {
-            Memory::default()
+            Memory::new_for_testing()
         };
 
         let execution_state = match self.wasm {
@@ -496,8 +496,8 @@ pub fn initial_execution_state() -> ExecutionState {
         canister_root: "NOT_USED".into(),
         session_nonce: None,
         wasm_binary: WasmBinary::new(CanisterModule::new(vec![])),
-        wasm_memory: Memory::default(),
-        stable_memory: Memory::default(),
+        wasm_memory: Memory::new_for_testing(),
+        stable_memory: Memory::new_for_testing(),
         exported_globals: vec![],
         exports: ExportedFunctions::new(BTreeSet::new()),
         metadata: wasm_metadata,
