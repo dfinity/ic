@@ -211,7 +211,7 @@ impl RoundLimits {
     /// Returns true if any of the round limits is reached.
     pub fn reached(&self) -> bool {
         self.instructions <= RoundInstructions::from(0)
-        // TODO: RUN-531 re-enable after the round tests are added
+        // TODO: RUN-539: Disable complexity limits for system subnets
         // || self.execution_complexity.cpu <= CpuComplexity::from(0)
     }
 }
