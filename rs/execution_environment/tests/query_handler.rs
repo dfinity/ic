@@ -5,6 +5,7 @@ use ic_execution_environment::ExecutionServices;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
@@ -48,6 +49,7 @@ async fn query_non_existent() {
             Config::default(),
             cycles_account_manager,
             state_manager,
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
 
         let receiver = CanisterId::from(1234);

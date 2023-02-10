@@ -58,6 +58,7 @@ impl StateSync {
                 NUMBER_OF_CHECKPOINT_THREADS,
             ))),
             self.state_sync_refs.clone(),
+            self.state_manager.get_fd_factory(),
             self.state_manager.malicious_flags.clone(),
         ))
     }
@@ -334,6 +335,7 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
                 &ro_layout,
                 self.state_manager.own_subnet_type,
                 &self.state_manager.metrics.checkpoint_metrics,
+                self.state_manager.get_fd_factory(),
             )
             .expect("failed to recover checkpoint");
             self.state_manager.on_synced_checkpoint(

@@ -1,3 +1,4 @@
+use super::PageAllocatorFileDescriptorImpl;
 use crate::{
     CheckpointError, CheckpointMetrics, PageMapType, PersistenceError, TipRequest,
     NUMBER_OF_CHECKPOINT_THREADS,
@@ -5,6 +6,7 @@ use crate::{
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::CanisterId;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::Memory;
 use ic_replicated_state::{
     bitcoin_state::{BitcoinState, UtxoSet},
@@ -18,6 +20,7 @@ use ic_state_layout::{
 use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
 use ic_utils::thread::parallel_map;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use std::{
     convert::{From, TryFrom},
@@ -40,6 +43,7 @@ pub fn make_checkpoint(
     tip_channel: &Sender<TipRequest>,
     metrics: &CheckpointMetrics,
     thread_pool: &mut scoped_threadpool::Pool,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState), CheckpointError> {
     {
         let _timer = metrics
@@ -98,6 +102,7 @@ pub fn make_checkpoint(
             state.metadata.own_subnet_type,
             metrics,
             Some(thread_pool),
+            Arc::clone(&fd_factory),
         )?
     };
 
@@ -109,6 +114,7 @@ pub fn load_checkpoint_parallel<P: ReadPolicy + Send + Sync>(
     checkpoint_layout: &CheckpointLayout<P>,
     own_subnet_type: SubnetType,
     metrics: &CheckpointMetrics,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<ReplicatedState, CheckpointError> {
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
 
@@ -117,6 +123,7 @@ pub fn load_checkpoint_parallel<P: ReadPolicy + Send + Sync>(
         own_subnet_type,
         metrics,
         Some(&mut thread_pool),
+        Arc::clone(&fd_factory),
     )
 }
 
@@ -127,6 +134,7 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
     own_subnet_type: SubnetType,
     metrics: &CheckpointMetrics,
     thread_pool: Option<&mut scoped_threadpool::Pool>,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<ReplicatedState, CheckpointError> {
     let into_checkpoint_error =
         |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
@@ -172,7 +180,11 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         match thread_pool {
             Some(thread_pool) => {
                 let results = parallel_map(thread_pool, canister_ids.iter(), |canister_id| {
-                    load_canister_state_from_checkpoint(checkpoint_layout, canister_id)
+                    load_canister_state_from_checkpoint(
+                        checkpoint_layout,
+                        canister_id,
+                        Arc::clone(&fd_factory),
+                    )
                 });
 
                 for canister_state in results.into_iter() {
@@ -185,8 +197,11 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
             }
             None => {
                 for canister_id in canister_ids.iter() {
-                    let (canister_state, durations) =
-                        load_canister_state_from_checkpoint(checkpoint_layout, canister_id)?;
+                    let (canister_state, durations) = load_canister_state_from_checkpoint(
+                        checkpoint_layout,
+                        canister_id,
+                        Arc::clone(&fd_factory),
+                    )?;
                     canister_states
                         .insert(canister_state.system_state.canister_id(), canister_state);
 
@@ -233,6 +248,7 @@ pub fn load_canister_state<P: ReadPolicy>(
     canister_layout: &CanisterLayout<P>,
     canister_id: &CanisterId,
     height: Height,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(CanisterState, LoadCanisterMetrics), CheckpointError> {
     let mut durations = BTreeMap::<&str, Duration>::default();
 
@@ -259,14 +275,22 @@ pub fn load_canister_state<P: ReadPolicy>(
         Some(execution_state_bits) => {
             let starting_time = Instant::now();
             let wasm_memory = Memory::new(
-                PageMap::open(&canister_layout.vmemory_0(), height)?,
+                PageMap::open(
+                    &canister_layout.vmemory_0(),
+                    height,
+                    Arc::clone(&fd_factory),
+                )?,
                 execution_state_bits.heap_size,
             );
             durations.insert("wasm_memory", starting_time.elapsed());
 
             let starting_time = Instant::now();
             let stable_memory = Memory::new(
-                PageMap::open(&canister_layout.stable_memory_blob(), height)?,
+                PageMap::open(
+                    &canister_layout.stable_memory_blob(),
+                    height,
+                    Arc::clone(&fd_factory),
+                )?,
                 canister_state_bits.stable_memory_size,
             );
             durations.insert("stable_memory", starting_time.elapsed());
@@ -360,9 +384,15 @@ pub fn load_canister_state<P: ReadPolicy>(
 fn load_canister_state_from_checkpoint<P: ReadPolicy>(
     checkpoint_layout: &CheckpointLayout<P>,
     canister_id: &CanisterId,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) -> Result<(CanisterState, LoadCanisterMetrics), CheckpointError> {
     let canister_layout = checkpoint_layout.canister(canister_id)?;
-    load_canister_state::<P>(&canister_layout, canister_id, checkpoint_layout.height())
+    load_canister_state::<P>(
+        &canister_layout,
+        canister_id,
+        checkpoint_layout.height(),
+        Arc::clone(&fd_factory),
+    )
 }
 
 fn load_bitcoin_state<P: ReadPolicy>(
@@ -384,9 +414,17 @@ fn load_bitcoin_state<P: ReadPolicy>(
         BitcoinStateBits::try_from(bitcoin_state_proto.unwrap_or_default())
             .map_err(|err| into_checkpoint_error(String::from("BitcoinStateBits"), err))?;
 
-    let utxos_small = load_or_create_pagemap(&layout.utxos_small(), height)?;
-    let utxos_medium = load_or_create_pagemap(&layout.utxos_medium(), height)?;
-    let address_outpoints = load_or_create_pagemap(&layout.address_outpoints(), height)?;
+    // Create a page allocator file descriptor factory for the bitcoin canister.
+    // TODO: this code will be removed together with the bitcoin canister.
+    let fd_factory: Arc<dyn PageAllocatorFileDescriptor> =
+        Arc::new(PageAllocatorFileDescriptorImpl::new(layout.raw_path()));
+
+    let utxos_small =
+        load_or_create_pagemap(&layout.utxos_small(), height, Arc::clone(&fd_factory))?;
+    let utxos_medium =
+        load_or_create_pagemap(&layout.utxos_medium(), height, Arc::clone(&fd_factory))?;
+    let address_outpoints =
+        load_or_create_pagemap(&layout.address_outpoints(), height, Arc::clone(&fd_factory))?;
 
     Ok(BitcoinState {
         adapter_queues: bitcoin_state_bits.adapter_queues,
@@ -403,11 +441,15 @@ fn load_bitcoin_state<P: ReadPolicy>(
     })
 }
 
-fn load_or_create_pagemap(path: &Path, height: Height) -> Result<PageMap, PersistenceError> {
+fn load_or_create_pagemap(
+    path: &Path,
+    height: Height,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+) -> Result<PageMap, PersistenceError> {
     if path.exists() {
-        PageMap::open(path, height)
+        PageMap::open(path, height, fd_factory)
     } else {
-        Ok(PageMap::new())
+        Ok(PageMap::new(fd_factory))
     }
 }
 
@@ -420,9 +462,12 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        canister_state::execution_state::WasmBinary, canister_state::execution_state::WasmMetadata,
-        page_map, testing::ReplicatedStateTesting, CallContextManager, CanisterStatus,
-        ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
+        canister_state::execution_state::WasmBinary,
+        canister_state::execution_state::WasmMetadata,
+        page_map::{self, TestPageAllocatorFileDescriptorImpl},
+        testing::ReplicatedStateTesting,
+        CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages,
+        PageIndex,
     };
     use ic_state_layout::StateLayout;
     use ic_sys::PAGE_SIZE;
@@ -483,6 +528,7 @@ mod tests {
             tip_channel,
             &state_manager_metrics().checkpoint_metrics,
             &mut thread_pool(),
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         )
         .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
         .1
@@ -580,6 +626,7 @@ mod tests {
                 &tip_channel,
                 &state_manager_metrics.checkpoint_metrics,
                 &mut thread_pool(),
+                Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             );
 
             match replicated_state {
@@ -644,6 +691,7 @@ mod tests {
                 own_subnet_type,
                 &state_manager_metrics.checkpoint_metrics,
                 Some(&mut thread_pool()),
+                Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             )
             .unwrap();
 
@@ -719,6 +767,7 @@ mod tests {
                 own_subnet_type,
                 &state_manager_metrics.checkpoint_metrics,
                 Some(&mut thread_pool()),
+                Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             )
             .unwrap();
             assert!(recovered_state.canisters_iter().next().is_none());
@@ -742,6 +791,7 @@ mod tests {
                         SubnetType::Application,
                         &state_manager_metrics().checkpoint_metrics,
                         Some(&mut thread_pool()),
+                        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
                     )
                 }) {
                 Err(CheckpointError::NotFound(_)) => (),
@@ -819,6 +869,7 @@ mod tests {
                 own_subnet_type,
                 &state_manager_metrics.checkpoint_metrics,
                 Some(&mut thread_pool()),
+                Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             )
             .unwrap();
 
@@ -875,6 +926,7 @@ mod tests {
                 own_subnet_type,
                 &state_manager_metrics.checkpoint_metrics,
                 Some(&mut thread_pool()),
+                Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             )
             .unwrap();
 
@@ -925,6 +977,7 @@ mod tests {
                 own_subnet_type,
                 &state_manager_metrics.checkpoint_metrics,
                 Some(&mut thread_pool()),
+                Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             )
             .unwrap();
 
@@ -973,6 +1026,7 @@ mod tests {
                 own_subnet_type,
                 &state_manager_metrics.checkpoint_metrics,
                 Some(&mut thread_pool()),
+                Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             )
             .unwrap();
 
@@ -1032,6 +1086,7 @@ mod tests {
                 own_subnet_type,
                 &state_manager_metrics.checkpoint_metrics,
                 Some(&mut thread_pool()),
+                Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             )
             .unwrap();
 
@@ -1073,6 +1128,7 @@ mod tests {
                 own_subnet_type,
                 &state_manager_metrics.checkpoint_metrics,
                 Some(&mut thread_pool()),
+                Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
             )
             .unwrap();
 

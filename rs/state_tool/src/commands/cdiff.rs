@@ -1,6 +1,7 @@
 //! Computes diff of canonical trees between checkpoints.
 
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_state_layout::CompleteCheckpointLayout;
 use ic_state_manager::{
     checkpoint::load_checkpoint,
@@ -10,6 +11,7 @@ use ic_state_manager::{
 };
 use ic_types::Height;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// Loads the checkponts at `path_a` and `path_b` and diffs them.
 fn diff_checkpoints(path_a: PathBuf, path_b: PathBuf) -> Result<Changes, CheckpointError> {
@@ -22,12 +24,14 @@ fn diff_checkpoints(path_a: PathBuf, path_b: PathBuf) -> Result<Changes, Checkpo
         own_subnet_type,
         &dummy_metrics,
         None,
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )?;
     let state_b = load_checkpoint(
         &CompleteCheckpointLayout::new_untracked(path_b, unused_height)?,
         own_subnet_type,
         &dummy_metrics,
         None,
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
     )?;
 
     let tree_a = hash_state(&state_a);

@@ -111,6 +111,7 @@ impl SandboxService for SandboxServer {
             req.wasm_page_map,
             req.next_wasm_memory_id,
             req.canister_id,
+            req.stable_memory_page_map,
         );
         rpc::Call::new_resolved(Ok(CreateExecutionStateReply(result)))
     }
@@ -125,6 +126,7 @@ impl SandboxService for SandboxServer {
             req.wasm_page_map,
             req.next_wasm_memory_id,
             req.canister_id,
+            req.stable_memory_page_map,
         );
         rpc::Call::new_resolved(Ok(CreateExecutionStateSerializedReply(result)))
     }

@@ -46,6 +46,7 @@ use crate::process_exe_and_args::{create_launcher_argv, create_sandbox_argv};
 #[cfg(target_os = "linux")]
 use crate::process_os_metrics;
 use crate::sandbox_process_eviction::{self, EvictionCandidate};
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 
 const SANDBOX_PROCESS_UPDATE_INTERVAL: Duration = Duration::from_secs(10);
 
@@ -578,6 +579,7 @@ pub struct SandboxedExecutionController {
     sandbox_exec_argv: Vec<String>,
     metrics: Arc<SandboxedExecutionMetrics>,
     launcher_service: Box<dyn LauncherService>,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
 impl WasmExecutor for SandboxedExecutionController {
@@ -660,6 +662,7 @@ impl WasmExecutor for SandboxedExecutionController {
         sandbox_process.history.record(
             format!("StartExecution(exec_id={} wasm_id={} wasm_memory_id={} stable_member_id={} api_type={}, next_wasm_memory_id={} next_stable_memory_id={}",
                 exec_id, wasm_id, wasm_memory_id, stable_memory_id, api_type.as_str(), next_wasm_memory_id, next_stable_memory_id));
+
         sandbox_process
             .sandbox_service
             .start_execution(protocol::sbxsvc::StartExecutionRequest {
@@ -725,10 +728,15 @@ impl WasmExecutor for SandboxedExecutionController {
         let sandbox_process = self.get_sandbox_process(canister_id);
         let wasm_binary = WasmBinary::new(canister_module);
 
-        // Steps 1, 2, 3, 4 are performed by the sandbox process.
+        // The sandbox process prepares wasm memory, instantiates page maps
+        // and compiles the wasm binary (or looks it up in the cache).
+        // Then, through RPC, operations are sent to the sandbox, passing along
+        // also serialized versions of the needed objects (e.g., the page allocator through the pagemap)
         let wasm_id = WasmId::new();
-        let wasm_page_map = PageMap::new();
+        let wasm_page_map = PageMap::new(Arc::clone(&self.fd_factory));
         let next_wasm_memory_id = MemoryId::new();
+
+        let stable_memory_page_map = PageMap::new(Arc::clone(&self.fd_factory));
 
         let (memory_modifications, exported_globals, serialized_module, compilation_result) =
             match compilation_cache.get(&wasm_binary.binary) {
@@ -750,6 +758,7 @@ impl WasmExecutor for SandboxedExecutionController {
                             wasm_page_map: wasm_page_map.serialize(),
                             next_wasm_memory_id,
                             canister_id,
+                            stable_memory_page_map: stable_memory_page_map.serialize(),
                         })
                         .sync()
                         .unwrap()
@@ -796,6 +805,7 @@ impl WasmExecutor for SandboxedExecutionController {
                                 wasm_page_map: wasm_page_map.serialize(),
                                 next_wasm_memory_id,
                                 canister_id,
+                                stable_memory_page_map: stable_memory_page_map.serialize(),
                             },
                         )
                         .sync()
@@ -847,7 +857,10 @@ impl WasmExecutor for SandboxedExecutionController {
                 .inc();
         }
 
-        let stable_memory = Memory::default();
+        let stable_memory = Memory::new(
+            stable_memory_page_map,
+            ic_replicated_state::NumWasmPages::from(0),
+        );
         let execution_state = ExecutionState::new(
             canister_root,
             wasm_binary,
@@ -913,6 +926,7 @@ impl SandboxedExecutionController {
         logger: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
         embedder_config: &EmbeddersConfig,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> std::io::Result<Self> {
         let launcher_exec_argv = create_launcher_argv().expect("No sandbox_launcher binary found");
         let min_sandbox_count = embedder_config.min_sandbox_count;
@@ -967,6 +981,7 @@ impl SandboxedExecutionController {
             sandbox_exec_argv,
             metrics,
             launcher_service,
+            fd_factory: Arc::clone(&fd_factory),
         })
     }
 
@@ -1635,10 +1650,12 @@ mod tests {
         let root = slog::Logger::root(drain, o!());
         let logger = new_replica_logger(root, &LoggerConfig::default());
 
+        use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
         let controller = SandboxedExecutionController::new(
             logger,
             &MetricsRegistry::new(),
             &EmbeddersConfig::default(),
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         )
         .unwrap();
 

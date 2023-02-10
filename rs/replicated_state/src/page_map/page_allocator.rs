@@ -14,8 +14,7 @@ pub mod mmap;
 use mmap::{PageAllocatorId, PageAllocatorInner, PageInner};
 
 pub use self::page_allocator_registry::PageAllocatorRegistry;
-
-use super::{FileDescriptor, FileOffset};
+use super::{FileDescriptor, FileOffset, PageAllocatorFileDescriptor};
 
 static ALLOCATED_PAGES: PageCounter = PageCounter::new();
 
@@ -71,13 +70,14 @@ impl Clone for PageAllocator {
 
 #[cfg_attr(feature = "cargo-clippy", allow(clippy::new_without_default))]
 impl PageAllocator {
-    pub fn new() -> Self {
-        Self(Arc::new(PageAllocatorInner::new()))
+    pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
+        Self(Arc::new(PageAllocatorInner::new(fd_factory)))
     }
 
     pub fn new_for_testing() -> Self {
         Self(Arc::new(PageAllocatorInner::new_for_testing()))
     }
+
     /// Allocates multiple pages with the given contents.
     ///
     /// The provided page count must match exactly the number of items in the

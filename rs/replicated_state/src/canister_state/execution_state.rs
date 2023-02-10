@@ -231,6 +231,14 @@ impl Memory {
             sandbox_memory: SandboxMemory::new(),
         }
     }
+    /// New method for testing, overriding the default trait.
+    pub fn new_for_testing() -> Self {
+        Self {
+            page_map: PageMap::new_for_testing(),
+            size: NumWasmPages::from(0),
+            sandbox_memory: SandboxMemory::new(),
+        }
+    }
 
     /// Returns an error if `self.size` is less than the modified prefix of
     /// `self.page_map`. The impact of such case:
@@ -247,16 +255,6 @@ impl Memory {
                 "The page map size {} exceeds the memory size {}",
                 page_map_bytes, memory_bytes
             ))
-        }
-    }
-}
-
-impl Default for Memory {
-    fn default() -> Self {
-        Self {
-            page_map: PageMap::new(),
-            size: NumWasmPages::from(0),
-            sandbox_memory: SandboxMemory::new(),
         }
     }
 }

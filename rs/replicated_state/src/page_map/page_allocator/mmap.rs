@@ -1,4 +1,6 @@
-use crate::page_map::{FileDescriptor, FileOffset};
+use crate::page_map::{
+    FileDescriptor, FileOffset, PageAllocatorFileDescriptor, TestPageAllocatorFileDescriptorImpl,
+};
 
 use super::page_allocator_registry::PageAllocatorRegistry;
 use super::{
@@ -16,7 +18,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 const MIN_PAGES_TO_FREE: usize = 10000;
-
 // The start address of a page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct PagePtr(*mut u8);
@@ -134,7 +135,13 @@ impl PageInner {
 ///
 /// It is exported publicly for benchmarking.
 #[derive(Debug)]
-pub struct PageAllocatorInner(Mutex<Option<MmapBasedPageAllocatorCore>>);
+pub struct PageAllocatorInner {
+    // These two optional members cannot both be None at the same time.
+    // The core allocator is None when there is no file descriptor created,
+    // while the fd_factory can be None when the file descriptor is already created.
+    core_allocator: Mutex<Option<MmapBasedPageAllocatorCore>>,
+    fd_factory: Option<Arc<dyn PageAllocatorFileDescriptor>>,
+}
 
 impl PageAllocatorInner {
     // See the comments of the corresponding method in `PageAllocator`.
@@ -142,8 +149,11 @@ impl PageAllocatorInner {
         page_allocator: &Arc<Self>,
         pages: &[(PageIndex, &PageBytes)],
     ) -> Vec<(PageIndex, Page)> {
-        let mut guard = page_allocator.0.lock().unwrap();
-        let core = guard.get_or_insert_with(MmapBasedPageAllocatorCore::new);
+        let mut guard = page_allocator.core_allocator.lock().unwrap();
+        let allocator_creator = || {
+            MmapBasedPageAllocatorCore::new(Arc::clone(page_allocator.fd_factory.as_ref().unwrap()))
+        };
+        let core = guard.get_or_insert_with(allocator_creator);
         // It would also be correct to increment the counters after all the
         // allocations, but doing it before gives better performance because
         // the core allocator can memory-map larger chunks.
@@ -163,8 +173,11 @@ impl PageAllocatorInner {
 
     // See the comments of the corresponding method in `PageAllocator`.
     pub fn serialize(&self) -> PageAllocatorSerialization {
-        let mut guard = self.0.lock().unwrap();
-        let core = guard.get_or_insert_with(MmapBasedPageAllocatorCore::new);
+        let mut guard = self.core_allocator.lock().unwrap();
+        let allocator_creator =
+            || MmapBasedPageAllocatorCore::new(Arc::clone(self.fd_factory.as_ref().unwrap()));
+        let core = guard.get_or_insert_with(allocator_creator);
+
         PageAllocatorSerialization {
             id: core.id,
             fd: FileDescriptor {
@@ -201,8 +214,11 @@ impl PageAllocatorInner {
                 validation: page.0.validation,
             })
             .collect();
-        let mut guard = self.0.lock().unwrap();
-        let core = guard.get_or_insert_with(MmapBasedPageAllocatorCore::new);
+        let mut guard = self.core_allocator.lock().unwrap();
+        let allocator_creator =
+            || MmapBasedPageAllocatorCore::new(Arc::clone(self.fd_factory.as_ref().unwrap()));
+        let core = guard.get_or_insert_with(allocator_creator);
+
         PageDeltaSerialization {
             file_len: core.file_len,
             pages,
@@ -214,7 +230,7 @@ impl PageAllocatorInner {
         page_allocator: &Arc<PageAllocatorInner>,
         page_delta: PageDeltaSerialization,
     ) -> Vec<(PageIndex, Page)> {
-        let mut guard = page_allocator.0.lock().unwrap();
+        let mut guard = page_allocator.core_allocator.lock().unwrap();
         let core = guard.as_mut().unwrap();
         core.grow_for_deserialization(page_delta.file_len);
         core.deserialized_pages += page_delta.pages.len();
@@ -236,22 +252,36 @@ impl PageAllocatorInner {
 
 #[cfg_attr(feature = "cargo-clippy", allow(clippy::new_without_default))]
 impl PageAllocatorInner {
-    pub fn new() -> Self {
-        Self(Mutex::new(None))
+    /// One always needs to instantiate a PageAllocatorInner with a file descriptor factory
+    /// which will serve as a backing file for the MmapBasedPageAllocator
+    pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
+        Self {
+            core_allocator: Mutex::new(None),
+            fd_factory: Some(fd_factory),
+        }
     }
+
     pub fn new_for_testing() -> Self {
-        PageAllocatorInner::new()
+        Self {
+            core_allocator: Mutex::new(None),
+            fd_factory: Some(Arc::new(TestPageAllocatorFileDescriptorImpl::new())),
+        }
     }
+
     fn open(
         id: PageAllocatorId,
         file_descriptor: FileDescriptor,
         backing_file_owner: BackingFileOwner,
     ) -> Self {
-        Self(Mutex::new(Some(MmapBasedPageAllocatorCore::open(
-            id,
-            file_descriptor,
-            backing_file_owner,
-        ))))
+        Self {
+            core_allocator: Mutex::new(Some(MmapBasedPageAllocatorCore::open(
+                id,
+                file_descriptor,
+                backing_file_owner,
+            ))),
+            // We don't need a factory here because the file descriptor already exists
+            fd_factory: None,
+        }
     }
 
     // Adds the given page to the list of dropped pages that will be freed on the
@@ -259,7 +289,7 @@ impl PageAllocatorInner {
     // Precondition: the page allocator must be the owner of the backing file.
     fn add_dropped_page(&self, page_ptr: PagePtr) {
         let dropped_pages = {
-            let mut guard = self.0.lock().unwrap();
+            let mut guard = self.core_allocator.lock().unwrap();
             let core = guard.as_mut().unwrap();
             assert_eq!(core.backing_file_owner, BackingFileOwner::CurrentAllocator);
             core.dropped_pages.push(page_ptr);
@@ -424,8 +454,14 @@ impl Drop for MmapBasedPageAllocatorCore {
 }
 
 impl MmapBasedPageAllocatorCore {
-    fn new() -> Self {
+    fn new(_fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
+        // TODO: ticket RUN-412
+        // At the moment we keep the file descriptors being created by the old
+        // code path which stores files in memory/tempfs. In the future, to enable
+        // the disk/file-backed memory allocation we simply need to replace the line
+        // below with fd_factory.get_fd().
         let fd = create_backing_file();
+
         Self::open(
             PageAllocatorId::default(),
             FileDescriptor { fd },
@@ -762,7 +798,7 @@ unsafe fn get_file_length(fd: RawFd) -> FileOffset {
     let mut stat = std::mem::MaybeUninit::<libc::stat64>::uninit();
     cvt(libc::fstat64(fd, stat.as_mut_ptr())).unwrap_or_else(|err| {
         panic!(
-            "MmapPageAllocator failed get the length of the file #{}: {}",
+            "MmapPageAllocator failed to get the length of the file #{}: {}",
             fd, err
         )
     });

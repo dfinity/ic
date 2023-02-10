@@ -533,6 +533,7 @@ impl StateMachine {
                 hypervisor_config.clone(),
                 Arc::clone(&cycles_account_manager),
                 Arc::clone(&state_manager) as Arc<_>,
+                Arc::clone(&state_manager.get_fd_factory()),
             )
         });
 
@@ -925,6 +926,7 @@ impl StateMachine {
             &tip_canister_layout,
             &canister_id,
             ic_types::Height::new(0),
+            self.state_manager.get_fd_factory(),
         )
         .unwrap_or_else(|e| {
             panic!(

@@ -8129,6 +8129,7 @@ dependencies = [
  "serde_cbor",
  "slog",
  "tempfile",
+ "uuid 1.3.0",
 ]
 
 [[package]]
@@ -8848,6 +8849,7 @@ dependencies = [
  "ic-types",
  "ic-utils 0.8.0",
  "ic-wasm-types",
+ "libc",
  "maplit",
  "nix 0.23.2",
  "parking_lot 0.12.1",
@@ -8864,6 +8866,7 @@ dependencies = [
  "strum 0.23.0",
  "tempfile",
  "tree-deserializer",
+ "uuid 1.3.0",
 ]
 
 [[package]]
@@ -15482,6 +15485,10 @@ name = "uuid"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1674845326ee10d37ca60470760d4288a6f80f304007d92e5c53bab78c9cfd79"
+dependencies = [
+ "getrandom 0.2.8",
+ "serde",
+]
 
 [[package]]
 name = "valuable"

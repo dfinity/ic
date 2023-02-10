@@ -403,6 +403,14 @@ impl StateLayout {
     fn init(&self) -> Result<(), LayoutError> {
         self.cleanup_tip()?;
         self.cleanup_tmp()?;
+        // This is for testing only. In production the Guest OS setup
+        // would have already created the page_deltas directory, however
+        // in testing the directory does not already exist and we need to
+        // create it.
+        if !Path::new(&self.page_deltas()).exists() {
+            WriteOnly::check_dir(&self.page_deltas())?;
+        }
+
         WriteOnly::check_dir(&self.backups())?;
         WriteOnly::check_dir(&self.checkpoints())?;
         WriteOnly::check_dir(&self.diverged_checkpoints())?;
@@ -458,6 +466,10 @@ impl StateLayout {
         self.root.join("fs_tmp")
     }
 
+    pub fn page_deltas(&self) -> PathBuf {
+        self.root.join("page_deltas")
+    }
+
     /// Removes the tmp directory and all its contents.
     fn cleanup_tmp(&self) -> Result<(), LayoutError> {
         let tmp = self.tmp();
@@ -475,6 +487,23 @@ impl StateLayout {
                 message: "Unable to remove fs_tmp directory".to_string(),
                 io_err: err,
             })?
+        }
+        // The page deltas directory will always exist because
+        // the guest os deployment scripts should have created it.
+        // Also, if we delete the directory here and re-create it as
+        // it happens for the other sibling dirs then the SELinux
+        // settings will be overwritten, which will not grant the sandbox
+        // the proper access to the files in the dir.
+        let page_deltas = self.page_deltas();
+        if page_deltas.exists() {
+            for entry in std::fs::read_dir(page_deltas.as_path()).unwrap() {
+                let entry = entry.map_err(|err| LayoutError::IoError {
+                    path: page_deltas.clone(),
+                    message: "Unable to remove content of the page_deltas directory".to_string(),
+                    io_err: err,
+                });
+                std::fs::remove_file(entry.unwrap().path()).unwrap();
+            }
         }
         Ok(())
     }

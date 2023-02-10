@@ -250,7 +250,7 @@ mod tests {
             session_nonce: None,
             wasm_binary,
             wasm_memory,
-            stable_memory: Memory::default(),
+            stable_memory: Memory::new_for_testing(),
             exported_globals: vec![Global::I32(1)],
             exports: ExportedFunctions::new(BTreeSet::new()),
             metadata: WasmMetadata::new(metadata),

@@ -22,6 +22,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use crate::execution::common::{apply_canister_state_changes, update_round_limits};
 use crate::execution_environment::{as_round_instructions, CompilationCostHandling, RoundLimits};
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 
 #[cfg(test)]
 mod tests;
@@ -184,6 +185,7 @@ impl Hypervisor {
         log: ReplicaLogger,
         cycles_account_manager: Arc<CyclesAccountManager>,
         dirty_page_overhead: NumInstructions,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
         let mut embedder_config = EmbeddersConfig::new();
         embedder_config.query_execution_threads_per_canister =
@@ -203,6 +205,7 @@ impl Hypervisor {
                     log.clone(),
                     metrics_registry,
                     &embedder_config,
+                    Arc::clone(&fd_factory),
                 )
                 .expect("Failed to start sandboxed execution controller");
                 Arc::new(executor)
@@ -212,6 +215,7 @@ impl Hypervisor {
                     WasmtimeEmbedder::new(embedder_config, log.clone()),
                     metrics_registry,
                     log.clone(),
+                    Arc::clone(&fd_factory),
                 );
                 Arc::new(executor)
             }

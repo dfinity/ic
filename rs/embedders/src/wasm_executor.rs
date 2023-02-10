@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
 use ic_system_api::sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateChanges};
 use ic_system_api::{ApiType, DefaultOutOfInstructionsHandler};
@@ -173,6 +174,7 @@ pub struct WasmExecutorImpl {
     wasm_embedder: WasmtimeEmbedder,
     metrics: WasmExecutorMetrics,
     log: ReplicaLogger,
+    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
 impl WasmExecutor for WasmExecutorImpl {
@@ -295,7 +297,9 @@ impl WasmExecutor for WasmExecutorImpl {
         self.observe_metrics(&serialized_module.imports_details);
         let exported_functions = serialized_module.exported_functions.clone();
         let wasm_metadata = serialized_module.wasm_metadata.clone();
-        let mut wasm_page_map = PageMap::new();
+
+        let mut wasm_page_map = PageMap::new(Arc::clone(&self.fd_factory));
+        let stable_memory_page_map = PageMap::new(Arc::clone(&self.fd_factory));
 
         let (globals, _wasm_page_delta, wasm_memory_size) = get_initial_globals_and_memory(
             &serialized_module.data_segments,
@@ -303,16 +307,19 @@ impl WasmExecutor for WasmExecutorImpl {
             &self.wasm_embedder,
             &mut wasm_page_map,
             canister_id,
+            &stable_memory_page_map,
         )?;
 
         // Create the execution state.
-        let stable_memory = Memory::default();
         let execution_state = ExecutionState::new(
             canister_root,
             wasm_binary,
             ExportedFunctions::new(exported_functions),
             Memory::new(wasm_page_map, wasm_memory_size),
-            stable_memory,
+            Memory::new(
+                stable_memory_page_map,
+                ic_replicated_state::NumWasmPages::from(0),
+            ),
             globals,
             wasm_metadata,
         );
@@ -338,11 +345,13 @@ impl WasmExecutorImpl {
         wasm_embedder: WasmtimeEmbedder,
         metrics_registry: &MetricsRegistry,
         log: ReplicaLogger,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> Self {
         Self {
             wasm_embedder,
             metrics: WasmExecutorMetrics::new(metrics_registry),
             log,
+            fd_factory: Arc::clone(&fd_factory),
         }
     }
 
@@ -769,6 +778,7 @@ pub fn get_initial_globals_and_memory(
     embedder: &WasmtimeEmbedder,
     wasm_page_map: &mut PageMap,
     canister_id: CanisterId,
+    stable_memory_page_map: &PageMap,
 ) -> HypervisorResult<(Vec<Global>, Vec<PageIndex>, NumWasmPages)> {
     let wasm_memory_pages = data_segments.as_pages();
 
@@ -797,7 +807,7 @@ pub fn get_initial_globals_and_memory(
         embedder_cache,
         &[],
         &Memory::new(wasm_page_map.clone(), NumWasmPages::from(0)),
-        &Memory::new(PageMap::new(), NumWasmPages::from(0)),
+        &Memory::new(stable_memory_page_map.clone(), NumWasmPages::from(0)),
         ModificationTracking::Ignore,
         system_api,
     ) {

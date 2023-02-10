@@ -33,6 +33,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{CallOrigin, NetworkTopology, ReplicatedState};
 use ic_types::{messages::CallContextId, SubnetId};
 use ingress_filter::IngressFilter;
@@ -100,6 +101,7 @@ impl ExecutionServices {
         config: Config,
         cycles_account_manager: Arc<CyclesAccountManager>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     ) -> ExecutionServices {
         let hypervisor = Arc::new(Hypervisor::new(
             config.clone(),
@@ -109,6 +111,7 @@ impl ExecutionServices {
             logger.clone(),
             Arc::clone(&cycles_account_manager),
             scheduler_config.dirty_page_overhead,
+            Arc::clone(&fd_factory),
         ));
 
         let ingress_history_writer = Arc::new(IngressHistoryWriterImpl::new(

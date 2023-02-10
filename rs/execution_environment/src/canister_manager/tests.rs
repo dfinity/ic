@@ -73,6 +73,8 @@ use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
 use super::InstallCodeResult;
 use prometheus::IntCounter;
 
+use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
+
 const CANISTER_CREATION_FEE: Cycles = Cycles::new(100_000_000_000);
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
@@ -207,6 +209,7 @@ impl CanisterManagerBuilder {
             no_op_logger(),
             Arc::clone(&cycles_account_manager),
             SchedulerConfig::application_subnet().dirty_page_overhead,
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
         let hypervisor = Arc::new(hypervisor);
         CanisterManager::new(
