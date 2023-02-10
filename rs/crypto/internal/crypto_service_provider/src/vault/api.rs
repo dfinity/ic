@@ -3,6 +3,7 @@ use crate::key_id::{KeyId, KeyIdInstantiationError};
 use crate::types::CspPublicCoefficients;
 use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::ExternalPublicKeys;
+use ic_crypto_internal_logmon::metrics::KeyCounts;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_threshold_sig_ecdsa::{
@@ -25,6 +26,9 @@ use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspBasicSignatureError {
@@ -157,11 +161,144 @@ pub struct NodeKeysErrors {
     pub idkg_dealing_encryption_key_error: Option<NodeKeysError>,
 }
 
+impl NodeKeysErrors {
+    pub fn no_error() -> Self {
+        NodeKeysErrors {
+            node_signing_key_error: None,
+            committee_signing_key_error: None,
+            tls_certificate_error: None,
+            dkg_dealing_encryption_key_error: None,
+            idkg_dealing_encryption_key_error: None,
+        }
+    }
+
+    pub fn keys_in_registry_missing_locally(&self) -> bool {
+        self.node_signing_key_error.as_ref().map_or(false, |err| {
+            err.external_public_key_error.is_none()
+                && err.contains_local_public_or_secret_key_error()
+        }) || self
+            .committee_signing_key_error
+            .as_ref()
+            .map_or(false, |err| {
+                err.external_public_key_error.is_none()
+                    && err.contains_local_public_or_secret_key_error()
+            })
+            || self.tls_certificate_error.as_ref().map_or(false, |err| {
+                err.external_public_key_error.is_none()
+                    && err.contains_local_public_or_secret_key_error()
+            })
+            || self
+                .dkg_dealing_encryption_key_error
+                .as_ref()
+                .map_or(false, |err| {
+                    err.external_public_key_error.is_none()
+                        && err.contains_local_public_or_secret_key_error()
+                })
+            || self
+                .idkg_dealing_encryption_key_error
+                .as_ref()
+                .map_or(false, |err| {
+                    err.external_public_key_error.is_none()
+                        && err.contains_local_public_or_secret_key_error()
+                })
+    }
+}
+
+impl From<&NodeKeysErrors> for KeyCounts {
+    fn from(err: &NodeKeysErrors) -> Self {
+        KeyCounts::ZERO
+            + err
+                .node_signing_key_error
+                .as_ref()
+                .map_or(KeyCounts::ONE, KeyCounts::from)
+            + err
+                .committee_signing_key_error
+                .as_ref()
+                .map_or(KeyCounts::ONE, KeyCounts::from)
+            + err
+                .tls_certificate_error
+                .as_ref()
+                .map_or(KeyCounts::ONE, KeyCounts::from)
+            + err
+                .dkg_dealing_encryption_key_error
+                .as_ref()
+                .map_or(KeyCounts::ONE, KeyCounts::from)
+            + err
+                .idkg_dealing_encryption_key_error
+                .as_ref()
+                .map_or(KeyCounts::ONE, KeyCounts::from)
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NodeKeysError {
     pub external_public_key_error: Option<ExternalPublicKeyError>,
     pub local_public_key_error: Option<LocalPublicKeyError>,
     pub secret_key_error: Option<SecretKeyError>,
+}
+
+impl NodeKeysError {
+    pub fn no_error() -> Self {
+        NodeKeysError {
+            external_public_key_error: None,
+            local_public_key_error: None,
+            secret_key_error: None,
+        }
+    }
+
+    fn contains_local_public_or_secret_key_error(&self) -> bool {
+        self.local_public_key_error.is_some() || self.secret_key_error.is_some()
+    }
+}
+
+/// Calculates a [`KeyCount`] from provided [`NodeKeysError`].
+///
+/// If there is no error for a particular key, it is deemed to be present, and the count is 1.
+/// If there is an error for a particular key, it is deemed to not be present, and the count is 0.
+///
+/// # Example
+///```
+///  # use ic_crypto_internal_csp::vault::api::{ExternalPublicKeyError, LocalPublicKeyError, NodeKeysError, SecretKeyError};
+///  # use ic_crypto_internal_logmon::metrics::KeyCounts;
+///  let all_ok = NodeKeysError {
+///      external_public_key_error: None,
+///      local_public_key_error: None,
+///      secret_key_error: None
+///  };
+///  let ok_key_counts = KeyCounts::from(&all_ok);
+///  assert_eq!(
+///      ok_key_counts,
+///      KeyCounts::ONE
+///  );
+///  let no_keys_present = NodeKeysError {
+///      external_public_key_error: Some(ExternalPublicKeyError(Box::new("malformed external public key".to_string()))),
+///      local_public_key_error: Some(LocalPublicKeyError::Mismatch),
+///      secret_key_error: Some(SecretKeyError::CannotComputeKeyId)
+///  };
+///  let empty_key_counts = KeyCounts::from(&no_keys_present);
+///  assert_eq!(
+///      empty_key_counts,
+///      KeyCounts::new(0, 0, 0)
+///  );
+///  let local_keys_missing = NodeKeysError {
+///      external_public_key_error: None,
+///      local_public_key_error: Some(LocalPublicKeyError::NotFound),
+///      secret_key_error: Some(SecretKeyError::NotFound)
+///  };
+///  let partial_key_count = KeyCounts::from(&local_keys_missing);
+///  assert_eq!(
+///      partial_key_count,
+///      KeyCounts::new(1, 0, 0)
+///  );
+///```
+impl From<&NodeKeysError> for KeyCounts {
+    fn from(err: &NodeKeysError) -> Self {
+        KeyCounts::new(
+            err.external_public_key_error.as_ref().map_or(1, |_err| 0),
+            err.local_public_key_error.as_ref().map_or(1, |_err| 0),
+            err.secret_key_error.as_ref().map_or(1, |_err| 0),
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -488,21 +625,6 @@ pub trait SecretKeyStoreCspVault {
 
 /// Operations of `CspVault` related to querying the public key store.
 pub trait PublicKeyStoreCspVault {
-    /// Checks whether the local public key store contains the provided public keys.
-    ///
-    /// # Returns
-    /// `true` if all the provided public keys exist in the local public key store,
-    /// `false` if one or more of the provided public keys do not exist in the local
-    /// public key store
-    ///
-    /// # Errors
-    /// * `CspPublicKeyStoreError::TransientInternalError` if there is a transient
-    ///   internal error, e.g., an RPC error when calling a remote CSP vault.
-    fn pks_contains(
-        &self,
-        public_keys: CurrentNodePublicKeys,
-    ) -> Result<bool, CspPublicKeyStoreError>;
-
     /// Returns the node's current public keys where generation timestamps are stripped.
     ///
     /// For keys that are periodically rotated (such as the iDKG dealing encryption key pair) only

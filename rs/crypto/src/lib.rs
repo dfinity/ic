@@ -37,7 +37,7 @@ use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
 use ic_types::consensus::CatchUpContentProtobufBytes;
 use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};
 use ic_types::messages::MessageId;
@@ -139,6 +139,8 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         logger: ReplicaLogger,
         registry_client: Arc<dyn RegistryClient>,
         node_id: NodeId,
+        metrics: Arc<CryptoMetrics>,
+        time_source: Option<Arc<dyn TimeSource>>,
     ) -> Self {
         CryptoComponentFatClient {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
@@ -146,8 +148,9 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
             registry_client,
             node_id,
             logger: new_logger!(&logger),
-            metrics: Arc::new(CryptoMetrics::none()),
-            time_source: Arc::new(CurrentSystemTimeSource::new(logger)),
+            metrics,
+            time_source: time_source
+                .unwrap_or_else(|| Arc::new(CurrentSystemTimeSource::new(logger))),
         }
     }
 }
@@ -247,11 +250,7 @@ impl CryptoComponentFatClient<Csp> {
             metrics,
             time_source: Arc::new(CurrentSystemTimeSource::new(logger)),
         };
-        crypto_component
-            .collect_and_store_key_count_metrics(latest_registry_version)
-            .expect(
-                "Failed to CryptoComponentFatClient::collect_and_store_key_count_metrics(...).",
-            );
+        crypto_component.collect_and_store_key_count_metrics(latest_registry_version);
         crypto_component
     }
 
@@ -271,7 +270,12 @@ impl CryptoComponentFatClient<Csp> {
         let metrics = Arc::new(CryptoMetrics::none());
         CryptoComponentFatClient {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
-            csp: Csp::new(config, tokio_runtime_handle, None, Arc::clone(&metrics)),
+            csp: Csp::new(
+                config,
+                tokio_runtime_handle,
+                Some(logger.clone()),
+                Arc::clone(&metrics),
+            ),
             registry_client,
             node_id,
             logger,
@@ -336,6 +340,10 @@ impl CryptoComponentFatClient<Csp> {
     pub fn registry_client(&self) -> &Arc<dyn RegistryClient> {
         &self.registry_client
     }
+
+    fn collect_and_store_key_count_metrics(&self, registry_version: RegistryVersion) {
+        let _ = self.check_keys_with_registry(registry_version);
+    }
 }
 
 fn key_from_registry(
@@ -354,6 +362,22 @@ fn key_from_registry(
             key_purpose,
             registry_version,
         }),
+    }
+}
+
+fn tls_certificate_from_registry(
+    registry: &dyn RegistryClient,
+    node_id: NodeId,
+    registry_version: RegistryVersion,
+) -> CryptoResult<X509PublicKeyCert> {
+    use ic_registry_client_helpers::crypto::CryptoRegistry;
+    let maybe_tls_certificate = registry.get_tls_certificate(node_id, registry_version)?;
+    match maybe_tls_certificate {
+        None => Err(CryptoError::TlsCertNotFound {
+            node_id,
+            registry_version,
+        }),
+        Some(cert) => Ok(cert),
     }
 }
 

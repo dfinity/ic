@@ -465,13 +465,6 @@ impl KeyManager for CryptoReturningOk {
         Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
     }
 
-    fn collect_and_store_key_count_metrics(
-        &self,
-        _registry_version: RegistryVersion,
-    ) -> CryptoResult<()> {
-        Ok(())
-    }
-
     fn current_node_public_keys(
         &self,
     ) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError> {

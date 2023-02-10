@@ -24,16 +24,16 @@ pub use crate::vault::remote_csp_vault::run_csp_vault_server;
 use crate::vault::remote_csp_vault::RemoteCspVault;
 
 use crate::api::{
-    CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker, CspSigVerifier, CspSigner,
-    CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner, CspTlsHandshakeSignerProvider,
-    DkgDealingEncryptionKeyIdRetrievalError, NiDkgCspClient, NodePublicKeyData,
-    NodePublicKeyDataError, ThresholdSignatureCspClient,
+    CspIDkgProtocol, CspKeyGenerator, CspPublicAndSecretKeyStoreChecker, CspSecretKeyStoreChecker,
+    CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
+    CspTlsHandshakeSignerProvider, DkgDealingEncryptionKeyIdRetrievalError, NiDkgCspClient,
+    NodePublicKeyData, NodePublicKeyDataError, ThresholdSignatureCspClient,
 };
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, ExternalPublicKeys};
-use crate::vault::api::{CspPublicKeyStoreError, CspVault};
+use crate::vault::api::{CspPublicKeyStoreError, CspVault, PksAndSksContainsErrors};
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
@@ -66,6 +66,7 @@ pub trait CryptoServiceProvider:
     + CspIDkgProtocol
     + CspThresholdEcdsaSigner
     + CspThresholdEcdsaSigVerifier
+    + CspPublicAndSecretKeyStoreChecker
     + CspSecretKeyStoreChecker
     + CspTlsHandshakeSignerProvider
     + NodePublicKeyData
@@ -81,6 +82,7 @@ impl<T> CryptoServiceProvider for T where
         + CspThresholdEcdsaSigner
         + CspThresholdEcdsaSigVerifier
         + NiDkgCspClient
+        + CspPublicAndSecretKeyStoreChecker
         + CspSecretKeyStoreChecker
         + CspTlsHandshakeSignerProvider
         + NodePublicKeyData
@@ -254,17 +256,6 @@ impl Csp {
 }
 
 impl NodePublicKeyData for Csp {
-    fn pks_contains(
-        &self,
-        public_keys: CurrentNodePublicKeys,
-    ) -> Result<bool, NodePublicKeyDataError> {
-        self.csp_vault.pks_contains(public_keys).map_err(
-            |CspPublicKeyStoreError::TransientInternalError(internal_error)| {
-                NodePublicKeyDataError::TransientInternalError(internal_error)
-            },
-        )
-    }
-
     fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError> {
         let pks = self.csp_vault.current_node_public_keys()?;
         Ok(pks)
@@ -300,6 +291,15 @@ impl NodePublicKeyData for Csp {
     fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, NodePublicKeyDataError> {
         let idkg_key_count = self.csp_vault.idkg_dealing_encryption_pubkeys_count()?;
         Ok(idkg_key_count)
+    }
+}
+
+impl CspPublicAndSecretKeyStoreChecker for Csp {
+    fn pks_and_sks_contains(
+        &self,
+        external_public_keys: ExternalPublicKeys,
+    ) -> Result<(), PksAndSksContainsErrors> {
+        self.csp_vault.pks_and_sks_contains(external_public_keys)
     }
 }
 

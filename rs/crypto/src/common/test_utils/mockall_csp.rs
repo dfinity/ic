@@ -6,16 +6,18 @@
 
 use ic_base_types::RegistryVersion;
 use ic_crypto_internal_csp::api::{
-    CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspSecretKeyStoreChecker,
-    CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
-    CspThresholdSignError, CspTlsHandshakeSignerProvider, NiDkgCspClient, NodePublicKeyData,
-    ThresholdSignatureCspClient,
+    CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspPublicAndSecretKeyStoreChecker,
+    CspSecretKeyStoreChecker, CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier,
+    CspThresholdEcdsaSigner, CspThresholdSignError, CspTlsHandshakeSignerProvider, NiDkgCspClient,
+    NodePublicKeyData, ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::api::{
     DkgDealingEncryptionKeyIdRetrievalError, NodePublicKeyDataError,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
+use ic_crypto_internal_csp::types::ExternalPublicKeys;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
+use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateDealingError, CspDkgCreateFsKeyError, CspDkgCreateReshareDealingError,
@@ -242,13 +244,19 @@ mock! {
         ) -> Result<(), CspDkgRetainThresholdKeysError>;
     }
 
+    pub trait CspPublicAndSecretKeyStoreChecker {
+        fn pks_and_sks_contains(
+            &self,
+            registry_public_keys: ExternalPublicKeys,
+        ) -> Result<(), PksAndSksContainsErrors>;
+    }
+
     pub trait CspSecretKeyStoreChecker {
         fn sks_contains(&self, id: &KeyId) -> Result<bool, CryptoError>;
         fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> Result<bool, CryptoError>;
     }
 
     pub trait NodePublicKeyData {
-        fn pks_contains(&self, public_keys: CurrentNodePublicKeys) -> Result<bool, NodePublicKeyDataError>;
         fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError>;
         fn current_node_public_keys_with_timestamps(&self) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError>;
         fn dkg_dealing_encryption_key_id(&self) -> Result<KeyId, DkgDealingEncryptionKeyIdRetrievalError>;

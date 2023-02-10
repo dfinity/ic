@@ -9,7 +9,9 @@ use ic_types::RegistryVersion;
 
 /// Methods for checking and retrieving key material.
 pub trait KeyManager {
-    /// Checks whether this crypto component is properly set up and in sync with the registry.
+    /// Checks whether this crypto component is properly set up and in sync with the registry. As
+    /// part of the check, the number of public keys in the registry, as well as the corresponding
+    /// local public and secret keys, are counted, and metrics observations are made.
     ///
     /// This is done by ensuring that:
     /// 1. the registry contains all necessary public keys
@@ -39,16 +41,6 @@ pub trait KeyManager {
         &self,
         registry_version: RegistryVersion,
     ) -> CryptoResult<PublicKeyRegistrationStatus>;
-
-    /// Collects key count metrics from the local node and the registry, and stores the information
-    /// in the metrics component.
-    ///
-    /// # Errors
-    /// * [`CryptoError::TransientInternalError`] e.g. on RPC error.
-    fn collect_and_store_key_count_metrics(
-        &self,
-        registry_version: RegistryVersion,
-    ) -> CryptoResult<()>;
 
     /// Returns the node's public keys currently stored in the public key store.
     ///

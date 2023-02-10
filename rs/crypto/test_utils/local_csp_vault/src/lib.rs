@@ -227,11 +227,6 @@ mock! {
     }
 
     pub trait PublicKeyStoreCspVault {
-        fn pks_contains(
-            &self,
-            public_keys: CurrentNodePublicKeys,
-        ) -> Result<bool, CspPublicKeyStoreError>;
-
         fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError>;
 
         fn current_node_public_keys_with_timestamps(
