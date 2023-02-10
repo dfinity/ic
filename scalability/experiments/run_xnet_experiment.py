@@ -212,6 +212,7 @@ class XnetExperiment(base_experiment.BaseExperiment):
         for (hostname, canister_id) in zip(hostnames, canister_ids):
             agent = misc.get_agent(hostname)
             req = agent.query_raw(canister_id, "metrics", encode([]), schema)
+            assert canister_id not in results  # We query each canister only once
             results[canister_id] = req[0]["value"]
         return results
 
@@ -276,10 +277,14 @@ class XnetExperiment(base_experiment.BaseExperiment):
 
         # Get metrics
         # --------------------------------------------------
-        results = {}
+        metrics = {}
         for hostname, canisters in self.canisters_per_host.items():
-            results.update(XnetExperiment.metrics([hostname for _ in canisters], canisters))
-        # print(results)
+            new = XnetExperiment.metrics([hostname for _ in canisters], canisters)
+            assert len(new.keys()) + len(metrics.keys()) == len(
+                (new.keys() | metrics.keys())
+            ), "Metrics contain duplicate keys (overwriting each other)"
+            metrics.update(new)
+        print(metrics)
 
         # Get Prometheus metrics
         # --------------------------------------------------
@@ -289,7 +294,7 @@ class XnetExperiment(base_experiment.BaseExperiment):
             with open(os.path.join(self.iter_outdir, "xnet-stream-size.json"), "w") as iter_file:
                 iter_file.write(out)
 
-        return results
+        return metrics
 
     def parse(path: str):
         """Parse the given json file containing Prometheus xnet-stream data."""
@@ -331,13 +336,13 @@ if __name__ == "__main__":
     metrics = exp.run_experiment(config)
     output = exp.run_accepted(metrics, config)
 
-    # TODO: Add metrics to experiment output.
     exp.write_summary_file(
         "run_xnet_experiment",
         {
             "rps": total_rate,
             "rps_max": total_rate,
             "iter_duration": config["duration"],
+            "metrics": metrics,
             "target_load": FLAGS.target_rps,
             "t_median": 0,  # TODO correction
             "failure_rate": 0,  # TODO correction

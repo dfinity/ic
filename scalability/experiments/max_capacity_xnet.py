@@ -25,6 +25,7 @@ if __name__ == "__main__":
     exp = run_xnet_experiment.XnetExperiment()
 
     rps_iterations = []
+    config_per_iteration = []
 
     max_capacity = None
 
@@ -46,6 +47,7 @@ if __name__ == "__main__":
             "canister_to_subnet_rate": canister_to_subnet_rate,
         }
 
+        config_per_iteration.append(config)
         metrics = exp.run_experiment(config)
 
         if exp.run_accepted(metrics, config):
@@ -57,10 +59,12 @@ if __name__ == "__main__":
         {
             "rps": rps_iterations,
             "rps_max": max_capacity,
+            "config": config_per_iteration,
+            "metrics": metrics,
             "is_update": True,
             "iter_duration": FLAGS.iter_duration,
         },
-        [FLAGS.payload_size],
-        "payload size [bytes]",
+        rps_iterations,
+        "request rate [/s]",
     )
     exp.end_experiment()
