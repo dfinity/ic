@@ -51,7 +51,7 @@ ALLOWABLE_FAILURE_RATE = 0.2
 # When median latency is below this level, we consider the experiment successful.
 ALLOWABLE_LATENCY = 5000
 
-# Default rate to use in wait_for_queit to determine if the IC has recovered from stressing.
+# Default rate to use in wait_for_quiet to determine if the IC has recovered from stressing.
 # The suite will wait between two benchmarking iterations until the HTTP request rate is below this value.
 DEFAULT_QUIET_RATE_RPS = 2
 
@@ -270,7 +270,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         recovered = False
         curr_i = 0
 
-        if FLAGS.no_instrument:
+        if FLAGS.no_prometheus:
             time.sleep(60)
             return
 

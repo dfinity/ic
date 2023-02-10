@@ -4,12 +4,11 @@ use dfn_macro::query;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::cmp::min;
-use std::mem;
 use std::str::FromStr;
 
-const ELEMENT_SIZE: usize = mem::size_of::<u64>();
-const MEMORY_SIZE: usize = 1 << 30; // 1GiB, can't exceed 4GB.
-const MEMORY_LEN: usize = MEMORY_SIZE / ELEMENT_SIZE;
+const MB: usize = 1 << 20;
+const MEMORY_SIZE: usize = 3800 * MB; // Cannot exceed 4 GiB
+const MAX_VECTOR_SIZE: usize = 1 << 29; // 512 MiB
 const PAGE_SIZE: usize = 4096;
 /// Datastructure representing a call tree.
 /// It's comprised of a canister_id representing where the canister originates
@@ -35,7 +34,9 @@ thread_local! {
     static METRICS: RefCell<Metrics> = RefCell::new(Default::default());
 
     /// Pages accessed by read/write methods.
-    static MEMORY: RefCell<Vec<u64>> = RefCell::new(vec![]);
+    /// Since each individual allocated object can only be up to 1 GiB of memory, we need
+    /// multiple vectors to fill up the entire heap.
+    static MEMORY: RefCell<Vec<Vec<u8>>> = RefCell::new(Vec::new());
 }
 
 #[derive(Serialize, Deserialize)]
@@ -56,12 +57,17 @@ struct Message {
 
 /// Touch each page of the memory once
 fn touch_memory(num_pages: usize) {
-    let mut middle_of_page = PAGE_SIZE / ELEMENT_SIZE / 2;
     MEMORY.with(|memory| {
-        let mut memory_ref = memory.borrow_mut();
-        let memory = memory_ref.as_mut_slice();
-        while (middle_of_page) < min(memory.len(), num_pages) {
-            memory[middle_of_page] += 1;
+        let mut middle_of_page: usize = PAGE_SIZE / 2;
+        while (middle_of_page) < min(MEMORY_SIZE, PAGE_SIZE * num_pages) {
+            // Find vector and offset within array to use.
+            let vector_idx = middle_of_page / MAX_VECTOR_SIZE;
+            let vector_offset: usize = middle_of_page % MAX_VECTOR_SIZE;
+
+            let mut memory_ref = memory.borrow_mut();
+            let memory = memory_ref[vector_idx].as_mut_slice();
+            memory[vector_offset] += 1;
+
             middle_of_page += PAGE_SIZE
         }
     });
@@ -119,16 +125,12 @@ async fn start(arguments: Arguments) -> Vec<Message> {
 
 #[export_name = "canister_init"]
 fn main() {
-    let mut memory = vec![0; MEMORY_LEN];
-    // Ensure that all pages are different.
-    let mut middle_of_page = PAGE_SIZE / ELEMENT_SIZE / 2;
-    while (middle_of_page) < memory.len() {
-        memory[middle_of_page] = middle_of_page as u64;
-        middle_of_page += PAGE_SIZE
+    let mut memory_size_left = MEMORY_SIZE;
+    let mut memories: Vec<Vec<u8>> = vec![];
+    while memory_size_left > 0 {
+        let curr_memory_size = std::cmp::min(memory_size_left, MAX_VECTOR_SIZE);
+        memories.push(vec![0; curr_memory_size]);
+        memory_size_left -= curr_memory_size;
     }
-    MEMORY.with(|s| s.replace(memory));
-    api::print(format!(
-        "Successfully initialized canister with {} bytes",
-        MEMORY_SIZE,
-    ));
+    MEMORY.with(|s| s.replace(memories));
 }

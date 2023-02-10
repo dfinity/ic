@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 """Measure ICP performance when using delegations"""
-import dataclasses
-import json
 import os
 import statistics
 import sys
@@ -42,11 +40,6 @@ class DelegationExperiment(IcPyStressExperiment):
         counter_end = parse_counter_return(agent.update_raw(self.target_canister, "read", []))
         counter_diff = counter_end - counter_start
 
-        iteration_uuid = str(uuid.uuid4())
-        with open(os.path.join(self.iter_outdir, "stresser-results" + iteration_uuid), "w") as f:
-            # Remove request IDs (they are not Json serializable) and write to file
-            f.write(json.dumps(dataclasses.replace(r, req_ids=[]).__dict__, indent=4))
-
         if counter_diff > r.num_succ_executed:
             print(
                 colored(
@@ -75,8 +68,6 @@ class DelegationExperiment(IcPyStressExperiment):
             ),
             " (successful submit does not mean successful execution)",
         )
-        for exception, num in r.exception_histogram.items():
-            print(f"{exception} - {num}")
         failure_rate = r.num_fail_executed / num_total
         print(
             colored(
@@ -90,12 +81,11 @@ class DelegationExperiment(IcPyStressExperiment):
             " (successful execution means the ingress message has been succesfully executed by the canister)",
         )
 
+        iteration_uuid = uuid.uuid4()
         plot_outname = os.path.join(self.iter_outdir, f"delegate_requests_start_time-{iteration_uuid}.png")
         plot_request_distribution(r.call_time, r.durations, plot_outname, config["rps"])
         plot_request_distribution(r.call_time, r.durations, "/tmp/plot.png", config["rps"])
         print(colored("Status codes:", "blue"))
-        for k, v in r.status_codes.items():
-            print(k, v)
 
         return EvaluatedSummaries(
             failure_rate,
