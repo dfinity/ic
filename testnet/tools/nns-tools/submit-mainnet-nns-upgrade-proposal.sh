@@ -7,7 +7,7 @@ source "$SCRIPT_DIR/functions.sh"
 help() {
     print_green "
 Usage: $0 <PROPOSAL_FILE> <NEURON_ID>
-    PROPOSAL_FILE: File with proposal created by ./prepare-mainnet-proposal-text.sh (or formatted in that way)
+    PROPOSAL_FILE: File with proposal created by ./prepare-mainnet-upgrade-proposal-text.sh (or formatted in that way)
     NEURON_ID: Your mainnet neuron ID, associated with your HSM
 
   This script will create a proposal on mainnet from a given proposal text.
@@ -16,7 +16,7 @@ Usage: $0 <PROPOSAL_FILE> <NEURON_ID>
     exit 1
 }
 
-if [ $# -lt 2 ]; then
+if [ $# -ne 2 ]; then
     help
 fi
 
@@ -26,7 +26,7 @@ NEURON_ID=$2
 value_from_proposal_text() {
     local FILE=$1
     local FIELD=$2
-    cat $FILE | grep "$FIELD" | sed "s/.*$FIELD[[:space:]]*//"
+    cat $FILE | grep "### $FIELD" | sed "s/.*$FIELD[[:space:]]*//"
 }
 
 check_or_set_dfx_hsm_pin() {
@@ -44,7 +44,7 @@ extract_previous_version() {
     cat $FILE | grep "git log" | sed 's/.*\([0-9a-f]\{40\}\)\.\.[0-9a-f]\{40\}.*/\1/'
 }
 
-submit_proposal_mainnet() {
+submit_nns_upgrade_proposal_mainnet() {
     ensure_variable_set IC_ADMIN
 
     PROPOSAL_FILE=$1
@@ -111,14 +111,18 @@ submit_proposal_mainnet() {
     "${cmd[@]}"
 }
 
-# We download a verison of IC_ADMIN compatible with the previous release
 if ! is_variable_set IC_ADMIN; then
     if [ ! -f "$MY_DOWNLOAD_DIR/ic-admin" ]; then
         PREVIOUS_VERSION=$(extract_previous_version "$PROPOSAL_FILE")
-        #TODO make this work for M1 macbooks
-        install_binary ic-admin "$PREVIOUS_VERSION" "$MY_DOWNLOAD_DIR"
+
+        if [ $(uname -o) != "Darwin" ]; then
+            install_binary ic-admin "$PREVIOUS_VERSION" "$MY_DOWNLOAD_DIR"
+        else
+            echo "IC_ADMIN must be set for Mac, cannot download."
+            return 1
+        fi
     fi
     IC_ADMIN=$MY_DOWNLOAD_DIR/ic-admin
 fi
 
-submit_proposal_mainnet $PROPOSAL_FILE $NEURON_ID
+submit_nns_upgrade_proposal_mainnet $PROPOSAL_FILE $NEURON_ID

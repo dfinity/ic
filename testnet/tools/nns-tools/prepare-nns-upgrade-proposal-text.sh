@@ -46,4 +46,4 @@ current_branch_has_commit $NEXT || (
     exit 1
 )
 
-generate_release_notes_template "$LAST" "$NEXT" "$CANISTER_NAME" "$OUTPUT_FILE"
+generate_nns_proposal_text "$LAST" "$NEXT" "$CANISTER_NAME" "$OUTPUT_FILE"

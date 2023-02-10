@@ -251,13 +251,13 @@ initial_token_distribution:
      developer_distribution:
        developer_neurons:
          - controller: ye54c-us65k-r4log-cyhy6-vt33j-z7mwx-ymwzl-yjtti-24xs4-qemd2-rqe
-           stake_e8s: 5000000000
+           stake_e8s: 3000000000000
            memo: 0
            dissolve_delay_seconds: 15780000 # 6 months
      treasury_distribution:
        total_e8s: 5000000000
      swap_distribution:
-       total_e8s: 6000000000
-       initial_swap_amount_e8s: 3000000000
+       total_e8s: 3000000000000
+       initial_swap_amount_e8s: 3000000000000
      airdrop_distribution:
        airdrop_neurons: []
