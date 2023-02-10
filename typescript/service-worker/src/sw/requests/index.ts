@@ -137,12 +137,22 @@ export class RequestProcessor {
         body: new Uint8Array(await this.request.arrayBuffer()),
       };
 
-      let upgradeCall = false;
       let httpResponse = await actor.http_request(httpRequest);
+      const upgradeCall =
+        httpResponse.upgrade.length === 1 && httpResponse.upgrade[0];
+
+      if (upgradeCall) {
+        // repeat the request as an update call
+        httpResponse = await actor.http_request_update(httpRequest);
+      }
 
       // Redirects are blocked for query calls only: if this response has the upgrade to update call flag set,
       // the update call is allowed to redirect. This is safe because the response (including the headers) will go through consensus.
-      if (httpResponse.status_code >= 300 && httpResponse.status_code < 400) {
+      if (
+        !upgradeCall &&
+        httpResponse.status_code >= 300 &&
+        httpResponse.status_code < 400
+      ) {
         console.error(
           'Due to security reasons redirects are blocked on the IC until further notice!'
         );
@@ -153,12 +163,6 @@ export class RequestProcessor {
           ),
           certifiedHeaders: new Headers(),
         };
-      }
-
-      if (httpResponse.upgrade.length === 1 && httpResponse.upgrade[0]) {
-        // repeat the request as an update call
-        httpResponse = await actor.http_request_update(httpRequest);
-        upgradeCall = true;
       }
 
       const headers = new Headers();
