@@ -1481,6 +1481,13 @@ pub(crate) fn syscalls<S: SystemApi>(
                     InternalErrorCode::StableMemoryTooBigFor32Bit => {
                         HypervisorError::Trapped(TrapCode::StableMemoryTooBigFor32Bit)
                     }
+                    InternalErrorCode::MemoryAccessLimitExceeded => {
+                        HypervisorError::MemoryAccessLimitExceeded(
+                            format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
+                                    stable_memory_dirty_page_limit * (PAGE_SIZE as u64 / 1024),
+                            )
+                        )
+                    }
                     InternalErrorCode::Unknown => HypervisorError::CalledTrap(format!(
                         "Trapped with internal error code: {}",
                         err_code

@@ -35,6 +35,9 @@ use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
+use crate::wasm_utils::instrumentation::{
+    DIRTY_PAGES_COUNTER_GLOBAL_NAME, INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+};
 use crate::{serialized_module::SerializedModuleBytes, wasm_utils::validation::ensure_determinism};
 
 use super::InstanceRunResult;
@@ -44,7 +47,6 @@ use self::host_memory::{MemoryPageSize, MemoryStart};
 #[cfg(test)]
 mod wasmtime_embedder_tests;
 
-const NUM_INSTRUCTION_GLOBAL_NAME: &str = "canister counter_instructions";
 const BAD_SIGNATURE_MESSAGE: &str = "function invocation does not match its signature";
 pub(crate) const WASM_HEAP_MEMORY_NAME: &str = "memory";
 pub(crate) const WASM_HEAP_BYTEMAP_MEMORY_NAME: &str = "bytemap_memory";
@@ -315,7 +317,7 @@ impl WasmtimeEmbedder {
         };
 
         store.data_mut().num_instructions_global =
-            instance.get_global(&mut store, NUM_INSTRUCTION_GLOBAL_NAME);
+            instance.get_global(&mut store, INSTRUCTIONS_COUNTER_GLOBAL_NAME);
 
         // in wasmtime only exported globals are accessible
         let instance_globals: Vec<_> = instance
@@ -372,6 +374,13 @@ impl WasmtimeEmbedder {
             }
         }
 
+        if self.config.feature_flags.wasm_native_stable_memory == FlagStatus::Enabled {
+            instance.get_global(&mut store, DIRTY_PAGES_COUNTER_GLOBAL_NAME)
+                .expect("Counter for dirty pages global should have been added with native stable memory enabled.")
+                .set(&mut store, Val::I64(self.config.stable_memory_dirty_page_limit.get() as i64))
+                .expect("Couldn't set dirty page counter global");
+        }
+
         let mut memories = HashMap::new();
         for memory_info in self.list_memory_infos(modification_tracking, heap_memory, stable_memory)
         {
@@ -392,6 +401,8 @@ impl WasmtimeEmbedder {
             write_barrier: self.config.feature_flags.write_barrier,
             wasm_native_stable_memory: self.config.feature_flags.wasm_native_stable_memory,
             modification_tracking,
+            #[cfg(debug_assertions)]
+            stable_memory_dirty_page_limit: self.config.stable_memory_dirty_page_limit,
         })
     }
 
@@ -606,6 +617,8 @@ pub struct WasmtimeInstance<S: SystemApi> {
     write_barrier: FlagStatus,
     wasm_native_stable_memory: FlagStatus,
     modification_tracking: ModificationTracking,
+    #[cfg(debug_assertions)]
+    stable_memory_dirty_page_limit: ic_types::NumPages,
 }
 
 impl<S: SystemApi> WasmtimeInstance<S> {
@@ -759,14 +772,17 @@ impl<S: SystemApi> WasmtimeInstance<S> {
             FlagStatus::Enabled => {
                 #[cfg(debug_assertions)]
                 if result.is_ok() {
-                    assert_eq!(
-                        access.stable_dirty_pages.len() as i64,
-                        self.instance
+                    let num_stable_dirty_pages = self.stable_memory_dirty_page_limit.get() as i64
+                        - self
+                            .instance
                             .get_global(&mut self.store, "canister counter_dirty_pages")
                             .unwrap()
                             .get(&mut self.store)
                             .i64()
-                            .unwrap()
+                            .unwrap();
+                    assert_eq!(
+                        access.stable_dirty_pages.len() as i64,
+                        num_stable_dirty_pages
                     );
                 }
                 access.stable_dirty_pages

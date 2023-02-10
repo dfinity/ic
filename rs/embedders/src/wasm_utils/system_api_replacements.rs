@@ -529,10 +529,25 @@ pub(super) fn replacement_functions(
                         Call {
                             function_index: count_clean_pages_fn_index,
                         },
-                        // TODO get complexity and bail if too high
-                        // for now store in local and set the global when succeeded
                         LocalTee { local_index: 5 },
+                        // fail if dirty pages limit exhausted
+                        I64ExtendI32U,
+                        GlobalGet {
+                            global_index: dirty_pages_counter_index,
+                        },
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
                         // Decrement instruction counter to charge for dirty pages
+                        LocalGet { local_index: 5 },
                         I64ExtendI32U,
                         I64Const {
                             value: dirty_page_overhead.get().try_into().unwrap(),
@@ -567,12 +582,12 @@ pub(super) fn replacement_functions(
                             dst_mem: stable_memory_index,
                             src_mem: 0,
                         },
-                        LocalGet { local_index: 5 },
-                        I64ExtendI32U,
                         GlobalGet {
                             global_index: dirty_pages_counter_index,
                         },
-                        I64Add,
+                        LocalGet { local_index: 5 },
+                        I64ExtendI32U,
+                        I64Sub,
                         GlobalSet {
                             global_index: dirty_pages_counter_index,
                         },
@@ -718,10 +733,25 @@ pub(super) fn replacement_functions(
                         Call {
                             function_index: count_clean_pages_fn_index,
                         },
-                        // TODO get complexity and bail if too high
-                        // for now store in local and set the global when succeeded
                         LocalTee { local_index: 5 },
+                        // fail if dirty pages limit exhausted
+                        I64ExtendI32U,
+                        GlobalGet {
+                            global_index: dirty_pages_counter_index,
+                        },
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
                         // Decrement instruction counter to charge for dirty pages
+                        LocalGet { local_index: 5 },
                         I64ExtendI32U,
                         I64Const {
                             value: dirty_page_overhead.get().try_into().unwrap(),
@@ -757,12 +787,12 @@ pub(super) fn replacement_functions(
                             dst_mem: stable_memory_index,
                             src_mem: 0,
                         },
-                        LocalGet { local_index: 5 },
-                        I64ExtendI32U,
                         GlobalGet {
                             global_index: dirty_pages_counter_index,
                         },
-                        I64Add,
+                        LocalGet { local_index: 5 },
+                        I64ExtendI32U,
+                        I64Sub,
                         GlobalSet {
                             global_index: dirty_pages_counter_index,
                         },
