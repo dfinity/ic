@@ -33,6 +33,8 @@ The +ic-bootstrap.tar+ may contain multiple files and/or subdirectories. The fol
 
 - +accounts_ssh_authorized_keys+ (directory): ssh keys for role accounts
 
+- +node_operator_private_key.pem+ (file): key to sign IC join request
+
 - +nftables.conf+ (file): nftables configuration file (obsoleted)
 
 - +backup.conf+ (file): backup configuration file (optional)
@@ -106,6 +108,10 @@ The following role account names are recognized:
 - +root+ (Only to be used for test builds)
 
 This directory and any file in it is optional, by default no authorized key is installed for either account. This means that the account is inaccessible. Accounts ssh configuration may be given for any of the bootstrap behaviors below.
+
+==== +node_operator_private_key.pem+: key to sign IC join request
+
+Must be a file which contains a private key from the node operator registered with the NNS and used to sign the IC join request.
 
 ==== +nftables.conf+: raw nftables configuration file (obsoleted)
 

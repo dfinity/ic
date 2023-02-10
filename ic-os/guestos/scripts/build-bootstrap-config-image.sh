@@ -70,6 +70,9 @@ options may be specified:
     the target). The presently recognized accounts are: backup, readonly,
     admin and root (the latter one for testing purposes only!)
 
+  --node_operator_private_key path
+    Should point to a file containing a node provider private key PEM.
+
   --backup_retention_time seconds
     How long the backed up consensus artifacts should stay on the spool
     before they get purged.
@@ -113,7 +116,7 @@ function build_ic_bootstrap_tar() {
 
     local IPV6_ADDRESS IPV6_GATEWAY NAME_SERVERS HOSTNAME
     local IC_CRYPTO IC_REGISTRY_LOCAL_STORE
-    local NNS_URL NNS_PUBLIC_KEY
+    local NNS_URL NNS_PUBLIC_KEY NODE_OPERATOR_PRIVATE_KEY
     local BACKUP_RETENTION_TIME_SECS BACKUP_PURGING_INTERVAL_SECS
     local JOURNALBEAT_HOSTS JOURNALBEAT_TAGS
     local ACCOUNTS_SSH_AUTHORIZED_KEYS
@@ -157,6 +160,9 @@ function build_ic_bootstrap_tar() {
                 ;;
             --accounts_ssh_authorized_keys)
                 ACCOUNTS_SSH_AUTHORIZED_KEYS="$2"
+                ;;
+            --node_operator_private_key)
+                NODE_OPERATOR_PRIVATE_KEY="$2"
                 ;;
             --backup_retention_time)
                 BACKUP_RETENTION_TIME_SECS="$2"
@@ -229,6 +235,9 @@ EOF
     fi
     if [ "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" != "" ]; then
         cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
+    fi
+    if [ "${NODE_OPERATOR_PRIVATE_KEY}" != "" ]; then
+        cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"
     fi
 
     tar cf "${OUT_FILE}" -C "${BOOTSTRAP_TMPDIR}" .
