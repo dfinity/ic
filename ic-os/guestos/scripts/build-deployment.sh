@@ -31,6 +31,7 @@ Arguments:
   -o=, --output=                        removable media output directory (Default: ./build-out/)
        --output-nns-public-key=         An optional path to output nns_public_key.pem if desired
   -s=, --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
+       --node-operator-private-key=     specify the node provider private key
        --git-revision=                  git revision for which to prepare the media
        --whitelist=                     path to provisional whitelist that allows canister creation
        --dkg-interval-length=           number of consensus rounds between DKG (-1 if not provided explicitly, which means - default will be used)
@@ -54,6 +55,10 @@ Arguments:
             ;;
         -s=* | --ssh=*)
             SSH="${argument#*=}"
+            shift
+            ;;
+        --node-operator-private-key=*)
+            NODE_OPERATOR_PRIVATE_KEY="${argument#*=}"
             shift
             ;;
         --git-revision=*)
@@ -89,6 +94,7 @@ done
 INPUT="${INPUT:=${BASE_DIR}/subnet.json}"
 OUTPUT="${OUTPUT:=${BASE_DIR}/build-out}"
 SSH="${SSH:=${BASE_DIR}/../../testnet/config/ssh_authorized_keys}"
+NODE_OPERATOR_PRIVATE_KEY="${NODE_OPERATOR_PRIVATE_KEY:=}"
 GIT_REVISION="${GIT_REVISION:=}"
 WHITELIST="${WHITELIST:=}"
 # Negative DKG value means unset (default will be used)
@@ -399,6 +405,25 @@ function copy_ssh_keys() {
     done
 }
 
+function copy_node_provider_key() {
+    for n in $NODES; do
+        declare -n NODE=$n
+        local subnet_idx=${NODE["subnet_idx"]}
+        local node_idx=${NODE["node_idx"]}
+
+        NODE_PREFIX=${DEPLOYMENT}.$subnet_idx.$node_idx
+
+        # Copy the file, but make sure that we do not
+        # copy/create symlinks (but rather dereference file contents).
+        # Symlinks must be refused by the config injection script (they
+        # can lead to confusion and side effects when overwriting one
+        # file changes another).
+        if [[ -n "$NODE_OPERATOR_PRIVATE_KEY" ]]; then
+            cp -Lr "${NODE_OPERATOR_PRIVATE_KEY}" "${CONFIG_DIR}/$NODE_PREFIX/node_provider_public_key.pem"
+        fi
+    done
+}
+
 function build_tarball() {
     for n in $NODES; do
         declare -n NODE=$n
@@ -455,6 +480,7 @@ function main() {
     generate_network_config
     generate_socks_config
     copy_ssh_keys
+    copy_node_provider_key
     build_tarball
     build_removable_media
     remove_temporary_directories

@@ -1,5 +1,5 @@
 use ic_canister_client::Sender;
-use ic_canister_client_sender::Ed25519KeyPair;
+use ic_canister_client_sender::{Ed25519KeyPair, Secp256k1KeyPair, SigKeys};
 use ic_sys::utility_command::{UtilityCommand, UtilityCommandResult};
 use ic_types::crypto::Signable;
 use ic_types::messages::MessageId;
@@ -61,5 +61,26 @@ impl Signer for TestSigner {
             pub_key: self.keypair.public_key.to_vec(),
             sign: Arc::new(sign_cmd),
         })
+    }
+}
+
+/// Signer for https://dfinity.atlassian.net/browse/NODE-439
+pub struct NodeProviderSigner {
+    keypair: Secp256k1KeyPair,
+}
+
+impl NodeProviderSigner {
+    pub fn new(path: &Path) -> Option<Self> {
+        let contents = std::fs::read_to_string(path).ok()?;
+        let keypair = Secp256k1KeyPair::from_pem(&contents).ok()?;
+        Some(Self { keypair })
+    }
+}
+
+impl Signer for NodeProviderSigner {
+    fn get(&self) -> UtilityCommandResult<Sender> {
+        Ok(Sender::SigKeys(SigKeys::EcdsaSecp256k1(
+            self.keypair.clone(),
+        )))
     }
 }

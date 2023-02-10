@@ -31,6 +31,9 @@ pub struct Config {
     /// When the orchestrator runs the first time, it checks if it is given
     /// a pem file to register with for testing purposes.
     pub test_key_pem: Option<PathBuf>,
+
+    /// If this Sec256k1 PEM is available, use it instead of the HSM.
+    pub node_operator_pem: Option<PathBuf>,
 }
 
 // We allow for the operator to only specify some of the fields while the others
@@ -58,6 +61,7 @@ impl Default for Config {
             nns_url: None,
             nns_pub_key_pem: None,
             test_key_pem: None,
+            node_operator_pem: None,
         }
     }
 }

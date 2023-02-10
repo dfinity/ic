@@ -34,6 +34,14 @@ function copy_config_files() {
         log_and_reboot_on_error "1" "Directory 'ssh_authorized_keys' does not exist."
     fi
 
+    echo "* Copying node operator private key..."
+    if [ -f "${CONFIG_DIR}/node_operator_private_key.pem" ]; then
+        cp ${CONFIG_DIR}/node_operator_private_key.pem /media/
+        log_and_reboot_on_error "${?}" "Unable to copy node operator private key to hostOS config partition."
+    else
+        echo "node_operator_private_key.pem does not exist, requiring HSM."
+    fi
+
     echo "* Copying deployment.json to config partition..."
     cp /data/deployment.json /media/
     log_and_reboot_on_error "${?}" "Unable to copy deployment.json to hostOS config partition."
@@ -43,18 +51,20 @@ function copy_config_files() {
     log_and_reboot_on_error "${?}" "Unable to copy NNS public key to hostOS config partition."
 }
 
-function insert_hsm() {
-    retry=0
-    while [ -z "$(lsusb | grep -E 'Nitro|Clay')" ]; do
-        let retry=retry+1
-        if [ ${retry} -ge 3600 ]; then
-            log_and_reboot_on_error "1" "Nitrokey HSM USB device could not be detected, giving up."
-            break
-        else
-            echo "* Please insert Nitrokey HSM USB device..."
-            sleep 3
-        fi
-    done
+function insert_hsm_if_necessary() {
+    if [ ! -f "${CONFIG_DIR}/node_operator_private_key.pem" ]; then
+        retry=0
+        while [ -z "$(lsusb | grep -E 'Nitro|Clay')" ]; do
+            let retry=retry+1
+            if [ ${retry} -ge 3600 ]; then
+                log_and_reboot_on_error "1" "Nitrokey HSM USB device could not be detected, giving up."
+                break
+            else
+                echo "* Please insert Nitrokey HSM USB device..."
+                sleep 3
+            fi
+        done
+    fi
 }
 
 function unmount_config_partition() {
@@ -76,7 +86,7 @@ main() {
     log_start "$(basename $0)"
     mount_config_partition
     copy_config_files
-    insert_hsm
+    insert_hsm_if_necessary
     unmount_config_partition
     log_end "$(basename $0)"
 }

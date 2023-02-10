@@ -2,7 +2,7 @@
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
     metrics::{KeyRotationStatus, OrchestratorMetrics},
-    signer::{Hsm, Signer, TestSigner},
+    signer::{Hsm, NodeProviderSigner, Signer, TestSigner},
 };
 use candid::Encode;
 use ic_canister_client::{Agent, Sender};
@@ -53,6 +53,9 @@ pub(crate) struct NodeRegistration {
 }
 
 impl NodeRegistration {
+    /// If the TestSigner path is present, use the TestSigner.
+    /// Then, if the PEM is present, use the NodeProviderSigner.
+    /// Else, use the HSM.
     pub(crate) fn new(
         log: ReplicaLogger,
         node_config: Config,
@@ -71,7 +74,19 @@ impl NodeRegistration {
             .and_then(|path| TestSigner::new(path.as_path()))
         {
             Some(test_signer) => Box::new(test_signer),
-            None => Box::new(Hsm),
+            None => {
+                // If we can open a PEM file under the path specified in the replica config,
+                // we use the given node operator private key to register the node.
+                match node_config
+                    .clone()
+                    .registration
+                    .node_operator_pem
+                    .and_then(|path| NodeProviderSigner::new(path.as_path()))
+                {
+                    Some(signer) => Box::new(signer),
+                    None => Box::new(Hsm),
+                }
+            }
         };
         Self {
             log,
