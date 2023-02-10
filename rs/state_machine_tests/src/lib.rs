@@ -648,16 +648,15 @@ impl StateMachine {
         self.checkpoints_enabled.set(enabled)
     }
 
-    /// Creates a new batch containing a single ingress message and sends it for
-    /// processing to the replicated state machine.
-    fn send_signed_ingress(&self, msg: SignedIngress) {
-        self.execute_block_with_ingress_payload(IngressPayload::from(vec![msg]))
-    }
-
     /// Triggers a single round of execution without any new inputs.  The state
     /// machine will invoke heartbeats and make progress on pending async calls.
     pub fn tick(&self) {
         self.execute_block_with_ingress_payload(IngressPayload::default())
+    }
+
+    /// Triggers a single round of execution with block payload as an input.
+    pub fn execute_payload(&self, builder: PayloadBuilder) {
+        self.execute_block_with_ingress_payload(IngressPayload::from(builder.payload))
     }
 
     /// Makes the state machine tick until there are no more messages in the system.
@@ -1291,25 +1290,15 @@ impl StateMachine {
         payload: Vec<u8>,
     ) -> MessageId {
         self.nonce.set(self.nonce.get() + 1);
-        let msg = SignedIngress::try_from(HttpRequestEnvelope::<HttpCallContent> {
-            content: HttpCallContent::Call {
-                update: HttpCanisterUpdate {
-                    canister_id: Blob(canister_id.get().into_vec()),
-                    method_name: method.to_string(),
-                    arg: Blob(payload),
-                    sender: Blob(sender.into_vec()),
-                    ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
-                    nonce: Some(Blob(self.nonce.get().to_be_bytes().to_vec())),
-                },
-            },
-            sender_pubkey: None,
-            sender_sig: None,
-            sender_delegation: None,
-        })
-        .unwrap();
+        let builder = PayloadBuilder::new().with_nonce(self.nonce.get()).ingress(
+            sender,
+            canister_id,
+            method,
+            payload,
+        );
 
-        let msg_id = msg.id();
-        self.send_signed_ingress(msg);
+        let msg_id = builder.ingress_ids().pop().unwrap();
+        self.execute_payload(builder);
         msg_id
     }
 
@@ -1592,5 +1581,66 @@ impl StateMachine {
             .subnet_call_context_manager
             .canister_http_request_contexts
             .clone()
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct PayloadBuilder {
+    expiry_time: u64,
+    nonce: Option<u64>,
+    payload: Vec<SignedIngress>,
+}
+
+impl PayloadBuilder {
+    pub fn new() -> Self {
+        Self::default().with_expiry_time(current_time_and_expiry_time().1)
+    }
+
+    pub fn with_expiry_time(self, expiry_time: Time) -> Self {
+        Self {
+            expiry_time: expiry_time.as_nanos_since_unix_epoch(),
+            ..self
+        }
+    }
+
+    pub fn with_nonce(self, nonce: u64) -> Self {
+        Self {
+            nonce: Some(nonce),
+            ..self
+        }
+    }
+
+    pub fn ingress(
+        mut self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        method: impl ToString,
+        payload: Vec<u8>,
+    ) -> Self {
+        let msg = SignedIngress::try_from(HttpRequestEnvelope::<HttpCallContent> {
+            content: HttpCallContent::Call {
+                update: HttpCanisterUpdate {
+                    canister_id: Blob(canister_id.get().into_vec()),
+                    method_name: method.to_string(),
+                    arg: Blob(payload),
+                    sender: Blob(sender.into_vec()),
+                    ingress_expiry: self.expiry_time,
+                    nonce: self.nonce.map(|n| Blob(n.to_be_bytes().to_vec())),
+                },
+            },
+            sender_pubkey: None,
+            sender_sig: None,
+            sender_delegation: None,
+        })
+        .unwrap();
+
+        self.payload.push(msg);
+        self.expiry_time += 1;
+        self.nonce = self.nonce.map(|n| n + 1);
+        self
+    }
+
+    pub fn ingress_ids(&self) -> Vec<MessageId> {
+        self.payload.iter().map(|i| i.id()).collect()
     }
 }
