@@ -16,6 +16,7 @@ pub struct Config {
     pub report_length_sec: Duration,
     pub sampling_interval_sec: Duration,
     pub canister_client_url: String,
+    pub canister_id: String,
 }
 
 #[serde_as]
@@ -29,7 +30,9 @@ pub struct OnchainObservabilityAdapterSpecificConfig {
     #[serde_as(as = "DurationSeconds<u64>")]
     #[serde(default = "default_sampling_interval")]
     pub sampling_interval_sec: Duration,
+    #[serde(default = "default_url")]
     pub canister_client_url: String,
+    pub canister_id: String,
 }
 
 const fn default_report_length() -> Duration {
@@ -38,4 +41,8 @@ const fn default_report_length() -> Duration {
 
 const fn default_sampling_interval() -> Duration {
     Duration::from_secs(60) // 1 minute
+}
+
+fn default_url() -> String {
+    "https://ic0.app".to_string()
 }

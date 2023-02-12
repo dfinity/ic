@@ -1,5 +1,5 @@
 {
-  "checksum": "0bf8020a41741a524fa2f5688128d846f0f979fecc445c9ffc09e29c8ae1e5f7",
+  "checksum": "f752b75c93c45a84e4e6bf2743174da0177cf1c91fdd5b345d53d705278c03bf",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -206,7 +206,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.6",
+              "id": "tokio-util 0.7.7",
               "target": "tokio_util"
             }
           ],
@@ -373,7 +373,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.6",
+              "id": "tokio-util 0.7.7",
               "target": "tokio_util"
             },
             {
@@ -2880,13 +2880,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "axum 0.6.5": {
+    "axum 0.6.6": {
       "name": "axum",
-      "version": "0.6.5",
+      "version": "0.6.6",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/axum/0.6.5/download",
-          "sha256": "3114e77b361ec716aa429ae5c04243abe00cf7548e870b9370affcc5c491a7d0"
+          "url": "https://crates.io/api/v1/crates/axum/0.6.6/download",
+          "sha256": "4e246206a63c9830e118d12c894f56a82033da1a2361f5544deeee3df85c99d9"
         }
       },
       "targets": [
@@ -2934,7 +2934,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.6.5",
+              "id": "axum 0.6.6",
               "target": "build_script_build"
             },
             {
@@ -3042,7 +3042,7 @@
           ],
           "selects": {}
         },
-        "version": "0.6.5"
+        "version": "0.6.6"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -8133,7 +8133,7 @@
               "alias": "tokio_dep"
             },
             {
-              "id": "tokio-util 0.7.6",
+              "id": "tokio-util 0.7.7",
               "target": "tokio_util"
             }
           ],
@@ -12200,7 +12200,7 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.6.5",
+              "id": "axum 0.6.6",
               "target": "axum"
             },
             {
@@ -13147,7 +13147,7 @@
               "target": "tokio_test"
             },
             {
-              "id": "tokio-util 0.7.6",
+              "id": "tokio-util 0.7.7",
               "target": "tokio_util"
             },
             {
@@ -17361,7 +17361,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.6",
+              "id": "tokio-util 0.7.7",
               "target": "tokio_util"
             },
             {
@@ -35875,7 +35875,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.6",
+              "id": "tokio-util 0.7.7",
               "target": "tokio_util"
             },
             {
@@ -36600,7 +36600,7 @@
                 "target": "tokio_rustls"
               },
               {
-                "id": "tokio-util 0.7.6",
+                "id": "tokio-util 0.7.7",
                 "target": "tokio_util"
               },
               {
@@ -43552,7 +43552,7 @@
               "target": "tokio_serde"
             },
             {
-              "id": "tokio-util 0.7.6",
+              "id": "tokio-util 0.7.7",
               "target": "tokio_util"
             },
             {
@@ -45763,13 +45763,13 @@
       },
       "license": "MIT"
     },
-    "tokio-util 0.7.6": {
+    "tokio-util 0.7.7": {
       "name": "tokio-util",
-      "version": "0.7.6",
+      "version": "0.7.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-util/0.7.6/download",
-          "sha256": "bc6a3b08b64e6dfad376fa2432c7b1f01522e37a623c3050bc95db2d3ff21583"
+          "url": "https://crates.io/api/v1/crates/tokio-util/0.7.7/download",
+          "sha256": "5427d89453009325de0d8f342c9490009f76e999cb7672d77e46267448f7e6b2"
         }
       },
       "targets": [
@@ -45833,7 +45833,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.7.6"
+        "version": "0.7.7"
       },
       "license": "MIT"
     },
@@ -46020,7 +46020,7 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.6.5",
+              "id": "axum 0.6.6",
               "target": "axum"
             },
             {
@@ -46081,7 +46081,7 @@
               "target": "tokio_stream"
             },
             {
-              "id": "tokio-util 0.7.6",
+              "id": "tokio-util 0.7.7",
               "target": "tokio_util"
             },
             {
@@ -46278,7 +46278,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.6",
+              "id": "tokio-util 0.7.7",
               "target": "tokio_util"
             },
             {
@@ -48620,8 +48620,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -48644,8 +48644,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -49019,7 +49019,7 @@
               "target": "tokio_tungstenite"
             },
             {
-              "id": "tokio-util 0.7.6",
+              "id": "tokio-util 0.7.7",
               "target": "tokio_util"
             },
             {

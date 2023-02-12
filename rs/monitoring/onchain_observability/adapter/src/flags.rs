@@ -62,6 +62,7 @@ impl Flags {
             report_length_sec: adapter_specific_config.report_length_sec,
             sampling_interval_sec: adapter_specific_config.sampling_interval_sec,
             canister_client_url: adapter_specific_config.canister_client_url,
+            canister_id: adapter_specific_config.canister_id,
         })
     }
 }
