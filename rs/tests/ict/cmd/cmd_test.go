@@ -34,7 +34,7 @@ func Test_RootCmdWithOneArg(t *testing.T) {
 }
 
 func Test_TestCmdWithNoArgs(t *testing.T) {
-	expected := "Error: accepts 1 arg(s), received 0"
+	expected := "requires at least 1 arg(s), only received 0"
 	actual := new(bytes.Buffer)
 	var command = cmd.NewTestCmd()
 	command.SetOut(actual)
