@@ -10,12 +10,15 @@ clap = { version = "3.1.6", features = ["derive"] }
 hyper = { version = "0.14.18", features = ["full"] }
 ic-async-utils = { path = "../../../async_utils" }
 ic-base-types = { path = "../../../types/base_types" }
+ic-canister-client = { path = "../../../canister_client" }
 ic-config = { path = "../../../config" }
 ic-crypto = { path = "../../../crypto" }
+ic-interfaces = { path = "../../../interfaces" }
 ic-logger = { path = "../../logger" }
 ic-metrics = { path = "../../metrics" }
 ic-registry-client = { path = "../../../registry/client" }
 ic-registry-local-store = { path = "../../../registry/local_store" }
+ic-types = { path = "../../../types/types" }
 itertools = "0.10.5"
 prometheus-parse = "0.2.3"
 serde = { version = "1.0", features = ["derive"] }
@@ -25,5 +28,5 @@ slog = "2.7.0"
 tempfile = "3.1.0"
 thiserror = "1.0.26"
 tokio = { version = "1.15.0", features = ["full"] }
-
+url = "2.1.1"
 [dev-dependencies]

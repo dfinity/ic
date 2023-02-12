@@ -7,8 +7,10 @@ use clap::Parser;
 use hyper::Client;
 use ic_async_utils::abort_on_panic;
 use ic_base_types::NodeId;
+use ic_canister_client::{Agent, Sender};
 use ic_config::registry_client::DataProviderConfig;
 use ic_crypto::CryptoComponent;
+use ic_interfaces::crypto::{BasicSigner, KeyManager};
 use ic_logger::{error, info, new_replica_logger_from_config, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_onchain_observability_adapter::{
@@ -16,6 +18,7 @@ use ic_onchain_observability_adapter::{
 };
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
+use ic_types::messages::MessageId;
 use serde_json::to_string_pretty;
 use std::{
     collections::{HashMap, HashSet},
@@ -26,6 +29,7 @@ use tokio::{
     runtime::Handle,
     time::{interval, MissedTickBehavior},
 };
+use url::Url;
 
 #[tokio::main]
 pub async fn main() {
@@ -36,10 +40,12 @@ pub async fn main() {
 
     let flags = Flags::parse();
     let config = flags.get_config().expect("Error getting config");
-    if config.canister_client_url.is_empty() {
+    if config.canister_id.is_empty() {
         // This means the process is disabled
         return;
     }
+    let canister_client_url =
+        Url::parse(&config.canister_client_url).expect("Failed to create url");
 
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
 
@@ -53,7 +59,10 @@ pub async fn main() {
     let metrics_registry = MetricsRegistry::global();
     let crypto_component =
         create_crypto_component(&logger, &metrics_registry, &config, handle).await;
-    let _node_id = crypto_component.get_node_id();
+    let node_id = crypto_component.get_node_id();
+    let _canister_client =
+        create_canister_client(crypto_component.clone(), canister_client_url, node_id).await;
+
     let http_client = Client::new();
     let http_client_clone = http_client.clone();
 
@@ -137,6 +146,37 @@ async fn create_crypto_component(
     })
     .await
     .expect("Failed to create crypto component")
+}
+
+async fn create_canister_client(crypto: Arc<CryptoComponent>, url: Url, node_id: NodeId) -> Agent {
+    let latest_version = crypto.registry_client().get_latest_version();
+
+    let crypto_clone = crypto.clone();
+
+    let node_pub_key = tokio::task::spawn_blocking(move || {
+        crypto
+            .current_node_public_keys()
+            .map(|cnpks| cnpks.node_signing_public_key)
+            .expect("Failed to retrieve current node public keys")
+            .expect("Missing node signing public key")
+    })
+    .await
+    .unwrap();
+
+    let sign_cmd = move |msg: &MessageId| {
+        tokio::task::block_in_place(|| {
+            crypto_clone
+                .sign_basic(msg, node_id, latest_version)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+                .map(|value| value.get().0)
+        })
+    };
+
+    let sender = Sender::Node {
+        pub_key: node_pub_key.key_value,
+        sign: Arc::new(sign_cmd),
+    };
+    Agent::new(url, sender)
 }
 
 // Peer label is in form of "{NODE IP}_{NODE ID PREFIX}" so we can take the prefix
