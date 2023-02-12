@@ -32,15 +32,11 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 				return fmt.Errorf("No test target `%s` was found: \nDid you mean any of:\n%s", target, strings.Join(closest_matches, "\n"))
 			}
 		}
-		cache_test_results := "--cache_test_results="
-		if cfg.useCachedTestResult {
-			cache_test_results += "yes"
-		} else {
-			cache_test_results += "no"
-		}
-		command := []string{"bazel", "test", target, "--config=systest", cache_test_results}
-		if cfg.testTmpDir != "" {
-			command = append(command, "--test_tmpdir="+cfg.testTmpDir)
+		command := []string{"bazel", "test", target, "--config=systest"}
+		// Append all bazel args following the --, i.e. "ict test target -- --verbose_explanations ..."
+		command = append(command, args[1:]...)
+		if !slice_contains_substring(command, "--cache_test_results") {
+			command = append(command, "--cache_test_results=no")
 		}
 		// Print Bazel command for debugging puroposes.
 		cmd.Println(CYAN + "Raw Bazel command to be invoked: \n$ " + strings.Join(command, " ") + NC)
@@ -59,16 +55,14 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 func NewTestCmd() *cobra.Command {
 	var cfg = Config{}
 	var testCmd = &cobra.Command{
-		Use:     "test <system_test_target_arg>",
+		Use:     "test <system_test_target> [flags] [-- <bazel_args>]",
 		Aliases: []string{"system_test", "t"},
 		Short:   "Run system_test target with Bazel",
-		Example: "ict test //rs/tests:basic_health_test",
-		Args:    cobra.ExactArgs(1),
+		Example: "  ict test //rs/tests:basic_health_test\n  ict test //rs/tests:basic_health_test --dry-run -- --test_tmpdir=./tmp --test_output=errors",
+		Args:    cobra.MinimumNArgs(1),
 		RunE:    TestCommandWithConfig(&cfg),
 	}
-	testCmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked.")
-	testCmd.Flags().BoolVarP(&cfg.useCachedTestResult, "cache_test_results", "c", false, "Bazel's cache_test_results, see --cache_test_results tag in Bazel docs.")
-	testCmd.PersistentFlags().StringVarP(&cfg.testTmpDir, "test_tmpdir", "t", "", "Dir for storing test results, see --test-tmpdir tag in Bazel docs.")
+	testCmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked without execution.")
 	testCmd.SetOut(os.Stdout)
 	return testCmd
 }
