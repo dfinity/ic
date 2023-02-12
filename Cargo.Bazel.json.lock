@@ -1,5 +1,5 @@
 {
-  "checksum": "ee6cde41f858d893e2681add8494ea544c29673ecd8563de18ba3efb8f2ab561",
+  "checksum": "0bf8020a41741a524fa2f5688128d846f0f979fecc445c9ffc09e29c8ae1e5f7",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -206,7 +206,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.5",
+              "id": "tokio-util 0.7.6",
               "target": "tokio_util"
             }
           ],
@@ -373,7 +373,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.5",
+              "id": "tokio-util 0.7.6",
               "target": "tokio_util"
             },
             {
@@ -2880,13 +2880,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "axum 0.6.4": {
+    "axum 0.6.5": {
       "name": "axum",
-      "version": "0.6.4",
+      "version": "0.6.5",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/axum/0.6.4/download",
-          "sha256": "e5694b64066a2459918d8074c2ce0d5a88f409431994c2356617c8ae0c4721fc"
+          "url": "https://crates.io/api/v1/crates/axum/0.6.5/download",
+          "sha256": "3114e77b361ec716aa429ae5c04243abe00cf7548e870b9370affcc5c491a7d0"
         }
       },
       "targets": [
@@ -2934,7 +2934,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.6.4",
+              "id": "axum 0.6.5",
               "target": "build_script_build"
             },
             {
@@ -3042,7 +3042,7 @@
           ],
           "selects": {}
         },
-        "version": "0.6.4"
+        "version": "0.6.5"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -8133,7 +8133,7 @@
               "alias": "tokio_dep"
             },
             {
-              "id": "tokio-util 0.7.5",
+              "id": "tokio-util 0.7.6",
               "target": "tokio_util"
             }
           ],
@@ -9171,7 +9171,7 @@
               "target": "smallvec"
             },
             {
-              "id": "target-lexicon 0.12.5",
+              "id": "target-lexicon 0.12.6",
               "target": "target_lexicon"
             }
           ],
@@ -9433,7 +9433,7 @@
               "target": "smallvec"
             },
             {
-              "id": "target-lexicon 0.12.5",
+              "id": "target-lexicon 0.12.6",
               "target": "target_lexicon"
             }
           ],
@@ -9545,7 +9545,7 @@
               "target": "cranelift_codegen"
             },
             {
-              "id": "target-lexicon 0.12.5",
+              "id": "target-lexicon 0.12.6",
               "target": "target_lexicon"
             }
           ],
@@ -10340,7 +10340,7 @@
                 "target": "mio"
               },
               {
-                "id": "signal-hook 0.3.14",
+                "id": "signal-hook 0.3.15",
                 "target": "signal_hook"
               },
               {
@@ -12200,7 +12200,7 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.6.4",
+              "id": "axum 0.6.5",
               "target": "axum"
             },
             {
@@ -12554,11 +12554,11 @@
               "alias": "ic_stable_structures_0_2_0"
             },
             {
-              "id": "ic-stable-structures 0.5.0",
+              "id": "ic-stable-structures 0.5.1",
               "target": "ic_stable_structures"
             },
             {
-              "id": "ic-test-state-machine-client 1.1.0",
+              "id": "ic-test-state-machine-client 1.1.1",
               "target": "ic_test_state_machine_client"
             },
             {
@@ -13015,7 +13015,7 @@
               "target": "sha3"
             },
             {
-              "id": "signal-hook 0.3.14",
+              "id": "signal-hook 0.3.15",
               "target": "signal_hook"
             },
             {
@@ -13147,7 +13147,7 @@
               "target": "tokio_test"
             },
             {
-              "id": "tokio-util 0.7.5",
+              "id": "tokio-util 0.7.6",
               "target": "tokio_util"
             },
             {
@@ -13231,7 +13231,7 @@
               "target": "wasmparser"
             },
             {
-              "id": "wasmprinter 0.2.49",
+              "id": "wasmprinter 0.2.50",
               "target": "wasmprinter"
             },
             {
@@ -13251,7 +13251,7 @@
               "target": "wast"
             },
             {
-              "id": "wat 1.0.57",
+              "id": "wat 1.0.58",
               "target": "wat"
             },
             {
@@ -17361,7 +17361,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.5",
+              "id": "tokio-util 0.7.6",
               "target": "tokio_util"
             },
             {
@@ -19345,73 +19345,6 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-cdk 0.6.10": {
-      "name": "ic-cdk",
-      "version": "0.6.10",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-cdk/0.6.10/download",
-          "sha256": "c98b304a2657bad15bcb547625a018e13cf596676d834cfd93023395a6e2e03a"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_cdk",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_cdk",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "candid 0.8.4",
-              "target": "candid"
-            },
-            {
-              "id": "cfg-if 1.0.0",
-              "target": "cfg_if"
-            },
-            {
-              "id": "ic0 0.18.9",
-              "target": "ic0"
-            },
-            {
-              "id": "serde 1.0.152",
-              "target": "serde"
-            },
-            {
-              "id": "serde_bytes 0.11.9",
-              "target": "serde_bytes"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "ic-cdk-macros 0.6.8",
-              "target": "ic_cdk_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.6.10"
-      },
-      "license": "Apache-2.0"
-    },
     "ic-cdk 0.7.0": {
       "name": "ic-cdk",
       "version": "0.7.0",
@@ -19847,13 +19780,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-stable-structures 0.5.0": {
+    "ic-stable-structures 0.5.1": {
       "name": "ic-stable-structures",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-stable-structures/0.5.0/download",
-          "sha256": "ead0e23ad5be0cad9f062a0a4e6777cd6f4d9bafa77a2cd06168f216943d67a1"
+          "url": "https://crates.io/api/v1/crates/ic-stable-structures/0.5.1/download",
+          "sha256": "1c44a6b5418cf179c13d3d6a09de56aa258d74bf45b7992871935f7e27f51700"
         }
       },
       "targets": [
@@ -19876,17 +19809,17 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.5.0"
+        "version": "0.5.1"
       },
       "license": "Apache-2.0"
     },
-    "ic-test-state-machine-client 1.1.0": {
+    "ic-test-state-machine-client 1.1.1": {
       "name": "ic-test-state-machine-client",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-test-state-machine-client/1.1.0/download",
-          "sha256": "3c8f6ec5f623db2267e0bd97d540d873bfe87f001e9282a80c119f1c44d233c2"
+          "url": "https://crates.io/api/v1/crates/ic-test-state-machine-client/1.1.1/download",
+          "sha256": "23516d69aeb4968ff884b700f41df8adae0733480d0bca6c6b4ff93d2b37003b"
         }
       },
       "targets": [
@@ -19919,7 +19852,7 @@
               "target": "ciborium"
             },
             {
-              "id": "ic-cdk 0.6.10",
+              "id": "ic-cdk 0.7.0",
               "target": "ic_cdk"
             },
             {
@@ -19934,7 +19867,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.1.0"
+        "version": "1.1.1"
       },
       "license": "Apache-2.0"
     },
@@ -20809,13 +20742,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "inferno 0.11.14": {
+    "inferno 0.11.15": {
       "name": "inferno",
-      "version": "0.11.14",
+      "version": "0.11.15",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/inferno/0.11.14/download",
-          "sha256": "d6e66fa9bb3c52f40d05c11b78919ff2f18993c2305bd8a62556d20cb3e9606f"
+          "url": "https://crates.io/api/v1/crates/inferno/0.11.15/download",
+          "sha256": "2fb7c1b80a1dfa604bb4a649a5c5aeef3d913f7c520cb42b40e534e8a61bcdfc"
         }
       },
       "targets": [
@@ -20944,12 +20877,12 @@
               "target": "ahash"
             },
             {
-              "id": "atty 0.2.14",
-              "target": "atty"
-            },
-            {
               "id": "indexmap 1.9.2",
               "target": "indexmap"
+            },
+            {
+              "id": "is-terminal 0.4.3",
+              "target": "is_terminal"
             },
             {
               "id": "itoa 1.0.5",
@@ -20983,7 +20916,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.11.14"
+        "version": "0.11.15"
       },
       "license": "CDDL-1.0"
     },
@@ -31995,7 +31928,7 @@
               "target": "findshlibs"
             },
             {
-              "id": "inferno 0.11.14",
+              "id": "inferno 0.11.15",
               "target": "inferno"
             },
             {
@@ -35942,7 +35875,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.5",
+              "id": "tokio-util 0.7.6",
               "target": "tokio_util"
             },
             {
@@ -36667,7 +36600,7 @@
                 "target": "tokio_rustls"
               },
               {
-                "id": "tokio-util 0.7.5",
+                "id": "tokio-util 0.7.6",
                 "target": "tokio_util"
               },
               {
@@ -40603,13 +40536,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "signal-hook 0.3.14": {
+    "signal-hook 0.3.15": {
       "name": "signal-hook",
-      "version": "0.3.14",
+      "version": "0.3.15",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/signal-hook/0.3.14/download",
-          "sha256": "a253b5e89e2698464fc26b545c9edceb338e18a89effeeecfea192c3025be29d"
+          "url": "https://crates.io/api/v1/crates/signal-hook/0.3.15/download",
+          "sha256": "732768f1176d21d09e076c23a93123d40bba92d50c4058da34d45c8de8e682b9"
         }
       },
       "targets": [
@@ -40655,18 +40588,18 @@
               "target": "libc"
             },
             {
-              "id": "signal-hook 0.3.14",
+              "id": "signal-hook 0.3.15",
               "target": "build_script_build"
             },
             {
-              "id": "signal-hook-registry 1.4.0",
+              "id": "signal-hook-registry 1.4.1",
               "target": "signal_hook_registry"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.14"
+        "version": "0.3.15"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -40726,7 +40659,7 @@
               "alias": "mio_0_8"
             },
             {
-              "id": "signal-hook 0.3.14",
+              "id": "signal-hook 0.3.15",
               "target": "signal_hook"
             }
           ],
@@ -40737,13 +40670,13 @@
       },
       "license": "Apache-2.0/MIT"
     },
-    "signal-hook-registry 1.4.0": {
+    "signal-hook-registry 1.4.1": {
       "name": "signal-hook-registry",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/signal-hook-registry/1.4.0/download",
-          "sha256": "e51e73328dc4ac0c7ccbda3a494dfa03df1de2f46018127f60c693f2648455b0"
+          "url": "https://crates.io/api/v1/crates/signal-hook-registry/1.4.1/download",
+          "sha256": "d8229b473baa5980ac72ef434c4415e70c4b5e71b423043adb4ba059f89c99a1"
         }
       },
       "targets": [
@@ -40775,7 +40708,7 @@
           "selects": {}
         },
         "edition": "2015",
-        "version": "1.4.0"
+        "version": "1.4.1"
       },
       "license": "Apache-2.0/MIT"
     },
@@ -43468,13 +43401,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "target-lexicon 0.12.5": {
+    "target-lexicon 0.12.6": {
       "name": "target-lexicon",
-      "version": "0.12.5",
+      "version": "0.12.6",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/target-lexicon/0.12.5/download",
-          "sha256": "9410d0f6853b1d94f0e519fb95df60f29d2c1eff2d921ffdf01a4c8a3b54f12d"
+          "url": "https://crates.io/api/v1/crates/target-lexicon/0.12.6/download",
+          "sha256": "8ae9980cab1db3fceee2f6c6f643d5d8de2997c58ee8d25fb0cc8a9e9e7348e5"
         }
       },
       "targets": [
@@ -43511,14 +43444,14 @@
         "deps": {
           "common": [
             {
-              "id": "target-lexicon 0.12.5",
+              "id": "target-lexicon 0.12.6",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.12.5"
+        "version": "0.12.6"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -43619,7 +43552,7 @@
               "target": "tokio_serde"
             },
             {
-              "id": "tokio-util 0.7.5",
+              "id": "tokio-util 0.7.6",
               "target": "tokio_util"
             },
             {
@@ -45156,7 +45089,7 @@
                 "target": "libc"
               },
               {
-                "id": "signal-hook-registry 1.4.0",
+                "id": "signal-hook-registry 1.4.1",
                 "target": "signal_hook_registry"
               }
             ],
@@ -45830,13 +45763,13 @@
       },
       "license": "MIT"
     },
-    "tokio-util 0.7.5": {
+    "tokio-util 0.7.6": {
       "name": "tokio-util",
-      "version": "0.7.5",
+      "version": "0.7.6",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-util/0.7.5/download",
-          "sha256": "7e267c18a719545b481171952a79f8c25c80361463ba44bc7fa9eba7c742ef4f"
+          "url": "https://crates.io/api/v1/crates/tokio-util/0.7.6/download",
+          "sha256": "bc6a3b08b64e6dfad376fa2432c7b1f01522e37a623c3050bc95db2d3ff21583"
         }
       },
       "targets": [
@@ -45900,7 +45833,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.7.5"
+        "version": "0.7.6"
       },
       "license": "MIT"
     },
@@ -46087,7 +46020,7 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.6.4",
+              "id": "axum 0.6.5",
               "target": "axum"
             },
             {
@@ -46148,7 +46081,7 @@
               "target": "tokio_stream"
             },
             {
-              "id": "tokio-util 0.7.5",
+              "id": "tokio-util 0.7.6",
               "target": "tokio_util"
             },
             {
@@ -46345,7 +46278,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-util 0.7.5",
+              "id": "tokio-util 0.7.6",
               "target": "tokio_util"
             },
             {
@@ -48687,8 +48620,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -48699,8 +48632,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -49086,7 +49019,7 @@
               "target": "tokio_tungstenite"
             },
             {
-              "id": "tokio-util 0.7.5",
+              "id": "tokio-util 0.7.6",
               "target": "tokio_util"
             },
             {
@@ -49673,13 +49606,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasm-encoder 0.22.1": {
+    "wasm-encoder 0.23.0": {
       "name": "wasm-encoder",
-      "version": "0.22.1",
+      "version": "0.23.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasm-encoder/0.22.1/download",
-          "sha256": "9a584273ccc2d9311f1dd19dc3fb26054661fa3e373d53ede5d1144ba07a9acd"
+          "url": "https://crates.io/api/v1/crates/wasm-encoder/0.23.0/download",
+          "sha256": "1c3e4bc09095436c8e7584d86d33e6c3ee67045af8fb262cbb9cc321de553428"
         }
       },
       "targets": [
@@ -49711,7 +49644,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.22.1"
+        "version": "0.23.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -49772,6 +49705,52 @@
         "version": "0.2.3"
       },
       "license": "MIT OR Apache-2.0"
+    },
+    "wasmparser 0.100.0": {
+      "name": "wasmparser",
+      "version": "0.100.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/wasmparser/0.100.0/download",
+          "sha256": "64b20236ab624147dfbb62cf12a19aaf66af0e41b8398838b66e997d07d269d4"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wasmparser",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "wasmparser",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "indexmap 1.9.2",
+              "target": "indexmap"
+            },
+            {
+              "id": "url 2.3.1",
+              "target": "url"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.100.0"
+      },
+      "license": "Apache-2.0 WITH LLVM-exception"
     },
     "wasmparser 0.77.0": {
       "name": "wasmparser",
@@ -49852,59 +49831,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wasmparser 0.99.0": {
-      "name": "wasmparser",
-      "version": "0.99.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmparser/0.99.0/download",
-          "sha256": "9ef3b717afc67f848f412d4f02c127dd3e35a0eecd58c684580414df4fde01d3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "wasmparser",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "wasmparser",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "indexmap 1.9.2",
-              "target": "indexmap"
-            },
-            {
-              "id": "url 2.3.1",
-              "target": "url"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.99.0"
-      },
-      "license": "Apache-2.0 WITH LLVM-exception"
-    },
-    "wasmprinter 0.2.49": {
+    "wasmprinter 0.2.50": {
       "name": "wasmprinter",
-      "version": "0.2.49",
+      "version": "0.2.50",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wasmprinter/0.2.49/download",
-          "sha256": "27c13dff901f9354fa9a6a877152d9c5642513645985635c9b83bcca99e40ea1"
+          "url": "https://crates.io/api/v1/crates/wasmprinter/0.2.50/download",
+          "sha256": "b2d3f7d7cb1e00ae9f91bb21f2856cdc68a913afb3b6b33fca5a83dba8c8c4eb"
         }
       },
       "targets": [
@@ -49933,14 +49866,14 @@
               "target": "anyhow"
             },
             {
-              "id": "wasmparser 0.99.0",
+              "id": "wasmparser 0.100.0",
               "target": "wasmparser"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.49"
+        "version": "0.2.50"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -50036,7 +49969,7 @@
               "target": "serde"
             },
             {
-              "id": "target-lexicon 0.12.5",
+              "id": "target-lexicon 0.12.6",
               "target": "target_lexicon"
             },
             {
@@ -50201,7 +50134,7 @@
               "target": "object"
             },
             {
-              "id": "target-lexicon 0.12.5",
+              "id": "target-lexicon 0.12.6",
               "target": "target_lexicon"
             },
             {
@@ -50283,7 +50216,7 @@
               "target": "serde"
             },
             {
-              "id": "target-lexicon 0.12.5",
+              "id": "target-lexicon 0.12.6",
               "target": "target_lexicon"
             },
             {
@@ -50377,7 +50310,7 @@
               "target": "serde"
             },
             {
-              "id": "target-lexicon 0.12.5",
+              "id": "target-lexicon 0.12.6",
               "target": "target_lexicon"
             },
             {
@@ -50763,13 +50696,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wast 52.0.3": {
+    "wast 53.0.0": {
       "name": "wast",
-      "version": "52.0.3",
+      "version": "53.0.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wast/52.0.3/download",
-          "sha256": "15942180f265280eede7bc38b239e9770031d1821c02d905284216c645316430"
+          "url": "https://crates.io/api/v1/crates/wast/53.0.0/download",
+          "sha256": "8244fa24196b1d8fd3ca4a96a3a164c40f846498c5deab6caf414c67340ca4af"
         }
       },
       "targets": [
@@ -50810,24 +50743,24 @@
               "target": "unicode_width"
             },
             {
-              "id": "wasm-encoder 0.22.1",
+              "id": "wasm-encoder 0.23.0",
               "target": "wasm_encoder"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "52.0.3"
+        "version": "53.0.0"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "wat 1.0.57": {
+    "wat 1.0.58": {
       "name": "wat",
-      "version": "1.0.57",
+      "version": "1.0.58",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wat/1.0.57/download",
-          "sha256": "37212100d4cbe6f0f6ff6e707f1e5a5b5b675f0451231ed9e4235e234e127ed3"
+          "url": "https://crates.io/api/v1/crates/wat/1.0.58/download",
+          "sha256": "4620f1059add6dad511decb9d5d88b4a0a0d3e2e315ed34f79b0dc0dce18aa4b"
         }
       },
       "targets": [
@@ -50852,14 +50785,14 @@
         "deps": {
           "common": [
             {
-              "id": "wast 52.0.3",
+              "id": "wast 53.0.0",
               "target": "wast"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.57"
+        "version": "1.0.58"
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
@@ -52991,7 +52924,7 @@
         "deps": {
           "common": [
             {
-              "id": "zstd-safe 6.0.3+zstd.1.5.2",
+              "id": "zstd-safe 6.0.4+zstd.1.5.4",
               "target": "zstd_safe"
             }
           ],
@@ -53002,13 +52935,13 @@
       },
       "license": "MIT"
     },
-    "zstd-safe 6.0.3+zstd.1.5.2": {
+    "zstd-safe 6.0.4+zstd.1.5.4": {
       "name": "zstd-safe",
-      "version": "6.0.3+zstd.1.5.2",
+      "version": "6.0.4+zstd.1.5.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/zstd-safe/6.0.3+zstd.1.5.2/download",
-          "sha256": "68e4a3f57d13d0ab7e478665c60f35e2a613dcd527851c2c7287ce5c787e134a"
+          "url": "https://crates.io/api/v1/crates/zstd-safe/6.0.4+zstd.1.5.4/download",
+          "sha256": "7afb4b54b8910cf5447638cb54bf4e8a65cbedd783af98b98c62ffe91f185543"
         }
       },
       "targets": [
@@ -53055,18 +52988,18 @@
               "target": "libc"
             },
             {
-              "id": "zstd-safe 6.0.3+zstd.1.5.2",
+              "id": "zstd-safe 6.0.4+zstd.1.5.4",
               "target": "build_script_build"
             },
             {
-              "id": "zstd-sys 2.0.6+zstd.1.5.2",
+              "id": "zstd-sys 2.0.7+zstd.1.5.4",
               "target": "zstd_sys"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "6.0.3+zstd.1.5.2"
+        "version": "6.0.4+zstd.1.5.4"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -53075,13 +53008,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "zstd-sys 2.0.6+zstd.1.5.2": {
+    "zstd-sys 2.0.7+zstd.1.5.4": {
       "name": "zstd-sys",
-      "version": "2.0.6+zstd.1.5.2",
+      "version": "2.0.7+zstd.1.5.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/zstd-sys/2.0.6+zstd.1.5.2/download",
-          "sha256": "68a3f9792c0c3dc6c165840a75f47ae1f4da402c2d006881129579f6597e801b"
+          "url": "https://crates.io/api/v1/crates/zstd-sys/2.0.7+zstd.1.5.4/download",
+          "sha256": "94509c3ba2fe55294d752b79842c530ccfab760192521df74a081a78d2b3c7f5"
         }
       },
       "targets": [
@@ -53127,14 +53060,14 @@
               "target": "libc"
             },
             {
-              "id": "zstd-sys 2.0.6+zstd.1.5.2",
+              "id": "zstd-sys 2.0.7+zstd.1.5.4",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.0.6+zstd.1.5.2"
+        "version": "2.0.7+zstd.1.5.4"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -53174,7 +53107,7 @@
     "difference 2.0.0",
     "escargot 0.5.7",
     "ic-wasm 0.1.5",
-    "inferno 0.11.14",
+    "inferno 0.11.15",
     "lalrpop 0.19.8",
     "leb128 0.2.5",
     "multipart 0.18.0",

@@ -7,40 +7,39 @@ use clap::Parser;
 use hyper::Client;
 use ic_async_utils::abort_on_panic;
 use ic_base_types::NodeId;
-use ic_logger::{error, info, new_replica_logger_from_config};
+use ic_config::registry_client::DataProviderConfig;
+use ic_crypto::CryptoComponent;
+use ic_logger::{error, info, new_replica_logger_from_config, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use ic_onchain_observability_adapter::{
-    get_peer_ids, Cli, MetricsParseError, SampledMetricsCollector,
+    get_peer_ids, Config, Flags, MetricsParseError, SampledMetricsCollector,
 };
+use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_local_store::LocalStoreImpl;
 use serde_json::to_string_pretty;
-use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
-use tokio::time::{interval, MissedTickBehavior};
-
-const POLLING_INTERVAL_SEC: Duration = Duration::from_secs(60);
-const REPORT_LENGTH_SEC: Duration = Duration::from_secs(180); // 3 min: TODO (prod should be 1hr)
-
-const CANISTER_URL: &str = "";
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Instant,
+};
+use tokio::{
+    runtime::Handle,
+    time::{interval, MissedTickBehavior},
+};
 
 #[tokio::main]
 pub async fn main() {
-    if CANISTER_URL.is_empty() {
-        // This means the process is disabled
-        return;
-    }
-
     // We abort the whole program with a core dump if a single thread panics.
     // This way we can capture all the context if a critical error
     // happens.
     abort_on_panic();
 
-    let cli = Cli::parse();
-
-    let config = match cli.get_config() {
-        Ok(config) => config,
-        Err(err) => {
-            panic!("An error occurred while getting the config: {}", err);
-        }
-    };
+    let flags = Flags::parse();
+    let config = flags.get_config().expect("Error getting config");
+    if config.canister_client_url.is_empty() {
+        // This means the process is disabled
+        return;
+    }
 
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
 
@@ -49,18 +48,23 @@ pub async fn main() {
         "Starting the onchain observability adapter with config: {}",
         to_string_pretty(&config).unwrap()
     );
-
-    let client = Client::new();
+    let handle = Handle::current();
+    // TODO (NET-1332): Switch to adapter-specific metrics registry
+    let metrics_registry = MetricsRegistry::global();
+    let crypto_component =
+        create_crypto_component(&logger, &metrics_registry, &config, handle).await;
+    let _node_id = crypto_component.get_node_id();
+    let http_client = Client::new();
+    let http_client_clone = http_client.clone();
 
     // This will be replaced with fetching node ids from registry
-    let peer_ids = match get_peer_ids(client.clone()).await {
-        Ok(peer_ids) => peer_ids,
-        Err(e) => panic!("error getting peer_ids ids {:?}", e),
-    };
+    let peer_ids = get_peer_ids(http_client_clone)
+        .await
+        .expect("Error getting peer_ids");
 
-    let mut sampling_interval = interval(POLLING_INTERVAL_SEC);
+    let mut sampling_interval = interval(config.sampling_interval_sec);
     sampling_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-    let mut sampler = SampledMetricsCollector::new_with_client(client);
+    let mut sampler = SampledMetricsCollector::new_with_client(http_client);
     let mut start_time = Instant::now();
 
     loop {
@@ -68,7 +72,7 @@ pub async fn main() {
         if let Err(e) = sampler.sample().await {
             error!(logger, "sampling failed {:?}", e);
         }
-        if start_time.elapsed() >= REPORT_LENGTH_SEC {
+        if start_time.elapsed() >= config.report_length_sec {
             let end_time = Instant::now();
             let up_time_peer_labels = sampler.aggregate();
             // TODO NET-1328 - remove panic and handle failed conversion gracefully
@@ -93,6 +97,46 @@ pub async fn main() {
             //TODO send report
         }
     }
+}
+
+// Generate crypto component which is needed for signing messages
+async fn create_crypto_component(
+    logger: &ReplicaLogger,
+    metrics_registry: &MetricsRegistry,
+    config: &Config,
+    rt_handle: Handle,
+) -> Arc<CryptoComponent> {
+    let DataProviderConfig::LocalStore(local_store_from_config) = config
+        .registry_config
+        .data_provider
+        .as_ref()
+        .expect("No registry provider found");
+
+    let data_provider = Arc::new(LocalStoreImpl::new(local_store_from_config));
+    let registry_client = Arc::new(RegistryClientImpl::new(
+        data_provider,
+        Some(metrics_registry),
+    ));
+
+    // TODO (NET-1336) proper error handling in case registry is not populated
+    registry_client
+        .fetch_and_start_polling()
+        .expect("fetch_and_start_polling failed");
+
+    let metrics_registry_clone = metrics_registry.clone();
+    let config_clone = config.clone();
+    let logger_clone = logger.clone();
+    tokio::task::spawn_blocking(move || {
+        Arc::new(CryptoComponent::new(
+            &config_clone.crypto_config,
+            Some(rt_handle),
+            registry_client,
+            logger_clone,
+            Some(&metrics_registry_clone),
+        ))
+    })
+    .await
+    .expect("Failed to create crypto component")
 }
 
 // Peer label is in form of "{NODE IP}_{NODE ID PREFIX}" so we can take the prefix

@@ -11,12 +11,18 @@ hyper = { version = "0.14.18", features = ["full"] }
 ic-async-utils = { path = "../../../async_utils" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-config = { path = "../../../config" }
-ic-logger = { path = "../../../monitoring/logger" }
+ic-crypto = { path = "../../../crypto" }
+ic-logger = { path = "../../logger" }
+ic-metrics = { path = "../../metrics" }
+ic-registry-client = { path = "../../../registry/client" }
+ic-registry-local-store = { path = "../../../registry/local_store" }
 itertools = "0.10.5"
 prometheus-parse = "0.2.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+serde_with = "1.6.2"
 slog = "2.7.0"
+tempfile = "3.1.0"
 thiserror = "1.0.26"
 tokio = { version = "1.15.0", features = ["full"] }
 
