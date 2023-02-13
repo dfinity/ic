@@ -1,12 +1,9 @@
-= The ckBTC Minter Canister (under development) +
+= The ckBTC Minter Canister +
 
 
 The ckBTC Minter canister converts BTC to ckBTC and back.
 It works with a link:../../../rosetta-api/icrc1/README.md[Ledger Canister], handling the _ckBTC_ token transfers, and a link:../../canister/README.adoc[Bitcoin Canister], interfacing with the Bitcoin network.
 The ckBTC Minter canister is a https://github.com/dfinity/ICRC-1/blob/8c526e1dae38622eb0940643996e8187d2063513/standards/ICRC-1/README.md#minting-account-[minter] for the ckBTC Ledger canister: it can mint and burn ckBTC tokens.
-
-IMPORTANT: ckBTC is still under development.
-We do not recommend people try it out yet.
 
 == Interact with the ckBTC minter
 To interact with the testnet bitcoin minter please move to rs/bitcoin/ckbtc/testnet.
@@ -41,7 +38,7 @@ dfx canister --network ic call minter get_btc_address "(record {subaccount=null;
 +
 2. Send bitcoin to the BTC address the minter gave you.
 3. Wait until your Bitcoin transaction got enough confirmations.
-   Mainnet ckBTC can require up to 12 confirmations, corresponding to a 2-hour waiting period on average.
+   Mainnet ckBTC can require up to 72 confirmations, corresponding to a 12-hour waiting period on average.
 4. Notify the minter about the transfer.
 +
 ----
