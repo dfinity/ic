@@ -224,9 +224,9 @@ pub struct CkBtcMinterState {
     /// entry once the update_balance call completes.
     pub finalized_utxos: BTreeMap<PrincipalId, BTreeSet<Utxo>>,
 
-    /// Process one heartbeat at a time
+    /// Process one timer event at a time.
     #[serde(skip)]
-    pub is_heartbeat_running: bool,
+    pub is_timer_running: bool,
 
     /// The mode in which the minter runs.
     pub mode: Mode,
@@ -667,7 +667,7 @@ impl From<InitArgs> for CkBtcMinterState {
             outpoint_account: Default::default(),
             utxos_state_addresses: Default::default(),
             finalized_utxos: Default::default(),
-            is_heartbeat_running: false,
+            is_timer_running: false,
             mode: args.mode,
         }
     }

@@ -2,13 +2,14 @@ use candid::candid_method;
 use candid::Principal;
 use ic_canister_log::export as export_logs;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{heartbeat, init, post_upgrade, query, update};
+use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::dashboard::build_dashboard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::InitArgs};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::RetrieveBtcStatusRequest;
 use ic_ckbtc_minter::state::{read_state, RetrieveBtcStatus};
+use ic_ckbtc_minter::tasks::{schedule_now, TaskType};
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
 use ic_ckbtc_minter::updates::{
     self,
@@ -25,6 +26,7 @@ use ic_icrc1::Account;
 fn init(args: InitArgs) {
     storage::record_event(&Event::Init(args.clone()));
     lifecycle::init::init(args);
+    schedule_now(TaskType::ProcessLogic);
 
     #[cfg(feature = "self_check")]
     ok_or_die(check_invariants())
@@ -53,7 +55,7 @@ fn check_invariants() -> Result<(), String> {
         recovered_state.check_invariants()?;
 
         // A running heartbeat can temporarily violate invariants.
-        if !s.is_heartbeat_running {
+        if !s.is_timer_running {
             s.check_semantically_eq(&recovered_state)?;
         }
 
@@ -73,12 +75,12 @@ fn check_anonymous_caller() {
     }
 }
 
-#[heartbeat]
-async fn heartbeat() {
+#[export_name = "canister_global_timer"]
+fn timer() {
     #[cfg(feature = "self_check")]
     ok_or_die(check_invariants());
 
-    ic_ckbtc_minter::heartbeat().await;
+    ic_ckbtc_minter::timer();
 }
 
 #[post_upgrade]

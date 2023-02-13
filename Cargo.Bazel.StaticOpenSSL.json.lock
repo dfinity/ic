@@ -1,5 +1,5 @@
 {
-  "checksum": "dbb16d7e7623ace64e6958a441ae09dfb54c0c05416dc5a4ed74f5c5bd255279",
+  "checksum": "446e8d77372fc41062c5747e45a4780bb1d7578f62515e5bb6d9dd62718472f0",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -12568,6 +12568,10 @@
             {
               "id": "ic-wasm 0.1.5",
               "target": "ic_wasm"
+            },
+            {
+              "id": "ic0 0.18.9",
+              "target": "ic0"
             },
             {
               "id": "ic_bls12_381 0.7.1",
@@ -41333,7 +41337,7 @@
               "target": "take_mut"
             },
             {
-              "id": "thread_local 1.1.4",
+              "id": "thread_local 1.1.7",
               "target": "thread_local"
             }
           ],
@@ -41628,7 +41632,7 @@
               "target": "term"
             },
             {
-              "id": "thread_local 1.1.4",
+              "id": "thread_local 1.1.7",
               "target": "thread_local"
             },
             {
@@ -44396,13 +44400,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "thread_local 1.1.4": {
+    "thread_local 1.1.7": {
       "name": "thread_local",
-      "version": "1.1.4",
+      "version": "1.1.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/thread_local/1.1.4/download",
-          "sha256": "5516c27b78311c50bf42c071425c560ac799b11c30b31f87e3081965fe5e0180"
+          "url": "https://crates.io/api/v1/crates/thread_local/1.1.7/download",
+          "sha256": "3fdd6f064ccff2d6567adcb3873ca630700f00b5ad3f060c25b5dcfd9a4ce152"
         }
       },
       "targets": [
@@ -44427,16 +44431,20 @@
         "deps": {
           "common": [
             {
+              "id": "cfg-if 1.0.0",
+              "target": "cfg_if"
+            },
+            {
               "id": "once_cell 1.17.0",
               "target": "once_cell"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "1.1.4"
+        "edition": "2021",
+        "version": "1.1.7"
       },
-      "license": "Apache-2.0/MIT"
+      "license": "MIT OR Apache-2.0"
     },
     "thread_profiler 0.3.0": {
       "name": "thread_profiler",
@@ -47050,7 +47058,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thread_local 1.1.4",
+              "id": "thread_local 1.1.7",
               "target": "thread_local"
             },
             {
@@ -48644,8 +48652,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -48668,8 +48676,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

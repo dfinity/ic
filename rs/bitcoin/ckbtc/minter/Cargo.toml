@@ -14,11 +14,12 @@ bs58 = "0.4.0"
 candid = "0.8.1"
 ciborium = { git = "https://github.com/enarx/ciborium", rev = "e719537c99b564c3674a56defe53713c702c6f46" }
 hex = "0.4.3"
+ic0 = "0.18.9"
 ic-base-types = { path = "../../../types/base_types" }
 ic-btc-types = { path = "../../types/public" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
-ic-cdk = "0.6.0"
+ic-cdk = "0.7.0"
 ic-cdk-macros = "0.6.0"
 ic-crypto-extended-bip32 = { path = "../../../crypto/extended_bip32" }
 ic-crypto-getrandom-for-wasm = { path = "../../../crypto/getrandom_for_wasm" }

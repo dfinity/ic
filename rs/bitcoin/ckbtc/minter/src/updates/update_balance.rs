@@ -1,4 +1,5 @@
 use crate::logs::P1;
+use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_btc_types::GetUtxosError;
@@ -157,6 +158,8 @@ pub async fn update_balance(
     let mint_txid = mint(satoshis_to_mint, caller_account.clone()).await?;
 
     state::mutate_state(|s| state::audit::add_utxos(s, Some(mint_txid), caller_account, new_utxos));
+
+    schedule_now(TaskType::ProcessLogic);
 
     Ok(UpdateBalanceResult {
         amount: satoshis_to_mint,

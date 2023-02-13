@@ -183,6 +183,9 @@ pub async fn wait_for_signed_tx(
                 "[retrieve_btc_status] unexpected status, got : {:?}", status
             ),
         }
+
+        // Wait a bit to avoid spamming the logs
+        tokio::time::sleep(Duration::from_secs(5)).await;
     }
 }
 
@@ -234,6 +237,9 @@ pub async fn wait_for_finalization(
                 )
             }
         }
+        // Wait a bit to avoid spamming the logs
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
         // We continue to generate blocks if the status is yet updated
         generate_blocks(btc_client, logger, 1, default_btc_address);
     }

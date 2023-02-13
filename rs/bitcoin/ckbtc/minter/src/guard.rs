@@ -66,28 +66,25 @@ impl<PR: PendingRequests> Drop for Guard<PR> {
     }
 }
 
-/// Ensures that there is only one instance of the heartbeat state machine.
-// Note: the struct has one private field to ensure that nobody can construct it
-// directly outside of this module.
 #[must_use]
-pub struct HeartbeatGuard(());
+pub struct TimerLogicGuard(());
 
-impl HeartbeatGuard {
+impl TimerLogicGuard {
     pub fn new() -> Option<Self> {
         mutate_state(|s| {
-            if s.is_heartbeat_running {
+            if s.is_timer_running {
                 return None;
             }
-            s.is_heartbeat_running = true;
-            Some(HeartbeatGuard(()))
+            s.is_timer_running = true;
+            Some(TimerLogicGuard(()))
         })
     }
 }
 
-impl Drop for HeartbeatGuard {
+impl Drop for TimerLogicGuard {
     fn drop(&mut self) {
         mutate_state(|s| {
-            s.is_heartbeat_running = false;
+            s.is_timer_running = false;
         });
     }
 }
@@ -111,7 +108,7 @@ mod tests {
     use ic_btc_types::Network;
     use ic_cdk::export::Principal;
 
-    use super::{balance_update_guard, HeartbeatGuard};
+    use super::{balance_update_guard, TimerLogicGuard};
 
     fn test_principal(id: u64) -> Principal {
         Principal::try_from_slice(&id.to_le_bytes()).unwrap()
@@ -165,15 +162,15 @@ mod tests {
     }
 
     #[test]
-    fn guard_heartbeat() {
+    fn guard_timer_guard() {
         init(test_state_args());
-        assert!(!read_state(|s| s.is_heartbeat_running));
+        assert!(!read_state(|s| s.is_timer_running));
 
-        let guard = HeartbeatGuard::new().expect("could not grab heartbeat guard");
-        assert!(HeartbeatGuard::new().is_none());
-        assert!(read_state(|s| s.is_heartbeat_running));
+        let guard = TimerLogicGuard::new().expect("could not grab heartbeat guard");
+        assert!(TimerLogicGuard::new().is_none());
+        assert!(read_state(|s| s.is_timer_running));
 
         drop(guard);
-        assert!(!read_state(|s| s.is_heartbeat_running));
+        assert!(!read_state(|s| s.is_timer_running));
     }
 }
