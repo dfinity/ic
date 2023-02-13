@@ -1121,7 +1121,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "uuid": crate.spec(
-                version = "^0.8.1",
+                version = "^1.3.0",
                 features = [
                     "v4",
                     "serde",

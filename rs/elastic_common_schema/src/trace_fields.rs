@@ -22,7 +22,7 @@ pub struct Span {
 impl Default for Span {
     fn default() -> Self {
         Self {
-            id: Uuid::new_v4().to_hyphenated().to_string(),
+            id: Uuid::new_v4().hyphenated().to_string(),
         }
     }
 }
@@ -35,7 +35,7 @@ pub struct Trace {
 impl Default for Trace {
     fn default() -> Self {
         Self {
-            id: Uuid::new_v4().to_hyphenated().to_string(),
+            id: Uuid::new_v4().hyphenated().to_string(),
         }
     }
 }
@@ -48,7 +48,7 @@ pub struct Transaction {
 impl Default for Transaction {
     fn default() -> Self {
         Self {
-            id: Some(Uuid::new_v4().to_hyphenated().to_string()),
+            id: Some(Uuid::new_v4().hyphenated().to_string()),
         }
     }
 }

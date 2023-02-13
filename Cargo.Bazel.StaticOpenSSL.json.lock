@@ -1,5 +1,5 @@
 {
-  "checksum": "446e8d77372fc41062c5747e45a4780bb1d7578f62515e5bb6d9dd62718472f0",
+  "checksum": "ddeaaa1f78ce4ef84cb5e586edea4d37815b66bb442a3d69ad017b06dfdc3917",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13199,7 +13199,7 @@
               "target": "url"
             },
             {
-              "id": "uuid 0.8.2",
+              "id": "uuid 1.3.0",
               "target": "uuid"
             },
             {
@@ -48446,8 +48446,25 @@
         ],
         "crate_features": [
           "default",
-          "std"
+          "getrandom",
+          "rng",
+          "serde",
+          "std",
+          "v4"
         ],
+        "deps": {
+          "common": [
+            {
+              "id": "getrandom 0.2.8",
+              "target": "getrandom"
+            },
+            {
+              "id": "serde 1.0.152",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
         "edition": "2018",
         "version": "1.3.0"
       },
