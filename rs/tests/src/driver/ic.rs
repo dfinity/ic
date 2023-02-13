@@ -40,6 +40,7 @@ pub struct InternetComputer {
     pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
     name: String,
     pub bitcoind_addr: Option<SocketAddr>,
+    pub socks_proxy: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -144,6 +145,11 @@ impl InternetComputer {
 
     pub fn with_bitcoind_addr(mut self, bitcoind_addr: SocketAddr) -> Self {
         self.bitcoind_addr = Some(bitcoind_addr);
+        self
+    }
+
+    pub fn with_socks_proxy(mut self, socks_proxy: String) -> Self {
+        self.socks_proxy = Some(socks_proxy);
         self
     }
 

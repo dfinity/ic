@@ -45,6 +45,8 @@ The +ic-bootstrap.tar+ may contain multiple files and/or subdirectories. The fol
 
 - +bitcoin_addr.conf+ (file): Configure bitcoin adapter address (optional)
 
+- +socks_proxy.conf+ (file): Configure socks proxy (optional)
+
 Not all files are needed in all bootstrap behaviors. See detailed specifications of the configuration parameters as well as the xref:behaviors[behaviors] section below.
 
 ==== +network.conf+: Network configuration parameters
@@ -162,6 +164,12 @@ Configuration for bitcoin adapter. Must be a file of key/value pairs separated b
 
 The bitcoin configuration can be given under any of the possible node behaviors below. If left unspecified, bitcoin adapter will not work properly due
 to lack of external system to contact.
+
+==== +socks_proxy.conf+: configure socks porxy
+
+Configuration for socks proxy. Must be a file of key/value pairs separated by “=” (one per line) with the following possible keys:
+
+- +socks_proxy+: URL of the socks proxy to use. E.g socks5://socksproxy.com:1080.
 
 [[behaviors]]
 == Behaviors
