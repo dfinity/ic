@@ -241,7 +241,6 @@ RUN \
         python3-dev \
         rsync \
         ssl-cert \
-        stunnel \
         sudo \
         systemd systemd-sysv systemd-journal-remote \
         udev \

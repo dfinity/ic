@@ -129,7 +129,6 @@ Name=enp2s0
 [Network]
 $(generate_ipv4_block)
 $(generate_name_server_list "${ipv4_name_servers}")
-LinkLocalAddressing=ipv4
 IPv6AcceptRA=no
 EOF
 }
