@@ -609,7 +609,7 @@ type Deallocation = Box<dyn std::any::Any + Send + 'static>;
 const DEALLOCATION_BACKLOG_THRESHOLD: usize = 500;
 
 /// The number of archived states to keep before we start deleting the old ones.
-const MAX_ARCHIVED_CHECKPOINTS_TO_KEEP: usize = 2;
+const MAX_ARCHIVED_CHECKPOINTS_TO_KEEP: usize = 1;
 
 /// The number of diverged states to keep before we start deleting the old ones.
 const MAX_DIVERGED_CHECKPOINTS_TO_KEEP: usize = 1;
