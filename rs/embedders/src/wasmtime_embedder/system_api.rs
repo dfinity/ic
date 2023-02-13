@@ -326,9 +326,10 @@ fn observe_execution_complexity<S: SystemApi>(
             );
                 return Err(process_err(caller, error));
             }
+            // Do not observe the execution complexity on the system subnets.
+            system_api.set_execution_complexity(total_complexity);
         }
     }
-    system_api.set_execution_complexity(total_complexity);
     Ok(())
 }
 
