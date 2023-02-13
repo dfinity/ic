@@ -16,6 +16,7 @@ LIB_DEPS = [
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "@crate_index//:bech32",
+    "@crate_index//:ic0",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:bs58",

@@ -1,4 +1,5 @@
 use crate::logs::P1;
+use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
@@ -139,6 +140,8 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
         crate::state::RetrieveBtcStatus::Pending,
         read_state(|s| s.retrieve_btc_status(block_index))
     );
+
+    schedule_now(TaskType::ProcessLogic);
 
     Ok(RetrieveBtcOk { block_index })
 }

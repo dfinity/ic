@@ -8,6 +8,7 @@ use scopeguard::{guard, ScopeGuard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
 
 pub mod address;
 pub mod dashboard;
@@ -20,6 +21,7 @@ pub mod queries;
 pub mod signature;
 pub mod state;
 pub mod storage;
+pub mod tasks;
 pub mod tx;
 pub mod updates;
 
@@ -419,19 +421,6 @@ async fn finalize_requests() {
     });
 }
 
-pub async fn heartbeat() {
-    if state::read_state(|s| s.mode == state::Mode::ReadOnly) {
-        return;
-    }
-    let _heartbeat_guard = match guard::HeartbeatGuard::new() {
-        Some(guard) => guard,
-        None => return,
-    };
-
-    submit_pending_requests().await;
-    finalize_requests().await;
-}
-
 /// Builds the minimal OutPoint -> Account map required to sign a transaction.
 fn filter_output_accounts(
     state: &state::CkBtcMinterState,
@@ -741,4 +730,33 @@ fn distribute(amount: u64, n: u64) -> Vec<u64> {
     }
 
     shares
+}
+
+pub fn timer() {
+    use tasks::{pop_if_ready, schedule_after, TaskType};
+
+    const INTERVAL_PROCESSING: Duration = Duration::from_secs(5);
+
+    let task = match pop_if_ready() {
+        Some(task) => task,
+        None => return,
+    };
+
+    match task.task_type {
+        TaskType::ProcessLogic => {
+            ic_cdk::spawn(async {
+                let _guard = match crate::guard::TimerLogicGuard::new() {
+                    Some(guard) => guard,
+                    None => return,
+                };
+
+                let _enqueue_followup_guard = guard((), |_| {
+                    schedule_after(INTERVAL_PROCESSING, TaskType::ProcessLogic)
+                });
+
+                submit_pending_requests().await;
+                finalize_requests().await;
+            });
+        }
+    }
 }
