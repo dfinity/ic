@@ -1083,6 +1083,19 @@ impl CanisterQueues {
 
         debug_assert!(self.schedules_ok(own_canister_id, local_canisters))
     }
+
+    /// Returns an iterator over the raw contents of the output to
+    /// `canister_id`; or `None` if no such canister exists.
+    ///
+    /// For testing purposes only.
+    pub fn output_queue_iter_for_testing(
+        &self,
+        canister_id: &CanisterId,
+    ) -> Option<impl Iterator<Item = &Option<RequestOrResponse>>> {
+        self.canister_queues
+            .get(canister_id)
+            .map(|(_, output_queue)| output_queue.iter_for_testing())
+    }
 }
 
 /// Generates a timeout reject response from a request, refunding its payment.
