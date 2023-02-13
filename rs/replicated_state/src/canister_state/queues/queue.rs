@@ -693,6 +693,13 @@ impl OutputQueue {
             current_time,
         }
     }
+
+    /// Returns an iterator over the underlying messages.
+    ///
+    /// For testing purposes only.
+    pub fn iter_for_testing(&self) -> impl Iterator<Item = &Option<RequestOrResponse>> {
+        self.queue.queue.iter()
+    }
 }
 
 /// Iterator over timed out requests in an OutputQueue.
