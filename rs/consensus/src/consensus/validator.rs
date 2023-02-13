@@ -47,6 +47,10 @@ const SECONDS_TO_LOG_UNVALIDATED: u64 = 300;
 /// How often we log an old unvalidated artifact.
 const LOG_EVERY_N_SECONDS: i32 = 60;
 
+/// The time, after which we will load a CUP even if we
+/// where holding it back before, to give recomputation a chance during catch up.
+const CATCH_UP_HOLD_OF_TIME: Duration = Duration::from_secs(150);
+
 /// Possible validator transient errors.
 #[derive(Debug)]
 enum TransientError {
@@ -62,6 +66,7 @@ enum TransientError {
     FinalizedBlockNotFound(Height),
     FailedToGetRegistryVersion,
     ValidationContextNotReached(ValidationContext, ValidationContext),
+    CatchUpHeightNegligible,
 }
 
 /// Possible validator permanent errors.
@@ -1311,6 +1316,9 @@ impl Validator {
                     )
                     .map_err(ValidatorError::from);
 
+                let verification =
+                    self.maybe_hold_back_cup(verification, &catch_up_package, pool_reader);
+
                 self.compute_action_from_sig_verification(
                     pool_reader,
                     verification,
@@ -1487,6 +1495,76 @@ impl Validator {
                     && now - timestamp >= Duration::from_secs(SECONDS_TO_LOG_UNVALIDATED)
             }
             None => false, // should never happen.
+        }
+    }
+
+    /// Under certain conditions, it makes sense to delay validating (and loading) a CUP
+    /// If we are already close to caught up and have all necessary artifacts in the pool
+    /// we might want to hold off loading the cup and try to get there by computation first.
+    /// After a while, if we did not catch up via computing, we will still load the CUP.
+    fn maybe_hold_back_cup(
+        &self,
+        verification: Result<(), ValidationError<PermanentError, TransientError>>,
+        catch_up_package: &CatchUpPackage,
+        pool_reader: &PoolReader<'_>,
+    ) -> Result<(), ValidationError<PermanentError, TransientError>> {
+        match verification {
+            Ok(()) => {
+                let cup_height = catch_up_package.height();
+
+                // Check that this is a CUP that is close to the current state we have
+                // in the state manager, i.e. there is a chance to catch up via recomputing
+                if cup_height
+                    .get()
+                    .saturating_sub(self.state_manager.latest_state_height().get())
+                    //< CATCH_UP_NEGLIGIBLE_HEIGHT
+                    < Self::get_next_interval_length(catch_up_package).get() / 4
+                    // Check that the finalized height is higher than this cup
+                    // In order to validate the finalization of height `h` we need to have a valid random beacon 
+                    // of height `h-1` and a valid block of height `h`.
+                    // In order to have a valid block of height `h` you need to have a valid block of height `h-1`.
+                    // The same is true for the random beacon.
+                    // Thus, if this condition is true, we know that we have all blocks and random beacons between the
+                    // latest CUP height and finalized height and are therefore able to recompute.
+                    && pool_reader.get_finalized_height() >= cup_height
+                {
+                    // Check that this CUP has not been in the pool for too long
+                    // If it has, we validate the CUP nonetheless
+                    // This is a safety measure
+                    let now = self.time_source.get_relative_time();
+                    match pool_reader
+                        .pool()
+                        .unvalidated()
+                        .get_timestamp(&catch_up_package.get_id())
+                    {
+                        Some(timestamp)
+                            if now >= timestamp && now - timestamp > CATCH_UP_HOLD_OF_TIME =>
+                        {
+                            warn!(
+                                self.log,
+                                "Validating CUP after holding it back for {} seconds",
+                                CATCH_UP_HOLD_OF_TIME.as_secs()
+                            );
+                            Ok(())
+                        }
+                        Some(_) => Err(ValidationError::Transient(
+                            TransientError::CatchUpHeightNegligible,
+                        )),
+                        None => Ok(()),
+                    }
+                } else {
+                    Ok(())
+                }
+            }
+            _ => verification,
+        }
+    }
+
+    fn get_next_interval_length(cup: &CatchUpPackage) -> Height {
+        let a = cup.content.block.as_ref().payload.as_ref();
+        match a {
+            BlockPayload::Summary(summary) => summary.dkg.next_interval_length,
+            _ => unreachable!("CatchUpPackage always contains a SummaryBlock"),
         }
     }
 }
@@ -2729,6 +2807,10 @@ pub mod test {
                 .get_mut()
                 .expect_get_state_hash_at()
                 .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
+            state_manager
+                .get_mut()
+                .expect_latest_state_height()
+                .return_const(Height::new(1));
 
             let validator = Validator::new(
                 replica_config,

@@ -22,7 +22,7 @@ const TARGET_FR_MS: u64 = 400;
 const DKG_INTERVAL: u64 = 100;
 const DKG_INTERVAL_TIME_MS: u64 = TARGET_FR_MS * DKG_INTERVAL;
 
-const CATCH_UP_RETRIES: u64 = 40;
+const CATCH_UP_RETRIES: u64 = 60;
 
 const STATE_MANAGER_MAX_RESIDENT_HEIGHT: &str = "state_manager_max_resident_height";
 
@@ -45,19 +45,24 @@ use ic_types::{malicious_behaviour::MaliciousBehaviour, Height};
 use slog::{info, Logger};
 use std::time::Duration;
 
-// FIXME: We would expext the values for execution and state sync delay to be much smaller
-pub fn config_catch_up_possible(env: TestEnv) {
+// FIXME: We would expect the values for execution and state sync delay to be much smaller
+/// This configuration should not create a catch up loop.
+pub fn no_catch_up_loop(env: TestEnv) {
     config(env, 0.8, 0.5)
 }
 
-pub fn config_catch_up_impossible(env: TestEnv) {
+/// Without mechanisms to precvvent a catch up loop, this setting owuld create a catch up loop
+// that would make it impossible for a node to catch up.
+pub fn catch_up_loop(env: TestEnv) {
     config(env, 1.2, 0.8)
 }
 
+/// Test that a single node can catch up to the rest of the network
 pub fn test_catch_up_possible(env: TestEnv) {
     test(env, true)
 }
 
+/// Test that a single node can not catch up to the rest of the network
 pub fn test_catch_up_impossible(env: TestEnv) {
     test(env, false)
 }

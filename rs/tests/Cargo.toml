@@ -328,8 +328,8 @@ name = "ic-systest-catch-up-possible-test"
 path = "bin/catch_up_possible_test.rs"
 
 [[bin]]
-name = "ic-systest-catch-up-impossible-test"
-path = "bin/catch_up_impossible_test.rs"
+name = "ic-systest-catch-up-loop-prevention-test"
+path = "bin/catch_up_loop_prevention_test.rs"
 
 [[bin]]
 name = "ic-systest-max-xnet-payload-size-test"
