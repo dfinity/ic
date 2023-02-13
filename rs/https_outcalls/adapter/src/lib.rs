@@ -17,10 +17,7 @@ pub use rpc_server::CanisterHttp;
 
 use futures::Future;
 use futures_core::stream::Stream;
-use hyper::{
-    client::connect::{Connect, HttpConnector},
-    Client,
-};
+use hyper::{client::connect::HttpConnector, Client};
 use hyper_socks2::SocksConnector;
 use hyper_tls::HttpsConnector;
 use ic_https_outcalls_service::canister_http_service_server::CanisterHttpServiceServer;
@@ -37,51 +34,33 @@ use tower::layer::util::Identity;
 pub struct AdapterServer(Router<Identity>);
 
 impl AdapterServer {
-    // The 'enforce_http' flat is used to execute unit tests with http.
-    // If we didn't have to support socks proxy then for testing we could use
-    // dependency injection pattern and inject the HttpsConnector.
-    // (We can't do this now because 'HttpsConnector' is not a generic).
-    // If we have to support a socks proxy and still remove the enforce_https,
-    // there is pretty much no other way but still to do a dependency injection
-    // but in this case it would be some certificate store to be used by the http
-    // client. This complicates unnecessary the production code. For now we decide
-    // to keep the 'enforce_https' flag.
     pub fn new(config: Config, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
+        // Socks client setup
         let mut http_connector = HttpConnector::new();
         http_connector.enforce_http(false);
         http_connector
             .set_connect_timeout(Some(Duration::from_secs(config.http_connect_timeout_secs)));
-        match &config.socks_proxy {
-            Some(url) => {
-                // The proxy connnector requires a the URL scheme to be specified. I.e socks5://
-                // Config validity check ensures that url includes scheme, host and port.
-                // Therefore the parse 'Uri' will be in the correct format. I.e socks5://somehost.com:1080
-                let proxy_connector = SocksConnector {
-                    proxy_addr: url.parse::<Uri>().expect("Failed to parse socks url."),
-                    auth: None,
-                    connector: http_connector,
-                };
-                let mut https_connector = HttpsConnector::new_with_connector(proxy_connector);
-                https_connector.https_only(true);
-                let https_client = Client::builder().build::<_, hyper::Body>(https_connector);
-                Self::new_with_client(https_client, config, logger, metrics)
-            }
-            None => {
-                let mut https_connector = HttpsConnector::new_with_connector(http_connector);
-                https_connector.https_only(true);
-                let https_client = Client::builder().build::<_, hyper::Body>(https_connector);
-                Self::new_with_client(https_client, config, logger, metrics)
-            }
-        }
-    }
+        // The proxy connnector requires a the URL scheme to be specified. I.e socks5://
+        // Config validity check ensures that url includes scheme, host and port.
+        // Therefore the parse 'Uri' will be in the correct format. I.e socks5://somehost.com:1080
+        let proxy_connector = SocksConnector {
+            proxy_addr: config
+                .socks_proxy
+                .parse::<Uri>()
+                .expect("Failed to parse socks url."),
+            auth: None,
+            connector: http_connector.clone(),
+        };
+        let mut https_connector = HttpsConnector::new_with_connector(proxy_connector);
+        https_connector.https_only(true);
+        let socks_client = Client::builder().build::<_, hyper::Body>(https_connector);
 
-    fn new_with_client<C: Clone + Connect + Send + Sync + 'static>(
-        client: Client<C>,
-        config: Config,
-        logger: ReplicaLogger,
-        metrics: &MetricsRegistry,
-    ) -> Self {
-        let canister_http = CanisterHttp::new(client, logger, metrics);
+        // Https client setup.
+        let mut https_connector = HttpsConnector::new_with_connector(http_connector);
+        https_connector.https_only(true);
+        let https_client = Client::builder().build::<_, hyper::Body>(https_connector);
+        let canister_http = CanisterHttp::new(https_client, socks_client, logger, metrics);
+
         Self(
             Server::builder()
                 .timeout(Duration::from_secs(config.http_request_timeout_secs))
