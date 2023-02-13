@@ -1979,7 +1979,9 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable_size(&self) -> HypervisorResult<u32> {
         let result = match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_stable_size")),
+            ApiType::Start {} if self.stable_memory.is_some() => {
+                Err(self.error_for("ic0_stable_size"))
+            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -1989,7 +1991,8 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self
+            | ApiType::InspectMessage { .. }
+            | ApiType::Start {} => self
                 .stable_memory
                 .as_ref()
                 .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
@@ -2001,7 +2004,9 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32> {
         let result = match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_stable_grow")),
+            ApiType::Start {} if self.stable_memory.is_some() => {
+                Err(self.error_for("ic0_stable_grow"))
+            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2011,7 +2016,8 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => {
+            | ApiType::InspectMessage { .. }
+            | ApiType::Start {} => {
                 match self.memory_usage.allocate_pages(additional_pages as usize) {
                     Ok(()) => {
                         let res = self
@@ -2043,7 +2049,9 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_stable_read")),
+            ApiType::Start {} if self.stable_memory.is_some() => {
+                Err(self.error_for("ic0_stable_read"))
+            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2053,7 +2061,8 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self
+            | ApiType::InspectMessage { .. }
+            | ApiType::Start {} => self
                 .stable_memory
                 .as_ref()
                 .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
@@ -2079,7 +2088,9 @@ impl SystemApi for SystemApiImpl {
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_stable_write")),
+            ApiType::Start {} if self.stable_memory.is_some() => {
+                Err(self.error_for("ic0_stable_write"))
+            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2089,7 +2100,8 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self
+            | ApiType::InspectMessage { .. }
+            | ApiType::Start {} => self
                 .stable_memory
                 .as_mut()
                 .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
@@ -2109,7 +2121,9 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable64_size(&self) -> HypervisorResult<u64> {
         let result = match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_stable64_size")),
+            ApiType::Start {} if self.stable_memory.is_some() => {
+                Err(self.error_for("ic0_stable64_size"))
+            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2119,7 +2133,8 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self
+            | ApiType::InspectMessage { .. }
+            | ApiType::Start {} => self
                 .stable_memory
                 .as_ref()
                 .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
@@ -2131,7 +2146,9 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64> {
         let result = match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_stable64_grow")),
+            ApiType::Start {} if self.stable_memory.is_some() => {
+                Err(self.error_for("ic0_stable64_grow"))
+            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2141,7 +2158,8 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => {
+            | ApiType::InspectMessage { .. }
+            | ApiType::Start {} => {
                 match self.memory_usage.allocate_pages(additional_pages as usize) {
                     Ok(()) => {
                         let res = self
@@ -2173,7 +2191,9 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_stable64_read")),
+            ApiType::Start {} if self.stable_memory.is_some() => {
+                Err(self.error_for("ic0_stable64_read"))
+            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2183,7 +2203,8 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self
+            | ApiType::InspectMessage { .. }
+            | ApiType::Start {} => self
                 .stable_memory
                 .as_ref()
                 .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
@@ -2209,7 +2230,9 @@ impl SystemApi for SystemApiImpl {
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_stable64_write")),
+            ApiType::Start {} if self.stable_memory.is_some() => {
+                Err(self.error_for("ic0_stable64_write"))
+            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2219,7 +2242,8 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => self
+            | ApiType::InspectMessage { .. }
+            | ApiType::Start {} => self
                 .stable_memory
                 .as_mut()
                 .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
