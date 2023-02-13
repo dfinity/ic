@@ -100,6 +100,10 @@ options may be specified:
     The IP address of a running bitcoind instance. To be used in
     systems tests only.
 
+  --socks_proxy url
+    The URL of the socks proxy to use. To be used in
+    systems tests only.
+
     Be sure to properly quote the string.
 EOF
 }
@@ -173,6 +177,9 @@ function build_ic_bootstrap_tar() {
             --bitcoind_addr)
                 BITCOIND_ADDR="$2"
                 ;;
+            --socks_proxy)
+                SOCKS_PROXY="$2"
+                ;;
             *)
                 echo "Unrecognized option: $1"
                 usage
@@ -220,6 +227,9 @@ EOF
     fi
     if [ "${BITCOIND_ADDR}" != "" ]; then
         echo "bitcoind_addr=${BITCOIND_ADDR}" >"${BOOTSTRAP_TMPDIR}/bitcoind_addr.conf"
+    fi
+    if [ "${SOCKS_PROXY}" != "" ]; then
+        echo "socks_proxy=${SOCKS_PROXY}" >"${BOOTSTRAP_TMPDIR}/socks_proxy.conf"
     fi
     if [ "${IC_CRYPTO}" != "" ]; then
         cp -r "${IC_CRYPTO}" "${BOOTSTRAP_TMPDIR}/ic_crypto"
