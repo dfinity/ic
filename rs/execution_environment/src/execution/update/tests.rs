@@ -1,10 +1,16 @@
 use std::time::Duration;
 
+use assert_matches::assert_matches;
+
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_error_types::ErrorCode;
+use ic_error_types::{ErrorCode, UserError};
+use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{canister_state::NextExecution, CallOrigin};
+use ic_replicated_state::{
+    canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
+    CallOrigin,
+};
 use ic_state_machine_tests::{Cycles, WasmResult};
 use ic_sys::PAGE_SIZE;
 use ic_types::{NumInstructions, NumPages};
@@ -685,5 +691,99 @@ fn dts_uninstall_with_aborted_update() {
             "Attempt to execute a message on canister {} which contains no Wasm module",
             canister_id
         )
+    );
+}
+
+#[test]
+fn stable_grow_updates_subnet_available_memory() {
+    let initial_subnet_memory = 11 * WASM_PAGE_SIZE_IN_BYTES as i64;
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    test.set_subnet_available_memory(SubnetAvailableMemory::new(
+        initial_subnet_memory,
+        initial_subnet_memory,
+    ));
+
+    // Growing stable memory should reduce the subnet total memory.
+    let payload = wasm()
+        .stable64_grow(1)
+        .int64_to_blob()
+        .append_and_reply()
+        .build();
+    let result = test.ingress(canister_id, "update", payload).unwrap();
+    assert_matches!(result, WasmResult::Reply(_));
+    assert_eq!(i64::from_le_bytes(result.bytes().try_into().unwrap()), 0);
+    // The universal canister needs one wasm page for it's stack in addition to
+    // the page we allocated with `stable_grow`.
+    assert_eq!(
+        initial_subnet_memory - test.subnet_available_memory().get_total_memory(),
+        2 * WASM_PAGE_SIZE_IN_BYTES as i64
+    );
+
+    // Growing beyond the total subnet memory should fail (returning -1) and not
+    // allocate anything more.
+    let payload = wasm()
+        .stable64_grow(10)
+        .int64_to_blob()
+        .append_and_reply()
+        .build();
+    let result = test.ingress(canister_id, "update", payload).unwrap();
+    assert_matches!(result, WasmResult::Reply(_));
+    assert_eq!(i64::from_le_bytes(result.bytes().try_into().unwrap()), -1);
+    assert_eq!(
+        initial_subnet_memory - test.subnet_available_memory().get_total_memory(),
+        2 * WASM_PAGE_SIZE_IN_BYTES as i64
+    );
+}
+
+#[test]
+fn stable_grow_returns_allocated_memory_on_error() {
+    const KB: u64 = 1024;
+    const GB: u64 = KB * KB * KB;
+
+    // Create a canister which already has stable memory too big for the 32-bit
+    // API.
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .universal_canister_with_cycles(Cycles::new(100_000_000_000_000))
+        .unwrap();
+    let payload = wasm()
+        .stable64_grow((4 * GB / WASM_PAGE_SIZE_IN_BYTES as u64) + 1)
+        .int64_to_blob()
+        .append_and_reply()
+        .build();
+    let result = test.ingress(canister_id, "update", payload).unwrap();
+    assert_matches!(result, WasmResult::Reply(_));
+    assert_eq!(i64::from_le_bytes(result.bytes().try_into().unwrap()), 0);
+
+    let initial_subnet_memory = test.subnet_available_memory().get_total_memory();
+    let initial_canister_memory = test
+        .canister_state(canister_id)
+        .memory_usage(SubnetType::Application);
+
+    // Calling 32-bit stable grow should trap.
+    let payload = wasm().stable_grow(1).reply().build();
+    let result = test.ingress(canister_id, "update", payload).unwrap_err();
+    assert_eq!(
+        result,
+        UserError::new(
+            ErrorCode::CanisterTrapped,
+            format!(
+                "Canister {} trapped: 32 bit stable memory api used on a memory larger than 4GB",
+                canister_id
+            )
+        )
+    );
+
+    // Subnet and canister memory should remain unchanged
+    assert_eq!(
+        test.subnet_available_memory().get_total_memory(),
+        initial_subnet_memory
+    );
+    assert_eq!(
+        test.canister_state(canister_id)
+            .memory_usage(SubnetType::Application),
+        initial_canister_memory
     );
 }
