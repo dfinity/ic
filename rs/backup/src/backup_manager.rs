@@ -33,6 +33,7 @@ const DEFAULT_REPLAY_PERIOD: u64 = 240;
 const DEFAULT_VERSIONS_HOT: usize = 2;
 const SECONDS_IN_DAY: u64 = 24u64 * 60 * 60;
 const COLD_STORAGE_PERIOD: u64 = 60 * 60; // each hour
+const PERIODIC_METRICS_PUSH_PERIOD: u64 = 5 * 60; // each 5 min
 
 struct SubnetBackup {
     pub nodes_syncing: usize,
@@ -373,10 +374,24 @@ impl BackupManager {
             }
         }
 
-        thread::spawn(move || cold_store(self));
+        let m = self.clone();
+        thread::spawn(move || cold_store(m));
 
         loop {
-            sleep_secs(30);
+            let mut progress = Vec::new();
+            for i in 0..size {
+                let b = &self.subnet_backups[i].backup_helper;
+                let last_block = b.retrieve_spool_top_height();
+                let last_cp = b.last_state_checkpoint();
+                let subnet = &b.subnet_id.to_string()[..5];
+                progress.push(format!("{}: {}/{}", subnet, last_cp, last_block));
+
+                b.notification_client.push_metrics_synced_height(last_block);
+                b.notification_client.push_metrics_restored_height(last_cp);
+            }
+            info!(self.log, "Replay/Sync - {}", progress.join(", "));
+
+            sleep_secs(PERIODIC_METRICS_PUSH_PERIOD);
         }
     }
 }
