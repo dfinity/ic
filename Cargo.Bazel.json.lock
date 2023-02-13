@@ -1,5 +1,5 @@
 {
-  "checksum": "1321967a229a4432ecb1c4fc732379531e77c3476be53c96189f7ebad38d743c",
+  "checksum": "42dcdfa4cf135994e3104f2c1c702b425abf15d11890a05c20cb6e4ae06215cb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13199,7 +13199,7 @@
               "target": "url"
             },
             {
-              "id": "uuid 0.8.2",
+              "id": "uuid 1.3.0",
               "target": "uuid"
             },
             {
@@ -48422,8 +48422,25 @@
         ],
         "crate_features": [
           "default",
-          "std"
+          "getrandom",
+          "rng",
+          "serde",
+          "std",
+          "v4"
         ],
+        "deps": {
+          "common": [
+            {
+              "id": "getrandom 0.2.8",
+              "target": "getrandom"
+            },
+            {
+              "id": "serde 1.0.152",
+              "target": "serde"
+            }
+          ],
+          "selects": {}
+        },
         "edition": "2018",
         "version": "1.3.0"
       },
@@ -48628,8 +48645,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -48640,8 +48657,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
