@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "canister_sigs",
+    srcs = glob(["src/**"]),
+    crate_name = "ic_crypto_test_utils_canister_sigs",
+    version = "0.8.0",
+    deps = [
+        "//rs/certification/test-utils",
+        "//rs/crypto/internal/crypto_lib/basic_sig/iccsa",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/sha",
+        "//rs/crypto/temp_crypto",
+        "//rs/crypto/test_utils",
+        "//rs/crypto/tree_hash",
+        "//rs/interfaces/registry",
+        "//rs/protobuf",
+        "//rs/registry/fake",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
+        "//rs/types/types",
+        "//rs/types/types_test_utils",
+        "@crate_index//:rand_0_8_4",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+    ],
+)

@@ -4908,6 +4908,7 @@ dependencies = [
  "ed25519-consensus",
  "hex",
  "ic-base-types",
+ "ic-certification-test-utils",
  "ic-config",
  "ic-crypto-for-verification-only",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -4931,14 +4932,17 @@ dependencies = [
  "ic-crypto-tecdsa",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
+ "ic-crypto-test-utils-canister-sigs",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-keygen",
  "ic-crypto-test-utils-local-csp-vault",
  "ic-crypto-test-utils-metrics",
  "ic-crypto-test-utils-multi-sigs",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-test-utils-threshold-sigs",
  "ic-crypto-tls-cert-validation",
  "ic-crypto-tls-interfaces",
+ "ic-crypto-tree-hash",
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-time",
  "ic-interfaces",
@@ -5626,6 +5630,29 @@ dependencies = [
  "strum_macros 0.23.1",
  "tokio",
  "tokio-openssl",
+]
+
+[[package]]
+name = "ic-crypto-test-utils-canister-sigs"
+version = "0.8.0"
+dependencies = [
+ "ic-certification-test-utils",
+ "ic-crypto-internal-basic-sig-iccsa",
+ "ic-crypto-internal-types",
+ "ic-crypto-sha",
+ "ic-crypto-temp-crypto",
+ "ic-crypto-test-utils",
+ "ic-crypto-tree-hash",
+ "ic-interfaces-registry",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-keys",
+ "ic-registry-proto-data-provider",
+ "ic-types",
+ "ic-types-test-utils",
+ "rand 0.8.5",
+ "serde",
+ "serde_cbor",
 ]
 
 [[package]]
