@@ -76,6 +76,16 @@ impl NotificationClient {
         self.push_metrics(message)
     }
 
+    pub fn push_metrics_synced_height(&self, height: u64) {
+        let message = format!(
+            "# TYPE backup_last_synced_height gauge\n\
+            # HELP backup_last_synced_height The height of the last synchronized state on a backup pod.\n\
+            backup_last_synced_height{{ic=\"mercury\"}} {}\n",
+            height
+        );
+        self.push_metrics(message)
+    }
+
     pub fn push_metrics_replay_time(&self, minutes: u64) {
         let message = format!(
             "# TYPE backup_replay_time_minutes gauge\n\
