@@ -33,27 +33,27 @@ del(.remote_port)
 
 .@timestamp, err = to_float(.msec) * 1000
 if err != null {
-    .@timestamp = null
+  .@timestamp = null
 }
 
 .@timestamp = to_int(.@timestamp)
 if .@timestamp == 0 {
-    .@timestamp = null
+  .@timestamp = null
 }
 
 status, err = to_int(.status)
 if err == null {
-    .status = status
+  .status = status
 }
 
 for_each([
-    "ic_subnet_id",
-    "ic_node_id",
-    "ic_canister_id",
+  "ic_subnet_id",
+  "ic_node_id",
+  "ic_canister_id",
 ]) -> |_, k| {
-    if get!(., [k]) == "" {
-        . = set!(., [k], "N/A")
-    }
+  if get!(., [k]) == "" {
+    . = set!(., [k], "N/A")
+  }
 }
 """
 
@@ -78,12 +78,12 @@ rate = 100
 [transforms.nginx_access_tag]
 type = "remap"
 inputs = [
-    "nginx_access_by_status.1xx",
-    "nginx_access_2xx_sampled",
-    "nginx_access_by_status.3xx",
-    "nginx_access_by_status.4xx",
-    "nginx_access_by_status.5xx",
-    "nginx_access_by_status._unmatched",
+  "nginx_access_by_status.1xx",
+  "nginx_access_2xx_sampled",
+  "nginx_access_by_status.3xx",
+  "nginx_access_by_status.4xx",
+  "nginx_access_by_status.5xx",
+  "nginx_access_by_status._unmatched",
 ]
 source = """
 tags = [ string(.tags || "") ?? "", "${ELASTICSEARCH_TAGS}" ]
@@ -99,8 +99,12 @@ type = "elasticsearch"
 inputs = [ "nginx_access_tag" ]
 endpoint = "${ELASTICSEARCH_URL}"
 mode = "bulk"
-bulk.index = "boundary-node-nginx-access-%Y.%m.%d"
-tls.verify_certificate = false
+
+  [sinks.elasticsearch_nginx_access.bulk]
+  index = "boundary-node-nginx-access-%Y.%m.%d"
+
+  [sinks.elasticsearch_nginx_access.tls]
+  verify_certificate = false
 
 # nginx access (metrics)
 
@@ -158,19 +162,19 @@ inputs = ["nginx_error_clean"]
 source = """
 .@timestamp, err = to_int(.__REALTIME_TIMESTAMP)
 if err != null {
-    .@timestamp = null
+  .@timestamp = null
 }
 
 .@timestamp, err = .@timestamp / 1000
 if err != null {
-    .timestamp = null
+  .timestamp = null
 }
 .@timestamp = to_int(.@timestamp)
 
 . = {
-    "@timestamp": .@timestamp,
-    "host": .host,
-    "message": .message
+  "@timestamp": .@timestamp,
+  "host": .host,
+  "message": .message
 }
 """
 
@@ -209,10 +213,10 @@ source = """
 preserved_fields = {}; preserved_keys = ["host"]
 
 for_each(preserved_keys) -> |_, k| {
-    v = get!(., [k])
-    if v != null {
-        preserved_fields = set!(preserved_fields, [k], v)
-    }
+  v = get!(., [k])
+  if v != null {
+    preserved_fields = set!(preserved_fields, [k], v)
+  }
 }
 
 . = parse_json!(.message)
@@ -229,8 +233,12 @@ type = "elasticsearch"
 inputs = ["control_plane_json"]
 endpoint = "${ELASTICSEARCH_URL}"
 mode = "bulk"
-bulk.index = "boundary-node-control-plane-%Y.%m.%d"
-tls.verify_certificate = false
+
+  [sinks.elasticsearch_control_plane.bulk]
+  index = "boundary-node-control-plane-%Y.%m.%d"
+
+  [sinks.elasticsearch_control_plane.tls]
+  verify_certificate = false
 
 # certificate-issuer
 
@@ -245,10 +253,10 @@ source = """
 preserved_fields = {}; preserved_keys = ["host"]
 
 for_each(preserved_keys) -> |_, k| {
-    v = get!(., [k])
-    if v != null {
-        preserved_fields = set!(preserved_fields, [k], v)
-    }
+  v = get!(., [k])
+  if v != null {
+    preserved_fields = set!(preserved_fields, [k], v)
+  }
 }
 
 . = parse_json!(.message)
@@ -265,8 +273,12 @@ type = "elasticsearch"
 inputs = ["certificate_issuer_json"]
 endpoint = "${ELASTICSEARCH_URL}"
 mode = "bulk"
-bulk.index = "boundary-node-certificate-issuer-%Y.%m.%d"
-tls.verify_certificate = false
+
+  [sinks.elasticsearch_certificate_issuer.bulk]
+  index = "boundary-node-certificate-issuer-%Y.%m.%d"
+
+  [sinks.elasticsearch_certificate_issuer.tls]
+  verify_certificate = false
 
 # certificate-syncer
 
@@ -281,10 +293,10 @@ source = """
 preserved_fields = {}; preserved_keys = ["host"]
 
 for_each(preserved_keys) -> |_, k| {
-    v = get!(., [k])
-    if v != null {
-        preserved_fields = set!(preserved_fields, [k], v)
-    }
+  v = get!(., [k])
+  if v != null {
+    preserved_fields = set!(preserved_fields, [k], v)
+  }
 }
 
 . = parse_json!(.message)
@@ -301,5 +313,67 @@ type = "elasticsearch"
 inputs = ["certificate_syncer_json"]
 endpoint = "${ELASTICSEARCH_URL}"
 mode = "bulk"
-bulk.index = "boundary-node-certificate-syncer-%Y.%m.%d"
-tls.verify_certificate = false
+
+  [sinks.elasticsearch_certificate_syncer.bulk]
+  index = "boundary-node-certificate-syncer-%Y.%m.%d"
+
+  [sinks.elasticsearch_certificate_syncer.tls]
+  verify_certificate = false
+
+# danted (socks proxy)
+
+[sources.danted]
+type = "journald"
+include_units = ["danted"]
+
+[transforms.danted_json]
+type = "remap"
+inputs = ["danted"]
+source = """
+preserved_fields = {}; preserved_keys = ["host", "timestamp"]
+
+for_each(preserved_keys) -> |_, k| {
+  v = get!(., [k])
+  if v != null {
+    preserved_fields = set!(preserved_fields, [k], v)
+  }
+}
+
+.message = string!(.message)
+addrs = split(.message, " [: ")[-1]
+addrs = split(string!(addrs), " ")
+
+client_addr_with_port = split(addrs[0], ".") ?? ["N/A", "N/A"]
+server_addr_with_port = split(addrs[1], ".") ?? ["N/A", "N/A"]
+
+. = merge({
+  "client_addr": client_addr_with_port[0],
+  "client_port": client_addr_with_port[1],
+  "server_addr": server_addr_with_port[0],
+  "server_port": server_addr_with_port[1],
+}, preserved_fields)
+"""
+
+# danted (socks proxy) (metrics)
+
+[transforms.danted_metrics]
+type = "log_to_metric"
+inputs = ["danted_json"]
+
+  [[transforms.danted_metrics.metrics]]
+  type = "counter"
+  field = "timestamp"
+  name = "requests_total"
+
+    [transforms.danted_metrics.metrics.tags]
+    hostname = "{{ host }}"
+    client_addr = "{{ client_addr }}"
+    server_addr = "{{ server_addr }}"
+
+# danted (socks proxy) (prometheus)
+
+[sinks.prometheus_exporter_danted]
+type = "prometheus_exporter"
+inputs = ["danted_metrics"]
+address = "${DANTED_PROMETHUS_ADDR}"
+default_namespace = "danted"

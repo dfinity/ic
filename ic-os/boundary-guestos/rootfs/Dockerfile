@@ -202,12 +202,10 @@ RUN addgroup node_exporter && \
     adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home node_exporter && \
     adduser node_exporter node_exporter && \
     # The "socks" account for socks proxy
-    # Also set correct permissions for dante and stunnel.
-    # Stunnel4 cannot be started as a systemctl service so starting it as `stunnel4 start`
+    # Also set correct permissions for dante.
     addgroup socks && \
     adduser --system --disabled-password --shell /usr/sbin/nologin --no-create-home socks && \
-    adduser socks socks && chmod +s /usr/sbin/danted && \
-    chmod 0755 /etc/init.d/stunnel4
+    adduser socks socks && chmod +s /usr/sbin/danted
 
 # Setup prober
 RUN \
