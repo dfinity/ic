@@ -13,6 +13,7 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig,
     subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig, SubnetConfigs},
 };
+use ic_embedders::wasmtime_embedder::system_api_complexity::{cpu, overhead};
 use ic_error_types::RejectCode;
 use ic_ic00_types::{
     self as ic00, CanisterIdRecord, CanisterStatusType, EcdsaCurve, EmptyBlob, Method, Payload as _,
@@ -63,6 +64,7 @@ struct SystemCallLimits {
 }
 
 fn complexity_env(
+    subnet_type: SubnetType,
     scheduler_cores: usize,
     SystemCallLimits {
         system_calls_per_slice,
@@ -70,10 +72,10 @@ fn complexity_env(
         system_calls_per_message,
     }: SystemCallLimits,
 ) -> StateMachine {
-    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
-    let performance_counter_complexity = 5 * 50;
+    let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
+    let performance_counter_complexity = cpu::PERFORMANCE_COUNTER.get() as u64;
     StateMachineBuilder::new()
-        .with_subnet_type(SubnetType::Application)
+        .with_subnet_type(subnet_type)
         .with_config(Some(StateMachineConfig::new(
             SubnetConfig {
                 scheduler_config: SchedulerConfig {
@@ -390,7 +392,6 @@ fn inner_loop_stops_when_max_instructions_per_round_consumed() {
 }
 
 #[test]
-#[ignore]
 fn inner_loop_stops_when_max_complexity_per_round_consumed() {
     // Create a canister with 3 input messages. 2 of them consume all
     // the complexity per round. The 2 messages are executed in the first
@@ -410,18 +411,12 @@ fn inner_loop_stops_when_max_complexity_per_round_consumed() {
         .build();
 
     let canister_id = test.create_canister();
-    test.send_ingress(
-        canister_id,
-        instructions(1).execution_complexity(ExecutionComplexity::with_cpu(50.into())),
-    );
-    test.send_ingress(
-        canister_id,
-        instructions(1).execution_complexity(ExecutionComplexity::with_cpu(50.into())),
-    );
-    test.send_ingress(
-        canister_id,
-        instructions(1).execution_complexity(ExecutionComplexity::with_cpu(50.into())),
-    );
+    for _ in 0..3 {
+        test.send_ingress(
+            canister_id,
+            instructions(1).execution_complexity(ExecutionComplexity::with_cpu(50.into())),
+        );
+    }
     test.execute_round(ExecutionRoundType::OrdinaryRound);
 
     assert_eq!(test.ingress_queue_size(canister_id), 1);
@@ -439,6 +434,7 @@ fn inner_loop_stops_when_max_complexity_per_round_consumed() {
 #[test]
 fn each_too_complex_message_aborts_execution() {
     let env = complexity_env(
+        SubnetType::Application,
         2,
         SystemCallLimits {
             system_calls_per_slice: 1,
@@ -464,24 +460,54 @@ fn each_too_complex_message_aborts_execution() {
 }
 
 #[test]
+fn each_too_complex_message_on_system_subnet_does_not_abort_execution() {
+    let env = complexity_env(
+        SubnetType::System,
+        2,
+        SystemCallLimits {
+            system_calls_per_slice: 1,
+            system_calls_per_round: 1,
+            system_calls_per_message: 1,
+        },
+    );
+    let canister_id = complexity_canister(&env);
+
+    for _ in 0..10 {
+        let message_id = execute_system_calls(&env, &canister_id, 2);
+
+        // Message limit is set to one system call, while we're executing two.
+        let state = ingress_state(&env, &message_id);
+        let err = match state {
+            IngressState::Failed(err) => err,
+            _ => unreachable!("Expected a failed state but got: {state:?}"),
+        };
+        assert_eq!(ErrorCode::CanisterInstructionLimitExceeded, err.code());
+        assert!(!err.description().contains("too many System API calls"));
+        env.tick();
+    }
+}
+
+#[test]
 fn each_too_complex_message_aborts_dts_execution() {
     // The overhead of the performance counter is 200, while its complexity is 250, so:
     //     11 * 200 (executed instructions) < 10 * 250 (instructions limit)
     // but
     //     11 * 250 (observed complexity) > 10 * 250 (instructions limit)
     // So we're sure the execution aborts due to the complexity.
+    let system_calls_per_message = 10;
     let env = complexity_env(
+        SubnetType::Application,
         2,
         SystemCallLimits {
             system_calls_per_slice: 1,
             system_calls_per_round: 1,
-            system_calls_per_message: 10,
+            system_calls_per_message,
         },
     );
     let canister_id = complexity_canister(&env);
 
     for _ in 0..10 {
-        let message_id = execute_system_calls(&env, &canister_id, 11);
+        let message_id = execute_system_calls(&env, &canister_id, system_calls_per_message + 1);
 
         // Message limit is set to 10 system calls, while we're executing 11.
         // As we slice execution using instructions, not complexity, to execute
@@ -505,12 +531,11 @@ fn each_too_complex_message_aborts_dts_execution() {
     }
 }
 
-// TODO: RUN-539: Disable complexity limits for system subnets
-#[ignore]
 #[test]
 fn too_complex_messages_break_round_execution() {
     let system_calls_per_round = 10;
     let env = complexity_env(
+        SubnetType::Application,
         2,
         SystemCallLimits {
             system_calls_per_slice: 1,
@@ -520,7 +545,12 @@ fn too_complex_messages_break_round_execution() {
     );
     let canister_id = complexity_canister(&env);
 
-    let message_ids = execute_batch_of_messages_with_system_calls(&env, &[canister_id], 20, 1);
+    let message_ids = execute_batch_of_messages_with_system_calls(
+        &env,
+        &[canister_id],
+        system_calls_per_round * 2,
+        1,
+    );
 
     // After the first round `system_calls_per_round` messages
     // should be completed.
@@ -541,13 +571,12 @@ fn too_complex_messages_break_round_execution() {
     }
 }
 
-// TODO: RUN-539: Disable complexity limits for system subnets
-#[ignore]
 #[test]
 fn too_complex_messages_in_different_canisters_break_round_execution() {
     let scheduler_cores = 2;
     let system_calls_per_round = 10;
     let env = complexity_env(
+        SubnetType::Application,
         scheduler_cores,
         SystemCallLimits {
             system_calls_per_slice: 1,
@@ -559,7 +588,8 @@ fn too_complex_messages_in_different_canisters_break_round_execution() {
         .map(|_| complexity_canister(&env))
         .collect::<Vec<_>>();
 
-    let message_ids = execute_batch_of_messages_with_system_calls(&env, &canister_ids, 10, 1);
+    let message_ids =
+        execute_batch_of_messages_with_system_calls(&env, &canister_ids, system_calls_per_round, 1);
 
     // After the first round `system_calls_per_round` messages times
     // `scheduler_cores` should be completed.
@@ -574,6 +604,54 @@ fn too_complex_messages_in_different_canisters_break_round_execution() {
         })
         .count();
     assert_eq!(system_calls_per_round * scheduler_cores, completed_messages);
+    // In the second round all the messages must be complete
+    env.tick();
+    for message_id in &message_ids {
+        let state = ingress_state(&env, message_id);
+        assert_eq!(IngressState::Completed(WasmResult::Reply(vec![])), state);
+    }
+}
+
+#[test]
+fn too_complex_messages_on_system_subnet_do_not_break_round_execution() {
+    let scheduler_cores = 2;
+    let system_calls_per_round = 10;
+    let performance_counter_overhead = overhead::PERFORMANCE_COUNTER.get() as usize;
+    let performance_counter_complexity = cpu::PERFORMANCE_COUNTER.get() as usize;
+    let system_calls_limited_by_instructions =
+        performance_counter_complexity * system_calls_per_round / performance_counter_overhead;
+    // There should be enough system calls per round to distinguish between
+    // instructions and complexity.
+    assert!(system_calls_limited_by_instructions > system_calls_per_round);
+    let env = complexity_env(
+        SubnetType::System,
+        scheduler_cores,
+        SystemCallLimits {
+            system_calls_per_slice: 1,
+            system_calls_per_round,
+            system_calls_per_message: 2,
+        },
+    );
+    let canister_ids = (0..4)
+        .map(|_| complexity_canister(&env))
+        .collect::<Vec<_>>();
+
+    let message_ids =
+        execute_batch_of_messages_with_system_calls(&env, &canister_ids, system_calls_per_round, 1);
+
+    // There should be more completed messages as the complexity limits
+    // are not enforced on the system subnets.
+    let completed_messages = message_ids
+        .iter()
+        .filter_map(|id| {
+            if let IngressState::Completed(_) = ingress_state(&env, id) {
+                Some(())
+            } else {
+                None
+            }
+        })
+        .count();
+    assert!(completed_messages > system_calls_per_round * scheduler_cores);
     // In the second round all the messages must be complete
     env.tick();
     for message_id in &message_ids {

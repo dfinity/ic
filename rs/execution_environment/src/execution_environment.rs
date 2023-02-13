@@ -69,7 +69,8 @@ use ic_types::{
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, LongExecutionMode, NumBytes, NumInstructions, SubnetId, Time,
+    CanisterId, CpuComplexity, Cycles, LongExecutionMode, NumBytes, NumInstructions, SubnetId,
+    Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_wasm_types::WasmHash;
@@ -211,8 +212,7 @@ impl RoundLimits {
     /// Returns true if any of the round limits is reached.
     pub fn reached(&self) -> bool {
         self.instructions <= RoundInstructions::from(0)
-        // TODO: RUN-539: Disable complexity limits for system subnets
-        // || self.execution_complexity.cpu <= CpuComplexity::from(0)
+            || self.execution_complexity.cpu <= CpuComplexity::from(0)
     }
 }
 
