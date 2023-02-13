@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import logging
 import math
 import os
 import statistics
@@ -358,7 +359,7 @@ def generate_report(base, githash, timestamp):
 
     experiment_data.update(add_toml_files(base))
 
-    print("Rendering experiment details with: ", json.dumps(experiment_data, indent=2))
+    logging.debug("Rendering experiment details with: ", json.dumps(experiment_data, indent=2))
     experiment_details = experiment_template(experiment_data)
 
     data.update(
@@ -465,7 +466,7 @@ def generate_report(base, githash, timestamp):
         report_file = os.path.join(base, "report.html")
 
     with open(report_file, "w") as outfile:
-        print("Rendering report with: ", json.dumps(data, indent=2))
+        logging.debug("Rendering report with: ", json.dumps(data, indent=2))
         data.update({"is_external": len(FLAGS.asset_root) > 0})
         output = template(data)
         outfile.write(output)
