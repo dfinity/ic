@@ -1150,7 +1150,7 @@ pub fn open_sns_token_swap_payload_for_tests(
                 count: 5,
                 dissolve_delay_interval_seconds: 7_889_400,
             }),
-            sale_delay_seconds: Some(0),
+            sale_delay_seconds: None,
         }),
         community_fund_investment_e8s: Some(333_333 * E8),
     }

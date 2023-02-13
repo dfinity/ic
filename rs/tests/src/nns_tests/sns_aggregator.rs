@@ -80,6 +80,7 @@ pub fn benchmark_config_with_aggregator(env: TestEnv) {
 
 pub fn config_fast(env: TestEnv) {
     config_for_security_testing(&env);
+    install_aggregator(&env);
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
