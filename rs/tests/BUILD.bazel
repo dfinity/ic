@@ -202,7 +202,7 @@ system_test(
 )
 
 system_test(
-    name = "catch_up_impossible_test",
+    name = "catch_up_loop_prevention_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
