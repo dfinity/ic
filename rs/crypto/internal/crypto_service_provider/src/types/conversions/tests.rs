@@ -16,7 +16,7 @@ proptest! {
          (CspPublicKey::EcdsaP256(_), Err(error)) => panic!("Failed to convert supported type: {:?}", error),
          (CspPublicKey::Ed25519(_), Ok(_)) => (),
          (CspPublicKey::Ed25519(_), Err(error)) => panic!("Failed to convert supported type: {:?}", error),
-         (unsupported, Ok(_)) => panic!("Unsupported type was successfuly converted to a UserPublicKey: {:?}", unsupported),
+         (unsupported, Ok(_)) => panic!("Unsupported type was successfully converted to a UserPublicKey: {:?}", unsupported),
          (_, Err(_)) => (),
        };
     }

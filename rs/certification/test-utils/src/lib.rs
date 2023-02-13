@@ -1,5 +1,5 @@
 use ic_crypto_internal_seed::Seed;
-use rand::{thread_rng, Rng};
+use rand::thread_rng;
 use serde::Serialize;
 
 use ic_crypto_internal_threshold_sig_bls12381::api::{
@@ -20,6 +20,7 @@ use ic_types::{
     crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
     CanisterId, CryptoHashOfPartialState, NumberOfNodes, SubnetId,
 };
+use rand::{CryptoRng, Rng, RngCore};
 
 const REPLICA_TIME: u64 = 1234567;
 
@@ -103,8 +104,12 @@ pub struct CertificateBuilder {
 
 impl CertificateBuilder {
     pub fn new(data: CertificateData) -> Self {
+        Self::new_with_rng(data, &mut thread_rng())
+    }
+
+    pub fn new_with_rng<R: Rng + RngCore + CryptoRng>(data: CertificateData, rng: &mut R) -> Self {
         let mut seed: [u8; 32] = [0; 32];
-        thread_rng().fill(&mut seed);
+        rng.fill(&mut seed);
 
         let (public_coefficients, secret_key_bytes) = generate_threshold_key(
             Seed::from_bytes(&seed),
@@ -234,7 +239,7 @@ pub fn encoded_time(time: u64) -> Vec<u8> {
     encoded_time
 }
 
-fn hash_full_tree(b: &mut HashTreeBuilderImpl, t: &LabeledTree<Vec<u8>>) {
+pub fn hash_full_tree(b: &mut HashTreeBuilderImpl, t: &LabeledTree<Vec<u8>>) {
     match t {
         LabeledTree::Leaf(bytes) => {
             b.start_leaf();

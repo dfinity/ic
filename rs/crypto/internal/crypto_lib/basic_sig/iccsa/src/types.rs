@@ -17,7 +17,7 @@ pub struct SignatureBytes(#[serde(with = "serde_bytes")] pub Vec<u8>);
 pub struct PublicKeyBytes(#[serde(with = "serde_bytes")] pub Vec<u8>);
 
 /// A decoded ICCSA signature
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Signature {
     pub certificate: Blob,
     pub tree: MixedHashTree,

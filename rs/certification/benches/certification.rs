@@ -107,6 +107,11 @@ fn canister_signature_bench_impl(
     });
 }
 
+/// Random data as a [`Digest`] to be used as "certified data".
+///
+/// The reason the data can be random is that we don't need it to be valid for some data,
+/// we just need some digest that exists in the state tree's path "/canister/<canister_id>/certified_data"
+/// to successfully verify the signature.
 fn new_random_certified_data() -> Digest {
     let mut random_certified_data: [u8; 32] = [0; 32];
     thread_rng().fill(&mut random_certified_data);
