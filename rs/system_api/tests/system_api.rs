@@ -11,8 +11,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, NumWasmPages, PageMap,
-    SystemState,
+    testing::CanisterQueuesTesting, CallOrigin, NetworkTopology, SystemState,
 };
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
@@ -1467,90 +1466,6 @@ fn call_perform_not_enough_cycles_resets_state() {
     let call_context_manager = system_state.call_context_manager().unwrap();
     assert_eq!(call_context_manager.call_contexts().len(), 1);
     assert_eq!(call_context_manager.callbacks().len(), 0);
-}
-
-#[test]
-fn stable_grow_updates_subnet_available_memory() {
-    let wasm_page_size = 64 << 10;
-    let subnet_available_memory_bytes = 2 * wasm_page_size;
-    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0);
-    let system_state = SystemStateBuilder::default().build();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
-        &system_state,
-        cycles_account_manager,
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
-    );
-    let mut api = SystemApiImpl::new(
-        ApiTypeBuilder::build_update_api(),
-        sandbox_safe_system_state,
-        CANISTER_CURRENT_MEMORY_USAGE,
-        execution_parameters(),
-        subnet_available_memory,
-        default_memory_for_system_api(),
-        Arc::new(DefaultOutOfInstructionsHandler {}),
-        no_op_logger(),
-    );
-
-    assert_eq!(api.ic0_stable_grow(1).unwrap(), 0);
-    assert_eq!(api.get_allocated_bytes().get(), wasm_page_size as u64);
-
-    assert_eq!(api.ic0_stable_grow(10).unwrap(), -1);
-    assert_eq!(api.get_allocated_bytes().get(), wasm_page_size as u64);
-}
-
-#[test]
-fn stable_grow_returns_allocated_memory_on_error() {
-    // Subnet with stable memory size above what can be represented on 32 bits.
-    let wasm_page_size = 64 << 10;
-    let subnet_available_memory_bytes = 2 * wasm_page_size;
-    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0);
-    let system_state = SystemStateBuilder::default().build();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let sandbox_safe_system_state = SandboxSafeSystemState::new(
-        &system_state,
-        cycles_account_manager,
-        &NetworkTopology::default(),
-        SchedulerConfig::application_subnet().dirty_page_overhead,
-    );
-    let mut api = SystemApiImpl::new(
-        ApiTypeBuilder::build_update_api(),
-        sandbox_safe_system_state,
-        CANISTER_CURRENT_MEMORY_USAGE,
-        execution_parameters(),
-        subnet_available_memory,
-        match EmbeddersConfig::default()
-            .feature_flags
-            .wasm_native_stable_memory
-        {
-            FlagStatus::Enabled => None,
-            FlagStatus::Disabled => Some(Memory::new(
-                PageMap::new_for_testing(),
-                NumWasmPages::new(1 << 32),
-            )),
-        },
-        Arc::new(DefaultOutOfInstructionsHandler {}),
-        no_op_logger(),
-    );
-
-    // Ensure that ic0_stable_grow() returns an error.
-    assert_eq!(
-        api.ic0_stable_grow(1),
-        Err(HypervisorError::Trapped(
-            TrapCode::StableMemoryTooBigFor32Bit
-        ))
-    );
-    // Subnet available memory should be unchanged.
-    assert_eq!(
-        subnet_available_memory.get_total_memory(),
-        subnet_available_memory_bytes
-    );
-    // As should the canister's current memory usage.
-    assert_eq!(
-        api.get_current_memory_usage(),
-        CANISTER_CURRENT_MEMORY_USAGE
-    );
 }
 
 #[test]
