@@ -50,16 +50,15 @@ impl Cli {
 
         // Validate proxy URL.
         // Check for general validation errors.
-        if let Some(socks_proxy) = &config.socks_proxy {
-            let uri = socks_proxy
-                .parse::<Uri>()
-                .map_err(|_| CliError::Validation("Failed to parse socks_proxy url".to_string()))?;
-            // scheme, host, port should be present. 'socks5://someproxy.com:80'
-            if uri.scheme().is_none() || uri.host().is_none() || uri.port().is_none() {
-                return Err(CliError::Validation(
-                    "Make sure socks proxy url contains (scheme,host,port)".to_string(),
-                ));
-            }
+        let uri = &config
+            .socks_proxy
+            .parse::<Uri>()
+            .map_err(|_| CliError::Validation("Failed to parse socks_proxy url".to_string()))?;
+        // scheme, host, port should be present. 'socks5://someproxy.com:80'
+        if uri.scheme().is_none() || uri.host().is_none() || uri.port().is_none() {
+            return Err(CliError::Validation(
+                "Make sure socks proxy url contains (scheme,host,port)".to_string(),
+            ));
         }
 
         Ok(config)
@@ -333,7 +332,7 @@ pub mod test {
                 debug_overrides: Vec::new(),
                 ..Default::default()
             },
-            socks_proxy: Some("socks5://notaproxy.com:1080".to_string()),
+            socks_proxy: "socks5://notaproxy.com:1080".to_string(),
         };
         assert_eq!(config, expected_config);
     }

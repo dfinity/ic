@@ -7,10 +7,12 @@ use byte_unit::Byte;
 use core::convert::TryFrom;
 use http::{uri::Scheme, Uri};
 use hyper::{
-    client::connect::Connect,
+    client::HttpConnector,
     header::{HeaderMap, ToStrError},
     Body, Client, Method,
 };
+use hyper_socks2::SocksConnector;
+use hyper_tls::HttpsConnector;
 use ic_async_utils::{receive_body_without_timeout, BodyReceiveError};
 use ic_https_outcalls_service::{
     canister_http_service_server::CanisterHttpService, CanisterHttpSendRequest,
@@ -18,7 +20,7 @@ use ic_https_outcalls_service::{
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use std::collections::HashMap;
+use std::{collections::HashMap, net::SocketAddr};
 use tonic::{Request, Response, Status};
 
 /// Hyper only supports a maximum of 32768 headers https://docs.rs/hyper/0.14.23/hyper/header/index.html#limitations-1
@@ -29,16 +31,23 @@ const HEADERS_LIMIT: usize = 1_024;
 const HEADER_NAME_VALUE_LIMIT: usize = 8_192;
 
 /// implements RPC
-pub struct CanisterHttp<C: Clone + Connect + Send + Sync + 'static> {
-    client: Client<C>,
+pub struct CanisterHttp {
+    client: Client<HttpsConnector<HttpConnector>>,
+    socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>>,
     logger: ReplicaLogger,
     metrics: AdapterMetrics,
 }
 
-impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttp<C> {
-    pub fn new(client: Client<C>, logger: ReplicaLogger, metrics: &MetricsRegistry) -> Self {
+impl CanisterHttp {
+    pub fn new(
+        client: Client<HttpsConnector<HttpConnector>>,
+        socks_client: Client<HttpsConnector<SocksConnector<HttpConnector>>>,
+        logger: ReplicaLogger,
+        metrics: &MetricsRegistry,
+    ) -> Self {
         Self {
             client,
+            socks_client,
             logger,
             metrics: AdapterMetrics::new(metrics),
         }
@@ -46,7 +55,7 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttp<C> {
 }
 
 #[tonic::async_trait]
-impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for CanisterHttp<C> {
+impl CanisterHttpService for CanisterHttp {
     async fn canister_http_send(
         &self,
         request: Request<CanisterHttpSendRequest>,
@@ -119,12 +128,37 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             .map(|(name, value)| name.as_str().len() + value.len())
             .sum::<usize>();
 
-        let mut http_req = hyper::Request::new(Body::from(req.body));
-        *http_req.headers_mut() = headers;
-        *http_req.method_mut() = method;
-        *http_req.uri_mut() = uri;
+        // If we are allowed to use socks and condition described in `should_use_socks_proxy` hold,
+        // we do the requests through the socks proxy. If not we use the default IPv6 route.
+        let http_resp = if req.socks_proxy_allowed {
+            // Http request does not implement clone. So we have to manually contruct a clone.
+            let req_body_clone = req.body.clone();
+            let mut http_req = hyper::Request::new(Body::from(req.body));
+            *http_req.headers_mut() = headers;
+            *http_req.method_mut() = method;
+            *http_req.uri_mut() = uri.clone();
 
-        let http_resp = self.client.request(http_req).await.map_err(|err| {
+            if !should_use_socks_proxy(&uri).await {
+                let mut http_req_clone = hyper::Request::new(Body::from(req_body_clone));
+                *http_req_clone.headers_mut() = http_req.headers().clone();
+                *http_req_clone.method_mut() = http_req.method().clone();
+                *http_req_clone.uri_mut() = http_req.uri().clone();
+                // If we fail to connect through IPv6 we retry with socks.
+                match self.client.request(http_req).await {
+                    Err(e) if e.is_connect() => self.socks_client.request(http_req_clone).await,
+                    resp => resp,
+                }
+            } else {
+                self.socks_client.request(http_req).await
+            }
+        } else {
+            let mut http_req = hyper::Request::new(Body::from(req.body));
+            *http_req.headers_mut() = headers;
+            *http_req.method_mut() = method;
+            *http_req.uri_mut() = uri.clone();
+            self.client.request(http_req).await
+        }
+        .map_err(|err| {
             debug!(self.logger, "Failed to connect: {}", err);
             self.metrics
                 .request_errors
@@ -226,6 +260,35 @@ impl<C: Clone + Connect + Send + Sync + 'static> CanisterHttpService for Caniste
             content: body_bytes.to_vec(),
         }))
     }
+}
+
+/// Decides if socks proxy should be used to connect to given Uri. In the following cases we do NOT use the proxy:
+/// 1. If we can't get the necessary infromation from the url to do the dns lookup.
+/// 2. If the dns resolution fails.
+/// 3. If we connect to localhost.
+/// 4. If the dns resoultion returns at least a single IPV6.
+async fn should_use_socks_proxy(url: &Uri) -> bool {
+    let host = match url.host() {
+        Some(host) => host,
+        None => return false,
+    };
+    // We use a default port in case no port is specfied becuase `lookup_host` requires us to specify a port.
+    let port = url.port_u16().unwrap_or(443);
+
+    let mut lookup = match tokio::net::lookup_host((host, port)).await {
+        Ok(lookup) => lookup,
+        Err(_) => return false,
+    };
+
+    // Check if localhost address.
+    if lookup.all(|addr| addr.ip().is_loopback()) {
+        return false;
+    }
+
+    if lookup.any(|addr| matches!(addr, SocketAddr::V6(_))) {
+        return false;
+    }
+    true
 }
 
 fn validate_headers(raw_headers: Vec<HttpHeader>) -> Result<HeaderMap, Status> {
