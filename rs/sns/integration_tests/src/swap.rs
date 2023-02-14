@@ -71,7 +71,7 @@ use ic_state_machine_tests::StateMachine;
 use ic_types::{ingress::WasmResult, Cycles};
 
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs as AccountBalanceArgs,
+    AccountIdentifier, BinaryAccountBalanceArgs as AccountBalanceArgs, BlockIndex,
     DEFAULT_TRANSFER_FEE as DEFAULT_TRANSFER_FEE_TOKENS,
 };
 use lazy_static::lazy_static;
@@ -3338,4 +3338,163 @@ fn test_deletion_of_sale_ticket() {
                 + ticket_new.amount_icp_e8s * 2
         }
     );
+}
+
+#[test]
+fn test_last_man_less_than_min() {
+    let state_machine = StateMachine::new();
+    let icp_ledger_id = state_machine.create_canister(None);
+    let sns_ledger_id = state_machine.create_canister(None);
+    let swap_id = state_machine.create_canister(None);
+    let minting_account = Account {
+        owner: PrincipalId::new_user_test_id(42),
+        subaccount: None,
+    };
+
+    // install the icp ledger
+    let wasm = ic_test_utilities_load_wasm::load_wasm(
+        "../../rosetta-api/icp_ledger/ledger",
+        "ledger-canister",
+        &[],
+    );
+    let args = icp_ledger::LedgerCanisterInitPayload::builder()
+        .minting_account(minting_account.clone().into())
+        .build()
+        .unwrap();
+    let args = Encode!(&args).unwrap();
+    state_machine
+        .install_existing_canister(icp_ledger_id, wasm, args)
+        .unwrap();
+
+    // install the sns ledger
+    let wasm = ic_test_utilities_load_wasm::load_wasm(
+        "../../rosetta-api/icrc1/ledger",
+        "ic-icrc1-ledger",
+        &[],
+    );
+    let args = Encode!(&LedgerArgument::Init(LedgerInit {
+        minting_account,
+        initial_balances: vec![(
+            Account {
+                owner: swap_id.into(),
+                subaccount: None
+            },
+            10_000_000
+        )],
+        transfer_fee: 10_000,
+        token_name: "SNS Token".to_string(),
+        token_symbol: "STK".to_string(),
+        metadata: vec![],
+        archive_options: ArchiveOptions {
+            trigger_threshold: 1,
+            num_blocks_to_archive: 1,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: Principal::anonymous().into(),
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None
+        },
+    }))
+    .unwrap();
+    state_machine
+        .install_existing_canister(sns_ledger_id, wasm, args)
+        .unwrap();
+
+    // install the sale canister
+    let wasm = ic_test_utilities_load_wasm::load_wasm("../swap", "sns-swap-canister", &[]);
+    let args = Encode!(&Init {
+        nns_governance_canister_id: Principal::anonymous().to_string(),
+        sns_governance_canister_id: Principal::anonymous().to_string(),
+        sns_ledger_canister_id: sns_ledger_id.to_string(),
+        icp_ledger_canister_id: icp_ledger_id.to_string(),
+        sns_root_canister_id: Principal::anonymous().to_string(),
+        fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
+        transaction_fee_e8s: Some(10_000),
+        neuron_minimum_stake_e8s: Some(1_000_000),
+    })
+    .unwrap();
+    state_machine
+        .install_existing_canister(swap_id, wasm, args)
+        .unwrap();
+
+    // open the sale
+    // min_participant_icp_e8s >= neuron_basket_count * (neuron_minimum_stake_e8s + transaction_fee_e8s) * max_icp_e8s / sns_token_e8s
+    // 1 >= 1 * (+ 10_000) * 10_000_000 / 10_000_000
+    let min_participant_icp_e8s = 1_010_000;
+    let max_participant_icp_e8s = 2_000_000;
+    let max_icp_e8s = 10_000_000;
+    let args = OpenRequest {
+        params: Some(swap_pb::Params {
+            min_participants: 1,
+            min_icp_e8s: 1,
+            max_icp_e8s,
+            min_participant_icp_e8s,
+            max_participant_icp_e8s,
+            swap_due_timestamp_seconds: *SWAP_DUE_TIMESTAMP_SECONDS,
+            sns_token_e8s: 10_000_000,
+            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                count: 1,
+                dissolve_delay_interval_seconds: 1,
+            }),
+            sale_delay_seconds: None,
+        }),
+        cf_participants: vec![],
+        open_sns_token_swap_proposal_id: Some(0),
+    };
+    let args = Encode!(&args).unwrap();
+    let _res = state_machine
+        .execute_ingress(swap_id, "open", args)
+        .unwrap();
+
+    // utilities
+    let mint_min_participant_icp_e8s = |user: u64| -> BlockIndex {
+        let to = Account {
+            owner: swap_id.into(),
+            subaccount: Some(principal_to_subaccount(&PrincipalId::new_user_test_id(
+                user,
+            ))),
+        };
+        icrc1_transfer(
+            &state_machine,
+            icp_ledger_id,
+            PrincipalId::new_user_test_id(42),
+            TransferArg {
+                from_subaccount: None,
+                to,
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: Nat::from(min_participant_icp_e8s),
+            },
+        )
+        .unwrap_or_else(|_| panic!("Unable to mint to user {}", user))
+    };
+    let refresh_buyer_icp_e8s = |user: u64| -> Result<RefreshBuyerTokensResponse, String> {
+        refresh_buyer_token(
+            &state_machine,
+            &swap_id,
+            &PrincipalId::new_user_test_id(user),
+        )
+    };
+    // /utilities
+
+    // The test starts here
+
+    // num_good_users can commit min_participant_icp_e8s icps
+    let num_good_users = max_icp_e8s / min_participant_icp_e8s;
+    for i in 1..num_good_users + 1 {
+        mint_min_participant_icp_e8s(i);
+        let res = refresh_buyer_icp_e8s(i)
+            .unwrap_or_else(|_| panic!("Unable to refresh_buyer_tokens for user {}", i));
+        assert_eq!(res.icp_accepted_participation_e8s, min_participant_icp_e8s);
+        assert_eq!(res.icp_ledger_account_balance_e8s, min_participant_icp_e8s);
+    }
+
+    // there aren't enough tokens for the last users so
+    // refresh_buyer_tokens_fails
+    mint_min_participant_icp_e8s(num_good_users + 1);
+    let res = refresh_buyer_icp_e8s(num_good_users + 1);
+    assert!(res.is_err());
+    let err = res.err().unwrap();
+    assert!(err.contains("minimum required to participate"), "{}", err);
 }

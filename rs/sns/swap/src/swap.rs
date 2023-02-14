@@ -644,28 +644,11 @@ impl Swap {
         }
         let max_participant_icp_e8s = params.max_participant_icp_e8s;
 
-        // Append to a new buyer to the BUYERS_LIST_INDEX
-        let is_preexisting_buyer = self.buyers.contains_key(&buyer.to_string());
-        if !is_preexisting_buyer {
-            insert_buyer_into_buyers_list_index(buyer)
-                .map_err(|grow_failed| {
-                    format!(
-                        "Failed to add buyer {} to state, the canister's stable memory could not grow: {}",
-                        buyer, grow_failed
-                    )
-                })?;
-        }
-
-        let buyer_state = self
+        let old_amount_icp_e8s = self
             .buyers
-            .entry(buyer.to_string())
-            .or_insert_with(|| BuyerState {
-                icp: Some(TransferableAmount {
-                    amount_e8s: 0,
-                    ..TransferableAmount::default()
-                }),
-            });
-        let old_amount_icp_e8s = buyer_state.amount_icp_e8s();
+            .get(&buyer.to_string())
+            .map_or(0, |buyer| buyer.amount_icp_e8s());
+
         if old_amount_icp_e8s >= e8s {
             // Already up-to-date. Strict inequality can happen if messages are re-ordered.
             return Ok(RefreshBuyerTokensResponse {
@@ -676,9 +659,7 @@ impl Swap {
         // Subtraction safe because of the preceding if-statement.
         let requested_increment_e8s = e8s - old_amount_icp_e8s;
         let actual_increment_e8s = std::cmp::min(max_increment_e8s, requested_increment_e8s);
-        let new_balance_e8s = buyer_state
-            .amount_icp_e8s()
-            .saturating_add(actual_increment_e8s);
+        let new_balance_e8s = old_amount_icp_e8s.saturating_add(actual_increment_e8s);
         if new_balance_e8s > max_participant_icp_e8s {
             log!(
                 INFO,
@@ -687,6 +668,30 @@ impl Swap {
                 new_balance_e8s,
                 max_participant_icp_e8s
             );
+        }
+
+        // Limit the participation based on the maximum per participant.
+        let new_balance_e8s = std::cmp::min(new_balance_e8s, max_participant_icp_e8s);
+
+        // Check that the new_balance_e8s is bigger than the minimum required for
+        // participating.
+        if new_balance_e8s < params.min_participant_icp_e8s {
+            return Err(format!(
+                "New balance: {}; minimum required to participate: {}",
+                new_balance_e8s, params.min_participant_icp_e8s
+            ));
+        }
+
+        // Append to a new buyer to the BUYERS_LIST_INDEX
+        let is_preexisting_buyer = self.buyers.contains_key(&buyer.to_string());
+        if !is_preexisting_buyer {
+            insert_buyer_into_buyers_list_index(buyer)
+                .map_err(|grow_failed| {
+                    format!(
+                        "Failed to add buyer {} to state, the canister's stable memory could not grow: {}",
+                        buyer, grow_failed
+                    )
+                })?;
         }
 
         // Try to fetch the current ticket of the buyer
@@ -715,7 +720,16 @@ impl Swap {
             // If there exists no ticket for the buyer, the payment flow will simply ignore the ticket
         }
 
-        buyer_state.set_amount_icp_e8s(std::cmp::min(new_balance_e8s, max_participant_icp_e8s));
+        let buyer_state = self
+            .buyers
+            .entry(buyer.to_string())
+            .or_insert_with(|| BuyerState {
+                icp: Some(TransferableAmount {
+                    amount_e8s: 0,
+                    ..TransferableAmount::default()
+                }),
+            });
+        buyer_state.set_amount_icp_e8s(new_balance_e8s);
         log!(
             INFO,
             "Refresh_buyer_tokens for buyer {}; old e8s {}; new e8s {}",
