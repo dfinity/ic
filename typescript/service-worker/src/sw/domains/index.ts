@@ -55,14 +55,15 @@ export class CanisterResolver {
   async saveICHostInfo(event: ICHostInfoEvent): Promise<void> {
     const item = ResolverMapper.toDBHostsItemFromEvent(event);
     if (item && item.canister) {
-      await this.storage.put(event.hostname, item, {
+      await this.storage.put(self.location.origin, item, {
         ttl: new Date(Date.now() + this.ttl),
       });
     }
   }
 
   async getCurrentGateway(): Promise<URL> {
-    const lookup = await this.lookup(new URL(self.location.href), false);
+    const currentOrigin = new URL(self.location.origin);
+    const lookup = await this.lookup(currentOrigin, false);
 
     if (!lookup.canister) {
       throw new CurrentGatewayResolveError();
@@ -113,7 +114,7 @@ export class CanisterResolver {
 
   async lookup(domain: URL, useCurrentGateway = true): Promise<DomainLookup> {
     // inglight map is used to deduplicate lookups for the same domain
-    let inflightLookup = this.inflight.get(domain.hostname);
+    let inflightLookup = this.inflight.get(domain.origin);
     if (inflightLookup) {
       const lookup = await inflightLookup;
       return useCurrentGateway ? await this.useCurrentGateway(lookup) : lookup;
@@ -127,7 +128,7 @@ export class CanisterResolver {
       }
 
       // maybe resolve from previous cached results
-      const cachedLookup = await this.storage.get(domain.hostname);
+      const cachedLookup = await this.storage.get(domain.origin);
       if (cachedLookup) {
         return ResolverMapper.fromDBHostsItem(cachedLookup);
       }
@@ -138,7 +139,7 @@ export class CanisterResolver {
       // we cache lookups to avoid additional round trips to the same domain
       try {
         const dbHostItem: DBHostsItem = ResolverMapper.toDBHostsItem(lookup);
-        await this.storage.put(domain.hostname, dbHostItem, {
+        await this.storage.put(domain.origin, dbHostItem, {
           ttl: new Date(Date.now() + this.ttl),
         });
       } catch (err) {
@@ -151,9 +152,9 @@ export class CanisterResolver {
 
     // caching the promise of inflight requests to enable concurrent
     // requests to the same domain to use the same promise
-    this.inflight.set(domain.hostname, inflightLookup);
+    this.inflight.set(domain.origin, inflightLookup);
     const lookup = await inflightLookup;
-    this.inflight.delete(domain.hostname);
+    this.inflight.delete(domain.origin);
 
     return useCurrentGateway ? await this.useCurrentGateway(lookup) : lookup;
   }
@@ -199,12 +200,14 @@ export class CanisterResolver {
   /**
    * Performs a HEAD request to the domain expecting to get back the canister id and gateway,
    * if both are not available handles the domain as a web2 request.
+   * The lookup request is made over HTTPS for security reasons.
    * @param domain The domain to find out if points to a canister or we2.
    * @param retries Number of fetch tries, only retry on network failures
    */
   private async fetchDomain(domain: URL, retries = 3): Promise<DomainLookup> {
     try {
-      const response = await fetch(domain.href, {
+      const secureDomain = ResolverMapper.toHTTPSUrl(domain);
+      const response = await fetch(secureDomain.href, {
         method: 'HEAD',
         mode: 'no-cors',
       });

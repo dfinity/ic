@@ -41,8 +41,8 @@ server {
     server_name localhost *.ic0.local *.ic.local;
 
     # Canister / Gateway (Header)
-    add_header "X-Ic-Gateway" $domain_canister_id always;
-    add_header "X-Ic-Canister-Id" $domain_gateway always;
+    add_header "X-Ic-Gateway" $domain_gateway always;
+    add_header "X-Ic-Canister-Id" $domain_canister_id always;
 
     # Canister / Gateway (Cookie)
     add_header "Set-Cookie" $domain_gateway_cookie always;

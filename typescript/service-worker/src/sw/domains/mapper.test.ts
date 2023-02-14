@@ -33,6 +33,14 @@ describe('Resolver mapper', () => {
     expect(item.canister).toBeFalsy();
   });
 
+  it('should map to https: protocol in a given url that uses the http: protocol', async () => {
+    const url = new URL('http://example.com');
+    const secureUrl = ResolverMapper.toHTTPSUrl(url);
+
+    expect(secureUrl.href).not.toEqual(url.href);
+    expect(secureUrl.protocol).toEqual('https:');
+  });
+
   it('should map from domain lookup to storage host item', async () => {
     const lookup: DomainLookup = {
       canister: {

@@ -11,6 +11,7 @@ Object.defineProperty(self, 'location', {
   value: {
     protocol: 'https:',
     host: 'rdmx6-jaaaa-aaaaa-aaadq-cai.ic0.app',
+    origin: 'https://rdmx6-jaaaa-aaaaa-aaadq-cai.ic0.app',
     hostname: 'rdmx6-jaaaa-aaaaa-aaadq-cai.ic0.app',
     toString: () => 'https://rdmx6-jaaaa-aaaaa-aaadq-cai.ic0.app',
     href: 'https://rdmx6-jaaaa-aaaaa-aaadq-cai.ic0.app',

@@ -33,6 +33,13 @@ export class ResolverMapper {
     };
   }
 
+  static toHTTPSUrl(url: URL): URL {
+    const secureDomain = new URL(url.href);
+    secureDomain.protocol = 'https:';
+
+    return secureDomain;
+  }
+
   static getPrincipalFromText(canisterId: string): Principal {
     try {
       return Principal.fromText(canisterId);
@@ -63,7 +70,7 @@ export class ResolverMapper {
         },
       });
     } catch (err) {
-      // logging the error in case the event had malformatted values
+      // logging the error in case the event had malformed values
       console.error(err);
       return null;
     }

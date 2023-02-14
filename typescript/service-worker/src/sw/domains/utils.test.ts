@@ -1,5 +1,6 @@
 import { Principal } from '@dfinity/principal';
 import {
+  isRawDomain,
   maybeResolveCanisterFromHeaders,
   maybeResolveCanisterFromHostName,
   resolveCanisterFromUrl,
@@ -38,6 +39,21 @@ describe('Resolve canister from headers', () => {
     const resolve = maybeResolveCanisterFromHeaders(headers);
 
     expect(resolve).toBeNull();
+  });
+});
+
+describe('Match raw url', () => {
+  it('should match raw url', async () => {
+    expect(isRawDomain('example.raw.ic0.app')).toBeTruthy();
+    expect(isRawDomain('example.raw.ic1.app')).toBeTruthy();
+    expect(isRawDomain('example.raw.ic0.dev')).toBeTruthy();
+    expect(isRawDomain('example.raw.ic1.dev')).toBeTruthy();
+  });
+
+  it('should not match raw url', async () => {
+    expect(isRawDomain('example.raw.ic0.io')).toBeFalsy();
+    expect(isRawDomain('raw.example.ic0.app')).toBeFalsy();
+    expect(isRawDomain('raw.example.ic0.dev')).toBeFalsy();
   });
 });
 
