@@ -523,6 +523,14 @@ impl XNetPayloadBuilderImpl {
         validation_context: &ValidationContext,
         state: &ReplicatedState,
     ) -> SliceValidationResult {
+        // Do not accept loopback stream slices. Those are inducted separately, entirely
+        // within the DSM.
+        if subnet_id == state.metadata.own_subnet_id {
+            return SliceValidationResult::Invalid(
+                "Loopback stream is inducted separately".to_string(),
+            );
+        }
+
         let slice = match self.certified_stream_store.decode_certified_stream_slice(
             subnet_id,
             validation_context.registry_version,
