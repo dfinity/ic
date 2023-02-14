@@ -5,7 +5,7 @@ use crate::tx;
 use candid::{CandidType, Principal};
 use ic_btc_types::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
-    MillisatoshiPerByte, Network, SendTransactionRequest, Utxo, UtxosFilterInRequest,
+    MillisatoshiPerByte, Network, SendTransactionRequest, UtxosFilterInRequest,
 };
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
@@ -125,7 +125,7 @@ pub async fn get_utxos(
     network: Network,
     address: &Address,
     min_confirmations: u32,
-) -> Result<Vec<Utxo>, CallError> {
+) -> Result<GetUtxosResponse, CallError> {
     // NB. The prices are 10B on the mainnet and 4B on the testnet:
     // https://internetcomputer.org/docs/current/developer-docs/deploy/computation-and-storage-costs
     let get_utxos_cost_cycles = match network {
@@ -169,7 +169,9 @@ pub async fn get_utxos(
         utxos.append(&mut response.utxos);
     }
 
-    Ok(utxos)
+    response.utxos = utxos;
+
+    Ok(response)
 }
 
 /// Returns the current fee percentiles on the bitcoin network.

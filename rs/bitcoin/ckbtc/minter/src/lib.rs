@@ -87,7 +87,7 @@ async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress)
     )
     .await
     {
-        Ok(utxos) => utxos,
+        Ok(response) => response.utxos,
         Err(e) => {
             log!(
                 P0,
@@ -348,13 +348,15 @@ async fn submit_pending_requests() {
     }
 }
 
-fn finalization_time_estimate(min_confirmations: u32, network: Network) -> u64 {
-    min_confirmations as u64
-        * match network {
-            Network::Mainnet => 10 * MIN_NANOS,
-            Network::Testnet => MIN_NANOS,
-            Network::Regtest => SEC_NANOS,
-        }
+fn finalization_time_estimate(min_confirmations: u32, network: Network) -> Duration {
+    Duration::from_nanos(
+        min_confirmations as u64
+            * match network {
+                Network::Mainnet => 10 * MIN_NANOS,
+                Network::Testnet => MIN_NANOS,
+                Network::Regtest => SEC_NANOS,
+            },
+    )
 }
 
 async fn finalize_requests() {
@@ -370,7 +372,7 @@ async fn finalize_requests() {
         let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network);
         s.submitted_transactions
             .iter()
-            .any(|req| req.submitted_at + wait_time < now)
+            .any(|req| req.submitted_at + (wait_time.as_nanos() as u64) < now)
     });
 
     if !has_requests_to_finalize {

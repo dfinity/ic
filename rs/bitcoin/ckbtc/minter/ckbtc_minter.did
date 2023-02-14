@@ -46,7 +46,10 @@ type UpdateBalanceResult = record {
 
 type UpdateBalanceError = variant {
     // There are no new UTXOs to process.
-    NoNewUtxos;
+    NoNewUtxos : record {
+        current_confirmations: opt nat32;
+        required_confirmations: nat32
+    };
     // The minter is already processing another update balance request for the caller.
     AlreadyProcessing;
     // The minter is overloaded, retry the request.
