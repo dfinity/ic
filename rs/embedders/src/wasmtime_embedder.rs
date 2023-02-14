@@ -106,6 +106,14 @@ fn trap_code_to_hypervisor_error(trap: wasmtime::Trap) -> HypervisorError {
     }
 }
 
+fn globals_to_ignore(wasm_native_stable_memory: FlagStatus) -> &'static [&'static str] {
+    const TO_IGNORE: &[&str] = &[DIRTY_PAGES_COUNTER_GLOBAL_NAME];
+    match wasm_native_stable_memory {
+        FlagStatus::Enabled => TO_IGNORE,
+        FlagStatus::Disabled => &[],
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum CanisterMemoryType {
     Heap,
@@ -270,7 +278,7 @@ impl WasmtimeEmbedder {
         &self,
         canister_id: CanisterId,
         cache: &EmbedderCache,
-        exported_globals: &[Global],
+        exported_globals: Option<&[Global]>,
         heap_memory: &execution_state::Memory,
         stable_memory: &execution_state::Memory,
         modification_tracking: ModificationTracking,
@@ -319,58 +327,69 @@ impl WasmtimeEmbedder {
         store.data_mut().num_instructions_global =
             instance.get_global(&mut store, INSTRUCTIONS_COUNTER_GLOBAL_NAME);
 
-        // in wasmtime only exported globals are accessible
-        let instance_globals: Vec<_> = instance
-            .exports(&mut store)
-            .filter_map(|e| e.into_global())
-            .collect();
+        if let Some(exported_globals) = exported_globals {
+            let globals_to_ignore =
+                globals_to_ignore(self.config.feature_flags.wasm_native_stable_memory);
 
-        if exported_globals.len() > instance_globals.len() {
-            fatal!(
+            // in wasmtime only exported globals are accessible
+            let instance_globals: Vec<_> = instance
+                .exports(&mut store)
+                .filter_map(|e| {
+                    if globals_to_ignore.contains(&e.name()) {
+                        None
+                    } else {
+                        e.into_global()
+                    }
+                })
+                .collect();
+
+            if exported_globals.len() != instance_globals.len() {
+                fatal!(
                 self.log,
-                "Given exported globals length {} is more than instance exported globals length {}",
+                "Given number of exported globals {} is not equal to the number of instance exported globals {}",
                 exported_globals.len(),
                 instance_globals.len()
             );
-        }
+            }
 
-        // set the globals to persisted values
-        for ((ix, v), instance_global) in exported_globals
-            .iter()
-            .enumerate()
-            .zip(instance_globals.iter())
-        {
-            if instance_global.ty(&mut store).mutability() == Mutability::Var {
-                instance_global
-                    .set(
-                        &mut store,
-                        match v {
-                            Global::I32(val) => Val::I32(*val),
-                            Global::I64(val) => Val::I64(*val),
-                            Global::F32(val) => Val::F32((val).to_bits()),
-                            Global::F64(val) => Val::F64((val).to_bits()),
-                        },
-                    )
-                    .unwrap_or_else(|e| {
-                        let v = match v {
-                            Global::I32(val) => (val).to_string(),
-                            Global::I64(val) => (val).to_string(),
-                            Global::F32(val) => (val).to_string(),
-                            Global::F64(val) => (val).to_string(),
-                        };
-                        fatal!(
-                            self.log,
-                            "error while setting exported global {} to {}: {}",
-                            ix,
-                            v,
-                            e
+            // set the globals to persisted values
+            for ((ix, v), instance_global) in exported_globals
+                .iter()
+                .enumerate()
+                .zip(instance_globals.iter())
+            {
+                if instance_global.ty(&mut store).mutability() == Mutability::Var {
+                    instance_global
+                        .set(
+                            &mut store,
+                            match v {
+                                Global::I32(val) => Val::I32(*val),
+                                Global::I64(val) => Val::I64(*val),
+                                Global::F32(val) => Val::F32((val).to_bits()),
+                                Global::F64(val) => Val::F64((val).to_bits()),
+                            },
                         )
-                    })
-            } else {
-                debug!(
-                    self.log,
-                    "skipping initialization of immutable global {}", ix
-                );
+                        .unwrap_or_else(|e| {
+                            let v = match v {
+                                Global::I32(val) => (val).to_string(),
+                                Global::I64(val) => (val).to_string(),
+                                Global::F32(val) => (val).to_string(),
+                                Global::F64(val) => (val).to_string(),
+                            };
+                            fatal!(
+                                self.log,
+                                "error while setting exported global {} to {}: {}",
+                                ix,
+                                v,
+                                e
+                            )
+                        })
+                } else {
+                    debug!(
+                        self.log,
+                        "skipping initialization of immutable global {}", ix
+                    );
+                }
             }
         }
 
@@ -962,10 +981,17 @@ impl<S: SystemApi> WasmtimeInstance<S> {
 
     /// Returns a list of exported globals.
     pub fn get_exported_globals(&mut self) -> Vec<Global> {
+        let globals_to_ignore = globals_to_ignore(self.wasm_native_stable_memory);
         let globals: Vec<_> = self
             .instance
             .exports(&mut self.store)
-            .filter_map(|e| e.into_global())
+            .filter_map(|e| {
+                if globals_to_ignore.contains(&e.name()) {
+                    None
+                } else {
+                    e.into_global()
+                }
+            })
             .collect();
         globals
             .iter()

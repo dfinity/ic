@@ -617,7 +617,7 @@ pub fn process(
     let mut instance = match embedder.new_instance(
         canister_id,
         embedder_cache,
-        globals,
+        Some(globals),
         wasm_memory,
         stable_memory,
         modification_tracking,
@@ -805,7 +805,7 @@ pub fn get_initial_globals_and_memory(
     let mut instance = match embedder.new_instance(
         canister_id,
         embedder_cache,
-        &[],
+        None,
         &Memory::new(wasm_page_map.clone(), NumWasmPages::from(0)),
         &Memory::new(stable_memory_page_map.clone(), NumWasmPages::from(0)),
         ModificationTracking::Ignore,

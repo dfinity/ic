@@ -454,7 +454,7 @@ mod tests {
                     .new_instance(
                         canister_test_id(1),
                         &embedder_cache,
-                        &[],
+                        None,
                         &Memory::new(page_map.clone(), NumWasmPages::from(0)),
                         &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                         modification_tracking,
@@ -634,7 +634,7 @@ mod tests {
                 .new_instance(
                     canister_test_id(1),
                     &cache,
-                    &[],
+                    None,
                     &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     ModificationTracking::Ignore,
@@ -1019,7 +1019,7 @@ mod tests {
             .new_instance(
                 canister_test_id(1),
                 &cache,
-                &[],
+                None,
                 &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                 &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                 ModificationTracking::Track,
@@ -1291,7 +1291,7 @@ mod tests {
                 .new_instance(
                     canister_test_id(1),
                     &embedder_cache,
-                    &[],
+                    None,
                     &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                     ModificationTracking::Track,

@@ -451,7 +451,14 @@ mod test {
         // Change the value of globals and verify we can get them back.
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_wat(wat)
-            .with_globals(vec![Global::I64(5), Global::I32(12), Global::I64(2468)])
+            .with_globals(vec![
+                Global::I64(5),
+                Global::I32(12),
+                Global::I64(2468),
+                // Last global is the instruction counter which will be
+                // overwritten anyway.
+                Global::I64(0),
+            ])
             .build();
 
         let res = instance
@@ -500,7 +507,13 @@ mod test {
         // Change the value of globals and verify we can get them back.
         let mut instance = WasmtimeInstanceBuilder::new()
             .with_wat(wat)
-            .with_globals(vec![Global::F64(5.3), Global::F32(12.37)])
+            .with_globals(vec![
+                Global::F64(5.3),
+                Global::F32(12.37),
+                // Last global is the instruction counter which will be
+                // overwritten anyway.
+                Global::I64(0),
+            ])
             .build();
         let res = instance
             .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
@@ -527,19 +540,21 @@ mod test {
                     )"#,
             )
             // Should fail because of not correct type of the second one.
-            .with_globals(vec![Global::I64(5), Global::I64(12)])
+            .with_globals(vec![
+                Global::I64(5),
+                Global::I64(12),
+                // Last global is the instruction counter which will be
+                // overwritten anyway.
+                Global::I64(0),
+            ])
             .build();
     }
 
     #[test]
     #[should_panic(
-        expected = "Given exported globals length 513 is more than instance exported globals length 2"
+        expected = "Given number of exported globals 3 is not equal to the number of instance exported globals 2"
     )]
     fn try_to_set_globals_that_are_more_than_the_instace_globals() {
-        // Globals take up a single 4K byte page and they are represented by 64 bits
-        // each, so by default there are 4096 * 8 bits / 64 bits = 512 globals.
-        const DEFAULT_GLOBALS_LENGTH: usize = 512;
-
         let _instance = WasmtimeInstanceBuilder::new()
             // Module only exports one global, but instrumentation adds a second.
             .with_wat(
@@ -548,7 +563,24 @@ mod test {
                     (global (export "g") (mut i64) (i64.const 42))
                 )"#,
             )
-            .with_globals(vec![Global::I64(0); DEFAULT_GLOBALS_LENGTH + 1])
+            .with_globals(vec![Global::I64(0); 3])
+            .build();
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Given number of exported globals 1 is not equal to the number of instance exported globals 2"
+    )]
+    fn try_to_set_globals_that_are_less_than_the_instace_globals() {
+        let _instance = WasmtimeInstanceBuilder::new()
+            // Module only exports one global, but instrumentation adds a second.
+            .with_wat(
+                r#"
+                (module
+                    (global (export "g") (mut i64) (i64.const 42))
+                )"#,
+            )
+            .with_globals(vec![Global::I64(0); 1])
             .build();
     }
 
