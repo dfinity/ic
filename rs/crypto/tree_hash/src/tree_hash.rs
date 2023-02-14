@@ -267,14 +267,11 @@ fn prune_witness_impl(
         LabeledTree::Leaf(v) => {
             match witness {
                 // LabeledTree <-> Witness mismatch.
-                Witness::Fork { .. } | Witness::Node { .. } => {
+                Witness::Fork { .. } | Witness::Node { .. } | Witness::Pruned { .. } => {
                     Err(TreeHashError::InconsistentPartialTree {
                         offending_path: curr_path.to_owned(),
                     })
                 }
-
-                // Nothing to do here.
-                Witness::Pruned { .. } => Ok(witness.to_owned()),
 
                 // Provided 'Leaf`, prune it.
                 Witness::Known() => Ok(Witness::Pruned {
