@@ -901,6 +901,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "serial_test": crate.spec(
                 version = "^0.8.0",
             ),
+            "sev": crate.spec(
+                version = "^1.1",
+                features = [
+                    "openssl",
+                ],
+            ),
             "sha2": crate.spec(
                 version = "^0.10.2",
             ),
