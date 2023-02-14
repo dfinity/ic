@@ -1,6 +1,6 @@
 //! The tokio thread based implementation of `ArtifactProcessor`
 
-use crate::{artifact::*, clients};
+use crate::clients;
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
     artifact_manager::{ArtifactProcessor, ProcessingResult},
@@ -21,6 +21,7 @@ use ic_logger::{debug, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::*,
+    artifact_kind::*,
     consensus::{certification::CertificationMessage, dkg, ConsensusMessage},
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,

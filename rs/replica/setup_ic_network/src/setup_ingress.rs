@@ -1,9 +1,9 @@
-use ic_artifact_manager::artifact::IngressArtifact;
 use ic_interfaces::{artifact_manager::ArtifactManager, ingress_pool::IngressPoolThrottler};
 use ic_interfaces_p2p::{IngressError, IngressIngestionService};
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_types::{
     artifact::{Artifact, ArtifactKind},
+    artifact_kind::IngressArtifact,
     messages::SignedIngress,
     NodeId,
 };

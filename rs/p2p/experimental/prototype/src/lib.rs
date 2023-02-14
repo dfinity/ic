@@ -2,7 +2,6 @@ mod client;
 mod p2p;
 
 use crate::p2p::P2P;
-use ic_artifact_manager::artifact::ConsensusArtifact;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
     consensus::{Consensus, ConsensusGossip},
@@ -12,6 +11,7 @@ use ic_interfaces::{
 use ic_types::artifact::{
     ArtifactKind, ConsensusMessage, ConsensusMessageAttribute, ConsensusMessageId, PriorityFn,
 };
+use ic_types::artifact_kind::ConsensusArtifact;
 use ic_types::NodeId;
 use std::sync::Arc;
 use tokio::sync::{
