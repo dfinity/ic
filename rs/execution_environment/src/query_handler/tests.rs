@@ -809,3 +809,197 @@ fn composite_query_fails_in_replicated_mode() {
     // Verify that we consume some cycles.
     assert!(balance_before > balance_after);
 }
+
+#[test]
+fn composite_query_single_user_response() {
+    // In this test canister 0 calls canisters 1, 2, 3 and produces a reply
+    // only when handling the response from canister 2.
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+
+    let mut canisters = vec![];
+    for _ in 0..4 {
+        canisters.push(test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap());
+    }
+
+    let reply = |i| wasm().reply_data(&[i]).build();
+    let empty = || wasm().build();
+
+    let canister_0 = wasm()
+        .composite_query(
+            canisters[1],
+            call_args().other_side(reply(1)).on_reply(empty()),
+        )
+        .composite_query(canisters[2], call_args().other_side(reply(2)))
+        .composite_query(
+            canisters[3],
+            call_args().other_side(reply(3)).on_reply(empty()),
+        );
+
+    let result = test
+        .query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canisters[0],
+                method_name: "composite_query".to_string(),
+                method_payload: canister_0.build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply([2_u8].to_vec()));
+}
+
+#[test]
+fn composite_query_single_canister_response() {
+    // In this test canister 0 calls canister 1 which in turn calls canisters
+    // 2, 3, 4 and produces a reply only when handling the response from
+    // canister 2. That reply should propagate to the user.
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+
+    let mut canisters = vec![];
+    for _ in 0..5 {
+        canisters.push(test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap());
+    }
+
+    let reply = |i| wasm().reply_data(&[i]).build();
+    let empty = || wasm().build();
+
+    let canister_1 = wasm()
+        .composite_query(
+            canisters[2],
+            call_args().other_side(reply(2)).on_reply(empty()),
+        )
+        .composite_query(canisters[3], call_args().other_side(reply(3)))
+        .composite_query(
+            canisters[4],
+            call_args().other_side(reply(4)).on_reply(empty()),
+        );
+
+    let canister_0 = wasm().composite_query(canisters[1], call_args().other_side(canister_1));
+
+    let result = test
+        .query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canisters[0],
+                method_name: "composite_query".to_string(),
+                method_payload: canister_0.build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply([3_u8].to_vec()));
+}
+
+#[test]
+fn composite_query_no_user_response() {
+    // In this test canister 0 calls canisters 1, 2, 3 and does not reply.
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+
+    let mut canisters = vec![];
+    for _ in 0..4 {
+        canisters.push(test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap());
+    }
+
+    let reply = |i| wasm().reply_data(&[i]).build();
+    let empty = || wasm().build();
+
+    let canister_0 = wasm()
+        .composite_query(
+            canisters[1],
+            call_args().other_side(reply(1)).on_reply(empty()),
+        )
+        .composite_query(
+            canisters[2],
+            call_args().other_side(reply(2)).on_reply(empty()),
+        )
+        .composite_query(
+            canisters[3],
+            call_args().other_side(reply(3)).on_reply(empty()),
+        );
+
+    let err = test
+        .query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canisters[0],
+                method_name: "composite_query".to_string(),
+                method_payload: canister_0.build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+        .unwrap_err();
+    assert_eq!(
+        err.description(),
+        format!("Canister {} did not produce a response", canisters[0])
+    );
+}
+
+#[test]
+fn composite_query_no_canister_response() {
+    // In this test canister 0 calls canister 1 which in turn calls canisters
+    // 2, 3, 4 and does not reply.
+    let mut test = ExecutionTestBuilder::new()
+        .with_composite_queries() // For now, query calls are only allowed in system subnets
+        .build();
+
+    let mut canisters = vec![];
+    for _ in 0..5 {
+        canisters.push(test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap());
+    }
+
+    let reply = |i| wasm().reply_data(&[i]).build();
+    let empty = || wasm().build();
+
+    let canister_1 = wasm()
+        .composite_query(
+            canisters[2],
+            call_args().other_side(reply(2)).on_reply(empty()),
+        )
+        .composite_query(
+            canisters[3],
+            call_args().other_side(reply(3)).on_reply(empty()),
+        )
+        .composite_query(
+            canisters[4],
+            call_args().other_side(reply(4)).on_reply(empty()),
+        );
+
+    let canister_0 = wasm().composite_query(
+        canisters[1],
+        call_args()
+            .other_side(canister_1)
+            .on_reject(wasm().reject_message().reject()),
+    );
+
+    let result = test
+        .query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canisters[0],
+                method_name: "composite_query".to_string(),
+                method_payload: canister_0.build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+        .unwrap();
+    match result {
+        WasmResult::Reply(_) => unreachable!("Expected reject"),
+        WasmResult::Reject(msg) => assert_eq!(
+            msg,
+            format!("Canister {} did not produce a response", canisters[1])
+        ),
+    }
+}
