@@ -478,17 +478,11 @@ pub fn initial_execution_state() -> ExecutionState {
     let mut metadata: BTreeMap<String, CustomSection> = BTreeMap::new();
     metadata.insert(
         String::from("candid"),
-        CustomSection {
-            visibility: CustomSectionType::Private,
-            content: vec![0, 2],
-        },
+        CustomSection::new(CustomSectionType::Private, vec![0, 2]),
     );
     metadata.insert(
         String::from("dummy"),
-        CustomSection {
-            visibility: CustomSectionType::Public,
-            content: vec![2, 1],
-        },
+        CustomSection::new(CustomSectionType::Public, vec![2, 1]),
     );
     let wasm_metadata = WasmMetadata::new(metadata);
 

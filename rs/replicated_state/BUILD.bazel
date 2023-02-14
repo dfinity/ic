@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "//rs/types/wasm_types",
     "//rs/utils",
+    "//rs/crypto/sha",
     "@crate_index//:bitcoin",
     "@crate_index//:cvt",
     "@crate_index//:lazy_static",

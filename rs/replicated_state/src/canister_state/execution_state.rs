@@ -1,4 +1,5 @@
 use super::SessionNonce;
+use crate::hash::ic_hashtree_leaf_hash;
 use crate::{canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from, NumWasmPages, PageMap};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -451,7 +452,7 @@ impl ExecutionState {
 
 /// An enum that represents the possible visibility levels a custom section
 /// defined in the wasm module can have.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CustomSectionType {
     Public,
     Private,
@@ -483,16 +484,30 @@ impl TryFrom<pb::CustomSectionType> for CustomSectionType {
 /// Represents the data a custom section holds.
 #[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CustomSection {
-    pub visibility: CustomSectionType,
-    pub content: Vec<u8>,
+    visibility: CustomSectionType,
+    content: Vec<u8>,
+    hash: [u8; 32],
 }
 
 impl CustomSection {
     pub fn new(visibility: CustomSectionType, content: Vec<u8>) -> Self {
         Self {
             visibility,
+            hash: ic_hashtree_leaf_hash(&content),
             content,
         }
+    }
+
+    pub fn visibility(&self) -> CustomSectionType {
+        self.visibility
+    }
+
+    pub fn content(&self) -> &[u8] {
+        &self.content
+    }
+
+    pub fn hash(&self) -> [u8; 32] {
+        self.hash
     }
 }
 
@@ -501,6 +516,7 @@ impl From<&CustomSection> for pb::WasmCustomSection {
         Self {
             visibility: pb::CustomSectionType::from(&item.visibility).into(),
             content: item.content.clone(),
+            hash: Some(item.hash.to_vec()),
         }
     }
 }
@@ -513,6 +529,15 @@ impl TryFrom<pb::WasmCustomSection> for CustomSection {
         )?;
         Ok(Self {
             visibility,
+            hash: match item.hash {
+                Some(hash_bytes) => hash_bytes.try_into().map_err(|h: Vec<u8>| {
+                    ProxyDecodeError::InvalidDigestLength {
+                        expected: 32,
+                        actual: h.len(),
+                    }
+                })?,
+                None => ic_hashtree_leaf_hash(&item.content),
+            },
             content: item.content,
         })
     }

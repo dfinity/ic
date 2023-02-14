@@ -197,6 +197,8 @@ pub struct WasmCustomSection {
     pub visibility: i32,
     #[prost(bytes = "vec", tag = "2")]
     pub content: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", optional, tag = "3")]
+    pub hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

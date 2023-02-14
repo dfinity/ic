@@ -11,6 +11,11 @@ pub mod materialize;
 use ic_crypto_tree_hash::Label;
 use std::sync::Arc;
 
+/// A hash of the tree leaf contents according to the IC interface spec.  See
+/// the definition of "reconstruct" function on
+/// https://internetcomputer.org/docs/current/references/ic-interface-spec/#certificate.
+pub type Hash = [u8; 32];
+
 /// A type alias for a ref-counted stateless function.
 pub type ArcFn<'a, T> = Arc<dyn Fn() -> T + 'a + Send + Sync>;
 
@@ -60,12 +65,17 @@ pub trait LazyFork<'a>: Send + Sync {
 ///
 /// The generic lifetime argument allows us to borrow data directly from the
 /// replicated state, which makes traversing the tree more efficient.
+///
+/// The tree might store precomputed hashes for some leaves, so the [Blob]
+/// variant might contain the computed hash to speed up the hash tree
+/// construction. If the hash is present, it must be equal to
+/// `H(domain_sep("ic-hashtree-leaf") · contents)`.
 #[derive(Clone)]
 pub enum LazyTree<'a> {
     // materialized tree
-    Blob(&'a [u8]),
+    Blob(&'a [u8], Option<Hash>),
 
-    // suspended tree
+    // suspended trees
     LazyBlob(ArcFn<'a, Vec<u8>>),
     LazyFork(Arc<dyn LazyFork<'a> + 'a + Send + Sync>),
 }
@@ -82,7 +92,7 @@ pub fn blob<'a>(f: impl Fn() -> Vec<u8> + 'a + Send + Sync) -> LazyTree<'a> {
 
 /// A helper function that construct a leaf from a string.
 pub fn string(s: &str) -> LazyTree<'_> {
-    LazyTree::Blob(s.as_bytes())
+    LazyTree::Blob(s.as_bytes(), None)
 }
 
 /// A helper function that construct a leaf from a number.

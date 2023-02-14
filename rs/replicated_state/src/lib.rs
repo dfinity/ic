@@ -1,6 +1,7 @@
 mod bitcoin;
 pub mod bitcoin_state;
 pub mod canister_state;
+pub(crate) mod hash;
 pub mod metadata_state;
 pub mod page_map;
 pub mod replicated_state;

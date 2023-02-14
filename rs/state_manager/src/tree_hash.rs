@@ -173,10 +173,7 @@ mod tests {
                 .update(&[(PageIndex::from(1), &[0u8; PAGE_SIZE])]);
             let wasm_binary = WasmBinary::new(CanisterModule::new(vec![]));
             let metadata = WasmMetadata::new(btreemap! {
-                String::from("dummy1") => CustomSection {
-                    visibility: CustomSectionType::Private,
-                    content: vec![0, 2],
-                }
+                String::from("dummy1") => CustomSection::new(CustomSectionType::Private, vec![0, 2]),
             });
             let execution_state = ExecutionState {
                 canister_root: "NOT_USED".into(),

@@ -60,7 +60,7 @@ impl<'a> LazyFork<'a> for FlatMapFork<'a> {
 
 fn as_lazy(t: &LabeledTree<Vec<u8>>) -> LazyTree<'_> {
     match t {
-        LabeledTree::Leaf(b) => LazyTree::Blob(&b[..]),
+        LabeledTree::Leaf(b) => LazyTree::Blob(&b[..], None),
         LabeledTree::SubTree(cs) => LazyTree::LazyFork(Arc::new(FlatMapFork(cs))),
     }
 }
