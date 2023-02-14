@@ -317,8 +317,7 @@ fn hitting_page_delta_limit_fails_message() {
     assert_eq!(
         result.description(),
         "Canister exceeded memory access limits: Exceeded the limit for the \
-    number of modified pages in the stable memory in a single message execution: limit: 40 KB, \
-    modified: 44 KB."
+    number of modified pages in the stable memory in a single message execution: limit: 40 KB."
     );
 }
 

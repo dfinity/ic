@@ -319,9 +319,8 @@ fn observe_execution_complexity<S: SystemApi>(
                 ));
             } else if total_complexity.stable_dirty_pages > stable_memory_dirty_page_limit {
                 let error = HypervisorError::MemoryAccessLimitExceeded(
-                format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB, modified: {} KB.",
+                format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
                     stable_memory_dirty_page_limit * (PAGE_SIZE as u64 / KiB),
-                    total_complexity.stable_dirty_pages.get() * (PAGE_SIZE as u64 / KiB),
                 ),
             );
                 return Err(process_err(caller, error));
