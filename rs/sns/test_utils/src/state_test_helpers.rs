@@ -23,7 +23,8 @@ use ic_sns_root::pb::v1::{
 };
 use ic_sns_root::{CanisterIdRecord, CanisterStatusResultV2};
 use ic_sns_swap::pb::v1::{
-    self as swap_pb, GetOpenTicketResponse, NewSaleTicketResponse, NotifyPaymentFailureResponse,
+    self as swap_pb, GetOpenTicketResponse, GetSaleParametersResponse,
+    ListCommunityFundParticipantsResponse, NewSaleTicketResponse, NotifyPaymentFailureResponse,
     RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Ticket,
 };
 use ic_state_machine_tests::StateMachine;
@@ -570,4 +571,34 @@ pub fn notify_payment_failure(
         .execute_ingress_as(*sender, *swap_id, "notify_payment_failure", args)
         .unwrap();
     Decode!(&res.bytes(), NotifyPaymentFailureResponse).unwrap()
+}
+
+pub fn get_sns_sale_parameters(
+    env: &StateMachine,
+    swap_id: &CanisterId,
+    sender: &PrincipalId,
+) -> GetSaleParametersResponse {
+    let args = Encode!(&swap_pb::GetSaleParametersRequest {}).unwrap();
+    let res = env
+        .query_as(*sender, *swap_id, "get_sale_parameters", args)
+        .unwrap();
+    Decode!(&res.bytes(), GetSaleParametersResponse).unwrap()
+}
+
+pub fn list_community_fund_participants(
+    env: &StateMachine,
+    swap_id: &CanisterId,
+    sender: &PrincipalId,
+    limit: &u32,
+    offset: &u64,
+) -> ListCommunityFundParticipantsResponse {
+    let args = Encode!(&swap_pb::ListCommunityFundParticipantsRequest {
+        limit: Some(*limit),
+        offset: Some(*offset)
+    })
+    .unwrap();
+    let res = env
+        .query_as(*sender, *swap_id, "list_community_fund_participants", args)
+        .unwrap();
+    Decode!(&res.bytes(), ListCommunityFundParticipantsResponse).unwrap()
 }

@@ -104,7 +104,7 @@ fn get_buyer_state_(request: GetBuyerStateRequest) -> GetBuyerStateResponse {
 }
 
 /// Get Params.
-#[export_name = "get_sale_parameters"]
+#[export_name = "canister_query get_sale_parameters"]
 fn get_sale_parameters() {
     over(candid_one, get_sale_parameters_)
 }
@@ -116,7 +116,7 @@ fn get_sale_parameters_(request: GetSaleParametersRequest) -> GetSaleParametersR
 }
 
 /// List Community Fund participants.
-#[export_name = "list_community_fund_participants"]
+#[export_name = "canister_query list_community_fund_participants"]
 fn list_community_fund_participants() {
     over(candid_one, list_community_fund_participants_);
 }
