@@ -7,7 +7,7 @@ use ic_adapter_metrics::AdapterMetrics;
 use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_config::adapters::AdaptersConfig;
 use ic_interfaces::execution_environment::AnonymousQueryService;
-use ic_interfaces_canister_http_adapter_client::CanisterHttpAdapterClient;
+use ic_interfaces_https_outcalls_adapter_client::CanisterHttpAdapterClient;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
