@@ -583,7 +583,7 @@ mod tests {
                 exec_input: exec_input_for_update(
                     "write",
                     &[],
-                    vec![],
+                    vec![Global::I32(0), Global::I64(0)],
                     MemoryId::new(),
                     MemoryId::new(),
                 ),
@@ -664,7 +664,7 @@ mod tests {
                 exec_input: exec_input_for_update(
                     "write",
                     &[16, 0, 0, 0, 1, 2, 3, 4],
-                    vec![],
+                    vec![Global::I64(0)],
                     MemoryId::new(),
                     MemoryId::new(),
                 ),
@@ -727,7 +727,7 @@ mod tests {
                 exec_input: exec_input_for_update(
                     "write",
                     &[16, 0, 0, 0, 1, 2, 3, 4],
-                    vec![],
+                    vec![Global::I64(0)],
                     next_wasm_memory_id,
                     next_stable_memory_id,
                 ),
@@ -745,7 +745,11 @@ mod tests {
                 wasm_id,
                 wasm_memory_id: next_wasm_memory_id,
                 stable_memory_id: next_stable_memory_id,
-                exec_input: exec_input_for_query("read", &[16, 0, 0, 0, 4, 0, 0, 0], vec![]),
+                exec_input: exec_input_for_query(
+                    "read",
+                    &[16, 0, 0, 0, 4, 0, 0, 0],
+                    vec![Global::I64(0)],
+                ),
             })
             .sync()
             .unwrap();
@@ -809,7 +813,7 @@ mod tests {
                 exec_input: exec_input_for_update(
                     "write",
                     &[],
-                    vec![],
+                    vec![Global::I32(0), Global::I64(0)],
                     MemoryId::new(),
                     MemoryId::new(),
                 ),
@@ -929,7 +933,7 @@ mod tests {
                 exec_input: exec_input_for_update(
                     "write_stable",
                     &[16, 0, 0, 0, 1, 2, 3, 4],
-                    vec![],
+                    vec![Global::I64(0)],
                     MemoryId::new(),
                     MemoryId::new(),
                 ),
@@ -992,7 +996,7 @@ mod tests {
                 exec_input: exec_input_for_update(
                     "write_stable",
                     &[16, 0, 0, 0, 1, 2, 3, 4],
-                    vec![],
+                    vec![Global::I64(0)],
                     next_wasm_memory_id,
                     next_stable_memory_id,
                 ),
@@ -1010,7 +1014,11 @@ mod tests {
                 wasm_id,
                 wasm_memory_id: next_wasm_memory_id,
                 stable_memory_id: next_stable_memory_id,
-                exec_input: exec_input_for_query("read_stable", &[16, 0, 0, 0, 4, 0, 0, 0], vec![]),
+                exec_input: exec_input_for_query(
+                    "read_stable",
+                    &[16, 0, 0, 0, 4, 0, 0, 0],
+                    vec![Global::I64(0)],
+                ),
             })
             .sync()
             .unwrap();
@@ -1061,7 +1069,7 @@ mod tests {
                 exec_input: exec_input_for_update(
                     "write",
                     &[16, 0, 0, 0, 1, 2, 3, 4],
-                    vec![],
+                    vec![Global::I64(0)],
                     child_wasm_memory_id,
                     child_stable_memory_id,
                 ),
@@ -1092,7 +1100,7 @@ mod tests {
                 exec_input: exec_input_for_update(
                     "write",
                     &[32, 0, 0, 0, 5, 6, 7, 8],
-                    vec![],
+                    vec![Global::I64(0)],
                     MemoryId::new(),
                     MemoryId::new(),
                 ),
@@ -1162,7 +1170,7 @@ mod tests {
                 exec_input: exec_input_for_update(
                     "write_stable",
                     &[16, 0, 0, 0, 1, 2, 3, 4],
-                    vec![],
+                    vec![Global::I64(0)],
                     child_wasm_memory_id,
                     child_stable_memory_id,
                 ),
@@ -1193,7 +1201,7 @@ mod tests {
                 exec_input: exec_input_for_update(
                     "write_stable",
                     &[32, 0, 0, 0, 5, 6, 7, 8],
-                    vec![],
+                    vec![Global::I64(0)],
                     MemoryId::new(),
                     MemoryId::new(),
                 ),
@@ -1282,7 +1290,7 @@ mod tests {
         let mut exec_input = exec_input_for_update(
             "run",
             &[100, 0, 0, 0],
-            vec![],
+            vec![Global::I64(0)],
             child_wasm_memory_id,
             child_stable_memory_id,
         );
@@ -1401,7 +1409,7 @@ mod tests {
         let mut exec_input = exec_input_for_update(
             "run",
             &[100, 0, 0, 0],
-            vec![],
+            vec![Global::I64(0)],
             child_wasm_memory_id,
             child_stable_memory_id,
         );

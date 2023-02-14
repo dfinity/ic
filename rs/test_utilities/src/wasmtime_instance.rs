@@ -25,7 +25,7 @@ pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000
 
 pub struct WasmtimeInstanceBuilder {
     wat: String,
-    globals: Vec<Global>,
+    globals: Option<Vec<Global>>,
     api_type: ic_system_api::ApiType,
     num_instructions: NumInstructions,
     subnet_type: SubnetType,
@@ -37,7 +37,7 @@ impl Default for WasmtimeInstanceBuilder {
     fn default() -> Self {
         Self {
             wat: "".to_string(),
-            globals: vec![],
+            globals: None,
             api_type: ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
             num_instructions: DEFAULT_NUM_INSTRUCTIONS,
             subnet_type: SubnetType::Application,
@@ -64,7 +64,10 @@ impl WasmtimeInstanceBuilder {
     }
 
     pub fn with_globals(self, globals: Vec<Global>) -> Self {
-        Self { globals, ..self }
+        Self {
+            globals: Some(globals),
+            ..self
+        }
     }
 
     pub fn with_api_type(self, api_type: ic_system_api::ApiType) -> Self {
@@ -136,7 +139,7 @@ impl WasmtimeInstanceBuilder {
             .new_instance(
                 canister_test_id(1),
                 &compiled,
-                &self.globals,
+                self.globals.as_deref(),
                 &Memory::new(
                     PageMap::new_for_testing(),
                     ic_replicated_state::NumWasmPages::from(0),
