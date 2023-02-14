@@ -7,6 +7,8 @@ use ic_crypto_internal_basic_sig_ed25519::types::SignatureBytes as BasicSigEd255
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::crypto::CryptoResult;
 use ic_types::NodeId;
+use serde::Deserialize;
+use serde::Serialize;
 use std::convert::TryFrom;
 use x509_parser::certificate::X509Certificate;
 use x509_parser::time::ASN1Time;
@@ -42,7 +44,7 @@ mod tests;
 ///   that is, the certificate is correctly self-signed
 ///
 /// [RFC 5280 (section 4.1.2.5)]: https://tools.ietf.org/html/rfc5280#section-4.1.2.5
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ValidTlsCertificate {
     certificate: X509PublicKeyCert,
 }

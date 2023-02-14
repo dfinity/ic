@@ -18,6 +18,7 @@ ic-crypto-internal-types = { path = "../internal/crypto_lib/types" }
 ic-crypto-tls-cert-validation = { path = "tls_cert_validation" }
 ic-protobuf = { path = "../../protobuf" }
 ic-types = { path = "../../types/types" }
+serde = { version = "1.0.99", features = [ "derive" ] }
 x509-parser = { version = "0.12.0" }
 
 [dev-dependencies]

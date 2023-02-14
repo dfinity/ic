@@ -15,6 +15,7 @@ use ic_crypto_internal_csp::vault::api::CspTlsSignError;
 use ic_crypto_internal_csp::vault::api::IDkgProtocolCspVault;
 use ic_crypto_internal_csp::vault::api::MultiSignatureCspVault;
 use ic_crypto_internal_csp::vault::api::NiDkgCspVault;
+use ic_crypto_internal_csp::vault::api::PksAndSksCompleteError;
 use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
 use ic_crypto_internal_csp::vault::api::PublicAndSecretKeyStoreCspVault;
 use ic_crypto_internal_csp::vault::api::PublicKeyStoreCspVault;
@@ -36,6 +37,7 @@ use ic_crypto_internal_types::encrypt::forward_secure::{
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
@@ -210,6 +212,8 @@ mock! {
             &self,
             external_public_keys: ExternalPublicKeys,
         ) -> Result<(), PksAndSksContainsErrors>;
+
+        fn pks_and_sks_complete(&self) -> Result<ValidNodePublicKeys, PksAndSksCompleteError>;
     }
 
     pub trait TlsHandshakeCspVault: Send + Sync {

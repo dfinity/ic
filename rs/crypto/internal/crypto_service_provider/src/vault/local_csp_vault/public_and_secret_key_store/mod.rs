@@ -1,7 +1,8 @@
 //! The crypto service provider API for querying public and secret keys in combination.
 use crate::vault::api::{
     ExternalPublicKeyError, LocalPublicKeyError, NodeKeysError, NodeKeysErrors,
-    PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault, SecretKeyError,
+    PksAndSksCompleteError, PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault,
+    SecretKeyError,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::{CspPublicKey, ExternalPublicKeys, KeyId, SecretKeyStore};
@@ -14,6 +15,7 @@ use crate::types::CspPop;
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
 use ic_types::crypto::AlgorithmId;
@@ -53,6 +55,11 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: 
                 secret_key_errors_result,
             )))
         }
+    }
+
+    fn pks_and_sks_complete(&self) -> Result<ValidNodePublicKeys, PksAndSksCompleteError> {
+        //TODO CRP-1772: provide actual implementation
+        Err(PksAndSksCompleteError::EmptyPublicKeyStore)
     }
 }
 

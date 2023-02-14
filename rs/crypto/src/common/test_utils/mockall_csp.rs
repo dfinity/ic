@@ -17,6 +17,7 @@ use ic_crypto_internal_csp::api::{
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::ExternalPublicKeys;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
+use ic_crypto_internal_csp::vault::api::PksAndSksCompleteError;
 use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
@@ -34,6 +35,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgLoadTranscriptError,
@@ -249,6 +251,8 @@ mock! {
             &self,
             registry_public_keys: ExternalPublicKeys,
         ) -> Result<(), PksAndSksContainsErrors>;
+
+        fn pks_and_sks_complete(&self) -> Result<ValidNodePublicKeys, PksAndSksCompleteError>;
     }
 
     pub trait CspSecretKeyStoreChecker {
