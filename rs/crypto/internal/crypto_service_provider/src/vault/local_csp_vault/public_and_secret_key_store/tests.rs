@@ -558,3 +558,16 @@ mod pks_and_sks_contains {
         );
     }
 }
+
+mod pks_and_sks_complete {
+    use crate::vault::api::{PksAndSksCompleteError, PublicAndSecretKeyStoreCspVault};
+    use crate::LocalCspVault;
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn should_return_empty_public_key_store() {
+        let vault = LocalCspVault::builder().build();
+        let result = vault.pks_and_sks_complete();
+        assert_matches!(result, Err(error) if error == PksAndSksCompleteError::EmptyPublicKeyStore)
+    }
+}

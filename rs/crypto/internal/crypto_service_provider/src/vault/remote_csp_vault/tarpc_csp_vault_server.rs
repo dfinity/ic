@@ -6,7 +6,7 @@ use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspThresholdSignatureKeygenError,
-    CspTlsKeygenError, CspTlsSignError, PublicRandomSeedGeneratorError,
+    CspTlsKeygenError, CspTlsSignError, PksAndSksCompleteError, PublicRandomSeedGeneratorError,
 };
 use crate::vault::api::{CspPublicKeyStoreError, CspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
@@ -31,6 +31,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_crypto_internal_types::NodeIndex;
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{new_logger, ReplicaLogger};
@@ -300,6 +301,15 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<(), PksAndSksContainsErrors> {
         let vault = self.local_csp_vault;
         let job = move || vault.pks_and_sks_contains(external_public_keys);
+        execute_on_thread_pool(self.thread_pool_handle, job).await
+    }
+
+    async fn pks_and_sks_complete(
+        self,
+        _: context::Context,
+    ) -> Result<ValidNodePublicKeys, PksAndSksCompleteError> {
+        let vault = self.local_csp_vault;
+        let job = move || vault.pks_and_sks_complete();
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 

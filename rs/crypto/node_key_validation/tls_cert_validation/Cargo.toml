@@ -15,6 +15,7 @@ ic-crypto-internal-basic-sig-ed25519 = { path = "../../internal/crypto_lib/basic
 ic-crypto-internal-types = { path = "../../internal/crypto_lib/types" }
 ic-protobuf = { path = "../../../protobuf" }
 ic-types = { path = "../../../types/types" }
+serde = { version = "1.0.99", features = [ "derive" ] }
 x509-parser = { version = "0.9.1" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

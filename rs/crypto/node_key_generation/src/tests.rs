@@ -529,3 +529,15 @@ mod idkg {
         );
     }
 }
+
+mod generate_required_node_keys {
+    use super::*;
+
+    #[test]
+    #[should_panic = "Node contains inconsistent key material"]
+    fn should_panic_because_of_dummy_implementation() {
+        CryptoConfig::run_with_temp_config(|config| {
+            let _ = generate_required_node_keys(&config, None);
+        })
+    }
+}

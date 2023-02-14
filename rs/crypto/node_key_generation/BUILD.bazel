@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/internal/crypto_service_provider",
     "//rs/crypto/internal/logmon",
+    "//rs/crypto/node_key_validation",
     "//rs/crypto/tls_interfaces",
     "//rs/crypto/utils/basic_sig",
     "//rs/interfaces",

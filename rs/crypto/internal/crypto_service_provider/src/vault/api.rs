@@ -16,6 +16,7 @@ use ic_crypto_internal_types::encrypt::forward_secure::{
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
@@ -333,6 +334,34 @@ pub enum PksAndSksContainsErrors {
     NodeKeysErrors(NodeKeysErrors),
     /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
     TransientInternalError(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PksAndSksCompleteError {
+    /// Public key store does not contain any public key
+    EmptyPublicKeyStore,
+    /// Error checking node signing public key and secret key
+    NodeSigningKeyError(PksAndSksCompleteKeyPairError),
+    /// Error checking committee signing public key and secret key
+    CommitteeSigningKeyError(PksAndSksCompleteKeyPairError),
+    /// Error checking TLS certificate and secret key
+    TlsCertificateError(PksAndSksCompleteKeyPairError),
+    /// Error checking dkg dealing encryption public key and secret key
+    DkgDealingEncryptionKeyError(PksAndSksCompleteKeyPairError),
+    /// Error checking one of IDKG dealing encryption public and secret key pairs
+    IdkgDealingEncryptionKeyError(PksAndSksCompleteKeyPairError),
+    /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
+    TransientInternalError(String),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PksAndSksCompleteKeyPairError {
+    /// Expected public key is missing
+    PublicKeyNotFound,
+    /// Public key is somehow malformed or a key ID cannot be computed from it.
+    PublicKeyInvalid,
+    /// Secret key is missing
+    SecretKeyNotFound,
 }
 
 /// `CspVault` offers a selection of operations that involve
@@ -675,6 +704,26 @@ pub trait PublicAndSecretKeyStoreCspVault {
         &self,
         external_public_keys: ExternalPublicKeys,
     ) -> Result<(), PksAndSksContainsErrors>;
+
+    /// Checks whether the public key store and secret key store are complete:
+    /// * all required public keys are present,
+    /// * all public keys in the public key store (corresponding to all required public keys
+    ///   and potentially additionally stored public keys, like rotated IDKG dealing encryption public keys)
+    ///   have a corresponding secret key in the secret key store,
+    /// * all public keys are valid.
+    /// If all check passes, the current node public keys in validated form is returned.
+    ///
+    /// # Errors
+    /// The method return on the first encountered error and will not check further any other key pairs.
+    /// The order in which checks are performed and keys are checked is not part of the API and should not be relied upon.
+    /// * [`PksAndSksCompleteError::EmptyPublicKeyStore`] if there are no public keys
+    /// * [`PksAndSksCompleteError::NodeSigningKeyError`] if there is a problem with the node signing key pair
+    /// * [`PksAndSksCompleteError::CommitteeSigningKeyError`] if there is a problem with the committee signing key pair
+    /// * [`PksAndSksCompleteError::TlsCertificateError`] if there is a problem with the TLS key material
+    /// * [`PksAndSksCompleteError::DkgDealingEncryptionKeyError`] if there is a problem with the DKG dealing encryption key pair
+    /// * [`PksAndSksCompleteError::IdkgDealingEncryptionKeyError`] if there is a problem with any of the IDKG dealing encryption key pairs
+    /// * [`PksAndSksCompleteError::TransientInternalError`] if a transient internal error, e.g., an RPC error, occurred.
+    fn pks_and_sks_complete(&self) -> Result<ValidNodePublicKeys, PksAndSksCompleteError>;
 }
 
 /// Operations of `CspVault` related to TLS handshakes.

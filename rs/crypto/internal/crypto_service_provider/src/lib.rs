@@ -33,10 +33,13 @@ use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, ExternalPublicKeys};
-use crate::vault::api::{CspPublicKeyStoreError, CspVault, PksAndSksContainsErrors};
+use crate::vault::api::{
+    CspPublicKeyStoreError, CspVault, PksAndSksCompleteError, PksAndSksContainsErrors,
+};
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_logger::{info, new_logger, replica_logger::no_op_logger, ReplicaLogger};
 use ic_types::crypto::CurrentNodePublicKeys;
 use key_id::KeyId;
@@ -68,6 +71,7 @@ pub trait CryptoServiceProvider:
     + CspThresholdEcdsaSigVerifier
     + CspPublicAndSecretKeyStoreChecker
     + CspSecretKeyStoreChecker
+    + CspPublicAndSecretKeyStoreChecker
     + CspTlsHandshakeSignerProvider
     + NodePublicKeyData
 {
@@ -84,6 +88,7 @@ impl<T> CryptoServiceProvider for T where
         + NiDkgCspClient
         + CspPublicAndSecretKeyStoreChecker
         + CspSecretKeyStoreChecker
+        + CspPublicAndSecretKeyStoreChecker
         + CspTlsHandshakeSignerProvider
         + NodePublicKeyData
 {
@@ -300,6 +305,10 @@ impl CspPublicAndSecretKeyStoreChecker for Csp {
         external_public_keys: ExternalPublicKeys,
     ) -> Result<(), PksAndSksContainsErrors> {
         self.csp_vault.pks_and_sks_contains(external_public_keys)
+    }
+
+    fn pks_and_sks_complete(&self) -> Result<ValidNodePublicKeys, PksAndSksCompleteError> {
+        self.csp_vault.pks_and_sks_complete()
     }
 }
 

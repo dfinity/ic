@@ -6,9 +6,9 @@ use crate::vault::api::{
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspPublicKeyStoreError,
     CspSecretKeyStoreContainsError, CspThresholdSignatureKeygenError, CspTlsKeygenError,
     CspTlsSignError, IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault,
-    PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault,
-    PublicRandomSeedGenerator, PublicRandomSeedGeneratorError, SecretKeyStoreCspVault,
-    ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault,
+    PksAndSksCompleteError, PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault,
+    PublicKeyStoreCspVault, PublicRandomSeedGenerator, PublicRandomSeedGeneratorError,
+    SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault,
 };
 use crate::vault::remote_csp_vault::codec::{CspVaultClientObserver, ObservableCodec};
 use crate::vault::remote_csp_vault::{remote_vault_codec_builder, TarpcCspVaultClient};
@@ -52,6 +52,7 @@ use tokio::net::UnixStream;
 #[cfg(test)]
 use ic_config::logger::Config as LoggerConfig;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 #[cfg(test)]
 use ic_logger::new_replica_logger_from_config;
 #[cfg(test)]
@@ -338,6 +339,18 @@ impl PublicAndSecretKeyStoreCspVault for RemoteCspVault {
         )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
             Err(PksAndSksContainsErrors::TransientInternalError(
+                rpc_error.to_string(),
+            ))
+        })
+    }
+
+    fn pks_and_sks_complete(&self) -> Result<ValidNodePublicKeys, PksAndSksCompleteError> {
+        self.tokio_block_on(
+            self.tarpc_csp_client
+                .pks_and_sks_complete(context_with_timeout(self.rpc_timeout)),
+        )
+        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
+            Err(PksAndSksCompleteError::TransientInternalError(
                 rpc_error.to_string(),
             ))
         })

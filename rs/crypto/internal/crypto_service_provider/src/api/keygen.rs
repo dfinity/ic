@@ -1,9 +1,11 @@
 mod errors;
 
 pub use errors::*;
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 
 use super::super::types::{CspPop, CspPublicKey};
 use crate::key_id::KeyId;
+use crate::vault::api::PksAndSksCompleteError;
 use crate::{ExternalPublicKeys, PksAndSksContainsErrors};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::{CryptoError, CurrentNodePublicKeys};
@@ -104,6 +106,8 @@ pub trait CspPublicAndSecretKeyStoreChecker {
         &self,
         external_public_keys: ExternalPublicKeys,
     ) -> Result<(), PksAndSksContainsErrors>;
+
+    fn pks_and_sks_complete(&self) -> Result<ValidNodePublicKeys, PksAndSksCompleteError>;
 }
 
 /// A trait that exposes the information about node public keys and key

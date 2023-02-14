@@ -1,7 +1,8 @@
 //! Static crypto utility methods.
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::{
-    CspCreateMEGaKeyError, CspSecretKeyStoreChecker, NodePublicKeyData,
+    CspCreateMEGaKeyError, CspPublicAndSecretKeyStoreChecker, CspSecretKeyStoreChecker,
+    NodePublicKeyData,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::keygen::utils::{
@@ -23,10 +24,12 @@ use std::sync::Arc;
 use tempfile::TempDir;
 
 use ic_crypto_internal_csp::types::conversions::CspPopFromPublicKeyProtoError;
+use ic_crypto_internal_csp::vault::api::PksAndSksCompleteError;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_interfaces::crypto::ErrorReproducibility;
 
 #[cfg(test)]
@@ -183,6 +186,44 @@ pub fn get_node_keys_or_generate_if_missing(
             )
         }
         Err(e) => panic!("Node contains inconsistent key material: {}", e),
+    }
+}
+
+//TODO CRP-1772: replace get_node_keys_or_generate_if_missing with this method and provide tests
+pub fn generate_required_node_keys(
+    config: &CryptoConfig,
+    tokio_runtime_handle: Option<tokio::runtime::Handle>,
+) -> Result<ValidNodePublicKeys, NodeKeyGenerationError> {
+    let csp = csp_for_config(config, tokio_runtime_handle);
+    match csp.pks_and_sks_complete() {
+        Ok(valid_public_keys) => Ok(valid_public_keys),
+        Err(PksAndSksCompleteError::EmptyPublicKeyStore) => {
+            //TODO CRP-1772: generate public keys
+            csp.pks_and_sks_complete().map_err(|error| match error {
+                PksAndSksCompleteError::TransientInternalError(transient_error) => {
+                    NodeKeyGenerationError::TransientInternalError(transient_error)
+                }
+                _ => panic!("Node contains inconsistent key material: {:?}", error),
+            })
+        }
+        Err(PksAndSksCompleteError::TransientInternalError(transient_error)) => Err(
+            NodeKeyGenerationError::TransientInternalError(transient_error),
+        ),
+        Err(error) => panic!("Node contains inconsistent key material: {:?}", error),
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum NodeKeyGenerationError {
+    /// If a transient internal error occurs, e.g., an RPC error communicating with the remote vault
+    TransientInternalError(String),
+}
+
+impl ErrorReproducibility for NodeKeyGenerationError {
+    fn is_reproducible(&self) -> bool {
+        match self {
+            NodeKeyGenerationError::TransientInternalError(_) => false,
+        }
     }
 }
 
