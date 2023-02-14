@@ -60,7 +60,8 @@ use ic_sns_swap::{pb::v1::RefreshBuyerTokensResponse, swap::principal_to_subacco
 use ic_sns_test_utils::{
     now_seconds,
     state_test_helpers::{
-        canister_status, get_open_ticket, new_sale_ticket, notify_payment_failure,
+        canister_status, get_open_ticket, get_sns_sale_parameters,
+        list_community_fund_participants, new_sale_ticket, notify_payment_failure,
         participate_in_swap, refresh_buyer_token, send_participation_funds,
         sns_governance_get_nervous_system_parameters, sns_governance_list_neurons,
         sns_root_register_dapp_canisters, swap_get_state,
@@ -3337,6 +3338,68 @@ fn test_deletion_of_sale_ticket() {
             icp_ledger_account_balance_e8s: ticket.amount_icp_e8s - 1
                 + ticket_new.amount_icp_e8s * 2
         }
+    );
+}
+
+#[test]
+fn test_get_sale_parameters() {
+    // Step 1: Prepare the world.
+    let mut state_machine = StateMachine::new();
+
+    let direct_participant_principal_ids = vec![*TEST_USER1_PRINCIPAL];
+    let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(100 * E8);
+    let neuron_basket_count = 3;
+    let sns_canister_ids = begin_swap(
+        &mut state_machine,
+        &direct_participant_principal_ids,
+        &[], // additional_nns_neurons
+        planned_participation_amount_per_account,
+        ExplosiveTokens::from_e8s(0), // planned_community_fund_participation_amount
+        neuron_basket_count,
+        DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR,
+        do_nothing_special_before_proposal_is_adopted,
+    )
+    .0;
+
+    assert!(get_sns_sale_parameters(
+        &state_machine,
+        &sns_canister_ids.swap(),
+        &TEST_USER1_PRINCIPAL,
+    )
+    .params
+    .is_some());
+}
+
+#[test]
+fn test_list_community_fund_participants() {
+    // Step 1: Prepare the world.
+    let mut state_machine = StateMachine::new();
+
+    let direct_participant_principal_ids = vec![*TEST_USER1_PRINCIPAL];
+    let planned_participation_amount_per_account = ExplosiveTokens::from_e8s(100 * E8);
+    let neuron_basket_count = 3;
+    let sns_canister_ids = begin_swap(
+        &mut state_machine,
+        &direct_participant_principal_ids,
+        &[], // additional_nns_neurons
+        planned_participation_amount_per_account,
+        ExplosiveTokens::from_e8s(0), // planned_community_fund_participation_amount
+        neuron_basket_count,
+        DEFAULT_MAX_COMMUNITY_FUND_RELATIVE_ERROR,
+        do_nothing_special_before_proposal_is_adopted,
+    )
+    .0;
+
+    assert_eq!(
+        list_community_fund_participants(
+            &state_machine,
+            &sns_canister_ids.swap(),
+            &TEST_USER1_PRINCIPAL,
+            &0,
+            &0
+        )
+        .cf_participants,
+        vec![]
     );
 }
 
