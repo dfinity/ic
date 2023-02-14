@@ -559,11 +559,19 @@ pub async fn assert_no_transaction(agent: &Icrc1Agent, logger: &Logger) {
     )
 }
 
-/// Assert that calling update_balance will throw an error.
+/// Assert that calling update_balance does not detect new UTXOs.
 pub async fn assert_no_new_utxo(agent: &CkBtcMinterAgent, subaccount: &Subaccount) {
-    assert_update_balance_error(agent, subaccount, UpdateBalanceError::NoNewUtxos).await;
+    let result = agent
+        .update_balance(UpdateBalanceArgs {
+            owner: None,
+            subaccount: Some(*subaccount),
+        })
+        .await
+        .expect("Error while calling update_balance");
+    matches!(result, Err(UpdateBalanceError::NoNewUtxos { .. }));
 }
 
+/// Assert that calling update_balance returns a transient error.
 pub async fn assert_temporarily_unavailable(agent: &CkBtcMinterAgent, subaccount: &Subaccount) {
     let result = agent
         .update_balance(UpdateBalanceArgs {
@@ -573,21 +581,6 @@ pub async fn assert_temporarily_unavailable(agent: &CkBtcMinterAgent, subaccount
         .await
         .expect("Error while calling update_balance");
     matches!(result, Err(UpdateBalanceError::TemporarilyUnavailable(..)));
-}
-
-pub async fn assert_update_balance_error(
-    agent: &CkBtcMinterAgent,
-    subaccount: &Subaccount,
-    expected_error: UpdateBalanceError,
-) {
-    let result = agent
-        .update_balance(UpdateBalanceArgs {
-            owner: None,
-            subaccount: Some(*subaccount),
-        })
-        .await
-        .expect("Error while calling update_balance");
-    assert_eq!(result, Err(expected_error));
 }
 
 /// Ensure wallet existence by creating one if required.

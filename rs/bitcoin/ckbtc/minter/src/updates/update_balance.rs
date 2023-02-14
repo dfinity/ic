@@ -2,7 +2,7 @@ use crate::logs::P1;
 use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_btc_types::GetUtxosError;
+use ic_btc_types::{GetUtxosError, GetUtxosResponse};
 use ic_canister_log::log;
 use ic_icrc1::{
     endpoints::{TransferArg, TransferError},
@@ -39,7 +39,13 @@ enum ErrorCode {
 pub enum UpdateBalanceError {
     TemporarilyUnavailable(String),
     AlreadyProcessing,
-    NoNewUtxos,
+    NoNewUtxos {
+        /// If there are new UTXOs that do not have enough
+        /// confirmations yet, this field will contain the number of
+        /// confirmations as observed by the minter.
+        current_confirmations: Option<u32>,
+        required_confirmations: u32,
+    },
     GenericError {
         error_code: u64,
         error_message: String,
@@ -110,7 +116,9 @@ pub async fn update_balance(
 
     log!(P1, "Fetching utxos for address {}", address);
 
-    let utxos = get_utxos(btc_network, &address, min_confirmations).await?;
+    let utxos = get_utxos(btc_network, &address, min_confirmations)
+        .await?
+        .utxos;
 
     let new_utxos: Vec<_> = state::read_state(|s| {
         let maybe_existing_utxos = s.utxos_state_addresses.get(&caller_account);
@@ -137,7 +145,26 @@ pub async fn update_balance(
         // We bail out early if there are no UTXOs to avoid creating a new entry
         // in the UTXOs map.  If we allowed empty entries, malicious callers
         // could exhaust the canister memory.
-        return Err(UpdateBalanceError::NoNewUtxos);
+
+        // We get the entire list of UTXOs again with a zero
+        // confirmation limit so that we can indicate the approximate
+        // wait time to the caller.
+        let GetUtxosResponse {
+            tip_height, utxos, ..
+        } = get_utxos(btc_network, &address, /*min_confirmations=*/ 0).await?;
+
+        let current_confirmations = utxos
+            .iter()
+            .filter_map(|u| {
+                (tip_height < u.height.saturating_add(min_confirmations))
+                    .then_some(tip_height - u.height)
+            })
+            .max();
+
+        return Err(UpdateBalanceError::NoNewUtxos {
+            current_confirmations,
+            required_confirmations: min_confirmations,
+        });
     }
 
     match btc_network {
