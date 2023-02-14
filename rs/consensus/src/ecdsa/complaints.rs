@@ -103,7 +103,7 @@ impl EcdsaComplaintHandlerImpl {
     ) -> EcdsaChangeSet {
         let active_transcripts = self.active_transcripts(block_reader);
 
-        // Collection of duplicate <complainer Id, transcript Id, dealer Id>
+        // Collection of validated complaints <complainer Id, transcript Id, dealer Id>
         let mut validated_complaints = BTreeSet::new();
 
         let mut ret = Vec::new();
@@ -223,7 +223,7 @@ impl EcdsaComplaintHandlerImpl {
     ) -> EcdsaChangeSet {
         let active_transcripts = self.active_transcripts(block_reader);
 
-        // Collection of validated openings
+        // Collection of validated openings <opener Id, transcript Id, dealer Id>
         let mut validated_openings = BTreeSet::new();
 
         let mut ret = Vec::new();

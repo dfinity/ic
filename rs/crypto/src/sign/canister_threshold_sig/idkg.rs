@@ -31,8 +31,6 @@ pub use utils::{
     MegaKeyFromRegistryError,
 };
 
-/// Currently, these are implemented with noop stubs,
-/// while the true implementation is in progress.
 impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
     fn create_dealing(
         &self,

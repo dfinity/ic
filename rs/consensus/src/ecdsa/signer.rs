@@ -66,7 +66,8 @@ impl EcdsaSignerImpl {
         }
     }
 
-    /// Generates signature shares for the newly added signature requests
+    /// Generates signature shares for the newly added signature requests.
+    /// The requests for new signatures come from the latest finalized block.
     fn send_signature_shares(
         &self,
         ecdsa_pool: &dyn EcdsaPool,
