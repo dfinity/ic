@@ -18,12 +18,6 @@ ipv6_prefix=""
 ipv6_subnet=""
 ipv6_gateway=""
 
-function prevalidate_config() {
-    if [ $(cat "${SSH_AUTHORIZED_KEYS}/admin" | sed 's/#.*//' | sed '/^[[:space:]]*$/d' | wc -l) == 0 ]; then
-        log_and_reboot_on_error "1" "No admin SSH key defined in '${SSH_AUTHORIZED_KEYS}/admin'."
-    fi
-}
-
 function create_config_tmp() {
     if [ ! -e "${CONFIG_TMP}" ]; then
         # Create fresh config tmp directory
@@ -105,7 +99,6 @@ function verify_variables() {
 main() {
     source /opt/ic/bin/functions.sh
     log_start "$(basename $0)"
-    prevalidate_config
     create_config_tmp
     clone_config
     normalize_config
