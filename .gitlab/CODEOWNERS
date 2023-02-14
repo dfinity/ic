@@ -204,7 +204,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/test_utilities/src/crypto/          @dfinity-lab/teams/crypto-owners
 /rs/test_utilities/src/cycles_account_manager.rs         @dfinity-lab/teams/execution-owners
 /rs/test_utilities/src/execution_environment.rs         @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
-/rs/test_utilities/src/wasm_instance.rs         @dfinity-lab/teams/runtime-owners
+/rs/test_utilities/src/wasmtime_instance.rs         @dfinity-lab/teams/runtime-owners
 /rs/tests/                              @dfinity-lab/teams/ic-testing-verification
 /rs/tests/bin/basic_health_test.rs        @dfinity-lab/teams/ic-testing-verification
 /rs/tests/bin/boundary_node_integration_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
