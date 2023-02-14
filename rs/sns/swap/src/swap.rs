@@ -2237,27 +2237,43 @@ fn compute_participation_increment(
     user_participation: u64,
     requested_increment: u64,
 ) -> Result<u64, (u64, u64)> {
+    // Check that there are available tokens available.
     if tot_participation >= max_tot_participation {
         return Err((0, 0));
     }
+    // The previous check guarantees that max_available_increment > 0
     let max_available_increment = max_tot_participation - tot_participation;
+
+    // Check that the user can reach min_user_participation with the next
+    // ticket. We do not want users to participate less than min_user_participation
+    // even if that's what's remaining in the sale.
     if user_participation.saturating_add(max_available_increment) < min_user_participation {
         return Err((0, 0));
     }
+
+    // If we reached this point then the user can participate in the sale.
+    // Next we check that the increment requested by the user is valid, that
+    // is that it would put the user participation within the min and max
+    // user participation (included). We also check that the increment is strictly
+    // bigger than zero because zero is not a valid increment.
     let requested_user_participation = user_participation.saturating_add(requested_increment);
     if requested_increment == 0
         || requested_user_participation < min_user_participation
         || requested_user_participation > max_user_participation
     {
-        let min_user_increment =
-            std::cmp::max(1, min_user_participation.saturating_sub(user_participation));
-        let max_user_increment = std::cmp::min(
-            max_user_participation.saturating_sub(user_participation),
-            max_available_increment,
-        );
+        let min_user_increment = 1
+            .max(min_user_participation.saturating_sub(user_participation))
+            .min(max_available_increment);
+        let max_user_increment = max_user_participation
+            .saturating_sub(user_participation)
+            .min(max_available_increment);
         return Err((min_user_increment, max_user_increment));
     }
-    Ok(std::cmp::min(max_available_increment, requested_increment))
+
+    // At this point both max_available_increment and requested_increment
+    // are valid increments. We take the min between the two so that the
+    // user cannot participate with more tokens than what's remaining.
+    Ok(max_available_increment.min(requested_increment))
 }
 
 pub fn is_valid_principal(p: &str) -> bool {
@@ -2992,6 +3008,16 @@ mod tests {
                 requested_increment: 1,
                 expected_result: Ok(1),
             },
+            // happy case 1
+            ComputeParticipationIncrementScenario {
+                tot_participation: 40,
+                max_tot_participation: 50,
+                min_user_participation: 2,
+                max_user_participation: 10,
+                user_participation: 0,
+                requested_increment: 3,
+                expected_result: Ok(3),
+            },
             // no more tokens available in the sale
             ComputeParticipationIncrementScenario {
                 tot_participation: 100,
@@ -3031,6 +3057,18 @@ mod tests {
                 user_participation: 0,
                 requested_increment: 1,
                 expected_result: Err((2, 10)),
+            },
+            // The actual_increment here is 10-9 and the new participation
+            // would be only 1 which is less than min_user_participation
+            // required to be part of the sale.
+            ComputeParticipationIncrementScenario {
+                tot_participation: 9,
+                max_tot_participation: 10,
+                min_user_participation: 2,
+                max_user_participation: 10,
+                user_participation: 0,
+                requested_increment: 2,
+                expected_result: Err((0, 0)),
             },
         ];
         for scenario in scenarios {
