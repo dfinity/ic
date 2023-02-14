@@ -442,8 +442,7 @@ statesync-experiment:
     paths:
       - $CI_JOB_STAGE/$CI_JOB_NAME
   tags:
-    - ic-prod-tests
-    - docker
+    - dfinity
     - ubuntu
   timeout: 1 hour
 
@@ -634,8 +633,7 @@ xnet-nightly:
     paths:
       - $CI_JOB_STAGE/$CI_JOB_NAME
   tags:
-    - ic-prod-tests
-    - docker
+    - dfinity
     - ubuntu
   timeout: 1 hour
 
