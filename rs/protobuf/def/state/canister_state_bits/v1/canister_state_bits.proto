@@ -111,6 +111,7 @@ enum CustomSectionType {
 message WasmCustomSection {
     CustomSectionType visibility = 1;
     bytes content = 2;
+    optional bytes hash = 3;
 }
 
 message WasmMetadata {

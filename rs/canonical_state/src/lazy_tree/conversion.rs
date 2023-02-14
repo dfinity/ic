@@ -396,7 +396,7 @@ impl<'a> LazyFork<'a> for ReplyStatus<'a> {
     fn edge(&self, label: &Label) -> Option<LazyTree<'a>> {
         match label.as_bytes() {
             STATUS_LABEL => Some(string("replied")),
-            REPLY_LABEL => Some(Blob(self.0)),
+            REPLY_LABEL => Some(Blob(self.0, None)),
             _ => None,
         }
     }
@@ -532,8 +532,8 @@ impl<'a> CanisterFork<'a> {
         let canister = self.canister;
         match canister.execution_state.as_ref() {
             Some(execution_state) => match label {
-                CERTIFIED_DATA_LABEL => Some(Blob(&canister.system_state.certified_data[..])),
-                CONTROLLER_LABEL => Some(Blob(canister.system_state.controller().as_slice())),
+                CERTIFIED_DATA_LABEL => Some(Blob(&canister.system_state.certified_data[..], None)),
+                CONTROLLER_LABEL => Some(Blob(canister.system_state.controller().as_slice(), None)),
                 CONTROLLERS_LABEL => Some(blob(move || {
                     encode_controllers(&canister.system_state.controllers)
                 })),
@@ -544,7 +544,7 @@ impl<'a> CanisterFork<'a> {
                 _ => None,
             },
             None => match label {
-                CONTROLLER_LABEL => Some(Blob(canister.system_state.controller().as_slice())),
+                CONTROLLER_LABEL => Some(Blob(canister.system_state.controller().as_slice(), None)),
                 CONTROLLERS_LABEL => Some(blob(move || {
                     encode_controllers(&canister.system_state.controllers)
                 })),
@@ -633,7 +633,7 @@ fn subnets_as_tree(
         mk_tree: move |subnet_id, subnet_topology, certification_version| {
             fork(
                 FiniteMap::default()
-                    .with_tree("public_key", Blob(&subnet_topology.public_key[..]))
+                    .with_tree("public_key", Blob(&subnet_topology.public_key[..], None))
                     .with_tree_if(
                         certification_version > CertificationVersion::V2,
                         "canister_ranges",
@@ -658,6 +658,6 @@ fn canister_metadata_as_tree(
     fork(MapTransformFork {
         map: execution_state.metadata.custom_sections(),
         certification_version,
-        mk_tree: |_name, section, _version| Blob(section.content.as_slice()),
+        mk_tree: |_name, section, _version| Blob(section.content(), Some(section.hash())),
     })
 }

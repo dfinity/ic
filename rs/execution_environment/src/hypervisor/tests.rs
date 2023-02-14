@@ -3465,7 +3465,7 @@ fn can_extract_exported_custom_sections() {
             .custom_sections()
             .get("candid:service")
             .unwrap()
-            .visibility,
+            .visibility(),
         CustomSectionType::Public
     );
     assert_eq!(
@@ -3474,7 +3474,7 @@ fn can_extract_exported_custom_sections() {
             .custom_sections()
             .get("candid:args")
             .unwrap()
-            .visibility,
+            .visibility(),
         CustomSectionType::Private
     );
     assert_eq!(
@@ -3483,7 +3483,7 @@ fn can_extract_exported_custom_sections() {
             .custom_sections()
             .get("motoko:stable-types")
             .unwrap()
-            .visibility,
+            .visibility(),
         CustomSectionType::Private
     );
     // Only the valid custom sections names are extracted: icp:public <name> or icp:private <name>.

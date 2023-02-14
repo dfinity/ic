@@ -703,10 +703,19 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> HashTree {
         par_strategy: &mut ParStrategy,
     ) -> NodeId {
         match t {
-            LazyTree::Blob(b) => {
+            LazyTree::Blob(b, None) => {
                 let mut h = Hasher::for_domain("ic-hashtree-leaf");
                 h.update(b);
                 ht.new_leaf(h.finalize())
+            }
+            LazyTree::Blob(_b, Some(cached_hash)) => {
+                #[cfg(debug_assertions)]
+                {
+                    let mut h = Hasher::for_domain("ic-hashtree-leaf");
+                    h.update(_b);
+                    assert_eq!(h.finalize(), Digest(*cached_hash));
+                }
+                ht.new_leaf(Digest(*cached_hash))
             }
             LazyTree::LazyBlob(f) => {
                 let b = f();
@@ -848,13 +857,14 @@ pub fn crypto_hash_lazy_tree(t: &LazyTree<'_>) -> crypto::HashTree {
 
     fn go(t: &LazyTree<'_>) -> HashTree {
         match t {
-            LazyTree::Blob(b) => {
+            LazyTree::Blob(b, None) => {
                 let mut h = Hasher::for_domain("ic-hashtree-leaf");
                 h.update(b);
                 HashTree::Leaf {
                     digest: h.finalize(),
                 }
             }
+            LazyTree::Blob(_, Some(h)) => HashTree::Leaf { digest: Digest(*h) },
             LazyTree::LazyBlob(f) => {
                 let b = f();
                 let mut h = Hasher::for_domain("ic-hashtree-leaf");

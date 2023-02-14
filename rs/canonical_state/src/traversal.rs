@@ -5,7 +5,7 @@ use ic_replicated_state::ReplicatedState;
 /// Traverses lazy tree using specified visitor.
 fn traverse_lazy_tree<'a, V: Visitor>(t: &LazyTree<'a>, v: &mut V) -> Result<(), V::Output> {
     match t {
-        LazyTree::Blob(b) => v.visit_blob(b),
+        LazyTree::Blob(b, _) => v.visit_blob(b),
         LazyTree::LazyBlob(thunk) => {
             let b = thunk();
             v.visit_blob(&b)
@@ -231,18 +231,9 @@ mod tests {
         let wasm_memory = Memory::new(PageMap::new_for_testing(), NumWasmPages::from(2));
 
         let metadata = btreemap! {
-            String::from("dummy1") => CustomSection {
-                visibility: CustomSectionType::Private,
-                content: vec![0, 2],
-            },
-            String::from("dummy2") => CustomSection {
-                visibility: CustomSectionType::Public,
-                content: vec![2, 1],
-            },
-            String::from("dummy3") => CustomSection {
-                visibility: CustomSectionType::Public,
-                content: vec![8, 9],
-            },
+            String::from("dummy1") => CustomSection::new(CustomSectionType::Private, vec![0, 2]),
+            String::from("dummy2") => CustomSection::new(CustomSectionType::Public, vec![2, 1]),
+            String::from("dummy3") => CustomSection::new(CustomSectionType::Public, vec![8, 9]),
         };
 
         let execution_state = ExecutionState {

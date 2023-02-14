@@ -8065,6 +8065,7 @@ dependencies = [
  "ic-certification-version",
  "ic-config",
  "ic-constants",
+ "ic-crypto-sha",
  "ic-error-types",
  "ic-ic00-types",
  "ic-interfaces",

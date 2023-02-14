@@ -545,8 +545,8 @@ fn can_validate_module_with_custom_sections() {
     assert_eq!(
         validation_details.wasm_metadata,
         WasmMetadata::new(btreemap! {
-            "name1".to_string() => CustomSection {content: vec![0, 1] , visibility: CustomSectionType::Private},
-            "name2".to_string() => CustomSection {content: vec![0, 2] , visibility: CustomSectionType::Public}
+            "name1".to_string() => CustomSection::new(CustomSectionType::Private, vec![0, 1]),
+            "name2".to_string() => CustomSection::new(CustomSectionType::Public, vec![0, 2]),
         })
     );
 }

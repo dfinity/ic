@@ -10,7 +10,7 @@ pub type TreePattern = LabeledTree<()>;
 
 fn materialize(lazy_tree: &LazyTree<'_>) -> Option<LabeledTree<Vec<u8>>> {
     match lazy_tree {
-        Blob(blob) => Some(LabeledTree::Leaf(blob.to_vec())),
+        Blob(blob, _) => Some(LabeledTree::Leaf(blob.to_vec())),
         LazyBlob(f) => Some(LabeledTree::Leaf(f().to_vec())),
         LazyFork(f) => {
             let children: Vec<_> = f
