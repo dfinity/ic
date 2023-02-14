@@ -100,6 +100,8 @@ members = [
   "http_endpoints/public",
   "http_endpoints/metrics",
   "http_utils",
+  "ic_os/sev",
+  "ic_os/sev_interfaces",
   "ic_p8s_service_discovery",
   "ic_p8s_service_discovery/log",
   "identity",
