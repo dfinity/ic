@@ -24,6 +24,7 @@ use ic_interfaces::{
     messaging::MessageRouting,
     validation::ValidationResult,
 };
+use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{CertificationScope, StateHashError, StateManager, StateReader};
 use ic_logger::ReplicaLogger;
@@ -75,13 +76,14 @@ use ic_types::messages::{CallbackId, Certificate};
 use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
 use ic_types::{
-    batch::{Batch, BatchPayload, IngressPayload},
+    batch::{Batch, BatchPayload, IngressPayload, XNetPayload},
     canister_http::CanisterHttpRequestContext,
     consensus::certification::Certification,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress, UserQuery,
     },
     time::current_time_and_expiry_time,
+    xnet::StreamIndex,
     CryptoHashOfPartialState, Height, NodeId, NumberOfNodes, Randomness, RegistryVersion,
 };
 pub use ic_types::{
@@ -90,6 +92,7 @@ pub use ic_types::{
     time::Time,
     CanisterId, CryptoHashOfState, Cycles, PrincipalId, SubnetId, UserId,
 };
+use maplit::btreemap;
 use serde::Serialize;
 pub use slog::Level;
 use std::io::stderr;
@@ -122,6 +125,7 @@ fn make_nodes_registry(
     nns_subnet_id: SubnetId,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
+    mut routing_table: RoutingTable,
     node_ids: &[NodeId],
     ecdsa_keys: &[EcdsaKeyId],
     features: SubnetFeatures,
@@ -162,8 +166,9 @@ fn make_nodes_registry(
             .unwrap();
     }
 
-    let mut routing_table = RoutingTable::new();
-    routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
+    if routing_table.is_empty() {
+        routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
+    }
     let pb_routing_table = PbRoutingTable::from(routing_table);
     data_provider
         .add(
@@ -317,6 +322,7 @@ pub struct StateMachineBuilder {
     subnet_size: usize,
     nns_subnet_id: SubnetId,
     subnet_id: SubnetId,
+    routing_table: RoutingTable,
     use_cost_scaling_flag: bool,
     ecdsa_keys: Vec<EcdsaKeyId>,
     features: SubnetFeatures,
@@ -336,6 +342,7 @@ impl StateMachineBuilder {
             subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
             nns_subnet_id: own_subnet_id,
             subnet_id: own_subnet_id,
+            routing_table: RoutingTable::new(),
             ecdsa_keys: Vec::new(),
             features: SubnetFeatures::default(),
         }
@@ -385,6 +392,13 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_routing_table(self, routing_table: RoutingTable) -> Self {
+        Self {
+            routing_table,
+            ..self
+        }
+    }
+
     pub fn with_subnet_id(self, subnet_id: SubnetId) -> Self {
         Self { subnet_id, ..self }
     }
@@ -417,6 +431,7 @@ impl StateMachineBuilder {
             self.subnet_size,
             self.nns_subnet_id,
             self.subnet_id,
+            self.routing_table,
             self.use_cost_scaling_flag,
             self.ecdsa_keys,
             self.features,
@@ -456,6 +471,7 @@ impl StateMachine {
         subnet_size: usize,
         nns_subnet_id: SubnetId,
         subnet_id: SubnetId,
+        routing_table: RoutingTable,
         use_cost_scaling_flag: bool,
         ecdsa_keys: Vec<EcdsaKeyId>,
         features: SubnetFeatures,
@@ -481,6 +497,7 @@ impl StateMachine {
             nns_subnet_id,
             subnet_id,
             subnet_type,
+            routing_table,
             &node_ids,
             &ecdsa_keys,
             features,
@@ -649,6 +666,39 @@ impl StateMachine {
         self.checkpoints_enabled.set(enabled)
     }
 
+    /// Returns the latest state.
+    pub fn get_latest_state(&self) -> Arc<ReplicatedState> {
+        self.state_manager.get_latest_state().take()
+    }
+
+    /// Generates a Xnet payload to a remote subnet.
+    pub fn generate_xnet_payload(
+        &self,
+        remote_subnet_id: SubnetId,
+        witness_begin: Option<StreamIndex>,
+        msg_begin: Option<StreamIndex>,
+        msg_limit: Option<usize>,
+        byte_limit: Option<usize>,
+    ) -> Result<XNetPayload, EncodeStreamError> {
+        if self.state_manager.latest_state_height() > self.state_manager.latest_certified_height() {
+            let state_hashes = self.state_manager.list_state_hashes_to_certify();
+            let (height, hash) = state_hashes.last().unwrap();
+            self.state_manager
+                .deliver_state_certification(self.certify_hash(height, hash));
+        }
+        self.state_manager
+            .encode_certified_stream_slice(
+                remote_subnet_id,
+                witness_begin,
+                msg_begin,
+                msg_limit,
+                byte_limit,
+            )
+            .map(|certified_stream| XNetPayload {
+                stream_slices: btreemap! { self.get_subnet_id() => certified_stream },
+            })
+    }
+
     /// Triggers a single round of execution without any new inputs.  The state
     /// machine will invoke heartbeats and make progress on pending async calls.
     pub fn tick(&self) {
@@ -690,7 +740,7 @@ impl StateMachine {
         }
     }
 
-    fn execute_block_with_ingress_payload(&self, ingress: IngressPayload) {
+    fn execute_block_with_batch_payload(&self, payload: BatchPayload) {
         let batch_number = self.message_routing.expected_batch_height();
 
         let mut seed = [0u8; 32];
@@ -700,10 +750,7 @@ impl StateMachine {
         let batch = Batch {
             batch_number,
             requires_full_state_hash: self.checkpoints_enabled.get(),
-            payload: BatchPayload {
-                ingress,
-                ..BatchPayload::default()
-            },
+            payload,
             randomness: Randomness::from(seed),
             ecdsa_subnet_public_keys: self.ecdsa_subnet_public_keys.clone(),
             registry_version: self.registry_client.get_latest_version(),
@@ -714,6 +761,20 @@ impl StateMachine {
             .deliver_batch(batch)
             .expect("MR queue overflow");
         self.await_height(batch_number);
+    }
+
+    fn execute_block_with_ingress_payload(&self, ingress: IngressPayload) {
+        self.execute_block_with_batch_payload(BatchPayload {
+            ingress,
+            ..BatchPayload::default()
+        });
+    }
+
+    pub fn execute_block_with_xnet_payload(&self, xnet: XNetPayload) {
+        self.execute_block_with_batch_payload(BatchPayload {
+            xnet,
+            ..BatchPayload::default()
+        });
     }
 
     fn await_height(&self, h: Height) {
