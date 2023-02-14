@@ -17,7 +17,7 @@ rust_library(
         "//rs/https_outcalls/client",
         "//rs/ingress_manager",
         "//rs/interfaces",
-        "//rs/interfaces/canister_http_adapter_client",
+        "//rs/interfaces/https_outcalls_adapter_client",
         "//rs/interfaces/p2p",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",

@@ -4842,8 +4842,8 @@ dependencies = [
  "ic-ic00-types",
  "ic-ingress-manager",
  "ic-interfaces",
- "ic-interfaces-canister-http-adapter-client",
  "ic-interfaces-certified-stream-store",
+ "ic-interfaces-https-outcalls-adapter-client",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-interfaces-state-manager-mocks",
@@ -6270,7 +6270,7 @@ dependencies = [
  "ic-https-outcalls-service",
  "ic-ic00-types",
  "ic-interfaces",
- "ic-interfaces-canister-http-adapter-client",
+ "ic-interfaces-https-outcalls-adapter-client",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -6624,14 +6624,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-interfaces-canister-http-adapter-client"
+name = "ic-interfaces-certified-stream-store"
 version = "0.8.0"
 dependencies = [
  "ic-types",
 ]
 
 [[package]]
-name = "ic-interfaces-certified-stream-store"
+name = "ic-interfaces-https-outcalls-adapter-client"
 version = "0.8.0"
 dependencies = [
  "ic-types",
@@ -8058,7 +8058,7 @@ dependencies = [
  "ic-https-outcalls-adapter-client",
  "ic-ingress-manager",
  "ic-interfaces",
- "ic-interfaces-canister-http-adapter-client",
+ "ic-interfaces-https-outcalls-adapter-client",
  "ic-interfaces-p2p",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",

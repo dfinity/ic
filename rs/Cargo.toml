@@ -106,7 +106,7 @@ members = [
   "ingress_manager",
   "interfaces",
   "interfaces/bitcoin_adapter_client",
-  "interfaces/canister_http_adapter_client",
+  "interfaces/https_outcalls_adapter_client",
   "interfaces/state_manager",
   "interfaces/state_manager/mocks",
   "interfaces/p2p",

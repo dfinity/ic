@@ -115,7 +115,7 @@ pub fn create_networking_stack(
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
     canister_http_adapter_client:
-        ic_interfaces_canister_http_adapter_client::CanisterHttpAdapterClient,
+        ic_interfaces_https_outcalls_adapter_client::CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
 ) -> (IngressIngestionService, P2PThreadJoiner) {
     let advert_subscriber = AdvertBroadcaster::new(log.clone(), &metrics_registry);
@@ -217,7 +217,7 @@ fn setup_artifact_manager(
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
     registry_poll_delay_duration_ms: u64,
     advert_broadcaster: AdvertBroadcaster,
-    canister_http_adapter_client: ic_interfaces_canister_http_adapter_client::CanisterHttpAdapterClient,
+    canister_http_adapter_client: ic_interfaces_https_outcalls_adapter_client::CanisterHttpAdapterClient,
 ) -> std::io::Result<Arc<dyn ArtifactManager>> {
     // Initialize the time source.
     let time_source = Arc::new(SysTimeSource::new());

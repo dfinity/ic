@@ -7,7 +7,7 @@ use crate::{
     consensus::{utils::registry_version_at_height, ConsensusCrypto, Membership},
 };
 use ic_interfaces::{canister_http::*, consensus_pool::ConsensusPoolCache};
-use ic_interfaces_canister_http_adapter_client::*;
+use ic_interfaces_https_outcalls_adapter_client::*;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::*;
