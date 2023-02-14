@@ -214,7 +214,7 @@ impl BackupHelper {
         ))
     }
 
-    fn rsync_spool(&self, node_ip: &IpAddr) {
+    fn rsync_spool(&self, node_ip: &IpAddr) -> bool {
         let _guard = self
             .artifacts_guard
             .lock()
@@ -237,7 +237,7 @@ impl BackupHelper {
                 &self.spool_dir().into_os_string(),
                 &["-qam", "--append-verify"],
             ) {
-                Ok(_) => return,
+                Ok(_) => return true,
                 Err(e) => warn!(
                     self.log,
                     "Problem syncing backup directory with host: {} : {}", node_ip, e
@@ -246,8 +246,7 @@ impl BackupHelper {
             sleep_secs(60);
         }
         warn!(self.log, "Didn't sync at all with host: {}", node_ip);
-        self.notification_client
-            .report_failure_slack("Couldn't pull artifacts from the nodes!".to_string());
+        false
     }
 
     fn rsync_config(&self, node_ip: &IpAddr, replica_version: &ReplicaVersion) {
@@ -307,14 +306,20 @@ impl BackupHelper {
         }
     }
 
-    pub fn sync_files(&self, nodes: &Vec<IpAddr>) {
+    pub fn sync_files(&self, nodes: &[IpAddr]) {
         let start_time = Instant::now();
-        for n in nodes {
-            self.rsync_spool(n);
+        let total_succeeded: usize = nodes
+            .iter()
+            .map(|node| self.rsync_spool(node) as usize)
+            .sum();
+        if 2 * total_succeeded >= nodes.len() {
+            let duration = start_time.elapsed();
+            let minutes = duration.as_secs() / 60;
+            self.notification_client.push_metrics_sync_time(minutes);
+        } else {
+            self.notification_client
+                .report_failure_slack("Couldn't pull artifacts from the nodes!".to_string());
         }
-        let duration = start_time.elapsed();
-        let minutes = duration.as_secs() / 60;
-        self.notification_client.push_metrics_sync_time(minutes);
     }
 
     pub fn create_spool_dir(&self) {
