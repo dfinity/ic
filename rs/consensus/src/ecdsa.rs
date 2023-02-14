@@ -34,10 +34,10 @@
 //! BLS signatures.
 //!
 //! Consensus orchestrates the creation of these transcripts. Blocks contain
-//! configs indicating which transcripts should be created. Such configs come in
-//! different types, because some transcripts should share a random value, while
-//! others need to share the product of two other transcripts. Complete
-//! transcripts will be included in blocks via the functions
+//! configs (also called params) indicating which transcripts should be created.
+//! Such configs come in different types, because some transcripts should share a
+//! random value, while others need to share the product of two other transcripts.
+//! Complete transcripts will be included in blocks via the functions
 //! `create_data_payload` and `create_summary_payload`.
 //!
 //! # [EcdsaImpl] behavior
@@ -49,8 +49,10 @@
 //! ## add DKG dealings
 //! for every config in `finalized_tip.ecdsa.configs`, do the following: if this
 //! replica is a dealer in this config, and no dealing for this config created
-//! by this replica is in the validated pool,then create a dealing for this
-//! config, and add it to the validated pool
+//! by this replica is in the validated pool, attempt to load the dependencies and,
+//! if successful, create a dealing for this config, and add it to the validated pool.
+//! If loading the dependencies (i.e. t3 depends on t2 and t1) wasn't successful,
+//! we instead send a complaint for the transcript that failed to load.
 //!
 //! ## validate DKG dealings
 //! for every unvalidated dealing d, do the following. If `d.config_id` is an
@@ -68,37 +70,40 @@
 //! validated pool.
 //!
 //! ## Remove stale dealings
-//! for every validated or unvalidated dealing d, do the following. If
-//! `d.config_id` is not an element of `finalized_tip.ecdsa.configs`, and
+//! for every validated or unvalidated dealing or support d, do the following.
+//! If `d.config_id` is not an element of `finalized_tip.ecdsa.configs`, and
 //! `d.config_id` is older than `finalized_tip`, remove `d` from the pool.
 //!
 //! ## add signature shares
 //! for every signature request `req` in
 //! `finalized_tip.ecdsa.signature_requests`, do the following: if this replica
 //! is a signer for `req` and no signature share by this replica is in the
-//! validated pool, create a signature share for `req` and add it to the
-//! validated pool.
+//! validated pool, load the dependencies (i.e. the quadruple and key transcripts),
+//! then create a signature share for `req` and add it to the validated pool.
 //!
 //! ## validate signature shares
-//! for every unvalidated signature share s, do the following: if `s.config_id`
+//! for every unvalidated signature share `s`, do the following: if `s.config_id`
 //! is an element of `finalized_tip.ecdsa.configs`, and there is no signature
 //! share by `s.signer` for `s.config_id` in the validated pool yet, then
 //! cryptographically validate the signature share. If valid, move `s` to
 //! validated, and if invalid, remove `s` from unvalidated.
 //!
 //! ## aggregate ECDSA signatures
-//! For every signature request `req` in
-//! `finalized_tip.ecdsa.signature_requests` for which no signature is present
-//! in the validated pool, do the following: if there are at least
-//! `req.threshold` signature shares wrt `req.config` from distinct signers in
-//! the validated pool, aggregate the shares into a full ECDSA signature, and
-//! add this signature to the validated pool.
+//! Signature shares are aggregated into full signatures and included into a block
+//! by the block maker, once enough share are available.
 //!
-//! ## validate full ECDSA signature
-//! // TODO
+//! ## validate complaints
+//! for every unvalidated complaint `c`, do the following: if `c.config_id`
+//! is an element of `finalized_tip.ecdsa.configs`, and there is no complaint
+//! by `c.complainer` for `c.config_id` in the validated pool yet, then
+//! cryptographically validate the signature of the complaint and the complaint
+//! itself. If valid, move `c` to validated, and if invalid, remove `c` from unvalidated.
 //!
-//! ## complaints & openings
-//! // TODO
+//! ## send openings
+//! for every validated complaint `c` for which this node has not sent an opening yet and
+//! for which `c.config_id` is an element of `finalized_tip.ecdsa.configs`: create and sign
+//! the opening, and add it to the validated pool.
+//!
 //!
 //! # ECDSA payload on blocks
 //! The ECDSA payload on blocks serves some purposes: it should ensure that all
@@ -127,7 +132,7 @@
 //! - optionally, key_times_lambda: transcript resulting from
 //!   key_times_lambda_config
 //! - optionally, kappa_times_lambda_config: config of multiplication
-//!   kappa_unasmked and lambda_masked (so masked multiplication of unmasked and
+//!   kappa_unmasked and lambda_masked (so masked multiplication of unmasked and
 //!   masked)
 //! - optionally, kappa_times_lambda: transcript resulting from
 //!   kappa_times_lambda_config

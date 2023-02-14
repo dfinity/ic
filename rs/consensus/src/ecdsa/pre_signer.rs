@@ -83,7 +83,7 @@ impl EcdsaPreSignerImpl {
 
     /// Starts the transcript generation sequence by issuing the
     /// dealing for the transcript. The requests for new transcripts
-    /// come from the latest summary block
+    /// come from the latest finalized block.
     fn send_dealings(
         &self,
         ecdsa_pool: &dyn EcdsaPool,
@@ -245,8 +245,8 @@ impl EcdsaPreSignerImpl {
         ret
     }
 
-    /// Sends out the signature share for the dealings received from peer
-    /// dealers
+    /// Does "private" validation of the dealings received from peer dealers and,
+    /// if successful, sends out the signature share (support message) for it.
     fn send_dealing_support(
         &self,
         ecdsa_pool: &dyn EcdsaPool,
@@ -509,7 +509,7 @@ impl EcdsaPreSignerImpl {
                             }
                             if dealing_hash_mismatch {
                                 self.metrics
-                                    .pre_sign_errors_inc("missing_hash_meta_data_misimatch");
+                                    .pre_sign_errors_inc("missing_hash_meta_data_mismatch");
                                 ret.push(EcdsaChangeAction::RemoveUnvalidated(id));
                                 warn!(
                                 self.log,
@@ -666,7 +666,7 @@ impl EcdsaPreSignerImpl {
         }
     }
 
-    /// Helper to verify a dealing received for a transcript we are building
+    /// Helper to do public verification of a dealing received for a transcript we are building
     fn crypto_verify_dealing(
         &self,
         id: &EcdsaMessageId,
@@ -749,8 +749,8 @@ impl EcdsaPreSignerImpl {
         }
     }
 
-    /// Helper to issue a support share for a dealing. Assumes we are a receiver
-    /// for the dealing.
+    /// Helper to do private verification of a dealing and, if successful, issue a support share for it.
+    /// Assumes we are a receiver for the dealing.
     fn crypto_create_dealing_support(
         &self,
         id: &EcdsaMessageId,
@@ -859,8 +859,10 @@ impl EcdsaPreSignerImpl {
         )
     }
 
-    /// Helper to load the transcripts the given transcript is dependent on.
-    /// Returns true if the dependencies were loaded successfully.
+    /// Helper to load the transcripts the given transcript config is dependent on.
+    ///
+    /// Returns None if all the transcripts could be loaded successfully.
+    /// Otherwise, returns the complaint change set to be added to the pool
     fn load_dependencies(
         &self,
         ecdsa_pool: &dyn EcdsaPool,
@@ -881,7 +883,7 @@ impl EcdsaPreSignerImpl {
         }
     }
 
-    /// Checks if the we have a valid dealing from the dealer for the given
+    /// Checks if we have a valid dealing from the dealer for the given
     /// transcript
     fn has_dealer_issued_dealing(
         &self,
@@ -899,7 +901,7 @@ impl EcdsaPreSignerImpl {
             })
     }
 
-    /// Checks if the we have a valid dealing support from the node for the
+    /// Checks if we have a valid dealing support from the node for the
     /// given dealing
     fn has_node_issued_dealing_support(
         &self,

@@ -785,7 +785,7 @@ fn new_random_config(
 }
 
 /// Creating new quadruples if necessary by updating quadruples_in_creation,
-/// considering currently avialable quadruples, quadruples in creation, and
+/// considering currently available quadruples, quadruples in creation, and
 /// ecdsa configs.
 fn make_new_quadruples_if_needed(
     current_key_transcript: Option<&ecdsa::UnmaskedTranscriptWithAttributes>,
@@ -943,7 +943,7 @@ pub(crate) fn get_signing_requests<'a>(
                 .is_none()
             && !valid_keys.contains(&context.key_id)
         {
-            // Reject news requests with unknown key Ids.
+            // Reject new requests with unknown key Ids.
             // Note that no quadruples are consumed at this stage.
             let response = ic_types::messages::Response {
                 originator: context.request.sender,
@@ -1041,8 +1041,13 @@ pub(crate) fn get_signing_requests<'a>(
     new_requests
 }
 
-// Update signature agreements in the data payload by combining
-// shares in the ECDSA pool.
+/// Update signature agreements in the data payload by:
+/// - dropping agreements that don't have a [SignWithEcdsaContext] anymore (because
+///   the response has been delivered)
+/// - setting remaining agreements to "Reported" (the signing response was delivered
+///   in the previous round, the context will be removed when the previous block is
+///   finalized)
+/// - adding new agreements as "Unreported" by combining shares in the ECDSA pool.
 pub(crate) fn update_signature_agreements(
     all_requests: &BTreeMap<CallbackId, SignWithEcdsaContext>,
     signature_builder: &dyn EcdsaSignatureBuilder,
@@ -1266,7 +1271,7 @@ fn update_next_key_transcript(
             unreachable!("Unexpected ReshareOfUnmaskedParams for key transcript creation");
         }
         (_, ecdsa::KeyTranscriptCreation::Created(_)) => {
-            // valid case that we can ignored
+            // valid case that we can ignore
         }
         _ => {
             unreachable!("Unexpected next_key_transcript configuration reached!");
@@ -1488,8 +1493,8 @@ pub(crate) fn build_signature_inputs(
     )
 }
 
-/// Checks for new reshare requests from execution and initiates
-/// the processing.
+/// Checks for new reshare requests from execution and initiates the processing
+/// by adding a new [ecdsa::ReshareOfUnmaskedParams] config to ongoing xnet reshares.
 /// TODO: in future, we may need to maintain a key transcript per supported key_id,
 /// and reshare the one specified by reshare_request.key_id.
 pub(crate) fn initiate_reshare_requests(
@@ -1564,7 +1569,10 @@ fn make_reshare_dealings_response(
     )
 }
 
-/// Checks and updates the completed reshare requests.
+/// Checks and updates the completed reshare requests by:
+/// - getting the validated dealings for each ongoing xnet reshare transcript
+/// - attempting to build the new [InitialIDkgDealings] (fails if there aren't enough dealings)
+/// - if successful, moving the request to completed agreements as [ecdsa::CompletedReshareRequest::Unreported].
 pub(crate) fn update_completed_reshare_requests(
     payload: &mut ecdsa::EcdsaPayload,
     make_reshare_dealings_response: &dyn Fn(

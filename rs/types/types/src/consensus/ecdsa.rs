@@ -124,7 +124,7 @@ impl EcdsaPayload {
         }
     }
 
-    /// Return an iterator of all request ids that is used in the payload.
+    /// Return an iterator of all request ids that are used in the payload.
     /// Note that it doesn't guarantee any ordering.
     pub fn iter_request_ids(&self) -> Box<dyn Iterator<Item = &RequestId> + '_> {
         Box::new(self.ongoing_signatures.keys())
@@ -423,8 +423,8 @@ impl Display for EcdsaKeyTranscript {
 }
 
 /// The creation of an ecdsa key transcript goes through one of the three paths below:
-/// 1. RandomTranscript -> ReshareOfMasked -> Created
-/// 2. ReshareOfUnmasked -> Created
+/// 1. Begin -> RandomTranscript -> ReshareOfMasked -> Created
+/// 2. Begin -> ReshareOfUnmasked -> Created
 /// 3. XnetReshareOfUnmaskedParams -> Created (xnet bootstrapping from initial dealings)
 ///
 /// The initial bootstrap will start with an empty 'EcdsaSummaryPayload', and then
