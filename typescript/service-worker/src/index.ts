@@ -17,7 +17,6 @@ function resolveICHostInfo(): ICHostInfoEvent | null {
   const canisterId = getValueFromCookie('__Secure-IcCanisterId');
   if (gateway && canisterId) {
     return {
-      hostname: window.location.hostname,
       canisterId,
       gateway,
     };

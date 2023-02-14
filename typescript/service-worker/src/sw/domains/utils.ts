@@ -68,7 +68,10 @@ export function maybeResolveCanisterIdFromSearchParam(
 }
 
 export function isRawDomain(hostname: string): boolean {
-  return !!hostname.match(new RegExp(/\.raw\.ic[0-9]+\./));
+  // For security reasons the match is only made for ic[0-9].app and ic[0-9].dev domains. This makes
+  // the match less permissive and prevents unwanted matches for domains that could include raw
+  // but still serve as a normal dapp domain that should go through response verification.
+  return !!hostname.match(new RegExp(/\.raw\.ic[0-9]+\.(app|dev)/));
 }
 
 /**

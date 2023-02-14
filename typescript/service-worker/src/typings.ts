@@ -3,7 +3,6 @@ export enum ServiceWorkerEvents {
 }
 
 export interface ICHostInfoEvent {
-  hostname: string;
   canisterId: string;
   gateway: string;
 }
