@@ -997,9 +997,6 @@ fn composite_query_no_canister_response() {
         .unwrap();
     match result {
         WasmResult::Reply(_) => unreachable!("Expected reject"),
-        WasmResult::Reject(msg) => assert_eq!(
-            msg,
-            format!("Canister {} did not produce a response", canisters[1])
-        ),
+        WasmResult::Reject(msg) => assert_eq!(msg, "Canister did not reply"),
     }
 }
