@@ -1007,7 +1007,7 @@ pub(crate) fn get_signing_requests<'a>(
                     originator_reply_callback: *callback_id,
                     refund: context.request.payment,
                     response_payload: ic_types::messages::Payload::Reject(RejectContext {
-                        code: RejectCode::CanisterReject,
+                        code: RejectCode::CanisterError,
                         message: "Signature request expired".to_string(),
                     }),
                 };
