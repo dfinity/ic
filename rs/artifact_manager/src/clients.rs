@@ -1,6 +1,5 @@
 //! The module contains implementations of the artifact client trait.
 
-use crate::artifact::*;
 use crate::processors::ArtifactProcessorManager;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_ARTIFACT_MANAGER};
 use ic_interfaces::{
@@ -23,6 +22,7 @@ use ic_logger::{debug, ReplicaLogger};
 use ic_types::{
     artifact,
     artifact::*,
+    artifact_kind::*,
     canister_http::*,
     chunkable::*,
     consensus::{

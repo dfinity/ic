@@ -1,5 +1,5 @@
 //! The module contains implementations for different artifact kinds.
-use ic_types::{
+use crate::{
     artifact::*,
     canister_http::{CanisterHttpResponseAttribute, CanisterHttpResponseShare},
     consensus::{
