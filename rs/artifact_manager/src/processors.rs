@@ -28,8 +28,10 @@ use ic_types::{
 };
 use ic_types::{canister_http::CanisterHttpResponseShare, consensus::HasRank};
 use prometheus::{histogram_opts, labels, Histogram, IntCounter};
-use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{
+    atomic::{AtomicBool, Ordering::SeqCst},
+    Arc, RwLock,
+};
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
 use std::time::Duration;
 
@@ -97,16 +99,11 @@ impl ArtifactProcessorMetrics {
     }
 }
 
-/// Pokes the thread to run on_state_change()
-struct ProcessRequest;
-
 /// Manages the life cycle of the client specific artifact processor thread.
 /// Also serves as the front end to enqueue requests to the processor thread.
 pub struct ArtifactProcessorManager<Artifact: ArtifactKind + 'static> {
-    /// The list of unvalidated artifacts.
-    pending_artifacts: Arc<Mutex<Vec<UnvalidatedArtifact<Artifact::Message>>>>,
     /// To send the process requests
-    sender: Sender<ProcessRequest>,
+    sender: Sender<UnvalidatedArtifact<Artifact::Message>>,
     /// Handle for the processing thread
     handle: Option<JoinHandle<()>>,
     /// To signal processing thread to exit.
@@ -124,18 +121,15 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
     where
         <Artifact as ic_types::artifact::ArtifactKind>::Message: Send,
     {
-        let pending_artifacts = Arc::new(Mutex::new(Vec::new()));
         let (sender, receiver) = crossbeam_channel::unbounded();
         let shutdown = Arc::new(AtomicBool::new(false));
 
         // Spawn the processor thread
-        let pending_artifacts_cl = pending_artifacts.clone();
         let shutdown_cl = shutdown.clone();
         let handle = ThreadBuilder::new()
             .name(format!("{}_Processor", Artifact::TAG))
             .spawn(move || {
                 Self::process_messages(
-                    pending_artifacts_cl,
                     time_source,
                     client,
                     Box::new(send_advert),
@@ -147,7 +141,6 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
             .unwrap();
 
         Self {
-            pending_artifacts,
             sender,
             handle: Some(handle),
             shutdown,
@@ -155,26 +148,23 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
     }
 
     pub fn on_artifact(&self, artifact: UnvalidatedArtifact<Artifact::Message>) {
-        let mut pending_artifacts = self.pending_artifacts.lock().unwrap();
-        pending_artifacts.push(artifact);
         self.sender
-            .send(ProcessRequest)
+            .send(artifact)
             .unwrap_or_else(|err| panic!("Failed to send request: {:?}", err));
     }
 
     // The artifact processor thread loop
     #[allow(clippy::too_many_arguments)]
     fn process_messages<S: Fn(AdvertSendRequest<Artifact>) + Send + 'static>(
-        pending_artifacts: Arc<Mutex<Vec<UnvalidatedArtifact<Artifact::Message>>>>,
         time_source: Arc<SysTimeSource>,
         client: Box<dyn ArtifactProcessor<Artifact>>,
         send_advert: Box<S>,
-        receiver: Receiver<ProcessRequest>,
+        receiver: Receiver<UnvalidatedArtifact<Artifact::Message>>,
         mut metrics: ArtifactProcessorMetrics,
         shutdown: Arc<AtomicBool>,
     ) {
         let mut last_on_state_change_result = ProcessingResult::StateUnchanged;
-        loop {
+        while !shutdown.load(SeqCst) {
             // TODO: assess impact of continued processing in same
             // iteration if StateChanged
             let recv_timeout = match last_on_state_change_result {
@@ -183,30 +173,23 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
                     Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
                 }
             };
-            let ret = receiver.recv_timeout(recv_timeout);
-            if shutdown.load(SeqCst) {
-                return;
-            }
-
-            last_on_state_change_result = match ret {
-                Ok(_) | Err(RecvTimeoutError::Timeout) => {
-                    time_source.update_time().ok();
-
-                    let artifacts = {
-                        let mut artifacts = Vec::new();
-                        let mut received_artifacts = pending_artifacts.lock().unwrap();
-                        std::mem::swap(&mut artifacts, &mut received_artifacts);
-                        artifacts
-                    };
-
-                    let (adverts, result) = metrics
-                        .with_metrics(|| client.process_changes(time_source.as_ref(), artifacts));
-
-                    adverts.into_iter().for_each(&send_advert);
-                    result
+            let recv_artifact = receiver.recv_timeout(recv_timeout);
+            let batched_artifacts = match recv_artifact {
+                Ok(artifact) => {
+                    let mut artifacts = vec![artifact];
+                    while let Ok(artifact) = receiver.try_recv() {
+                        artifacts.push(artifact);
+                    }
+                    artifacts
                 }
+                Err(RecvTimeoutError::Timeout) => vec![],
                 Err(RecvTimeoutError::Disconnected) => return,
             };
+            time_source.update_time().ok();
+            let (adverts, on_state_change_result) = metrics
+                .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifacts));
+            adverts.into_iter().for_each(&send_advert);
+            last_on_state_change_result = on_state_change_result;
         }
     }
 }
