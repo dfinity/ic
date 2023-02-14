@@ -1,6 +1,7 @@
 mod client;
 mod p2p;
 
+use crate::p2p::P2P;
 use ic_artifact_manager::artifact::ConsensusArtifact;
 use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
@@ -63,34 +64,22 @@ enum UnvalidatedPoolEvent<A> {
 pub(crate) struct PoolProcessorHandle<A: ArtifactKind> {
     pub sender: Sender<UnvalidatedPoolEvent<A::Message>>,
     pub priority_fn_watcher: watch::Receiver<PriorityFn<A::Id, A::Attribute>>,
+    pub filter_watcher: watch::Receiver<A::Filter>,
     pub jh: std::thread::JoinHandle<()>,
 }
 
 type ConsensusPoolProcessorHandle = PoolProcessorHandle<ConsensusArtifact>;
-
-pub struct P2P<A: ArtifactKind> {
-    #[allow(dead_code)]
-    pool_processor_handle: PoolProcessorHandle<A>,
-}
-
-impl<A: ArtifactKind> Drop for P2P<A> {
-    fn drop(&mut self) {
-        // todo figure out the graceful shutdown of the pool processor and P2P
-    }
-}
 
 type ConsensusP2P = P2P<ConsensusArtifact>;
 
 pub fn start_consensus_p2p<P: MutableConsensusPool + Send + Sync + 'static>(
     pool: P,
     mutation_source: Box<dyn Consensus + Send + Sync>,
-    priority_source: Box<dyn ConsensusGossip + Send + Sync>,
+    gossip_state: Box<dyn ConsensusGossip + Send + Sync>,
     time_source: Arc<dyn TimeSource>,
 ) -> ConsensusP2P {
     let pool_processor_handle =
-        ConsensusPoolProcessorHandle::new(pool, mutation_source, priority_source, time_source);
+        ConsensusPoolProcessorHandle::new(pool, mutation_source, gossip_state, time_source);
 
-    ConsensusP2P {
-        pool_processor_handle,
-    }
+    ConsensusP2P::new(pool_processor_handle)
 }
