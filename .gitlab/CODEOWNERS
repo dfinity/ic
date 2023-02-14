@@ -77,7 +77,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 
 # [Rust]
 /rs/                                    @dfinity-lab/teams/interface-owners
-/rs/artifact_manager/                   @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/networking-team
+/rs/artifact_manager/                   @dfinity-lab/teams/networking-team
 /rs/artifact_pool/                      @dfinity-lab/teams/consensus-owners
 /rs/async_utils/                        @dfinity-lab/teams/networking-team
 /rs/backup/                             @dfinity-lab/teams/consensus-owners
@@ -115,8 +115,8 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/ingress_manager/                    @dfinity-lab/teams/consensus-owners
 /rs/interfaces/                         @dfinity-lab/teams/interface-owners
 /rs/interfaces/bitcoin_adapter_client/  @dfinity-lab/teams/networking-team
-/rs/interfaces/canister_http_adapter_client/    @dfinity-lab/teams/networking-team
 /rs/interfaces/certified_stream_store/  @dfinity-lab/teams/message-routing-owners
+/rs/interfaces/https_outcalls_adapter_client/    @dfinity-lab/teams/networking-team
 /rs/interfaces/p2p/                     @dfinity-lab/teams/networking-team
 /rs/interfaces/registry/                @dfinity-lab/teams/nns-team
 /rs/interfaces/src/artifact_pool.rs     @dfinity-lab/teams/consensus-owners
