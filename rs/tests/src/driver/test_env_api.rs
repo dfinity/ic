@@ -136,7 +136,7 @@ use super::cli::{
 };
 use super::config::NODES_INFO;
 use super::driver_setup::{DEFAULT_FARM_BASE_URL, SSH_AUTHORIZED_PRIV_KEYS_DIR};
-use super::farm::{Certificate, DnsRecord};
+use super::farm::{DnsRecord, PlaynetCertificate};
 use super::test_setup::GroupSetup;
 use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::new::constants::{self, kibana_link};
@@ -1085,16 +1085,19 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
         false
     }
 
+    fn uses_dns(&self) -> bool {
+        false
+    }
+
     fn status(&self) -> Result<HttpStatusResponse> {
         let url = self.get_public_url();
         let addr = self.get_public_addr();
         let client = reqwest::blocking::Client::builder()
             .danger_accept_invalid_certs(self.uses_snake_oil_certs())
             .timeout(READY_RESPONSE_TIMEOUT);
-        let client = if let Some(domain) = url.domain() {
-            client.resolve(domain, addr)
-        } else {
-            client
+        let client = match (self.uses_dns(), url.domain()) {
+            (false, Some(domain)) => client.resolve(domain, addr),
+            _ => client,
         };
         let response = client
             .build()
@@ -1683,22 +1686,49 @@ where
     }
 }
 
-pub trait GetWildcardCertificate {
-    /// Get a certificate signed by Let's Encrypt from farm
-    /// for the domain `*.farm.dfinity.systems`.
-    fn get_wildcard_certificate(&self) -> Certificate;
+pub trait CreatePlaynetDnsRecords {
+    /// Creates DNS records under the suffix: `.ic{ix}.farm.dfinity.systems`
+    /// where `ix` is the index of the acquired playnet.
+    ///
+    /// The records will be garbage collected some time after the group has expired.
+    /// The suffix will be returned from this function such that the FQDNs can be constructed.
+    fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String;
 }
 
-impl<T> GetWildcardCertificate for T
+impl<T> CreatePlaynetDnsRecords for T
 where
     T: HasTestEnv,
 {
-    fn get_wildcard_certificate(&self) -> Certificate {
+    fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
         let farm_base_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, log);
-        farm.get_wildcard_certificate()
-            .expect("Failed get wildcard certificate")
+        let group_setup = GroupSetup::read_attribute(&env);
+        let group_name = group_setup.farm_group_name;
+        farm.create_playnet_dns_records(&group_name, dns_records)
+            .expect("Failed to create playnet DNS records")
+    }
+}
+
+pub trait AcquirePlaynetCertificate {
+    /// Get a certificate signed by Let's Encrypt from farm
+    /// for the domain `*.farm.dfinity.systems`.
+    fn acquire_playnet_certificate(&self) -> PlaynetCertificate;
+}
+
+impl<T> AcquirePlaynetCertificate for T
+where
+    T: HasTestEnv,
+{
+    fn acquire_playnet_certificate(&self) -> PlaynetCertificate {
+        let env = self.test_env();
+        let log = env.logger();
+        let farm_base_url = env.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, log);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let group_name = group_setup.farm_group_name;
+        farm.acquire_playnet_certificate(&group_name)
+            .expect("Failed to acquire a certificate for a playnet")
     }
 }

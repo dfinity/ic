@@ -60,11 +60,11 @@ impl Farm {
         }
     }
 
-    pub fn get_wildcard_certificate(&self) -> FarmResult<Certificate> {
-        let path = "certificate";
-        let resp = self.retry_until_success_long(self.get(path))?;
-        let cert = resp.json::<Certificate>()?;
-        Ok(cert)
+    pub fn acquire_playnet_certificate(&self, group_name: &str) -> FarmResult<PlaynetCertificate> {
+        let path = format!("group/{}/playnet/certificate", group_name);
+        let resp = self.retry_until_success_long(self.post(&path))?;
+        let playnet_cert = resp.json::<PlaynetCertificate>()?;
+        Ok(playnet_cert)
     }
 
     pub fn create_group(&self, group_name: &str, ttl: Duration, spec: GroupSpec) -> FarmResult<()> {
@@ -200,16 +200,27 @@ impl Farm {
         Ok(create_dns_records_result.suffix)
     }
 
+    /// Creates DNS records under the suffix: `ic{ix}.farm.dfinity.systems`
+    /// where ix is the index of the acquired playnet of the given group.
+    /// The records will be garbage collected some time after the group has expired.
+    /// The suffix will be returned from this function such that the FQDNs can be constructed.
+    pub fn create_playnet_dns_records(
+        &self,
+        group_name: &str,
+        dns_records: Vec<DnsRecord>,
+    ) -> FarmResult<String> {
+        let path = format!("group/{}/playnet/dns", group_name);
+        let rb = Self::json(self.post(&path), &dns_records);
+        let resp = self.retry_until_success_long(rb)?;
+        let create_dns_records_result = resp.json::<CreateDnsRecordsResult>()?;
+        Ok(create_dns_records_result.suffix)
+    }
+
     pub fn set_group_ttl(&self, group_name: &str, duration: Duration) -> FarmResult<()> {
         let path = format!("group/{}/ttl/{}", group_name, duration.as_secs());
         let rb = self.put(&path);
         let _resp = self.retry_until_success(rb)?;
         Ok(())
-    }
-
-    fn get(&self, path: &str) -> RequestBuilder {
-        let url = self.url_from_path(path);
-        self.client.get(url)
     }
 
     fn post(&self, path: &str) -> RequestBuilder {
@@ -544,6 +555,12 @@ impl AttachImageSpec {
             id,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PlaynetCertificate {
+    pub playnet: String,
+    pub cert: Certificate,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

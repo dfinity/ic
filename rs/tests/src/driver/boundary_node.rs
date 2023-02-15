@@ -1,6 +1,6 @@
 use std::{
     fmt::Write as FmtWrite,
-    fs::File,
+    fs::{self, File},
     io::{self, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::PathBuf,
@@ -10,18 +10,22 @@ use std::{
 use crate::{
     driver::{
         driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR,
-        farm::{CreateVmRequest, Farm, HostFeature, ImageLocation, VMCreateResponse, VmType},
+        farm::{
+            CreateVmRequest, DnsRecord, DnsRecordType, Farm, HostFeature, ImageLocation,
+            VMCreateResponse, VmType,
+        },
         ic::{AmountOfMemoryKiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
         resource::{DiskImage, ImageType},
         test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute},
         test_env_api::{
-            get_ssh_session_from_env, retry, HasDependencies, HasPublicApiUrl, HasTestEnv,
-            HasTopologySnapshot, HasVmName, IcNodeContainer, RetrieveIpv4Addr, SshSession, ADMIN,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            get_ssh_session_from_env, retry, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
+            HasDependencies, HasPublicApiUrl, HasTestEnv, HasTopologySnapshot, HasVmName,
+            IcNodeContainer, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
         test_setup::GroupSetup,
     },
-    util::create_agent_mapping,
+    util::{create_agent, create_agent_mapping},
 };
 
 use anyhow::{bail, Result};
@@ -29,17 +33,24 @@ use async_trait::async_trait;
 use flate2::{write::GzEncoder, Compression};
 use ic_agent::{Agent, AgentError};
 use reqwest::Url;
+use serde::{Deserialize, Serialize};
 use slog::info;
 use ssh2::Session;
 
-use super::{farm::FileId, test_env_api::HasIcDependencies};
+use super::{
+    farm::{FileId, PlaynetCertificate},
+    test_env_api::HasIcDependencies,
+};
 // The following default values are the same as for replica nodes
 const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(4);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
 
 const BOUNDARY_NODE_VMS_DIR: &str = "boundary_node_vms";
 const BOUNDARY_NODE_VM_PATH: &str = "vm.json";
+const BOUNDARY_NODE_PLAYNET_PATH: &str = "playnet.json";
 const CONF_IMG_FNAME: &str = "config_disk.img";
+const CERT_DIR: &str = "certificate";
+const PLAYNET_PATH: &str = "playnet.json";
 
 fn mk_compressed_img_path() -> std::string::String {
     format!("{}.gz", CONF_IMG_FNAME)
@@ -58,6 +69,7 @@ pub struct BoundaryNode {
     pub nns_node_urls: Vec<Url>,
     pub nns_public_key: Option<PathBuf>,
     pub replica_ipv6_rule: String,
+    pub use_real_certs_and_dns: bool,
 }
 
 impl BoundaryNode {
@@ -74,6 +86,7 @@ impl BoundaryNode {
             nns_node_urls: Default::default(),
             nns_public_key: Default::default(),
             replica_ipv6_rule: Default::default(),
+            use_real_certs_and_dns: false,
         }
     }
 
@@ -95,6 +108,33 @@ impl BoundaryNode {
                 .map(|s| s.to_string())
                 .collect(),
             )
+    }
+
+    /// Acquire a playnet certificate (or fail if all have been acquired already)
+    /// for the domain `ic{ix}.farm.dfinity.systems`
+    /// where `ix` is the index of the acquired playnet.
+    ///
+    /// Then create an AAAA record pointing
+    /// `ic{ix}.farm.dfinity.systems` to the IPv6 address of this BN.
+    ///
+    /// Also add CNAME records for
+    /// `*.ic{ix}.farm.dfinity.systems` and
+    /// `*.raw.ic{ix}.farm.dfinity.systems`
+    /// pointing to `ic{ix}.farm.dfinity.systems`.
+    ///
+    /// If IPv4 has been enabled (`has_ipv4`), also add a corresponding A record
+    /// pointing to the IPv4 address of this BN.
+    ///
+    /// Finally configure the BN with the playnet certificate.
+    ///
+    /// Note that if multiple BNs are created within the same
+    /// farm-group, they will share the same certificate and
+    /// domain name.
+    /// Also all their IPv6 addresses will be added to the AAAA record
+    /// and all their IPv4 addresses will be added to the A record.
+    pub fn use_real_certs_and_dns(mut self) -> Self {
+        self.use_real_certs_and_dns = true;
+        self
     }
 
     pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
@@ -221,12 +261,73 @@ impl BoundaryNode {
             self.vm_allocation.clone(),
             self.required_host_features.clone(),
         );
-        let vm = farm.create_vm(&pot_setup.farm_group_name, create_vm_req)?;
+        let vm_create_resp = farm.create_vm(&pot_setup.farm_group_name, create_vm_req)?;
 
-        env.write_boundary_node_vm(&self.name, &vm)?;
+        // Acquire a playnet certificate and provision an AAAA record pointing
+        // ic{ix}.farm.dfinity.systems to the IPv6 address of the BN.
+        let opt_existing_playnet = if self.use_real_certs_and_dns {
+            let playnet_domain_path = env.get_json_path(PLAYNET_PATH);
+            let mut existing_playnet: Playnet = if playnet_domain_path.exists() {
+                env.read_json_object(PLAYNET_PATH)?
+            } else {
+                let playnet_cert = env.acquire_playnet_certificate();
+                Playnet {
+                    playnet_cert,
+                    aaaa_records: vec![],
+                    a_records: vec![],
+                }
+            };
 
-        let image_id =
-            create_and_upload_config_disk_image(self, env, &pot_setup.farm_group_name, &farm)?;
+            existing_playnet
+                .aaaa_records
+                .push(vm_create_resp.ipv6.to_string());
+            let bn_fqdn = existing_playnet.playnet_cert.playnet.clone();
+            env.create_playnet_dns_records(vec![
+                DnsRecord {
+                    name: "".to_string(),
+                    record_type: DnsRecordType::AAAA,
+                    records: existing_playnet.aaaa_records.clone(),
+                },
+                DnsRecord {
+                    name: "*".to_string(),
+                    record_type: DnsRecordType::CNAME,
+                    records: vec![bn_fqdn.clone()],
+                },
+                DnsRecord {
+                    name: "*.raw".to_string(),
+                    record_type: DnsRecordType::CNAME,
+                    records: vec![bn_fqdn.clone()],
+                },
+            ]);
+
+            info!(
+                &logger,
+                "Created AAAA records {} to {:?}", bn_fqdn, existing_playnet.aaaa_records
+            );
+            Some(existing_playnet)
+        } else {
+            None
+        };
+
+        let opt_existing_playnet_cert: Option<PlaynetCertificate> = opt_existing_playnet
+            .as_ref()
+            .map(|existing_playnet| existing_playnet.playnet_cert.clone());
+
+        env.write_boundary_node_vm(
+            &self.name,
+            &vm_create_resp,
+            opt_existing_playnet_cert
+                .as_ref()
+                .map(|existing_playnet_cert| existing_playnet_cert.playnet.clone()),
+        )?;
+
+        let image_id = create_and_upload_config_disk_image(
+            self,
+            env,
+            &pot_setup.farm_group_name,
+            &farm,
+            opt_existing_playnet_cert,
+        )?;
 
         farm.attach_disk_images(
             &pot_setup.farm_group_name,
@@ -236,6 +337,35 @@ impl BoundaryNode {
         )?;
 
         farm.start_vm(&pot_setup.farm_group_name, &self.name)?;
+
+        if self.has_ipv4 {
+            // Provision an A record pointing ic{ix}.farm.dfinity.systems
+            // to the IPv4 address of the BN.
+            if let Some(mut existing_playnet) = opt_existing_playnet.clone() {
+                let boundary_node_vm = env
+                    .get_deployed_boundary_node(&self.name.clone())
+                    .unwrap()
+                    .get_snapshot()
+                    .unwrap();
+                let ipv4_address = boundary_node_vm.block_on_ipv4().unwrap().to_string();
+
+                existing_playnet.a_records.push(ipv4_address);
+
+                let bn_fqdn = env.create_playnet_dns_records(vec![DnsRecord {
+                    name: "".to_string(),
+                    record_type: DnsRecordType::A,
+                    records: existing_playnet.a_records.clone(),
+                }]);
+                info!(
+                    &logger,
+                    "Created A record {} to {:?}", bn_fqdn, existing_playnet.a_records
+                );
+            }
+        }
+
+        if let Some(existing_playnet) = opt_existing_playnet {
+            env.write_json_object(PLAYNET_PATH, &existing_playnet)?;
+        }
 
         Ok(())
     }
@@ -248,6 +378,7 @@ fn create_and_upload_config_disk_image(
     env: &TestEnv,
     group_name: &str,
     farm: &Farm,
+    opt_playnet_cert: Option<PlaynetCertificate>,
 ) -> anyhow::Result<FileId> {
     let boundary_node_dir = env
         .base_path()
@@ -294,6 +425,25 @@ fn create_and_upload_config_disk_image(
 
     if let Some(nns_public_key) = boundary_node.nns_public_key.clone() {
         cmd.arg("--nns_public_key").arg(nns_public_key);
+    }
+
+    if let Some(playnet_cert) = opt_playnet_cert {
+        let cert_dir = boundary_node_dir.join(CERT_DIR);
+        fs::create_dir_all(cert_dir.clone())?;
+        let cert = playnet_cert.cert;
+        fs::write(cert_dir.join("privkey.pem"), cert.priv_key_pem)?;
+        fs::write(cert_dir.join("chain.pem"), cert.chain_pem.clone())?;
+        fs::write(
+            cert_dir.join("fullchain.pem"),
+            cert.cert_pem + &cert.chain_pem,
+        )?;
+        let bn_fqdn = playnet_cert.playnet;
+        cmd.arg("--system-domains")
+            .arg(bn_fqdn.clone())
+            .arg("--application-domains")
+            .arg(bn_fqdn)
+            .arg("--certdir")
+            .arg(cert_dir);
     }
 
     let key = "PATH";
@@ -343,32 +493,50 @@ fn create_and_upload_config_disk_image(
 pub trait BoundaryNodeVm {
     fn get_deployed_boundary_node(&self, name: &str) -> Result<DeployedBoundaryNode>;
 
-    fn write_boundary_node_vm(&self, name: &str, vm: &VMCreateResponse) -> Result<()>;
+    fn write_boundary_node_vm(
+        &self,
+        name: &str,
+        vm: &VMCreateResponse,
+        opt_playnet: Option<String>,
+    ) -> Result<()>;
 }
 
 impl BoundaryNodeVm for TestEnv {
     fn get_deployed_boundary_node(&self, name: &str) -> Result<DeployedBoundaryNode> {
         let rel_boundary_node_dir: PathBuf = [BOUNDARY_NODE_VMS_DIR, name].iter().collect();
-        let abs_boundary_node_dir = self.get_path(rel_boundary_node_dir);
+        let abs_boundary_node_dir = self.get_path(rel_boundary_node_dir.clone());
+        let playnet =
+            self.read_json_object(rel_boundary_node_dir.join(BOUNDARY_NODE_PLAYNET_PATH))?;
         if abs_boundary_node_dir.is_dir() {
             Ok(DeployedBoundaryNode {
                 env: self.clone(),
                 name: name.to_string(),
+                playnet,
             })
         } else {
             bail!("Did not find deployed boundary node '{name}'!")
         }
     }
 
-    fn write_boundary_node_vm(&self, name: &str, vm: &VMCreateResponse) -> Result<()> {
-        let vm_path: PathBuf = [BOUNDARY_NODE_VMS_DIR, name].iter().collect();
-        self.write_json_object(vm_path.join(BOUNDARY_NODE_VM_PATH), &vm)
+    fn write_boundary_node_vm(
+        &self,
+        name: &str,
+        vm: &VMCreateResponse,
+        opt_playnet: Option<String>,
+    ) -> Result<()> {
+        let rel_boundary_node_dir: PathBuf = [BOUNDARY_NODE_VMS_DIR, name].iter().collect();
+        self.write_json_object(rel_boundary_node_dir.join(BOUNDARY_NODE_VM_PATH), &vm)?;
+        self.write_json_object(
+            rel_boundary_node_dir.join(BOUNDARY_NODE_PLAYNET_PATH),
+            &opt_playnet,
+        )
     }
 }
 
 pub struct DeployedBoundaryNode {
     env: TestEnv,
     name: String,
+    playnet: Option<String>,
 }
 
 impl HasTestEnv for DeployedBoundaryNode {
@@ -394,6 +562,7 @@ impl DeployedBoundaryNode {
             vm: self.get_vm()?,
             env: self.env,
             name: self.name,
+            playnet: self.playnet,
         })
     }
 }
@@ -401,14 +570,17 @@ impl DeployedBoundaryNode {
 pub struct BoundaryNodeSnapshot {
     env: TestEnv,
     name: String,
+    pub playnet: Option<String>,
     vm: VMCreateResponse,
 }
 
 impl BoundaryNodeSnapshot {
-    const URL: &'static str = "https://ic0.app";
-
     pub fn ipv6(&self) -> Ipv6Addr {
         self.vm.ipv6
+    }
+
+    pub fn get_playnet(&self) -> Option<String> {
+        self.playnet.clone()
     }
 }
 
@@ -439,7 +611,13 @@ impl SshSession for BoundaryNodeSnapshot {
 #[async_trait]
 impl HasPublicApiUrl for BoundaryNodeSnapshot {
     fn get_public_url(&self) -> Url {
-        Url::parse(Self::URL).expect("failed to parse url")
+        let url_str = self
+            .playnet
+            .clone()
+            .map_or("https://ic0.app".to_string(), |playnet| {
+                format!("https://{playnet}")
+            });
+        Url::parse(&url_str).expect("failed to parse url")
     }
 
     fn get_public_addr(&self) -> SocketAddr {
@@ -447,11 +625,19 @@ impl HasPublicApiUrl for BoundaryNodeSnapshot {
     }
 
     fn uses_snake_oil_certs(&self) -> bool {
-        true
+        self.playnet.is_none()
+    }
+
+    fn uses_dns(&self) -> bool {
+        self.playnet.is_some()
     }
 
     async fn try_build_default_agent_async(&self) -> Result<Agent, AgentError> {
-        create_agent_mapping(Self::URL, self.ipv6().into()).await
+        if self.uses_dns() {
+            create_agent(self.get_public_url().as_ref()).await
+        } else {
+            create_agent_mapping(self.get_public_url().as_ref(), self.ipv6().into()).await
+        }
     }
 }
 
@@ -481,4 +667,11 @@ impl RetrieveIpv4Addr for BoundaryNodeSnapshot {
             .parse::<Ipv4Addr>()
             .context("ipv4 retrieval")
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Playnet {
+    playnet_cert: PlaynetCertificate,
+    aaaa_records: Vec<String>,
+    a_records: Vec<String>,
 }
