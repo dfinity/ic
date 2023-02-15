@@ -23,7 +23,7 @@ thread_local! {
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
 
     // The stable bmap where the swap canister keeps open tickets. The key is the Principal.
-    pub static OPEN_TICKETS_MEMORY: RefCell<StableBTreeMap<Blob<32>, Ticket, VirtualMemory<DefaultMemoryImpl>>> =
+    pub static OPEN_TICKETS_MEMORY: RefCell<StableBTreeMap<Blob<{PrincipalId::MAX_LENGTH_IN_BYTES}>, Ticket, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(OPEN_TICKETS_MEMORY_ID))));
 
     /// The `BUYERS_LIST_INDEX` gives an ordered list index of the Swap::buyers map. This is used to
