@@ -122,18 +122,39 @@ pub enum RetrieveBtcStatus {
 pub enum Mode {
     ReadOnly,
     RestrictedTo(Vec<Principal>),
+    DepositsRestrictedTo(Vec<Principal>),
     GeneralAvailability,
 }
 
 impl Mode {
-    /// Returns Ok if the specified principal can modify minter's state.
-    pub fn is_available_for(&self, p: &Principal) -> Result<(), String> {
+    /// Returns Ok if the specified principal can convert BTC to ckBTC.
+    pub fn is_deposit_available_for(&self, p: &Principal) -> Result<(), String> {
         match self {
             Self::GeneralAvailability => Ok(()),
             Self::ReadOnly => Err("the minter is in read-only mode".to_string()),
             Self::RestrictedTo(allow_list) => {
                 if !allow_list.contains(p) {
                     return Err("access to the minter is temporarily restricted".to_string());
+                }
+                Ok(())
+            }
+            Self::DepositsRestrictedTo(allow_list) => {
+                if !allow_list.contains(p) {
+                    return Err("BTC deposits are temporarily restricted".to_string());
+                }
+                Ok(())
+            }
+        }
+    }
+
+    /// Returns Ok if the specified principal can convert ckBTC to BTC.
+    pub fn is_withdrawal_available_for(&self, p: &Principal) -> Result<(), String> {
+        match self {
+            Self::GeneralAvailability | Self::DepositsRestrictedTo(_) => Ok(()),
+            Self::ReadOnly => Err("the minter is in read-only mode".to_string()),
+            Self::RestrictedTo(allow_list) => {
+                if !allow_list.contains(p) {
+                    return Err("BTC withdrawals are temporarily restricted".to_string());
                 }
                 Ok(())
             }

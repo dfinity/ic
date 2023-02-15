@@ -78,7 +78,7 @@ impl From<ParseAddressError> for RetrieveBtcError {
 pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBtcError> {
     let caller = ic_cdk::caller();
 
-    state::read_state(|s| s.mode.is_available_for(&caller))
+    state::read_state(|s| s.mode.is_withdrawal_available_for(&caller))
         .map_err(RetrieveBtcError::TemporarilyUnavailable)?;
 
     init_ecdsa_public_key().await;

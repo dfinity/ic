@@ -73,6 +73,8 @@ type Mode = variant {
     ReadOnly;
     // Only specified principals can modify minter's state.
     RestrictedTo : vec principal;
+    // Only specified principals can convert BTC to ckBTC.
+    DepositsRestrictedTo : vec principal;
     // Anyone can interact with the minter.
     GeneralAvailability;
 };
