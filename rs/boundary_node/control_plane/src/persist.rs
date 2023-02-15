@@ -9,7 +9,7 @@ use anyhow::{Context, Error};
 use async_trait::async_trait;
 use futures::{stream, StreamExt};
 
-use crate::{encode::Encode, registry::RoutingTable, Reload, WithReload};
+use crate::{encode::Encode, registry::RoutingTable, reload::Reload, WithReload};
 
 pub enum PersistStatus {
     Completed,
