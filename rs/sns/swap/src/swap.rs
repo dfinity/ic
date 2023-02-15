@@ -13,13 +13,14 @@ use crate::pb::v1::{
     ErrorRefundIcpRequest, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateRequest,
     GetBuyerStateResponse, GetBuyersTotalResponse, GetDerivedStateResponse, GetLifecycleRequest,
     GetLifecycleResponse, GetOpenTicketRequest, GetOpenTicketResponse, GetSaleParametersRequest,
-    GetSaleParametersResponse, Init, Lifecycle, ListCommunityFundParticipantsRequest,
-    ListCommunityFundParticipantsResponse, ListDirectParticipantsRequest,
-    ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest, ListSnsNeuronRecipesResponse,
-    NeuronId as SaleNeuronId, NewSaleTicketRequest, NewSaleTicketResponse, OpenRequest,
-    OpenResponse, Participant, RefreshBuyerTokensResponse, RestoreDappControllersResponse,
-    SetDappControllersCallResult, SetModeCallResult, SettleCommunityFundParticipationResult,
-    SnsNeuronRecipe, Swap, SweepResult, Ticket, TransferableAmount,
+    GetSaleParametersResponse, GetStateResponse, Init, Lifecycle,
+    ListCommunityFundParticipantsRequest, ListCommunityFundParticipantsResponse,
+    ListDirectParticipantsRequest, ListDirectParticipantsResponse, ListSnsNeuronRecipesRequest,
+    ListSnsNeuronRecipesResponse, NeuronId as SaleNeuronId, NewSaleTicketRequest,
+    NewSaleTicketResponse, OpenRequest, OpenResponse, Participant, RefreshBuyerTokensResponse,
+    RestoreDappControllersResponse, SetDappControllersCallResult, SetModeCallResult,
+    SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap, SweepResult, Ticket,
+    TransferableAmount,
 };
 use crate::types::{ScheduledVestingEvent, TransferResult};
 #[cfg(target_arch = "wasm32")]
@@ -2028,6 +2029,22 @@ impl Swap {
     //
     // --- query methods on the state  -----------------------------------------
     //
+
+    /// Gets a copy of the Sale canister state and elides the dynamic data sources that
+    /// can grow unbounded and computes the derived state of the Sale.
+    pub fn get_state(&self) -> GetStateResponse {
+        let swap = Swap {
+            cf_participants: vec![],
+            neuron_recipes: vec![],
+            buyers: btreemap! {},
+            ..self.clone()
+        };
+
+        GetStateResponse {
+            swap: Some(swap),
+            derived: Some(self.derived_state()),
+        }
+    }
 
     /// Computes the DerivedState.
     /// `sns_tokens_per_icp` will be 0 if `participant_total_icp_e8s` is 0.

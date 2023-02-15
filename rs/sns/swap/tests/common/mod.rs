@@ -13,6 +13,7 @@ use ic_sns_governance::{
     },
     types::ONE_MONTH_SECONDS,
 };
+use ic_sns_swap::pb::v1::{CfNeuron, CfParticipant};
 use ic_sns_swap::{
     memory,
     pb::v1::{
@@ -259,6 +260,18 @@ pub fn create_generic_sns_neuron_recipes(count: u64) -> Vec<SnsNeuronRecipe> {
                 buyer_principal: (*TEST_USER1_PRINCIPAL).to_string(),
             })),
             claimed_status: Some(ClaimedStatus::Pending as i32),
+        })
+        .collect()
+}
+
+pub fn create_generic_cf_participants(count: u64) -> Vec<CfParticipant> {
+    (0..count)
+        .map(|i| CfParticipant {
+            hotkey_principal: i2principal_id_string(i),
+            cf_neurons: vec![CfNeuron {
+                nns_neuron_id: i,
+                amount_icp_e8s: E8,
+            }],
         })
         .collect()
 }

@@ -80,10 +80,7 @@ fn get_state() {
 /// See `GetStateResponse`.
 #[candid_method(query, rename = "get_state")]
 fn get_state_(_arg: GetStateRequest) -> GetStateResponse {
-    GetStateResponse {
-        swap: Some(swap().clone()),
-        derived: Some(swap().derived_state()),
-    }
+    swap().get_state()
 }
 
 /// Get the state of a buyer. This will return a `GetBuyerStateResponse`
