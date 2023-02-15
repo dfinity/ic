@@ -228,6 +228,14 @@ dfx deploy \
     certificate_orchestrator
 ```
 
+_Important:_ Make sure to use a random, large enough value for the `ID_SEED`. The
+value is an unsigned 128bit integer. You can use the following command, to generate
+such a value:
+
+```sh
+od -N 16 -t uL -An /dev/urandom | tr -d " "
+```
+
 Take note of the canister ID of the deployed `certificate-orchestrator`. In
 the following, we refer to it as `CANISTER_ID`.
 
