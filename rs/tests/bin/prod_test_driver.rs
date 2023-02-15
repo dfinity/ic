@@ -1,4 +1,5 @@
 use clap::Parser;
+use ic_tests::boundary_nodes_integration::boundary_nodes::BoundaryNodeHttpsConfig;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
     canister_http, driver::driver_setup::initialize_env, execution, ledger_tests, message_routing,
@@ -206,7 +207,7 @@ fn get_test_suites() -> HashMap<String, Suite> {
             "boundary_nodes_pre_master",
             vec![pot_with_setup(
                 "boundary_nodes_pot",
-                boundary_nodes_integration::boundary_nodes::config,
+                boundary_nodes_integration::boundary_nodes::mk_setup(BoundaryNodeHttpsConfig::AcceptInvalidCertsAndResolveClientSide),
                 seq!(
                     par!(
                         sys_t(

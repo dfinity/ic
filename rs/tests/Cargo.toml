@@ -352,6 +352,10 @@ name = "ic-systest-boundary-node-integration"
 path = "bin/boundary_node_integration_test.rs"
 
 [[bin]]
+name = "ic-systest-boundary-node-integration-on-playnet"
+path = "bin/boundary_node_integration_on_playnet_test.rs"
+
+[[bin]]
 name = "ic-systest-boundary-node-snp"
 path = "bin/boundary_nodes_snp_test.rs"
 

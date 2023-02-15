@@ -14,9 +14,7 @@ use ic_tests::systest;
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(mk_setup(
-            BoundaryNodeHttpsConfig::AcceptInvalidCertsAndResolveClientSide,
-        ))
+        .with_setup(mk_setup(BoundaryNodeHttpsConfig::UseRealCertsAndDns))
         .add_parallel(
             SystemTestSubGroup::new()
                 .add_test(systest!(canister_test))
