@@ -231,7 +231,7 @@ fn query_direct_read_write(c: &mut Criterion) {
 }
 
 fn query_direct_write_single(c: &mut Criterion) {
-    let wasm = wat::parse_str(stable_read_write_wat()).unwrap();
+    let wasm = wat::parse_str(stable_write_repeat()).unwrap();
     query_bench(c, wasm, "query_direct_write_single", "query_test", &[]);
 }
 
