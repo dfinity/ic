@@ -13,14 +13,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common import farm  # noqa
 from common import misc  # noqa
 from common import ssh  # noqa
-
-sys.path.append(
-    os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "ic-os/guestos/tests",
-    )
-)
-import ictools  # noqa
+from common import ictools  # noqa
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_boolean("clean", False, "Set true to do a clean Bazel build.")

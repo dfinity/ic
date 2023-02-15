@@ -2,7 +2,6 @@ package(default_visibility = ["__subpackages__"])
 
 exports_files([
     "bootloader/extra_boot_args.template",
-    "launch_single_vm.py",
     "partitions.csv",
     "rootfs",
     "rootfs/docker-base.dev",
@@ -29,7 +28,6 @@ sh_test(
 # All guest-os targets are named the same, just stay in different submodules.
 # To build or run specific target:
 #
-# bazel run   //ic-os/guestos/dev-malicious:launch_single_vm [--s3_endpoint=<internal endpoint address>]
 # bazel run   //ic-os/guestos/prod:upload_disk-img           [--s3_endpoint=<internal endpoint address>]
 # bazel build //ic-os/guestos/dev/...
 #

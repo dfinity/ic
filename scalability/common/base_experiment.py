@@ -124,8 +124,7 @@ class BaseExperiment:
         if self.benchmark_boundary_nodes:
             return "not-available"
 
-        sys.path.insert(1, "../ic-os/guestos/tests")
-        import ictools
+        from common import ictools
 
         return ictools.get_ic_version("http://[{}]:8080/api/v2/status".format(m))
 

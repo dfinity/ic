@@ -10,14 +10,7 @@ import gflags
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from common import farm  # noqa
-
-sys.path.append(
-    os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
-        "ic-os/guestos/tests",
-    )
-)
-import ictools  # noqa
+from common import ictools  # noqa
 
 FLAGS = gflags.FLAGS
 

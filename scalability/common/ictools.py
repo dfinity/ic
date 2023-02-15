@@ -13,7 +13,6 @@ import requests
 
 FLAGS = gflags.FLAGS
 
-gflags.DEFINE_string("ic_admin_bin", None, "Path to ic-admin binary")
 gflags.DEFINE_string("ic_prep_bin", None, "Path to ic-prep binary")
 gflags.DEFINE_string("install_nns_bin", None, "Path to ic-nns-init bin")
 gflags.DEFINE_integer("timeout", 240, "Timeout in seconds to wait for IC to come up")
@@ -47,30 +46,13 @@ def build_bootstrap_config_image(name, **kwargs):
                 f.write(keys)
         kwargs["accounts_ssh_authorized_keys"] = ssh_keys_dir
 
-    bootstrap_script = os.path.join(os.path.dirname(__file__), "..", "scripts", "build-bootstrap-config-image.sh")
+    bootstrap_script = "../ic-os/guestos/scripts/build-bootstrap-config-image.sh"
     args = [bootstrap_script, config_image]
     for key, value in kwargs.items():
         args.append("--" + key)
         args.append(value)
     subprocess.run(args, stdout=subprocess.DEVNULL, check=True)
     return config_image
-
-
-def wait_ic_version(replica_url, version, timeout):
-    start = time.time()
-    now = start
-    while now < start + timeout:
-        try:
-            req = requests.get(replica_url)
-            status = cbor.loads(req.content)
-            if version == status.value["impl_version"]:
-                print("✅ ic-version on %-30s   %s" % (replica_url, version))
-                return
-        except Exception as e:
-            print(e)
-            time.sleep(1)
-            now = time.time()
-    raise TimeoutError("Timeout when waiting for IC version %s." % version)
 
 
 def get_ic_version(replica_url):
@@ -165,12 +147,6 @@ def nns_install(ic_config, ic_url):
     return subprocess.run(cmd, check=True)
 
 
-def wait_ic_up(ic_config, timeout=None):
-    if timeout is None:
-        timeout = FLAGS.timeout
-    wait_http_up("http://[%s]:8080" % ic_config.nns_ips[0], timeout)
-
-
 def wait_http_up(url, timeout=None):
     if timeout is None:
         timeout = FLAGS.timeout
@@ -188,27 +164,6 @@ def wait_http_up(url, timeout=None):
             time.sleep(1)
             now = time.time()
     raise TimeoutError("Time out waiting for IC instance to come up.")
-
-
-def _get_artifact_version(artifact, kind):
-    if hasattr(artifact, "local_path"):
-        artifact = artifact.local_path
-
-    get_artifact_version = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "scripts",
-        "get-artifact-version.sh",
-    )
-    process = subprocess.Popen([get_artifact_version, kind, artifact], stdout=subprocess.PIPE)
-    return process.stdout.read().decode("utf-8").strip()
-
-
-def get_disk_image_version(image):
-    return _get_artifact_version(image, "--disk")
-
-
-def get_upgrade_image_version(image):
-    return _get_artifact_version(image, "--upgrade")
 
 
 def build_ssh_extra_config():
