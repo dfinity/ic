@@ -1,6 +1,5 @@
 use std::{
     cmp::min,
-    fs::{self},
     io::BufRead,
     net::SocketAddr,
     path::PathBuf,
@@ -23,10 +22,7 @@ use dashmap::{DashMap, DashSet};
 use futures::{future::TryFutureExt, stream::FuturesUnordered};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use lazy_static::lazy_static;
-use nix::{
-    sys::signal::{kill as send_signal, Signal},
-    unistd::Pid,
-};
+use nix::sys::signal::Signal;
 use opentelemetry::{
     baggage::BaggageExt,
     global,
@@ -50,16 +46,18 @@ mod encode;
 mod metrics;
 mod persist;
 mod registry;
+mod reload;
 mod retry;
 mod routes;
 
 use crate::{
-    encode::{RoutesEncoder, TrustedCertsEncoder, UpstreamEncoder},
+    encode::{RoutesEncoder, SystemReplicasEncoder, TrustedCertsEncoder, UpstreamEncoder},
     metrics::{CheckMetricParams, CheckWithMetrics, MetricParams, WithMetrics},
     persist::{LegacyPersister, Persister, WithDedup, WithEmpty, WithMultiple},
     registry::{
         CreateRegistryClient, CreateRegistryClientImpl, Snapshot, Snapshotter, WithMinimumVersion,
     },
+    reload::{PidReloader, SystemdReloader, WithReload},
     retry::WithRetry,
 };
 
@@ -99,6 +97,15 @@ struct Cli {
 
     #[clap(long, default_value = "/tmp/trusted_certs.pem")]
     trusted_certs_path: PathBuf,
+
+    #[clap(long, default_value = "/tmp/system_replicas.ruleset")]
+    nftables_system_replicas_path: PathBuf,
+
+    #[clap(long, default_value = "system_replica_ips")]
+    nftables_system_replicas_var: String,
+
+    #[clap(long, default_value = "/usr/bin/systemctl")]
+    systemctl_path: PathBuf,
 
     #[clap(long, default_value = "/var/run/nginx.pid")]
     pid_path: PathBuf,
@@ -200,27 +207,51 @@ async fn main() -> Result<(), Error> {
     let checker = WithSemaphore::wrap(checker, 32);
 
     // Service Reloads
-    let reloader = Reloader::new(cli.pid_path, Signal::SIGHUP);
-    let reloader = WithMetrics(reloader, MetricParams::new(&meter, SERVICE_NAME, "reload"));
+    let ngx_reloader = PidReloader::new(cli.pid_path, Signal::SIGHUP);
+    let ngx_reloader = WithMetrics(
+        ngx_reloader,
+        MetricParams::new(&meter, SERVICE_NAME, "ngx_reload"),
+    );
+
+    let nft_reloader = SystemdReloader::new(
+        cli.systemctl_path, // bin_path
+        "nftables",         // service
+        "restart",          // command
+    );
+    let nft_reloader = WithMetrics(
+        nft_reloader,
+        MetricParams::new(&meter, SERVICE_NAME, "nftables_reload"),
+    );
 
     // Persistence
     let persister = WithMultiple(vec![
-        Arc::new(LegacyPersister::new(cli.legacy_routes_dir.clone())),
-        Arc::new(Persister::new(
-            cli.routes_path.clone(),
-            Arc::new(RoutesEncoder),
+        Arc::new(WithReload(
+            WithMultiple(vec![
+                Arc::new(LegacyPersister::new(cli.legacy_routes_dir.clone())),
+                Arc::new(Persister::new(
+                    cli.routes_path.clone(),
+                    Arc::new(RoutesEncoder),
+                )),
+                Arc::new(Persister::new(
+                    cli.upstreams_path.clone(),
+                    Arc::new(UpstreamEncoder),
+                )),
+                Arc::new(Persister::new(
+                    cli.trusted_certs_path.clone(),
+                    Arc::new(TrustedCertsEncoder),
+                )),
+            ]),
+            ngx_reloader,
         )),
-        Arc::new(Persister::new(
-            cli.upstreams_path.clone(),
-            Arc::new(UpstreamEncoder),
-        )),
-        Arc::new(Persister::new(
-            cli.trusted_certs_path.clone(),
-            Arc::new(TrustedCertsEncoder),
+        Arc::new(WithReload(
+            WithMultiple(vec![Arc::new(Persister::new(
+                cli.nftables_system_replicas_path.clone(),
+                Arc::new(SystemReplicasEncoder(cli.nftables_system_replicas_var)),
+            ))]),
+            nft_reloader,
         )),
     ]);
 
-    let persister = WithReload(persister, reloader);
     let persister = WithDedup(persister, Arc::new(RwLock::new(None)));
     let persister = WithEmpty(persister);
     let persister = WithMetrics(
@@ -412,37 +443,6 @@ impl Check for Checker {
         Ok(())
     }
 }
-
-#[async_trait]
-trait Reload: Sync + Send {
-    async fn reload(&self) -> Result<(), Error>;
-}
-
-struct Reloader {
-    pid_path: PathBuf,
-    signal: Signal,
-}
-
-impl Reloader {
-    fn new(pid_path: PathBuf, signal: Signal) -> Self {
-        Self { pid_path, signal }
-    }
-}
-
-#[async_trait]
-impl Reload for Reloader {
-    async fn reload(&self) -> Result<(), Error> {
-        let pid = fs::read_to_string(self.pid_path.clone()).context("failed to read pid file")?;
-        let pid = pid.trim().parse::<i32>().context("failed to parse pid")?;
-        let pid = Pid::from_raw(pid);
-
-        send_signal(pid, self.signal)?;
-
-        Ok(())
-    }
-}
-
-struct WithReload<T, R>(T, R);
 
 #[async_trait]
 trait Run: Send + Sync {

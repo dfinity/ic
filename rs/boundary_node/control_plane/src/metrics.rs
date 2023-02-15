@@ -12,7 +12,8 @@ use tracing::info;
 
 use crate::{
     registry::{CreateRegistryClient, RoutingTable, Snapshot},
-    Check, Persist, PersistStatus, Reload, Run,
+    reload::Reload,
+    Check, Persist, PersistStatus, Run,
 };
 
 pub struct MetricParams {

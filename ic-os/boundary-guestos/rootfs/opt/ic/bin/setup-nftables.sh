@@ -9,6 +9,7 @@ readonly BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
 readonly NETWORK_CONFIG="${BOOT_DIR}/network.conf"
 
 readonly RUN_DIR='/run/ic-node/etc/nftables'
+readonly SYSTEM_REPLICAS_FILE="${RUN_DIR}/system_replicas.ruleset"
 readonly RULESET_FILE="${RUN_DIR}/defs.ruleset"
 
 ipv6_replica_ips=("::/128")
@@ -61,16 +62,17 @@ function read_variables() {
 # Add extra rules to nftables to limit access.
 function generate_nftables_config() {
     mkdir -p "${RUN_DIR}"
+
     cat >"${RULESET_FILE}" <<EOF
-define ipv6_replica_ips = { $(csv "${ipv6_replica_ips[@]}") }
-
-define ipv4_http_ips = { $(csv "${ipv4_http_ips[@]}") }
-
-define ipv6_http_ips = { $(csv "${ipv6_http_ips[@]}") }
-
-define ipv6_debug_ips = { $(csv "${ipv6_debug_ips[@]}") }
-
+define ipv6_replica_ips    = { $(csv "${ipv6_replica_ips[@]}")    }
+define ipv4_http_ips       = { $(csv "${ipv4_http_ips[@]}")       }
+define ipv6_http_ips       = { $(csv "${ipv6_http_ips[@]}")       }
+define ipv6_debug_ips      = { $(csv "${ipv6_debug_ips[@]}")      }
 define ipv6_monitoring_ips = { $(csv "${ipv6_monitoring_ips[@]}") }
+EOF
+
+    cat >"${SYSTEM_REPLICAS_FILE}" <<EOF
+define ipv6_system_replica_ips = { ::/128 }
 EOF
 }
 
