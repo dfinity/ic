@@ -20,6 +20,7 @@ You can find instructions in the [developer docs](https://internetcomputer.org/d
 Then, you can deploy the canister on the IC with the following two commands:
 ```
 export PRINCIPAL=$(dfx identity get-principal)
+export ID_SEED=$(od -N 16 -t uL -An /dev/urandom | tr -d " ")
 dfx deploy \
     --network "ic" \
     --argument "(
@@ -27,7 +28,10 @@ dfx deploy \
             rootPrincipals = vec {
                 principal \"${PRINCIPAL}\";
             };
-            idSeed = 10121989;
+            idSeed = \"${ID_SEED}\";
         }
     )"
 ```
+
+_Important:_ Make sure to use a random value of sufficient length for the ID seed.
+The ID seed is a 128bit unsigned integer.
