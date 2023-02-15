@@ -101,6 +101,11 @@ options may be specified:
       ic_types::malicious_behaviour::MaliciousBehaviour
 
     Be sure to properly quote the string.
+
+  --get_sev_certs
+    If on an SEV-SNP enabled machine, include the ark, ask, and vcek
+    certificates in the config image.  Note: this requires that this
+    script is executed on the host which will be running the SEV-SNP VM.
 EOF
 }
 
@@ -120,6 +125,7 @@ function build_ic_bootstrap_tar() {
     local NODE_OPERATOR_PRIVATE_KEY
     local REPLICA_LOG_DEBUG_OVERRIDES
     local MALICIOUS_BEHAVIOR
+    local GET_SEV_CERTS=false
     while true; do
         if [ $# == 0 ]; then
             break
@@ -172,6 +178,11 @@ function build_ic_bootstrap_tar() {
                 ;;
             --malicious_behavior)
                 MALICIOUS_BEHAVIOR="$2"
+                ;;
+            --get_sev_certs)
+                GET_SEV_CERTS=true
+                shift 1
+                continue
                 ;;
             *)
                 echo "Unrecognized option: $1"
@@ -226,6 +237,12 @@ EOF
     fi
     if [ "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" != "" ]; then
         cp -r "${ACCOUNTS_SSH_AUTHORIZED_KEYS}" "${BOOTSTRAP_TMPDIR}/accounts_ssh_authorized_keys"
+    fi
+    if [[ "${GET_SEV_CERTS}" == true && ! -e "/dev/sev" ]]; then
+        echo "--get_sev_certs is true but /dev/sev is not available, unable to get SEV certs"
+    fi
+    if [[ "${GET_SEV_CERTS}" == true && -e "/dev/sev" ]]; then
+        /opt/ic/bin/get-sev-certs.sh
     fi
     if [ "${NODE_OPERATOR_PRIVATE_KEY}" != "" ]; then
         cp "${NODE_OPERATOR_PRIVATE_KEY}" "${BOOTSTRAP_TMPDIR}/node_operator_private_key.pem"

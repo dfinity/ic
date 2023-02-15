@@ -16,4 +16,4 @@ start=$(fdisk -l disk.img 2>/dev/null | grep img4 | awk '$0=$2')
 offset=$(("$start" * 512))
 [ ! -d tmp_mount ] || sudo umount -q tmp_mount
 mkdir -p tmp_mount
-sudo mount -o loop,offset=${offset} ./disk.img ./tmp_mount
+sudo mount -o rw,loop,offset=${offset} ./disk.img ./tmp_mount
