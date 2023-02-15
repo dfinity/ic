@@ -214,6 +214,36 @@ fn test_upgrade_restricted() {
         "unexpected result: {:?}",
         res
     );
+
+    // Test restricted BTC deposits.
+    let upgrade_args = UpgradeArgs {
+        retrieve_btc_min_amount: Some(100),
+        min_confirmations: None,
+        max_time_in_queue_nanos: Some(100),
+        mode: Some(Mode::DepositsRestrictedTo(vec![authorized_principal])),
+    };
+    env.upgrade_canister(minter_id, minter_wasm(), Encode!(&upgrade_args).unwrap())
+        .expect("Failed to upgrade the minter canister");
+
+    let update_balance_args = UpdateBalanceArgs {
+        owner: None,
+        subaccount: None,
+    };
+
+    let res = env
+        .execute_ingress_as(
+            unauthorized_principal.into(),
+            minter_id,
+            "update_balance",
+            Encode!(&update_balance_args).unwrap(),
+        )
+        .expect("Failed to call update_balance");
+    let res = Decode!(&res.bytes(), Result<UpdateBalanceResult, UpdateBalanceError>).unwrap();
+    assert!(
+        matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
+        "unexpected result: {:?}",
+        res
+    );
 }
 
 #[test]
