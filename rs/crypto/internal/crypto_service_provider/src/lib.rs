@@ -30,7 +30,6 @@ use crate::api::{
     NodePublicKeyData, NodePublicKeyDataError, ThresholdSignatureCspClient,
 };
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
-use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, ExternalPublicKeys};
 use crate::vault::api::{CspPublicKeyStoreError, CspVault, PksAndSksContainsErrors};
@@ -41,7 +40,6 @@ use ic_logger::{info, new_logger, replica_logger::no_op_logger, ReplicaLogger};
 use ic_types::crypto::CurrentNodePublicKeys;
 use key_id::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use rand::{CryptoRng, Rng};
 use secret_key_store::proto_store::ProtoSecretKeyStore;
 use std::convert::TryFrom;
 use std::path::Path;
@@ -348,32 +346,6 @@ pub mod builder {
                 logger: self.logger,
                 metrics: Arc::new(self.metrics),
             }
-        }
-    }
-}
-
-impl Csp {
-    /// Creates a crypto service provider for testing.
-    ///
-    /// Note: This MUST NOT be used in production as the secrecy of the secret
-    /// key store and the canister secret key store is not guaranteed.
-    pub fn of<
-        R: Rng + CryptoRng + Send + Sync + 'static,
-        S: SecretKeyStore + 'static,
-        P: PublicKeyStore + 'static,
-    >(
-        csprng: R,
-        secret_key_store: S,
-        public_key_store: P,
-    ) -> Self {
-        Csp {
-            csp_vault: Arc::new(LocalCspVault::new_for_test(
-                csprng,
-                secret_key_store,
-                public_key_store,
-            )),
-            logger: no_op_logger(),
-            metrics: Arc::new(CryptoMetrics::none()),
         }
     }
 }

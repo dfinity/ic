@@ -15,14 +15,12 @@ mod tls;
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyStore;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
-use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::CspRwLock;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::time_source::TimeSource;
-use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{new_logger, ReplicaLogger};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
@@ -112,27 +110,6 @@ impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicK
             Arc::new(CurrentSystemTimeSource::new(new_logger!(&logger))),
             metrics,
             logger,
-        )
-    }
-}
-
-impl<R: Rng + CryptoRng, S: SecretKeyStore, P: PublicKeyStore>
-    LocalCspVault<R, S, TempSecretKeyStore, P>
-{
-    /// Creates a local CSP vault for testing.
-    ///
-    /// Note: This MUST NOT be used in production as the secrecy of the secret
-    /// key store is not guaranteed.
-    pub fn new_for_test(csprng: R, node_secret_key_store: S, public_key_store: P) -> Self {
-        let metrics = Arc::new(CryptoMetrics::none());
-        Self::new_internal(
-            csprng,
-            node_secret_key_store,
-            TempSecretKeyStore::new(),
-            public_key_store,
-            Arc::new(CurrentSystemTimeSource::new(no_op_logger())),
-            metrics,
-            no_op_logger(),
         )
     }
 }
@@ -257,6 +234,7 @@ pub mod builder {
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+    use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::FastForwardTimeSource;
 
     pub struct LocalCspVaultBuilder<R, S, C, P> {
