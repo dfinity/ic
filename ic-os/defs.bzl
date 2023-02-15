@@ -461,27 +461,6 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
         tags = ["manual"],
     )
 
-    native.py_binary(
-        name = "launch_single_vm",
-        main = "launch_single_vm.py",
-        srcs = [
-            "//ic-os/guestos:launch_single_vm.py",
-            "//ic-os/guestos/tests:ictools.py",
-        ],
-        data = [
-            ":disk-img.tar.zst.sha256",
-            ":disk-img-url",
-            ":version.txt",
-            "//rs/prep:ic-prep",
-        ],
-        env = {
-            "VERSION_FILE": "$(location :version.txt)",
-            "IMG_HASH_FILE": "$(location :disk-img.tar.zst.sha256)",
-            "DISK_IMG_URL_FILE": "$(location :disk-img-url)",
-        },
-        tags = ["manual"],
-    )
-
     native.filegroup(
         name = name,
         srcs = [

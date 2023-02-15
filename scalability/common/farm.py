@@ -368,8 +368,7 @@ class Farm(object):
         print(f"Setting up config image with {self.ic_node_ipv6s}")
         assert self.ic_node_ipv6s is not None
 
-        sys.path.insert(1, "../ic-os/guestos/tests")
-        import ictools
+        from common import ictools
 
         # Generate config image
         FLAGS.ic_prep_bin = os.path.join(self.artifacts_path, "ic-prep")
