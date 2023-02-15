@@ -11,7 +11,7 @@ use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use thiserror::Error;
 
 /// Time since UNIX_EPOCH (in nanoseconds). Just like 'std::time::Instant' or
@@ -161,6 +161,29 @@ impl TryFrom<Duration> for Time {
 impl From<Time> for Duration {
     fn from(val: Time) -> Self {
         Duration::from_nanos(val.0)
+    }
+}
+
+impl TryFrom<SystemTime> for Time {
+    type Error = TimeInstantiationError;
+
+    /// Performs conversion from `SystemTime` to `Time`.
+    ///
+    /// # Panics
+    ///
+    /// The function panics when `duration_since(UNIX_EPOCH)` fails,
+    /// i.e. when the `SystemTime` measurement is earlier than the
+    /// `UNIX_EPOCH`.
+    fn try_from(st: SystemTime) -> Result<Self, Self::Error> {
+        st.duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .try_into()
+    }
+}
+
+impl From<Time> for SystemTime {
+    fn from(t: Time) -> Self {
+        SystemTime::UNIX_EPOCH + Duration::from(t)
     }
 }
 

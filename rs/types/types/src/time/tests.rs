@@ -1,6 +1,7 @@
 use crate::time::{TimeInstantiationError, NANOS_PER_MILLI};
 use crate::Time;
 use assert_matches::assert_matches;
+use std::time::SystemTime;
 
 mod millis {
     use super::*;
@@ -47,4 +48,20 @@ mod millis {
         let result = Time::from_millis_since_unix_epoch(max_millis);
         assert_matches!(result, Ok(time) if time == Time::from_nanos_since_unix_epoch(18_446_744_073_709_000_000));
     }
+}
+
+#[test]
+fn should_convert_from_system_time_and_back() {
+    let system_time = SystemTime::now();
+    let time: Time = system_time.try_into().unwrap();
+
+    let system_time_nanos = system_time
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as u64;
+    let time_nanos = time.as_nanos_since_unix_epoch();
+    assert_eq!(system_time_nanos, time_nanos);
+
+    let back: SystemTime = time.into();
+    assert_eq!(system_time, back);
 }
