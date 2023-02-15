@@ -836,6 +836,7 @@ mod test {
         let mut valid_keys = BTreeSet::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         valid_keys.insert(key_id.clone());
+        let max_ongoing_signatures = 2;
         sign_with_ecdsa_contexts.insert(
             CallbackId::from(1),
             SignWithEcdsaContext {
@@ -917,6 +918,7 @@ mod test {
         update_ongoing_signatures(
             all_requests,
             Some(&current_key_transcript),
+            max_ongoing_signatures,
             &mut ecdsa_payload,
             no_op_logger(),
         )

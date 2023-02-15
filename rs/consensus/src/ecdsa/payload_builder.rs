@@ -714,6 +714,7 @@ pub(crate) fn create_data_payload_helper_2(
     update_ongoing_signatures(
         new_signing_requests,
         current_key_transcript.as_ref(),
+        ecdsa_config.quadruples_to_create_in_advance,
         ecdsa_payload,
         log.clone(),
     )?;
@@ -1115,6 +1116,7 @@ pub(crate) fn update_signature_agreements(
 pub(crate) fn update_ongoing_signatures(
     new_requests: BTreeMap<ecdsa::RequestId, &SignWithEcdsaContext>,
     current_key_transcript: Option<&ecdsa::UnmaskedTranscriptWithAttributes>,
+    max_ongoing_signatures: u32,
     payload: &mut ecdsa::EcdsaPayload,
     log: ReplicaLogger,
 ) -> Result<(), EcdsaPayloadError> {
@@ -1125,6 +1127,9 @@ pub(crate) fn update_ongoing_signatures(
             new_requests.len()
         );
         for (request_id, context) in new_requests.into_iter() {
+            if (payload.ongoing_signatures.len() as u32) >= max_ongoing_signatures {
+                return Ok(());
+            }
             if let Some(quadruple) = payload
                 .available_quadruples
                 .remove(&request_id.quadruple_id)
@@ -1905,6 +1910,7 @@ mod tests {
         let mut valid_keys = BTreeSet::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         valid_keys.insert(key_id.clone());
+        let max_ongoing_signatures = 2;
         let mut state = ReplicatedStateBuilder::default().build();
         state
             .metadata
@@ -1992,6 +1998,7 @@ mod tests {
         let result = update_ongoing_signatures(
             result,
             Some(&key_transcript),
+            max_ongoing_signatures,
             &mut ecdsa_payload,
             no_op_logger(),
         );
@@ -2033,6 +2040,7 @@ mod tests {
         let result = update_ongoing_signatures(
             new_requests,
             Some(&key_transcript),
+            max_ongoing_signatures,
             &mut ecdsa_payload,
             no_op_logger(),
         );
@@ -2756,6 +2764,7 @@ mod tests {
         let mut valid_keys = BTreeSet::new();
         let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
         valid_keys.insert(key_id.clone());
+        let max_ongoing_signatures = 1;
         sign_with_ecdsa_contexts.insert(
             CallbackId::from(1),
             SignWithEcdsaContext {
@@ -2808,6 +2817,7 @@ mod tests {
         update_ongoing_signatures(
             all_requests,
             Some(&current_key_transcript),
+            max_ongoing_signatures,
             &mut ecdsa_payload,
             no_op_logger(),
         )
