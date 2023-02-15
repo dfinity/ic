@@ -5,12 +5,12 @@ use crate::common::doubles::{
 };
 use crate::common::{
     compute_multiple_successful_claim_swap_neurons_response,
-    compute_single_successful_claim_swap_neurons_response, create_generic_sns_neuron_recipes,
-    create_single_neuron_recipe, extract_canister_call_error, extract_set_dapp_controller_response,
-    get_snapshot_of_buyers_index_list, i2principal_id_string, mock_stub, paginate_participants,
-    successful_set_dapp_controllers_call_result, successful_set_mode_call_result,
-    successful_settle_community_fund_participation_result, verify_participant_balances,
-    TestInvestor,
+    compute_single_successful_claim_swap_neurons_response, create_generic_cf_participants,
+    create_generic_sns_neuron_recipes, create_single_neuron_recipe, extract_canister_call_error,
+    extract_set_dapp_controller_response, get_snapshot_of_buyers_index_list, i2principal_id_string,
+    mock_stub, paginate_participants, successful_set_dapp_controllers_call_result,
+    successful_set_mode_call_result, successful_settle_community_fund_participation_result,
+    verify_participant_balances, TestInvestor,
 };
 use futures::{channel::mpsc, future::FutureExt, StreamExt};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -3843,4 +3843,40 @@ fn test_rebuild_indexes_ignores_existing_index() {
         buyer_list_index_length_before,
         buyer_list_index_length_after
     )
+}
+
+/// Test that the get_state API bounds the dynamic data sources returned in the
+/// GetStateResponse.
+#[test]
+fn test_get_state_bounds_data_sources() {
+    // Prepare the canister with multiple buyers
+    let swap = Swap {
+        lifecycle: Committed as i32,
+        params: Some(params()),
+        init: Some(init()),
+        buyers: btreemap! {
+            i2principal_id_string(1) => BuyerState::new(E8),
+        },
+        neuron_recipes: create_generic_sns_neuron_recipes(1),
+        cf_participants: create_generic_cf_participants(1),
+        ..Default::default()
+    };
+
+    let get_state_response = swap.get_state();
+    let derived_state = get_state_response.derived.unwrap();
+    // 1 CF participant and 1 direct participant at 1 E8 each
+    assert_eq!(derived_state.buyer_total_icp_e8s, 2 * E8);
+    // Exact exchange rate is not important to this test, just that it is set
+    assert!(derived_state.sns_tokens_per_icp >= 0.0f32);
+
+    let swap_state = get_state_response.swap.unwrap();
+    // Assert that unbounded data sources are set to empty structs in the response
+    assert!(swap_state.cf_participants.is_empty());
+    assert!(swap_state.neuron_recipes.is_empty());
+    assert!(swap_state.buyers.is_empty());
+
+    // Assert that the origin data sources are still populated
+    assert!(!swap.cf_participants.is_empty());
+    assert!(!swap.neuron_recipes.is_empty());
+    assert!(!swap.buyers.is_empty());
 }
