@@ -9,8 +9,8 @@ use ic_config::{
 use ic_ic00_types::{CanisterIdRecord, EmptyBlob, InstallCodeArgs, Method, Payload, IC_00};
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{
-    CanisterId, CanisterInstallMode, CanisterSettingsArgs, ErrorCode, IngressState, IngressStatus,
-    MessageId, PrincipalId, StateMachine, StateMachineConfig,
+    CanisterId, CanisterInstallMode, CanisterSettingsArgs, CryptoHashOfState, ErrorCode,
+    IngressState, IngressStatus, MessageId, PrincipalId, StateMachine, StateMachineConfig,
 };
 use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -100,32 +100,46 @@ fn should_skip_test_due_to_disabled_dts() -> bool {
     false
 }
 
-fn dts_env(
+fn dts_subnet_config(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
-) -> StateMachine {
+) -> SubnetConfig {
     let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
-    StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfig {
-            scheduler_config: SchedulerConfig {
-                max_instructions_per_install_code: message_instruction_limit,
-                max_instructions_per_install_code_slice: slice_instruction_limit,
-                max_instructions_per_round: slice_instruction_limit + slice_instruction_limit,
-                max_instructions_per_message: message_instruction_limit,
-                max_instructions_per_message_without_dts: slice_instruction_limit,
-                max_instructions_per_slice: slice_instruction_limit,
-                instruction_overhead_per_message: NumInstructions::from(0),
-                instruction_overhead_per_canister: NumInstructions::from(0),
-                ..subnet_config.scheduler_config
-            },
-            ..subnet_config
+    SubnetConfig {
+        scheduler_config: SchedulerConfig {
+            max_instructions_per_install_code: message_instruction_limit,
+            max_instructions_per_install_code_slice: slice_instruction_limit,
+            max_instructions_per_round: slice_instruction_limit + slice_instruction_limit,
+            max_instructions_per_message: message_instruction_limit,
+            max_instructions_per_message_without_dts: slice_instruction_limit,
+            max_instructions_per_slice: slice_instruction_limit,
+            instruction_overhead_per_message: NumInstructions::from(0),
+            instruction_overhead_per_canister: NumInstructions::from(0),
+            ..subnet_config.scheduler_config
         },
+        ..subnet_config
+    }
+}
+
+fn dts_state_machine_config(subnet_config: SubnetConfig) -> StateMachineConfig {
+    StateMachineConfig::new(
+        subnet_config,
         HypervisorConfig {
             deterministic_time_slicing: FlagStatus::Enabled,
             cost_to_compile_wasm_instruction: 0.into(),
             ..Default::default()
         },
-    ))
+    )
+}
+
+fn dts_env(
+    message_instruction_limit: NumInstructions,
+    slice_instruction_limit: NumInstructions,
+) -> StateMachine {
+    StateMachine::new_with_config(dts_state_machine_config(dts_subnet_config(
+        message_instruction_limit,
+        slice_instruction_limit,
+    )))
 }
 
 fn dts_install_code_env(
@@ -1705,4 +1719,55 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
         }
     }
     assert!(errors >= 1);
+}
+
+#[test]
+fn dts_serialized_and_runtime_states_are_equal() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    fn run(restart_node: bool) -> CryptoHashOfState {
+        let subnet_config = dts_subnet_config(
+            NumInstructions::from(1_000_000_000),
+            NumInstructions::from(10_000),
+        );
+        let num_canisters = subnet_config.scheduler_config.scheduler_cores * 2;
+        let state_machine_config = dts_state_machine_config(subnet_config);
+        let env = StateMachine::new_with_config(state_machine_config.clone());
+
+        let mut canister_ids = vec![];
+        for _ in 0..num_canisters {
+            let canister_id = env
+                .install_canister_with_cycles(
+                    UNIVERSAL_CANISTER_WASM.to_vec(),
+                    vec![],
+                    None,
+                    INITIAL_CYCLES_BALANCE,
+                )
+                .unwrap();
+            canister_ids.push(canister_id);
+        }
+
+        env.set_checkpoints_enabled(true);
+        for canister_id in canister_ids.iter() {
+            let work = wasm()
+                .instruction_counter_is_at_least(10_000)
+                .reply()
+                .build();
+            env.send_ingress(PrincipalId::new_anonymous(), *canister_id, "update", work);
+        }
+        let env = if restart_node {
+            env.restart_node_with_config(state_machine_config)
+        } else {
+            env
+        };
+        env.tick();
+        env.await_state_hash()
+    }
+
+    let hash_without_restart = run(false);
+    let hash_with_restart = run(true);
+    assert_eq!(hash_without_restart, hash_with_restart);
 }

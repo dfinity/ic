@@ -3,7 +3,7 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig,
     subnet_config::{SubnetConfig, SubnetConfigs},
 };
-use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::{
     combine_signatures, combined_public_key, generate_threshold_key, sign_message,
@@ -82,7 +82,6 @@ use ic_types::{
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress, UserQuery,
     },
-    time::current_time_and_expiry_time,
     xnet::StreamIndex,
     CryptoHashOfPartialState, Height, NodeId, NumberOfNodes, Randomness, RegistryVersion,
 };
@@ -262,6 +261,7 @@ fn replica_logger() -> ReplicaLogger {
 }
 
 /// Bundles the configuration of a `StateMachine`.
+#[derive(Clone)]
 pub struct StateMachineConfig {
     subnet_config: SubnetConfig,
     hypervisor_config: HypervisorConfig,
@@ -1353,12 +1353,10 @@ impl StateMachine {
         payload: Vec<u8>,
     ) -> MessageId {
         self.nonce.set(self.nonce.get() + 1);
-        let builder = PayloadBuilder::new().with_nonce(self.nonce.get()).ingress(
-            sender,
-            canister_id,
-            method,
-            payload,
-        );
+        let builder = PayloadBuilder::new()
+            .with_max_expiry_time_from_now(self.time())
+            .with_nonce(self.nonce.get())
+            .ingress(sender, canister_id, method, payload);
 
         let msg_id = builder.ingress_ids().pop().unwrap();
         self.execute_payload(builder);
@@ -1647,21 +1645,36 @@ impl StateMachine {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct PayloadBuilder {
-    expiry_time: u64,
+    expiry_time: Time,
     nonce: Option<u64>,
     payload: Vec<SignedIngress>,
 }
 
+impl Default for PayloadBuilder {
+    fn default() -> Self {
+        Self {
+            expiry_time: GENESIS,
+            nonce: Default::default(),
+            payload: Default::default(),
+        }
+        .with_max_expiry_time_from_now(GENESIS.into())
+    }
+}
+
 impl PayloadBuilder {
     pub fn new() -> Self {
-        Self::default().with_expiry_time(current_time_and_expiry_time().1)
+        Self::default()
     }
 
-    pub fn with_expiry_time(self, expiry_time: Time) -> Self {
+    pub fn with_max_expiry_time_from_now(self, now: SystemTime) -> Self {
+        self.with_expiry_time(now + MAX_INGRESS_TTL - PERMITTED_DRIFT)
+    }
+
+    pub fn with_expiry_time(self, expiry_time: SystemTime) -> Self {
         Self {
-            expiry_time: expiry_time.as_nanos_since_unix_epoch(),
+            expiry_time: expiry_time.try_into().unwrap(),
             ..self
         }
     }
@@ -1687,7 +1700,7 @@ impl PayloadBuilder {
                     method_name: method.to_string(),
                     arg: Blob(payload),
                     sender: Blob(sender.into_vec()),
-                    ingress_expiry: self.expiry_time,
+                    ingress_expiry: self.expiry_time.as_nanos_since_unix_epoch(),
                     nonce: self.nonce.map(|n| Blob(n.to_be_bytes().to_vec())),
                 },
             },
@@ -1698,7 +1711,7 @@ impl PayloadBuilder {
         .unwrap();
 
         self.payload.push(msg);
-        self.expiry_time += 1;
+        self.expiry_time += Duration::from_nanos(1);
         self.nonce = self.nonce.map(|n| n + 1);
         self
     }
