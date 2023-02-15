@@ -902,7 +902,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.8.0",
             ),
             "sev": crate.spec(
-                version = "^1.1",
+                version = "^1.1.0",
                 features = [
                     "openssl",
                 ],

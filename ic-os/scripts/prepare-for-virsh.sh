@@ -2,7 +2,7 @@
 
 # Get the image.  Either from a pre-built image or built locally.
 # wget https://download.dfinity.systems/ic/39b8ec113e4f387c0de3fd43954a790e98e7fbb7/boundary-os/disk-img-snp-dev/disk-img.tar.zst
-tar xfv bazel-out/k8-opt/bin/ic-os/boundary-guestos/dev-sev/disk-img.tar
+tar xfv bazel-out/k8-opt/bin/ic-os/boundary-guestos/envs/dev-sev/disk-img.tar
 
 # Mount and pull out the kernel and initrd.img
 start=$(fdisk -l disk.img 2>/dev/null | grep img4 | awk '$0=$2')

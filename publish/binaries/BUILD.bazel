@@ -3,8 +3,9 @@ load("//bazel:defs.bzl", "gzip_compress")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 
 LINUX_ONLY = [
-    "vsock_agent",
     "prod-test-driver",
+    "sevctl",
+    "vsock_agent",
 ]
 
 NO_STRIP = [
@@ -49,6 +50,7 @@ BINARIES = {
     "orchestrator": "//rs/orchestrator",
     "prod-test-driver": "//rs/tests:prod-test-driver",
     "sandbox_launcher": "//rs/canister_sandbox/sandbox_launcher",
+    "sevctl": "//rs/ic_os/sevctl:sevctl",
     "sns": "//rs/sns/cli:sns",
     "state-tool": "//rs/state_tool:state-tool",
     "vector-config-generator": "//rs/observability/vector_config_generator:vector_config_generator",

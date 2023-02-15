@@ -46,6 +46,8 @@ def _image_deps(mode, malicious = False):
             "//publish/binaries:orchestrator": "/opt/ic/bin/orchestrator:0755",
             ("//publish/malicious:replica" if malicious else "//publish/binaries:replica"): "/opt/ic/bin/replica:0755",
             "//publish/binaries:sandbox_launcher": "/opt/ic/bin/sandbox_launcher:0755",
+            "//publish/binaries:sevctl": "/opt/ic/bin/sevctl:0755",
+            "@sevtool": "/opt/ic/bin/sevtool:0755",
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",
             "//publish/binaries:vsock_agent": "/opt/ic/bin/vsock_agent:0755",
             "//ic-os/guestos/src:infogetty": "/opt/ic/bin/infogetty:0755",

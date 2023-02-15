@@ -104,6 +104,7 @@ members = [
   "ic_os/sev_interfaces",
   "ic_p8s_service_discovery",
   "ic_p8s_service_discovery/log",
+  "ic_os/sevctl",
   "identity",
   "ingress_manager",
   "interfaces",

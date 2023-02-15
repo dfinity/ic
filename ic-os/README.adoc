@@ -45,6 +45,15 @@ Note: guestOS has many scripts in its own scripts/ subdirectory that still need 
 == Environment setup
 To build IC-OS images outside of using /gitlab-ci/container/container-run.sh, you will need to configure your environment. To see what packages you must install, see ic/gitlab-ci/docker/Dockerfile.
 
+== Storing the SEV Certificates on the host (e.g. for test/farm machines)
+
+Note: we are storing the PEM files instead of the DER files.
+
+```bash
+% ic/ic-os/hostos/rootfs/opt/ic/bin/get-sev-certs.sh
+% sev-host-set-cert-chain  -r ark.pem -s ask.pem -v vcek.pem
+```
+
 == Running SEV-SNP VM with virsh
 
 === Preparing dev machine
