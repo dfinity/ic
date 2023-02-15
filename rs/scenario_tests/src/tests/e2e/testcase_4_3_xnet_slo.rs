@@ -20,6 +20,8 @@ pub async fn e2e_test(
     skip_cleanup: bool,
     delete_canister_retries: Option<u64>,
     all_to_one: bool,
+    canisters_per_subnet: Option<u64>,
+    canister_to_subnet_rate: Option<u64>,
 ) {
     let ic = match key_file {
         Some(key_file) => IcHandle::from_testnet_with_principal_from_file(testnet, key_file),
@@ -66,6 +68,8 @@ pub async fn e2e_test(
         skip_cleanup,
         delete_canister_retries,
         all_to_one,
+        canisters_per_subnet,
+        canister_to_subnet_rate,
     )
     .await
 }
