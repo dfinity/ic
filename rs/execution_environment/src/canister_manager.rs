@@ -1158,8 +1158,7 @@ impl CanisterManager {
             self.config.default_freeze_threshold,
         );
 
-        self.cycles_account_manager
-            .observe_consumed_cycles(&mut system_state, creation_fee);
+        system_state.observe_consumed_cycles(creation_fee);
         let scheduler_state = SchedulerState::new(state.metadata.batch_time);
         let mut new_canister = CanisterState::new(system_state, None, scheduler_state);
 

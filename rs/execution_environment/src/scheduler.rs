@@ -994,9 +994,7 @@ impl SchedulerImpl {
                     let remaining_cycles = canister.system_state.balance_mut().take();
                     canister
                         .system_state
-                        .canister_metrics
-                        .consumed_cycles_since_replica_started +=
-                        NominalCycles::from(remaining_cycles);
+                        .observe_consumed_cycles(remaining_cycles);
 
                     info!(
                         self.log,

@@ -15,7 +15,10 @@ use ic_types::{
     methods::{Callback, WasmClosure},
     Time,
 };
-use ic_types::{messages::MAX_RESPONSE_COUNT_BYTES, xnet::QueueId, CountBytes, Cycles};
+use ic_types::{
+    messages::MAX_RESPONSE_COUNT_BYTES, nominal_cycles::NominalCycles, xnet::QueueId, CountBytes,
+    Cycles,
+};
 use ic_wasm_types::CanisterModule;
 
 const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
@@ -512,6 +515,26 @@ fn canister_state_cycles_debit() {
     assert_eq!(
         initial_balance - Cycles::new(42),
         system_state.debited_balance()
+    );
+}
+const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
+
+#[test]
+fn update_balance_and_consumed_cycles_correctly() {
+    let mut system_state = CanisterStateFixture::new().canister_state.system_state;
+    let initial_consumed_cycles = NominalCycles::from(1000);
+    system_state
+        .canister_metrics
+        .consumed_cycles_since_replica_started = initial_consumed_cycles;
+
+    let cycles = Cycles::new(100);
+    system_state.increment_balance_and_decrement_consumed_cycles(cycles);
+    assert_eq!(system_state.balance(), INITIAL_CYCLES + cycles);
+    assert_eq!(
+        system_state
+            .canister_metrics
+            .consumed_cycles_since_replica_started,
+        initial_consumed_cycles - NominalCycles::from(cycles)
     );
 }
 

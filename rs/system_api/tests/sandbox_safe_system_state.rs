@@ -243,7 +243,7 @@ fn correct_charging_source_canister_for_a_request() {
         SMALL_APP_SUBNET_MAX_SIZE,
     );
 
-    cycles_account_manager.refund_cycles(&mut system_state, refund_cycles);
+    system_state.increment_balance_and_decrement_consumed_cycles(refund_cycles);
 
     // MAX_NUM_INSTRUCTIONS also gets partially refunded in the real
     // ExecutionEnvironmentImpl::execute_canister_response()
