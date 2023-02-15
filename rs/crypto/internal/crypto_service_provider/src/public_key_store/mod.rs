@@ -9,6 +9,7 @@ use std::path::Path;
 
 pub mod proto_pubkey_store;
 
+#[cfg(test)]
 pub mod temp_pubkey_store;
 
 #[cfg(test)]

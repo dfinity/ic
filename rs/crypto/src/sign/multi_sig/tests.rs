@@ -1,44 +1,30 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
-use crate::common::test_utils::crypto_component::crypto_component_with;
 use crate::sign::tests::*;
 use assert_matches::assert_matches;
 use ic_crypto_internal_csp::key_id::KeyId;
-use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
+use ic_crypto_temp_crypto::NodeKeysToGenerate;
+use ic_crypto_temp_crypto::TempCryptoComponent;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_types::crypto::SignableMock;
+use ic_types_test_utils::ids::{NODE_1, NODE_2};
 
 mod test_multi_sign {
     use super::*;
-    use crate::common::test_utils::multi_bls12_381;
-    use crate::common::test_utils::multi_bls12_381::MultiBls12381TestVector::{
-        STABILITY_1, STABILITY_2, STABILITY_3, STABILITY_4,
-    };
 
     #[test]
-    fn should_correctly_multi_sign() {
-        for (index, node, testvec) in &[
-            (1, NODE_1, STABILITY_1),
-            (2, NODE_2, STABILITY_2),
-            (3, NODE_3, STABILITY_3),
-            (4, NODE_4, STABILITY_4),
-        ] {
-            let (sk, pk, _pop, msg, expected_sig) = multi_bls12_381::testvec(*testvec);
-            let key_id = KeyId::try_from(&pk).unwrap();
-            let key_record = committee_signing_record_with(
-                *node,
-                pk.multi_bls12_381_bytes().unwrap().to_vec(),
-                key_id.to_owned(),
-                REG_V2,
-            );
-            let secret_key_store = secret_key_store_with(key_id, sk);
-            let crypto = crypto_component_with(
-                registry_with(key_record),
-                secret_key_store,
-                temp_public_key_store(),
-            );
-            let signature = crypto.sign_multi(&msg, *node, REG_V2).unwrap();
-            assert_eq!(signature, expected_sig, "Test vector {} failed.", index);
-        }
+    fn should_multi_sign() {
+        let crypto = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_committee_signing_key(), REG_V2)
+            .with_node_id(NODE_1)
+            .build();
+        let msg = SignableMock::new(b"Hello World!".to_vec());
+
+        let result = crypto.sign_multi(&msg, NODE_1, REG_V2);
+
+        assert_matches!(result, Ok(_));
     }
 
     // TODO: DFN-1229 Add more tests in addition to the above happy-path test.
@@ -53,68 +39,61 @@ mod test_multi_sig_verification {
     use crate::common::test_utils::multi_bls12_381::MultiBls12381TestVector::{
         STABILITY_1, STABILITY_2,
     };
-    use ic_crypto_internal_csp::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-    use ic_crypto_internal_csp::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_COMB_SIG_1_2;
     use ic_types::crypto::SignableMock;
 
     #[test]
-    fn should_correctly_verify_multi_sig_individual() {
-        for (index, node, testvec) in &[(1, NODE_1, STABILITY_1), (2, NODE_2, STABILITY_2)] {
-            let (sk, pk, _pop, msg, sig) = multi_bls12_381::testvec(*testvec);
-            let key_id = KeyId::try_from(&pk).unwrap();
+    fn should_verify_multi_sig_individual() {
+        let crypto = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_committee_signing_key(), REG_V2)
+            .with_node_id(NODE_1)
+            .build();
+        let msg = SignableMock::new(b"Hello World!".to_vec());
+        let signature = crypto.sign_multi(&msg, NODE_1, REG_V2).unwrap();
 
-            let key_record = committee_signing_record_with(
-                *node,
-                pk.multi_bls12_381_bytes().unwrap().to_vec(),
-                key_id,
-                REG_V1,
-            );
-            let secret_key_store = secret_key_store_with(key_id, sk);
-            let crypto = crypto_component_with(
-                registry_with(key_record),
-                secret_key_store,
-                temp_public_key_store(),
-            );
+        let result = crypto.verify_multi_sig_individual(&signature, &msg, NODE_1, REG_V2);
 
-            let result = crypto.verify_multi_sig_individual(&sig, &msg, *node, REG_V1);
-            assert!(result.is_ok(), "Test vector {} failed", index);
-        }
+        assert_matches!(result, Ok(()));
     }
 
     #[test]
-    fn should_correctly_combine_multi_sig_individuals() {
-        let (_, pk_1, _, _, sig_1) = multi_bls12_381::testvec(STABILITY_1);
-        let (_, pk_2, _, _, sig_2) = multi_bls12_381::testvec(STABILITY_2);
-        let pk_rec_1 = committee_signing_record_with(
-            NODE_1,
-            pk_1.multi_bls12_381_bytes().unwrap().to_vec(),
-            KeyId::from(KEY_ID_1),
-            REG_V1,
-        );
-        let pk_rec_2 = committee_signing_record_with(
-            NODE_2,
-            pk_2.multi_bls12_381_bytes().unwrap().to_vec(),
-            KeyId::from(KEY_ID_2),
-            REG_V1,
-        );
-        let signatures = vec![(NODE_1, sig_1), (NODE_2, sig_2)].into_iter().collect();
-        let combined_sig = CombinedMultiSigOf::new(CombinedMultiSig(hex_to_byte_vec(
-            TESTVEC_MULTI_BLS12_381_COMB_SIG_1_2,
-        )));
+    fn should_combine_and_verify_multi_sig_individuals() {
+        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client =
+            Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
 
-        let crypto = crypto_component_with(
-            registry_with_records(vec![pk_rec_1, pk_rec_2]),
-            TempSecretKeyStore::new(),
-            TempPublicKeyStore::new(),
-        );
+        let crypto_1 = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_committee_signing_key(), REG_V2)
+            .with_registry_client_and_data(
+                Arc::clone(&registry_client) as Arc<_>,
+                Arc::clone(&registry_data) as Arc<_>,
+            )
+            .with_node_id(NODE_1)
+            .build();
+        let crypto_2 = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_committee_signing_key(), REG_V2)
+            .with_registry_client_and_data(
+                Arc::clone(&registry_client) as Arc<_>,
+                Arc::clone(&registry_data) as Arc<_>,
+            )
+            .with_node_id(NODE_2)
+            .build();
+        registry_client.reload();
 
-        assert_eq!(
-            crypto
-                .combine_multi_sig_individuals(signatures, REG_V1)
-                .unwrap(),
-            combined_sig
-        );
+        let msg = SignableMock::new(b"Hello World!".to_vec());
+        let sig_node1_on_msg = crypto_1.sign_multi(&msg, NODE_1, REG_V2).unwrap();
+        let sig_node2_on_msg = crypto_2.sign_multi(&msg, NODE_2, REG_V2).unwrap();
+        let signatures = vec![(NODE_1, sig_node1_on_msg), (NODE_2, sig_node2_on_msg)]
+            .into_iter()
+            .collect();
+
+        let combined_multi_sig = crypto_1.combine_multi_sig_individuals(signatures, REG_V2);
+        assert_matches!(combined_multi_sig, Ok(_));
+
+        let nodes: BTreeSet<NodeId> = vec![NODE_1, NODE_2].into_iter().collect();
+        let result =
+            crypto_1.verify_multi_sig_combined(&combined_multi_sig.unwrap(), &msg, nodes, REG_V2);
+        assert_matches!(result, Ok(()));
     }
 
     #[test]
@@ -139,39 +118,6 @@ mod test_multi_sig_verification {
             Err(CryptoError::InvalidArgument { message })
                 if message.contains("No signatures to combine. At least one signature is needed to combine a multi-signature")
         );
-    }
-
-    #[test]
-    fn should_correctly_verify_multi_sig_combined() {
-        let (_, pk_1, _, msg_1, _) = multi_bls12_381::testvec(STABILITY_1);
-        let (_, pk_2, _, msg_2, _) = multi_bls12_381::testvec(STABILITY_2);
-        assert_eq!(msg_1, msg_2);
-        let pk_rec_1 = committee_signing_record_with(
-            NODE_1,
-            pk_1.multi_bls12_381_bytes().unwrap().to_vec(),
-            KeyId::from(KEY_ID_1),
-            REG_V1,
-        );
-        let pk_rec_2 = committee_signing_record_with(
-            NODE_2,
-            pk_2.multi_bls12_381_bytes().unwrap().to_vec(),
-            KeyId::from(KEY_ID_2),
-            REG_V1,
-        );
-        let nodes: BTreeSet<NodeId> = vec![NODE_1, NODE_2].into_iter().collect();
-        let combined_sig = CombinedMultiSigOf::new(CombinedMultiSig(hex_to_byte_vec(
-            TESTVEC_MULTI_BLS12_381_COMB_SIG_1_2,
-        )));
-
-        let crypto = crypto_component_with(
-            registry_with_records(vec![pk_rec_1, pk_rec_2]),
-            TempSecretKeyStore::new(),
-            TempPublicKeyStore::new(),
-        );
-
-        assert!(crypto
-            .verify_multi_sig_combined(&combined_sig, &msg_1, nodes, REG_V1)
-            .is_ok());
     }
 
     #[test]

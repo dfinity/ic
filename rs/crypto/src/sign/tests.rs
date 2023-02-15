@@ -4,10 +4,6 @@ use super::*;
 use crate::common::test_utils::{CryptoRegistryKey, CryptoRegistryRecord};
 use ic_crypto_internal_basic_sig_ecdsa_secp256r1 as ecdsa_secp256r1;
 use ic_crypto_internal_csp::key_id::KeyId;
-use ic_crypto_internal_csp::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-use ic_crypto_internal_csp::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
-use ic_crypto_internal_csp::secret_key_store::SecretKeyStore;
-use ic_crypto_internal_csp::types::CspSecretKey;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
@@ -37,7 +33,6 @@ pub const SUBNET_ID: SubnetId = SUBNET_1;
 pub fn node_signing_record_with(
     node_id: NodeId,
     public_key: Vec<u8>,
-    _key_id: KeyId,
     registry_version: RegistryVersion,
 ) -> CryptoRegistryRecord {
     CryptoRegistryRecord {
@@ -118,18 +113,6 @@ pub fn mega_encryption_pk_record_with(
         },
         registry_version,
     }
-}
-
-#[allow(dead_code)]
-pub fn secret_key_store_with(key_id: KeyId, secret_key: CspSecretKey) -> impl SecretKeyStore {
-    let mut temp_store = TempSecretKeyStore::new();
-    let scope = None;
-    temp_store.insert(key_id, secret_key, scope).unwrap();
-    temp_store
-}
-
-pub fn temp_public_key_store() -> TempPublicKeyStore {
-    TempPublicKeyStore::new()
 }
 
 pub fn to_new_registry_record(

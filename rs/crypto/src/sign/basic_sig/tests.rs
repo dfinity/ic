@@ -1,511 +1,429 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
-use crate::common::test_utils::crypto_component::crypto_component_with;
 use crate::common::test_utils::crypto_component::crypto_component_with_csp;
 use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
 use crate::sign::tests::*;
 use assert_matches::assert_matches;
 use ic_crypto_internal_csp::key_id::KeyId;
-use ic_crypto_internal_csp::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-use ic_crypto_internal_csp::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
-use ic_types::crypto::{AlgorithmId, SignableMock, DOMAIN_IC_REQUEST};
+use ic_types::crypto::{AlgorithmId, SignableMock};
 use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;
 use ic_types_test_utils::arbitrary as arbitrary_types;
 use ic_types_test_utils::ids::NODE_1;
 
-mod test_basic_sign {
+mod sign_basic {
     use super::*;
     use crate::common::test_utils::basic_sig;
     use crate::common::test_utils::basic_sig::TestVector::ED25519_STABILITY_1;
-    mod sign_common {
-        use super::*;
 
-        #[test]
-        fn should_fail_with_key_not_found_if_public_key_not_found_in_registry() {
-            let crypto = crypto_component_with_csp(
-                MockAllCryptoServiceProvider::new(),
-                registry_returning_none(),
-            );
+    #[test]
+    fn should_fail_with_key_not_found_if_public_key_not_found_in_registry() {
+        let crypto = crypto_component_with_csp(
+            MockAllCryptoServiceProvider::new(),
+            registry_returning_none(),
+        );
 
-            let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V1);
+        let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V1);
 
-            assert_matches!(result, Err(CryptoError::PublicKeyNotFound { .. }));
-        }
-
-        #[test]
-        fn should_fail_with_registry_error_if_registry_version_too_new() {
-            let crypto = crypto_component_with_csp(
-                MockAllCryptoServiceProvider::new(),
-                registry_returning(RegistryClientError::VersionNotAvailable { version: REG_V2 }),
-            );
-
-            let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V2);
-
-            assert_matches!(result, Err(CryptoError::RegistryClient(_)));
-        }
-
-        #[test]
-        fn should_fail_with_secret_key_not_found_if_secret_key_not_found_in_key_store() {
-            let (_, pk, _, _) = basic_sig::testvec(ED25519_STABILITY_1);
-            let key_record = node_signing_record_with(
-                NODE_1,
-                pk.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID),
-                REG_V2,
-            );
-            let crypto = crypto_component_with(
-                registry_with(key_record),
-                TempSecretKeyStore::new(),
-                TempPublicKeyStore::new(),
-            );
-
-            let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V2);
-
-            assert!(result.unwrap_err().is_secret_key_not_found());
-        }
+        assert_matches!(result, Err(CryptoError::PublicKeyNotFound { .. }));
     }
 
-    mod sign {
-        use super::*;
-        use crate::common::test_utils::basic_sig;
-        use crate::common::test_utils::basic_sig::TestVector::ED25519_STABILITY_1;
+    #[test]
+    fn should_fail_with_registry_error_if_registry_version_too_new() {
+        let crypto = crypto_component_with_csp(
+            MockAllCryptoServiceProvider::new(),
+            registry_returning(RegistryClientError::VersionNotAvailable { version: REG_V2 }),
+        );
 
-        // Here we only test with a single test vector: an extensive test with the
-        // entire test vector suite is done at the crypto lib level.
-        #[test]
-        fn should_correctly_sign() {
-            let (sk, pk, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
-            let key_id = KeyId::try_from(&pk).unwrap();
-            let key_record = node_signing_record_with(
-                NODE_1,
-                pk.ed25519_bytes().unwrap().to_vec(),
-                key_id.to_owned(),
-                REG_V2,
-            );
-            let secret_key_store = secret_key_store_with(key_id, sk);
-            let crypto = crypto_component_with(
-                registry_with(key_record),
-                secret_key_store,
-                TempPublicKeyStore::new(),
-            );
+        let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V2);
 
-            assert_matches!(crypto.sign_basic(&msg, NODE_1, REG_V2), Ok(actual_sig) if actual_sig == sig);
-        }
+        assert_matches!(result, Err(CryptoError::RegistryClient(_)));
+    }
+
+    #[test]
+    fn should_fail_with_secret_key_not_found_if_secret_key_not_found_in_key_store() {
+        let (_, pk, _, _) = basic_sig::testvec(ED25519_STABILITY_1);
+        let key_record =
+            node_signing_record_with(NODE_1, pk.ed25519_bytes().unwrap().to_vec(), REG_V2);
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let key_id = KeyId::try_from(&pk).unwrap();
+        let expected_error = CryptoError::SecretKeyNotFound {
+            algorithm: AlgorithmId::Ed25519,
+            key_id: key_id.to_string(),
+        };
+        csp.expect_sign()
+            .times(1)
+            .return_const(Err(expected_error.clone()));
+        let crypto = crypto_component_with_csp(csp, registry_with(key_record));
+
+        let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V2);
+
+        assert_matches!(result, Err(error) if error == expected_error);
+    }
+
+    #[test]
+    fn should_delegate_to_csp_to_sign() {
+        use ic_crypto_internal_basic_sig_ed25519::types as ed25519_types;
+        let (_, pk, _, _) = basic_sig::testvec(ED25519_STABILITY_1);
+        let key_record =
+            node_signing_record_with(NODE_1, pk.ed25519_bytes().unwrap().to_vec(), REG_V2);
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let expected_signature = CspSignature::Ed25519(ed25519_types::SignatureBytes([42; 64]));
+        csp.expect_sign()
+            .times(1)
+            .return_const(Ok(expected_signature.clone()));
+        let crypto = crypto_component_with_csp(csp, registry_with(key_record));
+
+        let result = crypto.sign_basic(&SignableMock::new(vec![]), NODE_1, REG_V2);
+
+        assert_matches!(result, Ok(signature)
+            if signature == BasicSigOf::new(BasicSig(expected_signature.as_ref().to_vec())));
     }
 }
 
-mod test_basic_sig_verification {
+mod verify_basic_sig {
     use super::*;
     use crate::common::test_utils::basic_sig;
-    use crate::common::test_utils::basic_sig::TestVector::{
-        ED25519_STABILITY_1, ED25519_STABILITY_2,
-    };
+    use crate::common::test_utils::basic_sig::TestVector::ED25519_STABILITY_1;
+    use crate::common::test_utils::crypto_component::crypto_component_with_csp;
+    use crate::sign::tests::REG_V2;
+    use ic_crypto_temp_crypto::NodeKeysToGenerate;
+    use ic_crypto_temp_crypto::TempCryptoComponent;
+    use ic_types_test_utils::ids::NODE_1;
 
-    mod verify_common {
-        use super::*;
-        use crate::common::test_utils::crypto_component::crypto_component_with_csp;
-        use crate::sign::tests::REG_V2;
-        use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    #[test]
+    fn should_fail_with_key_not_found_if_public_key_not_found_in_registry() {
+        let (_, _, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
+        let crypto = crypto_component_with_csp(
+            MockAllCryptoServiceProvider::new(),
+            registry_returning_none(),
+        );
 
-        #[test]
-        fn should_fail_with_key_not_found_if_public_key_not_found_in_registry() {
-            let (_, _, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
-            let crypto = crypto_component_with_csp(
-                MockAllCryptoServiceProvider::new(),
-                registry_returning_none(),
-            );
+        let result = crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V1);
 
-            let result = crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V1);
-
-            assert_matches!(result, Err(CryptoError::PublicKeyNotFound { .. }));
-        }
-
-        #[test]
-        fn should_delegate_to_csp_to_verify() {
-            let (_, pk, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
-            let key_record = node_signing_record_with(
-                NODE_1,
-                pk.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID),
-                REG_V2,
-            );
-            let mut csp = MockAllCryptoServiceProvider::new();
-            let msg_clone = msg.clone();
-            let expected_signature = SigConverter::for_target(AlgorithmId::Ed25519)
-                .try_from_basic(&sig)
-                .expect("invalid signature");
-            csp.expect_verify()
-                .times(1)
-                .withf(move |signature, message_bytes, algorithm_id, public_key| {
-                    *signature == expected_signature
-                        && *message_bytes == msg_clone.as_signed_bytes()
-                        && *algorithm_id == AlgorithmId::Ed25519
-                        && *public_key == pk
-                })
-                .return_const(Ok(()));
-            let crypto = crypto_component_with_csp(csp, registry_with(key_record));
-
-            assert!(crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2).is_ok());
-        }
-
-        #[test]
-        fn should_correctly_combine_a_single_signature() {
-            let (_, pk, _, sig) = basic_sig::testvec(ED25519_STABILITY_1);
-            let key_record = node_signing_record_with(
-                NODE_1,
-                pk.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID),
-                REG_V2,
-            );
-
-            let mut signatures = BTreeMap::new();
-            signatures.insert(NODE_1, &sig);
-            let crypto = crypto_component_with_csp(
-                MockAllCryptoServiceProvider::new(),
-                registry_with(key_record),
-            );
-
-            assert!(crypto.combine_basic_sig(signatures, REG_V2).is_ok());
-        }
-
-        #[test]
-        fn should_correctly_combine_multiple_signatures() {
-            let (_, pk_1, _, sig_1) = basic_sig::testvec(ED25519_STABILITY_1);
-            let (_, pk_2, _, sig_2) = basic_sig::testvec(ED25519_STABILITY_1);
-
-            let key_record_1 = node_signing_record_with(
-                NODE_1,
-                pk_1.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID_1),
-                REG_V2,
-            );
-            let key_record_2 = node_signing_record_with(
-                NODE_2,
-                pk_2.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID_2),
-                REG_V2,
-            );
-
-            let mut signatures = BTreeMap::new();
-            signatures.insert(NODE_1, &sig_1);
-            signatures.insert(NODE_2, &sig_2);
-            let crypto = crypto_component_with_csp(
-                MockAllCryptoServiceProvider::new(),
-                registry_with_records(vec![key_record_1, key_record_2]),
-            );
-
-            assert!(crypto.combine_basic_sig(signatures, REG_V2).is_ok());
-        }
-
-        #[test]
-        fn should_not_combine_zero_signatures() {
-            let (_, pk, _, _) = basic_sig::testvec(ED25519_STABILITY_1);
-            let key_record = node_signing_record_with(
-                NODE_1,
-                pk.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID),
-                REG_V2,
-            );
-
-            let signatures: BTreeMap<NodeId, &BasicSigOf<SignableMock>> = BTreeMap::new();
-
-            let crypto = crypto_component_with_csp(
-                MockAllCryptoServiceProvider::new(),
-                registry_with(key_record),
-            );
-
-            assert_matches!(
-                crypto.combine_basic_sig(signatures, REG_V2),
-                Err(CryptoError::InvalidArgument { message })
-                if message.contains("No signatures to combine in a batch. At least one signature is needed to create a batch")
-            );
-        }
-
-        #[test]
-        fn should_correctly_verify_batch_with_single_signature() {
-            let (_, pk, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
-            let key_record = node_signing_record_with(
-                NODE_1,
-                pk.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID),
-                REG_V2,
-            );
-
-            let mut signatures = BTreeMap::new();
-            signatures.insert(NODE_1, &sig);
-            let crypto = crypto_component_with(
-                registry_with(key_record),
-                TempSecretKeyStore::new(),
-                TempPublicKeyStore::new(),
-            );
-
-            let sig_batch = crypto.combine_basic_sig(signatures, REG_V2);
-            assert!(sig_batch.is_ok());
-
-            assert!(crypto
-                .verify_basic_sig_batch(&sig_batch.unwrap(), &msg, REG_V2)
-                .is_ok());
-        }
-
-        #[test]
-        fn should_correctly_verify_batch_with_multiple_signatures() {
-            let (sk_1, pk_1, msg, _) = basic_sig::testvec(ED25519_STABILITY_1);
-            let (sk_2, pk_2, _, _) = basic_sig::testvec(ED25519_STABILITY_2);
-
-            let key_id_1 = KeyId::try_from(&pk_1).unwrap();
-            let key_id_2 = KeyId::try_from(&pk_2).unwrap();
-            let key_record_1 = node_signing_record_with(
-                NODE_1,
-                pk_1.ed25519_bytes().unwrap().to_vec(),
-                key_id_1.to_owned(),
-                REG_V2,
-            );
-            let key_record_2 = node_signing_record_with(
-                NODE_2,
-                pk_2.ed25519_bytes().unwrap().to_vec(),
-                key_id_2.to_owned(),
-                REG_V2,
-            );
-
-            let registry_records = vec![key_record_1, key_record_2];
-            let sks_1 = secret_key_store_with(key_id_1, sk_1);
-            let crypto_1 = crypto_component_with(
-                registry_with_records(registry_records.clone()),
-                sks_1,
-                TempPublicKeyStore::new(),
-            );
-            let sks_2 = secret_key_store_with(key_id_2, sk_2);
-            let crypto_2 = crypto_component_with(
-                registry_with_records(registry_records),
-                sks_2,
-                TempPublicKeyStore::new(),
-            );
-
-            let mut signatures = BTreeMap::new();
-            let sig_1 = crypto_1.sign_basic(&msg, NODE_1, REG_V2).unwrap();
-            let sig_2 = crypto_2.sign_basic(&msg, NODE_2, REG_V2).unwrap();
-
-            signatures.insert(NODE_1, &sig_1);
-            signatures.insert(NODE_2, &sig_2);
-
-            let sig_batch = crypto_1.combine_basic_sig(signatures, REG_V2);
-            assert!(sig_batch.is_ok());
-
-            assert!(crypto_1
-                .verify_basic_sig_batch(&sig_batch.unwrap(), &msg, REG_V2)
-                .is_ok());
-        }
-
-        #[test]
-        fn should_not_verify_batch_on_different_messages() {
-            let (_, pk_1, msg, sig_1) = basic_sig::testvec(ED25519_STABILITY_1);
-            let (_, pk_2, _, sig_2) = basic_sig::testvec(ED25519_STABILITY_2);
-
-            let key_record_1 = node_signing_record_with(
-                NODE_1,
-                pk_1.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID_1),
-                REG_V2,
-            );
-            let key_record_2 = node_signing_record_with(
-                NODE_2,
-                pk_2.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID_2),
-                REG_V2,
-            );
-
-            let registry_records = vec![key_record_1, key_record_2];
-            let crypto = crypto_component_with(
-                registry_with_records(registry_records),
-                TempSecretKeyStore::new(),
-                TempPublicKeyStore::new(),
-            );
-            let mut signatures = BTreeMap::new();
-            assert!(crypto
-                .verify_basic_sig(&sig_1, &msg, NODE_1, REG_V2)
-                .is_ok());
-            assert!(crypto
-                .verify_basic_sig(&sig_2, &msg, NODE_2, REG_V2)
-                .is_err());
-
-            signatures.insert(NODE_1, &sig_1);
-            signatures.insert(NODE_2, &sig_2);
-
-            let sig_batch = crypto.combine_basic_sig(signatures, REG_V2);
-            assert!(sig_batch.is_ok());
-
-            assert_matches!(
-                crypto.verify_basic_sig_batch(&sig_batch.unwrap(), &msg, REG_V2),
-                Err(CryptoError::SignatureVerification { .. })
-            );
-        }
-
-        #[test]
-        fn should_not_verify_an_empty_batch() {
-            let (_, pk, msg, _) = basic_sig::testvec(ED25519_STABILITY_1);
-            let key_record = node_signing_record_with(
-                NODE_1,
-                pk.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID),
-                REG_V2,
-            );
-
-            let empty_signatures: BTreeMap<NodeId, BasicSigOf<SignableMock>> = BTreeMap::new();
-            let empty_batch = BasicSignatureBatch {
-                signatures_map: empty_signatures,
-            };
-            let crypto = crypto_component_with_csp(
-                MockAllCryptoServiceProvider::new(),
-                registry_with(key_record),
-            );
-
-            assert_matches!(
-                crypto.verify_basic_sig_batch(&empty_batch, &msg, REG_V2),
-                Err(CryptoError::InvalidArgument { message })
-                if message.contains("Empty BasicSignatureBatch. At least one signature should be included in the batch.")
-            );
-        }
+        assert_matches!(result, Err(CryptoError::PublicKeyNotFound { .. }));
     }
 
-    mod verify {
-        use super::*;
-        use crate::sign::tests::{node_signing_record_with, registry_with, KEY_ID, REG_V2};
-        use ic_types_test_utils::ids::NODE_1;
+    #[test]
+    fn should_fail_with_malformed_public_key_if_public_key_from_registry_is_invalid() {
+        let (_, _, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
+        let invalid_key_rec = node_signing_record_with(NODE_1, vec![1, 2, 3], REG_V2);
+        let crypto = crypto_component_with_csp(
+            MockAllCryptoServiceProvider::new(),
+            registry_with(invalid_key_rec),
+        );
 
-        // Here we only test with a single test vector: an extensive test with the
-        // entire test vector suite is done at the crypto lib level.
-        #[test]
-        fn should_correctly_verify() {
-            let (_, pk, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
-            let key_record = node_signing_record_with(
-                NODE_1,
-                pk.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID),
-                REG_V2,
-            );
-            let crypto = crypto_component_with(
-                registry_with(key_record),
-                TempSecretKeyStore::new(),
-                TempPublicKeyStore::new(),
-            );
+        let result = crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2);
 
-            assert!(crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2).is_ok());
-        }
+        assert_matches!(result, Err(CryptoError::MalformedPublicKey { .. }));
+    }
 
-        #[test]
-        fn should_fail_to_verify_under_wrong_signature() {
-            let (_, pk, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
-            let (_, _, _, wrong_sig) = basic_sig::testvec(ED25519_STABILITY_2);
-            assert_ne!(sig, wrong_sig);
-            let key_record = node_signing_record_with(
-                NODE_1,
-                pk.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID),
-                REG_V2,
-            );
-            let crypto = crypto_component_with(
-                registry_with(key_record),
-                TempSecretKeyStore::new(),
-                TempPublicKeyStore::new(),
-            );
+    #[test]
+    fn should_fail_with_malformed_signature_if_signature_has_incompatible_length() {
+        let (_, pk, msg, _) = basic_sig::testvec(ED25519_STABILITY_1);
+        let key_record =
+            node_signing_record_with(NODE_1, pk.ed25519_bytes().unwrap().to_vec(), REG_V2);
+        let crypto = crypto_component_with_csp(
+            MockAllCryptoServiceProvider::new(),
+            registry_with(key_record),
+        );
+        let incompatible_sig = BasicSigOf::new(BasicSig(vec![1, 2, 3]));
 
-            let result = crypto.verify_basic_sig(&wrong_sig, &msg, NODE_1, REG_V2);
+        let err = crypto
+            .verify_basic_sig(&incompatible_sig, &msg, NODE_1, REG_V2)
+            .unwrap_err();
 
-            assert!(result.unwrap_err().is_signature_verification_error());
-        }
+        assert!(err.is_malformed_signature());
+    }
 
-        #[test]
-        fn should_fail_to_verify_under_wrong_message() {
-            let (_, pk, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
-            let wrong_msg = SignableMock::new(b"wrong message".to_vec());
-            assert_ne!(msg, wrong_msg);
-            let key_record = node_signing_record_with(
-                NODE_1,
-                pk.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID),
-                REG_V2,
-            );
-            let crypto = crypto_component_with(
-                registry_with(key_record),
-                TempSecretKeyStore::new(),
-                TempPublicKeyStore::new(),
-            );
+    #[test]
+    fn should_delegate_to_csp_to_verify() {
+        let (_, pk, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
+        let key_record =
+            node_signing_record_with(NODE_1, pk.ed25519_bytes().unwrap().to_vec(), REG_V2);
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let msg_clone = msg.clone();
+        let expected_signature = SigConverter::for_target(AlgorithmId::Ed25519)
+            .try_from_basic(&sig)
+            .expect("invalid signature");
+        csp.expect_verify()
+            .times(1)
+            .withf(move |signature, message_bytes, algorithm_id, public_key| {
+                *signature == expected_signature
+                    && *message_bytes == msg_clone.as_signed_bytes()
+                    && *algorithm_id == AlgorithmId::Ed25519
+                    && *public_key == pk
+            })
+            .return_const(Ok(()));
+        let crypto = crypto_component_with_csp(csp, registry_with(key_record));
 
-            let result = crypto.verify_basic_sig(&sig, &wrong_msg, NODE_1, REG_V2);
+        assert!(crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2).is_ok());
+    }
 
-            assert!(result.unwrap_err().is_signature_verification_error());
-        }
+    #[test]
+    fn should_return_error_from_csp() {
+        let (_, pk, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
+        let key_record =
+            node_signing_record_with(NODE_1, pk.ed25519_bytes().unwrap().to_vec(), REG_V2);
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let msg_clone = msg.clone();
+        let expected_signature = SigConverter::for_target(AlgorithmId::Ed25519)
+            .try_from_basic(&sig)
+            .expect("invalid signature");
+        let expected_error = CryptoError::InternalError {
+            internal_error: "error in CSP".to_string(),
+        };
+        csp.expect_verify()
+            .times(1)
+            .withf(move |signature, message_bytes, algorithm_id, public_key| {
+                *signature == expected_signature
+                    && *message_bytes == msg_clone.as_signed_bytes()
+                    && *algorithm_id == AlgorithmId::Ed25519
+                    && *public_key == pk
+            })
+            .return_const(Err(expected_error.clone()));
+        let crypto = crypto_component_with_csp(csp, registry_with(key_record));
 
-        #[test]
-        fn should_fail_to_verify_under_wrong_public_key() {
-            let (_, pk, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
-            let (_, wrong_pk, _, _) = basic_sig::testvec(ED25519_STABILITY_2);
-            assert_ne!(pk, wrong_pk);
-            let key_record = node_signing_record_with(
-                NODE_1,
-                wrong_pk.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID),
-                REG_V2,
-            );
-            let crypto = crypto_component_with(
-                registry_with(key_record),
-                TempSecretKeyStore::new(),
-                TempPublicKeyStore::new(),
-            );
+        let result = crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2);
 
-            let result = crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2);
+        assert_matches!(result, Err(error) if error == expected_error);
+    }
 
-            assert!(result.unwrap_err().is_signature_verification_error());
-        }
+    #[test]
+    fn should_sign_and_verify_smoke_test() {
+        let crypto_component = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
+            .with_node_id(NODE_1)
+            .build();
+        let msg = SignableMock::new(b"message".to_vec());
 
-        #[test]
-        fn should_fail_with_malformed_signature_if_signature_has_incompatible_length() {
-            let (_, pk, msg, _) = basic_sig::testvec(ED25519_STABILITY_1);
-            let key_record = node_signing_record_with(
-                NODE_1,
-                pk.ed25519_bytes().unwrap().to_vec(),
-                KeyId::from(KEY_ID),
-                REG_V2,
-            );
-            let crypto = crypto_component_with_csp(
-                MockAllCryptoServiceProvider::new(),
-                registry_with(key_record),
-            );
-            let incompatible_sig = BasicSigOf::new(BasicSig(vec![1, 2, 3]));
+        let signature_result = crypto_component.sign_basic(&msg, NODE_1, REG_V2);
+        assert_matches!(signature_result, Ok(_));
 
-            let err = crypto
-                .verify_basic_sig(&incompatible_sig, &msg, NODE_1, REG_V2)
-                .unwrap_err();
+        let signature = signature_result.unwrap();
+        let verification_result =
+            crypto_component.verify_basic_sig(&signature, &msg, NODE_1, REG_V2);
 
-            assert!(err.is_malformed_signature());
-        }
-
-        // TODO(DFN-1220): re-enable this test; need to create a test registry
-        //     with invalid public keys.
-        // #[test]
-        // fn should_fail_with_malformed_public_key_if_pubkey_from_registry_is_invalid() {
-        //     let (_, _, msg, sig) = basic_sig::testvec(ED25519_STABILITY_1);
-        //     let invalid_key_rec =
-        //         node_signing_record_with(NODE_1, vec![1, 2, 3],
-        // KEY_ID, REG_V2);     let crypto =
-        //         crypto_component_with(registry_with(invalid_key_rec),
-        // MockSecretKeyStore::new(), TempPublicKeyStore::new());
-        //
-        //     let result = crypto.verify_basic_sig(&sig, &msg, NODE_1, REG_V2);
-        //
-        //     assert!(result.unwrap_err().is_malformed_public_key());
-        // }
+        assert_matches!(verification_result, Ok(()))
     }
 }
 
-mod test_request_id_sig_verification {
+mod combine_basic_sig {
+    use super::*;
+    use crate::common::test_utils::basic_sig;
+    use crate::common::test_utils::basic_sig::TestVector::ED25519_STABILITY_1;
+    use crate::common::test_utils::crypto_component::crypto_component_with_csp;
+    use crate::sign::tests::REG_V2;
+    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+
+    #[test]
+    fn should_correctly_combine_a_single_signature() {
+        let (_, pk, _, sig) = basic_sig::testvec(ED25519_STABILITY_1);
+        let key_record =
+            node_signing_record_with(NODE_1, pk.ed25519_bytes().unwrap().to_vec(), REG_V2);
+
+        let mut signatures = BTreeMap::new();
+        signatures.insert(NODE_1, &sig);
+        let crypto = crypto_component_with_csp(
+            MockAllCryptoServiceProvider::new(),
+            registry_with(key_record),
+        );
+
+        assert!(crypto.combine_basic_sig(signatures, REG_V2).is_ok());
+    }
+
+    #[test]
+    fn should_correctly_combine_multiple_signatures() {
+        let (_, pk_1, _, sig_1) = basic_sig::testvec(ED25519_STABILITY_1);
+        let (_, pk_2, _, sig_2) = basic_sig::testvec(ED25519_STABILITY_1);
+
+        let key_record_1 =
+            node_signing_record_with(NODE_1, pk_1.ed25519_bytes().unwrap().to_vec(), REG_V2);
+        let key_record_2 =
+            node_signing_record_with(NODE_2, pk_2.ed25519_bytes().unwrap().to_vec(), REG_V2);
+
+        let mut signatures = BTreeMap::new();
+        signatures.insert(NODE_1, &sig_1);
+        signatures.insert(NODE_2, &sig_2);
+        let crypto = crypto_component_with_csp(
+            MockAllCryptoServiceProvider::new(),
+            registry_with_records(vec![key_record_1, key_record_2]),
+        );
+
+        assert!(crypto.combine_basic_sig(signatures, REG_V2).is_ok());
+    }
+
+    #[test]
+    fn should_not_combine_zero_signatures() {
+        let (_, pk, _, _) = basic_sig::testvec(ED25519_STABILITY_1);
+        let key_record =
+            node_signing_record_with(NODE_1, pk.ed25519_bytes().unwrap().to_vec(), REG_V2);
+
+        let signatures: BTreeMap<NodeId, &BasicSigOf<SignableMock>> = BTreeMap::new();
+
+        let crypto = crypto_component_with_csp(
+            MockAllCryptoServiceProvider::new(),
+            registry_with(key_record),
+        );
+
+        assert_matches!(
+            crypto.combine_basic_sig(signatures, REG_V2),
+            Err(CryptoError::InvalidArgument { message })
+            if message.contains("No signatures to combine in a batch. At least one signature is needed to create a batch")
+        );
+    }
+}
+
+mod verify_sig_batch {
+    use super::*;
+    use crate::common::test_utils::basic_sig;
+    use crate::common::test_utils::basic_sig::TestVector::ED25519_STABILITY_1;
+    use crate::common::test_utils::crypto_component::crypto_component_with_csp;
+    use crate::sign::tests::REG_V2;
+    use ic_crypto_temp_crypto::NodeKeysToGenerate;
+    use ic_crypto_temp_crypto::TempCryptoComponent;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+
+    #[test]
+    fn should_correctly_verify_batch_with_single_signature() {
+        let crypto = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
+            .with_node_id(NODE_1)
+            .build();
+
+        let msg = SignableMock::new(b"Hello World!".to_vec());
+        let sig_node1_on_msg = crypto.sign_basic(&msg, NODE_1, REG_V2).unwrap();
+
+        let mut signatures = BTreeMap::new();
+        signatures.insert(NODE_1, &sig_node1_on_msg);
+
+        let sig_batch = crypto.combine_basic_sig(signatures, REG_V2);
+        assert!(sig_batch.is_ok());
+
+        assert!(crypto
+            .verify_basic_sig_batch(&sig_batch.unwrap(), &msg, REG_V2)
+            .is_ok());
+    }
+
+    #[test]
+    fn should_correctly_verify_batch_with_multiple_signatures() {
+        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client =
+            Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+
+        let crypto_1 = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
+            .with_registry_client_and_data(
+                Arc::clone(&registry_client) as Arc<_>,
+                Arc::clone(&registry_data) as Arc<_>,
+            )
+            .with_node_id(NODE_1)
+            .build();
+        let crypto_2 = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
+            .with_registry_client_and_data(
+                Arc::clone(&registry_client) as Arc<_>,
+                Arc::clone(&registry_data) as Arc<_>,
+            )
+            .with_node_id(NODE_2)
+            .build();
+        registry_client.reload();
+        let msg = SignableMock::new(b"message".to_vec());
+
+        let mut signatures = BTreeMap::new();
+        let sig_1 = crypto_1.sign_basic(&msg, NODE_1, REG_V2).unwrap();
+        let sig_2 = crypto_2.sign_basic(&msg, NODE_2, REG_V2).unwrap();
+        signatures.insert(NODE_1, &sig_1);
+        signatures.insert(NODE_2, &sig_2);
+
+        let sig_batch = crypto_1.combine_basic_sig(signatures, REG_V2);
+        assert_matches!(sig_batch, Ok(_));
+
+        let result = crypto_1.verify_basic_sig_batch(&sig_batch.unwrap(), &msg, REG_V2);
+
+        assert_matches!(result, Ok(()))
+    }
+
+    #[test]
+    fn should_not_verify_batch_on_different_messages() {
+        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client =
+            Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+
+        let crypto_1 = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
+            .with_registry_client_and_data(
+                Arc::clone(&registry_client) as Arc<_>,
+                Arc::clone(&registry_data) as Arc<_>,
+            )
+            .with_node_id(NODE_1)
+            .build();
+        let crypto_2 = TempCryptoComponent::builder()
+            .with_keys_in_registry_version(NodeKeysToGenerate::only_node_signing_key(), REG_V2)
+            .with_registry_client_and_data(
+                Arc::clone(&registry_client) as Arc<_>,
+                Arc::clone(&registry_data) as Arc<_>,
+            )
+            .with_node_id(NODE_2)
+            .build();
+        registry_client.reload();
+
+        let msg = SignableMock::new(b"Hello World!".to_vec());
+        let sig_node1_on_msg = crypto_1.sign_basic(&msg, NODE_1, REG_V2).unwrap();
+
+        let other_msg = SignableMock::new(b"World Hello! ".to_vec());
+        let sig_node2_on_other_msg = crypto_2.sign_basic(&other_msg, NODE_2, REG_V2).unwrap();
+
+        let mut signatures = BTreeMap::new();
+        assert!(crypto_1
+            .verify_basic_sig(&sig_node1_on_msg, &msg, NODE_1, REG_V2)
+            .is_ok());
+        assert!(crypto_1
+            .verify_basic_sig(&sig_node2_on_other_msg, &msg, NODE_2, REG_V2)
+            .is_err());
+
+        signatures.insert(NODE_1, &sig_node1_on_msg);
+        signatures.insert(NODE_2, &sig_node2_on_other_msg);
+
+        let sig_batch = crypto_1.combine_basic_sig(signatures, REG_V2);
+        assert!(sig_batch.is_ok());
+
+        assert_matches!(
+            crypto_1.verify_basic_sig_batch(&sig_batch.unwrap(), &msg, REG_V2),
+            Err(CryptoError::SignatureVerification { .. })
+        );
+    }
+
+    #[test]
+    fn should_not_verify_an_empty_batch() {
+        let (_, pk, msg, _) = basic_sig::testvec(ED25519_STABILITY_1);
+        let key_record =
+            node_signing_record_with(NODE_1, pk.ed25519_bytes().unwrap().to_vec(), REG_V2);
+
+        let empty_signatures: BTreeMap<NodeId, BasicSigOf<SignableMock>> = BTreeMap::new();
+        let empty_batch = BasicSignatureBatch {
+            signatures_map: empty_signatures,
+        };
+        let crypto = crypto_component_with_csp(
+            MockAllCryptoServiceProvider::new(),
+            registry_with(key_record),
+        );
+
+        assert_matches!(
+            crypto.verify_basic_sig_batch(&empty_batch, &msg, REG_V2),
+            Err(CryptoError::InvalidArgument { message })
+            if message.contains("Empty BasicSignatureBatch. At least one signature should be included in the batch.")
+        );
+    }
+}
+
+mod verify_basic_sig_by_public_key {
     use super::*;
     use crate::common::test_utils::crypto_component::crypto_component_with_csp;
     use proptest::prelude::*;
-
-    const REQUEST_SIG_ALGORITHMS: &[AlgorithmId] = &[AlgorithmId::Ed25519, AlgorithmId::EcdsaP256];
 
     proptest! {
         #[test]
@@ -529,18 +447,48 @@ mod test_request_id_sig_verification {
     }
 
     #[test]
-    fn should_verify_without_using_registry() {
-        let request_id = request_id();
-        let (sig, pk) = request_id_signature_and_public_key(&request_id, AlgorithmId::Ed25519);
-        let crypto = crypto_component_with(
+    fn should_fail_with_malformed_public_key_if_user_public_key_is_invalid() {
+        let invalid_user_public_key = UserPublicKey {
+            key: vec![1, 2, 3],
+            algorithm_id: AlgorithmId::Ed25519,
+        };
+        let message = SignableMock::new(b"message".to_vec());
+        let dummy_signature = BasicSigOf::new(BasicSig(b"signature".to_vec()));
+        let crypto = crypto_component_with_csp(
+            MockAllCryptoServiceProvider::new(),
             registry_panicking_on_usage(),
-            TempSecretKeyStore::new(),
-            TempPublicKeyStore::new(),
         );
 
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&sig, &request_id, &pk)
-            .is_ok());
+        let result = crypto.verify_basic_sig_by_public_key(
+            &dummy_signature,
+            &message,
+            &invalid_user_public_key,
+        );
+
+        assert_matches!(result, Err(CryptoError::MalformedPublicKey { .. }));
+    }
+
+    #[test]
+    fn should_fail_with_malformed_signature_if_signature_has_incompatible_length() {
+        let valid_user_public_key = UserPublicKey {
+            key: hex::decode("58d558c7586efb32f4667ee9a302877da97aa1136cda92af4d7a4f8873f9434f")
+                .expect("invalid hex data"),
+            algorithm_id: AlgorithmId::Ed25519,
+        };
+        let message = SignableMock::new(b"message".to_vec());
+        let invalid_signature = BasicSigOf::new(BasicSig(vec![1, 2, 3]));
+        let crypto = crypto_component_with_csp(
+            MockAllCryptoServiceProvider::new(),
+            registry_panicking_on_usage(),
+        );
+
+        let result = crypto.verify_basic_sig_by_public_key(
+            &invalid_signature,
+            &message,
+            &valid_user_public_key,
+        );
+
+        assert_matches!(result, Err(CryptoError::MalformedSignature { .. }));
     }
 
     #[test]
@@ -562,167 +510,40 @@ mod test_request_id_sig_verification {
                     && *public_key == expected_public_key
             })
             .return_const(Ok(()));
-        let crypto = crypto_component_with_csp(csp, dummy_registry());
+        let crypto = crypto_component_with_csp(csp, registry_panicking_on_usage());
 
         assert!(crypto
             .verify_basic_sig_by_public_key(&sig, &request_id, &pk)
             .is_ok());
     }
 
-    // Here we only test with a single test vector per algorithm: an extensive test
-    // with the entire test vector suite is done at the crypto lib level.
     #[test]
-    fn should_correctly_verify() {
-        for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
-            let request_id = request_id();
-            let (sig, pk) = request_id_signature_and_public_key(&request_id, *alg_id);
-            let crypto = crypto_component_with(
-                dummy_registry(),
-                TempSecretKeyStore::new(),
-                TempPublicKeyStore::new(),
-            );
+    fn should_return_error_from_csp_for_verify_basic_sig_by_public_key() {
+        let request_id = request_id();
+        let (sig, pk) = request_id_signature_and_public_key(&request_id, AlgorithmId::Ed25519);
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let msg_clone = request_id.clone();
+        let expected_signature = SigConverter::for_target(AlgorithmId::Ed25519)
+            .try_from_basic(&sig)
+            .expect("invalid signature");
+        let expected_public_key = CspPublicKey::try_from(&pk).expect("invalid public key");
+        let expected_error = CryptoError::InvalidArgument {
+            message: "invalid arg from csp".to_string(),
+        };
+        csp.expect_verify()
+            .times(1)
+            .withf(move |signature, message_bytes, algorithm_id, public_key| {
+                *signature == expected_signature
+                    && *message_bytes == msg_clone.as_signed_bytes()
+                    && *algorithm_id == AlgorithmId::Ed25519
+                    && *public_key == expected_public_key
+            })
+            .return_const(Err(expected_error.clone()));
+        let crypto = crypto_component_with_csp(csp, registry_panicking_on_usage());
 
-            assert!(crypto
-                .verify_basic_sig_by_public_key(&sig, &request_id, &pk)
-                .is_ok());
-        }
-    }
+        let result = crypto.verify_basic_sig_by_public_key(&sig, &request_id, &pk);
 
-    #[test]
-    fn should_verify_with_correct_domain_separator() {
-        let domain_separator_according_to_public_spec = b"\x0Aic-request";
-        assert_eq!(
-            DOMAIN_IC_REQUEST[..],
-            domain_separator_according_to_public_spec[..]
-        );
-        let crypto = crypto_component_with(
-            dummy_registry(),
-            TempSecretKeyStore::new(),
-            TempPublicKeyStore::new(),
-        );
-        for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
-            let request_id = request_id();
-            let (sig, pk) = request_id_signature_and_public_key_with_domain_separator(
-                DOMAIN_IC_REQUEST,
-                &request_id,
-                *alg_id,
-            );
-            assert!(crypto
-                .verify_basic_sig_by_public_key(&sig, &request_id, &pk)
-                .is_ok());
-        }
-    }
-
-    #[test]
-    fn should_fail_to_verify_under_wrong_signature() {
-        let crypto = crypto_component_with(
-            dummy_registry(),
-            TempSecretKeyStore::new(),
-            TempPublicKeyStore::new(),
-        );
-        for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
-            let request_id = request_id_1();
-            let (sig, pk) = request_id_signature_and_public_key(&request_id, *alg_id);
-            let (wrong_sig, _pk) = request_id_signature_and_public_key(&request_id_2(), *alg_id);
-            assert_ne!(sig, wrong_sig);
-
-            let result = crypto.verify_basic_sig_by_public_key(&wrong_sig, &request_id, &pk);
-            assert!(result.unwrap_err().is_signature_verification_error());
-        }
-    }
-
-    #[test]
-    fn should_fail_to_verify_under_wrong_request_id() {
-        let crypto = crypto_component_with(
-            dummy_registry(),
-            TempSecretKeyStore::new(),
-            TempPublicKeyStore::new(),
-        );
-        for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
-            let request_id = request_id_1();
-            let (sig, pk) = request_id_signature_and_public_key(&request_id, *alg_id);
-            let wrong_request_id = request_id_2();
-            assert_ne!(request_id, wrong_request_id);
-
-            let result = crypto.verify_basic_sig_by_public_key(&sig, &wrong_request_id, &pk);
-            assert!(result.unwrap_err().is_signature_verification_error());
-        }
-    }
-
-    #[test]
-    fn should_fail_to_verify_under_wrong_public_key() {
-        let crypto = crypto_component_with(
-            dummy_registry(),
-            TempSecretKeyStore::new(),
-            TempPublicKeyStore::new(),
-        );
-        for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
-            let request_id = request_id_1();
-            let (sig, pk) = request_id_signature_and_public_key(&request_id, *alg_id);
-            let (_sig, wrong_pk) = request_id_signature_and_public_key(&request_id_2(), *alg_id);
-            assert_ne!(pk, wrong_pk);
-
-            let result = crypto.verify_basic_sig_by_public_key(&sig, &request_id, &wrong_pk);
-            assert!(result.unwrap_err().is_signature_verification_error());
-        }
-    }
-
-    #[test]
-    fn should_fail_to_verify_under_wrong_domain_separator() {
-        let crypto = crypto_component_with(
-            dummy_registry(),
-            TempSecretKeyStore::new(),
-            TempPublicKeyStore::new(),
-        );
-        for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
-            let wrong_domain_separator = b"wrong_domain_separator";
-            let correct_domain_separator = DOMAIN_IC_REQUEST;
-            assert_ne!(wrong_domain_separator[..], correct_domain_separator[..]);
-            let request_id = request_id();
-            let (sig, pk) = request_id_signature_and_public_key_with_domain_separator(
-                wrong_domain_separator,
-                &request_id,
-                *alg_id,
-            );
-
-            let result = crypto.verify_basic_sig_by_public_key(&sig, &request_id, &pk);
-            assert!(result.unwrap_err().is_signature_verification_error());
-        }
-    }
-
-    #[test]
-    fn should_fail_with_malformed_signature_if_signature_has_incompatible_length() {
-        let crypto =
-            crypto_component_with_csp(MockAllCryptoServiceProvider::new(), dummy_registry());
-        for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
-            let request_id = request_id();
-            let (_sig, pk) = request_id_signature_and_public_key(&request_id, *alg_id);
-            let incompatible_sig = BasicSigOf::new(BasicSig(b"too short".to_vec()));
-
-            let result = crypto.verify_basic_sig_by_public_key(&incompatible_sig, &request_id, &pk);
-            assert!(result.unwrap_err().is_malformed_signature());
-        }
-    }
-
-    #[test]
-    fn should_fail_with_malformed_public_key_if_public_key_has_incompatible_length() {
-        let crypto = crypto_component_with(
-            dummy_registry(),
-            TempSecretKeyStore::new(),
-            TempPublicKeyStore::new(),
-        );
-        for alg_id in REQUEST_SIG_ALGORITHMS.iter() {
-            let request_id = request_id();
-            let (sig, _pk) = request_id_signature_and_public_key(&request_id, *alg_id);
-            let incompatible_pubkey = UserPublicKey {
-                key: b"too short".to_vec(),
-                algorithm_id: *alg_id,
-            };
-
-            let result =
-                crypto.verify_basic_sig_by_public_key(&sig, &request_id, &incompatible_pubkey);
-            assert!(result.unwrap_err().is_malformed_public_key());
-        }
+        assert_matches!(result, Err(error) if error == expected_error)
     }
 
     fn request_id() -> MessageId {
@@ -731,9 +552,5 @@ mod test_request_id_sig_verification {
 
     fn request_id_1() -> MessageId {
         MessageId::from([1; 32])
-    }
-
-    fn request_id_2() -> MessageId {
-        MessageId::from([2; 32])
     }
 }
