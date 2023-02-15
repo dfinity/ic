@@ -555,7 +555,32 @@ pub fn serve_http(req: HttpRequest) -> HttpResponse {
 }
 
 /// Encode the metrics in a format that can be understood by Prometheus.
-fn encode_metrics(_w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    w.encode_gauge(
+        "sale_stable_memory_pages",
+        dfn_core::api::stable_memory_size_in_pages() as f64,
+        "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
+    )?;
+    w.encode_gauge(
+        "sale_stable_memory_bytes",
+        (dfn_core::api::stable_memory_size_in_pages() * 64 * 1024) as f64,
+        "Size of the stable memory allocated by this canister.",
+    )?;
+    w.encode_gauge(
+        "sale_cycle_balance",
+        dfn_core::api::canister_cycle_balance() as f64,
+        "Cycle balance on the sale canister.",
+    )?;
+    w.encode_gauge(
+        "sale_open_tickets_number",
+        ic_sns_swap::memory::OPEN_TICKETS_MEMORY.with(|ts| ts.borrow().len()) as f64,
+        "The number of open tickets on the sale canister.",
+    )?;
+    w.encode_gauge(
+        "sale_buyer_number",
+        ic_sns_swap::memory::BUYERS_LIST_INDEX.with(|bs| bs.borrow().len()) as f64,
+        "The number of buyers on the sale canister.",
+    )?;
     Ok(())
 }
 
