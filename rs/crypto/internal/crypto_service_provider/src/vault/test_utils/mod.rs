@@ -1,6 +1,5 @@
 //! Utilities for testing `CspVault`-implementations
 
-pub mod basic_sig;
 pub mod idkg;
 pub mod multi_sig;
 pub mod ni_dkg;
