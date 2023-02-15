@@ -9,10 +9,10 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_common::{
-    serve_logs, serve_metrics,
+    serve_logs, serve_logs_v2, serve_metrics,
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
-use ic_nervous_system_root::{ChangeCanisterProposal, LOG_PREFIX};
+use ic_nervous_system_root::ChangeCanisterProposal;
 use ic_sns_root::{
     logs::{ERROR, INFO},
     pb::v1::{
@@ -29,8 +29,6 @@ use ic_sns_root::{
 use dfn_core::api::{call_bytes_with_cleanup, Funds};
 use prost::Message;
 
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_ic00_types::IC_00;
 use ic_icrc1::endpoints::ArchiveInfo;
 use ic_sns_root::types::Environment;
@@ -185,7 +183,7 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 
 #[export_name = "canister_update canister_status"]
 fn canister_status() {
-    println!("{}canister_status", LOG_PREFIX);
+    log!(INFO, "canister_status");
     over_async(candid_one, canister_status_);
 }
 
@@ -201,7 +199,7 @@ async fn canister_status_(
 /// SnsRootCanister::register_dapp_canister).
 #[export_name = "canister_update get_sns_canisters_summary"]
 fn get_sns_canisters_summary() {
-    println!("{}get_sns_canisters_summary", LOG_PREFIX);
+    log!(INFO, "get_sns_canisters_summary");
     over_async(candid_one, get_sns_canisters_summary_)
 }
 
@@ -231,7 +229,7 @@ async fn get_sns_canisters_summary_(
 /// SnsRootCanister::register_dapp_canister).
 #[export_name = "canister_query list_sns_canisters"]
 fn list_sns_canisters() {
-    println!("{}list_sns_canisters", LOG_PREFIX);
+    log!(INFO, "list_sns_canisters");
     over(candid_one, list_sns_canisters_)
 }
 
@@ -423,15 +421,16 @@ fn http_request() {
 }
 
 /// Serve an HttpRequest made to this canister
-pub fn serve_http(req: HttpRequest) -> HttpResponse {
-    if req.path() == "/metrics" {
-        serve_metrics(encode_metrics)
-    } else if req.path() == "/log/info" {
-        serve_logs(&INFO)
-    } else if req.path() == "/log/error" {
-        serve_logs(&ERROR)
-    } else {
-        HttpResponseBuilder::not_found().build()
+pub fn serve_http(request: HttpRequest) -> HttpResponse {
+    match request.path() {
+        "/metrics" => serve_metrics(encode_metrics),
+        "/logs" => serve_logs_v2(request, &INFO, &ERROR),
+
+        // These are obsolete.
+        "/log/info" => serve_logs(&INFO),
+        "/log/error" => serve_logs(&ERROR),
+
+        _ => HttpResponseBuilder::not_found().build(),
     }
 }
 
