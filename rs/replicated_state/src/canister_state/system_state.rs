@@ -956,6 +956,21 @@ impl SystemState {
         self.queues
             .split_input_schedules(own_canister_id, local_canisters);
     }
+
+    /// Increments the metric `consumed_cycles_since_replica_started` with the
+    /// number of cycles consumed.
+    pub fn observe_consumed_cycles(&mut self, cycles: Cycles) {
+        self.canister_metrics.consumed_cycles_since_replica_started +=
+            NominalCycles::from_cycles(cycles);
+    }
+
+    /// Add cycles to the balance and decrements the metric `consumed_cycles_since_replica_started`
+    /// with the number of cycles added.
+    pub fn increment_balance_and_decrement_consumed_cycles(&mut self, cycles: Cycles) {
+        *self.balance_mut() += cycles;
+        self.canister_metrics.consumed_cycles_since_replica_started -=
+            NominalCycles::from_cycles(cycles);
+    }
 }
 
 /// Implements memory limits verification for pushing a canister-to-canister

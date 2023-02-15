@@ -21,7 +21,6 @@ use ic_replicated_state::{
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, Request},
     methods::Callback,
-    nominal_cycles::NominalCycles,
     CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, NumPages, Time,
 };
 use ic_wasm_types::WasmEngineError;
@@ -283,10 +282,7 @@ impl SystemStateChanges {
             .apply_ref(system_state.balance_mut());
 
         // Observe consumed cycles.
-        system_state
-            .canister_metrics
-            .consumed_cycles_since_replica_started +=
-            NominalCycles::from_cycles(self.cycles_consumed);
+        system_state.observe_consumed_cycles(self.cycles_consumed);
 
         // Verify we don't accept more cycles than are available from each call
         // context and update each call context balance

@@ -187,14 +187,13 @@ impl ResponseHelper {
     ///
     /// These are the only state changes to the initial canister state before
     /// executing Wasm code.
-    fn apply_initial_refunds(&mut self, round: &RoundContext) {
+    fn apply_initial_refunds(&mut self) {
         *self.canister.system_state.balance_mut() += self.refund_for_sent_cycles;
         // The `refund_cycles()` is similar to `add_cycles()` but it
         // additionally fixes up the cycles-burned metric.
-        round.cycles_account_manager.refund_cycles(
-            &mut self.canister.system_state,
-            self.refund_for_response_transmission,
-        );
+        self.canister
+            .system_state
+            .increment_balance_and_decrement_consumed_cycles(self.refund_for_response_transmission);
     }
 
     /// Checks that the canister has not been uninstalled:
@@ -287,7 +286,7 @@ impl ResponseHelper {
             initial_cycles_balance: clean_canister.system_state.balance(),
             response_sender: paused.response_sender,
         };
-        helper.apply_initial_refunds(round);
+        helper.apply_initial_refunds();
 
         // This validation succeeded in `execute_response()` and we expect it to
         // succeed here too.
@@ -774,7 +773,7 @@ pub fn execute_response(
 
     let mut helper =
         ResponseHelper::new(&clean_canister, &response, error_counter, &original, &round);
-    helper.apply_initial_refunds(&round);
+    helper.apply_initial_refunds();
     let helper = match helper.validate(&call_context, &original, &round) {
         Ok(helper) => helper,
         Err(result) => {

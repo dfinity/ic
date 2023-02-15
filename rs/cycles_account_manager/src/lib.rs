@@ -24,7 +24,6 @@ use ic_replicated_state::{CanisterState, SystemState};
 use ic_types::{
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
     messages::{Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
-    nominal_cycles::NominalCycles,
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId,
 };
 use prometheus::IntCounter;
@@ -316,14 +315,6 @@ impl CyclesAccountManager {
         self.consume_with_threshold(system_state, cycles, threshold)
     }
 
-    /// Updates the metric `consumed_cycles_since_replica_started` with the
-    /// amount of cycles consumed.
-    pub fn observe_consumed_cycles(&self, system_state: &mut SystemState, cycles: Cycles) {
-        system_state
-            .canister_metrics
-            .consumed_cycles_since_replica_started += NominalCycles::from_cycles(cycles);
-    }
-
     /// Prepays the cost of executing a message with the given number of
     /// instructions. See the comment of `execution_cost()` for details
     /// about the execution cost.
@@ -387,7 +378,7 @@ impl CyclesAccountManager {
                 subnet_size,
             )
             .min(prepaid_execution_cycles);
-        self.refund_cycles(system_state, cycles_to_refund);
+        system_state.increment_balance_and_decrement_consumed_cycles(cycles_to_refund);
     }
 
     /// Charges the canister for its compute allocation
@@ -675,15 +666,6 @@ impl CyclesAccountManager {
         }
     }
 
-    /// Note that this function is made public only for the tests.
-    #[doc(hidden)]
-    pub fn refund_cycles(&self, system_state: &mut SystemState, cycles: Cycles) {
-        *system_state.balance_mut() += cycles;
-        system_state
-            .canister_metrics
-            .consumed_cycles_since_replica_started -= NominalCycles::from_cycles(cycles);
-    }
-
     /// Subtracts and consumes the cycles. This call should be used when the
     /// cycles are not being sent somewhere else.
     pub fn consume_with_threshold(
@@ -698,7 +680,7 @@ impl CyclesAccountManager {
             cycles,
             threshold,
         )
-        .map(|()| self.observe_consumed_cycles(system_state, cycles))
+        .map(|()| system_state.observe_consumed_cycles(cycles))
     }
 
     /// Subtracts `cycles` worth of cycles from the canister's balance as long

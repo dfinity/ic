@@ -694,23 +694,3 @@ fn consume_cycles_updates_consumed_cycles() {
         NominalCycles::from(1_000_000)
     );
 }
-
-#[test]
-fn verify_refund() {
-    let mut system_state = SystemStateBuilder::new().build();
-    let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
-    let initial_consumed_cycles = NominalCycles::from(1000);
-    system_state
-        .canister_metrics
-        .consumed_cycles_since_replica_started = initial_consumed_cycles;
-
-    let cycles = Cycles::new(100);
-    cycles_account_manager.refund_cycles(&mut system_state, cycles);
-    assert_eq!(system_state.balance(), INITIAL_CYCLES + cycles);
-    assert_eq!(
-        system_state
-            .canister_metrics
-            .consumed_cycles_since_replica_started,
-        initial_consumed_cycles - NominalCycles::from(cycles)
-    );
-}
