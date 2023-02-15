@@ -1,5 +1,5 @@
 {
-  "checksum": "bb383344c19f6d886419c805521f178b97b176ed6b71bf9802b9aae3395849b2",
+  "checksum": "d4b3e0f75975062d44d43679525907cdfae9507f5204079c1be2308350673c1d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1117,7 +1117,7 @@
         "deps": {
           "common": [
             {
-              "id": "gimli 0.27.1",
+              "id": "gimli 0.27.2",
               "target": "gimli"
             }
           ],
@@ -5532,6 +5532,39 @@
       },
       "license": "MIT/Apache-2.0"
     },
+    "by_address 1.1.0": {
+      "name": "by_address",
+      "version": "1.1.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/by_address/1.1.0/download",
+          "sha256": "bf8dba2868114ed769a1f2590fc9ae5eb331175b44313b6c9b922f8f7ca813d0"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "by_address",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "by_address",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "1.1.0"
+      },
+      "license": "MIT / Apache-2.0"
+    },
     "byte-unit 4.0.18": {
       "name": "byte-unit",
       "version": "4.0.18",
@@ -7549,13 +7582,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap 4.1.4": {
+    "clap 4.1.6": {
       "name": "clap",
-      "version": "4.1.4",
+      "version": "4.1.6",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/4.1.4/download",
-          "sha256": "f13b9c79b5d1dd500d20ef541215a6423c75829ef43117e1b4d17fd8af0b5d76"
+          "url": "https://crates.io/api/v1/crates/clap/4.1.6/download",
+          "sha256": "ec0b0588d44d4d63a87dbd75c136c166bbfd9a86a31cb89e09906521c7d3f5e3"
         }
       },
       "targets": [
@@ -7638,7 +7671,7 @@
           ],
           "selects": {}
         },
-        "version": "4.1.4"
+        "version": "4.1.6"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -12315,6 +12348,10 @@
               "target": "build_info_build"
             },
             {
+              "id": "by_address 1.1.0",
+              "target": "by_address"
+            },
+            {
               "id": "byte-unit 4.0.18",
               "target": "byte_unit"
             },
@@ -12367,7 +12404,7 @@
               "target": "clap"
             },
             {
-              "id": "clap 4.1.4",
+              "id": "clap 4.1.6",
               "target": "clap",
               "alias": "clap_4_0_0"
             },
@@ -17276,13 +17313,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "gimli 0.27.1": {
+    "gimli 0.27.2": {
       "name": "gimli",
-      "version": "0.27.1",
+      "version": "0.27.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/gimli/0.27.1/download",
-          "sha256": "221996f774192f0f718773def8201c4ae31f02616a54ccfc2d358bb0e5cefdec"
+          "url": "https://crates.io/api/v1/crates/gimli/0.27.2/download",
+          "sha256": "ad0a93d233ebf96623465aad4046a8d3aa4da22d4f4beba5388838c8a434bbb4"
         }
       },
       "targets": [
@@ -17309,7 +17346,7 @@
           "read-core"
         ],
         "edition": "2018",
-        "version": "0.27.1"
+        "version": "0.27.2"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -53569,7 +53606,7 @@
     "cc 1.0.79",
     "cddl 0.9.1",
     "clap 3.2.23",
-    "clap 4.1.4",
+    "clap 4.1.6",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",

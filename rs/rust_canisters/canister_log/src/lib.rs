@@ -102,6 +102,34 @@ impl LogBuffer {
     pub fn iter(&self) -> impl Iterator<Item = &LogEntry> {
         self.entries.iter()
     }
+
+    /// Returns the first iterator for which p returns false (or past the end
+    /// iterator if they all return false).
+    ///
+    /// Warning: Entries MUST be partitioned by p. That is, p returns true for
+    /// all elements in the "front" of the entries list, and false for all
+    /// elements in the "back". Otherwise, behavior is not defined. This is
+    /// because binary search is used.
+    ///
+    /// For example,
+    ///
+    ///   log_buffer.skip_old_entries(|log_entry| log_entry.timestamp <= T)
+    ///
+    /// In practice, p only uses the timestamp field, because you can partition
+    /// on that (since entries are in chronological order, assuming the clock is
+    /// monotonic, and the IC, it is).
+    ///
+    /// If you want an iterator to the first iterator that returns true, but p
+    /// does not partition, do this instead:
+    ///
+    ///    log_buffer.iter().skip_while(opposite_of_p)
+    pub fn entries_partition_point<P>(&self, p: P) -> impl Iterator<Item = &LogEntry>
+    where
+        P: Fn(&LogEntry) -> bool,
+    {
+        let head_len = self.entries.partition_point(p);
+        self.iter().skip(head_len)
+    }
 }
 
 pub type GlobalBuffer = LocalKey<RefCell<LogBuffer>>;

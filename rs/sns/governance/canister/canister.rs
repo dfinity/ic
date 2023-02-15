@@ -31,7 +31,7 @@ use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ic00_types::CanisterStatusResultV2;
 use ic_nervous_system_common::ledger::IcpLedgerCanister;
 use ic_nervous_system_common::{
-    get_canister_status, serve_logs, serve_metrics,
+    get_canister_status, serve_logs, serve_logs_v2, serve_metrics,
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
@@ -583,15 +583,16 @@ fn http_request() {
 }
 
 /// Serve an HttpRequest made to this canister
-pub fn serve_http(req: HttpRequest) -> HttpResponse {
-    if req.path() == "/metrics" {
-        serve_metrics(encode_metrics)
-    } else if req.path() == "/log/info" {
-        serve_logs(&INFO)
-    } else if req.path() == "/log/error" {
-        serve_logs(&ERROR)
-    } else {
-        HttpResponseBuilder::not_found().build()
+pub fn serve_http(request: HttpRequest) -> HttpResponse {
+    match request.path() {
+        "/metrics" => serve_metrics(encode_metrics),
+        "/logs" => serve_logs_v2(request, &INFO, &ERROR),
+
+        // These are obsolete.
+        "/log/info" => serve_logs(&INFO),
+        "/log/error" => serve_logs(&ERROR),
+
+        _ => HttpResponseBuilder::not_found().build(),
     }
 }
 

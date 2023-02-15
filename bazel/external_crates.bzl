@@ -92,6 +92,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "assert_approx_eq": crate.spec(
                 version = "^1.1.0",
             ),
+            "by_address": crate.spec(
+                version = "^1.1.0",
+            ),
             "chacha20poly1305": crate.spec(
                 version = "^0.10.0",
             ),

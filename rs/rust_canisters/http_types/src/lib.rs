@@ -36,6 +36,14 @@ impl HttpResponseBuilder {
         })
     }
 
+    pub fn bad_request() -> Self {
+        Self(HttpResponse {
+            status_code: 400,
+            headers: vec![],
+            body: ByteBuf::from("bad request"),
+        })
+    }
+
     pub fn not_found() -> Self {
         Self(HttpResponse {
             status_code: 404,
