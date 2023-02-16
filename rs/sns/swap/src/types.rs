@@ -386,7 +386,7 @@ impl TransferableAmount {
                 amount.get_e8s().saturating_sub(fee.get_e8s()),
                 fee.get_e8s(),
                 subaccount,
-                dst.clone(),
+                *dst,
                 0,
             )
             .await;

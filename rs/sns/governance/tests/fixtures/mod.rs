@@ -499,7 +499,7 @@ impl GovernanceCanisterFixture {
             TargetLedger::Sns => &self.sns_ledger_fixture,
         };
         ledger_fixture
-            .account_balance(account.clone())
+            .account_balance(*account)
             .now_or_never()
             .unwrap()
             .unwrap()
@@ -952,7 +952,7 @@ impl GovernanceCanisterFixtureBuilder {
         let mut parameters = self
             .governance
             .parameters
-            .unwrap_or_else(|| NervousSystemParameters::with_default_values());
+            .unwrap_or_else(NervousSystemParameters::with_default_values);
         parameters.neuron_grantable_permissions = Some(neuron_permission_list);
         self.governance.parameters = Some(parameters);
         self

@@ -79,20 +79,20 @@ where
     let initial_balances: Vec<_> = mints
         .into_iter()
         .enumerate()
-        .map(|(i, amount)| (accounts[i].clone(), amount))
+        .map(|(i, amount)| (accounts[i], amount))
         .collect();
     let mut balances: BalancesModel = initial_balances.iter().cloned().collect();
 
     let (env, canister_id) = setup(ledger_wasm, encode_init_args, initial_balances);
 
     for (from_idx, to_idx, amount) in transfers.into_iter() {
-        let from = accounts[from_idx].clone();
-        let to = accounts[to_idx].clone();
+        let from = accounts[from_idx];
+        let to = accounts[to_idx];
 
         let ((from_balance, to_balance), maybe_error) =
-            model_transfer(&mut balances, from.clone(), to.clone(), amount);
+            model_transfer(&mut balances, from, to, amount);
 
-        let result = transfer(&env, canister_id, from.clone(), to.clone(), amount);
+        let result = transfer(&env, canister_id, from, to, amount);
 
         prop_assert_eq!(result.is_err(), maybe_error.is_some());
 
@@ -127,10 +127,10 @@ fn model_transfer(
             }),
         );
     }
-    balances.insert(from.clone(), from_balance - amount - FEE);
+    balances.insert(from, from_balance - amount - FEE);
 
     let to_balance = balances.get(&to).cloned().unwrap_or_default();
-    balances.insert(to.clone(), to_balance + amount);
+    balances.insert(to, to_balance + amount);
 
     let from_balance = balances.get(&from).cloned().unwrap_or_default();
     let to_balance = balances.get(&to).cloned().unwrap_or_default();
@@ -390,7 +390,7 @@ fn arb_block() -> impl Strategy<Value = Block> {
 
 fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
     InitArgs {
-        minting_account: MINTER.clone(),
+        minting_account: MINTER,
         initial_balances,
         transfer_fee: FEE,
         token_name: TOKEN_NAME.to_string(),
@@ -789,26 +789,26 @@ where
 
     assert_eq!(0, total_supply(&env, canister_id));
     assert_eq!(0, balance_of(&env, canister_id, p1));
-    assert_eq!(0, balance_of(&env, canister_id, MINTER.clone()));
+    assert_eq!(0, balance_of(&env, canister_id, MINTER));
 
-    transfer(&env, canister_id, MINTER.clone(), p1, 10_000_000).expect("mint failed");
+    transfer(&env, canister_id, MINTER, p1, 10_000_000).expect("mint failed");
 
     assert_eq!(10_000_000, total_supply(&env, canister_id));
     assert_eq!(10_000_000, balance_of(&env, canister_id, p1));
-    assert_eq!(0, balance_of(&env, canister_id, MINTER.clone()));
+    assert_eq!(0, balance_of(&env, canister_id, MINTER));
 
-    transfer(&env, canister_id, p1, MINTER.clone(), 1_000_000).expect("burn failed");
+    transfer(&env, canister_id, p1, MINTER, 1_000_000).expect("burn failed");
 
     assert_eq!(9_000_000, total_supply(&env, canister_id));
     assert_eq!(9_000_000, balance_of(&env, canister_id, p1));
-    assert_eq!(0, balance_of(&env, canister_id, MINTER.clone()));
+    assert_eq!(0, balance_of(&env, canister_id, MINTER));
 
     // You have at least FEE, you can burn at least FEE
     assert_eq!(
         Err(TransferError::BadBurn {
             min_burn_amount: Nat::from(FEE)
         }),
-        transfer(&env, canister_id, p1, MINTER.clone(), FEE / 2),
+        transfer(&env, canister_id, p1, MINTER, FEE / 2),
     );
 
     transfer(&env, canister_id, p1, p2, FEE / 2).expect("transfer failed");
@@ -820,9 +820,9 @@ where
         Err(TransferError::BadBurn {
             min_burn_amount: Nat::from(FEE / 2)
         }),
-        transfer(&env, canister_id, p2, MINTER.clone(), FEE / 4),
+        transfer(&env, canister_id, p2, MINTER, FEE / 4),
     );
-    transfer(&env, canister_id, p2, MINTER.clone(), FEE / 2).expect("burn failed");
+    transfer(&env, canister_id, p2, MINTER, FEE / 2).expect("burn failed");
 
     assert_eq!(0, balance_of(&env, canister_id, p2));
 
@@ -831,7 +831,7 @@ where
         Err(TransferError::BadBurn {
             min_burn_amount: Nat::from(FEE)
         }),
-        transfer(&env, canister_id, p2, MINTER.clone(), 0),
+        transfer(&env, canister_id, p2, MINTER, 0),
     );
 }
 

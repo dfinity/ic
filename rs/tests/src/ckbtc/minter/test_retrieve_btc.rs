@@ -127,7 +127,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         let transfer_result = ledger_agent
             .transfer(TransferArg {
                 from_subaccount: Some(subaccount1),
-                to: withdrawal_account.clone(),
+                to: withdrawal_account,
                 fee: None,
                 created_at_time: None,
                 memo: None,

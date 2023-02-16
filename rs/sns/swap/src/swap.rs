@@ -1520,7 +1520,7 @@ impl Swap {
                 amount_e8s,
                 DEFAULT_TRANSFER_FEE.get_e8s(),
                 Some(source_subaccount),
-                dst.clone(),
+                dst,
                 0, // memo
             )
             .await;

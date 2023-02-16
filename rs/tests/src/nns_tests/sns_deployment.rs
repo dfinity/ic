@@ -846,7 +846,7 @@ pub fn add_one_participant(env: TestEnv) {
     let block_idx_1 = {
         let transfer_arg = TransferArg {
             from_subaccount: None,
-            to: sns_account.clone(),
+            to: sns_account,
             fee: None,
             created_at_time: None,
             memo: None,

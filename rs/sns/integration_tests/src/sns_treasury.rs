@@ -39,7 +39,7 @@ fn sns_treasury_can_transfer_funds_via_proposals() {
         owner: user,
         subaccount: None,
     };
-    let user_account_identifier = icrc1_account_to_icp_accountidentifier(user_account.clone());
+    let user_account_identifier = icrc1_account_to_icp_accountidentifier(user_account);
 
     let first_sns_canister_id = 11;
     let governance = CanisterId::from(first_sns_canister_id + 1);
@@ -57,7 +57,7 @@ fn sns_treasury_can_transfer_funds_via_proposals() {
     };
 
     let sns_treasury_account_nns_identifier =
-        icrc1_account_to_icp_accountidentifier(sns_treasury_account_nns.clone());
+        icrc1_account_to_icp_accountidentifier(sns_treasury_account_nns);
 
     let nns_init_payloads = NnsInitPayloadsBuilder::new()
         .with_ledger_accounts(vec![
@@ -78,12 +78,9 @@ fn sns_treasury_can_transfer_funds_via_proposals() {
     };
 
     let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-        .with_ledger_account(
-            sns_treasury_account_sns.clone(),
-            Tokens::new(10000, 0).unwrap(),
-        )
+        .with_ledger_account(sns_treasury_account_sns, Tokens::new(10000, 0).unwrap())
         // User needs majority of tokens to pass proposals
-        .with_ledger_account(user_account.clone(), Tokens::new(10001, 0).unwrap())
+        .with_ledger_account(user_account, Tokens::new(10001, 0).unwrap())
         .with_nervous_system_parameters(system_params)
         .build();
 
@@ -94,12 +91,12 @@ fn sns_treasury_can_transfer_funds_via_proposals() {
     assert_eq!(sns_canisters.governance_canister_id, governance);
 
     // Show that our treasuries have expected funds, and our user has expected funds
-    let user_icp_balance = nns_ledger_balance(&state_machine, user_account.clone());
+    let user_icp_balance = nns_ledger_balance(&state_machine, user_account);
 
     let user_sns_balance = icrc1_balance(
         &state_machine,
         sns_canisters.ledger_canister_id,
-        user_account.clone(),
+        user_account,
     );
     assert_eq!(user_sns_balance, Tokens::new(10001, 0).unwrap());
     assert_eq!(user_icp_balance, Tokens::new(10000, 0).unwrap());
@@ -107,9 +104,9 @@ fn sns_treasury_can_transfer_funds_via_proposals() {
     let sns_sns_balance = icrc1_balance(
         &state_machine,
         sns_canisters.ledger_canister_id,
-        sns_treasury_account_sns.clone(),
+        sns_treasury_account_sns,
     );
-    let sns_icp_balance = nns_ledger_balance(&state_machine, sns_treasury_account_nns.clone());
+    let sns_icp_balance = nns_ledger_balance(&state_machine, sns_treasury_account_nns);
 
     assert_eq!(sns_sns_balance, Tokens::new(10000, 0).unwrap());
     assert_eq!(sns_icp_balance, Tokens::new(10000, 0).unwrap());
@@ -182,7 +179,7 @@ fn sns_treasury_can_transfer_funds_via_proposals() {
     sns_wait_for_proposal_execution(&state_machine, governance, transfer_token_proposal_id);
 
     // Show that our treasuries are drained, and our user has expected funds
-    let user_icp_balance = nns_ledger_balance(&state_machine, user_account.clone());
+    let user_icp_balance = nns_ledger_balance(&state_machine, user_account);
 
     let user_sns_balance = icrc1_balance(
         &state_machine,

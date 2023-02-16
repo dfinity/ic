@@ -422,7 +422,7 @@ pub async fn assert_account_balance(agent: &Icrc1Agent, account: &Account, expec
     assert_eq!(
         Nat::from(expected_balance),
         agent
-            .balance_of(account.clone(), CallMode::Query)
+            .balance_of(*account, CallMode::Query)
             .await
             .expect("Error while calling balance_of")
     );

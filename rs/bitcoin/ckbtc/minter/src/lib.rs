@@ -434,11 +434,7 @@ fn filter_output_accounts(
         .map(|input| {
             (
                 input.previous_output.clone(),
-                state
-                    .outpoint_account
-                    .get(&input.previous_output)
-                    .unwrap()
-                    .clone(),
+                *state.outpoint_account.get(&input.previous_output).unwrap(),
             )
         })
         .collect()

@@ -685,7 +685,7 @@ proptest! {
             mode: Mode::GeneralAvailability,
         });
         for (utxo, acc_idx) in utxos_acc_idx {
-            state.add_utxos(accounts[acc_idx].clone(), vec![utxo]);
+            state.add_utxos(accounts[acc_idx], vec![utxo]);
             state.check_invariants().expect("invariant check failed");
         }
     }
@@ -710,7 +710,7 @@ proptest! {
         let mut available_amount = 0;
         for (utxo, acc_idx) in utxos_acc_idx {
             available_amount += utxo.value;
-            state.add_utxos(accounts[acc_idx].clone(), vec![utxo]);
+            state.add_utxos(accounts[acc_idx], vec![utxo]);
         }
         for req in requests {
             let block_index = req.block_index;

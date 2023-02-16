@@ -3280,7 +3280,7 @@ impl Governance {
         let account = self.neuron_account_id(subaccount);
 
         // Get the balance of the neuron from the ledger canister.
-        let balance = self.ledger.account_balance(account.clone()).await?;
+        let balance = self.ledger.account_balance(account).await?;
         let min_stake = self
             .nervous_system_parameters_or_panic()
             .neuron_minimum_stake_e8s

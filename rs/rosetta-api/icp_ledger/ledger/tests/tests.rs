@@ -17,7 +17,7 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> InitArgs {
         .map(|(account, amount)| (account.into(), Tokens::from_e8s(amount)))
         .collect();
     InitArgs {
-        minting_account: args.minting_account.clone().into(),
+        minting_account: args.minting_account.into(),
         icrc1_minting_account: Some(args.minting_account),
         initial_values,
         max_message_size_bytes: None,

@@ -147,7 +147,7 @@ impl Stream {
         let stream = timeout(timeout_duration, async {
             TcpStream::connect(&address)
                 .await
-                .map_err(|socket_err| StreamError::Io(socket_err))
+                .map_err(StreamError::Io)
         })
         .into_inner()
         .or_else(|_| {
@@ -167,7 +167,7 @@ impl Stream {
                                 StreamError::Socks(SocksError::AddressTypeNotSupported)
                             )?.to_owned();
                         Ok(Socks5Stream::connect(socks_addr_authority.as_str(), address)
-                            .map_err(|socks_err| StreamError::Socks(socks_err))
+                            .map_err(StreamError::Socks)
                             .await?.into_inner())
                     }
                     None => {

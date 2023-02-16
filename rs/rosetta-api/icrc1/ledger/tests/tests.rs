@@ -30,7 +30,7 @@ fn archive_wasm() -> Vec<u8> {
 
 fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerArgument {
     LedgerArgument::Init(InitArgs {
-        minting_account: MINTER.clone(),
+        minting_account: MINTER,
         initial_balances: args.initial_balances,
         transfer_fee: FEE,
         token_name: TOKEN_NAME.to_string(),

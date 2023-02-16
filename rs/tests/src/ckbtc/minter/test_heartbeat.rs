@@ -104,7 +104,7 @@ pub fn test_heartbeat(env: TestEnv) {
         let transfer_result = ledger_agent
             .transfer(TransferArg {
                 from_subaccount: Some(subaccount0),
-                to: withdrawal_account.clone(),
+                to: withdrawal_account,
                 fee: None,
                 created_at_time: None,
                 memo: None,

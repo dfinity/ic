@@ -291,7 +291,7 @@ async fn icrc1_send(
             created_at_time,
         };
         let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)
-            .map_err(|e| ic_icrc1::endpoints::TransferError::from(e))?;
+            .map_err(ic_icrc1::endpoints::TransferError::from)?;
 
         set_certified_data(&hash.into_bytes());
 
@@ -541,7 +541,7 @@ fn icrc1_supported_standards() -> Vec<StandardRecord> {
 
 #[candid_method(query, rename = "icrc1_minting_account")]
 fn icrc1_minting_account() -> Option<Account> {
-    LEDGER.read().unwrap().icrc1_minting_account.clone()
+    LEDGER.read().unwrap().icrc1_minting_account
 }
 
 #[candid_method(query, rename = "transfer_fee")]

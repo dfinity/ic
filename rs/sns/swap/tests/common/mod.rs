@@ -1,10 +1,16 @@
 use crate::common::doubles::{LedgerExpect, MockLedger};
-use crate::NNS_GOVERNANCE_CANISTER_ID;
+use crate::{
+    now_fn, NNS_GOVERNANCE_CANISTER_ID, OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID, START_TIMESTAMP_SECONDS,
+    SWAP_CANISTER_ID,
+};
 use candid::Principal;
 use ic_base_types::PrincipalId;
+use ic_icrc1::Account;
+use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
+use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_governance::{
     pb::v1::{
         claim_swap_neurons_request::NeuronParameters,
@@ -13,7 +19,11 @@ use ic_sns_governance::{
     },
     types::ONE_MONTH_SECONDS,
 };
-use ic_sns_swap::pb::v1::{CfNeuron, CfParticipant};
+use ic_sns_swap::pb::v1::{
+    error_refund_icp_response, CfNeuron, CfParticipant, ErrorRefundIcpRequest,
+    ErrorRefundIcpResponse, OpenRequest, Params, SweepResult,
+};
+use ic_sns_swap::swap::principal_to_subaccount;
 use ic_sns_swap::{
     memory,
     pb::v1::{
@@ -301,4 +311,160 @@ pub fn paginate_participants(swap: &Swap, limit: usize) -> Vec<Participant> {
 
 pub fn get_snapshot_of_buyers_index_list() -> Vec<PrincipalId> {
     memory::BUYERS_LIST_INDEX.with(|m| m.borrow().iter().collect())
+}
+
+pub async fn open_swap(swap: &mut Swap, params: &Params) {
+    let account = Account {
+        owner: SWAP_CANISTER_ID.get(),
+        subaccount: None,
+    };
+    // Open swap.
+    {
+        assert!(params.swap_due_timestamp_seconds > START_TIMESTAMP_SECONDS);
+        let r = swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    account,
+                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
+                )]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params.clone()),
+                    cf_participants: vec![],
+                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
+                },
+            )
+            .await;
+        assert!(r.is_ok());
+    }
+}
+
+pub async fn buy_token(swap: &mut Swap, user: &PrincipalId, amount: &u64, ledger: &MockLedger) {
+    assert!(swap
+        .refresh_buyer_token_e8s(*user, SWAP_CANISTER_ID, ledger)
+        .await
+        .is_ok());
+    assert_eq!(
+        swap.buyers
+            .get(&user.clone().to_string())
+            .unwrap()
+            .amount_icp_e8s(),
+        amount.clone()
+    );
+}
+
+pub async fn try_error_refund_ok(
+    swap: &mut Swap,
+    user: &PrincipalId,
+    ledger: &MockLedger,
+) -> ic_sns_swap::pb::v1::error_refund_icp_response::Ok {
+    match swap
+        .error_refund_icp(
+            SWAP_CANISTER_ID,
+            &ErrorRefundIcpRequest {
+                source_principal_id: Some(*user),
+            },
+            ledger,
+        )
+        .await
+    {
+        ErrorRefundIcpResponse {
+            result: Some(error_refund_icp_response::Result::Ok(ok)),
+        } => ok,
+        _ => panic!("Expected error refund not to fail!"),
+    }
+}
+
+pub fn get_sns_balance(user: &PrincipalId, swap: &mut Swap) -> u64 {
+    swap.buyers.get(&user.to_string()).unwrap().amount_icp_e8s()
+}
+
+pub async fn try_error_refund_err(
+    swap: &mut Swap,
+    user: &PrincipalId,
+    ledger: &MockLedger,
+) -> ic_sns_swap::pb::v1::error_refund_icp_response::Err {
+    match swap
+        .error_refund_icp(
+            SWAP_CANISTER_ID,
+            &ErrorRefundIcpRequest {
+                source_principal_id: Some(*user),
+            },
+            ledger,
+        )
+        .await
+    {
+        ErrorRefundIcpResponse {
+            result: Some(error_refund_icp_response::Result::Err(error)),
+        } => error,
+        _ => panic!("Expected error refund to fail!"),
+    }
+}
+
+pub fn get_transfer_and_account_balance_mock_ledger(
+    amount: &u64,
+    from_subaccount: &PrincipalId,
+    to: &PrincipalId,
+    error: bool,
+) -> Vec<LedgerExpect> {
+    vec![
+        LedgerExpect::AccountBalance(
+            Account {
+                owner: SWAP_CANISTER_ID.into(),
+                subaccount: Some(principal_to_subaccount(from_subaccount)),
+            },
+            Ok(Tokens::from_e8s(*amount)),
+        ),
+        LedgerExpect::TransferFunds(
+            *amount - DEFAULT_TRANSFER_FEE.get_e8s(),
+            DEFAULT_TRANSFER_FEE.get_e8s(),
+            Some(principal_to_subaccount(from_subaccount)),
+            Account {
+                owner: *to,
+                subaccount: None,
+            },
+            0,
+            match error {
+                false => Ok(100),
+                true => Err(101),
+            },
+        ),
+    ]
+}
+
+pub fn get_transfer_mock_ledger(
+    amount: &u64,
+    from_subaccount: &PrincipalId,
+    to: &PrincipalId,
+    error: bool,
+) -> Vec<LedgerExpect> {
+    vec![LedgerExpect::TransferFunds(
+        *amount - DEFAULT_TRANSFER_FEE.get_e8s(),
+        DEFAULT_TRANSFER_FEE.get_e8s(),
+        Some(principal_to_subaccount(from_subaccount)),
+        Account {
+            owner: *to,
+            subaccount: None,
+        },
+        0,
+        match error {
+            false => Ok(100),
+            true => Err(101),
+        },
+    )]
+}
+
+pub fn get_account_balance_mock_ledger(amount: &u64, user: &PrincipalId) -> Vec<LedgerExpect> {
+    vec![LedgerExpect::AccountBalance(
+        Account {
+            owner: SWAP_CANISTER_ID.into(),
+            subaccount: Some(principal_to_subaccount(user)),
+        },
+        Ok(Tokens::from_e8s(*amount)),
+    )]
+}
+
+pub async fn sweep(swap: &mut Swap, ledger: &MockLedger) -> SweepResult {
+    swap.sweep_icp(now_fn, ledger).await
 }

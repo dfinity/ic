@@ -21,7 +21,7 @@ pub fn add_utxos(
 ) {
     record_event(&Event::ReceivedUtxos {
         mint_txid,
-        to_account: account.clone(),
+        to_account: account,
         utxos: utxos.clone(),
     });
 

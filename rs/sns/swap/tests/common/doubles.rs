@@ -249,12 +249,13 @@ impl NnsGovernanceClient for SpyNnsGovernanceClient {
 }
 
 /// Expectation of one call on the mock Ledger.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub enum LedgerExpect {
     AccountBalance(Account, Result<Tokens, i32>),
     TransferFunds(u64, u64, Option<Subaccount>, Account, u64, Result<u64, i32>),
 }
 
+#[derive(Debug, Clone)]
 pub struct MockLedger {
     pub expect: Arc<Mutex<Vec<LedgerExpect>>>,
 }

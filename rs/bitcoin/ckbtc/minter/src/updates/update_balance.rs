@@ -182,7 +182,7 @@ pub async fn update_balance(
         ),
     }
 
-    let mint_txid = mint(satoshis_to_mint, caller_account.clone()).await?;
+    let mint_txid = mint(satoshis_to_mint, caller_account).await?;
 
     state::mutate_state(|s| state::audit::add_utxos(s, Some(mint_txid), caller_account, new_utxos));
 
