@@ -96,7 +96,7 @@ fn install_ledger(
     archive_options: ArchiveOptions,
 ) -> CanisterId {
     let args = LedgerArgument::Init(LedgerInitArgs {
-        minting_account: MINTER.clone(),
+        minting_account: MINTER,
         initial_balances,
         transfer_fee: FEE,
         token_name: TOKEN_NAME.to_string(),

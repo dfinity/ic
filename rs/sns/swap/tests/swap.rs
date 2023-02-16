@@ -4,14 +4,17 @@ use crate::common::doubles::{
     SpyNnsGovernanceClient, SpySnsGovernanceClient, SpySnsRootClient,
 };
 use crate::common::{
-    compute_multiple_successful_claim_swap_neurons_response,
+    buy_token, compute_multiple_successful_claim_swap_neurons_response,
     compute_single_successful_claim_swap_neurons_response, create_generic_cf_participants,
     create_generic_sns_neuron_recipes, create_single_neuron_recipe, extract_canister_call_error,
-    extract_set_dapp_controller_response, get_snapshot_of_buyers_index_list, i2principal_id_string,
-    mock_stub, paginate_participants, successful_set_dapp_controllers_call_result,
-    successful_set_mode_call_result, successful_settle_community_fund_participation_result,
-    verify_participant_balances, TestInvestor,
+    extract_set_dapp_controller_response, get_account_balance_mock_ledger,
+    get_snapshot_of_buyers_index_list, get_sns_balance,
+    get_transfer_and_account_balance_mock_ledger, get_transfer_mock_ledger, i2principal_id_string,
+    mock_stub, open_swap, paginate_participants, successful_set_dapp_controllers_call_result,
+    successful_set_mode_call_result, successful_settle_community_fund_participation_result, sweep,
+    try_error_refund_err, try_error_refund_ok, verify_participant_balances, TestInvestor,
 };
+use error_refund_icp_response::err::Type::Precondition;
 use futures::{channel::mpsc, future::FutureExt, StreamExt};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Account;
@@ -197,7 +200,7 @@ fn test_open() {
             .open(
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
-                    account.clone(),
+                    account,
                     Ok(Tokens::ZERO),
                 )]),
                 START_TIMESTAMP_SECONDS,
@@ -212,7 +215,7 @@ fn test_open() {
         let r = swap
             .open(
                 SWAP_CANISTER_ID,
-                &mock_stub(vec![LedgerExpect::AccountBalance(account.clone(), Err(13))]),
+                &mock_stub(vec![LedgerExpect::AccountBalance(account, Err(13))]),
                 START_TIMESTAMP_SECONDS,
                 open_request.clone(),
             )
@@ -226,7 +229,7 @@ fn test_open() {
             .open(
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
-                    account.clone(),
+                    account,
                     Ok(Tokens::from_e8s(params.sns_token_e8s - 1)),
                 )]),
                 START_TIMESTAMP_SECONDS,
@@ -1247,7 +1250,7 @@ async fn test_finalize_swap_ok() {
                 amount_e8s,
                 fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
                 from_subaccount,
-                to: expected_to.clone(),
+                to: expected_to,
                 memo: 0,
             }
         })
@@ -1475,299 +1478,378 @@ async fn test_finalize_swap_abort() {
     }
 }
 
-/// Test the error refund method.
+/// Test the error refund method for single user
 #[test]
-fn test_error_refund() {
-    let params = Params {
-        max_icp_e8s: 10 * E8,
-        min_icp_e8s: 5 * E8,
-        min_participants: 1,
-        min_participant_icp_e8s: E8,
-        max_participant_icp_e8s: 6 * E8,
-        sns_token_e8s: 100_000 * E8,
-        ..params()
-    };
-    let account = Account {
-        owner: SWAP_CANISTER_ID.get(),
-        subaccount: None,
-    };
-    let mut swap = Swap::new(init());
-    // Open swap.
+fn test_error_refund_single_user() {
+    let user1 = *TEST_USER1_PRINCIPAL;
+    //Test with single account
     {
-        let r = swap
-            .open(
-                SWAP_CANISTER_ID,
-                &mock_stub(vec![LedgerExpect::AccountBalance(
-                    account,
-                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
-                )]),
-                START_TIMESTAMP_SECONDS,
-                OpenRequest {
-                    params: Some(params),
-                    cf_participants: vec![],
-                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
-                },
-            )
-            .now_or_never()
-            .unwrap();
-        assert!(r.is_ok());
-    }
-    assert_eq!(swap.lifecycle(), Open);
-    // Cannot commit or abort, as the swap is not due yet.
-    assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
-    // Deposit 6 ICP from one buyer.
-    assert!(swap
-        .refresh_buyer_token_e8s(
-            *TEST_USER1_PRINCIPAL,
-            SWAP_CANISTER_ID,
-            &mock_stub(vec![LedgerExpect::AccountBalance(
-                Account {
-                    owner: SWAP_CANISTER_ID.get(),
-                    subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone()))
-                },
-                Ok(Tokens::from_e8s(6 * E8))
-            )])
-        )
-        .now_or_never()
-        .unwrap()
-        .is_ok());
-    assert_eq!(
-        swap.buyers
-            .get(&TEST_USER1_PRINCIPAL.to_string())
-            .unwrap()
-            .amount_icp_e8s(),
-        6 * E8
-    );
-    // Refund must fail as the swap is not committed or aborted.
-    {
-        use error_refund_icp_response::err::Type::Precondition;
-        match swap
-            .error_refund_icp(
-                SWAP_CANISTER_ID,
-                &ErrorRefundIcpRequest {
-                    source_principal_id: Some(*TEST_USER2_PRINCIPAL),
-                },
-                &mock_stub(vec![]),
-            )
-            .now_or_never()
-            .unwrap()
-        {
-            ErrorRefundIcpResponse {
-                result:
-                    Some(error_refund_icp_response::Result::Err(error_refund_icp_response::Err {
-                        error_type: Some(error_type),
-                        description: Some(description),
-                    })),
-            } => {
-                assert_eq!(error_type, Precondition as i32);
-                assert!(
-                    description.contains("ABORTED or COMMITTED"),
-                    "{}",
-                    description,
-                );
-            }
-            _ => panic!("Expected error refund to fail!"),
-        }
-    }
-    // Will not auto-commit before the swap is due.
-    assert!(!swap.can_commit(END_TIMESTAMP_SECONDS - 1));
-    assert!(!swap.try_commit_or_abort(END_TIMESTAMP_SECONDS - 1));
-    // Commit when due.
-    assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
-    assert_eq!(swap.lifecycle(), Committed);
-    // Check that buyer balance is correct. Total SNS balance is 100k and total ICP is 6.
-    verify_participant_balances(&swap, &TEST_USER1_PRINCIPAL, 6 * E8, 100_000 * E8);
+        let params = Params {
+            max_icp_e8s: 10 * E8,
+            min_icp_e8s: 5 * E8,
+            min_participants: 1,
+            min_participant_icp_e8s: E8,
+            max_participant_icp_e8s: 6 * E8,
+            sns_token_e8s: 100_000 * E8,
+            ..params()
+        };
+        let mut swap = Swap::new(init());
+        // Swap is not open and therefore cannot be commited
+        assert_eq!(swap.lifecycle(), Pending);
+        assert!(!swap.can_commit(params.swap_due_timestamp_seconds));
 
-    // Now, we try to do some refunds.
+        // Open swap
+        open_swap(&mut swap, &params).now_or_never().unwrap();
 
-    // Perhaps USER2 (who never participated in the swap) sent 10 ICP in error?
-    match swap
-        .error_refund_icp(
-            SWAP_CANISTER_ID,
-            &ErrorRefundIcpRequest {
-                source_principal_id: Some(*TEST_USER2_PRINCIPAL),
-            },
-            &mock_stub(vec![
-                LedgerExpect::AccountBalance(
-                    Account {
-                        owner: SWAP_CANISTER_ID.into(),
-                        subaccount: Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL)),
-                    },
-                    Ok(Tokens::from_e8s(10 * E8)),
-                ),
-                LedgerExpect::TransferFunds(
-                    10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
-                    DEFAULT_TRANSFER_FEE.get_e8s(),
-                    Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL.clone())),
-                    Account {
-                        owner: *TEST_USER2_PRINCIPAL,
-                        subaccount: None,
-                    },
-                    0,
-                    Ok(1066),
-                ),
-            ]),
-        )
-        .now_or_never()
-        .unwrap()
-    {
-        // Refund should succeed.
-        ErrorRefundIcpResponse {
-            result:
-                Some(error_refund_icp_response::Result::Ok(error_refund_icp_response::Ok {
-                    block_height: Some(block_height),
-                })),
-        } => assert_eq!(block_height, 1066),
-        _ => panic!("Expected error refund to succeed"),
-    }
-    // Perhaps USER3 didn't actually send 10 ICP in error, but tries to get a refund anyway?
-    match swap
-        .error_refund_icp(
-            SWAP_CANISTER_ID,
-            &ErrorRefundIcpRequest {
-                source_principal_id: Some(*TEST_USER3_PRINCIPAL),
-            },
-            &mock_stub(vec![
-                LedgerExpect::AccountBalance(
-                    Account {
-                        owner: SWAP_CANISTER_ID.get(),
-                        subaccount: Some(principal_to_subaccount(&TEST_USER3_PRINCIPAL.clone())),
-                    },
-                    Ok(Tokens::from_e8s(10 * E8)),
-                ),
-                LedgerExpect::TransferFunds(
-                    10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
-                    DEFAULT_TRANSFER_FEE.get_e8s(),
-                    Some(principal_to_subaccount(&TEST_USER3_PRINCIPAL.clone())),
-                    Account {
-                        owner: *TEST_USER3_PRINCIPAL,
-                        subaccount: None,
-                    },
-                    0, // memo
-                    Err(100),
-                ),
-            ]),
-        )
-        .now_or_never()
-        .unwrap()
-    {
-        ErrorRefundIcpResponse {
-            result:
-                Some(error_refund_icp_response::Result::Err(error_refund_icp_response::Err {
-                    error_type: Some(error_type),
-                    description: Some(description),
-                })),
-        } => {
-            assert_eq!(
-                error_type,
-                error_refund_icp_response::err::Type::External as i32,
-            );
-            assert!(description.contains("Transfer"), "{}", description);
-        }
-        _ => panic!("Expected error refund to fail"),
-    }
-    // Perhaps USER1 (who has a buyer record) sent 10 extra ICP in
-    // error? We expect this to fail as USER1's ICP still hasn't been
-    // "collected" (sweep).
-    match swap
-        .error_refund_icp(
-            SWAP_CANISTER_ID,
-            &ErrorRefundIcpRequest {
-                source_principal_id: Some(*TEST_USER1_PRINCIPAL),
-            },
-            &mock_stub(vec![]),
-        )
-        .now_or_never()
-        .unwrap()
-    {
-        ErrorRefundIcpResponse {
-            result:
-                Some(error_refund_icp_response::Result::Err(error_refund_icp_response::Err {
-                    error_type: Some(error_type),
-                    description: Some(description),
-                })),
-        } => {
-            assert_eq!(
-                error_type,
-                error_refund_icp_response::err::Type::Precondition as i32,
-            );
-            assert!(description.contains("escrow"), "{}", description);
-        }
-        _ => panic!("Expected error refund to fail"),
-    }
-    // "Sweep" all ICP, going to the governance canister.
-    let SweepResult {
-        success,
-        failure,
-        skipped,
-        invalid,
-        global_failures,
-    } = swap
-        .sweep_icp(
-            now_fn,
-            &mock_stub(vec![LedgerExpect::TransferFunds(
-                6 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
-                DEFAULT_TRANSFER_FEE.get_e8s(),
-                Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL)),
-                Account {
-                    owner: SNS_GOVERNANCE_CANISTER_ID.get(),
-                    subaccount: None,
-                },
-                0,
-                Ok(1067),
-            )]),
+        // Swap should be open
+        assert_eq!(swap.lifecycle(), Open);
+
+        //Buy a tokens
+        let amount = 6 * E8;
+        buy_token(
+            &mut swap,
+            &user1,
+            &amount,
+            &mock_stub(get_transfer_and_account_balance_mock_ledger(
+                &amount, &user1, &user1, false,
+            )),
         )
         .now_or_never()
         .unwrap();
-    assert_eq!(skipped, 0);
-    assert_eq!(success, 1);
-    assert_eq!(failure, 0);
-    assert_eq!(invalid, 0);
-    assert_eq!(global_failures, 0);
-    // Check that buyer balance still is correct.
 
-    verify_participant_balances(&swap, &TEST_USER1_PRINCIPAL, 6 * E8, 100_000 * E8);
+        //Verify that SNS Sale canister registered the tokens
+        assert_eq!(amount, get_sns_balance(&user1, &mut swap));
 
-    // Perhaps USER1 (who has a buyer record) sent 10 extra ICP in
-    // error? We expect this to succeed now that the ICP that
-    // participated in the swap have been disbursed.
-    match swap
-        .error_refund_icp(
-            SWAP_CANISTER_ID,
-            &ErrorRefundIcpRequest {
-                source_principal_id: Some(*TEST_USER1_PRINCIPAL),
-            },
-            &mock_stub(vec![
-                LedgerExpect::AccountBalance(
-                    Account {
-                        owner: SWAP_CANISTER_ID.get(),
-                        subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone())),
-                    },
-                    Ok(Tokens::from_e8s(10 * E8)),
-                ),
-                LedgerExpect::TransferFunds(
-                    10 * E8 - DEFAULT_TRANSFER_FEE.get_e8s(),
-                    DEFAULT_TRANSFER_FEE.get_e8s(),
-                    Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone())),
-                    Account {
-                        owner: *TEST_USER1_PRINCIPAL,
-                        subaccount: None,
-                    },
-                    0, // memo
-                    Ok(1066),
-                ),
-            ]),
+        //User has not commited yet --> No neuron has been created
+        assert!(std::panic::catch_unwind(|| verify_participant_balances(
+            &swap,
+            &user1,
+            amount,
+            swap.params.clone().unwrap().sns_token_e8s,
+        ))
+        .is_err());
+
+        //User has not commited yet --> Cannot get a refund
+        let refund_err = try_error_refund_err(
+            &mut swap,
+            &user1,
+            &mock_stub(get_account_balance_mock_ledger(&amount, &user1)),
         )
         .now_or_never()
-        .unwrap()
+        .unwrap();
+        assert!(refund_err
+            .description
+            .unwrap()
+            .contains("ABORTED or COMMITTED"));
+        assert_eq!(refund_err.error_type.unwrap(), Precondition as i32);
+
+        //The minimum number of participants is 1, so when calling commit with the appropriate end time a commit should be possible
+        assert!(swap.can_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+        assert!(swap.try_commit_or_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+
+        //The life cycle should have changed to COMMITTED
+        assert_eq!(swap.lifecycle(), Committed);
+
+        //Now that the lifecycle has changed to commited, the neurons for the buyers should have been generated
+        verify_participant_balances(
+            &swap,
+            &user1,
+            amount,
+            swap.params.clone().unwrap().sns_token_e8s,
+        );
+
+        //The lifecycle is committed, however the funds have not been sweeped i.e. sent to the governance canister if commited or back to buyer if aborted
+        //lifecycle is currently commited so funds should go governance canister after speep. Unitl then the buyer cannot refund
+        let refund_err = try_error_refund_err(
+            &mut swap,
+            &user1,
+            &mock_stub(get_transfer_and_account_balance_mock_ledger(
+                &amount, &user1, &user1, false,
+            )),
+        )
+        .now_or_never()
+        .unwrap();
+        assert!(refund_err.description.unwrap().contains("escrow"));
+        assert_eq!(refund_err.error_type.unwrap(), Precondition as i32);
+
+        //If user1 sends another amount by accident without actually buying any tokens (and thus not refreshing the balance of bought tokens) he should not be able to get a refund for that amount until the sns was sweeped.
+        let refund_err = try_error_refund_err(
+            &mut swap,
+            &user1,
+            &mock_stub(get_transfer_and_account_balance_mock_ledger(
+                &(7 * E8),
+                &user1,
+                &user1,
+                false,
+            )),
+        )
+        .now_or_never()
+        .unwrap();
+        assert!(refund_err.description.unwrap().contains("escrow"));
+        assert_eq!(refund_err.error_type.unwrap(), Precondition as i32);
+
+        //Now try to sweep
+        let SweepResult {
+            success,
+            failure,
+            skipped,
+            invalid,
+            global_failures,
+        } = sweep(
+            &mut swap,
+            &mock_stub(get_transfer_mock_ledger(
+                &amount,
+                &user1,
+                &SNS_GOVERNANCE_CANISTER_ID.into(),
+                false,
+            )),
+        )
+        .now_or_never()
+        .unwrap();
+        assert_eq!(skipped, 0);
+        assert_eq!(success, 1);
+        assert_eq!(failure, 0);
+        assert_eq!(invalid, 0);
+        assert_eq!(global_failures, 0);
+
+        // Now the user should be able to get their funds back which they send by accident earlier
+        let refund_ok = try_error_refund_ok(
+            &mut swap,
+            &user1,
+            &mock_stub(get_transfer_and_account_balance_mock_ledger(
+                &(7 * E8),
+                &user1,
+                &user1,
+                false,
+            )),
+        )
+        .now_or_never()
+        .unwrap();
+        assert_eq!(refund_ok.block_height.unwrap(), 100);
+
+        //User cant get a refund after sweep. Balance of the subaccount of the buyer is now 0 since it was transferred to the sns governance canister
+        //Transfer Response is set to be an Error since the account of the user1 in the sns sales canister is 0 and cannot pay for fees
+        let refund_err = try_error_refund_err(
+            &mut swap,
+            &user1,
+            &mock_stub(get_transfer_and_account_balance_mock_ledger(
+                &DEFAULT_TRANSFER_FEE.get_e8s(),
+                &user1,
+                &user1,
+                true,
+            )),
+        )
+        .now_or_never()
+        .unwrap();
+        assert!(refund_err.description.unwrap().contains("Transfer"));
+        assert_eq!(
+            refund_err.error_type.unwrap(),
+            error_refund_icp_response::err::Type::External as i32
+        );
+    }
+}
+
+/// Test the error refund method for multiple users.
+#[test]
+fn test_error_refund_multiple_users() {
+    let user1 = *TEST_USER1_PRINCIPAL;
+    let user2 = *TEST_USER2_PRINCIPAL;
+
     {
-        ErrorRefundIcpResponse {
-            result:
-                Some(error_refund_icp_response::Result::Ok(error_refund_icp_response::Ok {
-                    block_height: Some(block_height),
-                })),
-        } => assert_eq!(block_height, 1066),
-        _ => panic!("Expected error refund to succeed"),
+        let params = Params {
+            max_icp_e8s: 10 * E8,
+            min_icp_e8s: 5 * E8,
+            min_participants: 2,
+            min_participant_icp_e8s: E8,
+            max_participant_icp_e8s: 6 * E8,
+            sns_token_e8s: 100_000 * E8,
+            ..params()
+        };
+        let mut swap = Swap::new(init());
+        // Open swap
+        open_swap(&mut swap, &params).now_or_never().unwrap();
+        //Buy a tokens
+        let amount = 6 * E8;
+        buy_token(
+            &mut swap,
+            &user1,
+            &amount,
+            &mock_stub(get_transfer_and_account_balance_mock_ledger(
+                &amount, &user1, &user1, false,
+            )),
+        )
+        .now_or_never()
+        .unwrap();
+
+        //The minimum number of participants is 1, so when calling commit with the appropriate end time a commit should be possible
+        assert!(swap.try_commit_or_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+
+        //The life cycle should have changed to ABORTED
+        assert_eq!(swap.lifecycle(), Aborted);
+
+        //Make sure neither user1 nor any other user can refund tokens from user1 until they are sweeped
+        let mut expects = get_account_balance_mock_ledger(&amount, &user1);
+        expects.extend(
+            get_transfer_mock_ledger(&amount, &user1, &user2, false)
+                .iter()
+                .copied(),
+        );
+        let refund_err = try_error_refund_err(
+            &mut swap,
+            &user1,
+            &mock_stub(get_transfer_and_account_balance_mock_ledger(
+                &amount, &user1, &user1, false,
+            )),
+        )
+        .now_or_never()
+        .unwrap();
+        assert!(refund_err.description.unwrap().contains("escrow"));
+        assert_eq!(refund_err.error_type.unwrap(), Precondition as i32);
+
+        // If user2 has sent ICP to the SNS sale in error but did not go through normal payment flow they should be able to get a refund
+        let refund_ok = try_error_refund_ok(
+            &mut swap,
+            &user2,
+            &mock_stub(get_transfer_and_account_balance_mock_ledger(
+                &(amount),
+                &user2,
+                &user2,
+                false,
+            )),
+        )
+        .now_or_never()
+        .unwrap();
+        assert_eq!(refund_ok.block_height.unwrap(), 100);
+
+        //When status is aborted and sweep is called user1 should get their funds back
+        let SweepResult {
+            success,
+            failure,
+            skipped,
+            invalid,
+            global_failures,
+        } = sweep(
+            &mut swap,
+            &mock_stub(get_transfer_mock_ledger(&amount, &user1, &user1, false)),
+        )
+        .now_or_never()
+        .unwrap();
+        assert_eq!(skipped, 0);
+        assert_eq!(success, 1);
+        assert_eq!(failure, 0);
+        assert_eq!(invalid, 0);
+        assert_eq!(global_failures, 0);
+
+        //After user1 has gotten back their ICP they should not be able to call the refund_error function again and get back any ICP>0
+        //Transfer Response is set to be an Error since the account of the user1 in the sns sales canister is 0 and cannot pay for fees or the amount requested
+        let refund_err = try_error_refund_err(
+            &mut swap,
+            &user1,
+            &mock_stub(get_transfer_and_account_balance_mock_ledger(
+                &DEFAULT_TRANSFER_FEE.get_e8s(),
+                &user1,
+                &user1,
+                true,
+            )),
+        )
+        .now_or_never()
+        .unwrap();
+        assert!(refund_err.description.unwrap().contains("Transfer"));
+        assert_eq!(
+            refund_err.error_type.unwrap(),
+            error_refund_icp_response::err::Type::External as i32
+        );
+    }
+}
+
+/// Test the error refund method after sale has closed
+#[test]
+fn test_error_refund_after_close() {
+    let user1 = *TEST_USER1_PRINCIPAL;
+    let user2 = *TEST_USER2_PRINCIPAL;
+
+    //Test with single account
+    {
+        let params = Params {
+            max_icp_e8s: 10 * E8,
+            min_icp_e8s: 5 * E8,
+            min_participants: 1,
+            min_participant_icp_e8s: E8,
+            max_participant_icp_e8s: 6 * E8,
+            sns_token_e8s: 100_000 * E8,
+            ..params()
+        };
+        let mut swap = Swap::new(init());
+
+        // Open swap
+        open_swap(&mut swap, &params).now_or_never().unwrap();
+
+        //Buy a tokens
+        let amount = 6 * E8;
+        buy_token(
+            &mut swap,
+            &user1,
+            &amount,
+            &mock_stub(get_transfer_and_account_balance_mock_ledger(
+                &amount, &user1, &user1, false,
+            )),
+        )
+        .now_or_never()
+        .unwrap();
+
+        //Verify that SNS Sale canister registered the tokens
+        assert_eq!(amount, get_sns_balance(&user1, &mut swap));
+
+        //The minimum number of participants is 1, so when calling commit with the appropriate end time a commit should be possible
+        assert!(swap.can_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+        assert!(swap.try_commit_or_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
+
+        //The life cycle should have changed to COMMITTED
+        assert_eq!(swap.lifecycle(), Committed);
+
+        //Now that the lifecycle has changed to commited, the neurons for the buyers should have been generated
+        verify_participant_balances(
+            &swap,
+            &user1,
+            amount,
+            swap.params.clone().unwrap().sns_token_e8s,
+        );
+
+        //Now try to sweep
+        let SweepResult {
+            success,
+            failure,
+            skipped,
+            invalid,
+            global_failures,
+        } = sweep(
+            &mut swap,
+            &mock_stub(get_transfer_mock_ledger(
+                &amount,
+                &user1,
+                &SNS_GOVERNANCE_CANISTER_ID.into(),
+                false,
+            )),
+        )
+        .now_or_never()
+        .unwrap();
+        assert_eq!(skipped, 0);
+        assert_eq!(success, 1);
+        assert_eq!(failure, 0);
+        assert_eq!(invalid, 0);
+        assert_eq!(global_failures, 0);
+
+        // If user2 has sent ICP in Error but never committed their tokens , i.e. never called refresh_buyer_tokens they should be able to get their funds back even after the sale is committed
+        let refund_ok = try_error_refund_ok(
+            &mut swap,
+            &user2,
+            &mock_stub(get_transfer_and_account_balance_mock_ledger(
+                &E8, &user2, &user2, false,
+            )),
+        )
+        .now_or_never()
+        .unwrap();
+        assert_eq!(refund_ok.block_height.unwrap(), 100);
     }
 }
 
@@ -3906,7 +3988,7 @@ fn test_refresh_buyer_tokens() {
             .open(
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
-                    account.clone(),
+                    account,
                     Ok(Tokens::from_e8s(params.sns_token_e8s)),
                 )]),
                 START_TIMESTAMP_SECONDS,

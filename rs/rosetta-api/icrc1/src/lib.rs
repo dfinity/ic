@@ -22,7 +22,7 @@ pub type Subaccount = [u8; 32];
 pub const DEFAULT_SUBACCOUNT: &Subaccount = &[0; 32];
 pub const MAX_MEMO_LENGTH: usize = 32;
 
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug)]
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, Copy)]
 pub struct Account {
     pub owner: PrincipalId,
     pub subaccount: Option<Subaccount>,
@@ -87,7 +87,7 @@ fn ser_compact_account<S>(acc: &Account, s: S) -> Result<S::Ok, S::Error>
 where
     S: serde::ser::Serializer,
 {
-    CompactAccount::from(acc.clone()).serialize(s)
+    CompactAccount::from(*acc).serialize(s)
 }
 
 fn de_compact_account<'de, D>(d: D) -> Result<Account, D::Error>

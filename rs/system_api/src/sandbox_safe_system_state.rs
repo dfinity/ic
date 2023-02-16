@@ -220,7 +220,7 @@ impl SystemStateChanges {
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
                 ProvisionalCreateCanisterWithCyclesArgs::decode(payload)
                     .map(|record| record.get_sender_canister_version())
-                    .map_err(|err| Self::candid_error_to_user_error(err))
+                    .map_err(Self::candid_error_to_user_error)
             }
             Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::CanisterStatus)

@@ -350,14 +350,10 @@ impl CkBtcMinterState {
 
         self.tokens_minted += utxos.iter().map(|u| u.value).sum::<u64>();
 
-        let account_bucket = self
-            .utxos_state_addresses
-            .entry(account.clone())
-            .or_default();
+        let account_bucket = self.utxos_state_addresses.entry(account).or_default();
 
         for utxo in utxos {
-            self.outpoint_account
-                .insert(utxo.outpoint.clone(), account.clone());
+            self.outpoint_account.insert(utxo.outpoint.clone(), account);
             self.available_utxos.insert(utxo.clone());
             account_bucket.insert(utxo);
         }

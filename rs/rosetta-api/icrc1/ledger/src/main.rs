@@ -227,7 +227,7 @@ fn icrc1_metadata() -> Vec<(String, Value)> {
 #[query]
 #[candid_method(query)]
 fn icrc1_minting_account() -> Option<Account> {
-    Access::with_ledger(|ledger| Some(ledger.minting_account().clone()))
+    Access::with_ledger(|ledger| Some(*ledger.minting_account()))
 }
 
 #[query(name = "icrc1_balance_of")]

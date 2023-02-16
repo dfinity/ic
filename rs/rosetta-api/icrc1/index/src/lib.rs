@@ -535,7 +535,7 @@ mod tests {
     ) {
         let actual = get_account_transactions_ids(GetAccountTransactionsArgs {
             account: account(1),
-            start: start.map(|s| Nat::from(s)),
+            start: start.map(Nat::from),
             max_results: Nat::from(max_results),
         });
         assert_eq!(
@@ -640,7 +640,7 @@ mod tests {
 
             get_account_transactions_ids(GetAccountTransactionsArgs {
                 account: account(1),
-                start: start.map(|x| Nat::from(x)),
+                start: start.map(Nat::from),
                 max_results: Nat::from(max_results),
             });
         }

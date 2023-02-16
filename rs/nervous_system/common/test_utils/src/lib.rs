@@ -94,7 +94,7 @@ impl ICRC1Ledger for InterleavingTestLedger {
             amount_e8s,
             fee_e8s,
             from_subaccount,
-            to: to.clone(),
+            to,
             memo,
         };
         atomic::fence(AtomicOrdering::SeqCst);
@@ -112,8 +112,7 @@ impl ICRC1Ledger for InterleavingTestLedger {
 
     async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
         atomic::fence(AtomicOrdering::SeqCst);
-        self.notify(LedgerMessage::BalanceQuery(account.clone()))
-            .await?;
+        self.notify(LedgerMessage::BalanceQuery(account)).await?;
         self.underlying.account_balance(account).await
     }
 

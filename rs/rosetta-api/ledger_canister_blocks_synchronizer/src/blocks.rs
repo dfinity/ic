@@ -604,7 +604,7 @@ mod database_access {
             .unwrap();
         let account_history = stmt
             .query_map(params![account], |row| {
-                Ok((row.get(0)?, row.get(1).map(|x| Tokens::from_e8s(x))?))
+                Ok((row.get(0)?, row.get(1).map(Tokens::from_e8s)?))
             })
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         for tuple in account_history {

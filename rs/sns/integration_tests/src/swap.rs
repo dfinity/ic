@@ -3421,7 +3421,7 @@ fn test_last_man_less_than_min() {
         &[],
     );
     let args = icp_ledger::LedgerCanisterInitPayload::builder()
-        .minting_account(minting_account.clone().into())
+        .minting_account(minting_account.into())
         .build()
         .unwrap();
     let args = Encode!(&args).unwrap();

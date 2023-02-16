@@ -74,7 +74,7 @@ pub fn test(env: TestEnv) {
 
         let init_args = InitArgs {
             minting_account,
-            initial_balances: vec![(account1.clone(), 1_000_000_000)],
+            initial_balances: vec![(account1, 1_000_000_000)],
             transfer_fee: 1_000,
             token_name: "Example Token".to_string(),
             token_symbol: "XTK".to_string(),
@@ -189,17 +189,11 @@ pub fn test(env: TestEnv) {
         // balance_of
         assert_eq!(
             Nat::from(1_000_000_000u64),
-            agent
-                .balance_of(account1.clone(), CallMode::Query)
-                .await
-                .unwrap()
+            agent.balance_of(account1, CallMode::Query).await.unwrap()
         );
         assert_eq!(
             Nat::from(1_000_000_000u64),
-            agent
-                .balance_of(account1.clone(), CallMode::Update)
-                .await
-                .unwrap()
+            agent.balance_of(account1, CallMode::Update).await.unwrap()
         );
 
         // transfer

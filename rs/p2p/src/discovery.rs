@@ -97,7 +97,7 @@ fn get_peer_addr(node_record: &NodeRecord) -> Option<SocketAddr> {
                 endpoint.port.try_into().ok()?,
             ))
         })
-        .map(|s| SocketAddr::from(s))
+        .map(SocketAddr::from)
 }
 
 #[cfg(test)]

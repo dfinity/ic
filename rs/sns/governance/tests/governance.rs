@@ -346,7 +346,7 @@ fn test_disburse_maturity_succeeds_to_other() {
         owner: receiver,
         subaccount: None,
     };
-    let destination_account_proto = account_to_proto(destination_account.clone());
+    let destination_account_proto = account_to_proto(destination_account);
     let mut env =
         setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![receiver]);
     assert_ne!(env.controller, receiver);
@@ -468,7 +468,7 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
             owner: *destination,
             subaccount: None,
         };
-        let destination_account_proto = account_to_proto(destination_account.clone());
+        let destination_account_proto = account_to_proto(destination_account);
         let command_response = env
             .gov_fixture
             .manage_neuron(

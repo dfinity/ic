@@ -126,7 +126,7 @@ prop_compose! {
             operation,
             memo: Memo(memo),
             created_at_time,
-            icrc1_memo: icrc1_memo.map(|b| ByteBuf::from(b)),
+            icrc1_memo: icrc1_memo.map(ByteBuf::from),
         }
     }
 }

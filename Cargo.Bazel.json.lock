@@ -1,5 +1,5 @@
 {
-  "checksum": "8a917292db5c88f2d3cdfaa9f0c9bdb945ff5d261e89ad5dbebd97a0c574c116",
+  "checksum": "de714f9c4c2cc833d591371d31223b23f3af145a1cccf8b3e238d5c04f5fe62c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -906,7 +906,7 @@
               "target": "socket2"
             },
             {
-              "id": "time 0.3.17",
+              "id": "time 0.3.18",
               "target": "time"
             },
             {
@@ -8863,7 +8863,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "time 0.3.17",
+              "id": "time 0.3.18",
               "target": "time"
             }
           ],
@@ -35975,7 +35975,7 @@
               "target": "ring"
             },
             {
-              "id": "time 0.3.17",
+              "id": "time 0.3.18",
               "target": "time"
             },
             {
@@ -41375,7 +41375,7 @@
               "target": "thiserror"
             },
             {
-              "id": "time 0.3.17",
+              "id": "time 0.3.18",
               "target": "time"
             }
           ],
@@ -41859,7 +41859,7 @@
               "target": "slog"
             },
             {
-              "id": "time 0.3.17",
+              "id": "time 0.3.18",
               "target": "time"
             }
           ],
@@ -42020,7 +42020,7 @@
               "target": "thread_local"
             },
             {
-              "id": "time 0.3.17",
+              "id": "time 0.3.18",
               "target": "time"
             }
           ],
@@ -44977,13 +44977,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "time 0.3.17": {
+    "time 0.3.18": {
       "name": "time",
-      "version": "0.3.17",
+      "version": "0.3.18",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/time/0.3.17/download",
-          "sha256": "a561bf4617eebd33bca6434b988f39ed798e527f51a1e797d0ee4f61c0a38376"
+          "url": "https://crates.io/api/v1/crates/time/0.3.18/download",
+          "sha256": "af0097eaf301d576d0b2aead7a59facab6d53cc636340f0291fab8446a2e8613"
         }
       },
       "targets": [
@@ -45052,7 +45052,7 @@
           ],
           "selects": {}
         },
-        "version": "0.3.17"
+        "version": "0.3.18"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -45248,7 +45248,7 @@
               "target": "log"
             },
             {
-              "id": "time 0.3.17",
+              "id": "time 0.3.18",
               "target": "time"
             },
             {
@@ -47044,7 +47044,7 @@
               "target": "crossbeam_channel"
             },
             {
-              "id": "time 0.3.17",
+              "id": "time 0.3.18",
               "target": "time"
             },
             {
@@ -49102,18 +49102,6 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -49128,6 +49116,18 @@
           "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -53255,7 +53255,7 @@
         "deps": {
           "common": [
             {
-              "id": "time 0.3.17",
+              "id": "time 0.3.18",
               "target": "time"
             }
           ],

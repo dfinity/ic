@@ -2382,7 +2382,7 @@ Version {
             .take(1)
             // convert to CanisterId
             .cloned()
-            .map(|p| CanisterId::new(p))
+            .map(CanisterId::new)
             .collect::<Result<HashSet<_>, _>>()
             .unwrap();
 
@@ -2468,7 +2468,7 @@ Version {
             .take(1)
             // convert to CanisterId
             .cloned()
-            .map(|p| CanisterId::new(p))
+            .map(CanisterId::new)
             .collect::<Result<HashSet<_>, _>>()
             .unwrap();
 
