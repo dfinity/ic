@@ -14,7 +14,7 @@ use ic_interfaces_state_manager::{StateManager, CERT_CERTIFIED};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
     artifact::{
-        Advert, AdvertClass, AdvertSendRequest, ArtifactKind, ArtifactTag, Priority,
+        Advert, AdvertSendRequest, ArtifactDestination, ArtifactKind, ArtifactTag, Priority,
         StateSyncArtifactId, StateSyncAttribute, StateSyncFilter, StateSyncMessage,
     },
     chunkable::Chunkable,
@@ -355,7 +355,7 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
             .cloned()
             .map(|advert| AdvertSendRequest {
                 advert,
-                advert_class: AdvertClass::Critical,
+                dest: ArtifactDestination::AllPeersInSubnet,
             })
             .collect();
 
