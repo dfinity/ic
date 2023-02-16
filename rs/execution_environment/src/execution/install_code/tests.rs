@@ -77,8 +77,9 @@ fn install_code_fails_on_invalid_memory_allocation() {
 
 #[test]
 fn dts_resume_works_in_install_code() {
+    const INSTRUCTION_LIMIT: u64 = 2_000_000;
     let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(1_000_000)
+        .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
@@ -107,7 +108,7 @@ fn dts_resume_works_in_install_code() {
             original_system_state.balance()
                 - test
                     .cycles_account_manager()
-                    .execution_cost(NumInstructions::from(1_000_000), test.subnet_size()),
+                    .execution_cost(NumInstructions::from(INSTRUCTION_LIMIT), test.subnet_size()),
         );
         test.execute_slice(canister_id);
     }
@@ -127,8 +128,9 @@ fn dts_resume_works_in_install_code() {
 
 #[test]
 fn dts_abort_works_in_install_code() {
+    const INSTRUCTION_LIMIT: u64 = 2_000_000;
     let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(1_000_000)
+        .with_install_code_instruction_limit(INSTRUCTION_LIMIT)
         .with_install_code_slice_instruction_limit(1_000)
         .with_deterministic_time_slicing()
         .with_manual_execution()
@@ -157,7 +159,7 @@ fn dts_abort_works_in_install_code() {
             original_system_state.balance()
                 - test
                     .cycles_account_manager()
-                    .execution_cost(NumInstructions::from(1_000_000), test.subnet_size()),
+                    .execution_cost(NumInstructions::from(INSTRUCTION_LIMIT), test.subnet_size()),
         );
         test.execute_slice(canister_id);
     }
@@ -178,7 +180,7 @@ fn dts_abort_works_in_install_code() {
             original_system_state.balance()
                 - test
                     .cycles_account_manager()
-                    .execution_cost(NumInstructions::from(1_000_000), test.subnet_size()),
+                    .execution_cost(NumInstructions::from(INSTRUCTION_LIMIT), test.subnet_size()),
         );
         test.execute_slice(canister_id);
     }

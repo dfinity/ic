@@ -61,13 +61,19 @@ pub struct FeatureFlags {
     pub wasm_native_stable_memory: FlagStatus,
 }
 
-impl Default for FeatureFlags {
-    fn default() -> Self {
+impl FeatureFlags {
+    const fn const_default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
             write_barrier: FlagStatus::Disabled,
             wasm_native_stable_memory: FlagStatus::Disabled,
         }
+    }
+}
+
+impl Default for FeatureFlags {
+    fn default() -> Self {
+        Self::const_default()
     }
 }
 
@@ -126,7 +132,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Config {
             max_wasm_stack_size: 5 * 1024 * 1024,
             query_execution_threads_per_canister: QUERY_EXECUTION_THREADS_PER_CANISTER,
@@ -136,8 +142,8 @@ impl Config {
             max_custom_sections_size: MAX_CUSTOM_SECTIONS_SIZE,
             cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
-            feature_flags: FeatureFlags::default(),
-            stable_memory_dirty_page_limit: NumPages::from(STABLE_MEMORY_DIRTY_PAGE_LIMIT),
+            feature_flags: FeatureFlags::const_default(),
+            stable_memory_dirty_page_limit: NumPages::new(STABLE_MEMORY_DIRTY_PAGE_LIMIT),
             min_sandbox_count: DEFAULT_MIN_SANDBOX_COUNT,
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,

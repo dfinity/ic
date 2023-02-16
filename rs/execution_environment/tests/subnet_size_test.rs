@@ -1,6 +1,8 @@
 use candid::{Decode, Encode};
 use ic_config::{
+    embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
+    flag_status::FlagStatus,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_ic00_types::{
@@ -30,7 +32,13 @@ pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 
 const TEST_SUBNET_SIZE_MAX: usize = 34;
 const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(100 * B as u128);
-const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 1_038_000;
+const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = match EmbeddersConfig::new()
+    .feature_flags
+    .wasm_native_stable_memory
+{
+    FlagStatus::Enabled => 2_016_000,
+    FlagStatus::Disabled => 1_038_000,
+};
 const TEST_CANISTER_EXECUTE_INGRESS_INSTRUCTIONS: u64 = 30;
 
 /// This is a canister that keeps a counter on the heap and exposes various test

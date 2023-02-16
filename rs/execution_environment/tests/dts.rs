@@ -2,6 +2,7 @@ use std::time::{Duration, SystemTime};
 
 use candid::Encode;
 use ic_config::{
+    embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig, SubnetConfigs},
@@ -256,18 +257,29 @@ fn setup_dts_install_code(
     }
 }
 
+// These numbers were obtained by running the test and printing the costs.
+// They need to be adjusted if we change fees or the Wasm source code.
+const INSTALL_CODE_INGRESS_COST: u128 = 1_966_000;
+const NORMAL_INGRESS_COST: u128 = 1_224_000;
+const MAX_EXECUTION_COST: u128 = 990_000;
+const ACTUAL_EXECUTION_COST: u128 = match EmbeddersConfig::new()
+    .feature_flags
+    .wasm_native_stable_memory
+{
+    FlagStatus::Enabled => 926_012,
+    FlagStatus::Disabled => 863_612,
+};
+
 #[test]
 fn dts_install_code_with_concurrent_ingress_sufficient_cycles() {
     if should_skip_test_due_to_disabled_dts() {
         // Skip this test if DTS is not supported.
         return;
     }
-    // These numbers were obtained by running the test and printing the costs.
-    // They need to be adjusted if we change fees or the Wasm source code.
-    let install_code_ingress_cost = Cycles::new(1_966_000);
-    let normal_ingress_cost = Cycles::new(1_224_000);
-    let max_execution_cost = Cycles::new(990_000);
-    let actual_execution_cost = Cycles::new(863_612);
+    let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
+    let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
+    let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
+    let actual_execution_cost = Cycles::new(ACTUAL_EXECUTION_COST);
 
     // The initial balance is sufficient to run `install_code` and to send an
     // ingress message concurrently.
@@ -301,12 +313,10 @@ fn dts_install_code_with_concurrent_ingress_insufficient_cycles() {
         // Skip this test if DTS is not supported.
         return;
     }
-    // These numbers were obtained by running the test and printing the costs.
-    // They need to be adjusted if we change fees or the Wasm source code.
-    let install_code_ingress_cost = Cycles::new(1_966_000);
-    let normal_ingress_cost = Cycles::new(1_224_000);
-    let max_execution_cost = Cycles::new(990_000);
-    let actual_execution_cost = Cycles::new(863_612);
+    let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
+    let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
+    let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
+    let actual_execution_cost = Cycles::new(ACTUAL_EXECUTION_COST);
 
     // The initial balance is not sufficient for both execution and concurrent ingress message.
     let initial_balance = install_code_ingress_cost + normal_ingress_cost.max(max_execution_cost);
@@ -352,12 +362,10 @@ fn dts_install_code_with_concurrent_ingress_and_freezing_threshold_insufficient_
         // Skip this test if DTS is not supported.
         return;
     }
-    // These numbers were obtained by running the test and printing the costs.
-    // They need to be adjusted if we change fees or the Wasm source code.
-    let install_code_ingress_cost = Cycles::new(1_966_000);
-    let normal_ingress_cost = Cycles::new(1_224_000);
-    let max_execution_cost = Cycles::new(990_000);
-    let actual_execution_cost = Cycles::new(863_612);
+    let install_code_ingress_cost = Cycles::new(INSTALL_CODE_INGRESS_COST);
+    let normal_ingress_cost = Cycles::new(NORMAL_INGRESS_COST);
+    let max_execution_cost = Cycles::new(MAX_EXECUTION_COST);
+    let actual_execution_cost = Cycles::new(ACTUAL_EXECUTION_COST);
     let freezing_threshold = Cycles::new(10000000);
 
     // The initial balance is not sufficient for both execution and concurrent ingress message.
