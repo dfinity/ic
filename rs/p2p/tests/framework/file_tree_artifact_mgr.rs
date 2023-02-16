@@ -9,7 +9,7 @@ use ic_interfaces::time_source::TimeSource;
 use ic_replica_setup_ic_network::{
     TestArtifact, TestArtifactAttribute, TestArtifactId, TestArtifactMessage,
 };
-use ic_types::artifact::{Advert, AdvertClass, AdvertSendRequest, ArtifactId, Priority};
+use ic_types::artifact::{Advert, AdvertSendRequest, ArtifactDestination, ArtifactId, Priority};
 use ic_types::chunkable::Chunkable;
 use ic_types::crypto::CryptoHash;
 use ic_types::filetree_sync::{
@@ -57,7 +57,7 @@ impl ArtifactProcessor<TestArtifact> for ArtifactChunkingTestImpl {
                     id: artifact.id.clone(),
                     integrity_hash: CryptoHash(artifact_id.clone().into_bytes()),
                 },
-                advert_class: AdvertClass::Critical,
+                dest: ArtifactDestination::AllPeersInSubnet,
             })
             .collect::<Vec<_>>();
         let changed = if !adverts.is_empty() {

@@ -68,7 +68,12 @@ use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::{artifact::ArtifactFilter, crypto::CryptoHash, p2p::GossipAdvert, NodeId, SubnetId};
+use ic_types::{
+    artifact::{ArtifactDestination, ArtifactFilter},
+    crypto::CryptoHash,
+    p2p::GossipAdvert,
+    NodeId, SubnetId,
+};
 use lru::LruCache;
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
@@ -122,13 +127,6 @@ pub trait Gossip {
     fn on_peer_down(&self, peer_id: NodeId);
     /// The method is called periodically from a dedicated thread.
     fn on_gossip_timer(&self);
-}
-
-/// Specifies how to distribute the adverts
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ArtifactDestination {
-    /// Send to all peers
-    SendToAllPeers,
 }
 
 /// The cache used to check if a certain artifact has been received recently.
@@ -312,7 +310,7 @@ impl Gossip for GossipImpl {
             .start_timer();
 
         let (peers, label) = match dst {
-            ArtifactDestination::SendToAllPeers => (self.get_current_peer_ids(), "all_peers"),
+            ArtifactDestination::AllPeersInSubnet => (self.get_current_peer_ids(), "all_peers"),
         };
         self.metrics
             .adverts_by_action

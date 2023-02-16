@@ -68,7 +68,7 @@
 //!      PeerFlowQueueMap: A single flow being addressed by 1 thread.
 //! ```
 use crate::{
-    gossip_protocol::{ArtifactDestination, Gossip},
+    gossip_protocol::Gossip,
     gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage},
     metrics::FlowWorkerMetrics,
 };
@@ -77,7 +77,7 @@ use ic_logger::{debug, error, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_types::{
-    artifact::{ArtifactFilter, ArtifactTag},
+    artifact::{ArtifactDestination, ArtifactFilter, ArtifactTag},
     p2p::GossipAdvert,
     NodeId,
 };
@@ -519,13 +519,12 @@ impl AdvertBroadcaster {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::{
-        download_prioritization::test::make_gossip_advert, gossip_protocol::ArtifactDestination,
-    };
+    use crate::download_prioritization::test::make_gossip_advert;
     use ic_interfaces::ingress_pool::IngressPoolThrottler;
     use ic_interfaces_transport::TransportPayload;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{p2p::p2p_test_setup_logger, types::ids::node_test_id};
+    use ic_types::artifact::ArtifactDestination;
     use tokio::time::{sleep, Duration};
 
     struct TestThrottle();
@@ -684,7 +683,7 @@ pub mod tests {
     async fn broadcast_advert(count: usize, handler: &AdvertBroadcaster) {
         for i in 0..count {
             let message = make_gossip_advert(i as u64);
-            handler.send(message, ArtifactDestination::SendToAllPeers);
+            handler.send(message, ArtifactDestination::AllPeersInSubnet);
         }
     }
 

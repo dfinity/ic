@@ -36,15 +36,6 @@ use std::sync::{
 use std::thread::{Builder as ThreadBuilder, JoinHandle};
 use std::time::Duration;
 
-#[derive(Debug, PartialEq, Eq)]
-enum AdvertSource {
-    /// The artifact was produced by this peer
-    Produced,
-
-    /// Artifact was downloaded from another peer and being relayed
-    Relayed,
-}
-
 /// Metrics for a client artifact processor.
 struct ArtifactProcessorMetrics {
     /// The processing time histogram.
@@ -260,12 +251,6 @@ impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
             manager,
         )
     }
-
-    fn advert_class(&self, _msg: &ConsensusMessage, _source: AdvertSource) -> AdvertClass {
-        // Send to all peers until we can go back to using BestEffort for shares,
-        // after more experimentation.
-        AdvertClass::Critical
-    }
 }
 
 impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
@@ -311,7 +296,7 @@ impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
                 ConsensusAction::AddToValidated(to_add) => {
                     adverts.push(ConsensusArtifact::message_to_advert_send_request(
                         to_add,
-                        self.advert_class(to_add, AdvertSource::Produced),
+                        ArtifactDestination::AllPeersInSubnet,
                     ));
                     if let ConsensusMessage::BlockProposal(p) = to_add {
                         let rank = p.clone().content.decompose().1.rank();
@@ -324,7 +309,7 @@ impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
                 ConsensusAction::MoveToValidated(to_move) => {
                     adverts.push(ConsensusArtifact::message_to_advert_send_request(
                         to_move,
-                        self.advert_class(to_move, AdvertSource::Relayed),
+                        ArtifactDestination::AllPeersInSubnet,
                     ));
                     if let ConsensusMessage::BlockProposal(p) = to_move {
                         let rank = p.clone().content.decompose().1.rank();
@@ -402,15 +387,6 @@ impl<Pool: MutableIngressPool + Send + Sync + 'static> IngressProcessor<Pool> {
             manager,
         )
     }
-
-    fn advert_class(&self, source: AdvertSource) -> AdvertClass {
-        // 1. Notify all peers for ingress messages received directly by us
-        // 2. For relayed ingress messages: don't notify any peers
-        match source {
-            AdvertSource::Produced => AdvertClass::Critical,
-            AdvertSource::Relayed => AdvertClass::None,
-        }
-    }
 }
 
 impl<Pool: MutableIngressPool + Send + Sync + 'static> ArtifactProcessor<IngressArtifact>
@@ -443,20 +419,17 @@ impl<Pool: MutableIngressPool + Send + Sync + 'static> ArtifactProcessor<Ingress
                     attribute,
                     integrity_hash,
                 )) => {
-                    let advert_source = if *source_node_id == self.node_id {
-                        AdvertSource::Produced
-                    } else {
-                        AdvertSource::Relayed
-                    };
-                    adverts.push(AdvertSendRequest {
-                        advert: Advert {
-                            size: *size,
-                            id: message_id.clone(),
-                            attribute: attribute.clone(),
-                            integrity_hash: integrity_hash.clone(),
-                        },
-                        advert_class: self.advert_class(advert_source),
-                    });
+                    if *source_node_id == self.node_id {
+                        adverts.push(AdvertSendRequest {
+                            advert: Advert {
+                                size: *size,
+                                id: message_id.clone(),
+                                attribute: attribute.clone(),
+                                integrity_hash: integrity_hash.clone(),
+                            },
+                            dest: ArtifactDestination::AllPeersInSubnet,
+                        });
+                    }
                 }
                 IngressAction::RemoveFromUnvalidated(_)
                 | IngressAction::RemoveFromValidated(_)
@@ -568,13 +541,13 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
                 certification::ChangeAction::AddToValidated(msg) => {
                     adverts.push(CertificationArtifact::message_to_advert_send_request(
                         msg,
-                        AdvertClass::Critical,
+                        ArtifactDestination::AllPeersInSubnet,
                     ))
                 }
                 certification::ChangeAction::MoveToValidated(msg) => {
                     adverts.push(CertificationArtifact::message_to_advert_send_request(
                         msg,
-                        AdvertClass::Critical,
+                        ArtifactDestination::AllPeersInSubnet,
                     ))
                 }
                 certification::ChangeAction::HandleInvalid(msg, reason) => {
@@ -667,12 +640,18 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> ArtifactProcessor<DkgArtif
             let change_set = self.client.on_state_change(&*dkg_pool);
             for change_action in change_set.iter() {
                 match change_action {
-                    DkgChangeAction::AddToValidated(to_add) => adverts.push(
-                        DkgArtifact::message_to_advert_send_request(to_add, AdvertClass::Critical),
-                    ),
-                    DkgChangeAction::MoveToValidated(message) => adverts.push(
-                        DkgArtifact::message_to_advert_send_request(message, AdvertClass::Critical),
-                    ),
+                    DkgChangeAction::AddToValidated(to_add) => {
+                        adverts.push(DkgArtifact::message_to_advert_send_request(
+                            to_add,
+                            ArtifactDestination::AllPeersInSubnet,
+                        ))
+                    }
+                    DkgChangeAction::MoveToValidated(message) => {
+                        adverts.push(DkgArtifact::message_to_advert_send_request(
+                            message,
+                            ArtifactDestination::AllPeersInSubnet,
+                        ))
+                    }
                     DkgChangeAction::HandleInvalid(msg, reason) => {
                         self.invalidated_artifacts.inc();
                         warn!(self.log, "Invalid DKG message ({:?}): {:?}", reason, msg);
@@ -746,19 +725,6 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
         );
         (clients::EcdsaClient::new(ecdsa_pool, ecdsa_gossip), manager)
     }
-
-    fn advert_class(&self, msg: &EcdsaMessage, source: AdvertSource) -> AdvertClass {
-        // 1. Notify all peers for ecdsa messages received directly by us
-        // 2. For relayed ecdsa support messages: don't notify any peers.
-        // 3. For other relayed messages: still notify peers.
-        match source {
-            AdvertSource::Produced => AdvertClass::Critical,
-            AdvertSource::Relayed => match msg {
-                EcdsaMessage::EcdsaDealingSupport(_) => AdvertClass::None,
-                _ => AdvertClass::Critical,
-            },
-        }
-    }
 }
 
 impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<EcdsaArtifact>
@@ -783,18 +749,24 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<Ecds
 
             for change_action in change_set.iter() {
                 match change_action {
+                    // 1. Notify all peers for ecdsa messages received directly by us
+                    // 2. For relayed ecdsa support messages: don't notify any peers.
+                    // 3. For other relayed messages: still notify peers.
                     EcdsaChangeAction::AddToValidated(msg) => {
                         adverts.push(EcdsaArtifact::message_to_advert_send_request(
                             msg,
-                            self.advert_class(msg, AdvertSource::Produced),
+                            ArtifactDestination::AllPeersInSubnet,
                         ))
                     }
                     EcdsaChangeAction::MoveToValidated(msg_id) => {
                         if let Some(msg) = ecdsa_pool.unvalidated().get(msg_id) {
-                            adverts.push(EcdsaArtifact::message_to_advert_send_request(
-                                &msg,
-                                self.advert_class(&msg, AdvertSource::Relayed),
-                            ))
+                            match msg {
+                                EcdsaMessage::EcdsaDealingSupport(_) => (),
+                                _ => adverts.push(EcdsaArtifact::message_to_advert_send_request(
+                                    &msg,
+                                    ArtifactDestination::AllPeersInSubnet,
+                                )),
+                            }
                         } else {
                             warn!(
                                 self.log,
@@ -903,14 +875,14 @@ impl<PoolCanisterHttp: MutableCanisterHttpPool + Send + Sync + 'static>
                     CanisterHttpChangeAction::AddToValidated(share, _) => {
                         adverts.push(CanisterHttpArtifact::message_to_advert_send_request(
                             share,
-                            AdvertClass::Critical,
+                            ArtifactDestination::AllPeersInSubnet,
                         ))
                     }
                     CanisterHttpChangeAction::MoveToValidated(msg_id) => {
                         if let Some(msg) = canister_http_pool.lookup_unvalidated(msg_id) {
                             adverts.push(CanisterHttpArtifact::message_to_advert_send_request(
                                 &msg,
-                                AdvertClass::Critical,
+                                ArtifactDestination::AllPeersInSubnet,
                             ))
                         } else {
                             warn!(
