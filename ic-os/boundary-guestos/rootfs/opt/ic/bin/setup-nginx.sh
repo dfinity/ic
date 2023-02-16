@@ -8,6 +8,7 @@ readonly EMPTY_NJS_EXPORTS='let v = {}; export default v; // PLACEHOLDER'
 
 SYSTEM_DOMAINS=()
 APPLICATION_DOMAINS=()
+API_DOMAINS=()
 
 function read_variables() {
     local -r BN_CONFIG="${BOOT_DIR}/bn_vars.conf"
@@ -28,6 +29,7 @@ function read_variables() {
         case "${key}" in
             "system_domains") SYSTEM_DOMAINS+=("${value}") ;;
             "application_domains") APPLICATION_DOMAINS+=("${value}") ;;
+            "api_domains") API_DOMAINS+=("${value}") ;;
             "require_seo_certification") REQUIRE_SEO_CERTIFICATION="${value}" ;;
             "require_underscore_certification") REQUIRE_UNDERSCORE_CERTIFICATION="${value}" ;;
         esac
@@ -41,6 +43,10 @@ function read_variables() {
     if [[ "${#APPLICATION_DOMAINS[@]}" -eq 0 ]]; then
         err "APPLICATION_DOMAINS variables not set. Nginx won't be configured."
         exit 1
+    fi
+
+    if [[ "${#API_DOMAINS[@]}" -eq 0 ]]; then
+        err "API_DOMAINS variables not set but are not required. Proceeding without them."
     fi
 }
 
@@ -108,9 +114,16 @@ function setup_domains() {
     local -r DOMAIN_DIR="${RUN_DIR}/conf.d"
     mkdir -p "${DOMAIN_DIR}"
 
+    # Configure a fallback api-domain in case an api-domain is not specified (e.g in the case of the testnets)
+    local -r FALLBACK_API_DOMAIN="api.${SYSTEM_DOMAINS[0]}"
+    if [[ -z "${API_DOMAINS[@]}" ]]; then
+        API_DOMAINS+=("${FALLBACK_API_DOMAIN}")
+    fi
+
     # primary domains
     echo "map nop \$primary_system_domain { default ${SYSTEM_DOMAINS[0]}; }" >"${DOMAIN_DIR}/set_primary_system_domain.conf"
     echo "map nop \$primary_application_domain { default ${APPLICATION_DOMAINS[0]}; }" >"${DOMAIN_DIR}/set_primary_application_domain.conf"
+    echo "map nop \$primary_api_domain { default ${API_DOMAINS[0]}; }" >"${DOMAIN_DIR}/set_primary_api_domain.conf"
 
     local -r DOMAINS=(
         "${SYSTEM_DOMAINS[@]}"
@@ -132,6 +145,11 @@ function setup_domains() {
         echo "server_name ~^([^.]+\.raw\.${DOMAIN_ESCAPED})$;" >>"${DOMAIN_DIR}/server_raw_domain_escaped.conf"
         echo "server_name ${DOMAIN};" >>"${DOMAIN_DIR}/server_domain.conf"
         echo "server_name raw.${DOMAIN};" >>"${DOMAIN_DIR}/server_raw_domain.conf"
+    done
+
+    # api domains
+    for DOMAIN in "${API_DOMAINS[@]}"; do
+        echo "server_name ${DOMAIN};" >>"${DOMAIN_DIR}/api_domain.conf"
     done
 }
 
