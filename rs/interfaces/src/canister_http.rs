@@ -5,11 +5,9 @@ use crate::{
 };
 use ic_base_types::{NumBytes, RegistryVersion};
 use ic_types::{
-    artifact::{CanisterHttpResponseId, PriorityFn},
+    artifact::CanisterHttpResponseId,
     batch::{CanisterHttpPayload, ValidationContext},
-    canister_http::{
-        CanisterHttpResponse, CanisterHttpResponseAttribute, CanisterHttpResponseShare,
-    },
+    canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
     consensus::{Payload, Threshold},
     crypto::{CryptoError, CryptoHashOf},
     messages::CallbackId,
@@ -136,13 +134,6 @@ pub trait MutableCanisterHttpPool: CanisterHttpPool {
 
     /// Mutates the artifact pool by applying the change set.
     fn apply_changes(&mut self, change_set: CanisterHttpChangeSet);
-}
-
-pub trait CanisterHttpGossip: Send + Sync {
-    fn get_priority_function(
-        &self,
-        canister_http_pool: &dyn CanisterHttpPool,
-    ) -> PriorityFn<CanisterHttpResponseId, CanisterHttpResponseAttribute>;
 }
 
 pub trait CanisterHttpPoolManager: Send {

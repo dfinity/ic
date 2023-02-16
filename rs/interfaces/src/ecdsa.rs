@@ -1,7 +1,7 @@
 //! ECDSA related public interfaces.
 
 use crate::artifact_pool::UnvalidatedArtifact;
-use ic_types::artifact::{EcdsaMessageAttribute, EcdsaMessageId, PriorityFn};
+use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
     EcdsaComplaint, EcdsaMessage, EcdsaOpening, EcdsaPrefixOf, EcdsaSigShare, EcdsaStats,
 };
@@ -144,11 +144,4 @@ pub trait MutableEcdsaPool: EcdsaPool {
 /// Checks and processes the changes (if any)
 pub trait Ecdsa: Send {
     fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet;
-}
-
-pub trait EcdsaGossip: Send + Sync {
-    fn get_priority_function(
-        &self,
-        ecdsa_pool: &dyn EcdsaPool,
-    ) -> PriorityFn<EcdsaMessageId, EcdsaMessageAttribute>;
 }

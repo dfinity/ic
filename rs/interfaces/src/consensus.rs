@@ -16,10 +16,7 @@ use crate::{
     validation::ValidationError,
 };
 use ic_base_types::{NumBytes, SubnetId};
-use ic_types::{
-    artifact::{ConsensusMessageAttribute, ConsensusMessageFilter, ConsensusMessageId, PriorityFn},
-    registry::RegistryClientError,
-};
+use ic_types::registry::RegistryClientError;
 
 /// Consensus artifact processing interface.
 pub trait Consensus: Send {
@@ -38,18 +35,6 @@ pub trait Consensus: Send {
     /// caller is free to run other readers concurrently should it choose to.
     /// But this is a minor point.
     fn on_state_change(&self, consensus_pool: &dyn ConsensusPool) -> ChangeSet;
-}
-
-/// Consensus to gossip interface.
-pub trait ConsensusGossip: Send + Sync {
-    /// Return a priority function that matches the given consensus pool.
-    fn get_priority_function(
-        &self,
-        consensus_pool: &dyn ConsensusPool,
-    ) -> PriorityFn<ConsensusMessageId, ConsensusMessageAttribute>;
-
-    /// Return a filter that represents what artifacts are needed.
-    fn get_filter(&self) -> ConsensusMessageFilter;
 }
 
 #[derive(Debug)]

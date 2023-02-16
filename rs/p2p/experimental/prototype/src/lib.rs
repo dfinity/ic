@@ -3,10 +3,8 @@ mod p2p;
 
 use crate::p2p::P2P;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
-    consensus::{Consensus, ConsensusGossip},
-    consensus_pool::MutableConsensusPool,
-    time_source::TimeSource,
+    artifact_manager::ArtifactPoolDescriptor, artifact_pool::UnvalidatedArtifact,
+    consensus::Consensus, consensus_pool::MutableConsensusPool, time_source::TimeSource,
 };
 use ic_types::artifact::{
     ArtifactKind, ConsensusMessage, ConsensusMessageAttribute, ConsensusMessageId, PriorityFn,
@@ -75,7 +73,7 @@ type ConsensusP2P = P2P<ConsensusArtifact>;
 pub fn start_consensus_p2p<P: MutableConsensusPool + Send + Sync + 'static>(
     pool: P,
     mutation_source: Box<dyn Consensus + Send + Sync>,
-    gossip_state: Box<dyn ConsensusGossip + Send + Sync>,
+    gossip_state: Box<dyn ArtifactPoolDescriptor<ConsensusArtifact, P> + Send + Sync>,
     time_source: Arc<dyn TimeSource>,
 ) -> ConsensusP2P {
     let pool_processor_handle =

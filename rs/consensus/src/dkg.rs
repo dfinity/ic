@@ -10,8 +10,9 @@ use crate::ecdsa::{
     utils::inspect_ecdsa_initializations,
 };
 use ic_interfaces::{
+    artifact_manager::ArtifactPoolDescriptor,
     consensus_pool::ConsensusPoolCache,
-    dkg::{ChangeAction, ChangeSet, Dkg, DkgGossip, DkgPool},
+    dkg::{ChangeAction, ChangeSet, Dkg, DkgPool},
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -26,6 +27,7 @@ use ic_registry_client_helpers::{
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::{DkgMessageAttribute, DkgMessageId, Priority, PriorityFn},
+    artifact_kind::DkgArtifact,
     batch::ValidationContext,
     consensus::{
         dkg,
@@ -1267,10 +1269,10 @@ impl Dkg for DkgImpl {
     }
 }
 
-impl DkgGossip for DkgGossipImpl {
+impl<Pool: DkgPool> ArtifactPoolDescriptor<DkgArtifact, Pool> for DkgGossipImpl {
     fn get_priority_function(
         &self,
-        dkg_pool: &dyn DkgPool,
+        dkg_pool: &Pool,
     ) -> PriorityFn<DkgMessageId, DkgMessageAttribute> {
         let start_height = dkg_pool.get_current_start_height();
         Box::new(move |_id, attribute| {

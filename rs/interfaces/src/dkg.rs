@@ -1,24 +1,11 @@
 //! The DKG public interface.
 use crate::artifact_pool::UnvalidatedArtifact;
-use ic_types::{
-    artifact::{DkgMessageAttribute, DkgMessageId, PriorityFn},
-    consensus::dkg,
-    crypto::CryptoHashOf,
-    Height,
-};
+use ic_types::{consensus::dkg, crypto::CryptoHashOf, Height};
 use std::time::Duration;
 
 /// An interface for distributed key generation.
 pub trait Dkg: Send {
     fn on_state_change(&self, dkg_pool: &dyn DkgPool) -> ChangeSet;
-}
-
-/// Methods related to gossiping DKG.
-pub trait DkgGossip: Send + Sync {
-    fn get_priority_function(
-        &self,
-        dkg_pool: &dyn DkgPool,
-    ) -> PriorityFn<DkgMessageId, DkgMessageAttribute>;
 }
 
 /// The DkgPool is used to store messages that are exchanged between nodes in

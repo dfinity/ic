@@ -1,7 +1,7 @@
 use ic_artifact_manager::{manager, processors};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_interfaces::artifact_manager::*;
+use ic_interfaces::artifact_manager::{ArtifactPoolDescriptor, *};
 use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::{no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -9,7 +9,23 @@ use ic_test_utilities::{
     consensus::{fake::*, make_genesis, MockConsensus},
     types::ids::subnet_test_id,
 };
+use ic_types::artifact::{ConsensusMessageId, PriorityFn};
+use ic_types::artifact_kind::ConsensusArtifact;
+use ic_types::consensus::ConsensusMessageAttribute;
 use std::sync::{Arc, RwLock};
+
+struct UnimplementedConsensusPoolDescriptor {}
+
+impl ArtifactPoolDescriptor<ConsensusArtifact, ConsensusPoolImpl>
+    for UnimplementedConsensusPoolDescriptor
+{
+    fn get_priority_function(
+        &self,
+        _pool: &ConsensusPoolImpl,
+    ) -> PriorityFn<ConsensusMessageId, ConsensusMessageAttribute> {
+        unimplemented!()
+    }
+}
 
 fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactManager> {
     let time_source = Arc::new(SysTimeSource::new());
@@ -30,7 +46,7 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
         || {
             let mut consensus = MockConsensus::new();
             consensus.expect_on_state_change().return_const(vec![]);
-            let consensus_gossip = MockConsensus::new();
+            let consensus_gossip = UnimplementedConsensusPoolDescriptor {};
             (consensus, consensus_gossip)
         },
         Arc::clone(&time_source) as Arc<_>,

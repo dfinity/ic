@@ -181,13 +181,16 @@ use crate::ecdsa::pre_signer::{EcdsaPreSigner, EcdsaPreSignerImpl};
 use crate::ecdsa::signer::{EcdsaSigner, EcdsaSignerImpl};
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 
-use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::crypto::IDkgProtocol;
-use ic_interfaces::ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaGossip, EcdsaPool};
+use ic_interfaces::ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaPool};
+use ic_interfaces::{
+    artifact_manager::ArtifactPoolDescriptor, consensus_pool::ConsensusBlockCache,
+};
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::{EcdsaMessageAttribute, EcdsaMessageId, Priority, PriorityFn},
+    artifact_kind::EcdsaArtifact,
     consensus::ecdsa::{EcdsaBlockReader, RequestId},
     crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
     malicious_flags::MaliciousFlags,
@@ -434,10 +437,10 @@ impl EcdsaPriorityFnArgs {
     }
 }
 
-impl EcdsaGossip for EcdsaGossipImpl {
+impl<Pool: EcdsaPool> ArtifactPoolDescriptor<EcdsaArtifact, Pool> for EcdsaGossipImpl {
     fn get_priority_function(
         &self,
-        _ecdsa_pool: &dyn EcdsaPool,
+        _ecdsa_pool: &Pool,
     ) -> PriorityFn<EcdsaMessageId, EcdsaMessageAttribute> {
         let block_reader = EcdsaBlockReaderImpl::new(self.consensus_block_cache.finalized_chain());
         let subnet_id = self.subnet_id;

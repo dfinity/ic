@@ -3,7 +3,7 @@
 pub use crate::canister_http::pool_manager::CanisterHttpPoolManagerImpl;
 use crate::consensus::utils::registry_version_at_height;
 use ic_interfaces::{
-    canister_http::{CanisterHttpGossip, CanisterHttpPool},
+    artifact_manager::ArtifactPoolDescriptor, canister_http::CanisterHttpPool,
     consensus_pool::ConsensusPoolCache,
 };
 use ic_interfaces_state_manager::StateManager;
@@ -11,6 +11,7 @@ use ic_logger::{warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::{CanisterHttpResponseId, Priority, PriorityFn},
+    artifact_kind::CanisterHttpArtifact,
     canister_http::CanisterHttpResponseAttribute,
 };
 use std::{collections::BTreeSet, sync::Arc};
@@ -37,10 +38,12 @@ impl CanisterHttpGossipImpl {
     }
 }
 
-impl CanisterHttpGossip for CanisterHttpGossipImpl {
+impl<Pool: CanisterHttpPool> ArtifactPoolDescriptor<CanisterHttpArtifact, Pool>
+    for CanisterHttpGossipImpl
+{
     fn get_priority_function(
         &self,
-        _canister_http_pool: &dyn CanisterHttpPool,
+        _canister_http_pool: &Pool,
     ) -> PriorityFn<CanisterHttpResponseId, CanisterHttpResponseAttribute> {
         let finalized_height = self.consensus_cache.finalized_block().height;
         let registry_version =

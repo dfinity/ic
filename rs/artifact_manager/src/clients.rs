@@ -3,14 +3,15 @@
 use crate::processors::ArtifactProcessorManager;
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_ARTIFACT_MANAGER};
 use ic_interfaces::{
-    artifact_manager::{AdvertMismatchError, ArtifactClient, OnArtifactError},
+    artifact_manager::{
+        AdvertMismatchError, ArtifactClient, ArtifactPoolDescriptor, OnArtifactError,
+    },
     artifact_pool::{ArtifactPoolError, ReplicaVersionMismatch, UnvalidatedArtifact},
     canister_http::*,
     certification::{CertificationPool, CertifierGossip},
-    consensus::ConsensusGossip,
     consensus_pool::{ConsensusPool, ConsensusPoolCache},
-    dkg::{DkgGossip, DkgPool},
-    ecdsa::{EcdsaGossip, EcdsaPool},
+    dkg::DkgPool,
+    ecdsa::EcdsaPool,
     gossip_pool::{
         CanisterHttpGossipPool, CertificationGossipPool, ConsensusGossipPool, DkgGossipPool,
         EcdsaGossipPool, IngressGossipPool,
@@ -232,12 +233,12 @@ pub struct ConsensusClient<Pool> {
     /// reference counting.
     consensus_pool: Arc<RwLock<Pool>>,
     /// The `ConsensusGossip` client.
-    client: Arc<dyn ConsensusGossip>,
+    client: Arc<dyn ArtifactPoolDescriptor<ConsensusArtifact, Pool>>,
 }
 
 impl<Pool> ConsensusClient<Pool> {
     /// The constructor creates a `ConsensusClient` instance.
-    pub fn new<T: ConsensusGossip + 'static>(
+    pub fn new<T: ArtifactPoolDescriptor<ConsensusArtifact, Pool> + 'static>(
         consensus_pool: Arc<RwLock<Pool>>,
         consensus: T,
     ) -> Self {
@@ -559,12 +560,15 @@ pub struct DkgClient<Pool> {
     /// counting.
     dkg_pool: Arc<RwLock<Pool>>,
     /// The `DkgGossip` client.
-    client: Arc<dyn DkgGossip>,
+    client: Arc<dyn ArtifactPoolDescriptor<DkgArtifact, Pool>>,
 }
 
 impl<Pool> DkgClient<Pool> {
     /// The constructor creates a `DkgClient` instance.
-    pub fn new<T: DkgGossip + 'static>(dkg_pool: Arc<RwLock<Pool>>, dkg: T) -> Self {
+    pub fn new<T: ArtifactPoolDescriptor<DkgArtifact, Pool> + 'static>(
+        dkg_pool: Arc<RwLock<Pool>>,
+        dkg: T,
+    ) -> Self {
         Self {
             dkg_pool,
             client: Arc::new(dkg),
@@ -616,11 +620,14 @@ impl<Pool: DkgPool + DkgGossipPool + Send + Sync> ArtifactClient<DkgArtifact> fo
 /// The ECDSA client.
 pub struct EcdsaClient<Pool> {
     ecdsa_pool: Arc<RwLock<Pool>>,
-    ecdsa_gossip: Arc<dyn EcdsaGossip>,
+    ecdsa_gossip: Arc<dyn ArtifactPoolDescriptor<EcdsaArtifact, Pool>>,
 }
 
 impl<Pool> EcdsaClient<Pool> {
-    pub fn new<T: EcdsaGossip + 'static>(ecdsa_pool: Arc<RwLock<Pool>>, gossip: T) -> Self {
+    pub fn new<T: ArtifactPoolDescriptor<EcdsaArtifact, Pool> + 'static>(
+        ecdsa_pool: Arc<RwLock<Pool>>,
+        gossip: T,
+    ) -> Self {
         Self {
             ecdsa_pool,
             ecdsa_gossip: Arc::new(gossip),
@@ -663,11 +670,11 @@ impl<Pool: EcdsaPool + EcdsaGossipPool + Send + Sync> ArtifactClient<EcdsaArtifa
 /// The CanisterHttp Client
 pub struct CanisterHttpClient<Pool> {
     pool: Arc<RwLock<Pool>>,
-    gossip: Arc<dyn CanisterHttpGossip + Send + Sync>,
+    gossip: Arc<dyn ArtifactPoolDescriptor<CanisterHttpArtifact, Pool> + Send + Sync>,
 }
 
 impl<Pool: CanisterHttpPool + CanisterHttpGossipPool + Send + Sync> CanisterHttpClient<Pool> {
-    pub fn new<T: CanisterHttpGossip + Send + Sync + 'static>(
+    pub fn new<T: ArtifactPoolDescriptor<CanisterHttpArtifact, Pool> + Send + Sync + 'static>(
         pool: Arc<RwLock<Pool>>,
         gossip: T,
     ) -> Self {
