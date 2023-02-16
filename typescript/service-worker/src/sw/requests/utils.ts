@@ -5,6 +5,7 @@ import { idlFactory } from '../../http-interface/canister_http_interface';
 import { _SERVICE } from '../../http-interface/canister_http_interface_types';
 
 export const shouldFetchRootKey = Boolean(process.env.FORCE_FETCH_ROOT_KEY);
+export const isMainNet = !shouldFetchRootKey;
 
 export async function createAgentAndActor(
   gatewayUrl: URL,
@@ -41,13 +42,7 @@ export function decodeBody(body: Uint8Array, encoding: string): Uint8Array {
   }
 }
 
-const legacyGateways = new Set([
-  'boundary.dfinity.network',
-  'boundary.ic0.app',
-]);
-
 /**
- * Removes legacy sub domains from the URL of the request.
  * Request objects cannot be mutated, so we have to clone them and
  * object spread does not work so we have to manually deconstruct the request.
  * If we create a new Request using the original one then the duplex property is not copied over, so we have to set it manually.
@@ -55,17 +50,11 @@ const legacyGateways = new Set([
  * Safari does not support creating a Request with a readable stream as a body, so we have to read the stream and set the body
  * as the UIntArray that is read.
  */
-export async function removeLegacySubDomains(
+export async function updateRequestApiGateway(
   originalRequest: Request,
   gatewayUrl: URL
 ): Promise<Request> {
   const url = new URL(originalRequest.url);
-
-  if (legacyGateways.has(url.hostname)) {
-    console.warn(
-      `${url.hostname} refers to a legacy, deprecated sub domain. Please migrate to the latest version of @dfinity/agent-js and remove any subdomains from your 'host' configuration when creating the agent.`
-    );
-  }
 
   const {
     cache,

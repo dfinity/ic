@@ -72,8 +72,10 @@ it('should not set content-type: application/cbor and x-content-type-options: no
 it.each([
   `https://${CANISTER_ID}.ic0.app/api/foo`,
   `https://ic0.app/api/${CANISTER_ID}/foo`,
+  `https://icp-api.io/api/${CANISTER_ID}/foo`,
   `https://dscvr.one/api/foo`,
   `https://boundary.ic0.app/api/${CANISTER_ID}/foo`,
+  `https://boundary.dfinity.network/api/${CANISTER_ID}/foo`,
 ])(
   'should set content-type: application/cbor and x-content-type-options: nosniff on ic calls to %s',
   async (url) => {

@@ -48,12 +48,16 @@ describe('Match raw url', () => {
     expect(isRawDomain('example.raw.ic1.app')).toBeTruthy();
     expect(isRawDomain('example.raw.ic0.dev')).toBeTruthy();
     expect(isRawDomain('example.raw.ic1.dev')).toBeTruthy();
+    expect(isRawDomain('example.raw.icp0.io')).toBeTruthy();
   });
 
   it('should not match raw url', async () => {
     expect(isRawDomain('example.raw.ic0.io')).toBeFalsy();
     expect(isRawDomain('raw.example.ic0.app')).toBeFalsy();
     expect(isRawDomain('raw.example.ic0.dev')).toBeFalsy();
+    expect(isRawDomain('raw.example.icp0.io')).toBeFalsy();
+    expect(isRawDomain('example.raw.icp0.app')).toBeFalsy();
+    expect(isRawDomain('example.raw.icp0.dev')).toBeFalsy();
   });
 });
 

@@ -6,7 +6,7 @@ import {
   MalformedHostnameError,
 } from './errors';
 import { ResolverMapper } from './mapper';
-import { hostnameCanisterIdMap } from './static';
+import { DEFAULT_GATEWAY, hostnameCanisterIdMap } from './static';
 import {
   DBHostsItem,
   DomainLookup,
@@ -15,6 +15,7 @@ import {
   domainStorageProperties,
 } from './typings';
 import {
+  apiGateways,
   isRawDomain,
   maybeResolveCanisterFromHeaders,
   resolveCanisterFromUrl,
@@ -173,11 +174,11 @@ export class CanisterResolver {
       return false;
     }
 
-    if (url.hostname.endsWith(gateway.hostname)) {
-      return true;
-    }
+    const hasApiGateway = [...apiGateways, gateway.hostname].some(
+      (apiGateway) => url.hostname.endsWith(apiGateway)
+    );
 
-    return lookup.canister !== false;
+    return hasApiGateway || lookup.canister !== false;
   }
 
   /**
@@ -224,7 +225,8 @@ export class CanisterResolver {
         headers.has(domainLookupHeaders.gateway)
       ) {
         const canisterId = headers.get(domainLookupHeaders.canisterId) ?? '';
-        const gateway = headers.get(domainLookupHeaders.gateway) ?? '';
+        const gateway =
+          headers.get(domainLookupHeaders.gateway) ?? DEFAULT_GATEWAY.hostname;
         lookup.canister = {
           principal: ResolverMapper.getPrincipalFromText(canisterId),
           gateway: ResolverMapper.getURLFromHostname(gateway),
