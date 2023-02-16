@@ -3353,14 +3353,29 @@ fn can_uninstall_code() {
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
 
         // Check the checkpoint has the canister
-        let canister_path = state_manager
+        let canister_layout = state_manager
             .state_layout()
             .checkpoint(height(1))
             .unwrap()
             .canister(&canister_test_id(100))
-            .unwrap()
-            .raw_path();
+            .unwrap();
+        let canister_path = canister_layout.raw_path();
         assert!(std::fs::metadata(canister_path).unwrap().is_dir());
+
+        // WASM binary and memory stable memory should all be present
+        assert_ne!(
+            std::fs::metadata(canister_layout.vmemory_0())
+                .unwrap()
+                .len(),
+            0
+        );
+        assert_ne!(
+            std::fs::metadata(canister_layout.stable_memory_blob())
+                .unwrap()
+                .len(),
+            0
+        );
+        assert!(canister_layout.wasm().raw_path().exists());
 
         let (_height, mut state) = state_manager.take_tip();
 
@@ -3400,6 +3415,8 @@ fn can_uninstall_code() {
                 .len(),
             0
         );
+        // WASM binary should be missing
+        assert!(!canister_layout.wasm().raw_path().exists());
 
         assert_error_counters(metrics);
     });

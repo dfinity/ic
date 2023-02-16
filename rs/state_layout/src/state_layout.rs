@@ -1523,6 +1523,17 @@ where
             io_err: err,
         })
     }
+
+    pub fn delete_file(&self) -> Result<(), LayoutError> {
+        if self.path.exists() {
+            std::fs::remove_file(&self.path).map_err(|err| LayoutError::IoError {
+                path: self.path.clone(),
+                message: "failed to delete wasm binary from disk".to_string(),
+                io_err: err,
+            })?
+        }
+        Ok(())
+    }
 }
 
 impl<Permissions> From<PathBuf> for WasmFile<Permissions> {
