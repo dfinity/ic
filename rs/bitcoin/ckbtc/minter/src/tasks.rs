@@ -1,10 +1,11 @@
 use ic0;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 thread_local! {
     static TASKS: RefCell<TaskQueue> = RefCell::default();
+    static LAST_GLOBAL_TIMER: Cell<u64> = Cell::default();
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -25,6 +26,8 @@ pub struct TaskQueue {
 }
 
 fn set_global_timer(ts: u64) {
+    LAST_GLOBAL_TIMER.with(|v| v.set(ts));
+
     // SAFETY: setting the global timer is always safe; it does not
     // mutate any canister memory.
     unsafe {
@@ -62,20 +65,17 @@ impl TaskQueue {
             });
         }
 
-        let wake_up_at = self
-            .queue
-            .first()
-            .map(|t| t.execute_at)
-            .unwrap_or(execute_at);
+        self.next_execution_timestamp().unwrap_or(execute_at)
+    }
 
-        wake_up_at
+    fn next_execution_timestamp(&self) -> Option<u64> {
+        self.queue.first().map(|t| t.execute_at)
     }
 
     /// Removes the first task from the queue that's ready for
     /// execution.
     pub fn pop_if_ready(&mut self, now: u64) -> Option<Task> {
-        let t = self.queue.first()?.execute_at;
-        if t <= now {
+        if self.queue.first()?.execute_at <= now {
             let task = self.queue.pop_first().unwrap();
             self.deadline_by_task.remove(&task.task_type);
             Some(task)
@@ -95,19 +95,31 @@ impl TaskQueue {
     }
 }
 
+/// Schedules a task for execution after the given delay.
 pub fn schedule_after(delay: Duration, work: TaskType) {
     let now_nanos = ic_cdk::api::time();
     let execute_at = now_nanos.saturating_add(delay.as_secs() * crate::SEC_NANOS);
 
-    let wake_up_at = TASKS.with(|t| t.borrow_mut().schedule_at(execute_at, work));
-    set_global_timer(wake_up_at);
+    let execution_time = TASKS.with(|t| t.borrow_mut().schedule_at(execute_at, work));
+    set_global_timer(execution_time);
 }
 
+/// Schedules a task for immediate execution.
 pub fn schedule_now(work: TaskType) {
     schedule_after(Duration::from_secs(0), work)
 }
 
+/// Dequeues the next task ready for execution from the minter task queue.
 pub fn pop_if_ready() -> Option<Task> {
     let now = ic_cdk::api::time();
-    TASKS.with(|t| t.borrow_mut().pop_if_ready(now))
+    let task = TASKS.with(|t| t.borrow_mut().pop_if_ready(now));
+    if let Some(next_execution) = TASKS.with(|t| t.borrow().next_execution_timestamp()) {
+        set_global_timer(next_execution);
+    }
+    task
+}
+
+/// Returns the current value of the global task timer.
+pub fn global_timer() -> u64 {
+    LAST_GLOBAL_TIMER.with(|v| v.get())
 }
