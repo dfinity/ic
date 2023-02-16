@@ -85,7 +85,8 @@ fn timer() {
 
 #[post_upgrade]
 fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
-    lifecycle::upgrade::post_upgrade(upgrade_args)
+    lifecycle::upgrade::post_upgrade(upgrade_args);
+    schedule_now(TaskType::ProcessLogic);
 }
 
 #[candid_method(update)]

@@ -136,5 +136,11 @@ pub fn encode_metrics(
         "Total number of concurrent retrieve_btc requests.",
     )?;
 
+    metrics.encode_gauge(
+        "ckbtc_minter_global_timer_timestamp",
+        crate::tasks::global_timer() as f64,
+        "The deadline for the next global timer event.",
+    )?;
+
     Ok(())
 }
