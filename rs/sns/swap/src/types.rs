@@ -160,6 +160,9 @@ impl Init {
 }
 
 impl Params {
+    const MIN_SALE_DURATION_SECONDS: u64 = SECONDS_PER_DAY;
+    const MAX_SALE_DURATION_SECONDS: u64 = 90 * SECONDS_PER_DAY;
+
     pub fn validate(&self, init: &Init) -> Result<(), String> {
         if self.min_icp_e8s == 0 {
             return Err("min_icp_e8s must be > 0".to_string());
@@ -300,9 +303,24 @@ impl Params {
         Ok(())
     }
 
-    pub fn is_valid_at(&self, now_seconds: u64) -> bool {
-        now_seconds.saturating_add(SECONDS_PER_DAY) <= self.swap_due_timestamp_seconds
-            && self.swap_due_timestamp_seconds <= now_seconds.saturating_add(90 * SECONDS_PER_DAY)
+    pub fn is_valid_if_initiated_at(&self, now_seconds: u64) -> bool {
+        let sale_delay_seconds = self.sale_delay_seconds.unwrap_or(0);
+
+        let open_timestamp_seconds = now_seconds.saturating_add(sale_delay_seconds);
+        let duration_seconds = self
+            .swap_due_timestamp_seconds
+            .saturating_sub(open_timestamp_seconds);
+
+        // Sale must be at least MIN_SALE_DURATION_SECONDS long
+        if duration_seconds < Self::MIN_SALE_DURATION_SECONDS {
+            return false;
+        }
+        // Sale can be at most MAX_SALE_DURATION_SECONDS long
+        if duration_seconds > Self::MAX_SALE_DURATION_SECONDS {
+            return false;
+        }
+
+        true
     }
 }
 
@@ -436,7 +454,7 @@ impl OpenRequest {
                 defects.push("The parameters of the swap are missing.".to_string());
             }
             Some(params) => {
-                if !params.is_valid_at(current_timestamp_seconds) {
+                if !params.is_valid_if_initiated_at(current_timestamp_seconds) {
                     defects.push("The parameters of the swap are invalid.".to_string());
                 } else if let Err(err) = params.validate(init) {
                     defects.push(err);
@@ -966,5 +984,136 @@ mod tests {
             MAX_LIST_DIRECT_PARTICIPANTS_LIMIT and the corresponding API docs",
             remainder
         );
+    }
+
+    #[test]
+    fn sale_cannot_be_open_more_than_90_days() {
+        // Should be valid with the sale deadline set to MAX_SALE_DURATION_SECONDS from now.
+        let params = Params {
+            swap_due_timestamp_seconds: Params::MAX_SALE_DURATION_SECONDS,
+            sale_delay_seconds: Some(0),
+            ..PARAMS.clone()
+        };
+        assert!(params.is_valid_if_initiated_at(0));
+
+        let params = Params {
+            swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
+                + Params::MAX_SALE_DURATION_SECONDS,
+            sale_delay_seconds: Some(0),
+            ..PARAMS.clone()
+        };
+        assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+
+        // Should be invalid with the sale deadline set MAX_SALE_DURATION_SECONDS + 1 second from now.
+        let params = Params {
+            swap_due_timestamp_seconds: Params::MAX_SALE_DURATION_SECONDS + 1,
+            sale_delay_seconds: Some(0),
+            ..PARAMS.clone()
+        };
+        assert!(!params.is_valid_if_initiated_at(0));
+
+        let params = Params {
+            swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
+                + Params::MAX_SALE_DURATION_SECONDS
+                + 1,
+            sale_delay_seconds: Some(0),
+            ..PARAMS.clone()
+        };
+        assert!(!params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+    }
+
+    #[test]
+    fn sale_cannot_be_open_more_than_90_days_takes_into_account_delay() {
+        // Would normally be invalid with MAX_SALE_DURATION_SECONDS + 1 second, but 1 second
+        // of sale_delay makes the real period only MAX_SALE_DURATION_SECONDS, which is allowed.
+        let params = Params {
+            swap_due_timestamp_seconds: Params::MAX_SALE_DURATION_SECONDS + 1,
+            sale_delay_seconds: Some(1),
+            ..PARAMS.clone()
+        };
+        assert!(params.is_valid_if_initiated_at(0));
+
+        let params = Params {
+            swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
+                + Params::MAX_SALE_DURATION_SECONDS
+                + 1,
+            sale_delay_seconds: Some(1),
+            ..PARAMS.clone()
+        };
+        assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+    }
+
+    #[test]
+    fn sale_must_be_open_for_at_least_one_day() {
+        // Should be valid with the sale length set to MIN_SALE_DURATION_SECONDS.
+        let params = Params {
+            swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS,
+            sale_delay_seconds: Some(0),
+            ..PARAMS.clone()
+        };
+        assert!(params.is_valid_if_initiated_at(0));
+
+        let params = Params {
+            swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
+                + Params::MIN_SALE_DURATION_SECONDS,
+            sale_delay_seconds: Some(0),
+            ..PARAMS.clone()
+        };
+        assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+
+        // Should fail with the sale length set to one second less than MIN_SALE_DURATION_SECONDS.
+        let params = Params {
+            swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS - 1,
+            sale_delay_seconds: Some(0),
+            ..PARAMS.clone()
+        };
+        assert!(!params.is_valid_if_initiated_at(0));
+
+        let params = Params {
+            swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
+                + Params::MIN_SALE_DURATION_SECONDS
+                - 1,
+            sale_delay_seconds: Some(0),
+            ..PARAMS.clone()
+        };
+        assert!(!params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+    }
+
+    #[test]
+    fn sale_must_be_open_for_at_least_one_day_takes_into_account_delay() {
+        // Should be valid with the sale deadline set to MIN_SALE_DURATION_SECONDS + 1 second from now
+        // with a sale delay of 1 second.
+        let params = Params {
+            swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS + 1,
+            sale_delay_seconds: Some(1),
+            ..PARAMS.clone()
+        };
+        assert!(params.is_valid_if_initiated_at(0));
+
+        let params = Params {
+            swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
+                + Params::MIN_SALE_DURATION_SECONDS
+                + 1,
+            sale_delay_seconds: Some(1),
+            ..PARAMS.clone()
+        };
+        assert!(params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
+
+        // Should be invalid with the sale deadline set to MIN_SALE_DURATION_SECONDS from now
+        // with a sale delay of 1 second.
+        let params = Params {
+            swap_due_timestamp_seconds: Params::MIN_SALE_DURATION_SECONDS,
+            sale_delay_seconds: Some(1),
+            ..PARAMS.clone()
+        };
+        assert!(!params.is_valid_if_initiated_at(0));
+
+        let params = Params {
+            swap_due_timestamp_seconds: START_OF_2022_TIMESTAMP_SECONDS
+                + Params::MIN_SALE_DURATION_SECONDS,
+            sale_delay_seconds: Some(1),
+            ..PARAMS.clone()
+        };
+        assert!(!params.is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS));
     }
 }

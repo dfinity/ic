@@ -115,7 +115,7 @@ pub fn params() -> Params {
         }),
         sale_delay_seconds: None,
     };
-    assert!(result.is_valid_at(START_TIMESTAMP_SECONDS));
+    assert!(result.is_valid_if_initiated_at(START_TIMESTAMP_SECONDS));
     assert!(result.validate(&init()).is_ok());
     result
 }
