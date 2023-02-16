@@ -143,6 +143,8 @@ pub struct CheckpointMetrics {
     load_checkpoint_step_duration: HistogramVec,
     load_canister_step_duration: HistogramVec,
     tip_handler_request_duration: HistogramVec,
+    page_map_flushes: IntCounter,
+    page_map_flush_skips: IntCounter,
 }
 
 impl CheckpointMetrics {
@@ -178,11 +180,22 @@ impl CheckpointMetrics {
             &["request"],
         );
 
+        let page_map_flushes = metrics_registry.int_counter(
+            "state_manager_page_map_flushes",
+            "Amount of sent FlushPageMap requests.",
+        );
+        let page_map_flush_skips = metrics_registry.int_counter(
+            "state_manager_page_map_flush_skips",
+            "Amount of FlushPageMap requests that were skipped.",
+        );
+
         Self {
             make_checkpoint_step_duration,
             load_checkpoint_step_duration,
             load_canister_step_duration,
             tip_handler_request_duration,
+            page_map_flushes,
+            page_map_flush_skips,
         }
     }
 }
@@ -1061,13 +1074,14 @@ pub fn get_dirty_pages(
 /// Strips away the deltas from all page maps of the replicated state.
 /// We execute this procedure before making a checkpoint because we
 /// don't want those deltas to be persisted to TIP as we apply deltas
-/// incrementally after every round.
+/// incrementally.
 fn strip_page_map_deltas(
     state: &mut ReplicatedState,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 ) {
     PageMapType::list_all(state).into_iter().for_each(|entry| {
         if let Some(page_map) = entry.get_mut(state) {
+            assert!(page_map.unflushed_delta_is_empty());
             page_map.strip_all_deltas(Arc::clone(&fd_factory));
         }
     });
@@ -1914,20 +1928,21 @@ impl StateManagerImpl {
     }
 
     /// Flushes to disk all the canister heap deltas accumulated in memory
-    /// during one round of execution.
+    /// during execution from the last flush.
     fn flush_page_maps(&self, tip_state: &mut ReplicatedState, height: Height) {
+        self.metrics.checkpoint_metrics.page_map_flushes.inc();
         for entry in PageMapType::list_all(tip_state) {
             if let Some(page_map) = entry.get_mut(tip_state) {
                 // In cases where a PageMap's data has to be wiped, execution will replace the PageMap with a newly
                 // created one. In these cases, we also need to wipe the data from the file on disk.
                 // If the PageMap represents a new file, then the base_height will be None, as we set base_height only
                 // when loading a PageMap from a checkpoint. Furthermore, we only want to wipe data from the file on
-                // disk before applying any round deltas of that PageMap. We detect this case by looking at
-                // has_stripped_round_deltas, which will be false at the beginning, but true as soon as we strip round
+                // disk before applying any unflushed deltas of that PageMap. We detect this case by looking at
+                // has_stripped_unflushed_deltas, which will be false at the beginning, but true as soon as we strip unflushed
                 // deltas for the first time in the lifetime of the PageMap. As a result, if there is no base_height and
-                // we have not persisted round deltas before, then there are no relevant pages beyond the ones in the
-                // round delta, and we truncate the file on disk to size 0.
-                if page_map.base_height.is_none() && !page_map.has_stripped_round_deltas() {
+                // we have not persisted unflushed deltas before, then there are no relevant pages beyond the ones in the
+                // unlushed delta, and we truncate the file on disk to size 0.
+                if page_map.base_height.is_none() && !page_map.has_stripped_unflushed_deltas() {
                     self.tip_channel
                         .send(TipRequest::TruncatePageMapsPath {
                             height,
@@ -1935,19 +1950,19 @@ impl StateManagerImpl {
                         })
                         .unwrap();
                 }
-                if !page_map.round_delta_is_empty() {
-                    // Clone and send page map for asynchornous flushing to disc. The round deltas are
+                if !page_map.unflushed_delta_is_empty() {
+                    // Clone and send page map for asynchornous flushing to disc. The unflushed deltas are
                     // emptied in the original to ensure we don't flush twice.
                     self.tip_channel
-                        .send(TipRequest::FlushRoundDelta {
+                        .send(TipRequest::FlushPageMapDelta {
                             height,
                             page_map: page_map.clone(),
                             page_map_type: entry,
                         })
                         .unwrap();
                 }
-                // We strip empty round deltas to keep has_stripped_round_deltas() correct
-                page_map.strip_round_delta();
+                // We strip empty unflushed deltas to keep has_stripped_unflushed_deltas() correct
+                page_map.strip_unflushed_delta();
             }
         }
     }
@@ -2321,7 +2336,7 @@ impl StateManagerImpl {
         };
 
         // We don't need to persist the deltas to the tip because we
-        // flush deltas separately every round, see flush_page_maps.
+        // flush deltas before calling this method, see flush_page_maps.
         strip_page_map_deltas(state, self.get_fd_factory());
         let result = {
             checkpoint::make_checkpoint(
@@ -2346,9 +2361,11 @@ impl StateManagerImpl {
             }
             Err(CheckpointError::AlreadyExists(_)) => {
                 warn!(
-                                self.log,
-                                "Failed to create checkpoint @{} because it already exists, re-loading the checkpoint from disk", height
-                            );
+                    self.log,
+                    "Failed to create checkpoint @{} because it already exists, \
+                                re-loading the checkpoint from disk",
+                    height
+                );
 
                 let checkpointed_state = self
                     .state_layout
@@ -2422,6 +2439,10 @@ impl StateManagerImpl {
             manifest_delta: if is_nns { None } else { manifest_delta },
         };
         (checkpointed_state, state_metadata, compute_manifest_request)
+    }
+
+    pub fn test_only_tip_channel(&self) -> Sender<TipRequest> {
+        self.tip_channel.clone()
     }
 }
 
@@ -2946,7 +2967,6 @@ impl StateManager for StateManagerImpl {
             .set(self.tip_channel.len() as i64);
 
         self.populate_extra_metadata(&mut state, height);
-        self.flush_page_maps(&mut state, height);
 
         let mut state_metadata_and_compute_manifest_request: Option<(
             StateMetadata,
@@ -2955,13 +2975,21 @@ impl StateManager for StateManagerImpl {
 
         let checkpointed_state = match scope {
             CertificationScope::Full => {
+                self.flush_page_maps(&mut state, height);
                 let (checkpointed_state, state_metadata, compute_manifest_request) =
                     self.create_checkpoint_and_switch(&mut state, height);
                 state_metadata_and_compute_manifest_request =
                     Some((state_metadata, compute_manifest_request));
                 checkpointed_state
             }
-            CertificationScope::Metadata => state.clone(),
+            CertificationScope::Metadata => {
+                if self.tip_channel.is_empty() {
+                    self.flush_page_maps(&mut state, height);
+                } else {
+                    self.metrics.checkpoint_metrics.page_map_flush_skips.inc();
+                }
+                state.clone()
+            }
         };
 
         let certification_metadata =
