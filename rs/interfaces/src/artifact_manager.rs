@@ -5,8 +5,19 @@ use crate::{
     time_source::TimeSource,
 };
 use derive_more::From;
-use ic_types::artifact::{ArtifactPriorityFn, PriorityFn};
+use ic_types::artifact::{ArtifactKind, ArtifactPriorityFn, PriorityFn};
 use ic_types::{artifact, chunkable, p2p, NodeId};
+
+/// Consensus to gossip interface.
+pub trait ArtifactPoolDescriptor<Artifact: ArtifactKind, Pool>: Send + Sync {
+    /// Return a priority function that matches the given consensus pool.
+    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<Artifact::Id, Artifact::Attribute>;
+
+    /// Return a filter that represents what artifacts are needed.
+    fn get_filter(&self) -> Artifact::Filter {
+        Artifact::Filter::default()
+    }
+}
 
 #[allow(clippy::large_enum_variant)]
 #[derive(From, Debug)]

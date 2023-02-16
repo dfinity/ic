@@ -14,7 +14,6 @@ use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::crypto::crypto_hash;
 use ic_types::{
-    artifact::*,
     batch::ValidationContext,
     consensus::{
         catchup::CUPWithOriginalProtobuf, dkg, Block, CatchUpContent, CatchUpPackage,
@@ -64,15 +63,6 @@ pub fn assert_action_invalid<T: ConsensusMessageHashable>(action: ChangeAction, 
 
 mock! {
     pub Consensus {}
-
-    pub trait ConsensusGossip: Send + Sync {
-        fn get_priority_function<'a>(
-            &'a self,
-            consensus_pool: &'a (dyn ConsensusPool + 'a),
-        ) -> PriorityFn<ConsensusMessageId, ConsensusMessageAttribute>;
-
-        fn get_filter(&self) -> ConsensusMessageFilter;
-    }
 
     pub trait Consensus: Send {
         fn on_state_change<'a>(

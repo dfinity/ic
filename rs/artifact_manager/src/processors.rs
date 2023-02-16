@@ -3,15 +3,15 @@
 use crate::clients;
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
-    artifact_manager::{ArtifactProcessor, ProcessingResult},
+    artifact_manager::{ArtifactPoolDescriptor, ArtifactProcessor, ProcessingResult},
     artifact_pool::UnvalidatedArtifact,
     canister_http::*,
     certification,
     certification::{Certifier, CertifierGossip, MutableCertificationPool},
-    consensus::{Consensus, ConsensusGossip},
+    consensus::Consensus,
     consensus_pool::{ChangeAction as ConsensusAction, ConsensusPoolCache, MutableConsensusPool},
-    dkg::{ChangeAction as DkgChangeAction, Dkg, DkgGossip, MutableDkgPool},
-    ecdsa::{Ecdsa, EcdsaChangeAction, EcdsaGossip, MutableEcdsaPool},
+    dkg::{ChangeAction as DkgChangeAction, Dkg, MutableDkgPool},
+    ecdsa::{Ecdsa, EcdsaChangeAction, MutableEcdsaPool},
     gossip_pool::CanisterHttpGossipPool,
     ingress_manager::IngressHandler,
     ingress_pool::{ChangeAction as IngressAction, MutableIngressPool},
@@ -216,7 +216,7 @@ impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
     #[allow(clippy::too_many_arguments)]
     pub fn build<
         C: Consensus + 'static,
-        G: ConsensusGossip + 'static,
+        G: ArtifactPoolDescriptor<ConsensusArtifact, PoolConsensus> + 'static,
         S: Fn(AdvertSendRequest<ConsensusArtifact>) + Send + 'static,
         F: FnOnce() -> (C, G),
     >(
@@ -585,7 +585,7 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> DkgProcessor<PoolDkg> {
     #[allow(clippy::too_many_arguments)]
     pub fn build<
         C: Dkg + 'static,
-        G: DkgGossip + 'static,
+        G: ArtifactPoolDescriptor<DkgArtifact, PoolDkg> + 'static,
         S: Fn(AdvertSendRequest<DkgArtifact>) + Send + 'static,
         F: FnOnce() -> (C, G),
     >(
@@ -684,7 +684,7 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
     #[allow(clippy::too_many_arguments)]
     pub fn build<
         C: Ecdsa + 'static,
-        G: EcdsaGossip + 'static,
+        G: ArtifactPoolDescriptor<EcdsaArtifact, PoolEcdsa> + 'static,
         S: Fn(AdvertSendRequest<EcdsaArtifact>) + Send + 'static,
         F: FnOnce() -> (C, G),
     >(
@@ -808,7 +808,7 @@ impl<
 {
     pub fn build<
         C: CanisterHttpPoolManager + Sync + 'static,
-        G: CanisterHttpGossip + Send + Sync + 'static,
+        G: ArtifactPoolDescriptor<CanisterHttpArtifact, PoolCanisterHttp> + Send + Sync + 'static,
         S: Fn(AdvertSendRequest<CanisterHttpArtifact>) + Send + 'static,
         F: FnOnce() -> (C, G),
     >(

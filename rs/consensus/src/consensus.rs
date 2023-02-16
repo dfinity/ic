@@ -54,8 +54,9 @@ use crate::consensus::{
 };
 use ic_config::consensus::ConsensusConfig;
 use ic_interfaces::{
+    artifact_manager::ArtifactPoolDescriptor,
     canister_http::CanisterHttpPayloadBuilder,
-    consensus::{Consensus, ConsensusGossip},
+    consensus::Consensus,
     consensus_pool::ConsensusPool,
     dkg::DkgPool,
     ecdsa::EcdsaPool,
@@ -72,6 +73,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::{ConsensusMessageFilter, ConsensusMessageId, PriorityFn},
+    artifact_kind::ConsensusArtifact,
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
 };
@@ -586,11 +588,11 @@ impl ConsensusGossipImpl {
     }
 }
 
-impl ConsensusGossip for ConsensusGossipImpl {
+impl<Pool: ConsensusPool> ArtifactPoolDescriptor<ConsensusArtifact, Pool> for ConsensusGossipImpl {
     /// Return a priority function that matches the given consensus pool.
     fn get_priority_function(
         &self,
-        pool: &dyn ConsensusPool,
+        pool: &Pool,
     ) -> PriorityFn<ConsensusMessageId, ConsensusMessageAttribute> {
         get_priority_function(
             pool,
