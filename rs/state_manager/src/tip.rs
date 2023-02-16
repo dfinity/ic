@@ -339,6 +339,7 @@ fn serialize_canister_to_tip(
         None => {
             truncate_path(log, &canister_layout.vmemory_0());
             truncate_path(log, &canister_layout.stable_memory_blob());
+            canister_layout.wasm().delete_file()?;
             None
         }
     };
