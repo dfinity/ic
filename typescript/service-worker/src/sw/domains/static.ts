@@ -2,7 +2,7 @@ import { Principal } from '@dfinity/principal';
 import { StaticDomainMappings } from './typings';
 
 export const DEFAULT_GATEWAY = new URL(
-  self.location.protocol + '//' + 'ic0.app'
+  self.location.protocol + '//' + 'icp-api.io'
 );
 
 export const hostnameCanisterIdMap: StaticDomainMappings = new Map(

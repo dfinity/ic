@@ -10,8 +10,8 @@ import { VerifiedResponse, cacheHeaders } from './typings';
 import {
   createAgentAndActor,
   decodeBody,
-  removeLegacySubDomains,
   shouldFetchRootKey,
+  updateRequestApiGateway,
 } from './utils';
 
 export class RequestProcessor {
@@ -87,7 +87,7 @@ export class RequestProcessor {
    * We forward all requests to /api/ to the gateway, as is.
    */
   private async apiRequestHandler(currentGateway: URL): Promise<Response> {
-    const cleanedRequest = await removeLegacySubDomains(
+    const cleanedRequest = await updateRequestApiGateway(
       this.request,
       currentGateway
     );

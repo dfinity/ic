@@ -1,5 +1,14 @@
 import { Principal } from '@dfinity/principal';
+import { isMainNet } from '../requests/utils';
+import { DEFAULT_GATEWAY } from './static';
 import { CanisterLookup } from './typings';
+
+export const apiGateways = [
+  'boundary.dfinity.network',
+  'boundary.ic0.app',
+  'ic0.app',
+  'icp-api.io',
+];
 
 /**
  * Try to resolve the Canister ID to contact from headers.
@@ -36,7 +45,7 @@ export function resolveCanisterFromUrl(url: URL): CanisterLookup | null {
       if (principal) {
         lookup = {
           principal,
-          gateway: url,
+          gateway: isMainNet ? DEFAULT_GATEWAY : url,
         };
       }
     }
@@ -68,10 +77,13 @@ export function maybeResolveCanisterIdFromSearchParam(
 }
 
 export function isRawDomain(hostname: string): boolean {
-  // For security reasons the match is only made for ic[0-9].app and ic[0-9].dev domains. This makes
+  // For security reasons the match is only made for ic[0-9].app, ic[0-9].dev and icp[0-9].io domains. This makes
   // the match less permissive and prevents unwanted matches for domains that could include raw
   // but still serve as a normal dapp domain that should go through response verification.
-  return !!hostname.match(new RegExp(/\.raw\.ic[0-9]+\.(app|dev)/));
+  const isIcAppRaw = !!hostname.match(new RegExp(/\.raw\.ic[0-9]+\.app/));
+  const isIcDevRaw = !!hostname.match(new RegExp(/\.raw\.ic[0-9]+\.dev/));
+  const isIcpIoRaw = !!hostname.match(new RegExp(/\.raw\.icp[0-9]+\.io/));
+  return isIcAppRaw || isIcDevRaw || isIcpIoRaw;
 }
 
 /**
@@ -92,11 +104,14 @@ export function maybeResolveCanisterFromHostName(
   for (const domain of subdomains) {
     try {
       const principal = Principal.fromText(domain);
+      const gateway = isMainNet
+        ? DEFAULT_GATEWAY
+        : new URL(
+            self.location.protocol + '//' + topdomains.reverse().join('.')
+          );
       return {
         principal,
-        gateway: new URL(
-          self.location.protocol + '//' + topdomains.reverse().join('.')
-        ),
+        gateway,
       };
     } catch (_) {
       topdomains.push(domain);
