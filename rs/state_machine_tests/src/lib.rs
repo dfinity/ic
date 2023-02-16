@@ -284,7 +284,7 @@ pub struct StateMachine {
     secret_key: SecretKeyBytes,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     registry_client: Arc<FakeRegistryClient>,
-    state_manager: Arc<StateManagerImpl>,
+    pub state_manager: Arc<StateManagerImpl>,
     message_routing: MessageRoutingImpl,
     metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,

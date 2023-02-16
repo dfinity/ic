@@ -11,7 +11,10 @@ use ic_replicated_state::{
     page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NumWasmPages, PageMap,
     ReplicatedState, Stream,
 };
-use ic_state_manager::{BitcoinPageMap, DirtyPageMap, FileType, PageMapType, StateManagerImpl};
+use ic_state_machine_tests::StateMachineBuilder;
+use ic_state_manager::{
+    tip::TipRequest, BitcoinPageMap, DirtyPageMap, FileType, PageMapType, StateManagerImpl,
+};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
@@ -73,6 +76,92 @@ fn tree_payload(t: MixedHashTree) -> LabeledTree<Vec<u8>> {
 
 fn label<T: Into<Label>>(t: T) -> Label {
     t.into()
+}
+
+/// This is a canister that keeps a counter on the heap and allows to increment it.
+const TEST_CANISTER: &str = r#"
+(module
+    (import "ic0" "msg_reply" (func $msg_reply))
+    (import "ic0" "msg_reply_data_append"
+    (func $msg_reply_data_append (param i32 i32)))
+
+    (func $inc
+
+    ;; load the old counter value, increment, and store it back
+    (i32.store
+
+        ;; store at the beginning of the heap
+        (i32.const 0) ;; store at the beginning of the heap
+
+        ;; increment heap[0]
+        (i32.add
+
+        ;; the old value at heap[0]
+        (i32.load (i32.const 0))
+
+        ;; "1"
+        (i32.const 1)
+        )
+    )
+    (call $msg_reply_data_append (i32.const 0) (i32.const 0))
+    (call $msg_reply)
+    )
+
+    (memory $memory 1)
+    (export "memory" (memory $memory))
+    (export "canister_update inc" (func $inc))
+)"#;
+
+#[test]
+fn skipping_flushing_is_invisible_for_state() {
+    fn execute(block_tip: bool) -> CryptoHashOfState {
+        let env = StateMachineBuilder::new().build();
+        env.set_checkpoints_enabled(false);
+        let tip_channel = env.state_manager.test_only_tip_channel();
+
+        let canister_id0 = env.install_canister_wat(TEST_CANISTER, vec![], None);
+        let canister_id1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
+
+        // One wait occupies the TipHandler thread, the second (nop) makes queue non-empty
+        // to cause flush skips. 0-size channel blocks send in the TipHandler until we call recv()
+        let (send_wait, recv_wait) = crossbeam_channel::bounded::<()>(0);
+        let (send_nop, _) = crossbeam_channel::unbounded();
+        tip_channel
+            .send(TipRequest::Wait { sender: send_wait })
+            .unwrap();
+        tip_channel
+            .send(TipRequest::Wait { sender: send_nop })
+            .unwrap();
+        if !block_tip {
+            recv_wait.recv().unwrap();
+        }
+        env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
+        env.execute_ingress(canister_id1, "inc", vec![]).unwrap();
+        if block_tip {
+            recv_wait.recv().unwrap();
+        }
+        env.set_checkpoints_enabled(true);
+        std::mem::drop(tip_channel);
+        let skips = env
+            .metrics_registry()
+            .prometheus_registry()
+            .gather()
+            .into_iter()
+            .filter(|x| x.get_name() == "state_manager_page_map_flush_skips")
+            .map(|x| x.get_metric()[0].get_counter().get_value())
+            .next()
+            .unwrap();
+        if block_tip {
+            assert_eq!(skips, 2.0)
+        } else {
+            assert_eq!(skips, 0.0)
+        }
+        let env = env.restart_node();
+        env.tick();
+
+        env.await_state_hash()
+    }
+    assert_eq!(execute(false), execute(true));
 }
 
 #[test]

@@ -43,8 +43,8 @@ pub enum TipRequest {
         height: Height,
         page_map_type: PageMapType,
     },
-    /// Flush PageMaps's round delta on disc.
-    FlushRoundDelta {
+    /// Flush PageMaps's unflushed delta on disc.
+    FlushPageMapDelta {
         height: Height,
         page_map: PageMap,
         page_map_type: PageMapType,
@@ -176,18 +176,20 @@ pub fn spawn_tip_thread(
                             truncate_path(&log, &path);
                         }
 
-                        TipRequest::FlushRoundDelta {
+                        TipRequest::FlushPageMapDelta {
                             height,
                             page_map,
                             page_map_type,
                         } => {
-                            let _timer = request_timer(&metrics, "flush_round_delta");
+                            let _timer = request_timer(&metrics, "flush_unflushed_delta");
                             let path =
                                 page_map_path(&log, &mut tip_handler, height, &page_map_type);
-                            if !page_map.round_delta_is_empty() {
-                                page_map.persist_round_delta(&path).unwrap_or_else(|err| {
-                                    fatal!(log, "Failed to persist round delta: {}", err);
-                                });
+                            if !page_map.unflushed_delta_is_empty() {
+                                page_map
+                                    .persist_unflushed_delta(&path)
+                                    .unwrap_or_else(|err| {
+                                        fatal!(log, "Failed to persist unflushed delta: {}", err);
+                                    });
                             }
                         }
                         TipRequest::SerializeToTip {

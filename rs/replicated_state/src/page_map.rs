@@ -301,14 +301,13 @@ pub struct PageMap {
     /// It is reset when `strip_all_deltas()` method is called.
     page_delta: PageDelta,
 
-    /// The map containing deltas accumulated since the beginning of the
-    /// execution round.  It is reset when `strip_round_delta()` or
-    /// `strip_all_deltas()` methods are called.
+    /// The map containing deltas accumulated since the last flush to disk.
+    /// It is reset when `strip_unflushed_delta()` or `strip_all_deltas()` methods are called.
     ///
-    /// Invariant: round_delta ⊆ page_delta
-    round_delta: PageDelta,
+    /// Invariant: unflushed_delta ⊆ page_delta
+    unflushed_delta: PageDelta,
 
-    has_stripped_round_deltas: bool,
+    has_stripped_unflushed_deltas: bool,
 
     /// The allocator for PageDelta pages.
     /// It is reset when `strip_all_deltas()` method is called.
@@ -325,8 +324,8 @@ impl PageMap {
             checkpoint: Default::default(),
             base_height: Default::default(),
             page_delta: Default::default(),
-            round_delta: Default::default(),
-            has_stripped_round_deltas: false,
+            unflushed_delta: Default::default(),
+            has_stripped_unflushed_deltas: false,
             page_allocator: PageAllocator::new(fd_factory),
         }
     }
@@ -337,8 +336,8 @@ impl PageMap {
             checkpoint: Default::default(),
             base_height: Default::default(),
             page_delta: Default::default(),
-            round_delta: Default::default(),
-            has_stripped_round_deltas: false,
+            unflushed_delta: Default::default(),
+            has_stripped_unflushed_deltas: false,
             page_allocator: PageAllocator::new_for_testing(),
         }
     }
@@ -356,8 +355,8 @@ impl PageMap {
             checkpoint,
             base_height: Some(base_height),
             page_delta: Default::default(),
-            round_delta: Default::default(),
-            has_stripped_round_deltas: false,
+            unflushed_delta: Default::default(),
+            has_stripped_unflushed_deltas: false,
             page_allocator: PageAllocator::new(fd_factory),
         })
     }
@@ -370,10 +369,10 @@ impl PageMap {
             page_delta: self
                 .page_allocator
                 .serialize_page_delta(self.page_delta.iter()),
-            round_delta: self
+            unflushed_delta: self
                 .page_allocator
-                .serialize_page_delta(self.round_delta.iter()),
-            has_stripped_round_deltas: self.has_stripped_round_deltas,
+                .serialize_page_delta(self.unflushed_delta.iter()),
+            has_stripped_unflushed_deltas: self.has_stripped_unflushed_deltas,
             page_allocator: self.page_allocator.serialize(),
         }
     }
@@ -391,14 +390,14 @@ impl PageMap {
         let page_allocator = PageAllocator::deserialize(page_map.page_allocator, registry);
         let page_delta =
             PageDelta::from(page_allocator.deserialize_page_delta(page_map.page_delta));
-        let round_delta =
-            PageDelta::from(page_allocator.deserialize_page_delta(page_map.round_delta));
+        let unflushed_delta =
+            PageDelta::from(page_allocator.deserialize_page_delta(page_map.unflushed_delta));
         Ok(Self {
             checkpoint,
             base_height: page_map.base_height,
             page_delta,
-            round_delta,
-            has_stripped_round_deltas: page_map.has_stripped_round_deltas,
+            unflushed_delta,
+            has_stripped_unflushed_deltas: page_map.has_stripped_unflushed_deltas,
             page_allocator,
         })
     }
@@ -435,10 +434,10 @@ impl PageMap {
         self.persist_to_file(&self.page_delta, dst)
     }
 
-    /// Persists the round delta contained in this page map to the specified
+    /// Persists the unflushed delta contained in this page map to the specified
     /// destination.
-    pub fn persist_round_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
-        self.persist_to_file(&self.round_delta, dst)
+    pub fn persist_unflushed_delta(&self, dst: &Path) -> Result<(), PersistenceError> {
+        self.persist_to_file(&self.unflushed_delta, dst)
     }
 
     /// Returns the iterator over host pages managed by this `PageMap`.
@@ -503,16 +502,16 @@ impl PageMap {
         // a good property to maintain.
         {
             std::mem::take(&mut self.page_delta);
-            std::mem::take(&mut self.round_delta);
+            std::mem::take(&mut self.unflushed_delta);
         }
         self.page_allocator = PageAllocator::new(Arc::clone(&fd_factory));
     }
 
-    /// Removes the round delta from this page map.
-    pub fn strip_round_delta(&mut self) {
-        self.has_stripped_round_deltas = true;
+    /// Removes the unflushed delta from this page map.
+    pub fn strip_unflushed_delta(&mut self) {
+        self.has_stripped_unflushed_deltas = true;
 
-        std::mem::take(&mut self.round_delta);
+        std::mem::take(&mut self.unflushed_delta);
     }
 
     pub fn get_page_delta_indices(&self) -> Vec<PageIndex> {
@@ -524,14 +523,14 @@ impl PageMap {
         self.page_delta.is_empty()
     }
 
-    /// Whether there are any round deltas
-    pub fn round_delta_is_empty(&self) -> bool {
-        self.round_delta.is_empty()
+    /// Whether there are any unflushed deltas
+    pub fn unflushed_delta_is_empty(&self) -> bool {
+        self.unflushed_delta.is_empty()
     }
 
-    /// Whether strip_round_deltas has been called before
-    pub fn has_stripped_round_deltas(&self) -> bool {
-        self.has_stripped_round_deltas
+    /// Whether strip_unflushed_deltas has been called before
+    pub fn has_stripped_unflushed_deltas(&self) -> bool {
+        self.has_stripped_unflushed_deltas
     }
 
     /// Returns the length of the modified prefix in host pages.
@@ -558,9 +557,9 @@ impl PageMap {
         // Also copy the base height to reflect the height of the new checkpoint.
         self.base_height = checkpointed_page_map.base_height;
         assert!(self.page_delta.is_empty());
-        assert!(self.round_delta.is_empty());
+        assert!(self.unflushed_delta.is_empty());
         assert!(checkpointed_page_map.page_delta.is_empty());
-        assert!(checkpointed_page_map.round_delta.is_empty());
+        assert!(checkpointed_page_map.unflushed_delta.is_empty());
         // Keep the page allocators of the states disjoint.
     }
 
@@ -572,7 +571,7 @@ impl PageMap {
         let delta = PageDelta::from(delta);
         // Delta is a persistent data structure and is cheap to clone.
         self.page_delta.update(delta.clone());
-        self.round_delta.update(delta)
+        self.unflushed_delta.update(delta)
     }
 
     /// Persists the given delta to the specified destination.
@@ -786,14 +785,14 @@ impl std::fmt::Debug for PageMap {
 ///
 /// It contains sufficient information to reconstruct `PageMap`
 /// in another process. Note that canister sandboxing does not
-/// need `round_delta`, but the field is kept for consistency here.
+/// need `unflushed_delta`, but the field is kept for consistency here.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PageMapSerialization {
     pub checkpoint: CheckpointSerialization,
     pub base_height: Option<Height>,
     pub page_delta: PageDeltaSerialization,
-    pub round_delta: PageDeltaSerialization,
-    pub has_stripped_round_deltas: bool,
+    pub unflushed_delta: PageDeltaSerialization,
+    pub has_stripped_unflushed_deltas: bool,
     pub page_allocator: PageAllocatorSerialization,
 }
 

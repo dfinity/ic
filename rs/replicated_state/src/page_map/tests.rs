@@ -269,7 +269,7 @@ fn serialize_page_map() {
     let page_7 = [7u8; PAGE_SIZE];
     let pages = &[(PageIndex::new(1), &page_1), (PageIndex::new(3), &page_3)];
     sandbox.update(pages);
-    sandbox.strip_round_delta();
+    sandbox.strip_unflushed_delta();
     sandbox.update(&[(PageIndex::new(7), &page_7)]);
     // The sandbox process sends the dirty pages to the replica process.
     let page_delta =
