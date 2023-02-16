@@ -55,8 +55,6 @@ class Ci:
         [
             "system-tests-hourly",
             "system-tests-nightly",
-            "wasm-generator-hourly",
-            "wasm-generator-nightly",
         ]
     )
 
