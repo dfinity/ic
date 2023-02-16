@@ -22,8 +22,9 @@ use ic_sns_root::pb::v1::{
     RegisterDappCanistersResponse,
 };
 use ic_sns_root::{CanisterIdRecord, CanisterStatusResultV2};
+
 use ic_sns_swap::pb::v1::{
-    self as swap_pb, GetOpenTicketResponse, GetSaleParametersResponse,
+    self as swap_pb, GetBuyerStateResponse, GetOpenTicketResponse, GetSaleParametersResponse,
     ListCommunityFundParticipantsResponse, NewSaleTicketResponse, NotifyPaymentFailureResponse,
     RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Ticket,
 };
@@ -571,6 +572,21 @@ pub fn notify_payment_failure(
         .execute_ingress_as(*sender, *swap_id, "notify_payment_failure", args)
         .unwrap();
     Decode!(&res.bytes(), NotifyPaymentFailureResponse).unwrap()
+}
+
+pub fn get_buyer_state(
+    env: &StateMachine,
+    swap_id: &CanisterId,
+    sender: &PrincipalId,
+) -> GetBuyerStateResponse {
+    let args = Encode!(&swap_pb::GetBuyerStateRequest {
+        principal_id: Some(*sender)
+    })
+    .unwrap();
+    let res = env
+        .query_as(*sender, *swap_id, "get_buyer_state", args)
+        .unwrap();
+    Decode!(&res.bytes(), GetBuyerStateResponse).unwrap()
 }
 
 pub fn get_sns_sale_parameters(

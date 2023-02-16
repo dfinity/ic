@@ -97,7 +97,7 @@ fn init() -> Init {
     result
 }
 
-fn params() -> Params {
+pub fn params() -> Params {
     let result = Params {
         min_participants: 3,
         min_icp_e8s: 1,
@@ -3843,6 +3843,487 @@ fn test_rebuild_indexes_ignores_existing_index() {
         buyer_list_index_length_before,
         buyer_list_index_length_after
     )
+}
+
+//Test refresh buyer tokens endpoint
+#[test]
+fn test_refresh_buyer_tokens() {
+    let user1 = PrincipalId::new_user_test_id(1);
+    let user2 = PrincipalId::new_user_test_id(2);
+    let user3 = PrincipalId::new_user_test_id(3);
+    let user4 = PrincipalId::new_user_test_id(4);
+    let account = Account {
+        owner: SWAP_CANISTER_ID.get(),
+        subaccount: None,
+    };
+
+    let buy_token_ok =
+        |swap: &mut Swap, user: &PrincipalId, balance_icp: &u64, balance_icp_accepted: &u64| {
+            assert_eq!(
+                swap.refresh_buyer_token_e8s(
+                    *user,
+                    SWAP_CANISTER_ID,
+                    &mock_stub(vec![LedgerExpect::AccountBalance(
+                        Account {
+                            owner: SWAP_CANISTER_ID.get(),
+                            subaccount: Some(principal_to_subaccount(user)),
+                        },
+                        Ok(Tokens::from_e8s(*balance_icp)),
+                    )]),
+                )
+                .now_or_never()
+                .unwrap()
+                .unwrap(),
+                RefreshBuyerTokensResponse {
+                    icp_accepted_participation_e8s: *balance_icp_accepted,
+                    icp_ledger_account_balance_e8s: *balance_icp
+                }
+            );
+        };
+
+    let buy_token_err =
+        |swap: &mut Swap, user: &PrincipalId, balance_icp: &u64, error_message: &str| {
+            assert!(swap
+                .refresh_buyer_token_e8s(
+                    *user,
+                    SWAP_CANISTER_ID,
+                    &mock_stub(vec![LedgerExpect::AccountBalance(
+                        Account {
+                            owner: SWAP_CANISTER_ID.get(),
+                            subaccount: Some(principal_to_subaccount(user)),
+                        },
+                        Ok(Tokens::from_e8s(*balance_icp)),
+                    )]),
+                )
+                .now_or_never()
+                .unwrap()
+                .unwrap_err()
+                .contains(error_message));
+        };
+
+    let open_swap = |swap: &mut Swap, params: &Params| {
+        assert!(swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    account.clone(),
+                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
+                )]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params.clone()),
+                    cf_participants: vec![],
+                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
+                }
+            )
+            .now_or_never()
+            .unwrap()
+            .is_ok());
+    };
+
+    let check_final_conditions = |swap: &mut Swap,
+                                  user: &PrincipalId,
+                                  amount_committed: &u64,
+                                  participant_total_icp: &u64| {
+        assert_eq!(
+            swap.buyers
+                .get(&user.to_string())
+                .unwrap()
+                .icp
+                .as_ref()
+                .unwrap()
+                .amount_e8s,
+            amount_committed.clone()
+        );
+
+        assert_eq!(
+            swap.get_buyers_total().buyers_total,
+            participant_total_icp.clone()
+        );
+    };
+
+    //Test happy scenario
+    {
+        let params = Params {
+            max_icp_e8s: 50 * E8,
+            min_icp_e8s: 5 * E8,
+            min_participants: 1,
+            min_participant_icp_e8s: 2 * E8,
+            max_participant_icp_e8s: 40 * E8,
+            sns_token_e8s: 100_000 * E8,
+            ..params()
+        };
+        let amount_user1_0 = 5 * E8;
+        let amount_user1_1 = 3 * E8;
+        let amount_user2_0 = 35 * E8;
+        let mut swap = Swap::new(init());
+
+        // Make sure tokens can only be commited once the swap is open
+        assert!(swap
+            .refresh_buyer_token_e8s(user1, SWAP_CANISTER_ID, &mock_stub(vec![]))
+            .now_or_never()
+            .unwrap()
+            .unwrap_err()
+            .contains("OPEN state"));
+        //Open the swap
+        open_swap(&mut swap, &params);
+
+        // Makse sure user1 has not committed any users yet
+        assert!(!swap.buyers.contains_key(&user1.to_string()));
+
+        buy_token_ok(&mut swap, &user1, &amount_user1_0, &amount_user1_0);
+
+        // Make sure user1's committment is reflected in the buyers state
+        // Total commited balance should be that of user1
+        check_final_conditions(&mut swap, &user1, &(amount_user1_0), &(amount_user1_0));
+
+        // Commit another 35 ICP
+        buy_token_ok(&mut swap, &user2, &amount_user2_0, &amount_user2_0);
+
+        // Make sure user2's commitment is reflected in the buyers state
+        // Total committed balance should be that of user1 + user2
+        check_final_conditions(
+            &mut swap,
+            &user2,
+            &(amount_user2_0),
+            &(amount_user1_0 + amount_user2_0),
+        );
+
+        buy_token_ok(
+            &mut swap,
+            &user1,
+            &(amount_user1_0 + amount_user1_1),
+            &(amount_user1_0 + amount_user1_1),
+        );
+
+        // Makse sure user1's committmend is reflected in the buyers state
+        // Total commited balance should be that of user1 + user2
+        check_final_conditions(
+            &mut swap,
+            &user1,
+            &(amount_user1_0 + amount_user1_1),
+            &(amount_user1_0 + amount_user1_1 + amount_user2_0),
+        );
+    }
+
+    // Test token limit
+    {
+        let params = Params {
+            max_icp_e8s: 50 * E8,
+            min_icp_e8s: 5 * E8,
+            min_participants: 1,
+            min_participant_icp_e8s: 2 * E8,
+            max_participant_icp_e8s: 40 * E8,
+            sns_token_e8s: 100_000 * E8,
+            ..params()
+        };
+
+        let mut swap = Swap::new(init());
+
+        open_swap(&mut swap, &params);
+
+        // Buy limit of tokens available per user
+        buy_token_ok(
+            &mut swap,
+            &user1,
+            &(params.max_participant_icp_e8s),
+            &(params.max_participant_icp_e8s),
+        );
+
+        // Buy limit of tokens available
+        buy_token_ok(
+            &mut swap,
+            &user2,
+            &(params.max_participant_icp_e8s),
+            &(params.max_icp_e8s - params.max_participant_icp_e8s),
+        );
+
+        assert_eq!(swap.get_buyers_total().buyers_total, params.max_icp_e8s);
+
+        // No user should be able to commit to tokens now no matter how small the amount
+        buy_token_err(
+            &mut swap,
+            &user3,
+            &(params.min_participant_icp_e8s),
+            "ICP target",
+        );
+    }
+
+    // Test quota
+    {
+        let params = Params {
+            max_icp_e8s: 200 * E8,
+            min_icp_e8s: 5 * E8,
+            min_participants: 1,
+            min_participant_icp_e8s: 2 * E8,
+            max_participant_icp_e8s: 40 * E8,
+            sns_token_e8s: 100_000 * E8,
+            ..params()
+        };
+        let mut swap = Swap::new(init());
+        let amount_user1_0 = 5 * E8;
+        //The limit per user is 40 E8s and we want to test the maximum participation limit per user
+        let amount_user2_0 = 40 * E8;
+        let amount_user3_0 = 40 * E8;
+        let amount_user4_0 = 100 * E8 - (amount_user1_0 + amount_user2_0 + amount_user3_0);
+        let amount_user1_1 = 41 * E8;
+
+        open_swap(&mut swap, &params);
+
+        //Buy limit for each user which is 40 E8s. User1 contributes 5 at first
+        buy_token_ok(&mut swap, &user1, &amount_user1_0, &amount_user1_0);
+        buy_token_ok(&mut swap, &user2, &amount_user2_0, &amount_user2_0);
+        buy_token_ok(&mut swap, &user3, &amount_user3_0, &amount_user3_0);
+        buy_token_ok(&mut swap, &user4, &amount_user4_0, &amount_user4_0);
+
+        // Make sure the total amount deposited by buyers is at 100
+        assert_eq!(
+            swap.get_buyers_total().buyers_total,
+            amount_user1_0 + amount_user2_0 + amount_user3_0 + amount_user4_0
+        );
+        assert_eq!(
+            amount_user1_0 + amount_user2_0 + amount_user3_0 + amount_user4_0,
+            100 * E8
+        );
+
+        //Try and buy 41 more tokens. Since user1 has already participated in the sale they can purchase the missing amount until the user limit
+        buy_token_ok(
+            &mut swap,
+            &user1,
+            &(amount_user1_1 + amount_user1_0),
+            &params.max_participant_icp_e8s,
+        );
+
+        //User 1 should have 40 tokens committed at the end and 135 tokens should be bought in total
+        check_final_conditions(
+            &mut swap,
+            &user1,
+            &(params.max_participant_icp_e8s),
+            &(amount_user1_0
+                + amount_user2_0
+                + amount_user3_0
+                + amount_user4_0
+                + (params.max_participant_icp_e8s - amount_user1_0)),
+        );
+    }
+
+    // Test not enough tokens left
+    {
+        let params = Params {
+            max_icp_e8s: 100 * E8,
+            min_icp_e8s: 5 * E8,
+            min_participants: 1,
+            min_participant_icp_e8s: 2 * E8,
+            max_participant_icp_e8s: 40 * E8,
+            sns_token_e8s: 100_000 * E8,
+            ..params()
+        };
+        let mut swap = Swap::new(init());
+        let amount_user1_0 = 5 * E8;
+        let amount_user2_0 = 40 * E8;
+        let amount_user3_0 = 40 * E8;
+        let amount_user4_0 = 99 * E8 - (amount_user2_0 + amount_user3_0);
+
+        open_swap(&mut swap, &params);
+
+        // All tokens but one should be already bought up by users 2 to 4 --> 99 Tokens were bought
+        buy_token_ok(&mut swap, &user2, &amount_user2_0, &amount_user2_0);
+        buy_token_ok(&mut swap, &user3, &amount_user3_0, &amount_user3_0);
+        buy_token_ok(&mut swap, &user4, &amount_user4_0, &amount_user4_0);
+
+        // Make sure the 99 tokens were registered
+        assert_eq!(
+            swap.get_buyers_total().buyers_total,
+            amount_user2_0 + amount_user3_0 + amount_user4_0
+        );
+
+        // Make sure that only an amount smaller than the minimum amount to be bought per user is available
+        assert!(
+            params.max_icp_e8s - swap.get_buyers_total().buyers_total
+                < params.min_participant_icp_e8s
+        );
+
+        // No user that has not participated in the sale yet can buy this one token left
+        buy_token_err(
+            &mut swap,
+            &user1,
+            &amount_user1_0,
+            "minimum required to participate",
+        );
+
+        // The one token should still be left fur purchase
+        check_final_conditions(
+            &mut swap,
+            &user2,
+            &amount_user2_0,
+            &(params.max_icp_e8s - E8),
+        );
+    }
+
+    // Test minimum tokens requirement
+    {
+        let params = Params {
+            max_icp_e8s: 100 * E8,
+            min_icp_e8s: 5 * E8,
+            min_participants: 1,
+            min_participant_icp_e8s: 2 * E8,
+            max_participant_icp_e8s: 40 * E8,
+            sns_token_e8s: 100_000 * E8,
+            ..params()
+        };
+        let mut swap = Swap::new(init());
+        let amount_user1_0 = E8;
+        let amount_user2_0 = 40 * E8;
+        let amount_user3_0 = 10 * E8;
+
+        open_swap(&mut swap, &params);
+
+        buy_token_ok(&mut swap, &user2, &amount_user2_0, &amount_user2_0);
+
+        buy_token_ok(&mut swap, &user3, &amount_user3_0, &amount_user3_0);
+
+        // One cannot buy fewer tokens than the minimum participation limit
+        buy_token_err(
+            &mut swap,
+            &user1,
+            &amount_user1_0,
+            "minimum required to participate",
+        );
+    }
+
+    // Test commited tokens below minimum
+    {
+        let params = Params {
+            max_icp_e8s: 100 * E8,
+            min_icp_e8s: 5 * E8,
+            min_participants: 1,
+            min_participant_icp_e8s: 2 * E8,
+            max_participant_icp_e8s: 40 * E8,
+            sns_token_e8s: 100_000 * E8,
+            ..params()
+        };
+        let mut swap = Swap::new(init());
+        let amount_user1_0 = 3 * E8;
+        let amount_user1_1 = 150_000_000;
+        let amount_user2_0 = 40 * E8;
+        let amount_user3_0 = 40 * E8;
+        let amount_user4_0 = 99 * E8 - (amount_user2_0 + amount_user3_0 + amount_user1_0);
+
+        open_swap(&mut swap, &params);
+
+        buy_token_ok(&mut swap, &user1, &amount_user1_0, &amount_user1_0);
+
+        buy_token_ok(&mut swap, &user2, &amount_user2_0, &amount_user2_0);
+
+        buy_token_ok(&mut swap, &user3, &amount_user3_0, &amount_user3_0);
+
+        buy_token_ok(&mut swap, &user4, &amount_user4_0, &amount_user4_0);
+
+        assert_eq!(
+            swap.get_buyers_total().buyers_total,
+            amount_user2_0 + amount_user3_0 + amount_user4_0 + amount_user1_0
+        );
+
+        assert!(
+            params.max_icp_e8s - swap.get_buyers_total().buyers_total
+                < params.min_participant_icp_e8s
+        );
+
+        assert!((params.max_icp_e8s - swap.get_buyers_total().buyers_total) < amount_user1_1);
+
+        assert!(
+            swap.buyers
+                .get(&user1.to_string())
+                .unwrap()
+                .icp
+                .as_ref()
+                .unwrap()
+                .amount_e8s
+                > 0
+        );
+
+        assert!(amount_user1_1 < params.min_participant_icp_e8s);
+
+        buy_token_ok(
+            &mut swap,
+            &user1,
+            &(amount_user1_0 + amount_user1_1),
+            &(amount_user1_0 + E8),
+        );
+
+        check_final_conditions(
+            &mut swap,
+            &user1,
+            &(amount_user1_0 + E8),
+            &(params.max_icp_e8s),
+        );
+    }
+
+    // Test not sending additional funds
+    {
+        let params = Params {
+            max_icp_e8s: 50 * E8,
+            min_icp_e8s: 5 * E8,
+            min_participants: 1,
+            min_participant_icp_e8s: 2 * E8,
+            max_participant_icp_e8s: 40 * E8,
+            sns_token_e8s: 100_000 * E8,
+            ..params()
+        };
+        let mut swap = Swap::new(init());
+        let amount_user1_0 = 3 * E8;
+        let amount_user2_0 = 37 * E8;
+
+        open_swap(&mut swap, &params);
+
+        buy_token_ok(&mut swap, &user1, &amount_user1_0, &amount_user1_0);
+
+        buy_token_ok(&mut swap, &user2, &amount_user2_0, &amount_user2_0);
+
+        buy_token_ok(&mut swap, &user1, &amount_user1_0, &amount_user1_0);
+
+        check_final_conditions(
+            &mut swap,
+            &user1,
+            &(amount_user1_0),
+            &(amount_user1_0 + amount_user2_0),
+        );
+    }
+
+    //Test committing with no funds sent
+    {
+        let params = Params {
+            max_icp_e8s: 100 * E8,
+            min_icp_e8s: 5 * E8,
+            min_participants: 1,
+            min_participant_icp_e8s: 2 * E8,
+            max_participant_icp_e8s: 40 * E8,
+            sns_token_e8s: 100_000 * E8,
+            ..params()
+        };
+        let mut swap = Swap::new(init());
+        let amount_user1_0 = 3 * E8;
+        let amount_user2_0 = 40 * E8;
+        let amount_user3_0 = 40 * E8;
+        let amount_user4_0 = 18 * E8;
+
+        open_swap(&mut swap, &params);
+
+        buy_token_ok(&mut swap, &user2, &amount_user2_0, &amount_user2_0);
+
+        buy_token_ok(&mut swap, &user3, &amount_user3_0, &amount_user3_0);
+
+        buy_token_ok(&mut swap, &user4, &amount_user4_0, &amount_user4_0);
+
+        assert_eq!(
+            params.max_icp_e8s - swap.get_buyers_total().buyers_total,
+            2 * E8
+        );
+
+        buy_token_ok(&mut swap, &user1, &amount_user1_0, &(2 * E8));
+
+        check_final_conditions(&mut swap, &user1, &(2 * E8), &(params.max_icp_e8s));
+    }
 }
 
 /// Test that the get_state API bounds the dynamic data sources returned in the
