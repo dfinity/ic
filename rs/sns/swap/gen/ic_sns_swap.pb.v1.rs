@@ -186,6 +186,13 @@ pub struct Swap {
     /// after a user requests a new ticket successfully.
     #[prost(uint64, optional, tag = "12")]
     pub next_ticket_id: ::core::option::Option<u64>,
+    /// The last time the purge_old_tickets routine was completed.
+    #[prost(uint64, optional, tag = "13")]
+    pub purge_old_tickets_last_completion_timestamp_nanoseconds: ::core::option::Option<u64>,
+    /// The next principal bytes that should be checked by the next
+    /// running purge_old_tickets routine.
+    #[prost(bytes = "vec", optional, tag = "14")]
+    pub purge_old_tickets_next_principal: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 /// The initialisation data of the canister. Always specified on
 /// canister creation, and cannot be modified afterwards.

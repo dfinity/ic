@@ -38,7 +38,7 @@ use ic_sns_governance::{
     },
     types::ONE_MONTH_SECONDS,
 };
-use ic_sns_swap::swap::SALE_NEURON_MEMO_RANGE_START;
+use ic_sns_swap::swap::{FIRST_PRINCIPAL_BYTES, SALE_NEURON_MEMO_RANGE_START};
 use ic_sns_swap::{
     memory,
     pb::v1::{
@@ -147,6 +147,8 @@ fn create_generic_committed_swap() -> Swap {
         finalize_swap_in_progress: None,
         decentralization_sale_open_timestamp_seconds: None,
         next_ticket_id: Some(0),
+        purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
+        purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
     }
 }
 
@@ -1090,6 +1092,8 @@ async fn test_finalize_swap_ok() {
         finalize_swap_in_progress: None,
         decentralization_sale_open_timestamp_seconds: None,
         next_ticket_id: Some(0),
+        purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
+        purge_old_tickets_next_principal: Some(vec![0; 32]),
     };
     assert!(swap.try_commit_or_abort(END_TIMESTAMP_SECONDS));
     assert_eq!(swap.lifecycle(), Committed);
@@ -1352,6 +1356,8 @@ async fn test_finalize_swap_abort() {
         finalize_swap_in_progress: None,
         decentralization_sale_open_timestamp_seconds: None,
         next_ticket_id: Some(0),
+        purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
+        purge_old_tickets_next_principal: Some(vec![0; 32]),
     };
 
     assert!(swap.try_commit_or_abort(/* now_seconds: */ END_TIMESTAMP_SECONDS + 1));
