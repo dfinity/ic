@@ -8,8 +8,8 @@ use ic_interfaces::{
     },
     artifact_pool::{ArtifactPoolError, ReplicaVersionMismatch, UnvalidatedArtifact},
     canister_http::*,
-    certification::{CertificationPool, CertifierGossip},
-    consensus_pool::{ConsensusPool, ConsensusPoolCache},
+    certification::CertificationPool,
+    consensus_pool::ConsensusPool,
     dkg::DkgPool,
     ecdsa::EcdsaPool,
     gossip_pool::{
@@ -463,24 +463,20 @@ impl<Pool: IngressPool + IngressGossipPool + IngressPoolThrottler + Send + Sync 
 
 /// The certification `ArtifactClient` to be managed by the `ArtifactManager`.
 pub struct CertificationClient<PoolCertification> {
-    /// The consensus pool cache.
-    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     /// The certification pool, protected by a read-write lock and automatic
     /// reference counting.
     certification_pool: Arc<RwLock<PoolCertification>>,
-    /// The `CertifierGossip` client.
-    client: Arc<dyn CertifierGossip>,
+    /// The `ArtifactPoolDescriptor` client.
+    client: Arc<dyn ArtifactPoolDescriptor<CertificationArtifact, PoolCertification>>,
 }
 
 impl<PoolCertification> CertificationClient<PoolCertification> {
     /// The constructor creates a `CertificationClient` instance.
-    pub fn new<T: CertifierGossip + 'static>(
-        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    pub fn new<T: ArtifactPoolDescriptor<CertificationArtifact, PoolCertification> + 'static>(
         certification_pool: Arc<RwLock<PoolCertification>>,
         certifier: T,
     ) -> Self {
         Self {
-            consensus_pool_cache,
             certification_pool,
             client: Arc::new(certifier),
         }
@@ -539,12 +535,8 @@ impl<PoolCertification: CertificationPool + CertificationGossipPool + Send + Syn
     fn get_priority_function(
         &self,
     ) -> Option<PriorityFn<CertificationMessageId, CertificationMessageAttribute>> {
-        let consensus_pool_cache = self.consensus_pool_cache.as_ref();
         let certification_pool = &*self.certification_pool.read().unwrap();
-        Some(
-            self.client
-                .get_priority_function(consensus_pool_cache, certification_pool),
-        )
+        Some(self.client.get_priority_function(certification_pool))
     }
 
     /// The method returns a new (single-chunked) certification tracker,

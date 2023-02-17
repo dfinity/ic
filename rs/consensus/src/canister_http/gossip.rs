@@ -16,7 +16,7 @@ use ic_types::{
 };
 use std::{collections::BTreeSet, sync::Arc};
 
-/// The canonical implementation of [`CanisterHttpGossip`]
+/// The canonical implementation of [`ArtifactPoolDescriptor`]
 pub struct CanisterHttpGossipImpl {
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,

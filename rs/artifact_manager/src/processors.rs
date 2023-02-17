@@ -7,7 +7,7 @@ use ic_interfaces::{
     artifact_pool::UnvalidatedArtifact,
     canister_http::*,
     certification,
-    certification::{Certifier, CertifierGossip, MutableCertificationPool},
+    certification::{Certifier, MutableCertificationPool},
     consensus::Consensus,
     consensus_pool::{ChangeAction as ConsensusAction, ConsensusPoolCache, MutableConsensusPool},
     dkg::{ChangeAction as DkgChangeAction, Dkg, MutableDkgPool},
@@ -464,7 +464,7 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
     #[allow(clippy::too_many_arguments)]
     pub fn build<
         C: Certifier + 'static,
-        G: CertifierGossip + 'static,
+        G: ArtifactPoolDescriptor<CertificationArtifact, PoolCertification> + 'static,
         S: Fn(AdvertSendRequest<CertificationArtifact>) + Send + 'static,
         F: FnOnce() -> (C, G),
     >(
@@ -497,11 +497,7 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
             send_advert,
         );
         (
-            clients::CertificationClient::new(
-                consensus_pool_cache,
-                certification_pool,
-                certifier_gossip,
-            ),
+            clients::CertificationClient::new(certification_pool, certifier_gossip),
             manager,
         )
     }

@@ -3,9 +3,7 @@ use crate::{
     consensus_pool::ConsensusPoolCache,
     validation::{ValidationError, ValidationResult},
 };
-use ic_types::artifact::{CertificationMessageAttribute, CertificationMessageId};
 use ic_types::{
-    artifact::{CertificationMessageFilter, PriorityFn},
     consensus::certification::{Certification, CertificationMessage, CertificationShare},
     crypto::CryptoError,
     CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
@@ -48,20 +46,6 @@ pub trait Certifier: Send {
         consensus_cache: &dyn ConsensusPoolCache,
         certification_pool: Arc<RwLock<dyn CertificationPool>>,
     ) -> ChangeSet;
-}
-
-/// Trait containing methods related to gossiping.
-pub trait CertifierGossip: Send + Sync {
-    /// Return the priority function for the Gossip protocol to optimize the
-    /// artifact exchange.
-    fn get_priority_function(
-        &self,
-        consensus_cache: &dyn ConsensusPoolCache,
-        certification_pool: &dyn CertificationPool,
-    ) -> PriorityFn<CertificationMessageId, CertificationMessageAttribute>;
-
-    /// Return a filter that represents what artifacts are needed.
-    fn get_filter(&self) -> CertificationMessageFilter;
 }
 
 /// Contains all possible change actions applicable to the certification pool.

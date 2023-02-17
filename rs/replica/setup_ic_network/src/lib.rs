@@ -364,6 +364,7 @@ fn setup_artifact_manager(
                     Arc::clone(&membership) as Arc<_>,
                     Arc::clone(&certifier_crypto),
                     Arc::clone(&state_manager) as Arc<_>,
+                    Arc::clone(&artifact_pools.consensus_pool_cache) as Arc<_>,
                     metrics_registry.clone(),
                     replica_logger.clone(),
                 )
