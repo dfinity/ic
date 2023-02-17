@@ -35,6 +35,9 @@ slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debu
 [dev-dependencies]
 assert_matches = "1.3.0"
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
+ic-state-machine-tests = { path = "../state_machine_tests" }
+xnet-test = { path = "../rust_canisters/xnet_test" }
+canister-test = { path = "../rust_canisters/canister_test" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-execution-environment = { path = "../test_utilities/execution_environment" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }

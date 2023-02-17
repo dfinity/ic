@@ -6885,6 +6885,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "candid",
+ "canister-test",
  "ic-base-types",
  "ic-certification-version",
  "ic-config",
@@ -6909,6 +6910,7 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-replicated-state",
+ "ic-state-machine-tests",
  "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-test-utilities-logger",
@@ -6922,6 +6924,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "slog",
+ "xnet-test",
 ]
 
 [[package]]
