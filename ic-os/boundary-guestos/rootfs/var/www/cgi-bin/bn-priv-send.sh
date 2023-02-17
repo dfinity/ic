@@ -15,6 +15,7 @@ LOGFILE=/var/www/cgi-bin/cgi.log
 UPLOAD_DIR=/var/www/cgi-bin/artifacts
 SEV_TOOL=/opt/ic/bin/sevtool
 SEV_GUEST_TOOL=/opt/ic/bin/sev-guest-parse-report
+ARK_PEM=/opt/ic/share/ark.pem
 
 log() {
     echo "[$(date --rfc-3339='ns')] $@" >>${LOGFILE}
@@ -107,6 +108,9 @@ main() {
     fi
 
     log "Report and encrypted private key received."
+
+    # Copy over hard coded root of trust ARK PEM.
+    cp "${ARK_PEM}" "${work_dir}/"
 
     # Validate the guest report and its certificate chain
     if validate_privkey ${work_dir}; then

@@ -27,8 +27,8 @@ if [ -e /dev/sev-guest ]; then
         done
 
         # Create the corresponding tarballs for the nginx to deliver
-        tar -czvf ${HTML_DIR}/report_pem.tar.gz -C ${DIR} bn_pub.key guest_report_pem.bin vcek.pem ark.pem ask.pem
-        tar -czvf ${HTML_DIR}/report_csr.tar.gz -C ${DIR} BN.csr guest_report_csr.bin vcek.pem ark.pem ask.pem
+        tar -czvf ${HTML_DIR}/report_pem.tar.gz -C ${DIR} bn_pub.key guest_report_pem.bin vcek.pem ask.pem
+        tar -czvf ${HTML_DIR}/report_csr.tar.gz -C ${DIR} BN.csr guest_report_csr.bin vcek.pem ask.pem
 
         # Give the right permissions for the cgi scripts
         chown www-data:www-data ${DIR}/bn_priv.key
