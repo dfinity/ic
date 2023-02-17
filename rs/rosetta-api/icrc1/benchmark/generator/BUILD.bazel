@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/benchmark/worker",
     "//rs/rosetta-api/icrc1/client/cdk",
+    "//rs/rosetta-api/icrc1/index",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/ledger_core",
     "//rs/rust_canisters/dfn_core",
