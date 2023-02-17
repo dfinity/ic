@@ -2,9 +2,9 @@ use super::verifier::VerifierImpl;
 use super::CertificationCrypto;
 use crate::consensus::{membership::Membership, utils};
 use ic_interfaces::{
+    artifact_manager::ArtifactPoolDescriptor,
     certification::{
-        CertificationPool, Certifier, CertifierGossip, ChangeAction, ChangeSet, Verifier,
-        VerifierError,
+        CertificationPool, Certifier, ChangeAction, ChangeSet, Verifier, VerifierError,
     },
     consensus_pool::ConsensusPoolCache,
     validation::ValidationError,
@@ -19,6 +19,7 @@ use ic_types::{
         CertificationMessageAttribute, CertificationMessageFilter, CertificationMessageId,
         Priority, PriorityFn,
     },
+    artifact_kind::CertificationArtifact,
     consensus::certification::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
     },
@@ -48,6 +49,7 @@ pub struct CertifierImpl {
 /// pool and submitting the corresponding change sets.
 pub struct CertifierGossipImpl {
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
 }
 
 struct CertifierMetrics {
@@ -57,7 +59,9 @@ struct CertifierMetrics {
     execution_time: Histogram,
 }
 
-impl CertifierGossip for CertifierGossipImpl {
+impl<Pool: CertificationPool> ArtifactPoolDescriptor<CertificationArtifact, Pool>
+    for CertifierGossipImpl
+{
     // The priority function requires just the height of the artifact to decide if
     // it should be fetched or not: if we already have a full certification at
     // that height or this height is below the CUP height, we're not interested in
@@ -65,11 +69,10 @@ impl CertifierGossip for CertifierGossipImpl {
     // have a full certification at that height, we're interested in all artifacts.
     fn get_priority_function(
         &self,
-        consensus_cache: &dyn ConsensusPoolCache,
-        certification_pool: &dyn CertificationPool,
+        certification_pool: &Pool,
     ) -> PriorityFn<CertificationMessageId, CertificationMessageAttribute> {
         let certified_heights = certification_pool.certified_heights();
-        let cup_height = consensus_cache.catch_up_package().height();
+        let cup_height = self.consensus_pool_cache.catch_up_package().height();
         Box::new(move |_, attribute| {
             let height = match attribute {
                 CertificationMessageAttribute::Certification(height) => height,
@@ -116,6 +119,7 @@ pub fn setup(
     membership: Arc<Membership>,
     crypto: Arc<dyn CertificationCrypto>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     metrics_registry: MetricsRegistry,
     log: ReplicaLogger,
 ) -> (CertifierImpl, CertifierGossipImpl) {
@@ -128,7 +132,10 @@ pub fn setup(
             metrics_registry,
             log,
         ),
-        CertifierGossipImpl { state_manager },
+        CertifierGossipImpl {
+            state_manager,
+            consensus_pool_cache,
+        },
     )
 }
 
@@ -697,6 +704,7 @@ mod tests {
                     membership,
                     crypto,
                     state_manager.clone(),
+                    pool.get_cache(),
                     metrics_registry,
                     log,
                 );
@@ -712,7 +720,7 @@ mod tests {
                 );
                 cert_pool.apply_changes(change_set);
 
-                let prio_fn = certifier_gossip.get_priority_function(pool.as_cache(), &cert_pool);
+                let prio_fn = certifier_gossip.get_priority_function(&cert_pool);
                 for (height, prio) in &[
                     (1, Priority::Drop),
                     (2, Priority::Fetch),
