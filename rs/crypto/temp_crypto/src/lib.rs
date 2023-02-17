@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
-use ic_crypto::{CryptoComponent, CryptoComponentFatClient};
+use ic_crypto::{CryptoComponent, CryptoComponentImpl};
 use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
@@ -82,7 +82,7 @@ pub type TempCryptoComponent = TempCryptoComponentGeneric<Csp>;
 /// directory will exist for as long as the struct exists and is automatically
 /// deleted once the struct goes out of scope.
 pub struct TempCryptoComponentGeneric<C: CryptoServiceProvider> {
-    crypto_component: CryptoComponentFatClient<C>,
+    crypto_component: CryptoComponentImpl<C>,
     remote_vault_environment: Option<RemoteVaultEnvironment>,
     temp_dir: TempDir,
 }
@@ -116,7 +116,7 @@ impl TokioRuntimeOrHandle {
 }
 
 impl<C: CryptoServiceProvider> Deref for TempCryptoComponentGeneric<C> {
-    type Target = CryptoComponentFatClient<C>;
+    type Target = CryptoComponentImpl<C>;
 
     fn deref(&self) -> &Self::Target {
         &self.crypto_component

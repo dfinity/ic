@@ -4,7 +4,7 @@
 //! verification, TLS handshakes, and random number generation.
 //!
 //! Please refer to the 'Trait Implementations' section of the
-//! `CryptoComponentFatClient` to get an overview of the functionality offered
+//! `CryptoComponentImpl` to get an overview of the functionality offered
 //! by the `CryptoComponent`.
 //!
 //! # Architecture Overview
@@ -50,9 +50,9 @@ use std::sync::Arc;
 /// `ThresholdSigDataStore`.
 pub const THRESHOLD_SIG_DATA_STORE_CAPACITY: usize = ThresholdSigDataStoreImpl::CAPACITY;
 
-/// A type alias for `CryptoComponentFatClient<Csp>`.
-/// See the Rust documentation of `CryptoComponentFatClient`.
-pub type CryptoComponent = CryptoComponentFatClient<Csp>;
+/// A type alias for `CryptoComponentImpl<Csp>`.
+/// See the Rust documentation of `CryptoComponentImpl`.
+pub type CryptoComponent = CryptoComponentImpl<Csp>;
 
 /// A crypto component that offers limited functionality and can be used outside
 /// of the replica process.
@@ -93,7 +93,7 @@ impl<T> CryptoComponentForNonReplicaProcess for T where
 /// Allows Internet Computer nodes to perform crypto operations such as
 /// distributed key generation, signing, signature verification, and TLS
 /// handshakes.
-pub struct CryptoComponentFatClient<C: CryptoServiceProvider> {
+pub struct CryptoComponentImpl<C: CryptoServiceProvider> {
     lockable_threshold_sig_data_store: LockableThresholdSigDataStore,
     csp: C,
     registry_client: Arc<dyn RegistryClient>,
@@ -132,7 +132,7 @@ impl LockableThresholdSigDataStore {
     }
 }
 
-impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
     /// Creates a crypto component using the given `csp` and fake `node_id`.
     pub fn new_with_csp_and_fake_node_id(
         csp: C,
@@ -142,7 +142,7 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
         metrics: Arc<CryptoMetrics>,
         time_source: Option<Arc<dyn TimeSource>>,
     ) -> Self {
-        CryptoComponentFatClient {
+        CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
             registry_client,
@@ -155,16 +155,16 @@ impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
     }
 }
 
-impl<C: CryptoServiceProvider> fmt::Debug for CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider> fmt::Debug for CryptoComponentImpl<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "CryptoComponentFatClient {{ csp: <OMITTED>, registry: <OMITTED> }}"
+            "CryptoComponentImpl {{ csp: <OMITTED>, registry: <OMITTED> }}"
         )
     }
 }
 
-impl CryptoComponentFatClient<Csp> {
+impl CryptoComponentImpl<Csp> {
     /// Creates a new crypto component.
     ///
     /// This is the constructor to use to create the replica's / node's crypto
@@ -241,7 +241,7 @@ impl CryptoComponentFatClient<Csp> {
             .expect("Missing node signing public key");
         let node_id = derive_node_id(node_signing_pk);
         let latest_registry_version = registry_client.get_latest_version();
-        let crypto_component = CryptoComponentFatClient {
+        let crypto_component = CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp,
             registry_client,
@@ -268,7 +268,7 @@ impl CryptoComponentFatClient<Csp> {
         time_source: Arc<dyn TimeSource>,
     ) -> Self {
         let metrics = Arc::new(CryptoMetrics::none());
-        CryptoComponentFatClient {
+        CryptoComponentImpl {
             lockable_threshold_sig_data_store: LockableThresholdSigDataStore::new(),
             csp: Csp::new(
                 config,
@@ -301,7 +301,7 @@ impl CryptoComponentFatClient<Csp> {
     /// nested), or by wrapping them with `tokio::task::block_in_place`
     /// and accepting the performance implications.
     /// Because the asynchronous communication with the vault happens only for
-    /// secret key operations, for the `CryptoComponentFatClient` the concerned
+    /// secret key operations, for the `CryptoComponentImpl` the concerned
     /// methods are
     /// * `KeyManager::check_keys_with_registry`
     /// * `BasicSigner::sign_basic`
@@ -323,7 +323,7 @@ impl CryptoComponentFatClient<Csp> {
         logger: ReplicaLogger,
         metrics_registry: Option<&MetricsRegistry>,
     ) -> impl CryptoComponentForNonReplicaProcess {
-        CryptoComponentFatClient::new(
+        CryptoComponentImpl::new(
             config,
             tokio_runtime_handle,
             registry_client,
