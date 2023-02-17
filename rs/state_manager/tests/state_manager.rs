@@ -11,7 +11,7 @@ use ic_replicated_state::{
     page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NumWasmPages, PageMap,
     ReplicatedState, Stream,
 };
-use ic_state_machine_tests::StateMachineBuilder;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::{
     tip::TipRequest, BitcoinPageMap, DirtyPageMap, FileType, PageMapType, StateManagerImpl,
 };
@@ -114,6 +114,16 @@ const TEST_CANISTER: &str = r#"
 
 #[test]
 fn skipping_flushing_is_invisible_for_state() {
+    fn skips(env: &StateMachine) -> f64 {
+        env.metrics_registry()
+            .prometheus_registry()
+            .gather()
+            .into_iter()
+            .filter(|x| x.get_name() == "state_manager_page_map_flush_skips")
+            .map(|x| x.get_metric()[0].get_counter().get_value())
+            .next()
+            .unwrap()
+    }
     fn execute(block_tip: bool) -> CryptoHashOfState {
         let env = StateMachineBuilder::new().build();
         env.set_checkpoints_enabled(false);
@@ -125,7 +135,7 @@ fn skipping_flushing_is_invisible_for_state() {
         // One wait occupies the TipHandler thread, the second (nop) makes queue non-empty
         // to cause flush skips. 0-size channel blocks send in the TipHandler until we call recv()
         let (send_wait, recv_wait) = crossbeam_channel::bounded::<()>(0);
-        let (send_nop, _) = crossbeam_channel::unbounded();
+        let (send_nop, recv_nop) = crossbeam_channel::unbounded();
         tip_channel
             .send(TipRequest::Wait { sender: send_wait })
             .unwrap();
@@ -134,33 +144,29 @@ fn skipping_flushing_is_invisible_for_state() {
             .unwrap();
         if !block_tip {
             recv_wait.recv().unwrap();
+            recv_nop.recv().unwrap();
         }
+        let skips_before = skips(&env);
         env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
         env.execute_ingress(canister_id1, "inc", vec![]).unwrap();
+        let skips_after = skips(&env);
         if block_tip {
             recv_wait.recv().unwrap();
+            recv_nop.recv().unwrap();
         }
         env.set_checkpoints_enabled(true);
         std::mem::drop(tip_channel);
-        let skips = env
-            .metrics_registry()
-            .prometheus_registry()
-            .gather()
-            .into_iter()
-            .filter(|x| x.get_name() == "state_manager_page_map_flush_skips")
-            .map(|x| x.get_metric()[0].get_counter().get_value())
-            .next()
-            .unwrap();
         if block_tip {
-            assert_eq!(skips, 2.0)
+            assert_eq!(skips_after - skips_before, 2.0)
         } else {
-            assert_eq!(skips, 0.0)
+            assert_eq!(skips_after - skips_before, 0.0)
         }
         let env = env.restart_node();
         env.tick();
 
         env.await_state_hash()
     }
+
     assert_eq!(execute(false), execute(true));
 }
 
