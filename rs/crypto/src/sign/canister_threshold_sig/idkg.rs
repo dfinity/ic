@@ -1,5 +1,5 @@
 use crate::sign::{get_log_id, log_err, log_ok_content};
-use crate::CryptoComponentFatClient;
+use crate::CryptoComponentImpl;
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_interfaces::crypto::IDkgProtocol;
 use ic_logger::{debug, new_logger};
@@ -31,7 +31,7 @@ pub use utils::{
     MegaKeyFromRegistryError,
 };
 
-impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
     fn create_dealing(
         &self,
         params: &IDkgTranscriptParams,

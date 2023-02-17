@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::NodeId;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto::{CryptoComponent, CryptoComponentFatClient};
+use ic_crypto::{CryptoComponent, CryptoComponentImpl};
 use ic_crypto_internal_csp::keygen::utils::{
     mega_public_key_from_proto, MEGaPublicKeyFromProtoError,
 };
@@ -137,19 +137,19 @@ fn ensure_node_keys_are_generated_correctly(node_pks: &CurrentNodePublicKeys, no
     assert_eq!(*node_id, derived_node_id);
 }
 
-fn local_crypto_component(config: &CryptoConfig) -> Arc<CryptoComponentFatClient<Csp>> {
+fn local_crypto_component(config: &CryptoConfig) -> Arc<CryptoComponentImpl<Csp>> {
     crypto_component(config, None)
 }
 fn remote_crypto_component(
     config: &CryptoConfig,
     tokio_runtime_handle: tokio::runtime::Handle,
-) -> Arc<CryptoComponentFatClient<Csp>> {
+) -> Arc<CryptoComponentImpl<Csp>> {
     crypto_component(config, Some(tokio_runtime_handle))
 }
 fn crypto_component(
     config: &CryptoConfig,
     tokio_runtime_handle: Option<tokio::runtime::Handle>,
-) -> Arc<CryptoComponentFatClient<Csp>> {
+) -> Arc<CryptoComponentImpl<Csp>> {
     let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
     let logger = no_op_logger();
     let metrics_registry = MetricsRegistry::new();

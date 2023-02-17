@@ -54,7 +54,7 @@ pub(crate) use ic_crypto_internal_csp::imported_utilities::sign_utils as utils;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_types::signature::BasicSignatureBatch;
 
-impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentImpl<C> {
     fn sign_basic(
         &self,
         message: &H,
@@ -98,7 +98,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentFa
     }
 }
 
-impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoComponentImpl<C> {
     fn verify_basic_sig(
         &self,
         signature: &BasicSigOf<H>,
@@ -218,7 +218,7 @@ impl<C: CryptoServiceProvider, H: Signable> BasicSigVerifier<H> for CryptoCompon
 }
 
 impl<C: CryptoServiceProvider, S: Signable> BasicSigVerifierByPublicKey<S>
-    for CryptoComponentFatClient<C>
+    for CryptoComponentImpl<C>
 {
     fn verify_basic_sig_by_public_key(
         &self,
@@ -262,7 +262,7 @@ impl<C: CryptoServiceProvider, S: Signable> BasicSigVerifierByPublicKey<S>
     }
 }
 
-impl<C: CryptoServiceProvider, H: Signable> MultiSigner<H> for CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider, H: Signable> MultiSigner<H> for CryptoComponentImpl<C> {
     fn sign_multi(
         &self,
         message: &H,
@@ -306,7 +306,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigner<H> for CryptoComponentFa
     }
 }
 
-impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoComponentImpl<C> {
     fn verify_multi_sig_individual(
         &self,
         signature: &IndividualMultiSigOf<H>,
@@ -439,7 +439,7 @@ impl<C: CryptoServiceProvider, H: Signable> MultiSigVerifier<H> for CryptoCompon
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoComponentImpl<C> {
     // TODO (CRP-479): switch to Result<ThresholdSigShareOf<T>,
     // ThresholdSigDataNotFoundError>
     fn sign_threshold(&self, message: &T, dkg_id: DkgId) -> CryptoResult<ThresholdSigShareOf<T>> {
@@ -478,9 +478,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigner<T> for CryptoCompone
     }
 }
 
-impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
-    for CryptoComponentFatClient<C>
-{
+impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T> for CryptoComponentImpl<C> {
     fn verify_threshold_sig_share(
         &self,
         signature: &ThresholdSigShareOf<T>,
@@ -607,7 +605,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifier<T>
 }
 
 impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
-    for CryptoComponentFatClient<C>
+    for CryptoComponentImpl<C>
 {
     fn verify_combined_threshold_sig_by_public_key(
         &self,
@@ -654,7 +652,7 @@ impl<C: CryptoServiceProvider, T: Signable> ThresholdSigVerifierByPublicKey<T>
     }
 }
 
-impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoComponentImpl<C> {
     fn verify_canister_sig(
         &self,
         signature: &CanisterSigOf<S>,
@@ -703,7 +701,7 @@ impl<C: CryptoServiceProvider, S: Signable> CanisterSigVerifier<S> for CryptoCom
     }
 }
 
-impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentImpl<C> {
     fn sign_share(
         &self,
         inputs: &ThresholdEcdsaSigInputs,
@@ -737,7 +735,7 @@ impl<C: CryptoServiceProvider> ThresholdEcdsaSigner for CryptoComponentFatClient
     }
 }
 
-impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider> ThresholdEcdsaSigVerifier for CryptoComponentImpl<C> {
     fn verify_sig_share(
         &self,
         signer: NodeId,

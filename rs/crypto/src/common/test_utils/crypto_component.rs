@@ -1,4 +1,4 @@
-use crate::CryptoComponentFatClient;
+use crate::CryptoComponentImpl;
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_interfaces_registry::RegistryClient;
@@ -11,8 +11,8 @@ const NODE_ID: u64 = 42;
 pub fn crypto_component_with_csp<C: CryptoServiceProvider>(
     csp: C,
     registry_client: Arc<dyn RegistryClient>,
-) -> CryptoComponentFatClient<C> {
-    CryptoComponentFatClient::new_with_csp_and_fake_node_id(
+) -> CryptoComponentImpl<C> {
+    CryptoComponentImpl::new_with_csp_and_fake_node_id(
         csp,
         no_op_logger(),
         registry_client,

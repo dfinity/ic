@@ -4,7 +4,7 @@ mod tests;
 use crate::sign::{
     fetch_idkg_dealing_encryption_public_key_from_registry, MegaKeyFromRegistryError,
 };
-use crate::{key_from_registry, tls_certificate_from_registry, CryptoComponentFatClient};
+use crate::{key_from_registry, tls_certificate_from_registry, CryptoComponentImpl};
 use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use ic_crypto_internal_csp::types::ExternalPublicKeys;
 use ic_crypto_internal_csp::vault::api::{NodeKeysErrors, PksAndSksContainsErrors};
@@ -24,7 +24,7 @@ use ic_types::registry::RegistryClientError;
 use ic_types::{RegistryVersion, Time};
 use std::time::Duration;
 
-impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider> KeyManager for CryptoComponentImpl<C> {
     fn check_keys_with_registry(
         &self,
         registry_version: RegistryVersion,
@@ -128,7 +128,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentFatClient<C> {
 }
 
 // Helpers for implementing `KeyManager`-trait.
-impl<C: CryptoServiceProvider> CryptoComponentFatClient<C> {
+impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
     fn retrieve_keys_from_registry(&self, registry_version: RegistryVersion) -> RegistryKeysResult {
         let node_signing_public_key = key_from_registry(
             self.registry_client.as_ref(),

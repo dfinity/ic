@@ -1240,7 +1240,7 @@ mod check_keys_with_registry {
 
     struct Setup {
         metrics_registry: MetricsRegistry,
-        crypto: CryptoComponentFatClient<MockAllCryptoServiceProvider>,
+        crypto: CryptoComponentImpl<MockAllCryptoServiceProvider>,
         registry_client: Arc<FakeRegistryClient>,
         time_source: Arc<FastForwardTimeSource>,
     }
@@ -1389,7 +1389,7 @@ mod check_keys_with_registry {
             );
 
             let time_source = FastForwardTimeSource::new();
-            let crypto = CryptoComponentFatClient::new_with_csp_and_fake_node_id(
+            let crypto = CryptoComponentImpl::new_with_csp_and_fake_node_id(
                 mock_csp,
                 self.logger.unwrap_or_else(|| no_op_logger()),
                 registry_client.clone(),
@@ -1882,7 +1882,7 @@ mod rotate_idkg_dealing_encryption_keys {
             )
             .expect("Failed to add subnet list record key");
 
-        let crypto_component = CryptoComponentFatClient::new_with_csp_and_fake_node_id(
+        let crypto_component = CryptoComponentImpl::new_with_csp_and_fake_node_id(
             csp,
             no_op_logger(),
             registry_client.clone(),
@@ -2073,7 +2073,7 @@ mod idkg_dealing_encryption_pubkeys_count {
         let registry_client =
             Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
 
-        let crypto_component = CryptoComponentFatClient::new_with_csp_and_fake_node_id(
+        let crypto_component = CryptoComponentImpl::new_with_csp_and_fake_node_id(
             csp,
             no_op_logger(),
             registry_client.clone(),

@@ -17,7 +17,7 @@ use tokio::net::TcpStream;
 mod rustls;
 
 #[async_trait]
-impl<CSP> TlsHandshake for CryptoComponentFatClient<CSP>
+impl<CSP> TlsHandshake for CryptoComponentImpl<CSP>
 where
     CSP: CryptoServiceProvider + Send + Sync,
 {
