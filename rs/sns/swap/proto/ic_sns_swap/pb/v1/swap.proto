@@ -226,6 +226,13 @@ message Swap {
   // users new ticket upon successfully requesting a new ticket. It is incremented
   // after a user requests a new ticket successfully. 
   optional uint64 next_ticket_id = 12;
+
+  // The last time the purge_old_tickets routine was completed.
+  optional uint64 purge_old_tickets_last_completion_timestamp_nanoseconds = 13;
+
+  // The next principal bytes that should be checked by the next
+  // running purge_old_tickets routine.
+  optional bytes purge_old_tickets_next_principal = 14;
 }
 
 // The initialisation data of the canister. Always specified on

@@ -47,7 +47,9 @@ use itertools::{Either, Itertools};
 use maplit::btreemap;
 use prost::Message;
 use rust_decimal::prelude::ToPrimitive;
+use std::borrow::Cow;
 use std::collections::BTreeMap;
+use std::ops::Bound::{Included, Unbounded};
 use std::{
     mem,
     num::{NonZeroU128, NonZeroU64},
@@ -79,6 +81,12 @@ const DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT: u32 = 10_000;
 /// conflict with the memos of Sale neurons.
 pub const SALE_NEURON_MEMO_RANGE_START: u64 = 1_000_000;
 pub const SALE_NEURON_MEMO_RANGE_END: u64 = 10_000_000;
+
+// The principal with all bytes set to zero. The main property
+// of this principal is that for any principal p != FIRST_PRINCIPAL_BYTES
+// then p.as_slice() < FIRST_PRINCIPAL_BYTES.as_slice().
+pub const FIRST_PRINCIPAL_BYTES: [u8; PrincipalId::MAX_LENGTH_IN_BYTES] =
+    [0; PrincipalId::MAX_LENGTH_IN_BYTES];
 
 impl From<(Option<i32>, String)> for CanisterCallError {
     fn from((code, description): (Option<i32>, String)) -> Self {
@@ -223,6 +231,8 @@ impl Swap {
             finalize_swap_in_progress: Some(false),
             decentralization_sale_open_timestamp_seconds: None,
             next_ticket_id: Some(0),
+            purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
+            purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
         }
     }
 
@@ -294,6 +304,9 @@ impl Swap {
     /// Returns true if a transition was made, and false otherwise.
     pub fn try_open_after_delay(&mut self, now_seconds: u64) -> bool {
         if self.can_open(now_seconds) {
+            // set the purge_old_ticket last principal so that the routine can start
+            // in the next heartbeat
+            self.purge_old_tickets_next_principal = Some(FIRST_PRINCIPAL_BYTES.to_vec());
             self.set_lifecycle(Lifecycle::Open);
             return true;
         }
@@ -382,6 +395,9 @@ impl Swap {
         if open_delay_seconds > 0 {
             self.set_lifecycle(Lifecycle::Adopted);
         } else {
+            // set the purge_old_ticket last principal so that the routine can start
+            // in the next heartbeat
+            self.purge_old_tickets_next_principal = Some(FIRST_PRINCIPAL_BYTES.to_vec());
             self.set_lifecycle(Lifecycle::Open);
         }
         Ok(OpenResponse {})
@@ -1920,6 +1936,155 @@ impl Swap {
         NewSaleTicketResponse::ok(ticket)
     }
 
+    // Calls purge_old_tickets when needed.
+    //
+    // The conditions to call purge_old_tickets are the following:
+    // 1. there are more than `number_of_tickets_threshold` tickets
+    // 2. the `lifecycle` is `Open`
+    // 3. either there is an ongoing purge_old_tickets running or
+    //    10 minutes has passed since the last call
+    //
+    // Returns None if purge_old_tickets was not run, Some(false) if it was
+    // run but didn't complete, Some(true) if it was run and completed the
+    // check of all tickets.
+    pub fn try_purge_old_tickets(
+        &mut self,
+        now_nanoseconds: impl Fn() -> u64,
+        /* amount of tickets after which purge_old_tickets is executed */
+        number_of_tickets_threshold: u64,
+        /* minimum age of a ticket to be purged */
+        max_age_in_nanoseconds: u64,
+        /* max number of inspect in a single call */
+        max_number_to_inspect: u64,
+    ) -> Option<bool> {
+        const INTERVAL_NANOSECONDS: u64 = 60 * 10 * 1_000_000_000; // 10 minutes
+
+        if self.lifecycle() != Lifecycle::Open {
+            return None;
+        }
+
+        // Do not run purge_old_tickets if the number of tickets is less than or equal
+        // to the threshold. This should save cycles.
+        if memory::OPEN_TICKETS_MEMORY.with(|ts| ts.borrow().len()) < number_of_tickets_threshold {
+            return None;
+        }
+
+        let purge_old_tickets_last_completion_timestamp_nanoseconds = self
+            .purge_old_tickets_last_completion_timestamp_nanoseconds
+            .unwrap_or(0);
+
+        let purge_old_tickets_next_principal = self.purge_old_tickets_next_principal().to_vec();
+        let first_principal_bytes = FIRST_PRINCIPAL_BYTES.to_vec();
+
+        if purge_old_tickets_next_principal != first_principal_bytes
+            || purge_old_tickets_last_completion_timestamp_nanoseconds + INTERVAL_NANOSECONDS
+                <= now_nanoseconds()
+        {
+            match self.purge_old_tickets(
+                now_nanoseconds(),
+                purge_old_tickets_next_principal,
+                max_age_in_nanoseconds,
+                max_number_to_inspect,
+            ) {
+                Some(new_next_principal) => {
+                    // If a principal is returned then there are some principals
+                    // that haven't been checked yet by purge_old_tickets. We record
+                    // the next principal so that the next heartbeat can continue the
+                    // work.
+                    self.purge_old_tickets_next_principal = Some(new_next_principal);
+                    return Some(false);
+                }
+                None => {
+                    // If no principal is returned then purge_old_tickets has
+                    // exhausted all the tickets.
+                    log!(INFO, "purge_old_tickets done");
+                    self.purge_old_tickets_next_principal = Some(first_principal_bytes);
+                    self.purge_old_tickets_last_completion_timestamp_nanoseconds =
+                        Some(now_nanoseconds());
+                    return Some(true);
+                }
+            }
+        }
+        None
+    }
+
+    /// Purge tickets that are older than 2 days.
+    ///
+    /// Because there can be many tickets, this method takes in input a starting principal,
+    /// attempts to purge the first batch of MAX_NUMBER_OF_PRINCIPALS_TO_INSPECT principals and
+    /// returns the last one purged so that the calling method can decide if it wants to
+    /// continue with the next batch.
+    fn purge_old_tickets(
+        &self,
+        curr_time_in_nanoseconds: u64,
+        start_principal: Vec<u8>,
+        /* minimum age of a ticket to be purged */
+        max_age_in_nanoseconds: u64,
+        /* max number of inspect in a single call */
+        max_number_to_inspect: u64,
+    ) -> Option<Vec<u8>> {
+        if start_principal == FIRST_PRINCIPAL_BYTES.to_vec() {
+            log!(
+                INFO,
+                "purge_old_tickets started from {}, number of tickets {}",
+                hex::encode(&start_principal),
+                memory::OPEN_TICKETS_MEMORY.with(|ts| ts.borrow().len()),
+            );
+        } else {
+            log!(
+                INFO,
+                "purge_old_tickets resumed from {:?}",
+                hex::encode(&start_principal),
+            );
+        }
+
+        memory::OPEN_TICKETS_MEMORY.with(|tickets| {
+            let mut to_purge = vec![];
+            let last_principal = {
+                let mut last_principal = None;
+                let tickets = tickets.borrow();
+                let min_principal = Blob::from_bytes(Cow::from(&start_principal[..]));
+                let mut iter = tickets.range((Included(min_principal), Unbounded));
+                for _i in 0..max_number_to_inspect {
+                    match iter.next() {
+                        Some((principal, ticket)) => {
+                            last_principal = Some(principal.as_slice().to_vec());
+                            // ticket.creation_time is in nanoseconds
+                            if ticket.creation_time + max_age_in_nanoseconds
+                                < curr_time_in_nanoseconds
+                            {
+                                to_purge.push(principal);
+                            }
+                        }
+                        None => {
+                            last_principal = None;
+                            break;
+                        }
+                    }
+                }
+                last_principal
+            };
+
+            if !to_purge.is_empty() {
+                log!(
+                    INFO,
+                    "Purging {} open tickets because they are older than {} seconds (number of open tickets: {})",
+                    to_purge.len(),
+                    max_age_in_nanoseconds,
+                    tickets.borrow().len(),
+                );
+            }
+
+            for principal in to_purge {
+                if tickets.borrow_mut().remove(&principal).is_none() {
+                    log!(ERROR, "Cannot purge ticket of principal {:?} because it doesn't exist! This should not happen", principal.as_slice())
+                }
+            }
+
+            last_principal
+        })
+    }
+
     //
     // --- predicates on the state ---------------------------------------------
     //
@@ -2494,6 +2659,18 @@ impl GetOpenTicketResponse {
             error_type: Some(get_open_ticket_response::err::Type::SaleClosed as i32),
         })
     }
+
+    // panic if self.result is unset
+    pub fn ticket(&self) -> Result<Option<Ticket>, i32> {
+        match self.result.as_ref().unwrap() {
+            get_open_ticket_response::Result::Ok(get_open_ticket_response::Ok { ticket }) => {
+                Ok(ticket.to_owned())
+            }
+            get_open_ticket_response::Result::Err(get_open_ticket_response::Err { error_type }) => {
+                Err(error_type.unwrap_or(-1))
+            }
+        }
+    }
 }
 
 impl NewSaleTicketResponse {
@@ -2565,6 +2742,16 @@ impl NewSaleTicketResponse {
             }),
             existing_ticket: None,
         })
+    }
+
+    // panics if self.result is not set or the ticket is not set
+    pub fn ticket(&self) -> Result<Ticket, new_sale_ticket_response::Err> {
+        match self.result.as_ref().unwrap() {
+            new_sale_ticket_response::Result::Ok(new_sale_ticket_response::Ok { ticket }) => {
+                Ok(ticket.to_owned().unwrap())
+            }
+            new_sale_ticket_response::Result::Err(err) => Err(err.clone()),
+        }
     }
 }
 
@@ -3203,6 +3390,8 @@ mod tests {
                 finalize_swap_in_progress: Some(false),
                 decentralization_sale_open_timestamp_seconds: Some(1),
                 next_ticket_id: Some(0),
+                purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
+                purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec())
             };
             let mut ticket_ids = HashSet::new();
             for pid in pids {
@@ -3394,5 +3583,265 @@ mod tests {
         // reached the maximum amount of time remaining
         assert!(result);
         assert_eq!(swap.lifecycle, Lifecycle::Aborted as i32);
+    }
+
+    #[test]
+    fn test_purge_old_tickets() {
+        const TEN_MINUTES: u64 = 60 * 10 * 1_000_000_000;
+        const ONE_DAY: u64 = SECONDS_PER_DAY * 1_000_000_000;
+        const NUMBER_OF_TICKETS_THRESHOLD: u64 = 10;
+        const MAX_AGE_IN_NANOSECONDS: u64 = ONE_DAY * 2;
+        const MAX_NUMBER_TO_INSPECT: u64 = 2;
+
+        let min_participant_icp_e8s = 1;
+        let mut sale = Swap {
+            lifecycle: Lifecycle::Open as i32,
+            init: Some(Init {
+                nns_governance_canister_id: PrincipalId::new_anonymous().to_string(),
+                sns_governance_canister_id: PrincipalId::new_anonymous().to_string(),
+                sns_ledger_canister_id: PrincipalId::new_anonymous().to_string(),
+                icp_ledger_canister_id: PrincipalId::new_anonymous().to_string(),
+                sns_root_canister_id: PrincipalId::new_anonymous().to_string(),
+                fallback_controller_principal_ids: vec![PrincipalId::new_anonymous().to_string()],
+                transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
+                neuron_minimum_stake_e8s: Some(0),
+            }),
+            params: Some(Params {
+                min_participants: 0,
+                min_icp_e8s: 1,
+                max_icp_e8s: 10,
+                min_participant_icp_e8s,
+                max_participant_icp_e8s: 1,
+                swap_due_timestamp_seconds: 10_000_000,
+                sns_token_e8s: 10_000_000,
+                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                    count: 1,
+                    dissolve_delay_interval_seconds: 1,
+                }),
+                sale_delay_seconds: Some(0),
+            }),
+            cf_participants: vec![],
+            buyers: BTreeMap::new(),
+            neuron_recipes: vec![],
+            open_sns_token_swap_proposal_id: Some(0),
+            finalize_swap_in_progress: Some(false),
+            decentralization_sale_open_timestamp_seconds: Some(10),
+            next_ticket_id: Some(0),
+            purge_old_tickets_last_completion_timestamp_nanoseconds: Some(0),
+            purge_old_tickets_next_principal: Some(FIRST_PRINCIPAL_BYTES.to_vec()),
+        };
+
+        let try_purge_old_tickets = |sale: &mut Swap, time: u64| loop {
+            match sale.try_purge_old_tickets(
+                || time,
+                NUMBER_OF_TICKETS_THRESHOLD,
+                MAX_AGE_IN_NANOSECONDS,
+                MAX_NUMBER_TO_INSPECT,
+            ) {
+                Some(false) => continue,
+                Some(true) => break,
+                None => panic!("purge_old_ticket was not run"),
+            }
+        };
+
+        // Check that the number_of_tickets_threshold parameter works and prevents
+        // the method from being called (None == purge_old_ticket didn't run)
+        assert_eq!(
+            sale.try_purge_old_tickets(
+                || TEN_MINUTES,
+                1, /* there are 0 tickets */
+                0,
+                u64::MAX
+            ),
+            None
+        );
+
+        let principals1: Vec<PrincipalId> = (0..10).map(PrincipalId::new_user_test_id).collect();
+        let principals2: Vec<PrincipalId> = (10..20).map(PrincipalId::new_user_test_id).collect();
+        let principals3: Vec<PrincipalId> = (20..30).map(PrincipalId::new_user_test_id).collect();
+
+        // add the first batch of tickets at the beginning of time
+        for principal in &principals1 {
+            assert!(sale
+                .new_sale_ticket(
+                    &NewSaleTicketRequest {
+                        amount_icp_e8s: min_participant_icp_e8s,
+                        subaccount: None
+                    },
+                    *principal,
+                    0
+                )
+                .ticket()
+                .is_ok());
+        }
+
+        // try to purge old tickets without advancing time. None of the tickets should be removed
+        try_purge_old_tickets(&mut sale, TEN_MINUTES); // TEN_MINUTES in order to trigger the call
+
+        // not purged because 0 days old
+        for principal in &principals1 {
+            assert!(sale
+                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                .ticket()
+                .unwrap()
+                .is_some());
+        }
+
+        // add the second batch of tickets after one day
+        for principal in &principals2 {
+            assert!(sale
+                .new_sale_ticket(
+                    &NewSaleTicketRequest {
+                        amount_icp_e8s: min_participant_icp_e8s,
+                        subaccount: None
+                    },
+                    *principal,
+                    ONE_DAY
+                )
+                .ticket()
+                .is_ok());
+        }
+
+        // try to purge old tickets after one day. None of the tickets should be removed
+        try_purge_old_tickets(&mut sale, ONE_DAY);
+
+        // not purged because 1 day old
+        for principal in &principals1 {
+            assert!(sale
+                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                .ticket()
+                .unwrap()
+                .is_some());
+        }
+
+        // not purged because 0 days old
+        for principal in &principals2 {
+            assert!(sale
+                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                .ticket()
+                .unwrap()
+                .is_some());
+        }
+
+        // try to purge old tickets after two days minus 1 second.
+        // check that all the tickets are still there. This verifies
+        // that the sale canister keep the tickets for the right amount of time
+        try_purge_old_tickets(&mut sale, ONE_DAY * 2 - 1);
+
+        // not purged because 2 day - 1 second old
+        for principal in &principals1 {
+            assert!(sale
+                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                .ticket()
+                .unwrap()
+                .is_some());
+        }
+
+        // not purged because 1 days - 1 second old
+        for principal in &principals2 {
+            assert!(sale
+                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                .ticket()
+                .unwrap()
+                .is_some());
+        }
+
+        // try to purge old tickets after two days.
+        // All the principal1 tickets should be gone.
+        // TEN_MINUTES required to trigger the method.
+        try_purge_old_tickets(&mut sale, ONE_DAY * 2 + TEN_MINUTES);
+
+        // purged because 2 days old
+        for principal in &principals1 {
+            assert!(sale
+                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                .ticket()
+                .unwrap()
+                .is_none());
+        }
+
+        // not purged because 1 days old
+        for principal in &principals2 {
+            assert!(sale
+                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                .ticket()
+                .unwrap()
+                .is_some());
+        }
+
+        // add the third batch of tickets at two days
+        for principal in &principals3 {
+            assert!(sale
+                .new_sale_ticket(
+                    &NewSaleTicketRequest {
+                        amount_icp_e8s: min_participant_icp_e8s,
+                        subaccount: None
+                    },
+                    *principal,
+                    ONE_DAY * 2 + TEN_MINUTES
+                )
+                .ticket()
+                .is_ok());
+        }
+
+        // try to purge old tickets after three days - 1 second.
+        // same result
+        try_purge_old_tickets(&mut sale, ONE_DAY * 3 - 1);
+
+        // not purged because 2 days old - 1 second
+        for principal in &principals2 {
+            assert!(sale
+                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                .ticket()
+                .unwrap()
+                .is_some());
+        }
+
+        // try to purge old tickets after three days.
+        // All the principal2 tickets should be gone.
+        // TEN_MINUTES required to trigger the method.
+        try_purge_old_tickets(&mut sale, ONE_DAY * 3 + TEN_MINUTES);
+
+        // purged because 2 days old
+        for principal in &principals2 {
+            assert!(sale
+                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                .ticket()
+                .unwrap()
+                .is_none());
+        }
+
+        // not purged because 1 days old
+        for principal in &principals3 {
+            assert!(sale
+                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                .ticket()
+                .unwrap()
+                .is_some());
+        }
+
+        // try to purge old tickets after 4 days but
+        // with a higher threshold.
+        // All the principals3 tickets should be still
+        // there because of the threshold
+
+        assert_eq!(
+            sale.try_purge_old_tickets(
+                || ONE_DAY * 4 + TEN_MINUTES,
+                principals3.len() as u64 + 1,
+                0,
+                u64::MAX
+            ),
+            None
+        );
+
+        // not purged because threshold was not met
+        for principal in &principals3 {
+            assert!(sale
+                .get_open_ticket(&GetOpenTicketRequest {}, *principal)
+                .ticket()
+                .unwrap()
+                .is_some());
+        }
     }
 }
