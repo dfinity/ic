@@ -37,8 +37,11 @@ error() {
     exit 1
 }
 
+# Works from inside/outside of the repo to return the root of this repository
 repo_root() {
-    git rev-parse --show-toplevel
+    local SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+    # Execute in subshell to not change directory of caller
+    (cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)
 }
 
 STEPS_PATTERN="^(${STEPS:-.*})([.].*|$)"
