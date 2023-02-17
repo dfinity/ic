@@ -157,45 +157,6 @@ system-tests-hourly:
   script:
     - *run-farm-based-test
 
-.system-tests-wasm-generator:
-  extends: .system-tests
-  variables:
-    SUITE_NAME: "wasm_generator"
-  script:
-    - |
-      export RANDOM_CANISTERS_BASE_DIR="${CI_PROJECT_DIR}/test_canisters"
-      mkdir "${RANDOM_CANISTERS_BASE_DIR}"
-      export TEST_MODULES="${CI_PROJECT_DIR}/testnet/tests/scripts/test_modules"
-      $SHELL_WRAPPER "${TEST_MODULES}/wasm-generator/wasm-generator.sh" 20 "${NUMBER_OF_CANISTERS}"
-    - *run-farm-based-test
-
-wasm-generator-hourly:
-  extends:
-    - .system-tests-wasm-generator
-    - .with-monitoring
-  variables:
-    cd_target_env: "HOURLY"
-    NUMBER_OF_CANISTERS: 100
-
-wasm-generator-nightly:
-  extends:
-    - .system-tests-wasm-generator
-    - .with-monitoring
-  stage: prod-tests-04
-  variables:
-    NUMBER_OF_CANISTERS: 1000
-    cd_target_env: "NIGHTLY"
-    SYSTEM_TESTS_TIMEOUT: "7200"  # 2 h
-  timeout: 3 hours
-
-wasm-generator-slo:
-  extends: .system-tests-wasm-generator
-  variables:
-    NUMBER_OF_CANISTERS: 2000
-    SYSTEM_TESTS_TIMEOUT: "7200"  # 2 h
-    cd_target_env: "SLO"
-  timeout: 3 hours
-
 system-tests-short-nightly:
   extends:
     - .system-tests

@@ -33,7 +33,6 @@ pkgs.mkCiShell {
     pkgs.sed
     pkgs.which
 
-    pkgs.csmith
     pkgs.gcc
     pkgs.llvmPackages_10.lld
     pkgs.llvmPackages_10.clang-unwrapped
@@ -42,8 +41,6 @@ pkgs.mkCiShell {
     pkgs.diffutils
   ];
 
-  # needed by tests/test_modules/wasm-generator/wasm-generator.sh
-  CSMITH_INCLUDE = "${pkgs.csmith}/include/${pkgs.csmith.name}";
   LIBC_INCLUDE = "${pkgs.lib.getDev pkgs.stdenv.cc.libc}/include";
 
   ANSIBLE_INVENTORY_PREPEND_PATH = pkgs.lib.makeBinPath [
