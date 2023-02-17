@@ -16,6 +16,7 @@ use ic_interfaces::{
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::CanisterHttpResponseId,
+    artifact_kind::CanisterHttpArtifact,
     canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
     crypto::CryptoHashOf,
     time::current_time,
@@ -151,17 +152,14 @@ impl MutableCanisterHttpPool for CanisterHttpPoolImpl {
     }
 }
 
-impl GossipPool<CanisterHttpResponseShare, CanisterHttpChangeSet> for CanisterHttpPoolImpl {
-    type MessageId = CanisterHttpResponseId;
-    type Filter = ();
-
-    fn contains(&self, id: &Self::MessageId) -> bool {
+impl GossipPool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
+    fn contains(&self, id: &CanisterHttpResponseId) -> bool {
         self.unvalidated.contains_key(id) || self.validated.contains_key(id)
     }
 
     fn get_validated_by_identifier(
         &self,
-        id: &Self::MessageId,
+        id: &CanisterHttpResponseId,
     ) -> Option<CanisterHttpResponseShare> {
         self.validated
             .get(id)
@@ -171,7 +169,7 @@ impl GossipPool<CanisterHttpResponseShare, CanisterHttpChangeSet> for CanisterHt
 
     fn get_all_validated_by_filter(
         &self,
-        _filter: Self::Filter,
+        _filter: &(),
     ) -> Box<dyn Iterator<Item = CanisterHttpResponseShare> + '_> {
         unimplemented!()
     }

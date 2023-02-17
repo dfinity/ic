@@ -309,7 +309,7 @@ impl<Pool: ConsensusPool + ConsensusGossipPool + Send + Sync> ArtifactClient<Con
         self.consensus_pool
             .read()
             .unwrap()
-            .get_all_validated_by_filter(filter.height)
+            .get_all_validated_by_filter(filter)
             .map(|msg| ConsensusArtifact::message_to_advert(&msg))
             .collect()
     }
@@ -526,7 +526,7 @@ impl<PoolCertification: CertificationPool + CertificationGossipPool + Send + Syn
         self.certification_pool
             .read()
             .unwrap()
-            .get_all_validated_by_filter(filter.height)
+            .get_all_validated_by_filter(filter)
             .map(|msg| CertificationArtifact::message_to_advert(&msg))
             .collect()
     }

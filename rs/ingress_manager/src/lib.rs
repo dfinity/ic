@@ -227,7 +227,9 @@ pub(crate) mod tests {
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_registry::test_subnet_record;
-    use ic_types::{ingress::IngressStatus, Height, RegistryVersion, SubnetId};
+    use ic_types::{
+        artifact_kind::IngressArtifact, ingress::IngressStatus, Height, RegistryVersion, SubnetId,
+    };
     use std::sync::{Arc, RwLockWriteGuard};
 
     pub(crate) fn setup_registry(
@@ -357,21 +359,18 @@ pub(crate) mod tests {
         }
     }
 
-    impl<'a> GossipPool<SignedIngress, ChangeSet> for IngressPoolTestAccess<'a> {
-        type MessageId = IngressMessageId;
-        type Filter = std::ops::RangeInclusive<Time>;
-
-        fn contains(&self, id: &Self::MessageId) -> bool {
+    impl<'a> GossipPool<IngressArtifact> for IngressPoolTestAccess<'a> {
+        fn contains(&self, id: &IngressMessageId) -> bool {
             self.0.contains(id)
         }
 
-        fn get_validated_by_identifier(&self, _id: &Self::MessageId) -> Option<SignedIngress> {
+        fn get_validated_by_identifier(&self, _id: &IngressMessageId) -> Option<SignedIngress> {
             unimplemented!()
         }
 
         fn get_all_validated_by_filter(
             &self,
-            _filter: Self::Filter,
+            _filter: &(),
         ) -> Box<dyn Iterator<Item = SignedIngress> + '_> {
             unimplemented!()
         }
