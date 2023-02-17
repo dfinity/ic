@@ -580,15 +580,26 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Cycle balance on the sale canister.",
     )?;
     w.encode_gauge(
-        "sale_open_tickets_number",
+        "sale_open_tickets_count",
         ic_sns_swap::memory::OPEN_TICKETS_MEMORY.with(|ts| ts.borrow().len()) as f64,
         "The number of open tickets on the sale canister.",
     )?;
     w.encode_gauge(
-        "sale_buyer_number",
+        "sale_buyer_count",
         ic_sns_swap::memory::BUYERS_LIST_INDEX.with(|bs| bs.borrow().len()) as f64,
         "The number of buyers on the sale canister.",
     )?;
+    w.encode_gauge(
+        "sale_cf_participants_count",
+        swap().cf_participants.len() as f64,
+        "The number of Community Fund participants in the sale",
+    )?;
+    w.encode_gauge(
+        "sale_neuron_recipes_count",
+        swap().neuron_recipes.len() as f64,
+        "The current number of Neuron Recipes created by the sale",
+    )?;
+
     Ok(())
 }
 
