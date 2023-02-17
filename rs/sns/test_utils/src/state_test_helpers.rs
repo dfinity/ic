@@ -5,7 +5,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::CanisterInstallMode;
 use ic_icrc1::Account;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::ExplosiveTokens;
+use ic_nervous_system_common::{ExplosiveTokens, SECONDS_PER_DAY};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID,
@@ -23,10 +23,13 @@ use ic_sns_root::pb::v1::{
 };
 use ic_sns_root::{CanisterIdRecord, CanisterStatusResultV2};
 
+use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
 use ic_sns_swap::pb::v1::{
-    self as swap_pb, GetBuyerStateResponse, GetOpenTicketResponse, GetSaleParametersResponse,
+    self as swap_pb, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateResponse,
+    GetLifecycleResponse, GetOpenTicketResponse, GetSaleParametersResponse,
     ListCommunityFundParticipantsResponse, NewSaleTicketResponse, NotifyPaymentFailureResponse,
-    RefreshBuyerTokensRequest, RefreshBuyerTokensResponse, Ticket,
+    OpenRequest, OpenResponse, Params, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
+    Ticket,
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
@@ -592,12 +595,9 @@ pub fn get_buyer_state(
 pub fn get_sns_sale_parameters(
     env: &StateMachine,
     swap_id: &CanisterId,
-    sender: &PrincipalId,
 ) -> GetSaleParametersResponse {
     let args = Encode!(&swap_pb::GetSaleParametersRequest {}).unwrap();
-    let res = env
-        .query_as(*sender, *swap_id, "get_sale_parameters", args)
-        .unwrap();
+    let res = env.query(*swap_id, "get_sale_parameters", args).unwrap();
     Decode!(&res.bytes(), GetSaleParametersResponse).unwrap()
 }
 
@@ -617,4 +617,64 @@ pub fn list_community_fund_participants(
         .query_as(*sender, *swap_id, "list_community_fund_participants", args)
         .unwrap();
     Decode!(&res.bytes(), ListCommunityFundParticipantsResponse).unwrap()
+}
+
+pub fn open_sale(env: &StateMachine, swap_id: &CanisterId, params: Option<Params>) -> OpenResponse {
+    let args = OpenRequest {
+        params: Some(
+            params.unwrap_or(Params {
+                min_participants: 1,
+                min_icp_e8s: 1,
+                max_icp_e8s: 10_000_000,
+                min_participant_icp_e8s: 1_010_000,
+                max_participant_icp_e8s: 10_000_000,
+                swap_due_timestamp_seconds: env
+                    .time()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+                    + 13 * SECONDS_PER_DAY,
+                sns_token_e8s: 10_000_000,
+                neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+                    count: 1,
+                    dissolve_delay_interval_seconds: 1,
+                }),
+                sale_delay_seconds: None,
+            }),
+        ),
+        cf_participants: vec![],
+        open_sns_token_swap_proposal_id: Some(0),
+    };
+    let args = Encode!(&args).unwrap();
+    let res = env.execute_ingress(*swap_id, "open", args).unwrap();
+    Decode!(&res.bytes(), OpenResponse).unwrap()
+}
+
+pub fn error_refund(
+    env: &StateMachine,
+    swap_id: &CanisterId,
+    sender: &PrincipalId,
+) -> ErrorRefundIcpResponse {
+    let args = Encode!(&swap_pb::ErrorRefundIcpRequest {
+        source_principal_id: Some(*sender)
+    })
+    .unwrap();
+    let res = env
+        .execute_ingress_as(*sender, *swap_id, "error_refund_icp", args)
+        .unwrap();
+    Decode!(&res.bytes(), ErrorRefundIcpResponse).unwrap()
+}
+
+pub fn get_lifecycle(env: &StateMachine, swap_id: &CanisterId) -> GetLifecycleResponse {
+    let args = Encode!(&swap_pb::GetLifecycleRequest {}).unwrap();
+    let res = env.query(*swap_id, "get_lifecycle", args).unwrap();
+    Decode!(&res.bytes(), GetLifecycleResponse).unwrap()
+}
+
+pub fn finalize_swap(env: &StateMachine, swap_id: &CanisterId) -> FinalizeSwapResponse {
+    let args = Encode!(&swap_pb::FinalizeSwapRequest {}).unwrap();
+    let res = env
+        .execute_ingress(*swap_id, "finalize_swap", args)
+        .unwrap();
+    Decode!(&res.bytes(), FinalizeSwapResponse).unwrap()
 }

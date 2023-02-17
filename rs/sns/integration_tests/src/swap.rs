@@ -50,10 +50,9 @@ use ic_sns_init::pb::v1::{
     TreasuryDistribution,
 };
 use ic_sns_swap::pb::v1::{
-    self as swap_pb, error_refund_icp_response, get_open_ticket_response, new_sale_ticket_response,
-    params::NeuronBasketConstructionParameters, set_dapp_controllers_call_result,
-    set_mode_call_result, ErrorRefundIcpRequest, ErrorRefundIcpResponse, GetOpenTicketResponse,
-    GetStateRequest, GetStateResponse, Init, NewSaleTicketResponse, NotifyPaymentFailureResponse,
+    self as swap_pb, error_refund_icp_response, params::NeuronBasketConstructionParameters,
+    set_dapp_controllers_call_result, set_mode_call_result, ErrorRefundIcpRequest,
+    ErrorRefundIcpResponse, GetOpenTicketResponse, GetStateRequest, GetStateResponse, Init,
     OpenRequest, SetDappControllersCallResult, SetDappControllersResponse,
 };
 use ic_sns_swap::{pb::v1::RefreshBuyerTokensResponse, swap::principal_to_subaccount};
@@ -61,8 +60,8 @@ use ic_sns_test_utils::{
     now_seconds,
     state_test_helpers::{
         canister_status, get_buyer_state, get_open_ticket, get_sns_sale_parameters,
-        list_community_fund_participants, new_sale_ticket, notify_payment_failure,
-        participate_in_swap, refresh_buyer_token, send_participation_funds,
+        list_community_fund_participants, new_sale_ticket, participate_in_swap,
+        refresh_buyer_token, send_participation_funds,
         sns_governance_get_nervous_system_parameters, sns_governance_list_neurons,
         sns_root_register_dapp_canisters, swap_get_state,
     },
@@ -2728,394 +2727,6 @@ fn test_upgrade() {
 }
 
 #[test]
-fn test_get_open_ticket() {
-    let state_machine = StateMachine::new();
-    let ledger_id = state_machine.create_canister(None);
-    let swap_id = state_machine.create_canister(None);
-    let minting_account = Account {
-        owner: Principal::anonymous().into(),
-        subaccount: None,
-    };
-
-    // install the sns ledger
-    let wasm = ic_test_utilities_load_wasm::load_wasm(
-        "../../rosetta-api/icrc1/ledger",
-        "ic-icrc1-ledger",
-        /* features = */ &[],
-    );
-    let args = Encode!(&LedgerArgument::Init(LedgerInit {
-        minting_account,
-        initial_balances: vec![(
-            Account {
-                owner: swap_id.into(),
-                subaccount: None
-            },
-            10_000_000
-        )],
-        transfer_fee: 10_000,
-        token_name: "SNS Token".to_string(),
-        token_symbol: "STK".to_string(),
-        metadata: vec![],
-        archive_options: ArchiveOptions {
-            trigger_threshold: 1,
-            num_blocks_to_archive: 1,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: Principal::anonymous().into(),
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None
-        },
-    }))
-    .unwrap();
-    state_machine
-        .install_existing_canister(ledger_id, wasm, args)
-        .unwrap();
-
-    // install the sale canister
-    let wasm = ic_test_utilities_load_wasm::load_wasm("../swap", "sns-swap-canister", &[]);
-    let args = Encode!(&Init {
-        nns_governance_canister_id: Principal::anonymous().to_string(),
-        sns_governance_canister_id: Principal::anonymous().to_string(),
-        sns_ledger_canister_id: ledger_id.to_string(),
-        icp_ledger_canister_id: Principal::anonymous().to_string(),
-        sns_root_canister_id: Principal::anonymous().to_string(),
-        fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
-        transaction_fee_e8s: Some(10_000),
-        neuron_minimum_stake_e8s: Some(1_000_000),
-    })
-    .unwrap();
-    state_machine
-        .install_existing_canister(swap_id, wasm, args)
-        .unwrap();
-
-    // get_open_ticket should return an error when the sale is not open yet
-    let principal = PrincipalId::new_user_test_id(0);
-    let expected = GetOpenTicketResponse::err(get_open_ticket_response::Err {
-        error_type: Some(get_open_ticket_response::err::Type::SaleNotOpen.into()),
-    });
-    assert_eq!(
-        get_open_ticket(&state_machine, swap_id, principal),
-        expected
-    );
-
-    // open the sale
-    // min_participant_icp_e8s >= neuron_basket_count * (neuron_minimum_stake_e8s + transaction_fee_e8s) * max_icp_e8s / sns_token_e8s
-    // 1 >= 1 * (+ 10_000) * 10_000_000 / 10_000_000
-    let args = OpenRequest {
-        params: Some(swap_pb::Params {
-            min_participants: 1,
-            min_icp_e8s: 1,
-            max_icp_e8s: 10_000_000,
-            min_participant_icp_e8s: 1_010_000,
-            max_participant_icp_e8s: 10_000_000,
-            swap_due_timestamp_seconds: *SWAP_DUE_TIMESTAMP_SECONDS,
-            sns_token_e8s: 10_000_000,
-            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                count: 1,
-                dissolve_delay_interval_seconds: 1,
-            }),
-            sale_delay_seconds: None,
-        }),
-        cf_participants: vec![],
-        open_sns_token_swap_proposal_id: Some(0),
-    };
-    let args = Encode!(&args).unwrap();
-    let _res = state_machine
-        .execute_ingress(swap_id, "open", args)
-        .unwrap();
-
-    // get_open_ticket should return none when the sale is open but there are no tickets
-    assert_eq!(
-        get_open_ticket(&state_machine, swap_id, principal),
-        GetOpenTicketResponse::ok(None)
-    );
-}
-
-#[test]
-fn test_new_sale_ticket() {
-    let state_machine = StateMachine::new();
-    let ledger_id = state_machine.create_canister(None);
-    let swap_id = state_machine.create_canister(None);
-    let user0 = PrincipalId::new_user_test_id(0);
-    let user1 = PrincipalId::new_user_test_id(1);
-    let minting_account = Account {
-        owner: Principal::anonymous().into(),
-        subaccount: None,
-    };
-
-    // install the sns ledger
-    let wasm = ic_test_utilities_load_wasm::load_wasm(
-        "../../rosetta-api/icrc1/ledger",
-        "ic-icrc1-ledger",
-        &[],
-    );
-    let args = Encode!(&LedgerArgument::Init(LedgerInit {
-        minting_account,
-        initial_balances: vec![(
-            Account {
-                owner: swap_id.into(),
-                subaccount: None
-            },
-            10_000_000
-        )],
-        transfer_fee: 10_000,
-        token_name: "SNS Token".to_string(),
-        token_symbol: "STK".to_string(),
-        metadata: vec![],
-        archive_options: ArchiveOptions {
-            trigger_threshold: 1,
-            num_blocks_to_archive: 1,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: Principal::anonymous().into(),
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None
-        },
-    }))
-    .unwrap();
-    state_machine
-        .install_existing_canister(ledger_id, wasm, args)
-        .unwrap();
-
-    // install the sale canister
-    let wasm = ic_test_utilities_load_wasm::load_wasm("../swap", "sns-swap-canister", &[]);
-    let args = Encode!(&Init {
-        nns_governance_canister_id: Principal::anonymous().to_string(),
-        sns_governance_canister_id: Principal::anonymous().to_string(),
-        sns_ledger_canister_id: ledger_id.to_string(),
-        icp_ledger_canister_id: Principal::anonymous().to_string(),
-        sns_root_canister_id: Principal::anonymous().to_string(),
-        fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
-        transaction_fee_e8s: Some(10_000),
-        neuron_minimum_stake_e8s: Some(1_000_000),
-    })
-    .unwrap();
-    state_machine
-        .install_existing_canister(swap_id, wasm, args)
-        .unwrap();
-
-    // open the sale
-    // min_participant_icp_e8s >= neuron_basket_count * (neuron_minimum_stake_e8s + transaction_fee_e8s) * max_icp_e8s / sns_token_e8s
-    // 1 >= 1 * (+ 10_000) * 10_000_000 / 10_000_000
-    let min_participant_icp_e8s = 1_010_000;
-    let max_participant_icp_e8s = 2_000_000;
-    let args = OpenRequest {
-        params: Some(swap_pb::Params {
-            min_participants: 1,
-            min_icp_e8s: 1,
-            max_icp_e8s: 10_000_000,
-            min_participant_icp_e8s,
-            max_participant_icp_e8s,
-            swap_due_timestamp_seconds: *SWAP_DUE_TIMESTAMP_SECONDS,
-            sns_token_e8s: 10_000_000,
-            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                count: 1,
-                dissolve_delay_interval_seconds: 1,
-            }),
-            sale_delay_seconds: None,
-        }),
-        cf_participants: vec![],
-        open_sns_token_swap_proposal_id: Some(0),
-    };
-    let args = Encode!(&args).unwrap();
-    let _res = state_machine
-        .execute_ingress(swap_id, "open", args)
-        .unwrap();
-
-    // error when caller is anonymous
-    assert_eq!(
-        NewSaleTicketResponse {
-            result: Some(new_sale_ticket_response::Result::Err(
-                new_sale_ticket(
-                    &state_machine,
-                    swap_id,
-                    PrincipalId::new_anonymous(),
-                    min_participant_icp_e8s,
-                    None
-                )
-                .unwrap_err()
-            ))
-        },
-        NewSaleTicketResponse::err_invalid_principal()
-    );
-
-    // error when subaccount is not 32 bytes
-    assert_eq!(
-        NewSaleTicketResponse {
-            result: Some(new_sale_ticket_response::Result::Err(
-                new_sale_ticket(
-                    &state_machine,
-                    swap_id,
-                    user0,
-                    min_participant_icp_e8s,
-                    Some(vec![0; 31])
-                )
-                .unwrap_err()
-            ))
-        },
-        NewSaleTicketResponse::err_invalid_subaccount()
-    );
-    assert_eq!(
-        NewSaleTicketResponse {
-            result: Some(new_sale_ticket_response::Result::Err(
-                new_sale_ticket(
-                    &state_machine,
-                    swap_id,
-                    user0,
-                    min_participant_icp_e8s,
-                    Some(vec![0; 33])
-                )
-                .unwrap_err()
-            ))
-        },
-        NewSaleTicketResponse::err_invalid_subaccount()
-    );
-
-    // error when amount < min_participant_icp_e8s
-    let res = new_sale_ticket(
-        &state_machine,
-        swap_id,
-        user0,
-        min_participant_icp_e8s - 1,
-        None,
-    );
-    let expected = NewSaleTicketResponse::err_invalid_user_amount(
-        min_participant_icp_e8s,
-        max_participant_icp_e8s,
-    );
-    assert_eq!(
-        NewSaleTicketResponse {
-            result: Some(new_sale_ticket_response::Result::Err(res.unwrap_err()))
-        },
-        expected
-    );
-
-    // error when amount > max_participant_icp_e8s
-    let res = new_sale_ticket(
-        &state_machine,
-        swap_id,
-        user0,
-        max_participant_icp_e8s + 1,
-        None,
-    );
-    let expected = NewSaleTicketResponse::err_invalid_user_amount(
-        min_participant_icp_e8s,
-        max_participant_icp_e8s,
-    );
-    assert_eq!(
-        NewSaleTicketResponse {
-            result: Some(new_sale_ticket_response::Result::Err(res.unwrap_err()))
-        },
-        expected
-    );
-
-    // ticket correctly created
-    let ticket = new_sale_ticket(
-        &state_machine,
-        swap_id,
-        user0,
-        min_participant_icp_e8s,
-        None,
-    )
-    .unwrap();
-
-    //Ticket id counter starts with 0
-    assert!(ticket.ticket_id == 0);
-
-    // ticket can be retrieved
-    let ticket_0 = match get_open_ticket(&state_machine, swap_id, user0) {
-        GetOpenTicketResponse {
-            result: Some(get_open_ticket_response::Result::Ok(ref ticket_ok)),
-        } => {
-            assert_eq!(
-                Some(get_open_ticket_response::Result::Ok(ticket_ok.clone())),
-                GetOpenTicketResponse::ok(Some(ticket.clone())).result
-            );
-            ticket_ok.ticket.as_ref().unwrap().clone()
-        }
-        _ => panic!("Open ticket could not be retrieved for user0"),
-    };
-
-    // Make sure a new ticket can be created after the prior ticket was deleted
-    let res = new_sale_ticket(
-        &state_machine,
-        swap_id,
-        user0,
-        min_participant_icp_e8s + 1,
-        None,
-    );
-    assert_eq!(
-        NewSaleTicketResponse {
-            result: Some(new_sale_ticket_response::Result::Err(res.unwrap_err()))
-        },
-        NewSaleTicketResponse::err_ticket_exists(ticket)
-    );
-
-    // ticket id is still the same as before the error
-    let ticket_0 = match get_open_ticket(&state_machine, swap_id, user0) {
-        GetOpenTicketResponse {
-            result: Some(get_open_ticket_response::Result::Ok(ref ticket_ok)),
-        } => {
-            let retrieved_ticket = ticket_ok.ticket.as_ref().unwrap().clone();
-            assert_eq!(retrieved_ticket.ticket_id.clone(), ticket_0.ticket_id);
-            retrieved_ticket
-        }
-        _ => panic!("Open ticket could not be retrieved for user0"),
-    };
-
-    // Create new ticket for other user
-    let ticket = new_sale_ticket(
-        &state_machine,
-        swap_id,
-        user1,
-        min_participant_icp_e8s,
-        None,
-    )
-    .unwrap();
-    //Ticket id counter should now be at 1
-    assert!(ticket.ticket_id == 1);
-
-    // Make sure the ticket form user1 has an incremented ticket id
-    let ticket_1 = match get_open_ticket(&state_machine, swap_id, user1) {
-        GetOpenTicketResponse {
-            result: Some(get_open_ticket_response::Result::Ok(ref ticket_ok)),
-        } => {
-            assert_eq!(
-                Some(get_open_ticket_response::Result::Ok(ticket_ok.clone())),
-                GetOpenTicketResponse::ok(Some(ticket)).result
-            );
-            ticket_ok.ticket.as_ref().unwrap().clone()
-        }
-        _ => panic!("Open ticket could not be retrieved for user0"),
-    };
-    assert!(ticket_1.ticket_id > ticket_0.ticket_id);
-
-    //Test manual deleting ticket
-    {
-        let NotifyPaymentFailureResponse {
-            ticket: deleted_ticket,
-        } = notify_payment_failure(&state_machine, &swap_id, &user0);
-        assert!(deleted_ticket.clone().unwrap().ticket_id == ticket_0.ticket_id);
-        assert!(deleted_ticket.unwrap().ticket_id != ticket_1.ticket_id);
-
-        // Make sure that there exists not ticket for the user1
-        match get_open_ticket(&state_machine, swap_id, user0) {
-            GetOpenTicketResponse {
-                result: Some(get_open_ticket_response::Result::Ok(ref ticket_ok)),
-            } => {
-                assert!(ticket_ok.ticket.is_none());
-            }
-            _ => panic!("Open ticket could not be retrieved for user0"),
-        };
-
-        let NotifyPaymentFailureResponse {
-            ticket: no_ticket_found,
-        } = notify_payment_failure(&state_machine, &swap_id, &user0);
-        assert!(no_ticket_found.is_none());
-    }
-}
-
-#[test]
 fn test_deletion_of_sale_ticket() {
     // Step 1: Prepare the world.
     let mut state_machine = StateMachine::new();
@@ -3361,13 +2972,11 @@ fn test_get_sale_parameters() {
     )
     .0;
 
-    assert!(get_sns_sale_parameters(
-        &state_machine,
-        &sns_canister_ids.swap(),
-        &TEST_USER1_PRINCIPAL,
-    )
-    .params
-    .is_some());
+    assert!(
+        get_sns_sale_parameters(&state_machine, &sns_canister_ids.swap(),)
+            .params
+            .is_some()
+    );
 }
 
 #[test]
@@ -3586,13 +3195,9 @@ fn test_refresh_buyer_token() {
     )
     .0;
 
-    let sns_params = get_sns_sale_parameters(
-        &state_machine,
-        &sns_canister_ids.swap(),
-        &TEST_USER1_PRINCIPAL,
-    )
-    .params
-    .unwrap();
+    let sns_params = get_sns_sale_parameters(&state_machine, &sns_canister_ids.swap())
+        .params
+        .unwrap();
 
     //Happy Case
     {
