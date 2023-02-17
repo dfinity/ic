@@ -39,3 +39,6 @@ mod governance;
 
 #[cfg(test)]
 mod sns_treasury;
+
+#[cfg(test)]
+mod payment_flow;
