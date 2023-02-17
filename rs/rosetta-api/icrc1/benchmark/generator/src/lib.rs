@@ -30,6 +30,7 @@ pub struct RunScenarioResult {
 pub enum Scenario {
     Accounts,
     Transactions,
+    IndexPerf,
 }
 
 #[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
@@ -70,6 +71,7 @@ pub async fn run_scenario(scenario: Scenario) -> RunScenarioResult {
     let result = match scenario {
         Scenario::Accounts => scenario::accounts::run_benchmark().await,
         Scenario::Transactions => scenario::transactions::run_benchmark().await,
+        Scenario::IndexPerf => scenario::indexperf::run_benchmark().await,
     };
     ic_cdk::println!("Benchmark result: {:?}", result);
     result

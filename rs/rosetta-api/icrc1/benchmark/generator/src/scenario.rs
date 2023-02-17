@@ -1,4 +1,5 @@
 pub(crate) mod accounts;
+pub(crate) mod indexperf;
 pub(crate) mod transactions;
 
 use crate::{get_ledger_principal, next_u64};
