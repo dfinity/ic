@@ -9,11 +9,12 @@ use ic_interfaces::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_types::consensus::dkg;
-use ic_types::{consensus, Height};
 use ic_types::{
+    artifact_kind::DkgArtifact,
     crypto::CryptoHashOf,
     time::{current_time, Time},
 };
+use ic_types::{consensus, Height};
 use std::{ops::Sub, time::Duration};
 
 /// The DkgPool is used to store messages that are exchanged between replicas in
@@ -144,25 +145,19 @@ impl MutableDkgPool for DkgPoolImpl {
     }
 }
 
-impl GossipPool<dkg::Message, ChangeSet> for DkgPoolImpl {
-    type MessageId = CryptoHashOf<dkg::Message>;
-    type Filter = ();
-
-    fn contains(&self, hash: &Self::MessageId) -> bool {
+impl GossipPool<DkgArtifact> for DkgPoolImpl {
+    fn contains(&self, hash: &CryptoHashOf<dkg::Message>) -> bool {
         self.unvalidated.contains_key(hash) || self.validated.contains_key(hash)
     }
 
-    fn get_validated_by_identifier(&self, id: &Self::MessageId) -> Option<dkg::Message> {
+    fn get_validated_by_identifier(&self, id: &CryptoHashOf<dkg::Message>) -> Option<dkg::Message> {
         self.validated
             .get(id)
             .map(|artifact| artifact.as_ref())
             .cloned()
     }
 
-    fn get_all_validated_by_filter(
-        &self,
-        _filter: Self::Filter,
-    ) -> Box<dyn Iterator<Item = dkg::Message>> {
+    fn get_all_validated_by_filter(&self, _filter: &()) -> Box<dyn Iterator<Item = dkg::Message>> {
         unimplemented!()
     }
 }

@@ -18,14 +18,16 @@ use ic_interfaces::gossip_pool::{EcdsaGossipPool, GossipPool};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
-use ic_types::consensus::catchup::CUPWithOriginalProtobuf;
-use ic_types::consensus::ecdsa::{
-    ecdsa_msg_id, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening, EcdsaPrefixOf,
-    EcdsaSigShare, EcdsaStats, EcdsaStatsNoOp,
-};
+use ic_types::artifact_kind::EcdsaArtifact;
 use ic_types::consensus::BlockPayload;
+use ic_types::consensus::{
+    catchup::CUPWithOriginalProtobuf,
+    ecdsa::{
+        ecdsa_msg_id, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening, EcdsaPrefixOf,
+        EcdsaSigShare, EcdsaStats, EcdsaStatsNoOp,
+    },
+};
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
-
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -421,23 +423,17 @@ impl MutableEcdsaPool for EcdsaPoolImpl {
     }
 }
 
-impl GossipPool<EcdsaMessage, EcdsaChangeSet> for EcdsaPoolImpl {
-    type MessageId = EcdsaMessageId;
-    type Filter = ();
-
-    fn contains(&self, msg_id: &Self::MessageId) -> bool {
+impl GossipPool<EcdsaArtifact> for EcdsaPoolImpl {
+    fn contains(&self, msg_id: &EcdsaMessageId) -> bool {
         self.unvalidated.as_pool_section().contains(msg_id)
             || self.validated.as_pool_section().contains(msg_id)
     }
 
-    fn get_validated_by_identifier(&self, msg_id: &Self::MessageId) -> Option<EcdsaMessage> {
+    fn get_validated_by_identifier(&self, msg_id: &EcdsaMessageId) -> Option<EcdsaMessage> {
         self.validated.as_pool_section().get(msg_id)
     }
 
-    fn get_all_validated_by_filter(
-        &self,
-        _filter: Self::Filter,
-    ) -> Box<dyn Iterator<Item = EcdsaMessage>> {
+    fn get_all_validated_by_filter(&self, _filter: &()) -> Box<dyn Iterator<Item = EcdsaMessage>> {
         unimplemented!()
     }
 }

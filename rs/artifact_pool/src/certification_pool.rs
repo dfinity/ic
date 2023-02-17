@@ -10,7 +10,9 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_types::crypto::crypto_hash;
 use ic_types::{
+    artifact::CertificationMessageFilter,
     artifact::CertificationMessageId,
+    artifact_kind::CertificationArtifact,
     consensus::certification::{
         Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
     },
@@ -251,11 +253,8 @@ impl CertificationPool for CertificationPoolImpl {
     }
 }
 
-impl GossipPool<CertificationMessage, ChangeSet> for CertificationPoolImpl {
-    type MessageId = CertificationMessageId;
-    type Filter = Height;
-
-    fn contains(&self, id: &Self::MessageId) -> bool {
+impl GossipPool<CertificationArtifact> for CertificationPoolImpl {
+    fn contains(&self, id: &CertificationMessageId) -> bool {
         // TODO: this is a very inefficient implementation as we compute all hashes
         // every time.
         match &id.hash {
@@ -282,7 +281,10 @@ impl GossipPool<CertificationMessage, ChangeSet> for CertificationPoolImpl {
         }
     }
 
-    fn get_validated_by_identifier(&self, id: &Self::MessageId) -> Option<CertificationMessage> {
+    fn get_validated_by_identifier(
+        &self,
+        id: &CertificationMessageId,
+    ) -> Option<CertificationMessage> {
         match &id.hash {
             CertificationMessageHash::CertificationShare(hash) => self
                 .shares_at_height(id.height)
@@ -302,10 +304,10 @@ impl GossipPool<CertificationMessage, ChangeSet> for CertificationPoolImpl {
 
     fn get_all_validated_by_filter(
         &self,
-        filter: Self::Filter,
+        filter: &CertificationMessageFilter,
     ) -> Box<dyn Iterator<Item = CertificationMessage> + '_> {
         // Return all validated certifications and all shares above the filter
-        let min_height = filter.get();
+        let min_height = filter.height.get();
         let all_certs = self
             .validated_certifications()
             .filter(move |cert| cert.height > Height::from(min_height))

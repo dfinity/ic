@@ -19,6 +19,7 @@ use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::IngressMessageId,
+    artifact_kind::IngressArtifact,
     messages::{MessageId, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH},
     CountBytes, NodeId, Time,
 };
@@ -359,10 +360,7 @@ impl MutableIngressPool for IngressPoolImpl {
     }
 }
 
-impl GossipPool<SignedIngress, ChangeSet> for IngressPoolImpl {
-    type MessageId = IngressMessageId;
-    type Filter = std::ops::RangeInclusive<Time>;
-
+impl GossipPool<IngressArtifact> for IngressPoolImpl {
     fn check_quota(
         &self,
         message: &SignedIngress,
@@ -385,13 +383,9 @@ impl GossipPool<SignedIngress, ChangeSet> for IngressPoolImpl {
 
     fn get_all_validated_by_filter<'a>(
         &'a self,
-        filter: Self::Filter,
+        _filter: &(),
     ) -> Box<dyn Iterator<Item = SignedIngress> + 'a> {
-        Box::new(
-            self.validated
-                .get_all_by_expiry_range(filter)
-                .map(|obj| obj.as_ref().signed_ingress.clone()),
-        )
+        Box::new(vec![].into_iter())
     }
 }
 
@@ -560,21 +554,8 @@ mod tests {
                         },
                     );
                 }
-
-                // range query
-                let filtered_msgs: Vec<_> =
-                    ingress_pool.get_all_validated_by_filter(range).collect();
-                assert_eq!(msgs_in_range, filtered_msgs);
-
-                // singleton
-                let filtered_msgs: Vec<_> = ingress_pool
-                    .get_all_validated_by_filter(range_min..=range_min)
-                    .collect();
-                assert_eq!(msgs_in_range[0..=0], filtered_msgs[0..]);
-
                 // empty
-                let filtered_msgs =
-                    ingress_pool.get_all_validated_by_filter(range_min..=mock_time());
+                let filtered_msgs = ingress_pool.get_all_validated_by_filter(&());
                 assert!(filtered_msgs.count() == 0);
             })
         })

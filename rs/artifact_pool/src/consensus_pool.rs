@@ -19,7 +19,8 @@ use ic_interfaces::{
 };
 use ic_logger::ReplicaLogger;
 use ic_types::{
-    artifact::ConsensusMessageId, consensus::catchup::CUPWithOriginalProtobuf, consensus::*,
+    artifact::ConsensusMessageFilter, artifact::ConsensusMessageId,
+    artifact_kind::ConsensusArtifact, consensus::catchup::CUPWithOriginalProtobuf, consensus::*,
     Height, SubnetId, Time,
 };
 use prometheus::{labels, opts, IntGauge};
@@ -502,10 +503,7 @@ impl MutableConsensusPool for ConsensusPoolImpl {
     }
 }
 
-impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
-    type MessageId = ConsensusMessageId;
-    type Filter = Height;
-
+impl GossipPool<ConsensusArtifact> for ConsensusPoolImpl {
     fn contains(&self, id: &ConsensusMessageId) -> bool {
         self.unvalidated.contains(id) || self.validated.contains(id)
     }
@@ -518,7 +516,7 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
     // above the given height filter.
     fn get_all_validated_by_filter(
         &self,
-        filter: Self::Filter,
+        filter: &ConsensusMessageFilter,
     ) -> Box<dyn Iterator<Item = ConsensusMessage> + '_> {
         let max_catch_up_height = self
             .validated
@@ -528,7 +526,7 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
             .unwrap();
         // Since random beacon of previous height is required, min_random_beacon_height
         // should be one less than the normal min height.
-        let min_random_beacon_height = max_catch_up_height.max(filter);
+        let min_random_beacon_height = max_catch_up_height.max(filter.height);
         let min = min_random_beacon_height.increment();
         let max_finalized_height = self
             .validated
@@ -623,7 +621,7 @@ impl GossipPool<ConsensusMessage, ChangeSet> for ConsensusPoolImpl {
             self.validated
                 .catch_up_package()
                 .get_by_height_range(HeightRange {
-                    min: max_catch_up_height.max(filter),
+                    min: max_catch_up_height.max(filter.height),
                     max: max_catch_up_height,
                 })
                 .map(|x| x.into_message())
