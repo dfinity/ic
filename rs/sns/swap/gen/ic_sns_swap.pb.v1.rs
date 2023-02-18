@@ -10,12 +10,14 @@
 /// State (lifecycle) diagram for the swap canister's state.
 ///
 /// ```text
-///                                   sufficient_participation && (swap_due || icp_target_reached)
-/// PENDING ------------------> ADOPTED ---------------------- OPEN --------------------------> COMMITTED
-///                              |                                                                  |
-///                              | swap_due && not sufficient_participation                         |
-///                              v                                                                  v
-///                              ABORTED -------------------------------------------------------> <DELETED>
+///                                                                      sufficient_participation
+///                                                                      && (swap_due || icp_target_reached)
+/// PENDING -------------------> ADOPTED ---------------------> OPEN -----------------------------------------> COMMITTED
+///          Sale recieves a request        The opening delay      |                                                |
+///          from NNS governance to         has elapsed            | not sufficient_participation                   |
+///          schedule opening                                      | && (swap_due || icp_target_reached)            |
+///                                                                v                                                v
+///                                                             ABORTED ---------------------------------------> <DELETED>
 /// ```
 ///
 /// Here `sufficient_participation` means that the minimum number of
@@ -23,6 +25,10 @@
 /// between `min_participant_icp_e8s` and `max_participant_icp_e8s`, and
 /// their total contributions add up to at least `min_icp_e8s` and at most
 /// `max_icp_e8s`.
+///
+/// `icp_target_reached` means that the total amount of ICP contributed is
+/// equal to `max_icp_e8s`. (The total amount of ICP contributed should
+/// never be greater than `max_icp_e8s`.)
 ///
 ///
 /// The dramatis personae of the 'swap' canister are as follows:
@@ -89,7 +95,10 @@
 ///
 /// Step 3b. (State ABORTED). If the parameters of the swap have not
 /// been satisfied before the due date/time, the swap is aborted and
-/// the ICP tokens transferred back to their respective owners.
+/// the ICP tokens transferred back to their respective owners. The
+/// swap can also be aborted early if it is determined that the
+/// swap cannot possibly succeed, e.g., because the ICP ceiling has
+/// been reached and the minimum number of participants has not been.
 ///
 /// The 'swap' canister can be deleted when all tokens registered with the
 /// 'swap' canister have been disbursed to their rightful owners.
@@ -305,11 +314,13 @@ pub struct Params {
     #[prost(uint64, tag = "2")]
     pub min_icp_e8s: u64,
     /// The number of ICP that is "targeted" by this token swap. If this
-    /// amount is achieved, the swap will be triggered immediately,
-    /// without waiting for the due date (`end_timestamp_seconds`). This
-    /// means that an investor knows the minimum number of SNS tokens
-    /// received per invested ICP. Must be at least `min_participants *
-    /// min_participant_icp_e8s`.
+    /// amount is achieved with sufficient participation, the swap will be
+    /// triggered immediately, without waiting for the due date
+    /// (`end_timestamp_seconds`). This means that an investor knows the minimum
+    /// number of SNS tokens received per invested ICP. If this amount is achieved
+    /// without reaching sufficient_participation, the swap will abort without
+    /// waiting for the due date. Must be at least
+    /// `min_participants * min_participant_icp_e8s`.
     #[prost(uint64, tag = "3")]
     pub max_icp_e8s: u64,
     /// The minimum amount of ICP that each buyer must contribute to
