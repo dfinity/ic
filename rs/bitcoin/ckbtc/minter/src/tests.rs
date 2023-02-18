@@ -1,6 +1,6 @@
 use crate::MINTER_FEE_CONSTANT;
 use crate::{
-    address::BitcoinAddress, build_unsigned_transaction, fake_sign, greedy,
+    address::BitcoinAddress, build_unsigned_transaction, estimate_fee, fake_sign, greedy,
     signature::EncodedSignature, tx, BuildTxError,
 };
 use crate::{
@@ -851,4 +851,23 @@ proptest! {
         }
     }
 
+    #[test]
+    fn test_fee_range(
+        utxos in btree_set(arb_utxo(5_000u64..1_000_000_000), 0..20),
+        amount in option::of(any::<u64>()),
+        fee_per_vbyte in 2..100u64,
+    ) {
+        const SMALLEST_TX_SIZE_VBYTES: u64 = 140; // one input, two outputs
+        const MIN_MINTER_FEE: u64 = 312;
+
+        let estimate = estimate_fee(&utxos, amount, fee_per_vbyte);
+        let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte;
+
+        prop_assert!(
+            estimate >= lower_bound,
+            "The fee estimate {} is below the lower bound {}",
+            estimate,
+            lower_bound
+        );
+    }
 }

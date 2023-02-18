@@ -213,6 +213,10 @@ service : (InitArgs) -> {
 
     // Section "Convert ckBTC to BTC" {{{
 
+    /// Returns an estimation of the user's fee (in Satoshi) for a
+    /// retrive_btc request based on the current status of the Bitcoin network.
+    estimate_fee : (record { amount : opt nat64 }) -> (nat64) query;
+
     // Returns the account to which the caller should deposit ckBTC
     // before withdrawing BTC using the [retrieve_btc] endpoint.
     get_withdrawal_account : () -> (Account);

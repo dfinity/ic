@@ -251,6 +251,8 @@ pub struct CkBtcMinterState {
 
     /// The mode in which the minter runs.
     pub mode: Mode,
+
+    pub last_fee_per_vbyte: Vec<u64>,
 }
 
 impl CkBtcMinterState {
@@ -686,6 +688,7 @@ impl From<InitArgs> for CkBtcMinterState {
             finalized_utxos: Default::default(),
             is_timer_running: false,
             mode: args.mode,
+            last_fee_per_vbyte: vec![1; 100],
         }
     }
 }
