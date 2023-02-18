@@ -7,7 +7,7 @@ use ic_ckbtc_minter::dashboard::build_dashboard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::InitArgs};
 use ic_ckbtc_minter::metrics::encode_metrics;
-use ic_ckbtc_minter::queries::RetrieveBtcStatusRequest;
+use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest};
 use ic_ckbtc_minter::state::{read_state, RetrieveBtcStatus};
 use ic_ckbtc_minter::tasks::{schedule_now, TaskType};
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
@@ -27,6 +27,7 @@ fn init(args: InitArgs) {
     storage::record_event(&Event::Init(args.clone()));
     lifecycle::init::init(args);
     schedule_now(TaskType::ProcessLogic);
+    schedule_now(TaskType::RefreshFeePercentiles);
 
     #[cfg(feature = "self_check")]
     ok_or_die(check_invariants())
@@ -124,6 +125,14 @@ async fn update_balance(
 ) -> Result<UpdateBalanceResult, UpdateBalanceError> {
     check_anonymous_caller();
     check_postcondition(updates::update_balance::update_balance(args).await)
+}
+
+#[candid_method(query)]
+#[query]
+fn estimate_fee(arg: EstimateFeeArg) -> u64 {
+    read_state(|s| {
+        ic_ckbtc_minter::estimate_fee(&s.available_utxos, arg.amount, s.last_fee_per_vbyte[49])
+    })
 }
 
 #[candid_method(query)]

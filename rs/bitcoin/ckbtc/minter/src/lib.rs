@@ -123,6 +123,7 @@ async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
                 return Some(DEFAULT_FEE);
             }
             if fees.len() >= 100 {
+                state::mutate_state(|s| s.last_fee_per_vbyte = fees.clone());
                 Some(fees[49])
             } else {
                 log!(
@@ -756,5 +757,60 @@ pub fn timer() {
                 finalize_requests().await;
             });
         }
+        TaskType::RefreshFeePercentiles => {
+            ic_cdk::spawn(async {
+                const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);
+                let _ = estimate_fee_per_vbyte().await;
+                schedule_after(FEE_ESTIMATE_DELAY, TaskType::RefreshFeePercentiles);
+            });
+        }
     }
+}
+
+pub fn estimate_fee(
+    available_utxos: &BTreeSet<Utxo>,
+    maybe_amount: Option<u64>,
+    median_fee_per_vbyte: u64,
+) -> u64 {
+    const DEFAULT_INPUT_COUNT: u64 = 3;
+    // One output for the caller and one for the change.
+    const DEFAULT_OUTPUT_COUNT: u64 = 2;
+    // See
+    // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
+    // for the transaction structure and
+    // https://bitcoin.stackexchange.com/questions/92587/calculate-transaction-fee-for-external-addresses-which-doesnt-belong-to-my-loca/92600#92600
+    // for transaction size estimate.
+    const INPUT_SIZE_VBYTES: u64 = 69;
+    const OUTPUT_SIZE_VBYTES: u64 = 31;
+    const TX_OVERHEAD_VBYTES: u64 = 10;
+
+    let input_count = match maybe_amount {
+        Some(amount) => {
+            // We simulate the algorithm that selects UTXOs for the
+            // specified amount.  If the withdrawal rate is low, we
+            // should get the exact number of inputs that the minter
+            // will use.
+            let mut utxos = available_utxos.clone();
+            let selected_utxos = greedy(amount, &mut utxos);
+
+            if !selected_utxos.is_empty() {
+                selected_utxos.len() as u64
+            } else {
+                DEFAULT_INPUT_COUNT
+            }
+        }
+        None => DEFAULT_INPUT_COUNT,
+    };
+
+    let vsize = input_count * INPUT_SIZE_VBYTES
+        + DEFAULT_OUTPUT_COUNT * OUTPUT_SIZE_VBYTES
+        + TX_OVERHEAD_VBYTES;
+
+    let minter_fee = MINTER_FEE_PER_INPUT * input_count
+        + MINTER_FEE_PER_OUTPUT * DEFAULT_OUTPUT_COUNT
+        + MINTER_FEE_CONSTANT;
+
+    // We subtract one from the outputs because the minter's output
+    // does not participate in fees distribution.
+    (vsize * median_fee_per_vbyte + minter_fee) / (DEFAULT_OUTPUT_COUNT - 1).max(1)
 }
