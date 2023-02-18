@@ -678,7 +678,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
             format!(
                 r##"#
 # Path to the SNS Project logo on the local filesystem. The path is relative
-# to the running sns binary, so an absolute path to the logo file is recommended.
+# to the configuration file location, unless an absolute path is given.
 # Must have less than {} characters, roughly 256Kb.
 #"##,
                 SnsMetadata::MAX_LOGO_LENGTH

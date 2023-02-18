@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use tempfile::NamedTempFile;
 
+use anyhow::anyhow;
 #[cfg(test)]
 use std::io::BufReader;
 
@@ -160,13 +161,21 @@ fn parse_deploy_new_sns_response(buffer: &[u8]) -> anyhow::Result<SnsWSnsCaniste
     {
         hex.pop().unwrap();
     }
-    Ok(Decode!(
+    let decoded = Decode!(
         &hex::decode(hex).expect("cannot parse dfx output as hex"),
         DeployNewSnsResponse
     )
-    .expect("cannot parse dfx output as DeployNewSnsResponse")
-    .canisters
-    .expect("DeployNewSnsResponse should contain SNS canister IDs"))
+    .expect("cannot parse dfx output as DeployNewSnsResponse");
+
+    let DeployNewSnsResponse {
+        canisters, error, ..
+    } = decoded;
+
+    if error.is_some() {
+        Err(anyhow!(error.unwrap().message))
+    } else {
+        canisters.ok_or_else(|| anyhow!("DeployNewSnsResponse should contain SNS canister IDs"))
+    }
 }
 
 fn dfx_canister_ids_json(

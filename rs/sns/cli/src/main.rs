@@ -218,13 +218,27 @@ pub fn generate_sns_init_payload(init_config_file: &PathBuf) -> anyhow::Result<S
         )
     })?;
 
-    let sns_cli_init_config: SnsCliInitConfig = serde_yaml::from_reader(file).map_err(|err| {
-        anyhow!(
-            "Couldn't parse the initial parameters file ({:?}): {}",
-            init_config_file,
-            err
-        )
-    })?;
+    let mut sns_cli_init_config: SnsCliInitConfig =
+        serde_yaml::from_reader(file).map_err(|err| {
+            anyhow!(
+                "Couldn't parse the initial parameters file ({:?}): {}",
+                init_config_file,
+                err
+            )
+        })?;
+    // If logo path is a relative path, interpret it from the location of the configuration file
+    sns_cli_init_config.sns_governance.logo =
+        sns_cli_init_config.sns_governance.logo.map(|logo_path| {
+            if logo_path.is_absolute() {
+                logo_path
+            } else {
+                init_config_file
+                    .to_path_buf()
+                    .parent()
+                    .unwrap()
+                    .join(logo_path)
+            }
+        });
 
     let sns_init_payload = SnsInitPayload::try_from(sns_cli_init_config).map_err(|err| {
         anyhow!(
