@@ -1137,13 +1137,7 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
                 );
                 Ok(false)
             }
-            Err(e) => {
-                warn!(
-                    self.test_env().logger(),
-                    "Could not fetch status response: {}", e
-                );
-                Err(e)
-            }
+            Err(e) => Err(e), // return the error, don't log it too.
         }
     }
 
@@ -1509,12 +1503,24 @@ where
                     let err_msg = e.to_string();
                     break Err(e.context(format!("Timed out! Last error: {}", err_msg)));
                 }
-                info!(log, "Attempt {} failed. Error: {:?}", attempt, e);
+                info!(
+                    log,
+                    "Attempt {} failed. Error: {}",
+                    attempt,
+                    trunc_error(e.to_string())
+                );
                 std::thread::sleep(backoff);
                 attempt += 1;
             }
         }
     }
+}
+
+fn trunc_error(err_str: String) -> String {
+    let mut short_e = err_str.replace('\n', "\\n ");
+    short_e.truncate(160);
+    short_e.push_str("...");
+    short_e
 }
 
 pub async fn retry_async<F, Fut, R>(

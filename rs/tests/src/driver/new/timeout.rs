@@ -73,11 +73,6 @@ impl Task for TimeoutTask {
         Box::new(th)
     }
 
-    fn execute(&self) -> Result<(), String> {
-        std::thread::sleep(self.duration);
-        Ok(())
-    }
-
     fn task_id(&self) -> TaskId {
         self.task_id.clone()
     }

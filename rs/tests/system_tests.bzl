@@ -18,7 +18,7 @@ def _run_system_test(ctx):
             cd "$TEST_TMPDIR"
             mkdir root_env
             cp -Rs "$RUNFILES" root_env/dependencies/
-            "$RUNFILES/{test_executable}" --working-dir . run
+            "$RUNFILES/{test_executable}" --working-dir . "$@" run
         """.format(
             test_executable = ctx.executable.src.short_path,
         ),

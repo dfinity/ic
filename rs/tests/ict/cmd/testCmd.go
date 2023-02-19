@@ -16,6 +16,7 @@ type Config struct {
 	testTmpDir            string
 	isDryRun              bool
 	useFuzzyMatchedTarget bool
+	keepAlive             bool
 }
 
 func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) error {
@@ -37,6 +38,10 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 		command = append(command, args[1:]...)
 		if !slice_contains_substring(command, "--cache_test_results") {
 			command = append(command, "--cache_test_results=no")
+		}
+		if cfg.keepAlive {
+			command = append(command, "--test_timeout=3600")
+			command = append(command, "--test_arg=--debug-keepalive")
 		}
 		// Print Bazel command for debugging puroposes.
 		cmd.Println(CYAN + "Raw Bazel command to be invoked: \n$ " + strings.Join(command, " ") + NC)
@@ -63,6 +68,9 @@ func NewTestCmd() *cobra.Command {
 		RunE:    TestCommandWithConfig(&cfg),
 	}
 	testCmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked without execution.")
+	testCmd.Flags().BoolVarP(&cfg.useCachedTestResult, "cache_test_results", "c", false, "Bazel's cache_test_results, see --cache_test_results tag in Bazel docs.")
+	testCmd.Flags().BoolVarP(&cfg.keepAlive, "keepalive", "k", false, "Keep test system alive for 60 minutes.")
+	testCmd.PersistentFlags().StringVarP(&cfg.testTmpDir, "test_tmpdir", "t", "", "Dir for storing test results, see --test-tmpdir tag in Bazel docs.")
 	testCmd.SetOut(os.Stdout)
 	return testCmd
 }

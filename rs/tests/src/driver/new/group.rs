@@ -19,7 +19,7 @@ use crate::driver::{
             TargetFunctionFailure, TargetFunctionSuccess,
         },
         subprocess_ipc::LogServer,
-        task::EmptyTask,
+        task::{DebugKeepaliveTask, EmptyTask},
         task_scheduler::{new_task_scheduler, TaskTable},
     },
 };
@@ -45,6 +45,15 @@ use std::{
 
 use slog::{debug, info, trace, warn, Logger};
 
+const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
+const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
+
+const DEBUG_KEEPALIVE_TASK_NAME: &str = "debug_keepalive";
+const REPORT_TASK_NAME: &str = "report";
+const KEEPALIVE_TASK_NAME: &str = "keepalive";
+const SETUP_TASK_NAME: &str = "setup";
+const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
+
 #[derive(Parser, Debug)]
 pub struct CliArgs {
     #[clap(flatten)]
@@ -52,6 +61,12 @@ pub struct CliArgs {
 
     #[clap(subcommand)]
     pub action: SystemTestsSubcommand,
+
+    #[clap(
+        long = "debug-keepalive",
+        help = "If set, system under test is kept alive until bazel timeout or user interrupt."
+    )]
+    pub debug_keepalive: bool,
 }
 
 impl CliArgs {
@@ -99,14 +114,6 @@ pub enum SystemTestsSubcommand {
     SpawnChild { task_id: TaskId, parent_pid: u32 },
 }
 
-const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
-const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
-
-const ROOT_TASK_NAME: &str = "root";
-const KEEPALIVE_TASK_NAME: &str = "keepalive";
-const SETUP_TASK_NAME: &str = "setup";
-const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
-
 #[derive(Deserialize, Serialize)]
 struct SetupResult;
 
@@ -117,7 +124,7 @@ impl TestEnvAttribute for SetupResult {
 }
 
 fn is_task_visible_to_user(task_id: &TaskId) -> bool {
-    matches!(task_id, TaskId::Test(task_name) if task_name.ne(ROOT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX) && !task_name.starts_with("dummy("))
+    matches!(task_id, TaskId::Test(task_name) if task_name.ne(REPORT_TASK_NAME) && task_name.ne(KEEPALIVE_TASK_NAME) && !task_name.starts_with(LIFETIME_GUARD_TASK_PREFIX) && !task_name.starts_with("dummy("))
 }
 
 /// A shortcut to represent the type of an event subscriber
@@ -454,7 +461,7 @@ impl SystemTestGroup {
         self.add_group(lifetime_guard_sub_group, EvalOrder::Parallel)
     }
 
-    /// Add a single task with the specified minumal lifetime.
+    /// Add a single task with the specified minimal lifetime.
     ///
     /// Useful in experiments involving human interactions.
     pub fn add_task_with_minimal_lifetime(
@@ -583,10 +590,12 @@ impl SystemTestGroup {
             )],
             &mut compose_ctx,
         );
-        Ok(compose(
+
+        // TODO: rename this to report -> reporter listens to this one...
+        let plan = Ok(compose(
             Some(Box::new(EmptyTask::new(
                 subs.clone(),
-                TaskId::Test(ROOT_TASK_NAME.to_string()),
+                TaskId::Test(REPORT_TASK_NAME.to_string()),
             ))),
             EvalOrder::Sequential,
             vec![timed(
@@ -595,6 +604,30 @@ impl SystemTestGroup {
                 Some(String::from("::group")),
                 &mut compose_ctx,
             )],
+            &mut compose_ctx,
+        ));
+
+        if !group_ctx.debug_keepalive {
+            return plan;
+        }
+        // otherwise, wrap the regular plan in a keepalive tree
+
+        let keepalive_plan: Plan<Box<dyn Task>> = Plan::Leaf {
+            task: Box::new(DebugKeepaliveTask::new(
+                subs.clone(),
+                TaskId::Test(String::from("debugKeepAliveTask")),
+                group_ctx.log().clone(),
+                compose_ctx.rh.clone(),
+            )),
+        };
+
+        Ok(compose(
+            Some(Box::new(EmptyTask::new(
+                subs.clone(),
+                TaskId::Test(DEBUG_KEEPALIVE_TASK_NAME.to_string()),
+            ))),
+            EvalOrder::Sequential,
+            vec![plan.unwrap(), keepalive_plan],
             &mut compose_ctx,
         ))
     }
@@ -612,7 +645,11 @@ impl SystemTestGroup {
         let args = CliArgs::parse().validate()?;
         let is_parent_process = matches!(args.action, SystemTestsSubcommand::Run);
 
-        let group_ctx = GroupContext::new(args.group_dir.path.clone(), args.subproc_id())?;
+        let group_ctx = GroupContext::new(
+            args.group_dir.path.clone(),
+            args.subproc_id(),
+            args.debug_keepalive,
+        )?;
         if is_parent_process {
             debug!(group_ctx.log(), "Created group context: {:?}", group_ctx);
         }
@@ -783,10 +820,19 @@ impl SystemTestGroup {
                         match event.what {
                             EventPayload::TaskFailed { ref task_id, .. }
                             | EventPayload::TaskStopped { ref task_id, .. }
-                                if task_id.name().eq(ROOT_TASK_NAME) =>
+                                if task_id.name().eq(REPORT_TASK_NAME) =>
                             {
                                 debug!(group_ctx.log(), "Detected root completion {:?} (awaiting all running tasks to complete)", event);
                                 is_root_completed = true;
+                                debug!(group_ctx.log(), "All test events completed.");
+                                info!(group_ctx.log(), "\n{report}");
+                                if let Ok(group_setup) = GroupSetup::try_read_attribute(&group_ctx.get_setup_env().unwrap()) {
+                                    info!(
+                                        group_ctx.log(),
+                                        "See replica logs in Kibana: {}\n",
+                                        kibana_link(&group_setup.farm_group_name)
+                                    );
+                                };
                             }
                             _ => (),
                         };
@@ -823,13 +869,8 @@ impl SystemTestGroup {
 
                 if report.is_failure_free() {
                     let setup_env = group_ctx.get_setup_env()?;
-                    debug!(
-                        group_ctx.log(),
-                        "Obtained setup_env from disk: {:?}", setup_env
-                    );
                     match GroupSetup::try_read_attribute(&setup_env) {
                         Ok(group_setup) => {
-                            debug!(group_ctx.log(), "Group setup: {:?}", group_setup);
                             report.farm_group_report = Some(FarmGroupReport { group_setup });
                         }
                         Err(error) => {
@@ -861,18 +902,7 @@ impl SystemTestGroup {
 
         match outcome {
             Ok(Outcome::FromSubProcess) => Ok(()),
-            Ok(Outcome::FromParentProcess(report)) => {
-                if let Some(ref farm_group_report) = report.farm_group_report {
-                    info!(
-                        &logger,
-                        "\n{report}\nSee replica logs in Kibana: {}",
-                        kibana_link(&farm_group_report.group_setup.farm_group_name)
-                    );
-                } else {
-                    info!(&logger, "\n{report}");
-                }
-                Ok(())
-            }
+            Ok(Outcome::FromParentProcess(_)) => Ok(()),
             Err(failure_mode) => {
                 // TODO: also print Kibana link in case of failure. This requires that the dyncamic group name (e.g., distributed_mainnet_test_bin--1673213252002) is made available to all SystemTestGroup instances, not only those used with Farm.
                 warn!(logger, "{failure_mode}");
@@ -896,7 +926,7 @@ fn log_event(log: &Logger, e: &Event) {
                 info!(log, "[{task_id}|{channel_name:?} closed] ");
             }
             ProcessEventPayload::Exited(exit_status) => {
-                info!(log, "[{task_id} existed: {exit_status:?}] ");
+                info!(log, "[{task_id} exited: {exit_status:?}] ");
             }
         },
         e => debug!(log, "Event: {e:?}"),

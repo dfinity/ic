@@ -10,6 +10,9 @@ use std::sync::{
     Arc,
 };
 
+use slog::{info, Logger};
+use tokio::{runtime::Handle as RtHandle, task::JoinHandle};
+
 use super::event::{BroadcastingEventSubscriberFactory, Event, TaskId};
 
 pub trait TaskIdT: Clone + PartialEq + Eq + Send + Sync + std::fmt::Debug {}
@@ -22,7 +25,10 @@ pub trait Task: Send + Sync {
     fn spawn(&self) -> Box<dyn TaskHandle>;
 
     /// Execute the task, consuming the current thread.
-    fn execute(&self) -> Result<(), String>;
+    /// execute() is only ever called on SubprocessTasks, so only that task type should reimplement this.
+    fn execute(&self) -> Result<(), String> {
+        Ok(())
+    }
 
     fn task_id(&self) -> TaskId;
 }
@@ -75,10 +81,6 @@ impl Task for EmptyTask {
             stopped: Default::default(),
             sub_fact: self.sub_fact.clone(),
         }) as Box<dyn TaskHandle>
-    }
-
-    fn execute(&self) -> Result<(), String> {
-        Ok(())
     }
 
     fn task_id(&self) -> TaskId {
@@ -178,6 +180,98 @@ impl OldTask {
         //    failure_message
         // );
         self.finalize(OldTaskState::Failed { failure_message })
+    }
+}
+
+pub struct DebugKeepaliveTask {
+    spawned: AtomicBool,
+    task_id: TaskId,
+    sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
+    logger: Logger,
+    rt: RtHandle,
+}
+
+impl DebugKeepaliveTask {
+    pub fn new(
+        sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
+        task_id: TaskId,
+        logger: Logger,
+        rt: RtHandle,
+    ) -> Self {
+        Self {
+            spawned: Default::default(),
+            task_id,
+            sub_fact,
+            logger,
+            rt,
+        }
+    }
+}
+
+impl Task for DebugKeepaliveTask {
+    fn spawn(&self) -> Box<dyn TaskHandle> {
+        if self.spawned.fetch_or(true, Ordering::Relaxed) {
+            panic!("Cannot respawn already spawned task.");
+        }
+        let mut sub = self.sub_fact.create_broadcasting_subscriber();
+        (sub)(Event::task_spawned(self.task_id.clone()));
+
+        let logger = self.logger.clone();
+        let join_handle = self.rt.spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            let mut mins = 1;
+            loop {
+                info!(
+                    logger,
+                    "Keeping alive system under test due to `ict -k` flag. Ctrl-c to stop."
+                );
+                tokio::time::sleep(std::time::Duration::from_secs(60 * mins)).await;
+                if mins < 5 {
+                    mins += 1;
+                }
+            }
+        });
+
+        Box::new(DebugKeepaliveTaskHandle {
+            join_handle,
+            task_id: self.task_id.clone(),
+            stopped: Default::default(),
+            sub_fact: self.sub_fact.clone(),
+        }) as Box<dyn TaskHandle>
+    }
+
+    fn task_id(&self) -> TaskId {
+        self.task_id.clone()
+    }
+}
+
+pub struct DebugKeepaliveTaskHandle {
+    join_handle: JoinHandle<()>,
+    task_id: TaskId,
+    stopped: AtomicBool,
+    sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
+}
+
+impl TaskHandle for DebugKeepaliveTaskHandle {
+    fn fail(&self) {
+        if self.stopped.fetch_or(true, Ordering::Relaxed) {
+            return;
+        }
+        self.join_handle.abort();
+        let mut sub = self.sub_fact.create_broadcasting_subscriber();
+        (sub)(Event::task_failed(
+            self.task_id.clone(),
+            "Keepalive Task failed.".to_string(),
+        ));
+    }
+
+    fn stop(&self) {
+        if self.stopped.fetch_or(true, Ordering::Relaxed) {
+            return;
+        }
+        self.join_handle.abort();
+        let mut sub = self.sub_fact.create_broadcasting_subscriber();
+        (sub)(Event::task_stopped(self.task_id.clone()));
     }
 }
 
