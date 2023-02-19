@@ -14,7 +14,7 @@ use ic_interfaces::ecdsa::{
     EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
     EcdsaPoolSectionOps, MutableEcdsaPool, MutableEcdsaPoolSection,
 };
-use ic_interfaces::gossip_pool::{EcdsaGossipPool, GossipPool};
+use ic_interfaces::gossip_pool::GossipPool;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
@@ -437,8 +437,6 @@ impl GossipPool<EcdsaArtifact> for EcdsaPoolImpl {
         unimplemented!()
     }
 }
-
-impl EcdsaGossipPool for EcdsaPoolImpl {}
 
 #[cfg(test)]
 mod tests {

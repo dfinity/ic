@@ -14,7 +14,7 @@ use ic_interfaces::{
         ConsensusPoolCache, HeightIndexedPool, HeightRange, MutableConsensusPool, PoolSection,
         UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
-    gossip_pool::{ConsensusGossipPool, GossipPool},
+    gossip_pool::GossipPool,
     time_source::TimeSource,
 };
 use ic_logger::ReplicaLogger;
@@ -692,8 +692,6 @@ impl GossipPool<ConsensusArtifact> for ConsensusPoolImpl {
         )
     }
 }
-
-impl ConsensusGossipPool for ConsensusPoolImpl {}
 
 /// An iterator for block ancestors.
 /// TODO: this is currently used only for ConsensusBlockChainImpl. Migrate

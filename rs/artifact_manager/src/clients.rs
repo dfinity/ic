@@ -12,10 +12,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusPool,
     dkg::DkgPool,
     ecdsa::EcdsaPool,
-    gossip_pool::{
-        CanisterHttpGossipPool, CertificationGossipPool, ConsensusGossipPool, DkgGossipPool,
-        EcdsaGossipPool, IngressGossipPool,
-    },
+    gossip_pool::GossipPool,
     ingress_pool::{IngressPool, IngressPoolThrottler},
     time_source::TimeSource,
 };
@@ -264,8 +261,8 @@ fn check_protocol_version<T: HasVersion>(artifact: &T) -> Result<(), ReplicaVers
     }
 }
 
-impl<Pool: ConsensusPool + ConsensusGossipPool + Send + Sync> ArtifactClient<ConsensusArtifact>
-    for ConsensusClient<Pool>
+impl<Pool: ConsensusPool + GossipPool<ConsensusArtifact> + Send + Sync>
+    ArtifactClient<ConsensusArtifact> for ConsensusClient<Pool>
 {
     /// The method checks if the protocol version in the *Consensus* message is
     /// correct.
@@ -360,8 +357,9 @@ impl<Pool> IngressClient<Pool> {
     }
 }
 
-impl<Pool: IngressPool + IngressGossipPool + IngressPoolThrottler + Send + Sync + 'static>
-    ArtifactClient<IngressArtifact> for IngressClient<Pool>
+impl<
+        Pool: IngressPool + GossipPool<IngressArtifact> + IngressPoolThrottler + Send + Sync + 'static,
+    > ArtifactClient<IngressArtifact> for IngressClient<Pool>
 {
     /// The method checks whether the given signed ingress bytes constitutes a
     /// valid singed ingress message.
@@ -483,7 +481,7 @@ impl<PoolCertification> CertificationClient<PoolCertification> {
     }
 }
 
-impl<PoolCertification: CertificationPool + CertificationGossipPool + Send + Sync>
+impl<PoolCertification: CertificationPool + GossipPool<CertificationArtifact> + Send + Sync>
     ArtifactClient<CertificationArtifact> for CertificationClient<PoolCertification>
 {
     /// The method always accepts the given `CertificationMessage`.
@@ -568,7 +566,9 @@ impl<Pool> DkgClient<Pool> {
     }
 }
 
-impl<Pool: DkgPool + DkgGossipPool + Send + Sync> ArtifactClient<DkgArtifact> for DkgClient<Pool> {
+impl<Pool: DkgPool + GossipPool<DkgArtifact> + Send + Sync> ArtifactClient<DkgArtifact>
+    for DkgClient<Pool>
+{
     /// The method checks if the protocol version is correct.
     ///
     /// If this is the case, the artifact is returned wrapped in an
@@ -627,7 +627,7 @@ impl<Pool> EcdsaClient<Pool> {
     }
 }
 
-impl<Pool: EcdsaPool + EcdsaGossipPool + Send + Sync> ArtifactClient<EcdsaArtifact>
+impl<Pool: EcdsaPool + GossipPool<EcdsaArtifact> + Send + Sync> ArtifactClient<EcdsaArtifact>
     for EcdsaClient<Pool>
 {
     fn check_artifact_acceptance(
@@ -665,7 +665,9 @@ pub struct CanisterHttpClient<Pool> {
     gossip: Arc<dyn ArtifactPoolDescriptor<CanisterHttpArtifact, Pool> + Send + Sync>,
 }
 
-impl<Pool: CanisterHttpPool + CanisterHttpGossipPool + Send + Sync> CanisterHttpClient<Pool> {
+impl<Pool: CanisterHttpPool + GossipPool<CanisterHttpArtifact> + Send + Sync>
+    CanisterHttpClient<Pool>
+{
     pub fn new<T: ArtifactPoolDescriptor<CanisterHttpArtifact, Pool> + Send + Sync + 'static>(
         pool: Arc<RwLock<Pool>>,
         gossip: T,
@@ -677,7 +679,7 @@ impl<Pool: CanisterHttpPool + CanisterHttpGossipPool + Send + Sync> CanisterHttp
     }
 }
 
-impl<Pool: CanisterHttpPool + CanisterHttpGossipPool + Send + Sync>
+impl<Pool: CanisterHttpPool + GossipPool<CanisterHttpArtifact> + Send + Sync>
     ArtifactClient<CanisterHttpArtifact> for CanisterHttpClient<Pool>
 {
     fn check_artifact_acceptance(

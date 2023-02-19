@@ -12,7 +12,7 @@ use ic_interfaces::{
     consensus_pool::{ChangeAction as ConsensusAction, ConsensusPoolCache, MutableConsensusPool},
     dkg::{ChangeAction as DkgChangeAction, Dkg, MutableDkgPool},
     ecdsa::{Ecdsa, EcdsaChangeAction, MutableEcdsaPool},
-    gossip_pool::CanisterHttpGossipPool,
+    gossip_pool::GossipPool,
     ingress_manager::IngressHandler,
     ingress_pool::{ChangeAction as IngressAction, MutableIngressPool},
     time_source::{SysTimeSource, TimeSource},
@@ -799,7 +799,7 @@ pub struct CanisterHttpProcessor<PoolCanisterHttp> {
 }
 
 impl<
-        PoolCanisterHttp: MutableCanisterHttpPool + CanisterHttpGossipPool + Send + Sync + 'static,
+        PoolCanisterHttp: MutableCanisterHttpPool + GossipPool<CanisterHttpArtifact> + Send + Sync + 'static,
     > CanisterHttpProcessor<PoolCanisterHttp>
 {
     pub fn build<
