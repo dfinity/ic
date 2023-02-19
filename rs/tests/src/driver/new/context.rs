@@ -19,6 +19,7 @@ pub struct GroupContext {
     pub group_dir: PathBuf,
     logger: Logger,
     pub parent_pid: u32,
+    pub debug_keepalive: bool,
 }
 
 impl GroupContext {
@@ -27,7 +28,11 @@ impl GroupContext {
     ///
     /// XXX: The task id technically should be part of the ProcessContext. However, we need it here
     /// to create the log channel in case we are in a subprocess.
-    pub fn new(group_dir: PathBuf, subproc_info: Option<(TaskId, u32)>) -> Result<Self> {
+    pub fn new(
+        group_dir: PathBuf,
+        subproc_info: Option<(TaskId, u32)>,
+        debug_keepalive: bool,
+    ) -> Result<Self> {
         let task_id = subproc_info.as_ref().map(|t| t.0.clone());
         let parent_pid = subproc_info.map(|t| t.1).unwrap_or_else(std::process::id);
         let socket_path = Self::log_socket_path_(parent_pid);
@@ -46,6 +51,7 @@ impl GroupContext {
             group_dir,
             logger,
             parent_pid,
+            debug_keepalive,
         })
     }
 
