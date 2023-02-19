@@ -11,7 +11,7 @@ use ic_interfaces::{
     canister_http::{
         CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool, MutableCanisterHttpPool,
     },
-    gossip_pool::{CanisterHttpGossipPool, GossipPool},
+    gossip_pool::GossipPool,
 };
 use ic_metrics::MetricsRegistry;
 use ic_types::{
@@ -174,7 +174,5 @@ impl GossipPool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
         unimplemented!()
     }
 }
-
-impl CanisterHttpGossipPool for CanisterHttpPoolImpl {}
 
 // TODO: Tests

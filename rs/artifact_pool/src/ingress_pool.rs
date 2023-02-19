@@ -8,7 +8,7 @@ use crate::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
     artifact_pool::{ArtifactPoolError, HasTimestamp, UnvalidatedArtifact},
-    gossip_pool::{GossipPool, IngressGossipPool},
+    gossip_pool::GossipPool,
     ingress_pool::{
         ChangeAction, ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect,
         IngressPoolThrottler, MutableIngressPool, PoolSection, SelectResult,
@@ -388,8 +388,6 @@ impl GossipPool<IngressArtifact> for IngressPoolImpl {
         Box::new(vec![].into_iter())
     }
 }
-
-impl IngressGossipPool for IngressPoolImpl {}
 
 /// Implement the select interface required by IngressSelector (and consequently
 /// by consensus). It allows the caller to select qualifying artifacts from the

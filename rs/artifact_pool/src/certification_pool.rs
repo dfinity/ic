@@ -4,7 +4,7 @@ use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
     certification::{CertificationPool, ChangeAction, ChangeSet, MutableCertificationPool},
     consensus_pool::HeightIndexedPool,
-    gossip_pool::{CertificationGossipPool, GossipPool},
+    gossip_pool::GossipPool,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -319,8 +319,6 @@ impl GossipPool<CertificationArtifact> for CertificationPoolImpl {
         Box::new(all_certs.chain(all_shares))
     }
 }
-
-impl CertificationGossipPool for CertificationPoolImpl {}
 
 #[cfg(test)]
 mod tests {

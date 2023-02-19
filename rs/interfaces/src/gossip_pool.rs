@@ -1,13 +1,6 @@
 //! The gossip pool public interface.
 use crate::artifact_pool::ArtifactPoolError;
-use ic_types::{
-    artifact::ArtifactKind,
-    artifact_kind::{
-        CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
-        IngressArtifact,
-    },
-    NodeId,
-};
+use ic_types::{artifact::ArtifactKind, NodeId};
 
 /// GossipPool trait is the generic interface used by ArtifactManager
 /// to interact with the Pools internally and allow GossipProtocol to
@@ -45,20 +38,3 @@ pub trait GossipPool<T: ArtifactKind> {
         filter: &T::Filter,
     ) -> Box<dyn Iterator<Item = T::Message> + '_>;
 }
-
-/// GossipPool trait for ConsensusPool
-pub trait ConsensusGossipPool: GossipPool<ConsensusArtifact> {}
-
-/// GossipPool trait for IngressPool
-pub trait IngressGossipPool: GossipPool<IngressArtifact> {}
-
-/// GossipPool trait for CertificationPool
-pub trait CertificationGossipPool: GossipPool<CertificationArtifact> {}
-
-/// GossipPool trait for DkgPool
-pub trait DkgGossipPool: GossipPool<DkgArtifact> {}
-
-/// GossipPool trait for EcdsaPool
-pub trait EcdsaGossipPool: GossipPool<EcdsaArtifact> {}
-
-pub trait CanisterHttpGossipPool: GossipPool<CanisterHttpArtifact> {}

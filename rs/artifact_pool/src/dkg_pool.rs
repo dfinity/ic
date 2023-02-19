@@ -5,7 +5,7 @@ use crate::{
 use ic_interfaces::{
     artifact_pool::{UnvalidatedArtifact, ValidatedArtifact},
     dkg::{ChangeAction, ChangeSet, DkgPool, MutableDkgPool},
-    gossip_pool::{DkgGossipPool, GossipPool},
+    gossip_pool::GossipPool,
 };
 use ic_metrics::MetricsRegistry;
 use ic_types::consensus::dkg;
@@ -161,8 +161,6 @@ impl GossipPool<DkgArtifact> for DkgPoolImpl {
         unimplemented!()
     }
 }
-
-impl DkgGossipPool for DkgPoolImpl {}
 
 impl DkgPool for DkgPoolImpl {
     fn get_validated(&self) -> Box<dyn Iterator<Item = &dkg::Message> + '_> {
