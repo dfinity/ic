@@ -365,22 +365,6 @@ fn key_from_registry(
     }
 }
 
-fn tls_certificate_from_registry(
-    registry: &dyn RegistryClient,
-    node_id: NodeId,
-    registry_version: RegistryVersion,
-) -> CryptoResult<X509PublicKeyCert> {
-    use ic_registry_client_helpers::crypto::CryptoRegistry;
-    let maybe_tls_certificate = registry.get_tls_certificate(node_id, registry_version)?;
-    match maybe_tls_certificate {
-        None => Err(CryptoError::TlsCertNotFound {
-            node_id,
-            registry_version,
-        }),
-        Some(cert) => Ok(cert),
-    }
-}
-
 /// Get an identifier to use with logging. If debug logging is not enabled for the caller, a
 /// `log_id` of 0 is returned.
 /// The main criteria for the identifier, and the generation thereof, are:
