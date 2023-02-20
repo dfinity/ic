@@ -3,7 +3,7 @@
 use super::*;
 use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::NodePublicKeyData;
+use ic_crypto_internal_csp::api::CspPublicKeyStore;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils::empty_fake_registry;
 use ic_interfaces::crypto::KeyManager;
@@ -12,38 +12,6 @@ use ic_types_test_utils::ids::node_test_id;
 
 mod node_public_key_data {
     use super::*;
-    use ic_crypto_internal_csp::api::DkgDealingEncryptionKeyIdRetrievalError;
-
-    #[test]
-    fn should_return_key_not_found_error_when_no_dkg_encryption_key() {
-        CryptoConfig::run_with_temp_config(|config| {
-            let csp = csp_for_config(&config, None);
-            assert_eq!(
-                csp.dkg_dealing_encryption_key_id(),
-                Err(DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound)
-            );
-        })
-    }
-
-    #[test]
-    fn should_get_dkg_dealing_encryption_key_id() {
-        CryptoConfig::run_with_temp_config(|config| {
-            let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
-            let generated_dkg_dealing_enc_pk = CspFsEncryptionPublicKey::try_from(
-                node_pks
-                    .dkg_dealing_encryption_public_key
-                    .expect("no dkg key"),
-            )
-            .expect("invalid dkg encryption key");
-            let csp = csp_for_config(&config, None);
-
-            let key_id = csp
-                .dkg_dealing_encryption_key_id()
-                .expect("Failed to retrieve DKG dealing encryption key id");
-
-            assert_eq!(key_id, KeyId::from(&generated_dkg_dealing_enc_pk))
-        })
-    }
 
     #[test]
     fn should_get_correct_node_public_keys() {

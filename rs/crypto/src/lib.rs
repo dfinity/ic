@@ -26,7 +26,7 @@ pub use sign::{get_mega_pubkey, get_tecdsa_master_public_key, MegaKeyFromRegistr
 
 use crate::sign::ThresholdSigDataStoreImpl;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::NodePublicKeyData;
+use ic_crypto_internal_csp::api::CspPublicKeyStore;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_generation::derive_node_id;

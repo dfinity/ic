@@ -1,8 +1,8 @@
 //! Static crypto utility methods.
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp::api::{
-    CspCreateMEGaKeyError, CspPublicAndSecretKeyStoreChecker, CspSecretKeyStoreChecker,
-    NodePublicKeyData,
+    CspCreateMEGaKeyError, CspPublicAndSecretKeyStoreChecker, CspPublicKeyStore,
+    CspSecretKeyStoreChecker,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::keygen::utils::{

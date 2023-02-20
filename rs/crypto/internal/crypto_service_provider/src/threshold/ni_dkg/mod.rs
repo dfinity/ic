@@ -4,11 +4,15 @@
 //! including the secret key store and random number generator, and the
 //! stateless crypto lib.
 
-use crate::api::{NiDkgCspClient, NodePublicKeyData};
+use crate::api::{CspPublicKeyStore, NiDkgCspClient, NodePublicKeyDataError};
 use crate::key_id::KeyId;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::Csp;
+use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
+use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
+    CspDkgLoadPrivateKeyError, CspDkgUpdateFsEpochError,
+};
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as clib;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
 use ic_crypto_internal_threshold_sig_bls12381::types as threshold_types;
@@ -20,6 +24,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
 use ic_logger::debug;
+use ic_types::crypto::error::{KeyNotFoundError, MalformedDataError};
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeId, NodeIndex, NumberOfNodes};
@@ -54,7 +59,29 @@ impl NiDkgCspClient for Csp {
     ) -> Result<(), ni_dkg_errors::CspDkgUpdateFsEpochError> {
         debug!(self.logger; crypto.method_name => "update_forward_secure_epoch", crypto.dkg_epoch => epoch.get());
 
-        let key_id = self.dkg_dealing_encryption_key_id()?;
+        let key_id = dkg_dealing_encryption_key_id(self).map_err(|error| match error {
+            DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound => {
+                CspDkgUpdateFsEpochError::KeyNotFoundError(KeyNotFoundError {
+                    internal_error: String::from("Missing DKG dealing encryption key"),
+                    key_id: String::from(
+                        "Public key not found, therefore the key id could not be derived",
+                    ),
+                })
+            }
+            DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey {
+                key_bytes,
+                details: description,
+            } => CspDkgUpdateFsEpochError::MalformedPublicKeyError(MalformedDataError {
+                algorithm: AlgorithmId::NiDkg_Groth20_Bls12_381,
+                internal_error: description,
+                data: Some(key_bytes),
+            }),
+            DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError(details) => {
+                CspDkgUpdateFsEpochError::TransientInternalError(InternalError {
+                    internal_error: details,
+                })
+            }
+        })?;
         self.csp_vault
             .update_forward_secure_epoch(algorithm_id, key_id, epoch)
     }
@@ -196,7 +223,29 @@ impl NiDkgCspClient for Csp {
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError> {
         debug!(self.logger; crypto.method_name => "load_threshold_signing_key", crypto.dkg_epoch => epoch.get());
 
-        let fs_key_id = self.dkg_dealing_encryption_key_id()?;
+        let fs_key_id = dkg_dealing_encryption_key_id(self).map_err(|error| match error {
+            DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound => {
+                CspDkgLoadPrivateKeyError::KeyNotFoundError(KeyNotFoundError {
+                    internal_error: String::from("Missing DKG dealing encryption key"),
+                    key_id: String::from(
+                        "Public key not found, therefore the key id could not be derived",
+                    ),
+                })
+            }
+            DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey {
+                key_bytes,
+                details: description,
+            } => CspDkgLoadPrivateKeyError::MalformedPublicKeyError(MalformedDataError {
+                algorithm: AlgorithmId::NiDkg_Groth20_Bls12_381,
+                internal_error: description,
+                data: Some(key_bytes),
+            }),
+            DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError(details) => {
+                CspDkgLoadPrivateKeyError::TransientInternalError(InternalError {
+                    internal_error: details,
+                })
+            }
+        })?;
 
         self.csp_vault.load_threshold_signing_key(
             algorithm_id,
@@ -216,6 +265,46 @@ impl NiDkgCspClient for Csp {
         self.csp_vault
             .retain_threshold_keys_if_present(active_key_ids)
     }
+}
+
+fn dkg_dealing_encryption_key_id<T: CspPublicKeyStore>(
+    csp: &T,
+) -> Result<KeyId, DkgDealingEncryptionKeyIdRetrievalError> {
+    let pk = CspFsEncryptionPublicKey::try_from(
+        csp.current_node_public_keys()
+            .map_err(|error| match error {
+                NodePublicKeyDataError::TransientInternalError(msg) => {
+                    DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError(msg)
+                }
+            })?
+            .dkg_dealing_encryption_public_key
+            .ok_or(DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound)?,
+    )
+    .map_err(
+        |e| DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey {
+            key_bytes: e.key_bytes,
+            details: format!(
+                "Unsupported public key proto as dkg dealing encryption public key: {}",
+                e.internal_error
+            ),
+        },
+    )?;
+    Ok(KeyId::from(&pk))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum DkgDealingEncryptionKeyIdRetrievalError {
+    /// Missing DKG dealing encryption key
+    KeyNotFound,
+    /// The public key could not be parsed or was otherwise invalid
+    MalformedPublicKey {
+        /// Raw key data
+        key_bytes: Vec<u8>,
+        /// Auxiliary details
+        details: String,
+    },
+    /// Transient internal error occurred
+    TransientInternalError(String),
 }
 
 pub mod static_api {

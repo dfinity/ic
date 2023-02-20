@@ -10,8 +10,8 @@ pub use canister_threshold::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
 };
 pub use keygen::{
-    CspKeyGenerator, CspPublicAndSecretKeyStoreChecker, CspSecretKeyStoreChecker,
-    DkgDealingEncryptionKeyIdRetrievalError, NodePublicKeyData, NodePublicKeyDataError,
+    CspKeyGenerator, CspPublicAndSecretKeyStoreChecker, CspPublicKeyStore,
+    CspSecretKeyStoreChecker, NodePublicKeyDataError,
 };
 pub use sign::{CspSigVerifier, CspSigner};
 pub use threshold::{

@@ -17,7 +17,7 @@ const FIXED_SEED: u64 = 42;
 
 mod gen_node_siging_key_pair_tests {
     use super::*;
-    use crate::NodePublicKeyData;
+    use crate::CspPublicKeyStore;
 
     #[test]
     fn should_correctly_generate_node_signing_keys() {
@@ -86,7 +86,7 @@ mod gen_node_siging_key_pair_tests {
 }
 
 mod gen_key_pair_with_pop_tests {
-    use crate::{api::NodePublicKeyData, keygen::utils::committee_signing_pk_to_proto};
+    use crate::{api::CspPublicKeyStore, keygen::utils::committee_signing_pk_to_proto};
 
     use super::*;
 

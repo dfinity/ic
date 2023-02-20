@@ -24,10 +24,10 @@ pub use crate::vault::remote_csp_vault::run_csp_vault_server;
 use crate::vault::remote_csp_vault::RemoteCspVault;
 
 use crate::api::{
-    CspIDkgProtocol, CspKeyGenerator, CspPublicAndSecretKeyStoreChecker, CspSecretKeyStoreChecker,
-    CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
-    CspTlsHandshakeSignerProvider, DkgDealingEncryptionKeyIdRetrievalError, NiDkgCspClient,
-    NodePublicKeyData, NodePublicKeyDataError, ThresholdSignatureCspClient,
+    CspIDkgProtocol, CspKeyGenerator, CspPublicAndSecretKeyStoreChecker, CspPublicKeyStore,
+    CspSecretKeyStoreChecker, CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier,
+    CspThresholdEcdsaSigner, CspTlsHandshakeSignerProvider, NiDkgCspClient, NodePublicKeyDataError,
+    ThresholdSignatureCspClient,
 };
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
@@ -37,14 +37,12 @@ use crate::vault::api::{
 };
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_logger::{info, new_logger, replica_logger::no_op_logger, ReplicaLogger};
 use ic_types::crypto::CurrentNodePublicKeys;
 use key_id::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use secret_key_store::proto_store::ProtoSecretKeyStore;
-use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
@@ -71,7 +69,7 @@ pub trait CryptoServiceProvider:
     + CspSecretKeyStoreChecker
     + CspPublicAndSecretKeyStoreChecker
     + CspTlsHandshakeSignerProvider
-    + NodePublicKeyData
+    + CspPublicKeyStore
 {
 }
 
@@ -88,7 +86,7 @@ impl<T> CryptoServiceProvider for T where
         + CspSecretKeyStoreChecker
         + CspPublicAndSecretKeyStoreChecker
         + CspTlsHandshakeSignerProvider
-        + NodePublicKeyData
+        + CspPublicKeyStore
 {
 }
 
@@ -258,7 +256,7 @@ impl Csp {
     }
 }
 
-impl NodePublicKeyData for Csp {
+impl CspPublicKeyStore for Csp {
     fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError> {
         let pks = self.csp_vault.current_node_public_keys()?;
         Ok(pks)
@@ -269,26 +267,6 @@ impl NodePublicKeyData for Csp {
     ) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError> {
         let pks = self.csp_vault.current_node_public_keys_with_timestamps()?;
         Ok(pks)
-    }
-
-    fn dkg_dealing_encryption_key_id(
-        &self,
-    ) -> Result<KeyId, DkgDealingEncryptionKeyIdRetrievalError> {
-        let pk = CspFsEncryptionPublicKey::try_from(
-            self.current_node_public_keys()?
-                .dkg_dealing_encryption_public_key
-                .ok_or(DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound)?,
-        )
-        .map_err(
-            |e| DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey {
-                key_bytes: e.key_bytes,
-                details: format!(
-                    "Unsupported public key proto as dkg dealing encryption public key: {}",
-                    e.internal_error
-                ),
-            },
-        )?;
-        Ok(KeyId::from(&pk))
     }
 
     fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, NodePublicKeyDataError> {

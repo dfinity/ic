@@ -5,14 +5,12 @@
 #![allow(clippy::too_many_arguments)]
 
 use ic_base_types::RegistryVersion;
+use ic_crypto_internal_csp::api::NodePublicKeyDataError;
 use ic_crypto_internal_csp::api::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspPublicAndSecretKeyStoreChecker,
-    CspSecretKeyStoreChecker, CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier,
-    CspThresholdEcdsaSigner, CspThresholdSignError, CspTlsHandshakeSignerProvider, NiDkgCspClient,
-    NodePublicKeyData, ThresholdSignatureCspClient,
-};
-use ic_crypto_internal_csp::api::{
-    DkgDealingEncryptionKeyIdRetrievalError, NodePublicKeyDataError,
+    CspPublicKeyStore, CspSecretKeyStoreChecker, CspSigVerifier, CspSigner,
+    CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner, CspThresholdSignError,
+    CspTlsHandshakeSignerProvider, NiDkgCspClient, ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::ExternalPublicKeys;
@@ -260,10 +258,9 @@ mock! {
         fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> Result<bool, CryptoError>;
     }
 
-    pub trait NodePublicKeyData {
+    pub trait CspPublicKeyStore {
         fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError>;
         fn current_node_public_keys_with_timestamps(&self) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError>;
-        fn dkg_dealing_encryption_key_id(&self) -> Result<KeyId, DkgDealingEncryptionKeyIdRetrievalError>;
         fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, NodePublicKeyDataError>;
     }
 
