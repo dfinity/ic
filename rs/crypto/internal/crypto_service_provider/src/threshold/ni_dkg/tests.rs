@@ -102,6 +102,77 @@ mod gen_dealing_encryption_key_pair_tests {
     }
 }
 
+mod dkg_dealing_encryption_key_id {
+    use super::*;
+    use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
+    use crate::threshold::ni_dkg::dkg_dealing_encryption_key_id;
+    use crate::{Csp, LocalCspVault};
+    use assert_matches::assert_matches;
+    use ic_protobuf::registry::crypto::v1::PublicKey;
+
+    #[test]
+    fn should_return_key_not_found_error_when_no_dkg_encryption_key() {
+        let csp = Csp::builder().build();
+        let result = dkg_dealing_encryption_key_id(&csp);
+        assert_matches!(
+            result,
+            Err(DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound)
+        );
+    }
+    #[test]
+    fn should_return_malformed_error_when_public_key_invalid() {
+        let mut public_key_store = MockPublicKeyStore::new();
+        let invalid_dkg_dealing_encryption_public_key = PublicKey::default();
+        public_key_store
+            .expect_ni_dkg_dealing_encryption_pubkey()
+            .times(1)
+            .return_const(Some(invalid_dkg_dealing_encryption_public_key));
+        public_key_store
+            .expect_node_signing_pubkey()
+            .times(1)
+            .return_const(None);
+        public_key_store
+            .expect_committee_signing_pubkey()
+            .times(1)
+            .return_const(None);
+        public_key_store
+            .expect_tls_certificate()
+            .times(1)
+            .return_const(None);
+        public_key_store
+            .expect_idkg_dealing_encryption_pubkeys()
+            .times(1)
+            .return_const(vec![]);
+        let csp = Csp::builder()
+            .with_vault(
+                LocalCspVault::builder()
+                    .with_mock_stores()
+                    .with_public_key_store(public_key_store)
+                    .build(),
+            )
+            .build();
+
+        let result = dkg_dealing_encryption_key_id(&csp);
+
+        assert_matches!(
+            result,
+            Err(DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey { .. })
+        );
+    }
+
+    #[test]
+    fn should_get_dkg_dealing_encryption_key_id() {
+        let csp = Csp::builder().build();
+        let (generated_dkg_pk, _pop) = csp
+            .gen_dealing_encryption_key_pair(NODE_1)
+            .expect("no dkg key");
+
+        let result = dkg_dealing_encryption_key_id(&csp);
+
+        assert_matches!(result, Ok(key_id) if key_id == KeyId::from(&generated_dkg_pk));
+    }
+}
+
 proptest! {
     #![proptest_config(ProptestConfig {
         cases: 4,

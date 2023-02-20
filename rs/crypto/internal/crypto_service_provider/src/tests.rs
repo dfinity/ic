@@ -14,7 +14,7 @@ mod csp_tests {
     mod node_public_key_data {
         use super::*;
         use crate::vault::api::CspPublicKeyStoreError;
-        use crate::{NodePublicKeyData, NodePublicKeyDataError};
+        use crate::{CspPublicKeyStore, NodePublicKeyDataError};
         use assert_matches::assert_matches;
         use ic_types::crypto::CurrentNodePublicKeys;
 

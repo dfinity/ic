@@ -110,9 +110,8 @@ pub trait CspPublicAndSecretKeyStoreChecker {
     fn pks_and_sks_complete(&self) -> Result<ValidNodePublicKeys, PksAndSksCompleteError>;
 }
 
-/// A trait that exposes the information about node public keys and key
-/// identifiers.
-pub trait NodePublicKeyData {
+/// A trait that exposes the information about the node public key store.
+pub trait CspPublicKeyStore {
     /// Returns the node's current public keys where generation timestamps are stripped.
     ///
     /// # Errors
@@ -130,18 +129,6 @@ pub trait NodePublicKeyData {
     fn current_node_public_keys_with_timestamps(
         &self,
     ) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError>;
-
-    /// Returns the id of the dkg dealing encryption key.
-    ///
-    /// # Errors
-    /// * [`DkgDealingEncryptionKeyIdRetrievalError::KeyNotFound`] if the key was not found.
-    /// * [`DkgDealingEncryptionKeyIdRetrievalError::MalformedPublicKey`] if the public key
-    ///   could not be parsed or was otherwise invalid.
-    /// * [`DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError`] if there is a transient internal
-    ///   error when calling the CSP vault.
-    fn dkg_dealing_encryption_key_id(
-        &self,
-    ) -> Result<KeyId, DkgDealingEncryptionKeyIdRetrievalError>;
 
     /// Returns the number of iDKG dealing encryption public keys stored locally.
     ///
