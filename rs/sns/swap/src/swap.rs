@@ -699,18 +699,6 @@ impl Swap {
             ));
         }
 
-        // Append to a new buyer to the BUYERS_LIST_INDEX
-        let is_preexisting_buyer = self.buyers.contains_key(&buyer.to_string());
-        if !is_preexisting_buyer {
-            insert_buyer_into_buyers_list_index(buyer)
-                .map_err(|grow_failed| {
-                    format!(
-                        "Failed to add buyer {} to state, the canister's stable memory could not grow: {}",
-                        buyer, grow_failed
-                    )
-                })?;
-        }
-
         // Try to fetch the current ticket of the buyer
         let principal = Blob::from_bytes(buyer.as_slice().into());
         if let Some(ticket_sns_sale_canister) =
@@ -735,6 +723,18 @@ impl Swap {
             // --> Delete fully executed ticket, if it exists and proceed with the top up
             memory::OPEN_TICKETS_MEMORY.with(|m| m.borrow_mut().remove(&principal));
             // If there exists no ticket for the buyer, the payment flow will simply ignore the ticket
+        }
+
+        // Append to a new buyer to the BUYERS_LIST_INDEX
+        let is_preexisting_buyer = self.buyers.contains_key(&buyer.to_string());
+        if !is_preexisting_buyer {
+            insert_buyer_into_buyers_list_index(buyer)
+                .map_err(|grow_failed| {
+                    format!(
+                        "Failed to add buyer {} to state, the canister's stable memory could not grow: {}",
+                        buyer, grow_failed
+                    )
+                })?;
         }
 
         let buyer_state = self
