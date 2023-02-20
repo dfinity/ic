@@ -20,6 +20,67 @@ use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt};
 
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum CallOrQuery {
+    Call,
+    Query,
+}
+
+pub(crate) fn representation_indepent_hash_call_or_query(
+    request_type: CallOrQuery,
+    canister_id: Vec<u8>,
+    method_name: &str,
+    arg: Vec<u8>,
+    ingress_expiry: u64,
+    sender: Vec<u8>,
+    nonce: Option<&[u8]>,
+) -> [u8; 32] {
+    use RawHttpRequestVal::*;
+    let mut map = btreemap! {
+        "request_type".to_string() => match request_type {
+            CallOrQuery::Call => String("call".to_string()),
+            CallOrQuery::Query => String("query".to_string()),
+        },
+        "canister_id".to_string() => Bytes(canister_id),
+        "method_name".to_string() => String(method_name.to_string()),
+        "arg".to_string() => Bytes(arg),
+        "ingress_expiry".to_string() => U64(ingress_expiry),
+        "sender".to_string() => Bytes(sender),
+    };
+    if let Some(some_nonce) = nonce {
+        map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
+    }
+    hash_of_map(&map)
+}
+
+pub(crate) fn representation_independent_hash_read_state(
+    ingress_expiry: u64,
+    paths: &[Path],
+    sender: Vec<u8>,
+    nonce: Option<&[u8]>,
+) -> [u8; 32] {
+    use RawHttpRequestVal::*;
+    let mut map = btreemap! {
+        "request_type".to_string() => String("read_state".to_string()),
+        "ingress_expiry".to_string() => U64(ingress_expiry),
+        "paths".to_string() => Array(paths
+                .iter()
+                .map(|p| {
+                    RawHttpRequestVal::Array(
+                        p.iter()
+                            .map(|b| RawHttpRequestVal::Bytes(b.clone().to_vec()))
+                            .collect(),
+                    )
+                })
+                .collect()),
+        "sender".to_string() => Bytes(sender),
+    };
+    if let Some(some_nonce) = nonce {
+        map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
+    }
+    hash_of_map(&map)
+}
+
 /// Describes the fields of a canister update call as defined in
 /// `<https://sdk.dfinity.org/docs/interface-spec/index.html#api-update>`.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -39,22 +100,16 @@ pub struct HttpCanisterUpdate {
 
 impl HttpCanisterUpdate {
     /// Returns the representation-independent hash.
-    // TODO(EXC-236): Avoid the duplication between this method and the one in
-    // `SignedIngressContent`.
     pub fn representation_independent_hash(&self) -> [u8; 32] {
-        use RawHttpRequestVal::*;
-        let mut map = btreemap! {
-            "request_type".to_string() => String("call".to_string()),
-            "canister_id".to_string() => Bytes(self.canister_id.0.clone()),
-            "method_name".to_string() => String(self.method_name.clone()),
-            "arg".to_string() => Bytes(self.arg.0.clone()),
-            "ingress_expiry".to_string() => U64(self.ingress_expiry),
-            "sender".to_string() => Bytes(self.sender.0.clone()),
-        };
-        if let Some(nonce) = &self.nonce {
-            map.insert("nonce".to_string(), Bytes(nonce.0.clone()));
-        }
-        hash_of_map(&map)
+        representation_indepent_hash_call_or_query(
+            CallOrQuery::Call,
+            self.canister_id.0.clone(),
+            &self.method_name,
+            self.arg.0.clone(),
+            self.ingress_expiry,
+            self.sender.0.clone(),
+            self.nonce.as_ref().map(|x| x.0.as_slice()),
+        )
     }
 
     pub fn id(&self) -> MessageId {
@@ -163,51 +218,28 @@ impl HttpReadStateContent {
 
 impl HttpUserQuery {
     /// Returns the representation-independent hash.
-    // TODO(EXC-235): Avoid the duplication between this method and the one in
-    // `UserQuery`.
     pub fn representation_independent_hash(&self) -> [u8; 32] {
-        use RawHttpRequestVal::*;
-        let mut map = btreemap! {
-            "request_type".to_string() => String("query".to_string()),
-            "canister_id".to_string() => Bytes(self.canister_id.0.clone()),
-            "method_name".to_string() => String(self.method_name.clone()),
-            "arg".to_string() => Bytes(self.arg.0.clone()),
-            "ingress_expiry".to_string() => U64(self.ingress_expiry),
-            "sender".to_string() => Bytes(self.sender.0.clone()),
-        };
-        if let Some(nonce) = &self.nonce {
-            map.insert("nonce".to_string(), Bytes(nonce.0.clone()));
-        }
-        hash_of_map(&map)
+        representation_indepent_hash_call_or_query(
+            CallOrQuery::Query,
+            self.canister_id.0.clone(),
+            &self.method_name,
+            self.arg.0.clone(),
+            self.ingress_expiry,
+            self.sender.0.clone(),
+            self.nonce.as_ref().map(|x| x.0.as_slice()),
+        )
     }
 }
 
 impl HttpReadState {
     /// Returns the representation-independent hash.
-    // TODO(EXC-237): Avoid the duplication between this method and the one in
-    // `ReadState`.
     pub fn representation_independent_hash(&self) -> [u8; 32] {
-        use RawHttpRequestVal::*;
-        let mut map = btreemap! {
-            "request_type".to_string() => String("read_state".to_string()),
-            "ingress_expiry".to_string() => U64(self.ingress_expiry),
-            "paths".to_string() => Array(self
-                    .paths
-                    .iter()
-                    .map(|p| {
-                        RawHttpRequestVal::Array(
-                            p.iter()
-                                .map(|b| RawHttpRequestVal::Bytes(b.clone().to_vec()))
-                                .collect(),
-                        )
-                    })
-                    .collect()),
-            "sender".to_string() => Bytes(self.sender.0.clone()),
-        };
-        if let Some(nonce) = &self.nonce {
-            map.insert("nonce".to_string(), Bytes(nonce.0.clone()));
-        }
-        hash_of_map(&map)
+        representation_independent_hash_read_state(
+            self.ingress_expiry,
+            self.paths.as_slice(),
+            self.sender.0.clone(),
+            self.nonce.as_ref().map(|x| x.0.as_slice()),
+        )
     }
 }
 

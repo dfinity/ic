@@ -1,9 +1,9 @@
 //! This module contains various definitions related to Ingress messages
 
-use super::{MessageId, RawHttpRequestVal, EXPECTED_MESSAGE_ID_LENGTH};
+use super::{MessageId, EXPECTED_MESSAGE_ID_LENGTH};
 use crate::{
-    messages::message_id::hash_of_map,
     messages::{
+        http::{representation_indepent_hash_call_or_query, CallOrQuery},
         Authentication, HasCanisterId, HttpCallContent, HttpCanisterUpdate, HttpRequest,
         HttpRequestContent, HttpRequestEnvelope, HttpRequestError, SignedRequestBytes,
     },
@@ -19,7 +19,6 @@ use ic_protobuf::{
     state::ingress::v1 as pb_ingress,
     types::v1 as pb_types,
 };
-use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::{
@@ -77,22 +76,16 @@ impl HasCanisterId for SignedIngressContent {
 }
 
 impl HttpRequestContent for SignedIngressContent {
-    // TODO(EXC-236): Avoid the duplication between this method and the one in
-    // `HttpCanisterUpdate`.
     fn id(&self) -> MessageId {
-        use RawHttpRequestVal::*;
-        let mut map = btreemap! {
-            "request_type".to_string() => String("call".to_string()),
-            "canister_id".to_string() => Bytes(self.canister_id.get().to_vec()),
-            "method_name".to_string() => String(self.method_name.clone()),
-            "arg".to_string() => Bytes(self.arg.clone()),
-            "ingress_expiry".to_string() => U64(self.ingress_expiry),
-            "sender".to_string() => Bytes(self.sender.get().to_vec()),
-        };
-        if let Some(nonce) = &self.nonce {
-            map.insert("nonce".to_string(), Bytes(nonce.clone()));
-        }
-        MessageId::from(hash_of_map(&map))
+        MessageId::from(representation_indepent_hash_call_or_query(
+            CallOrQuery::Call,
+            self.canister_id.get().into_vec(),
+            &self.method_name,
+            self.arg.clone(),
+            self.ingress_expiry,
+            self.sender.get().into_vec(),
+            self.nonce.as_deref(),
+        ))
     }
 
     fn sender(&self) -> UserId {
