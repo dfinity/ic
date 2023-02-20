@@ -125,6 +125,15 @@ impl MetricsObservationsAssert {
         self
     }
 
+    pub fn contains_key_too_old_but_not_in_registry(&self, value: f64) -> &Self {
+        assert!(self.contains_crypto_counter_metric(
+            "crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry",
+            &vec![],
+            value,
+        ));
+        self
+    }
+
     fn contains_crypto_boolean_counter_metric(
         &self,
         metric_name: &str,
@@ -140,6 +149,33 @@ impl MetricsObservationsAssert {
                 } else {
                     println!(
                         "Expected boolean counter value ge 0, found {}",
+                        found_metric.get_counter().get_value()
+                    );
+                    false
+                }
+            }
+        }
+    }
+
+    fn contains_crypto_counter_metric(
+        &self,
+        metric_name: &str,
+        metric_labels: &Vec<MetricsLabel>,
+        metric_value: f64,
+    ) -> bool {
+        let metric = self.get_metric(metric_name, MetricType::COUNTER, metric_labels);
+        match metric {
+            None => false,
+            Some(found_metric) => {
+                if !found_metric.has_counter() {
+                    return false;
+                }
+                if found_metric.get_counter().get_value() == metric_value {
+                    true
+                } else {
+                    println!(
+                        "Expected counter value {}, found {}",
+                        metric_value,
                         found_metric.get_counter().get_value()
                     );
                     false

@@ -631,7 +631,9 @@ mod check_keys_with_registry {
             let in_memory_logger = InMemoryReplicaLogger::new();
             let setup = Setup::builder()
                 .with_registry_public_keys(valid_current_node_public_keys())
-                .with_csp_current_node_public_keys_result(Ok(valid_current_node_public_keys()))
+                .with_csp_current_node_public_keys_with_timestamps_result(Ok(
+                    valid_current_node_public_keys_with_timestamps(),
+                ))
                 .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
                 .with_csp_pks_and_sks_contains_result(Ok(()))
                 .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
@@ -666,7 +668,9 @@ mod check_keys_with_registry {
                 idkg_dealing_encryption_public_key.timestamp = Some(0);
             }
             let setup = Setup::builder()
-                .with_csp_current_node_public_keys_result(Ok(valid_current_node_public_keys()))
+                .with_csp_current_node_public_keys_with_timestamps_result(Ok(
+                    valid_current_node_public_keys_with_timestamps(),
+                ))
                 .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
                 .with_csp_pks_and_sks_contains_result(Ok(()))
                 .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
@@ -704,7 +708,9 @@ mod check_keys_with_registry {
                 idkg_dealing_encryption_public_key.key_value = b"samesamebutdifferent".to_vec();
             }
             let setup = Setup::builder()
-                .with_csp_current_node_public_keys_result(Ok(valid_current_node_public_keys()))
+                .with_csp_current_node_public_keys_with_timestamps_result(Ok(
+                    valid_current_node_public_keys_with_timestamps(),
+                ))
                 .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
                 .with_csp_pks_and_sks_contains_result(Ok(()))
                 .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
@@ -922,7 +928,9 @@ mod check_keys_with_registry {
         ) {
             let setup = Setup::builder()
                 .with_registry_public_keys(valid_current_node_public_keys())
-                .with_csp_current_node_public_keys_result(Ok(valid_current_node_public_keys()))
+                .with_csp_current_node_public_keys_with_timestamps_result(Ok(
+                    valid_current_node_public_keys_with_timestamps(),
+                ))
                 .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
                 .with_csp_pks_and_sks_contains_result(Ok(()))
                 .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
@@ -950,7 +958,9 @@ mod check_keys_with_registry {
                 idkg_dealing_encryption_public_key.key_value = b"samesamebutdifferent".to_vec();
             }
             let setup = Setup::builder()
-                .with_csp_current_node_public_keys_result(Ok(valid_current_node_public_keys()))
+                .with_csp_current_node_public_keys_with_timestamps_result(Ok(
+                    valid_current_node_public_keys_with_timestamps(),
+                ))
                 .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
                 .with_csp_pks_and_sks_contains_result(Ok(()))
                 .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
@@ -967,6 +977,45 @@ mod check_keys_with_registry {
 
             MetricsObservationsAssert::assert_that(setup.metrics_registry)
                 .contains_latest_key_exists_in_registry(false);
+        }
+    }
+
+    mod latest_key_too_old_but_not_in_registry {
+        use super::*;
+
+        #[test]
+        fn should_observe_metric_for_latest_local_key_too_old_but_still_not_in_registry() {
+            let setup = Setup::builder()
+                .with_registry_public_keys(valid_current_node_public_keys())
+                .with_csp_current_node_public_keys_with_timestamps_result(Ok(
+                    CurrentNodePublicKeys {
+                        idkg_dealing_encryption_public_key: Some(PublicKeyProto {
+                            key_value: b"local key not in registry".to_vec(),
+                            timestamp: Some(0),
+                            ..valid_idkg_dealing_encryption_public_key()
+                        }),
+                        ..valid_current_node_public_keys_with_timestamps()
+                    },
+                ))
+                .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
+                .with_csp_pks_and_sks_contains_result(Ok(()))
+                .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
+                    subnet_id(),
+                    Some(node_id()),
+                    Some(TWO_WEEKS),
+                ))
+                .build();
+
+            setup
+                .time_source
+                .advance_time(TWO_WEEKS + Duration::from_secs(1));
+
+            let _check_keys_with_registry_result = setup
+                .crypto
+                .check_keys_with_registry(setup.registry_client.get_latest_version());
+
+            MetricsObservationsAssert::assert_that(setup.metrics_registry)
+                .contains_key_too_old_but_not_in_registry(1f64);
         }
     }
 
@@ -1100,7 +1149,7 @@ mod check_keys_with_registry {
             .with_registry_public_keys(valid_current_node_public_keys())
             .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
             .with_csp_pks_and_sks_contains_result(Ok(()))
-            .with_csp_current_node_public_keys_result(Err(
+            .with_csp_current_node_public_keys_with_timestamps_result(Err(
                 NodePublicKeyDataError::TransientInternalError(
                     "error retrieving current node public keys from remote csp vault".to_string(),
                 ),
@@ -1123,7 +1172,9 @@ mod check_keys_with_registry {
     fn should_return_key_needs_rotating_if_keys_match_and_registry_key_has_no_timestamp() {
         let setup = Setup::builder()
             .with_registry_public_keys(valid_current_node_public_keys())
-            .with_csp_current_node_public_keys_result(Ok(valid_current_node_public_keys()))
+            .with_csp_current_node_public_keys_with_timestamps_result(Ok(
+                valid_current_node_public_keys_with_timestamps(),
+            ))
             .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
             .with_csp_pks_and_sks_contains_result(Ok(()))
             .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
@@ -1150,7 +1201,9 @@ mod check_keys_with_registry {
             idkg_dealing_encryption_public_key.timestamp = Some(0);
         }
         let setup = Setup::builder()
-            .with_csp_current_node_public_keys_result(Ok(valid_current_node_public_keys()))
+            .with_csp_current_node_public_keys_with_timestamps_result(Ok(
+                valid_current_node_public_keys_with_timestamps(),
+            ))
             .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
             .with_csp_pks_and_sks_contains_result(Ok(()))
             .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
@@ -1185,7 +1238,9 @@ mod check_keys_with_registry {
             idkg_dealing_encryption_public_key.key_value = b"samesamebutdifferent".to_vec();
         }
         let setup = Setup::builder()
-            .with_csp_current_node_public_keys_result(Ok(valid_current_node_public_keys()))
+            .with_csp_current_node_public_keys_with_timestamps_result(Ok(
+                valid_current_node_public_keys_with_timestamps(),
+            ))
             .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
             .with_csp_pks_and_sks_contains_result(Ok(()))
             .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
@@ -1199,7 +1254,7 @@ mod check_keys_with_registry {
         assert_matches!(
             setup.crypto.check_keys_with_registry(setup.registry_client.get_latest_version()),
             Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(key_to_register))
-            if key_to_register == idkg_dealing_encryption_public_key_to_register
+            if key_to_register.equal_ignoring_timestamp(&idkg_dealing_encryption_public_key_to_register)
         );
     }
 
@@ -1219,8 +1274,10 @@ mod check_keys_with_registry {
             );
         }
         let setup = Setup::builder()
-            .with_csp_current_node_public_keys_result(Ok(valid_current_node_public_keys()))
             .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(1))
+            .with_csp_current_node_public_keys_with_timestamps_result(Ok(
+                valid_current_node_public_keys_with_timestamps(),
+            ))
             .with_csp_pks_and_sks_contains_result(Ok(()))
             .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
                 subnet_id(),
@@ -1248,7 +1305,7 @@ mod check_keys_with_registry {
     impl Setup {
         fn builder() -> SetupBuilder {
             SetupBuilder {
-                csp_current_node_public_keys_result: None,
+                csp_current_node_public_keys_with_timestamps_result: None,
                 csp_pks_and_sks_contains_result: None,
                 registry_public_keys: None,
                 csp_idkg_dealing_encryption_public_keys_count_result: None,
@@ -1259,7 +1316,7 @@ mod check_keys_with_registry {
     }
 
     struct SetupBuilder {
-        csp_current_node_public_keys_result:
+        csp_current_node_public_keys_with_timestamps_result:
             Option<Result<CurrentNodePublicKeys, NodePublicKeyDataError>>,
         csp_pks_and_sks_contains_result: Option<Result<(), PksAndSksContainsErrors>>,
         registry_public_keys: Option<CurrentNodePublicKeys>,
@@ -1270,11 +1327,15 @@ mod check_keys_with_registry {
     }
 
     impl SetupBuilder {
-        fn with_csp_current_node_public_keys_result(
+        fn with_csp_current_node_public_keys_with_timestamps_result(
             mut self,
-            current_node_public_keys: Result<CurrentNodePublicKeys, NodePublicKeyDataError>,
+            csp_current_node_public_keys_with_timestamps: Result<
+                CurrentNodePublicKeys,
+                NodePublicKeyDataError,
+            >,
         ) -> Self {
-            self.csp_current_node_public_keys_result = Some(current_node_public_keys);
+            self.csp_current_node_public_keys_with_timestamps_result =
+                Some(csp_current_node_public_keys_with_timestamps);
             self
         }
 
@@ -1326,13 +1387,13 @@ mod check_keys_with_registry {
                     .times(1)
                     .return_const(csp_pks_and_sks_contains_result);
             }
-            if let Some(csp_current_node_public_keys_result) =
-                self.csp_current_node_public_keys_result
+            if let Some(csp_current_node_public_keys_with_timestamps_result) =
+                self.csp_current_node_public_keys_with_timestamps_result
             {
                 mock_csp
-                    .expect_current_node_public_keys()
+                    .expect_current_node_public_keys_with_timestamps()
                     .times(1)
-                    .return_const(csp_current_node_public_keys_result);
+                    .return_const(csp_current_node_public_keys_with_timestamps_result);
             }
             if let Some(csp_idkg_dealing_encryption_public_keys_count_result) =
                 self.csp_idkg_dealing_encryption_public_keys_count_result
@@ -1455,6 +1516,19 @@ mod check_keys_with_registry {
             .expect("failed to add TLS certificate to registry");
     }
 
+    fn valid_current_node_public_keys_with_timestamps() -> CurrentNodePublicKeys {
+        CurrentNodePublicKeys {
+            node_signing_public_key: Some(valid_node_signing_public_key()),
+            committee_signing_public_key: Some(valid_committee_signing_public_key()),
+            tls_certificate: Some(valid_tls_certificate()),
+            dkg_dealing_encryption_public_key: Some(valid_dkg_dealing_encryption_public_key()),
+            idkg_dealing_encryption_public_key: Some(PublicKeyProto {
+                timestamp: Some(0),
+                ..valid_idkg_dealing_encryption_public_key()
+            }),
+        }
+    }
+
     fn valid_current_node_public_keys() -> CurrentNodePublicKeys {
         CurrentNodePublicKeys {
             node_signing_public_key: Some(valid_node_signing_public_key()),
@@ -1558,9 +1632,12 @@ mod rotate_idkg_dealing_encryption_keys {
     use ic_base_types::{NodeId, PrincipalId, SubnetId};
     use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
     use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
+    use ic_logger::ReplicaLogger;
     use ic_protobuf::registry::crypto::v1::PublicKey;
-    use ic_registry_keys::make_crypto_node_key;
+    use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key};
     use ic_test_utilities::FastForwardTimeSource;
+    use ic_test_utilities_in_memory_logger::{assertions::LogEntriesAssert, InMemoryReplicaLogger};
+    use slog::Level;
 
     pub(crate) const REGISTRY_VERSION_1: RegistryVersion = RegistryVersion::new(1);
     pub(crate) const REGISTRY_VERSION_2: RegistryVersion = RegistryVersion::new(2);
@@ -1897,6 +1974,98 @@ mod rotate_idkg_dealing_encryption_keys {
         assert_matches!(result, Err(IDkgDealingEncryptionKeyRotationError::TransientInternalError(details)) if details == DETAILS_STR);
     }
 
+    #[test]
+    fn should_log_warning_if_rotated_local_idkg_public_key_is_too_old_but_not_in_registry_with_mocked_csp(
+    ) {
+        use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
+        use ic_interfaces::crypto::KeyManager;
+        use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+        use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
+
+        let setup = Setup::new_with_keys_to_generate(NodeKeysToGenerate::all());
+        let mut current_node_public_keys = setup
+            .crypto
+            .current_node_public_keys()
+            .expect("error getting current node public keys");
+        let mut current_node_public_keys_with_timestamps = current_node_public_keys.clone();
+        if let Some(idkg_dealing_encryption_public_key) =
+            &mut current_node_public_keys_with_timestamps.idkg_dealing_encryption_public_key
+        {
+            idkg_dealing_encryption_public_key.timestamp = Some(0);
+        }
+        current_node_public_keys.idkg_dealing_encryption_public_key =
+            Some(an_idkg_dealing_encryption_public_key());
+
+        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client =
+            Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+
+        let mut mock_csp = MockAllCryptoServiceProvider::new();
+
+        mock_csp
+            .expect_pks_and_sks_contains()
+            .times(1)
+            .return_const(Ok(()));
+        mock_csp
+            .expect_idkg_dealing_encryption_pubkeys_count()
+            .times(1)
+            .return_const(Ok(1));
+        mock_csp
+            .expect_current_node_public_keys_with_timestamps()
+            .times(1)
+            .return_const(Ok(current_node_public_keys_with_timestamps.clone()));
+
+        let in_memory_logger = InMemoryReplicaLogger::new();
+
+        add_keys_to_registry(&registry_data, &current_node_public_keys);
+        let ecdsa_subnet_config =
+            EcdsaSubnetConfig::new(subnet_id(), Some(node_id()), Some(TWO_WEEKS));
+        registry_data
+            .add(
+                &make_subnet_record_key(ecdsa_subnet_config.subnet_id),
+                REGISTRY_VERSION_1,
+                Some(ecdsa_subnet_config.subnet_record),
+            )
+            .expect("Failed to add subnet record.");
+        let subnet_list_record = SubnetListRecord {
+            subnets: vec![ecdsa_subnet_config.subnet_id.get().into_vec()],
+        };
+        registry_data
+            .add(
+                make_subnet_list_record_key().as_str(),
+                REGISTRY_VERSION_1,
+                Some(subnet_list_record),
+            )
+            .expect("Failed to add subnet list record key");
+
+        registry_client.reload();
+
+        let crypto_component = CryptoComponentImpl::new_with_csp_and_fake_node_id(
+            mock_csp,
+            ReplicaLogger::from(&in_memory_logger),
+            registry_client.clone(),
+            node_id(),
+            Arc::new(CryptoMetrics::none()),
+            None,
+        );
+        registry_client.reload();
+
+        assert_matches!(
+            crypto_component.check_keys_with_registry(REGISTRY_VERSION_1),
+            Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(
+                latest_local_idkg_dealing_encryption_key,
+            )) if latest_local_idkg_dealing_encryption_key.equal_ignoring_timestamp(&current_node_public_keys_with_timestamps
+                    .idkg_dealing_encryption_public_key.expect("no idkg dealing encryption key"))
+        );
+
+        let logs = in_memory_logger.drain_logs();
+
+        LogEntriesAssert::assert_that(logs)
+            .has_only_one_message_containing(
+                &Level::Warning,
+                "Local iDKG dealing encryption key is too old (1970-01-01 00:00:00 UTC), but it still has not been registered in the registry");
+    }
+
     struct Setup {
         registry_data: Arc<ProtoRegistryDataProvider>,
         registry_client: Arc<FakeRegistryClient>,
@@ -1921,6 +2090,7 @@ mod rotate_idkg_dealing_encryption_keys {
                     Some(node_id()),
                     Some(TWO_WEEKS),
                 )),
+                None,
             )
         }
 
@@ -1928,12 +2098,14 @@ mod rotate_idkg_dealing_encryption_keys {
             Self::new_internal(
                 NodeKeysToGenerate::only_idkg_dealing_encryption_key(),
                 ecdsa_subnet_config,
+                None,
             )
         }
 
         fn new_internal(
             node_keys_to_generate: NodeKeysToGenerate,
             ecdsa_subnet_config: Option<EcdsaSubnetConfig>,
+            logger: Option<ReplicaLogger>,
         ) -> Self {
             let registry_data = Arc::new(ProtoRegistryDataProvider::new());
             let registry_client =
@@ -1946,6 +2118,9 @@ mod rotate_idkg_dealing_encryption_keys {
                     Arc::clone(&registry_data) as Arc<_>,
                 )
                 .with_time_source(Arc::clone(&time_source) as Arc<_>);
+            if let Some(logger) = logger {
+                crypto_builder = crypto_builder.with_logger(logger);
+            }
             if let Some(ecdsa_subnet_config) = ecdsa_subnet_config {
                 crypto_builder = crypto_builder.with_ecdsa_subnet_config(ecdsa_subnet_config);
             }
@@ -2024,6 +2199,53 @@ mod rotate_idkg_dealing_encryption_keys {
             // callers of rotate_idkg_dealing_encryption_keys use a CryptoComponent with a remote vault
             .with_remote_vault()
             .with_node_id(node_id())
+    }
+
+    fn add_keys_to_registry(
+        registry_data: &Arc<ProtoRegistryDataProvider>,
+        current_node_public_keys: &CurrentNodePublicKeys,
+    ) {
+        registry_data
+            .add(
+                &make_crypto_node_key(node_id(), KeyPurpose::NodeSigning),
+                REGISTRY_VERSION_1,
+                current_node_public_keys.node_signing_public_key.to_owned(),
+            )
+            .expect("failed to add node signing key to registry");
+        registry_data
+            .add(
+                &make_crypto_node_key(node_id(), KeyPurpose::CommitteeSigning),
+                REGISTRY_VERSION_1,
+                current_node_public_keys
+                    .committee_signing_public_key
+                    .to_owned(),
+            )
+            .expect("failed to add committee signing key to registry");
+        registry_data
+            .add(
+                &make_crypto_node_key(node_id(), KeyPurpose::DkgDealingEncryption),
+                REGISTRY_VERSION_1,
+                current_node_public_keys
+                    .dkg_dealing_encryption_public_key
+                    .to_owned(),
+            )
+            .expect("failed to add NI-DKG dealing encryption key to registry");
+        registry_data
+            .add(
+                &make_crypto_node_key(node_id(), KeyPurpose::IDkgMEGaEncryption),
+                REGISTRY_VERSION_1,
+                current_node_public_keys
+                    .idkg_dealing_encryption_public_key
+                    .to_owned(),
+            )
+            .expect("failed to add iDKG dealing encryption key to registry");
+        registry_data
+            .add(
+                &make_crypto_tls_cert_key(node_id()),
+                REGISTRY_VERSION_1,
+                current_node_public_keys.tls_certificate.clone(),
+            )
+            .expect("failed to add TLS certificate to registry");
     }
 }
 
