@@ -40,11 +40,12 @@ fn make_state_machine_pair() -> (StateMachine, StateMachine) {
 
 // Installs a canister with a large number of cycles.
 fn install_canister(env: &StateMachine, wasm: Vec<u8>) -> Result<CanisterId, UserError> {
-    env.install_canister_with_cycles(wasm, Vec::new(), None, Cycles::new(u128::MAX))
+    env.install_canister_with_cycles(wasm, Vec::new(), None, Cycles::new(u128::MAX / 2))
 }
 
-/// Returns an iterator over the raw constituents in an output queue of
-/// a local canister to a remote canister.
+/// Returns an iterator over the raw contents of a specific local canister's
+/// output queue to a specific remote canister; or `None` if the queue does not
+/// exist.
 fn get_output_queue_iter<'a>(
     state: &'a Arc<ReplicatedState>,
     local_canister_id: &CanisterId,
@@ -71,7 +72,7 @@ fn peek_output_queue<'a>(
         .and_then(|mut iter| iter.next())
 }
 
-/// Generate the payload for the 'start' method on the Xnet canister, where
+/// Generate the payload for the 'start' method on the XNet canister, where
 /// `canister_id_1` and `canister_id_2` are assumed to be on different subnets.
 fn start_payload_for_xnet_canister_pair(
     canister_id_1: &CanisterId,
@@ -90,7 +91,7 @@ fn start_payload_for_xnet_canister_pair(
     )
 }
 
-/// Calls the 'start' method on a canister in the state machine (assumed to be a Xnet canister).
+/// Calls the 'start' method on a canister in the state machine (assumed to be a XNet canister).
 fn call_start_on_xnet_canister(
     env: &StateMachine,
     canister_id: CanisterId,
@@ -104,7 +105,7 @@ fn call_start_on_xnet_canister(
     Ok(())
 }
 
-/// Calls the 'stop' method on a canister in the state machine (assumed to be a Xnet canister).
+/// Calls the 'stop' method on a canister in the state machine (assumed to be a XNet canister).
 fn call_stop_on_xnet_canister(
     env: &StateMachine,
     canister_id: CanisterId,
@@ -155,15 +156,15 @@ fn tick_until_messages_in_output_queue(
     panic!("No messages in the output queue after {} ticks", MAX_TICKS)
 }
 
-/// Test timing out requests in output queues, using a local and a remote canister, by
-/// by completelu filling up the stream of one canister and request start piling up
-/// in the its output queue. Then advance the time to trigger a timeout; then check
-/// the queue has been emptied out.
+/// Test timing out requests in output queues, by completely filling up the XNet stream with
+/// messages from a local canister, such that messages start piling up in its output queue.
+/// Then advance the time and execute a round to trigger a timeout; then check the output queue
+/// has been emptied out.
 #[test]
 fn test_timeout_removes_requests_from_output_queues() {
     let (env, remote_env) = make_state_machine_pair();
 
-    // Install Xnet canister on the subnets.
+    // Install XNet canister on the subnets.
     let wasm = Project::cargo_bin_maybe_from_env("xnet-test-canister", &[]).bytes();
     let local_canister_id = install_canister(&env, wasm.clone()).unwrap();
     let remote_canister_id = install_canister(&remote_env, wasm).unwrap();
@@ -206,7 +207,7 @@ fn test_timeout_removes_requests_from_output_queues() {
 fn test_response_in_output_queue_causes_backpressure() {
     let (env, remote_env) = make_state_machine_pair();
 
-    // Install Xnet canister on the subnets.
+    // Install XNet canister on the subnets.
     let wasm = Project::cargo_bin_maybe_from_env("xnet-test-canister", &[]).bytes();
     let local_canister_id = install_canister(&env, wasm.clone()).unwrap();
     let remote_canister_id = install_canister(&remote_env, wasm).unwrap();
@@ -262,7 +263,7 @@ fn test_response_in_output_queue_causes_backpressure() {
     .unwrap();
     call_start_on_xnet_canister(&env, local_canister_id, payload).unwrap();
 
-    // Keep ticking and triggering timeouts until the Xnet canister starts
+    // Keep ticking and triggering timeouts until the XNet canister starts
     // reporting call errors, indicating back pressure.
     const MAX_TICKS: u64 = 100;
     for ticks_counter in 1..=MAX_TICKS {
@@ -294,7 +295,7 @@ fn test_response_in_output_queue_causes_backpressure() {
 fn test_reservations_do_not_inhibit_xnet_induction_of_requests() {
     let (env, remote_env) = make_state_machine_pair();
 
-    // Install Xnet canister on the subnets.
+    // Install XNet canister on the subnets.
     let wasm = Project::cargo_bin_maybe_from_env("xnet-test-canister", &[]).bytes();
     let local_canister_id = install_canister(&env, wasm.clone()).unwrap();
     let remote_canister_id = install_canister(&remote_env, wasm).unwrap();
