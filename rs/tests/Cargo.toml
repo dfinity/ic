@@ -105,6 +105,7 @@ lifeline = { path = "../nns/handlers/lifeline" }
 itertools = "0.10.0"
 maplit = "1.0.2"
 nix = "0.23.0"
+num_cpus = "1.13.1"
 on_wire = { path = "../rust_canisters/on_wire"}
 openssh-keys ="0.5.0"
 openssl = "0.10.29"
