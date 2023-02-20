@@ -34,6 +34,7 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     page_map, testing::CanisterQueuesTesting, CallContextManager, CallOrigin, CanisterState,
     CanisterStatus, NumWasmPages, PageMap, ReplicatedState,
@@ -2285,7 +2286,7 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
         let cycles_balance_before = canister.system_state.balance();
         let cycles = Cycles::new(100);
 
-        *canister.system_state.balance_mut() += cycles;
+        canister.system_state.add_cycles(cycles);
 
         // Assert that state has changed
         assert_eq!(
@@ -4158,7 +4159,9 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
         .build();
     let uc = test.universal_canister().unwrap();
 
-    *test.canister_state_mut(uc).system_state.balance_mut() = Cycles::new(1_000_000_000_000_000);
+    test.canister_state_mut(uc)
+        .system_state
+        .set_balance(Cycles::new(1_000_000_000_000_000));
 
     let settings = CanisterSettingsArgs::new(None, None, Some(MEMORY_CAPACITY.get() / 2), None);
     let args = CreateCanisterArgs {
@@ -4216,7 +4219,9 @@ fn create_canister_makes_subnet_oversubscribed() {
         .build();
     let uc = test.universal_canister().unwrap();
 
-    *test.canister_state_mut(uc).system_state.balance_mut() = Cycles::new(1_000_000_000_000_000);
+    test.canister_state_mut(uc)
+        .system_state
+        .set_balance(Cycles::new(1_000_000_000_000_000));
 
     let settings = CanisterSettingsArgs::new(None, Some(50_u64), None, None);
     let args = CreateCanisterArgs {
@@ -4361,7 +4366,9 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
     test.canister_state_mut(uc)
         .scheduler_state
         .compute_allocation = ComputeAllocation::try_from(60).unwrap();
-    *test.canister_state_mut(uc).system_state.balance_mut() = Cycles::new(2_000_000_000_000_000);
+    test.canister_state_mut(uc)
+        .system_state
+        .set_balance(Cycles::new(2_000_000_000_000_000));
 
     // Create a canister with default settings.
     let args = CreateCanisterArgs::default();

@@ -1615,7 +1615,7 @@ impl StateMachine {
         let canister_state = state
             .canister_state_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {} not found", canister_id));
-        *canister_state.system_state.balance_mut() += Cycles::from(amount);
+        canister_state.system_state.add_cycles(Cycles::from(amount));
         let balance = canister_state.system_state.balance().get();
         self.state_manager
             .commit_and_certify(state, height.increment(), CertificationScope::Full);

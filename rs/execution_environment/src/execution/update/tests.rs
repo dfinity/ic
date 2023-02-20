@@ -7,6 +7,7 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
     CallOrigin,
@@ -125,7 +126,9 @@ fn dts_update_concurrent_cycles_change_succeeds() {
         + call_charge
         + cycles_debit;
     let initial_execution_cost = test.canister_execution_cost(a_id);
-    *test.canister_state_mut(a_id).system_state.balance_mut() = initial_cycles;
+    test.canister_state_mut(a_id)
+        .system_state
+        .set_balance(initial_cycles);
 
     test.execute_slice(a_id);
     assert_eq!(
@@ -223,7 +226,9 @@ fn dts_update_concurrent_cycles_change_fails() {
     let initial_cycles =
         freezing_threshold + additional_freezing_threshold + max_execution_cost + call_charge;
     let initial_execution_cost = test.canister_execution_cost(a_id);
-    *test.canister_state_mut(a_id).system_state.balance_mut() = initial_cycles;
+    test.canister_state_mut(a_id)
+        .system_state
+        .set_balance(initial_cycles);
 
     test.execute_slice(a_id);
     assert_eq!(
@@ -354,7 +359,9 @@ fn dts_update_resume_fails_due_to_cycles_change() {
 
     // Change the cycles balance of the clean canister.
     let balance = test.canister_state(a_id).system_state.balance();
-    *test.canister_state_mut(a_id).system_state.balance_mut() += balance + Cycles::new(1);
+    test.canister_state_mut(a_id)
+        .system_state
+        .add_cycles(balance + Cycles::new(1));
 
     test.execute_slice(a_id);
 

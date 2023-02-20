@@ -674,13 +674,40 @@ impl CyclesAccountManager {
         cycles: Cycles,
         threshold: Cycles,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        self.withdraw_with_threshold(
+        self.verify_cycles_balance_with_treshold(
             system_state.canister_id,
-            system_state.balance_mut(),
+            system_state.balance(),
             cycles,
             threshold,
-        )
-        .map(|()| system_state.observe_consumed_cycles(cycles))
+        )?;
+
+        system_state.remove_cycles(cycles);
+        system_state.observe_consumed_cycles(cycles);
+        Ok(())
+    }
+
+    fn verify_cycles_balance_with_treshold(
+        &self,
+        canister_id: CanisterId,
+        cycles_balance: Cycles,
+        cycles: Cycles,
+        threshold: Cycles,
+    ) -> Result<(), CanisterOutOfCyclesError> {
+        let cycles_available = if cycles_balance > threshold {
+            cycles_balance - threshold
+        } else {
+            Cycles::zero()
+        };
+
+        if cycles > cycles_available {
+            return Err(CanisterOutOfCyclesError {
+                canister_id,
+                available: cycles_balance,
+                requested: cycles,
+                threshold,
+            });
+        }
+        Ok(())
     }
 
     /// Subtracts `cycles` worth of cycles from the canister's balance as long
@@ -699,20 +726,7 @@ impl CyclesAccountManager {
         cycles: Cycles,
         threshold: Cycles,
     ) -> Result<(), CanisterOutOfCyclesError> {
-        let cycles_available = if *cycles_balance > threshold {
-            *cycles_balance - threshold
-        } else {
-            Cycles::zero()
-        };
-
-        if cycles > cycles_available {
-            return Err(CanisterOutOfCyclesError {
-                canister_id,
-                available: *cycles_balance,
-                requested: cycles,
-                threshold,
-            });
-        }
+        self.verify_cycles_balance_with_treshold(canister_id, *cycles_balance, cycles, threshold)?;
 
         *cycles_balance -= cycles;
         Ok(())

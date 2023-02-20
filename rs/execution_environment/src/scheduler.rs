@@ -991,10 +991,7 @@ impl SchedulerImpl {
                     canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
                     canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
                     // Burn the remaining balance of the canister.
-                    let remaining_cycles = canister.system_state.balance_mut().take();
-                    canister
-                        .system_state
-                        .observe_consumed_cycles(remaining_cycles);
+                    canister.system_state.burn_remaining_balance();
 
                     info!(
                         self.log,
