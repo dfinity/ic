@@ -303,6 +303,8 @@ fn serialize_canister_to_tip(
             match wasm_binary.file() {
                 Some(path) => {
                     let wasm = canister_layout.wasm();
+                    // This if should always be false, as we reflink copy the entire checkpoint to the tip
+                    // It is left in mainly as defensive programming
                     if !wasm.raw_path().exists() {
                         ic_state_layout::utils::do_copy(log, path, wasm.raw_path()).map_err(
                             |io_err| CheckpointError::IoError {
