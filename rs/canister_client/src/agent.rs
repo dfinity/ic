@@ -12,6 +12,7 @@ use ic_types::{
     consensus::catchup::CatchUpPackageParam,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{Blob, HttpStatusResponse, MessageId, ReplicaHealthStatus},
+    time::current_time_and_expiry_time,
     CanisterId,
 };
 use prost::Message;
@@ -222,7 +223,7 @@ impl Agent {
             .post_with_response(
                 &self.url,
                 &query_path(*canister_id),
-                envelope,
+                envelope.into(),
                 tokio::time::Instant::now() + self.query_timeout,
             )
             .await?;
@@ -252,13 +253,19 @@ impl Agent {
         let deadline = Instant::now() + self.ingress_timeout;
         let mut backoff = get_backoff_policy();
         let (http_body, request_id) = self
-            .prepare_update(canister_id, method, arguments, nonce)
+            .prepare_update(
+                canister_id,
+                method,
+                arguments,
+                nonce,
+                current_time_and_expiry_time().1,
+            )
             .map_err(|err| format!("{}", err))?;
         self.http_client
             .post_with_response(
                 &self.url,
                 &update_path(*effective_canister_id),
-                http_body,
+                http_body.into(),
                 tokio::time::Instant::from_std(deadline),
             )
             .await?;
