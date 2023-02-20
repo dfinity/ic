@@ -402,7 +402,7 @@ impl SystemStateBuilder {
     }
 
     pub fn initial_cycles(mut self, cycles: Cycles) -> Self {
-        *self.system_state.balance_mut() = cycles;
+        self.system_state.set_balance(cycles);
         self
     }
 

@@ -278,8 +278,7 @@ impl SystemStateChanges {
     ) -> HypervisorResult<()> {
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
-        self.cycles_balance_change
-            .apply_ref(system_state.balance_mut());
+        self.cycles_balance_change.apply_on_state(system_state);
 
         // Observe consumed cycles.
         system_state.observe_consumed_cycles(self.cycles_consumed);

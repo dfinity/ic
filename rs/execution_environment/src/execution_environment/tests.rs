@@ -1238,7 +1238,9 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
         )
         .build();
     test.canister_state_mut(b_id).system_state.freeze_threshold = NumSeconds::from(0);
-    *test.canister_state_mut(b_id).system_state.balance_mut() = Cycles::new(1_000);
+    test.canister_state_mut(b_id)
+        .system_state
+        .set_balance(Cycles::new(1_000));
     let result = test.ingress(a_id, "update", a);
     let reply = get_reply(result);
     let error = std::str::from_utf8(&reply).unwrap();
@@ -1254,7 +1256,9 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
     let mut test = ExecutionTestBuilder::new().build();
     let id = test.universal_canister().unwrap();
     test.canister_state_mut(id).system_state.freeze_threshold = NumSeconds::from(0);
-    *test.canister_state_mut(id).system_state.balance_mut() = Cycles::new(1_000);
+    test.canister_state_mut(id)
+        .system_state
+        .set_balance(Cycles::new(1_000));
     let run = wasm().message_payload().append_and_reply().build();
     let err = test.ingress(id, "update", run).unwrap_err();
     assert_eq!(ErrorCode::CanisterOutOfCycles, err.code());
@@ -1268,7 +1272,9 @@ fn can_reject_an_ingress_when_canister_is_out_of_cycles() {
 fn message_to_canister_with_not_enough_balance_is_rejected() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister = test.universal_canister().unwrap();
-    *test.canister_state_mut(canister).system_state.balance_mut() = Cycles::new(1_000);
+    test.canister_state_mut(canister)
+        .system_state
+        .set_balance(Cycles::new(1_000));
     let err = test
         .should_accept_ingress_message(canister, "", vec![])
         .unwrap_err();
@@ -1301,7 +1307,9 @@ fn management_message_to_canister_with_not_enough_balance_is_not_accepted() {
     let mut test = ExecutionTestBuilder::new().build();
     let own_subnet_id = test.state().metadata.own_subnet_id;
     let canister = test.universal_canister().unwrap();
-    *test.canister_state_mut(canister).system_state.balance_mut() = Cycles::new(1_000);
+    test.canister_state_mut(canister)
+        .system_state
+        .set_balance(Cycles::new(1_000));
 
     for receiver in [IC_00, CanisterId::from(own_subnet_id)].iter() {
         let payload = CanisterIdRecord::from(canister).encode();

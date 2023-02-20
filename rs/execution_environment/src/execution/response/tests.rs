@@ -4,6 +4,7 @@ use ic_error_types::ErrorCode;
 use ic_ic00_types::CanisterStatusType;
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{CanisterStatus, NumWasmPages};
 use ic_test_utilities::types::messages::ResponseBuilder;
 use ic_test_utilities_execution_environment::{
@@ -1315,7 +1316,9 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     // Reset the cycles balance of canister A to simplify cycles bookkeeping.
     let initial_cycles = freezing_threshold + additional_freezing_threshold + call_charge - refund;
     let initial_execution_cost = test.canister_execution_cost(a_id);
-    *test.canister_state_mut(a_id).system_state.balance_mut() = initial_cycles;
+    test.canister_state_mut(a_id)
+        .system_state
+        .set_balance(initial_cycles);
 
     // Execute one slice of the response callback.
     test.execute_slice(a_id);
@@ -1432,7 +1435,9 @@ fn dts_response_concurrent_cycles_change_fails() {
     // Reset the cycles balance of canister A to simplify cycles bookkeeping.
     let initial_cycles = freezing_threshold + additional_freezing_threshold + call_charge - refund;
     let initial_execution_cost = test.canister_execution_cost(a_id);
-    *test.canister_state_mut(a_id).system_state.balance_mut() = initial_cycles;
+    test.canister_state_mut(a_id)
+        .system_state
+        .set_balance(initial_cycles);
 
     // Execute one slice of the response callback.
     test.execute_slice(a_id);
@@ -1576,7 +1581,9 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
     // Reset the cycles balance of canister A to simplify cycles bookkeeping.
     let initial_cycles = freezing_threshold + additional_freezing_threshold + call_charge - refund;
     let initial_execution_cost = test.canister_execution_cost(a_id);
-    *test.canister_state_mut(a_id).system_state.balance_mut() = initial_cycles;
+    test.canister_state_mut(a_id)
+        .system_state
+        .set_balance(initial_cycles);
 
     // Execute one slice of the response callback.
     test.execute_slice(a_id);

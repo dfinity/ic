@@ -513,11 +513,6 @@ impl SystemState {
         self.canister_id
     }
 
-    /// Returns a mutable reference to the balance of the canister.
-    pub fn balance_mut(&mut self) -> &mut Cycles {
-        &mut self.cycles_balance
-    }
-
     /// Returns the amount of cycles that the balance holds.
     pub fn balance(&self) -> Cycles {
         self.cycles_balance
@@ -957,6 +952,23 @@ impl SystemState {
             .split_input_schedules(own_canister_id, local_canisters);
     }
 
+    /// Increments 'cycles_balance'.
+    pub fn add_cycles(&mut self, amount: Cycles) {
+        self.cycles_balance += amount;
+    }
+
+    /// Decreases 'cycles_balance' for 'amount'.
+    pub fn remove_cycles(&mut self, amount: Cycles) {
+        self.cycles_balance -= amount;
+    }
+
+    /// Removes all cycles from 'cycles_balance'.
+    pub fn burn_remaining_balance(&mut self) {
+        let balance = self.cycles_balance;
+        self.observe_consumed_cycles(balance);
+        self.remove_cycles(balance);
+    }
+
     /// Increments the metric `consumed_cycles_since_replica_started` with the
     /// number of cycles consumed.
     pub fn observe_consumed_cycles(&mut self, cycles: Cycles) {
@@ -965,9 +977,9 @@ impl SystemState {
     }
 
     /// Add cycles to the balance and decrements the metric `consumed_cycles_since_replica_started`
-    /// with the number of cycles added.
+    /// with the number of cycles refunded.
     pub fn increment_balance_and_decrement_consumed_cycles(&mut self, cycles: Cycles) {
-        *self.balance_mut() += cycles;
+        self.add_cycles(cycles);
         self.canister_metrics.consumed_cycles_since_replica_started -=
             NominalCycles::from_cycles(cycles);
     }
@@ -1018,7 +1030,7 @@ pub mod testing {
     use super::SystemState;
     use crate::CanisterQueues;
     use ic_interfaces::messages::CanisterMessage;
-    use ic_types::CanisterId;
+    use ic_types::{CanisterId, Cycles};
 
     /// Exposes `SystemState` internals for use in other crates' unit tests.
     pub trait SystemStateTesting {
@@ -1033,6 +1045,9 @@ pub mod testing {
 
         /// Testing only: pops next input message
         fn pop_input(&mut self) -> Option<CanisterMessage>;
+
+        /// Set value of 'cycles_balance'.
+        fn set_balance(&mut self, balance: Cycles);
     }
 
     impl SystemStateTesting for SystemState {
@@ -1050,6 +1065,10 @@ pub mod testing {
 
         fn pop_input(&mut self) -> Option<CanisterMessage> {
             self.pop_input()
+        }
+
+        fn set_balance(&mut self, balance: Cycles) {
+            self.cycles_balance = balance;
         }
     }
 }
