@@ -125,16 +125,16 @@
       <alias name='pci.7'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x6'/>
     </controller>
-    <interface type='bridge'>
+    <interface type='network'>
       <mac address='{{ mac_address }}'/>
-      <source bridge='{{ ipv6_interface }}'/>
+      <source network='{{ ipv6_interface }}'/>
       <target dev='vnet0'/>
       <model type='virtio'/>
       <alias name='net0'/>
       <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x0'/>
     </interface>
-    <interface type='bridge'>
-      <source bridge='{{ ipv4_interface }}'/>
+    <interface type='network'>
+      <source network='{{ ipv4_interface }}'/>
       <target dev='vnet1'/>
       <model type='virtio'/>
       <alias name='net1'/>

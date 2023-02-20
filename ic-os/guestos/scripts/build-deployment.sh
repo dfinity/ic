@@ -159,6 +159,7 @@ NODES=${!__RAW_NODE_@}
 
 function prepare_build_directories() {
     TEMPDIR=$(mktemp -d /tmp/build-deployment.sh.XXXXXXXXXX)
+    TEMPDIR="/home/faraz/wrk/apk/build-deployment/"
 
     IC_PREP_DIR="$TEMPDIR/IC_PREP"
     CONFIG_DIR="$TEMPDIR/CONFIG"
@@ -179,19 +180,19 @@ function cleanup_rootfs() {
 }
 
 function download_registry_canisters() {
-    "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
-        --git-rev "$GIT_REVISION" --remote-path=canisters --out="${IC_PREP_DIR}/canisters"
+#    "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
+#        --git-rev "$GIT_REVISION" --remote-path=canisters --out="${IC_PREP_DIR}/canisters"
 
-    find "${IC_PREP_DIR}/canisters/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {}"
+#    find "${IC_PREP_DIR}/canisters/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {}"
 
     rsync -a --delete "${IC_PREP_DIR}/canisters/" "$OUTPUT/canisters/"
 }
 
 function download_binaries() {
-    "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
-        --git-rev "$GIT_REVISION" --remote-path=release --out="${IC_PREP_DIR}/bin"
+#    "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
+#        --git-rev "$GIT_REVISION" --remote-path=release --out="${IC_PREP_DIR}/bin"
 
-    find "${IC_PREP_DIR}/bin/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {} && basename {} .gz | xargs -I[] chmod +x ${IC_PREP_DIR}/bin/[]"
+#    find "${IC_PREP_DIR}/bin/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {} && basename {} .gz | xargs -I[] chmod +x ${IC_PREP_DIR}/bin/[]"
 
     mkdir -p "$OUTPUT/bin"
     rsync -a --delete "${IC_PREP_DIR}/bin/" "$OUTPUT/bin/"
@@ -199,6 +200,9 @@ function download_binaries() {
 
 function generate_subnet_config() {
     # Start hashing in the background
+    rm -rf "$TEMPDIR/REPLICA_HASH"
+    rm -rf "$TEMPDIR/NM_HASH"
+
     mkfifo "$TEMPDIR/REPLICA_HASH"
     mkfifo "$TEMPDIR/NM_HASH"
     sha256sum "${IC_PREP_DIR}/bin/replica" | cut -d " " -f 1 >"$TEMPDIR/REPLICA_HASH" &
@@ -483,7 +487,7 @@ function main() {
     copy_node_provider_key
     build_tarball
     build_removable_media
-    remove_temporary_directories
+    #remove_temporary_directories
     cleanup_rootfs
 
 }
