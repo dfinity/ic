@@ -63,6 +63,14 @@ gflags.DEFINE_string(
 gflags.DEFINE_boolean("simulate_machine_failures", False, "Simulate machine failures while testing.")
 gflags.DEFINE_string("nns_url", "", "Use the following NNS URL instead of getting it from the testnet configuration")
 gflags.DEFINE_integer("iter_duration", 300, "Duration in seconds to run each iteration of the experiment.")
+gflags.DEFINE_string(
+    "datapoints",
+    "",
+    (
+        "Datapoints for each iteration. Supported are a) coma-separated floats, b) ranges start-end:step or c) "
+        "exponential start~target~end where more measurements are executed the closer we get to target."
+    ),
+)
 
 
 class BaseExperiment:
@@ -644,3 +652,11 @@ class BaseExperiment:
     def get_canister_ids(self):
         """Return canister IDs of all canisters installed by the suite."""
         return list(itertools.chain.from_iterable([k for _, k in self.canister_ids.items()]))
+
+    @staticmethod
+    def get_datapoints(default: [float]) -> [float]:
+        """Parse datapoints given as arguments or otherwise return default."""
+        if len(FLAGS.datapoints) > 0:
+            return misc.parse_datapoints(FLAGS.datapoints)
+        else:
+            return default
