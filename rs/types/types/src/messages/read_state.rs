@@ -1,11 +1,11 @@
 use crate::{
     messages::{
-        message_id::hash_of_map, HttpReadState, HttpRequestError, MessageId, RawHttpRequestVal,
+        http::representation_independent_hash_read_state, HttpReadState, HttpRequestError,
+        MessageId,
     },
     PrincipalId, UserId,
 };
 use ic_crypto_tree_hash::Path;
-use maplit::btreemap;
 use std::convert::TryFrom;
 
 /// A `read_state` request sent from the user.
@@ -18,30 +18,13 @@ pub struct ReadState {
 }
 
 impl ReadState {
-    // TODO(EXC-237): Avoid the duplication between this method and the one in
-    // `HttpReadState`.
     pub fn id(&self) -> MessageId {
-        use RawHttpRequestVal::*;
-        let mut map = btreemap! {
-            "request_type".to_string() => String("read_state".to_string()),
-            "ingress_expiry".to_string() => U64(self.ingress_expiry),
-            "paths".to_string() => Array(self
-                    .paths
-                    .iter()
-                    .map(|p| {
-                        RawHttpRequestVal::Array(
-                            p.iter()
-                                .map(|b| RawHttpRequestVal::Bytes(b.clone().to_vec()))
-                                .collect(),
-                        )
-                    })
-                    .collect()),
-            "sender".to_string() => Bytes(self.source.get().to_vec()),
-        };
-        if let Some(nonce) = &self.nonce {
-            map.insert("nonce".to_string(), Bytes(nonce.clone()));
-        }
-        MessageId::from(hash_of_map(&map))
+        MessageId::from(representation_independent_hash_read_state(
+            self.ingress_expiry,
+            self.paths.as_slice(),
+            self.source.get().into_vec(),
+            self.nonce.as_deref(),
+        ))
     }
 }
 

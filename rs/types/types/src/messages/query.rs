@@ -1,13 +1,12 @@
 use crate::messages::Blob;
 use crate::{
     messages::{
-        message_id::hash_of_map, HasCanisterId, HttpRequestError, HttpUserQuery, MessageId,
-        RawHttpRequestVal,
+        http::{representation_indepent_hash_call_or_query, CallOrQuery},
+        HasCanisterId, HttpRequestError, HttpUserQuery, MessageId,
     },
     CanisterId, PrincipalId, UserId,
 };
 use ic_error_types::RejectCode;
-use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
@@ -23,22 +22,16 @@ pub struct UserQuery {
 }
 
 impl UserQuery {
-    // TODO(EXC-235): Avoid the duplication between this method and the one in
-    // `HttpUserQuery`.
     pub fn id(&self) -> MessageId {
-        use RawHttpRequestVal::*;
-        let mut map = btreemap! {
-            "request_type".to_string() => String("query".to_string()),
-            "canister_id".to_string() => Bytes(self.receiver.get().to_vec()),
-            "method_name".to_string() => String(self.method_name.clone()),
-            "arg".to_string() => Bytes(self.method_payload.clone()),
-            "ingress_expiry".to_string() => U64(self.ingress_expiry),
-            "sender".to_string() => Bytes(self.source.get().to_vec()),
-        };
-        if let Some(nonce) = &self.nonce {
-            map.insert("nonce".to_string(), Bytes(nonce.clone()));
-        }
-        MessageId::from(hash_of_map(&map))
+        MessageId::from(representation_indepent_hash_call_or_query(
+            CallOrQuery::Query,
+            self.receiver.get().into_vec(),
+            &self.method_name,
+            self.method_payload.clone(),
+            self.ingress_expiry,
+            self.source.get().into_vec(),
+            self.nonce.as_deref(),
+        ))
     }
 }
 
