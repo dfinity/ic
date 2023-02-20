@@ -26,7 +26,7 @@ use ic_sns_root::{CanisterIdRecord, CanisterStatusResultV2};
 use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
 use ic_sns_swap::pb::v1::{
     self as swap_pb, ErrorRefundIcpResponse, FinalizeSwapResponse, GetBuyerStateResponse,
-    GetLifecycleResponse, GetOpenTicketResponse, GetSaleParametersResponse,
+    GetBuyersTotalResponse, GetLifecycleResponse, GetOpenTicketResponse, GetSaleParametersResponse,
     ListCommunityFundParticipantsResponse, NewSaleTicketResponse, NotifyPaymentFailureResponse,
     OpenRequest, OpenResponse, Params, RefreshBuyerTokensRequest, RefreshBuyerTokensResponse,
     Ticket,
@@ -677,4 +677,11 @@ pub fn finalize_swap(env: &StateMachine, swap_id: &CanisterId) -> FinalizeSwapRe
         .execute_ingress(*swap_id, "finalize_swap", args)
         .unwrap();
     Decode!(&res.bytes(), FinalizeSwapResponse).unwrap()
+}
+pub fn get_buyers_total(env: &StateMachine, swap_id: &CanisterId) -> GetBuyersTotalResponse {
+    let args = Encode!(&swap_pb::GetBuyersTotalRequest {}).unwrap();
+    let res = env
+        .execute_ingress(*swap_id, "get_buyers_total", args)
+        .unwrap();
+    Decode!(&res.bytes(), GetBuyersTotalResponse).unwrap()
 }
