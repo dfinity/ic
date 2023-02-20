@@ -10,7 +10,7 @@ use crate::{
 use backoff::backoff::Backoff;
 use ic_canister_client::{update_path, Agent, HttpClientConfig, Sender as AgentSender};
 use ic_types::{
-    messages::{Blob, MessageId, SignedRequestBytes},
+    messages::{Blob, MessageId},
     time::current_time_and_expiry_time,
     CanisterId,
 };
@@ -20,7 +20,6 @@ use itertools::Either;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    convert::TryFrom,
     env, fs,
     str::FromStr,
     time::{Duration, Instant},
@@ -306,8 +305,8 @@ impl Engine {
     ) -> bool {
         let nonce = plan.nonce.clone();
         let deadline = Instant::now() + agent.ingress_timeout;
-        let (request, request_id) = agent
-            .prepare_update_raw(
+        let (content, request_id) = agent
+            .prepare_update(
                 &plan.canister_id,
                 method,
                 arg,
@@ -316,12 +315,8 @@ impl Engine {
             )
             .unwrap();
 
-        debug!(
-            "Sending signed update. request id: {}. Message\n{:?}",
-            request_id, request
-        );
+        debug!("Sending signed update. request id: {}.", request_id);
 
-        let content = SignedRequestBytes::try_from(request).unwrap().into();
         let path = update_path(plan.canister_id);
         let time_start = std::time::Instant::now();
         debug!(
@@ -338,7 +333,7 @@ impl Engine {
             .http_client()
             .send_post_request(
                 agent.url.join(path.as_str()).unwrap().as_str(),
-                content,
+                content.into(),
                 tokio::time::Instant::from_std(deadline),
             )
             .await;

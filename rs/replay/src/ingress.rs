@@ -59,7 +59,7 @@ fn make_signed_ingress(
         .as_bytes()
         .to_vec();
     let (http_body, _request_id) = agent
-        .prepare_update_raw(&canister_id, method, payload, nonce, expiry)
+        .prepare_update(&canister_id, method, payload, nonce, expiry)
         .map_err(|err| format!("Error preparing update message: {:?}", err))?;
     SignedIngress::try_from(http_body)
         .map_err(|err| format!("Error converting to SignedIngress: {:?}", err))
@@ -405,7 +405,7 @@ pub fn atomic_mutate(
         .as_bytes()
         .to_vec();
     let (http_body, _request_id) = agent
-        .prepare_update_raw(&canister_id, "atomic_mutate", payload, nonce, expiry)
+        .prepare_update(&canister_id, "atomic_mutate", payload, nonce, expiry)
         .map_err(|err| format!("Error preparing update message: {:?}", err))?;
     SignedIngress::try_from(http_body)
         .map_err(|err| format!("Error converting to SignedIngress: {:?}", err))

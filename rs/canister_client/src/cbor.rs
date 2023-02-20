@@ -150,14 +150,14 @@ pub(crate) fn parse_query_response(message: &CBOR) -> Result<RequestStatus, Stri
 
 impl Agent {
     /// Prepares an update request.
-    pub fn prepare_update_raw<S: ToString>(
+    pub fn prepare_update<S: ToString>(
         &self,
         canister_id: &CanisterId,
         method: S,
         arguments: Vec<u8>,
         nonce: Vec<u8>,
         ingress_expiry: Time,
-    ) -> Result<(HttpRequestEnvelope<HttpCallContent>, MessageId), Box<dyn Error>> {
+    ) -> Result<(SignedRequestBytes, MessageId), Box<dyn Error>> {
         let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: to_blob(canister_id),
@@ -169,26 +169,9 @@ impl Agent {
             },
         };
 
-        sign_submit(content, &self.sender)
-    }
-
-    /// Prepares and serailizes a CBOR update request.
-    pub fn prepare_update<S: ToString>(
-        &self,
-        canister_id: &CanisterId,
-        method: S,
-        arguments: Vec<u8>,
-        nonce: Vec<u8>,
-    ) -> Result<(Vec<u8>, MessageId), Box<dyn Error>> {
-        let (submit_request, request_id) = self.prepare_update_raw(
-            canister_id,
-            method,
-            arguments,
-            nonce,
-            current_time_and_expiry_time().1,
-        )?;
-        let http_body = SignedRequestBytes::try_from(submit_request)?;
-        Ok((http_body.into(), request_id))
+        let (submit_request, request_id) = sign_submit(content, &self.sender)?;
+        let signed_request_bytes = SignedRequestBytes::try_from(submit_request)?;
+        Ok((signed_request_bytes, request_id))
     }
 
     /// Prepares and serializes a CBOR query request.
@@ -197,7 +180,7 @@ impl Agent {
         canister_id: &CanisterId,
         method: &str,
         arguments: Vec<u8>,
-    ) -> Result<Vec<u8>, Box<dyn Error>> {
+    ) -> Result<SignedRequestBytes, Box<dyn Error>> {
         let content = HttpQueryContent::Query {
             query: HttpUserQuery {
                 canister_id: to_blob(canister_id),
@@ -210,7 +193,7 @@ impl Agent {
         };
 
         let request = sign_query(content, &self.sender)?;
-        Ok(SignedRequestBytes::try_from(request)?.into())
+        Ok(SignedRequestBytes::try_from(request)?)
     }
 
     /// Prepares and serializes a CBOR read_state request, with the given paths
