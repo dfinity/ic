@@ -1335,7 +1335,7 @@ fn should_return_registration_needed_from_check_keys_with_registry_if_local_idkg
     assert_matches!(
         result,
         Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(missing_pk))
-        if missing_pk == new_idkg_dealing_encryption_key_to_register
+        if missing_pk.equal_ignoring_timestamp(&new_idkg_dealing_encryption_key_to_register)
     );
 }
 

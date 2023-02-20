@@ -6,6 +6,7 @@ use crate::sign::{
 };
 use crate::tls::{tls_cert_from_registry_raw, TlsCertFromRegistryError};
 use crate::{key_from_registry, CryptoComponentImpl};
+use ic_crypto_internal_csp::api::NodePublicKeyDataError;
 use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use ic_crypto_internal_csp::types::ExternalPublicKeys;
 use ic_crypto_internal_csp::vault::api::{NodeKeysErrors, PksAndSksContainsErrors};
@@ -190,9 +191,9 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
 
         // Check if the latest iDKG key we have locally still needs to be registered in the
         // registry, or if it needs to be rotated.
-        let current_node_public_keys = match self.current_node_public_keys() {
+        let current_node_public_keys = match self.csp.current_node_public_keys_with_timestamps() {
             Ok(current_node_public_keys) => current_node_public_keys,
-            Err(CurrentNodePublicKeysError::TransientInternalError(internal_error)) => {
+            Err(NodePublicKeyDataError::TransientInternalError(internal_error)) => {
                 return Err(CryptoError::TransientInternalError { internal_error });
             }
         };
@@ -202,50 +203,91 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
             if registry_idkg_dealing_encryption_public_key
                 .equal_ignoring_timestamp(&latest_local_idkg_dealing_encryption_key)
             {
-                self.metrics.observe_boolean_result(
-                    BooleanOperation::LatestLocalIdkgKeyExistsInRegistry,
-                    BooleanResult::True,
-                );
-                match registry_idkg_dealing_encryption_public_key.timestamp {
-                    None => {
-                        // The key in the registry has no timestamp, so it shall be rotated
-                        info!(
-                            self.logger,
-                            "iDKG dealing encryption key has no timestamp and needs rotating"
-                        );
-                        return Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys);
-                    }
-                    Some(timestamp_in_millis) => {
-                        if self.is_current_key_too_old(timestamp_in_millis, key_rotation_period) {
-                            info!(
-                                self.logger,
-                                "iDKG dealing encryption key too old and needs rotating"
-                            );
-                            return Ok(
-                                PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys,
-                            );
-                        }
-                    }
-                }
+                self.check_rotation_status_of_registered_idkg_dealing_encryption_key(
+                    registry_idkg_dealing_encryption_public_key.timestamp,
+                    key_rotation_period,
+                )
             } else {
-                info!(
-                    self.logger,
-                    "Local iDKG dealing encryption key needs registration"
-                );
-                self.metrics.observe_boolean_result(
-                    BooleanOperation::LatestLocalIdkgKeyExistsInRegistry,
-                    BooleanResult::False,
-                );
-                return Ok(
-                    PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(
-                        latest_local_idkg_dealing_encryption_key,
-                    ),
-                );
+                self.check_rotation_status_of_unregistered_idkg_dealing_encryption_key(
+                    latest_local_idkg_dealing_encryption_key,
+                    key_rotation_period,
+                )
             }
         } else {
             panic!("No iDKG dealing encryption key found locally");
         }
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
+    }
+
+    fn check_rotation_status_of_registered_idkg_dealing_encryption_key(
+        &self,
+        registry_idkg_dealing_encryption_public_key_timestamp: Option<u64>,
+        key_rotation_period: Duration,
+    ) -> CryptoResult<PublicKeyRegistrationStatus> {
+        self.metrics.observe_boolean_result(
+            BooleanOperation::LatestLocalIdkgKeyExistsInRegistry,
+            BooleanResult::True,
+        );
+        match registry_idkg_dealing_encryption_public_key_timestamp {
+            None => {
+                // The key in the registry has no timestamp, so it shall be rotated
+                info!(
+                    self.logger,
+                    "iDKG dealing encryption key has no timestamp and needs rotating"
+                );
+                Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys)
+            }
+            Some(timestamp_in_millis) => {
+                if self.is_current_key_too_old(timestamp_in_millis, key_rotation_period) {
+                    info!(
+                        self.logger,
+                        "iDKG dealing encryption key too old and needs rotating"
+                    );
+                    Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys)
+                } else {
+                    Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
+                }
+            }
+        }
+    }
+
+    fn check_rotation_status_of_unregistered_idkg_dealing_encryption_key(
+        &self,
+        latest_local_idkg_dealing_encryption_key: PublicKeyProto,
+        key_rotation_period: Duration,
+    ) -> CryptoResult<PublicKeyRegistrationStatus> {
+        info!(
+            self.logger,
+            "Local iDKG dealing encryption key needs registration"
+        );
+        if let Some(latest_local_idkg_dealing_encryption_key_timestamp) =
+            latest_local_idkg_dealing_encryption_key
+                .timestamp
+                .to_owned()
+        {
+            if self.is_current_key_too_old(
+                latest_local_idkg_dealing_encryption_key_timestamp,
+                key_rotation_period,
+            ) {
+                warn!(
+                    self.logger,
+                    "Local iDKG dealing encryption key is too old ({}), but it still has not been registered in the registry",
+                    Time::from_millis_since_unix_epoch(latest_local_idkg_dealing_encryption_key_timestamp)
+                    .expect("conversion error to happen in the year 2554");
+                );
+                self.metrics
+                    .observe_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry(
+                    );
+            }
+        }
+        self.metrics.observe_boolean_result(
+            BooleanOperation::LatestLocalIdkgKeyExistsInRegistry,
+            BooleanResult::False,
+        );
+        Ok(
+            PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(
+                latest_local_idkg_dealing_encryption_key,
+            ),
+        )
     }
 
     fn rotate_idkg_dealing_encryption_keys_internal(

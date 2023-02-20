@@ -5,7 +5,7 @@ mod bls12_381_sig_cache;
 use convert_case::{Case, Casing};
 use core::fmt;
 use ic_metrics::MetricsRegistry;
-use prometheus::{Gauge, HistogramVec, IntCounterVec, IntGaugeVec};
+use prometheus::{Gauge, HistogramVec, IntCounter, IntCounterVec, IntGaugeVec};
 use std::fmt::{Display, Formatter};
 use std::ops::Add;
 use std::time::Instant;
@@ -243,6 +243,22 @@ impl CryptoMetrics {
                 .set(registry_version as f64);
         }
     }
+
+    /// Observes the latest iDKG dealing encryption public key too old, but not in registry. This
+    /// serves as a warning that something is or was affecting iDKG dealing encryption key
+    /// rotation. This situation may occur in the following situations (non-exhaustive list):
+    /// - If a node goes offline in the middle of a key rotation operation, and continues to be
+    ///   offline for an extended period of time
+    /// - If there is an error in the logic for computing the key rotation period
+    /// - If there is a bug in the registry that is not allowing nodes to register newly rotated
+    ///   keys for an extended period of time
+    pub fn observe_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry(&self) {
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry
+                .inc();
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]
@@ -467,6 +483,9 @@ struct Metrics {
 
     /// Gauge for the minimum registry version in active iDKG transcripts.
     observe_minimum_registry_version_in_active_idkg_transcripts: Gauge,
+
+    /// Counter for iDKG dealing encryption public key too old, but not in registry.
+    crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry: IntCounter,
 }
 
 impl Display for MetricsDomain {
@@ -627,7 +646,11 @@ impl Metrics {
             observe_minimum_registry_version_in_active_idkg_transcripts: r.gauge(
                 "crypto_minimum_registry_version_in_active_idkg_transcripts",
                 "Minimum registry version in active iDKG transcripts"
-            )
+            ),
+            crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry: r.int_counter(
+                "crypto_latest_idkg_dealing_encryption_public_key_too_old_but_not_in_registry", 
+                "latest iDKG dealing encryption public key too old, but not in registry"
+            ),
         }
     }
 }
