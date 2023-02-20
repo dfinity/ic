@@ -14806,6 +14806,7 @@ dependencies = [
  "lifeline",
  "maplit",
  "nix 0.23.2",
+ "num_cpus",
  "on_wire",
  "openssh-keys",
  "openssl",

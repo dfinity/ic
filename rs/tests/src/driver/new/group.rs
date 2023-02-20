@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 
 use anyhow::{bail, Result};
 use clap::Parser;
-use tokio::runtime::{Handle, Runtime};
+use tokio::runtime::{Builder, Handle, Runtime};
 
 use crate::driver::new::constants::{kibana_link, GROUP_TTL, KEEPALIVE_INTERVAL};
 use crate::driver::new::{subprocess_task::SubprocessTask, task::Task, timeout::TimeoutTask};
@@ -47,6 +47,8 @@ use slog::{debug, info, trace, warn, Logger};
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
 const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
+const MAX_RUNTIME_THREADS: usize = 16;
+const MAX_RUNTIME_BLOCKING_THREADS: usize = 16;
 
 const DEBUG_KEEPALIVE_TASK_NAME: &str = "debug_keepalive";
 const REPORT_TASK_NAME: &str = "report";
@@ -661,8 +663,24 @@ impl SystemTestGroup {
 
         // create the runtime that lives until this variable is dropped.
         // Note: having only a runtime handle does not guarantee that the runtime is alive.
-        let runtime = Runtime::new().unwrap();
-
+        let runtime: Runtime = {
+            let cpus = num_cpus::get();
+            info!(group_ctx.log(), "Number of CPUs {}", cpus);
+            let workers = std::cmp::min(MAX_RUNTIME_THREADS, cpus);
+            let blocking_threads = std::cmp::min(MAX_RUNTIME_BLOCKING_THREADS, cpus);
+            info!(
+                group_ctx.log(),
+                "Set tokio runtime: worker_threads={}, blocking_threads={}",
+                workers,
+                blocking_threads
+            );
+            Builder::new_multi_thread()
+                .worker_threads(workers)
+                .max_blocking_threads(blocking_threads)
+                .enable_all()
+                .build()
+                .unwrap()
+        };
         let subs: Arc<dyn BroadcastingEventSubscriberFactory> = broadcaster.clone(); // a shallow copy - the broadcaster is shared!
         let plan = self.make_plan(runtime.handle(), group_ctx.clone(), subs)?;
         if is_parent_process {

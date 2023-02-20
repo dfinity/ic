@@ -109,6 +109,7 @@ DEPENDENCIES = [
     "@crate_index//:leb128",
     "@crate_index//:maplit",
     "@crate_index//:nix",
+    "@crate_index//:num_cpus",
     "@crate_index//:openssh-keys",
     "@crate_index//:openssl",
     "@crate_index//:pem",
