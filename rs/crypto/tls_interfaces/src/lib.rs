@@ -134,6 +134,14 @@ impl<'de> Deserialize<'de> for TlsPublicKeyCert {
     }
 }
 
+impl TryFrom<X509PublicKeyCert> for TlsPublicKeyCert {
+    type Error = TlsPublicKeyCertCreationError;
+
+    fn try_from(value: X509PublicKeyCert) -> Result<Self, Self::Error> {
+        TlsPublicKeyCert::new_from_der(value.certificate_der)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// Errors encountered during creation of a `TlsPublicKeyCert`.
 pub struct TlsPublicKeyCertCreationError {

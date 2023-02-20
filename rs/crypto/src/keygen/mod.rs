@@ -4,7 +4,8 @@ mod tests;
 use crate::sign::{
     fetch_idkg_dealing_encryption_public_key_from_registry, MegaKeyFromRegistryError,
 };
-use crate::{key_from_registry, tls_certificate_from_registry, CryptoComponentImpl};
+use crate::tls::{tls_cert_from_registry_raw, TlsCertFromRegistryError};
+use crate::{key_from_registry, CryptoComponentImpl};
 use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use ic_crypto_internal_csp::types::ExternalPublicKeys;
 use ic_crypto_internal_csp::vault::api::{NodeKeysErrors, PksAndSksContainsErrors};
@@ -142,11 +143,12 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
             KeyPurpose::CommitteeSigning,
             registry_version,
         );
-        let tls_certificate = tls_certificate_from_registry(
+        let tls_certificate = tls_cert_from_registry_raw(
             self.registry_client.as_ref(),
             self.node_id,
             registry_version,
-        );
+        )
+        .map_err(to_crypto_error);
         let dkg_dealing_encryption_public_key = key_from_registry(
             self.registry_client.as_ref(),
             self.node_id,
@@ -524,6 +526,24 @@ impl RegistryKeysResult {
             key_count += 1;
         }
         key_count
+    }
+}
+
+fn to_crypto_error(e: TlsCertFromRegistryError) -> CryptoError {
+    match e {
+        TlsCertFromRegistryError::RegistryError(registry_error) => {
+            CryptoError::RegistryClient(registry_error)
+        }
+        TlsCertFromRegistryError::CertificateNotInRegistry {
+            node_id,
+            registry_version,
+        } => CryptoError::TlsCertNotFound {
+            node_id,
+            registry_version,
+        },
+        TlsCertFromRegistryError::CertificateMalformed { internal_error } => {
+            CryptoError::InternalError { internal_error }
+        }
     }
 }
 

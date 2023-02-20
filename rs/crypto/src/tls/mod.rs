@@ -15,6 +15,8 @@ use std::str::FromStr;
 use tokio::net::TcpStream;
 
 mod rustls;
+#[cfg(test)]
+mod tests;
 
 #[async_trait]
 impl<CSP> TlsHandshake for CryptoComponentImpl<CSP>
@@ -190,34 +192,37 @@ fn common_name_entries(cert: &TlsPublicKeyCert) -> X509NameEntries {
         .entries_by_nid(Nid::COMMONNAME)
 }
 
+pub fn tls_cert_from_registry_raw(
+    registry: &dyn RegistryClient,
+    node_id: NodeId,
+    registry_version: RegistryVersion,
+) -> Result<X509PublicKeyCert, TlsCertFromRegistryError> {
+    use ic_registry_client_helpers::crypto::CryptoRegistry;
+    let maybe_tls_certificate = registry.get_tls_certificate(node_id, registry_version)?;
+    match maybe_tls_certificate {
+        None => Err(TlsCertFromRegistryError::CertificateNotInRegistry {
+            node_id,
+            registry_version,
+        }),
+        Some(cert) => Ok(cert),
+    }
+}
+
 fn tls_cert_from_registry(
     registry: &dyn RegistryClient,
     node_id: NodeId,
     registry_version: RegistryVersion,
 ) -> Result<TlsPublicKeyCert, TlsCertFromRegistryError> {
-    use ic_registry_client_helpers::crypto::CryptoRegistry;
-    registry
-        .get_tls_certificate(node_id, registry_version)?
-        .map_or_else(
-            || {
-                Err(TlsCertFromRegistryError::CertificateNotInRegistry {
-                    node_id,
-                    registry_version,
-                })
-            },
-            |cert| {
-                let cert = TlsPublicKeyCert::new_from_der(cert.certificate_der).map_err(|e| {
-                    TlsCertFromRegistryError::CertificateMalformed {
-                        internal_error: e.internal_error,
-                    }
-                })?;
-                Ok(cert)
-            },
-        )
+    let raw_cert = tls_cert_from_registry_raw(registry, node_id, registry_version)?;
+    TlsPublicKeyCert::try_from(raw_cert).map_err(|e| {
+        TlsCertFromRegistryError::CertificateMalformed {
+            internal_error: e.internal_error,
+        }
+    })
 }
 
 #[derive(Debug)]
-enum TlsCertFromRegistryError {
+pub enum TlsCertFromRegistryError {
     RegistryError(RegistryClientError),
     CertificateNotInRegistry {
         node_id: NodeId,
