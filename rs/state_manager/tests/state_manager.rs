@@ -107,10 +107,37 @@ const TEST_CANISTER: &str = r#"
     (call $msg_reply)
     )
 
+    (func $read
+    ;; now we copied the counter address into heap[0]
+    (call $msg_reply_data_append
+        (i32.const 0) ;; the counter address from heap[0]
+        (i32.const 4) ;; length
+    )
+    (call $msg_reply)
+    )
+
     (memory $memory 1)
     (export "memory" (memory $memory))
     (export "canister_update inc" (func $inc))
+    (export "canister_query read" (func $read))
+
+    
 )"#;
+
+fn to_int(v: Vec<u8>) -> i32 {
+    i32::from_le_bytes(v.try_into().unwrap())
+}
+
+fn read_and_assert_eq(env: &StateMachine, canister_id: CanisterId, expected: i32) {
+    assert_eq!(
+        to_int(
+            env.execute_ingress(canister_id, "read", vec![])
+                .unwrap()
+                .bytes()
+        ),
+        expected
+    );
+}
 
 #[test]
 fn skipping_flushing_is_invisible_for_state() {
@@ -131,6 +158,7 @@ fn skipping_flushing_is_invisible_for_state() {
 
         let canister_id0 = env.install_canister_wat(TEST_CANISTER, vec![], None);
         let canister_id1 = env.install_canister_wat(TEST_CANISTER, vec![], None);
+        let canister_id2 = env.install_canister_wat(TEST_CANISTER, vec![], None);
 
         // One wait occupies the TipHandler thread, the second (nop) makes queue non-empty
         // to cause flush skips. 0-size channel blocks send in the TipHandler until we call recv()
@@ -149,6 +177,11 @@ fn skipping_flushing_is_invisible_for_state() {
         let skips_before = skips(&env);
         env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
         env.execute_ingress(canister_id1, "inc", vec![]).unwrap();
+        env.execute_ingress(canister_id2, "inc", vec![]).unwrap();
+
+        // Second inc on canister_id0 to trigger overwriting a previously written page.
+        env.execute_ingress(canister_id0, "inc", vec![]).unwrap();
+
         let skips_after = skips(&env);
         if block_tip {
             recv_wait.recv().unwrap();
@@ -157,12 +190,21 @@ fn skipping_flushing_is_invisible_for_state() {
         env.set_checkpoints_enabled(true);
         std::mem::drop(tip_channel);
         if block_tip {
-            assert_eq!(skips_after - skips_before, 2.0)
+            assert_eq!(skips_after - skips_before, 4.0)
         } else {
             assert_eq!(skips_after - skips_before, 0.0)
         }
+        env.tick();
+        read_and_assert_eq(&env, canister_id0, 2);
+        read_and_assert_eq(&env, canister_id1, 1);
+        read_and_assert_eq(&env, canister_id2, 1);
+
         let env = env.restart_node();
         env.tick();
+
+        read_and_assert_eq(&env, canister_id0, 2);
+        read_and_assert_eq(&env, canister_id1, 1);
+        read_and_assert_eq(&env, canister_id2, 1);
 
         env.await_state_hash()
     }
