@@ -246,3 +246,20 @@ def load_artifacts(artifacts_path: str):
     print(f"Found artifacts at {artifacts_path}")
 
     return artifacts_hash
+
+
+def parse_datapoints(datapoints: str) -> [float]:
+    """Determine the request rate to run from the given string."""
+    if re.match(r"^[0-9\-:]*$", datapoints):
+        entries = datapoints.split(":")
+        start, stop = tuple(map(int, entries[0].split("-")))
+        steps = int(entries[1]) if len(entries) > 1 else int(math.ceil((stop - start) / 10))
+        # numpy.arrange() supports floats in contrast to range() if we ever need that.
+        return list(map(float, range(start, stop + 1, steps)))
+
+    if re.match(r"^[0-9]+~[0-9]+~[0-9]+$", datapoints):
+        start, target, stop = tuple(map(int, datapoints.split("~")))
+        return list(map(float, get_iterations(target, start, stop)))
+
+    if re.match(r"^[0-9,]*$", datapoints):
+        return [float(e) for e in datapoints.split(",")]

@@ -11,7 +11,7 @@ six>=1.16.0
 termcolor>=1.1.0
 absl-py>=0.14.1
 toml
-https://github.com/rocklabs-io/ic-py/archive/383403a50ff3d9664655fb23af2db12e98334c54.zip
+https://github.com/rocklabs-io/ic-py/archive/53c375a1d6c1d09e8d24588142dece550b801cef.zip
 uuid
 pydot
 matplotlib==3.6.2
