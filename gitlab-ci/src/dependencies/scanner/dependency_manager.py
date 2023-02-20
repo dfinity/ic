@@ -421,8 +421,8 @@ class NPM(DependencyManager):
         list_out: typing.Dict = {}
         environment = {}
         cwd = path
-        command = "npm install"
-        logging.info(f"Performing npm install {cwd.resolve()}")
+        command = "npm ci"
+        logging.info(f"Performing npm ci {cwd.resolve()}")
         _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
 
         command = "npm list --all --json"
@@ -461,7 +461,7 @@ class NPM(DependencyManager):
             vulnerable_dependency_used = False
             for result in results:
                 for ranges in range_str:
-                    if satisfies(result["version"], ranges):
+                    if "version" in result and satisfies(result["version"], ranges):
                         vulnerable_dependency_used = True
 
             # vulnerable version of this dependency isn't used by this dependency
@@ -487,7 +487,7 @@ class NPM(DependencyManager):
 
         vulnerable_dependency: typing.List = []
         for result in results:
-            if not satisfies(result["version"], range_str):
+            if "version" not in result or not satisfies(result["version"], range_str):
                 continue
 
             if result["version"] in [dependency.version for dependency in vulnerable_dependency]:

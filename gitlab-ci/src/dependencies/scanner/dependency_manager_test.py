@@ -187,7 +187,7 @@ def test_npm_list_output(json_mock, process_executor_mock, npm_test):
     npm_test._NPM__npm_list_output(path)
     process_executor_mock.assert_has_calls(
         [
-            call("npm install", resolved_path, {}),
+            call("npm ci", resolved_path, {}),
             call("npm list --all --json", resolved_path, {}),
         ]
     )

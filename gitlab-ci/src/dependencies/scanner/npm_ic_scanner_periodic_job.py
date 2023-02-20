@@ -44,6 +44,11 @@ REPOS_TO_SCAN = [
         "https://github.com/dfinity/gix-components",
         [Project("gix-components", "gix-components")],
     ),
+    Repository(
+        "ic-docutrack",
+        "https://github.com/dfinity/ic-docutrack",
+        [Project("frontend", "ic-docutrack/frontend")],
+    ),
 ]
 
 if __name__ == "__main__":
