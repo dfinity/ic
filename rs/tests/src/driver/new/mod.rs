@@ -11,6 +11,5 @@ pub mod report;
 pub mod subprocess_ipc;
 pub mod subprocess_task;
 pub mod task;
-pub mod task_executor;
 pub mod task_scheduler;
 pub mod timeout;
