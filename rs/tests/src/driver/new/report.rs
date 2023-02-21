@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     fmt::{Display, Formatter, Result},
     time::{Duration, Instant},
 };
@@ -48,26 +48,29 @@ impl TargetFunctionOutcome for TargetFunctionFailure {
 
 fn fmt_succs(
     succs: &[TargetFunctionSuccess],
+    skips: &HashSet<TaskId>,
     sub_reports: &BTreeMap<TaskId, String>,
     f: &mut Formatter<'_>,
     min_width: usize,
 ) -> Result {
     succs.iter().fold(write!(f, ""), |acc, success| {
         let tid = success.task_id();
-        acc.and(writeln!(
-            f,
-            "{}",
-            &format!(
+        let sub_report = if let Some(sub_report) = sub_reports.get(&tid) {
+            format!(" -- {}", sub_report.clone())
+        } else {
+            "".to_string()
+        };
+        let print_result = if skips.contains(&success.task_id) {
+            format!("Test {:<min_width$}  SKIPPED {}", tid.name(), sub_report)
+        } else {
+            format!(
                 "Test {:<min_width$}  PASSED in {:>6.2}s{}",
                 tid.name(),
                 success.runtime.as_secs_f64(),
-                if let Some(sub_report) = sub_reports.get(&tid) {
-                    format!(" -- {}", sub_report.clone())
-                } else {
-                    String::from("")
-                }
+                sub_report
             )
-        ))
+        };
+        acc.and(writeln!(f, "{}", print_result))
     })
 }
 
@@ -102,6 +105,7 @@ pub struct FarmGroupReport {
 
 #[derive(Clone, Debug, Default)]
 pub struct SystemTestGroupReport {
+    skips: HashSet<TaskId>,
     successes: Vec<TargetFunctionSuccess>,
     failures: Vec<TargetFunctionFailure>,
 
@@ -123,6 +127,10 @@ pub struct SystemTestGroupReport {
 }
 
 impl SystemTestGroupReport {
+    pub fn add_skipped(&mut self, skipped: TargetFunctionSuccess) {
+        self.skips.insert(skipped.task_id);
+    }
+
     pub fn add_succ(&mut self, succ: TargetFunctionSuccess) {
         self.successes.push(succ);
     }
@@ -273,10 +281,14 @@ impl Display for SystemTestGroupReport {
             .and(if self.failures.is_empty() && self.successes.is_empty() {
                 writeln!(f, "No test outcomes were reported.")
             } else if self.failures.is_empty() {
-                fmt_succs(&self.successes, &self.sub_reports, f, w).and(writeln!(
+                fmt_succs(&self.successes, &self.skips, &self.sub_reports, f, w).and(writeln!(
                     f,
                     "{:.^table_width$}",
-                    format!(" All {} tests passed! ", self.successes.len())
+                    format!(
+                        " All {} tests passed, {} skipped! ",
+                        self.successes.len() - self.skips.len(),
+                        self.skips.len()
+                    )
                 ))
             } else if self.successes.is_empty() {
                 fmt_fails(&self.failures, f, w).and(writeln!(
@@ -285,11 +297,19 @@ impl Display for SystemTestGroupReport {
                     format!(" All {} tests failed ", self.failures.len())
                 ))
             } else {
-                fmt_succs(&self.successes, &self.sub_reports, f, w)
+                fmt_succs(&self.successes, &self.skips, &self.sub_reports, f, w)
                     .and(writeln!(
                         f,
                         "{:.^table_width$}",
-                        format!(" Tests passed: {:>2} ", self.successes.len())
+                        format!(
+                            " Tests passed: {:>2} ",
+                            self.successes.len() - self.skips.len()
+                        )
+                    ))
+                    .and(writeln!(
+                        f,
+                        "{:.^table_width$}",
+                        format!(" Tests skipped: {:>2} ", self.skips.len())
                     ))
                     .and(fmt_fails(&self.failures, f, w))
                     .and(writeln!(

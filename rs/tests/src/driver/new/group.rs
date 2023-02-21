@@ -35,8 +35,12 @@ use anyhow::{bail, Result};
 use clap::Parser;
 use tokio::runtime::{Handle, Runtime};
 
-use crate::driver::new::constants::{kibana_link, GROUP_TTL, KEEPALIVE_INTERVAL};
-use crate::driver::new::{subprocess_task::SubprocessTask, task::Task, timeout::TimeoutTask};
+use crate::driver::new::{
+    constants::{kibana_link, GROUP_TTL, KEEPALIVE_INTERVAL},
+    subprocess_task::SubprocessTask,
+    task::{SkipTestTask, Task},
+    timeout::TimeoutTask,
+};
 use std::{
     iter::once,
     sync::Arc,
@@ -67,6 +71,12 @@ pub struct CliArgs {
         help = "If set, system under test is kept alive until bazel timeout or user interrupt."
     )]
     pub debug_keepalive: bool,
+
+    #[clap(
+        long = "filter-tests",
+        help = r#"Execute only those test functions, which contain a substring and skip all the others."#
+    )]
+    pub filter_tests: Option<String>,
 }
 
 impl CliArgs {
@@ -96,7 +106,7 @@ pub struct GroupDir {
 Path to a working directory of the test driver. The working directory contains
 all test environments including the one of the setup."#
     )]
-    path: PathBuf,
+    pub path: PathBuf,
 }
 
 #[derive(clap::Subcommand, Clone, Debug)]
@@ -300,9 +310,23 @@ impl SystemTestSubGroup {
                     .collect(),
                 ctx,
             ),
+            // If filtering flag `--filter-tests` is set, then for all
+            // skipped test function we execute a SkipTestTask, which sends EventPayload::TaskSkipped.
             SystemTestSubGroup::Singleton { task_fn, task_id } => {
                 let logger = ctx.logger.clone();
-                let task_id = task_id;
+                let group_ctx = ctx.group_ctx.clone();
+                if let Some(ref filter) = group_ctx.filter_tests {
+                    if let TaskId::Test(ref name) = task_id {
+                        if !name.contains(filter) {
+                            return Plan::Leaf {
+                                task: Box::from(SkipTestTask::new(
+                                    ctx.subs.clone(),
+                                    task_id.clone(),
+                                )),
+                            };
+                        }
+                    }
+                }
                 let closure = {
                     let task_id = task_id.clone();
                     let group_ctx = ctx.group_ctx.clone();
@@ -316,10 +340,9 @@ impl SystemTestSubGroup {
                         task_fn(env)
                     }
                 };
-                let task = subproc(task_id, closure, ctx);
                 timed(
                     Plan::Leaf {
-                        task: Box::from(task),
+                        task: Box::from(subproc(task_id, closure, ctx)),
                     },
                     ctx.timeout_per_test,
                     None,
@@ -648,6 +671,7 @@ impl SystemTestGroup {
         let group_ctx = GroupContext::new(
             args.group_dir.path.clone(),
             args.subproc_id(),
+            args.filter_tests,
             args.debug_keepalive,
         )?;
         if is_parent_process {
@@ -815,6 +839,11 @@ impl SystemTestGroup {
                             }
                         } else if let EventPayload::TaskCaughtPanic { ref task_id, ref msg } = event.what {
                             report.set_assert_failure_message(task_id.clone(), msg);
+                        } else if let EventPayload::TaskSkipped { ref task_id } = event.what {
+                            report.add_skipped(TargetFunctionSuccess {
+                                task_id: task_id.clone(),
+                                runtime: Duration::ZERO,
+                            });
                         }
                         // else { non-terminal event }
                         match event.what {
