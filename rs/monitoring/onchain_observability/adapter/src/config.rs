@@ -35,14 +35,14 @@ pub struct OnchainObservabilityAdapterSpecificConfig {
     pub canister_id: String,
 }
 
-const fn default_report_length() -> Duration {
+pub(crate) const fn default_report_length() -> Duration {
     Duration::from_secs(3600) // 1 hour
 }
 
-const fn default_sampling_interval() -> Duration {
+pub(crate) const fn default_sampling_interval() -> Duration {
     Duration::from_secs(60) // 1 minute
 }
 
-fn default_url() -> String {
+pub(crate) fn default_url() -> String {
     "https://ic0.app".to_string()
 }
