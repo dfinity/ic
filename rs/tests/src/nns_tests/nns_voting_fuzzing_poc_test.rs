@@ -1,8 +1,8 @@
 use slog::{info, Logger};
 
-use crate::driver::test_env::TestEnv;
+use crate::driver::test_env::{SshKeyGen, TestEnv};
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, ADMIN,
 };
 use crate::util::{block_on, runtime_from_url};
 
@@ -21,6 +21,8 @@ use proptest::test_runner::TestRunner;
 
 /// A test runs within a given IC configuration.
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .setup_and_start(&env)
