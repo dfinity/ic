@@ -200,7 +200,9 @@ pub enum ModificationTracking {
 #[derive(Clone, Serialize, Deserialize)]
 pub enum ApiType {
     /// For executing the `canister_start` method
-    Start,
+    Start {
+        time: Time,
+    },
 
     /// For executing the `canister_init` method
     Init {
@@ -332,8 +334,8 @@ pub enum ApiType {
 }
 
 impl ApiType {
-    pub fn start() -> Self {
-        Self::Start {}
+    pub fn start(time: Time) -> Self {
+        Self::Start { time }
     }
 
     pub fn init(time: Time, incoming_payload: Vec<u8>, caller: PrincipalId) -> Self {
@@ -502,7 +504,7 @@ impl ApiType {
                 query_kind: NonReplicatedQueryKind::Stateful { .. },
                 ..
             }
-            | ApiType::Start
+            | ApiType::Start { .. }
             | ApiType::Init { .. }
             | ApiType::Update { .. }
             | ApiType::ReplyCallback { .. }
@@ -1015,7 +1017,7 @@ impl SystemApiImpl {
 
     fn ic0_canister_cycle_balance_helper(&self, method_name: &str) -> HypervisorResult<Cycles> {
         match &self.api_type {
-            ApiType::Start {} => Err(self.error_for(method_name)),
+            ApiType::Start { .. } => Err(self.error_for(method_name)),
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -1674,7 +1676,7 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_controller_size(&self) -> HypervisorResult<usize> {
         let result = match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_controller_size")),
+            ApiType::Start { .. } => Err(self.error_for("ic0_controller_size")),
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -1700,7 +1702,7 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start {} => Err(self.error_for("ic0_controller_copy")),
+            ApiType::Start { .. } => Err(self.error_for("ic0_controller_copy")),
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -1979,7 +1981,7 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable_size(&self) -> HypervisorResult<u32> {
         let result = match &self.api_type {
-            ApiType::Start {} if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.stable_memory.is_some() => {
                 Err(self.error_for("ic0_stable_size"))
             }
             ApiType::Init { .. }
@@ -1992,7 +1994,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::Start {} => self
+            | ApiType::Start { .. } => self
                 .stable_memory
                 .as_ref()
                 .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
@@ -2004,7 +2006,7 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32> {
         let result = match &self.api_type {
-            ApiType::Start {} if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.stable_memory.is_some() => {
                 Err(self.error_for("ic0_stable_grow"))
             }
             ApiType::Init { .. }
@@ -2017,7 +2019,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::Start {} => {
+            | ApiType::Start { .. } => {
                 match self.memory_usage.allocate_pages(additional_pages as usize) {
                     Ok(()) => {
                         let res = self
@@ -2049,7 +2051,7 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start {} if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.stable_memory.is_some() => {
                 Err(self.error_for("ic0_stable_read"))
             }
             ApiType::Init { .. }
@@ -2062,7 +2064,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::Start {} => self
+            | ApiType::Start { .. } => self
                 .stable_memory
                 .as_ref()
                 .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
@@ -2088,7 +2090,7 @@ impl SystemApi for SystemApiImpl {
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start {} if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.stable_memory.is_some() => {
                 Err(self.error_for("ic0_stable_write"))
             }
             ApiType::Init { .. }
@@ -2101,7 +2103,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::Start {} => self
+            | ApiType::Start { .. } => self
                 .stable_memory
                 .as_mut()
                 .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
@@ -2121,7 +2123,7 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable64_size(&self) -> HypervisorResult<u64> {
         let result = match &self.api_type {
-            ApiType::Start {} if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.stable_memory.is_some() => {
                 Err(self.error_for("ic0_stable64_size"))
             }
             ApiType::Init { .. }
@@ -2134,7 +2136,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::Start {} => self
+            | ApiType::Start { .. } => self
                 .stable_memory
                 .as_ref()
                 .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
@@ -2146,7 +2148,7 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64> {
         let result = match &self.api_type {
-            ApiType::Start {} if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.stable_memory.is_some() => {
                 Err(self.error_for("ic0_stable64_grow"))
             }
             ApiType::Init { .. }
@@ -2159,7 +2161,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::Start {} => {
+            | ApiType::Start { .. } => {
                 match self.memory_usage.allocate_pages(additional_pages as usize) {
                     Ok(()) => {
                         let res = self
@@ -2191,7 +2193,7 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start {} if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.stable_memory.is_some() => {
                 Err(self.error_for("ic0_stable64_read"))
             }
             ApiType::Init { .. }
@@ -2204,7 +2206,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::Start {} => self
+            | ApiType::Start { .. } => self
                 .stable_memory
                 .as_ref()
                 .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
@@ -2230,7 +2232,7 @@ impl SystemApi for SystemApiImpl {
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start {} if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.stable_memory.is_some() => {
                 Err(self.error_for("ic0_stable64_write"))
             }
             ApiType::Init { .. }
@@ -2243,7 +2245,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::Start {} => self
+            | ApiType::Start { .. } => self
                 .stable_memory
                 .as_mut()
                 .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
@@ -2770,10 +2772,22 @@ impl SystemApi for SystemApiImpl {
                 "(debug message out of memory bounds)".to_string()
             }
         };
-        eprintln!(
-            "[Canister {}] {}",
-            self.sandbox_safe_system_state.canister_id, msg
-        );
+        match &self.api_type {
+            ApiType::Start { time }
+            | ApiType::Init { time, .. }
+            | ApiType::SystemTask { time, .. }
+            | ApiType::Update { time, .. }
+            | ApiType::Cleanup { time, .. }
+            | ApiType::NonReplicatedQuery { time, .. }
+            | ApiType::ReplicatedQuery { time, .. }
+            | ApiType::PreUpgrade { time, .. }
+            | ApiType::ReplyCallback { time, .. }
+            | ApiType::RejectCallback { time, .. }
+            | ApiType::InspectMessage { time, .. } => eprintln!(
+                "{}: [Canister {}] {}",
+                time, self.sandbox_safe_system_state.canister_id, msg
+            ),
+        }
         trace_syscall!(self, ic0_debug_print, src, size, summarize(heap, src, size));
         Ok(())
     }

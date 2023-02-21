@@ -271,7 +271,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         )
     } else {
         let wasm_execution_result = round.hypervisor.execute_dts(
-            ApiType::start(),
+            ApiType::start(original.time),
             execution_state,
             &SystemState::new_for_start(canister_id),
             helper.canister_memory_usage(),

@@ -13,7 +13,7 @@ use ic_system_api::{
     ExecutionParameters, InstructionLimits, SystemApiImpl,
 };
 use ic_test_utilities::{
-    cycles_account_manager::CyclesAccountManagerBuilder, types::ids::canister_test_id,
+    cycles_account_manager::CyclesAccountManagerBuilder, mock_time, types::ids::canister_test_id,
 };
 use ic_test_utilities_execution_environment::default_memory_for_system_api;
 use ic_types::{ComputeAllocation, NumBytes, NumInstructions};
@@ -45,7 +45,7 @@ fn test_wasmtime_system_api() {
     let canister_memory_limit = NumBytes::from(4 << 30);
     let canister_current_memory_usage = NumBytes::from(0);
     let system_api = SystemApiImpl::new(
-        ApiType::start(),
+        ApiType::start(mock_time()),
         sandbox_safe_system_state,
         canister_current_memory_usage,
         ExecutionParameters {
