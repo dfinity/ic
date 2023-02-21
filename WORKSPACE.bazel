@@ -329,8 +329,20 @@ aspect_bazel_lib_dependencies()
 # TLA+ tools
 http_jar(
     name = "tlaplus",
-    sha256 = "fa18543e44ed5974a85bd2c60c0dc16620ae117680ea8e693d2691999ed90b22",
-    url = "https://github.com/tlaplus/tlaplus/releases/download/v1.7.2/tla2tools.jar",
+    sha256 = "9f32797d66e09ae526c49b6248bec52791aae1591be3b691ac0b1f1f2d712d7d",
+    url = "https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar",
+)
+
+http_jar(
+    name = "tlaplus_community_modules",
+    sha256 = "109e0828d192c33703d5cbc50b5b6e128acd816565616e27b3855949c7baba9c",
+    url = "https://github.com/tlaplus/CommunityModules/releases/download/202302091937/CommunityModules-202302091937.jar",
+)
+
+http_jar(
+    name = "tlaplus_community_modules_deps",
+    sha256 = "762c4bdc25a0cb67043411c7f4f062cc2c038631c9c569539df880e0e78d5cf4",
+    url = "https://github.com/tlaplus/CommunityModules/releases/download/202302091937/CommunityModules-deps-202302091937.jar",
 )
 
 # Official WebAssembly test suite.

@@ -1,8 +1,13 @@
-load("//tlaplus:defs.bzl", "tla_module", "tlc_test")
+load("//tlaplus:defs.bzl", "sany_test", "tla_module", "tlc_test")
 
 tla_module(
     name = "spec",
     src = "StateManager.tla",
+)
+
+sany_test(
+    name = "sany",
+    module = ":spec",
 )
 
 tlc_test(
