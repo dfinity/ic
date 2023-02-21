@@ -33,6 +33,7 @@ pub(super) fn replacement_functions(
 ) -> Vec<(SystemApiFunc, (Type, Body<'static>))> {
     let count_clean_pages_fn_index = special_indices.count_clean_pages_fn.unwrap();
     let dirty_pages_counter_index = special_indices.dirty_pages_counter_ix.unwrap();
+    let accessed_pages_counter_index = special_indices.accessed_pages_counter_ix.unwrap();
     let stable_memory_index = special_indices.stable_memory_index;
     let decr_instruction_counter_fn = special_indices.decr_instruction_counter_fn;
 
@@ -215,7 +216,7 @@ pub(super) fn replacement_functions(
                     [],
                 )),
                 Body {
-                    locals: vec![],
+                    locals: vec![(4, ValType::I32)], // src on bytemap, src + len on bytemap, accessed page cnt, mark bytemap iterator
                     instructions: vec![
                         // Decrement instruction counter by the size of the copy
                         // and fixed overhead.  On system subnets this charge is
@@ -235,6 +236,18 @@ pub(super) fn replacement_functions(
                             function_index: decr_instruction_counter_fn,
                         },
                         Drop,
+                        // if size is 0 we return
+                        // (correctness of the code that follows depends on the size being > 0)
+                        // note that we won't return errors if addresses are out of bounds
+                        // in this case
+                        LocalGet { local_index: 2 },
+                        I32Const { value: 0 },
+                        I32Eq,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        Return,
+                        End,
                         // If memory is too big for 32bit api, we trap
                         MemorySize {
                             mem: stable_memory_index,
@@ -279,6 +292,96 @@ pub(super) fn replacement_functions(
                             function_index: InjectedImports::InternalTrap as u32,
                         },
                         End,
+                        // src
+                        LocalGet { local_index: 1 },
+                        I32Const {
+                            value: page_size_shift,
+                        },
+                        I32ShrU,
+                        LocalTee { local_index: 3 }, // store b_start
+                        // b_end
+                        LocalGet { local_index: 1 },
+                        LocalGet { local_index: 2 },
+                        I32Add,
+                        I32Const { value: 1 },
+                        I32Sub,
+                        I32Const {
+                            value: page_size_shift,
+                        },
+                        I32ShrU,
+                        I32Const { value: 1 },
+                        I32Add,
+                        LocalTee { local_index: 4 }, // store b_end
+                        Call {
+                            function_index: count_clean_pages_fn_index,
+                        },
+                        // On top of the stack we have the number of pages that haven't been accessed in the given range.
+                        // One above is the number of pages that haven't been written to in the given range
+                        // We will use the first one and just drop the second since we don't need
+                        // that information for reads
+                        LocalTee { local_index: 5 },
+                        // fail if accessed pages limit exhausted
+                        I64ExtendI32U,
+                        GlobalGet {
+                            global_index: accessed_pages_counter_index,
+                        },
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
+                        Drop, // clean pages count not needed
+                        // mark accessed pages if there are any to be marked
+                        LocalGet { local_index: 5 },
+                        I32Const { value: 0 },
+                        I32GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        LocalGet { local_index: 3 }, // b_start
+                        LocalSet { local_index: 6 }, // it
+                        Loop {
+                            blockty: BlockType::Empty,
+                        },
+                        LocalGet { local_index: 6 }, // it as arg for store
+                        LocalGet { local_index: 6 }, // it as arg for load
+                        I32Load8U {
+                            memarg: wasmparser::MemArg {
+                                align: 0,
+                                max_align: 0,
+                                offset: 0,
+                                // We assume the bytemap for stable memory is always
+                                // inserted directly after the stable memory.
+                                memory: special_indices.stable_memory_index + 1,
+                            },
+                        },
+                        I32Const { value: 2 }, // READ_BIT
+                        I32Or,
+                        I32Store8 {
+                            memarg: wasmparser::MemArg {
+                                align: 0,
+                                max_align: 0,
+                                offset: 0,
+                                // We assume the bytemap for stable memory is always
+                                // inserted directly after the stable memory.
+                                memory: special_indices.stable_memory_index + 1,
+                            },
+                        },
+                        LocalGet { local_index: 6 },
+                        I32Const { value: 1 },
+                        I32Add,
+                        LocalTee { local_index: 6 },
+                        LocalGet { local_index: 4 }, //b_end
+                        I32LtU,
+                        BrIf { relative_depth: 0 },
+                        End, // end loop
+                        End, // end if
                         // perform the copy
                         LocalGet { local_index: 0 },
                         LocalGet { local_index: 1 },
@@ -287,6 +390,15 @@ pub(super) fn replacement_functions(
                         MemoryCopy {
                             dst_mem: 0,
                             src_mem: stable_memory_index,
+                        },
+                        GlobalGet {
+                            global_index: accessed_pages_counter_index,
+                        },
+                        LocalGet { local_index: 5 },
+                        I64ExtendI32U,
+                        I64Sub,
+                        GlobalSet {
+                            global_index: accessed_pages_counter_index,
                         },
                         End,
                     ],
@@ -301,7 +413,7 @@ pub(super) fn replacement_functions(
                     [],
                 )),
                 Body {
-                    locals: vec![],
+                    locals: vec![(4, ValType::I32)], // src on bytemap, src + len on bytemap, accessed page cnt, mark bytemap iterator
                     instructions: vec![
                         // Decrement instruction counter by the size of the copy
                         // and fixed overhead.  On system subnets this charge is
@@ -404,6 +516,98 @@ pub(super) fn replacement_functions(
                             function_index: InjectedImports::InternalTrap as u32,
                         },
                         End,
+                        // src
+                        LocalGet { local_index: 1 },
+                        I64Const {
+                            value: page_size_shift as i64,
+                        },
+                        I64ShrU,
+                        I32WrapI64,
+                        LocalTee { local_index: 3 }, // store b_start
+                        // b_end
+                        LocalGet { local_index: 1 },
+                        LocalGet { local_index: 2 },
+                        I64Add,
+                        I64Const { value: 1 },
+                        I64Sub,
+                        I64Const {
+                            value: page_size_shift as i64,
+                        },
+                        I64ShrU,
+                        I64Const { value: 1 },
+                        I64Add,
+                        I32WrapI64,
+                        LocalTee { local_index: 4 }, // store b_end
+                        Call {
+                            function_index: count_clean_pages_fn_index,
+                        },
+                        // On top of the stack we have the number of pages that haven't been accessed in the given range.
+                        // One above is the number of pages that haven't been written to in the given range
+                        // We will use the first one and just drop the second since we don't need
+                        // that information for reads
+                        LocalTee { local_index: 5 },
+                        // fail if accessed pages limit exhausted
+                        I64ExtendI32U,
+                        GlobalGet {
+                            global_index: accessed_pages_counter_index,
+                        },
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
+                        Drop, // clean pages count not needed
+                        // mark accessed pages if there are any to be marked
+                        LocalGet { local_index: 5 },
+                        I32Const { value: 0 },
+                        I32GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        LocalGet { local_index: 3 }, // b_start
+                        LocalSet { local_index: 6 }, // it
+                        Loop {
+                            blockty: BlockType::Empty,
+                        },
+                        LocalGet { local_index: 6 }, // it as arg for store
+                        LocalGet { local_index: 6 }, // it as arg for load
+                        I32Load8U {
+                            memarg: wasmparser::MemArg {
+                                align: 0,
+                                max_align: 0,
+                                offset: 0,
+                                // We assume the bytemap for stable memory is always
+                                // inserted directly after the stable memory.
+                                memory: special_indices.stable_memory_index + 1,
+                            },
+                        },
+                        I32Const { value: 2 }, // READ_BIT
+                        I32Or,
+                        I32Store8 {
+                            memarg: wasmparser::MemArg {
+                                align: 0,
+                                max_align: 0,
+                                offset: 0,
+                                // We assume the bytemap for stable memory is always
+                                // inserted directly after the stable memory.
+                                memory: special_indices.stable_memory_index + 1,
+                            },
+                        },
+                        LocalGet { local_index: 6 },
+                        I32Const { value: 1 },
+                        I32Add,
+                        LocalTee { local_index: 6 },
+                        LocalGet { local_index: 4 }, //b_end
+                        I32LtU,
+                        BrIf { relative_depth: 0 },
+                        End, // end loop
+                        End, // end if
                         // perform the copy
                         LocalGet { local_index: 0 },
                         I32WrapI64,
@@ -413,6 +617,15 @@ pub(super) fn replacement_functions(
                         MemoryCopy {
                             dst_mem: 0,
                             src_mem: stable_memory_index,
+                        },
+                        GlobalGet {
+                            global_index: accessed_pages_counter_index,
+                        },
+                        LocalGet { local_index: 5 },
+                        I64ExtendI32U,
+                        I64Sub,
+                        GlobalSet {
+                            global_index: accessed_pages_counter_index,
                         },
                         End,
                     ],
@@ -427,7 +640,7 @@ pub(super) fn replacement_functions(
                     [],
                 )),
                 Body {
-                    locals: vec![(3, ValType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt
+                    locals: vec![(4, ValType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt, accessed page cnt
                     instructions: vec![
                         // Decrement instruction counter by the size of the copy
                         // and fixed overhead.  On system subnets this charge is
@@ -529,6 +742,23 @@ pub(super) fn replacement_functions(
                         Call {
                             function_index: count_clean_pages_fn_index,
                         },
+                        LocalTee { local_index: 6 },
+                        // fail if accessed pages limit exhausted
+                        I64ExtendI32U,
+                        GlobalGet {
+                            global_index: accessed_pages_counter_index,
+                        },
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
                         LocalTee { local_index: 5 },
                         // fail if dirty pages limit exhausted
                         I64ExtendI32U,
@@ -540,7 +770,7 @@ pub(super) fn replacement_functions(
                             blockty: BlockType::Empty,
                         },
                         I32Const {
-                            value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
+                            value: InternalErrorCode::MemoryWriteLimitExceeded as i32,
                         },
                         Call {
                             function_index: InjectedImports::InternalTrap as u32,
@@ -562,7 +792,7 @@ pub(super) fn replacement_functions(
                         // perform memory fill
                         LocalGet { local_index: 3 }, //b_start
                         // value to fill with
-                        I32Const { value: 1 },
+                        I32Const { value: 3 },
                         // calculate b_size
                         // b_end = (dst + size - 1) / PAGE_SIZE + 1
                         // b_len = b_end - b_start
@@ -591,6 +821,15 @@ pub(super) fn replacement_functions(
                         GlobalSet {
                             global_index: dirty_pages_counter_index,
                         },
+                        GlobalGet {
+                            global_index: accessed_pages_counter_index,
+                        },
+                        LocalGet { local_index: 6 },
+                        I64ExtendI32U,
+                        I64Sub,
+                        GlobalSet {
+                            global_index: accessed_pages_counter_index,
+                        },
                         End,
                     ],
                 },
@@ -604,7 +843,7 @@ pub(super) fn replacement_functions(
                     [],
                 )),
                 Body {
-                    locals: vec![(3, ValType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt
+                    locals: vec![(4, ValType::I32)], // dst on bytemap, dst + len on bytemap, dirty page cnt, accessed page cnt
                     instructions: vec![
                         // Decrement instruction counter by the size of the copy
                         // and fixed overhead.  On system subnets this charge is
@@ -729,10 +968,26 @@ pub(super) fn replacement_functions(
                         I64Add,
                         I32WrapI64,
                         LocalTee { local_index: 4 }, // store b_end
-                        // count pages already dirty
                         Call {
                             function_index: count_clean_pages_fn_index,
                         },
+                        LocalTee { local_index: 6 },
+                        // fail if accessed pages limit exhausted
+                        I64ExtendI32U,
+                        GlobalGet {
+                            global_index: accessed_pages_counter_index,
+                        },
+                        I64GtU,
+                        If {
+                            blockty: BlockType::Empty,
+                        },
+                        I32Const {
+                            value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
+                        },
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
                         LocalTee { local_index: 5 },
                         // fail if dirty pages limit exhausted
                         I64ExtendI32U,
@@ -744,7 +999,7 @@ pub(super) fn replacement_functions(
                             blockty: BlockType::Empty,
                         },
                         I32Const {
-                            value: InternalErrorCode::MemoryAccessLimitExceeded as i32,
+                            value: InternalErrorCode::MemoryWriteLimitExceeded as i32,
                         },
                         Call {
                             function_index: InjectedImports::InternalTrap as u32,
@@ -766,7 +1021,7 @@ pub(super) fn replacement_functions(
                         // perform memory fill
                         LocalGet { local_index: 3 }, //b_start
                         // value to fill with
-                        I32Const { value: 1 },
+                        I32Const { value: 3 },
                         // calculate b_size
                         // b_end = (dst + size - 1) / PAGE_SIZE + 1
                         // b_len = b_end - b_start
@@ -795,6 +1050,15 @@ pub(super) fn replacement_functions(
                         I64Sub,
                         GlobalSet {
                             global_index: dirty_pages_counter_index,
+                        },
+                        GlobalGet {
+                            global_index: accessed_pages_counter_index,
+                        },
+                        LocalGet { local_index: 6 },
+                        I64ExtendI32U,
+                        I64Sub,
+                        GlobalSet {
+                            global_index: accessed_pages_counter_index,
                         },
                         End,
                     ],

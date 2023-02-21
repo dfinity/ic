@@ -191,6 +191,7 @@ const INTERNAL_TRAP_FUN_NAME: &str = "internal_trap";
 const TABLE_STR: &str = "table";
 pub(crate) const INSTRUCTIONS_COUNTER_GLOBAL_NAME: &str = "canister counter_instructions";
 pub(crate) const DIRTY_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_dirty_pages";
+pub(crate) const ACCESSED_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_accessed_pages";
 const CANISTER_START_STR: &str = "canister_start";
 
 /// There is one byte for each OS page in the wasm heap.
@@ -335,6 +336,7 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
 pub(super) struct SpecialIndices {
     pub instructions_counter_ix: u32,
     pub dirty_pages_counter_ix: Option<u32>,
+    pub accessed_pages_counter_ix: Option<u32>,
     pub decr_instruction_counter_fn: u32,
     pub count_clean_pages_fn: Option<u32>,
     pub start_fn_ix: Option<u32>,
@@ -381,14 +383,17 @@ pub(super) fn instrument(
     let num_globals = (module.globals.len() + num_imported_globals) as u32;
 
     let dirty_pages_counter_ix;
+    let accessed_pages_counter_ix;
     let count_clean_pages_fn;
     match wasm_native_stable_memory {
         FlagStatus::Enabled => {
             dirty_pages_counter_ix = Some(num_globals + 1);
+            accessed_pages_counter_ix = Some(num_globals + 2);
             count_clean_pages_fn = Some(num_functions + 1);
         }
         FlagStatus::Disabled => {
             dirty_pages_counter_ix = None;
+            accessed_pages_counter_ix = None;
             count_clean_pages_fn = None;
         }
     };
@@ -396,6 +401,7 @@ pub(super) fn instrument(
     let special_indices = SpecialIndices {
         instructions_counter_ix: num_globals,
         dirty_pages_counter_ix,
+        accessed_pages_counter_ix,
         decr_instruction_counter_fn: num_functions,
         count_clean_pages_fn,
         start_fn_ix: module.start,
@@ -624,13 +630,21 @@ fn export_additional_symbols<'a>(
     module.code_sections.push(func_body);
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
-        // function to count dirty pages in a given range
-        let func_type = Type::Func(FuncType::new([ValType::I32, ValType::I32], [ValType::I32]));
+        // function to count clean pages in a given range
+        // Arg 0 - start of the range
+        // Arg 1 - end of the range
+        // Arg 1 must be strictly bigger than arg 0
+        // Return index 0 is the number of pages that haven't been written to in the given range
+        // Return index 1 is the number of pages that haven't been accessed in the given range.
+        let func_type = Type::Func(FuncType::new(
+            [ValType::I32, ValType::I32],
+            [ValType::I32, ValType::I32],
+        ));
         let it = 2; // iterator index
-        let acc = 3; // accumulator index
+        let tmp = 3;
+        let acc_w = 4; // accumulator index
+        let acc_a = 5; // accumulator index
         let instructions = vec![
-            I32Const { value: 0 },
-            LocalSet { local_index: acc },
             LocalGet { local_index: 0 },
             LocalSet { local_index: it },
             Loop {
@@ -648,9 +662,23 @@ fn export_additional_symbols<'a>(
                     memory: special_indices.stable_memory_index + 1,
                 },
             },
-            LocalGet { local_index: acc },
+            LocalTee { local_index: tmp },
+            I32Const { value: 1 }, //write bit
+            I32And,
+            // update acc_w
+            LocalGet { local_index: acc_w },
             I32Add,
-            LocalSet { local_index: acc },
+            LocalSet { local_index: acc_w },
+            // get access bit
+            LocalGet { local_index: tmp },
+            I32Const { value: 1 },
+            I32ShrU,
+            I32Const { value: 1 },
+            I32And,
+            // update acc_a
+            LocalGet { local_index: acc_a },
+            I32Add,
+            LocalSet { local_index: acc_a },
             LocalGet { local_index: it },
             I32Const { value: 1 },
             I32Add,
@@ -663,12 +691,18 @@ fn export_additional_symbols<'a>(
             LocalGet { local_index: 1 },
             LocalGet { local_index: 0 },
             I32Sub,
-            LocalGet { local_index: acc },
+            LocalGet { local_index: acc_w },
+            I32Sub,
+            // non-accessed pages
+            LocalGet { local_index: 1 },
+            LocalGet { local_index: 0 },
+            I32Sub,
+            LocalGet { local_index: acc_a },
             I32Sub,
             End,
         ];
         let func_body = wasm_transform::Body {
-            locals: vec![(2, ValType::I32)],
+            locals: vec![(4, ValType::I32)],
             instructions,
         };
         let type_idx = add_type(&mut module, func_type);
@@ -688,6 +722,16 @@ fn export_additional_symbols<'a>(
     if let Some(index) = special_indices.dirty_pages_counter_ix {
         let export = Export {
             name: DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+            kind: ExternalKind::Global,
+            index,
+        };
+        debug_assert!(super::validation::RESERVED_SYMBOLS.contains(&export.name));
+        module.exports.push(export);
+    }
+
+    if let Some(index) = special_indices.accessed_pages_counter_ix {
+        let export = Export {
+            name: ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
             kind: ExternalKind::Global,
             index,
         };
@@ -724,6 +768,14 @@ fn export_additional_symbols<'a>(
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
         // push the dirty page counter
+        module.globals.push(Global {
+            ty: GlobalType {
+                content_type: ValType::I64,
+                mutable: true,
+            },
+            init_expr: ConstExpr::new(extra_data.as_ref().unwrap(), 0),
+        });
+        // push the accessed page counter
         module.globals.push(Global {
             ty: GlobalType {
                 content_type: ValType::I64,

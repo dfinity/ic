@@ -52,6 +52,9 @@ const GiB: u64 = KiB * KiB * KiB;
 // Maximum number of stable memory dirty pages that a single message execution
 // is allowed to produce.
 pub const STABLE_MEMORY_DIRTY_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
+// Maximum number of stable memory pages that a single message execution
+// is allowed to access.
+pub const STABLE_MEMORY_ACCESSED_PAGE_LIMIT: u64 = 8 * GiB / (PAGE_SIZE as u64);
 
 #[derive(Copy, Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 pub struct FeatureFlags {
@@ -108,6 +111,10 @@ pub struct Config {
     // is allowed to produce.
     pub stable_memory_dirty_page_limit: NumPages,
 
+    // Maximum number of stable memory pages that a single message execution
+    // can access.
+    pub stable_memory_accessed_page_limit: NumPages,
+
     /// Sandbox process eviction does not activate if the number of sandbox
     /// processes is below this threshold.
     pub min_sandbox_count: usize,
@@ -144,6 +151,7 @@ impl Config {
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
             feature_flags: FeatureFlags::const_default(),
             stable_memory_dirty_page_limit: NumPages::new(STABLE_MEMORY_DIRTY_PAGE_LIMIT),
+            stable_memory_accessed_page_limit: NumPages::new(STABLE_MEMORY_ACCESSED_PAGE_LIMIT),
             min_sandbox_count: DEFAULT_MIN_SANDBOX_COUNT,
             max_sandbox_count: DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: DEFAULT_MAX_SANDBOX_IDLE_TIME,

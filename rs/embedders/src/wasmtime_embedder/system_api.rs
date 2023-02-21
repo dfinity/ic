@@ -366,6 +366,7 @@ pub(crate) fn syscalls<S: SystemApi>(
     store: &Store<StoreData<S>>,
     feature_flags: FeatureFlags,
     stable_memory_dirty_page_limit: NumPages,
+    stable_memory_access_page_limit: NumPages,
 ) -> Linker<StoreData<S>> {
     fn with_system_api<S, T>(caller: &mut Caller<'_, StoreData<S>>, f: impl Fn(&mut S) -> T) -> T {
         f(&mut caller.as_context_mut().data_mut().system_api)
@@ -1481,10 +1482,17 @@ pub(crate) fn syscalls<S: SystemApi>(
                     InternalErrorCode::StableMemoryTooBigFor32Bit => {
                         HypervisorError::Trapped(TrapCode::StableMemoryTooBigFor32Bit)
                     }
-                    InternalErrorCode::MemoryAccessLimitExceeded => {
+                    InternalErrorCode::MemoryWriteLimitExceeded => {
                         HypervisorError::MemoryAccessLimitExceeded(
                             format!("Exceeded the limit for the number of modified pages in the stable memory in a single message execution: limit: {} KB.",
                                     stable_memory_dirty_page_limit * (PAGE_SIZE as u64 / 1024),
+                            )
+                        )
+                    }
+                    InternalErrorCode::MemoryAccessLimitExceeded => {
+                        HypervisorError::MemoryAccessLimitExceeded(
+                            format!("Exceeded the limit for the number of accessed pages in the stable memory in a single message execution: limit: {} KB.",
+                                    stable_memory_access_page_limit * (PAGE_SIZE as u64 / 1024),
                             )
                         )
                     }
