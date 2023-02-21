@@ -114,7 +114,9 @@ fn test_invalid_public_key_fails_to_parse() {
 #[test]
 fn test_invalid_secret_key_fails_to_parse() {
     for (value, valid, name) in malformed_secret_threshold_key_test_vectors() {
-        let bytes = SecretKeyBytes(value);
+        let bytes = SecretKeyBytes(
+            ic_crypto_secrets_containers::SecretArray::new_and_dont_zeroize_argument(&value),
+        );
         let secret_key = SecretKey::try_from(&bytes);
         match (valid, secret_key) {
             (false, Err(ClibThresholdSignError::MalformedSecretKey { .. })) => (),

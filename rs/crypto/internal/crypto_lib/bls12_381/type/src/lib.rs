@@ -231,6 +231,7 @@ impl Scalar {
             buf[0] &= 0b0111_1111; // clear the 256th bit
 
             if let Ok(s) = Self::deserialize(&buf) {
+                buf.zeroize();
                 return s;
             }
         }
@@ -272,6 +273,7 @@ impl Scalar {
             buf[Self::BYTES - n_bytes] &= n_mask;
 
             if let Ok(s) = Self::deserialize(&buf) {
+                buf.zeroize();
                 if s < n {
                     return s;
                 }
@@ -282,14 +284,17 @@ impl Scalar {
     /// Decode a scalar as a big-endian byte string, accepting out of range elements
     ///
     /// Out of range elements are reduced modulo the group order
-    pub fn deserialize_unchecked(bytes: [u8; Self::BYTES]) -> Self {
+    pub fn deserialize_unchecked(bytes: &[u8; Self::BYTES]) -> Self {
         let mut le_bytes = [0u8; 64];
 
         for i in 0..Self::BYTES {
             le_bytes[i] = bytes[Self::BYTES - i - 1];
         }
         // le_bytes[32..64] left as zero
-        Self::new(ic_bls12_381::Scalar::from_bytes_wide(&le_bytes))
+
+        let s = ic_bls12_381::Scalar::from_bytes_wide(&le_bytes);
+        le_bytes.zeroize();
+        Self::new(s)
     }
 
     /// Deserialize a scalar from a big-endian byte string
@@ -300,6 +305,7 @@ impl Scalar {
             .map_err(|_| PairingInvalidScalar::InvalidScalar)?;
         bytes.reverse();
         let scalar = ic_bls12_381::Scalar::from_bytes(&bytes);
+        bytes.zeroize();
         ctoption_ok_or!(scalar, PairingInvalidScalar::InvalidScalar)
     }
 

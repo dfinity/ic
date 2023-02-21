@@ -10,6 +10,7 @@ rust_library(
     deps = [
         "//rs/crypto/internal/crypto_lib/bls12_381/type",
         "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/secrets_containers",
         "//rs/crypto/sha",
         "//rs/protobuf",
         "//rs/types/types",
@@ -25,11 +26,9 @@ rust_library(
 rust_test(
     name = "bls12_381_test",
     crate = ":bls12_381",
-    proc_macro_deps = [
-        "@crate_index//:proptest-derive",
-    ],
     deps = [
         "//rs/crypto/internal/test_vectors",
         "@crate_index//:proptest",
+        "@crate_index//:serde_cbor",
     ],
 )

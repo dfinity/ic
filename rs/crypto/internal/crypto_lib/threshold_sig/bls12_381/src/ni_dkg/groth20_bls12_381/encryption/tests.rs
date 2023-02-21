@@ -133,7 +133,8 @@ fn fs_key_message_pairs(
             |(threshold_key, FsEncryptionKeySetWithPop { public_key, .. })| {
                 (
                     *public_key,
-                    Scalar::deserialize(&threshold_key.0).expect("Invalid secret key"),
+                    Scalar::deserialize(&threshold_key.0.expose_secret())
+                        .expect("Invalid secret key"),
                 )
             },
         )

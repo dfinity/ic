@@ -36,6 +36,9 @@ pub fn combined_signature() -> impl Strategy<Value = CombinedSignature> {
     individual_signature().prop_map(|signature| combine_signatures(&[signature]))
 }
 
+pub fn secret_key_bytes() -> impl Strategy<Value = SecretKeyBytes> {
+    key_pair().prop_map(|(secret_key, _public_key)| secret_key.into())
+}
 pub fn public_key_bytes() -> impl Strategy<Value = PublicKeyBytes> {
     public_key().prop_map(|public_key| public_key.into())
 }
@@ -61,6 +64,15 @@ impl proptest::prelude::Arbitrary for PublicKeyBytes {
 
     fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
         public_key_bytes().boxed()
+    }
+}
+
+impl proptest::prelude::Arbitrary for SecretKeyBytes {
+    type Parameters = ();
+    type Strategy = BoxedStrategy<Self>;
+
+    fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+        secret_key_bytes().boxed()
     }
 }
 

@@ -33,7 +33,9 @@ impl CspSecretKey {
 
     /// This function is only used for tests
     pub fn multi_bls12381_from_hex(hex: &str) -> Self {
-        CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes(hex_to_32_bytes(hex)))
+        CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
+            SecretArray::new_and_dont_zeroize_argument(&hex_to_32_bytes(hex)),
+        ))
     }
 }
 
@@ -177,7 +179,9 @@ pub fn arbitrary_multi_bls12381_secret_key() -> CspSecretKey {
     for b in random_bytes.iter_mut() {
         *b = rand::random();
     }
-    CspSecretKey::MultiBls12_381(multi_sig_types::SecretKeyBytes(random_bytes))
+    CspSecretKey::MultiBls12_381(multi_sig_types::SecretKeyBytes::new(
+        SecretArray::new_and_dont_zeroize_argument(&random_bytes),
+    ))
 }
 
 /// This function is only used for tests
@@ -227,7 +231,9 @@ pub fn arbitrary_threshold_bls12381_secret_key() -> CspSecretKey {
     for b in random_bytes.iter_mut() {
         *b = rand::random();
     }
-    CspSecretKey::ThresBls12_381(threshold_sig_types::SecretKeyBytes(random_bytes))
+    CspSecretKey::ThresBls12_381(threshold_sig_types::SecretKeyBytes::new(
+        SecretArray::new_and_dont_zeroize_argument(&random_bytes),
+    ))
 }
 
 /// This function is only used for tests

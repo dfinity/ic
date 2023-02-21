@@ -1,6 +1,8 @@
 //! BLS12-381 multisignature types.
 #![allow(clippy::unit_arg)] // Arbitrary is a unit arg in: derive(proptest_derive::Arbitrary)
 use ic_crypto_internal_bls12_381_type::{G1Projective, G2Projective, Scalar};
+use ic_crypto_secrets_containers::SecretArray;
+use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[cfg(test)]
@@ -29,12 +31,14 @@ pub type Pop = G1Projective;
 pub type CombinedSignature = G1Projective;
 
 /// Wrapper for a serialized secret key.
-#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct SecretKeyBytes(pub [u8; SecretKeyBytes::SIZE]);
-ic_crypto_internal_types::derive_serde!(SecretKeyBytes, SecretKeyBytes::SIZE);
+#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop, Serialize, Deserialize)]
+pub struct SecretKeyBytes(pub(crate) SecretArray<{ SecretKeyBytes::SIZE }>);
 impl SecretKeyBytes {
     pub const SIZE: usize = Scalar::BYTES;
+
+    pub fn new(val: SecretArray<{ SecretKeyBytes::SIZE }>) -> Self {
+        Self(val)
+    }
 }
 
 /// Wrapper for a serialized individual signature.
