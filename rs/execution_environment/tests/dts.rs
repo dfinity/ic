@@ -1,4 +1,4 @@
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use candid::Encode;
 use ic_config::{
@@ -1778,4 +1778,551 @@ fn dts_serialized_and_runtime_states_are_equal() {
     let hash_without_restart = run(false);
     let hash_with_restart = run(true);
     assert_eq!(hash_without_restart, hash_with_restart);
+}
+
+fn get_global_counter(env: &StateMachine, canister_id: CanisterId) -> u64 {
+    let query = wasm().get_global_counter().reply_int64().build();
+    match env.query(canister_id, "query", query).unwrap() {
+        WasmResult::Reply(r) => {
+            let bytes: [u8; 8] = r.try_into().unwrap();
+            u64::from_le_bytes(bytes)
+        }
+        WasmResult::Reject(_) => {
+            unreachable!("unexpected reject result");
+        }
+    }
+}
+
+#[test]
+fn dts_heartbeat_works() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(50_000),
+    );
+
+    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let heartbeat = wasm()
+        .instruction_counter_is_at_least(100_000)
+        .inc_global_counter()
+        .build();
+
+    let set_heartbeat = wasm()
+        .set_heartbeat(heartbeat)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+
+    let result = env
+        .execute_ingress(canister_id, "update", set_heartbeat)
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+
+    for i in 1..10 {
+        env.tick();
+        // Each heartbeat takes three rounds to execute.
+        assert_eq!(i / 3, get_global_counter(&env, canister_id));
+    }
+}
+
+#[test]
+fn dts_heartbeat_resume_after_abort() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(50_000),
+    );
+
+    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let heartbeat = wasm()
+        .instruction_counter_is_at_least(100_000)
+        .inc_global_counter()
+        .build();
+
+    let set_heartbeat = wasm()
+        .set_heartbeat(heartbeat)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+
+    let result = env
+        .execute_ingress(canister_id, "update", set_heartbeat)
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+
+    env.set_checkpoints_enabled(true);
+
+    for _ in 0..3 {
+        env.tick();
+        assert_eq!(0, get_global_counter(&env, canister_id));
+    }
+
+    env.set_checkpoints_enabled(false);
+
+    for i in 1..10 {
+        env.tick();
+        // Each heartbeat takes three rounds to execute.
+        assert_eq!(i / 3, get_global_counter(&env, canister_id));
+    }
+}
+
+#[test]
+fn dts_heartbeat_with_trap() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(50_000),
+    );
+
+    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let heartbeat = wasm()
+        .instruction_counter_is_at_least(100_000)
+        .inc_global_counter()
+        .trap()
+        .build();
+
+    let set_heartbeat = wasm()
+        .set_heartbeat(heartbeat)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+
+    let result = env
+        .execute_ingress(canister_id, "update", set_heartbeat)
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+
+    for _ in 1..10 {
+        env.tick();
+        assert_eq!(0, get_global_counter(&env, canister_id));
+    }
+}
+
+#[test]
+fn dts_heartbeat_does_not_prevent_canister_from_stopping() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(50_000),
+    );
+
+    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let heartbeat = wasm()
+        .instruction_counter_is_at_least(100_000)
+        .inc_global_counter()
+        .build();
+
+    let set_heartbeat = wasm()
+        .set_heartbeat(heartbeat)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+
+    let result = env
+        .execute_ingress(canister_id, "update", set_heartbeat)
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+
+    for i in 1..10 {
+        env.tick();
+        // Each heartbeat takes three rounds to execute.
+        assert_eq!(i / 3, get_global_counter(&env, canister_id));
+    }
+
+    env.stop_canister(canister_id).unwrap();
+
+    assert_eq!(
+        ErrorCode::CanisterStopped,
+        env.query(canister_id, "query", vec![]).unwrap_err().code()
+    );
+}
+
+#[test]
+fn dts_heartbeat_does_not_prevent_upgrade() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(50_000),
+    );
+
+    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let heartbeat = wasm()
+        .instruction_counter_is_at_least(100_000)
+        .inc_global_counter()
+        .build();
+
+    let set_heartbeat = wasm()
+        .set_heartbeat(heartbeat)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+
+    let result = env
+        .execute_ingress(canister_id, "update", set_heartbeat)
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+
+    for i in 1..10 {
+        env.tick();
+        // Each heartbeat takes three rounds to execute.
+        assert_eq!(i / 3, get_global_counter(&env, canister_id));
+    }
+
+    let empty_wasm = wat2wasm("(module)");
+
+    let result = env.upgrade_canister(canister_id, empty_wasm, vec![]);
+
+    assert_eq!(Ok(()), result);
+}
+
+#[test]
+fn dts_global_timer_one_shot_works() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(50_000),
+    );
+
+    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+
+    let timer = wasm()
+        .instruction_counter_is_at_least(100_000)
+        .inc_global_counter()
+        .build();
+
+    let set_global_timer = wasm()
+        .set_global_timer_method(timer)
+        .api_global_timer_set(now_nanos)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+
+    for i in 1..10 {
+        env.tick();
+        if i < 3 {
+            // The timer takes three rounds to execute.
+            assert_eq!(0, get_global_counter(&env, canister_id));
+        } else {
+            // The timer is one shot.
+            assert_eq!(1, get_global_counter(&env, canister_id));
+        }
+    }
+}
+
+#[test]
+fn dts_global_timer_periodic_works() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(50_000),
+    );
+
+    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+
+    let timer = wasm()
+        .instruction_counter_is_at_least(100_000)
+        .inc_global_counter()
+        .api_global_timer_set(now_nanos)
+        .build();
+
+    let set_global_timer = wasm()
+        .set_global_timer_method(timer)
+        .api_global_timer_set(now_nanos)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+
+    for i in 1..10 {
+        env.tick();
+        // Each timer takes three rounds to execute.
+        assert_eq!(i / 3, get_global_counter(&env, canister_id));
+    }
+}
+
+#[test]
+fn dts_global_timer_resume_after_abort() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(50_000),
+    );
+
+    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+
+    let timer = wasm()
+        .instruction_counter_is_at_least(100_000)
+        .inc_global_counter()
+        .api_global_timer_set(now_nanos)
+        .build();
+
+    let set_global_timer = wasm()
+        .set_global_timer_method(timer)
+        .api_global_timer_set(now_nanos)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+
+    env.set_checkpoints_enabled(true);
+
+    for _ in 0..3 {
+        env.tick();
+        assert_eq!(0, get_global_counter(&env, canister_id));
+    }
+
+    env.set_checkpoints_enabled(false);
+
+    for i in 1..10 {
+        env.tick();
+        // Each timer takes three rounds to execute.
+        assert_eq!(i / 3, get_global_counter(&env, canister_id));
+    }
+}
+
+#[test]
+fn dts_global_timer_does_not_prevent_canister_from_stopping() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(50_000),
+    );
+
+    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+
+    let timer = wasm()
+        .instruction_counter_is_at_least(100_000)
+        .inc_global_counter()
+        .api_global_timer_set(now_nanos)
+        .build();
+
+    let set_global_timer = wasm()
+        .set_global_timer_method(timer)
+        .api_global_timer_set(now_nanos)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+
+    for i in 1..10 {
+        env.tick();
+        // Each timer takes three rounds to execute.
+        assert_eq!(i / 3, get_global_counter(&env, canister_id));
+    }
+
+    env.stop_canister(canister_id).unwrap();
+
+    assert_eq!(
+        ErrorCode::CanisterStopped,
+        env.query(canister_id, "query", vec![]).unwrap_err().code()
+    );
+}
+
+#[test]
+fn dts_global_timer_with_trap() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(50_000),
+    );
+
+    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+
+    let timer = wasm()
+        .instruction_counter_is_at_least(100_000)
+        .inc_global_counter()
+        .api_global_timer_set(now_nanos)
+        .trap()
+        .build();
+
+    let set_global_timer = wasm()
+        .set_global_timer_method(timer)
+        .api_global_timer_set(now_nanos)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+
+    for _ in 1..10 {
+        env.tick();
+        assert_eq!(0, get_global_counter(&env, canister_id));
+    }
+}
+
+#[test]
+fn dts_global_timer_does_not_prevent_upgrade() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(50_000),
+    );
+
+    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+
+    let timer = wasm()
+        .instruction_counter_is_at_least(100_000)
+        .inc_global_counter()
+        .api_global_timer_set(now_nanos)
+        .build();
+
+    let set_global_timer = wasm()
+        .set_global_timer_method(timer)
+        .api_global_timer_set(now_nanos)
+        .get_global_counter()
+        .reply_int64()
+        .build();
+
+    let result = env
+        .execute_ingress(canister_id, "update", set_global_timer)
+        .unwrap();
+
+    assert_eq!(result, WasmResult::Reply(0u64.to_le_bytes().to_vec()));
+
+    for i in 1..10 {
+        env.tick();
+        // Each timer takes three rounds to execute.
+        assert_eq!(i / 3, get_global_counter(&env, canister_id));
+    }
+
+    let empty_wasm = wat2wasm("(module)");
+
+    let result = env.upgrade_canister(canister_id, empty_wasm, vec![]);
+
+    assert_eq!(Ok(()), result);
 }

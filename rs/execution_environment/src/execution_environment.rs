@@ -2357,69 +2357,52 @@ pub fn execute_canister(
         NextExecution::StartNew | NextExecution::ContinueLong => {}
     }
 
-    let (input, instruction_limits, prepaid_execution_cycles) =
-        match canister.system_state.task_queue.pop_front() {
-            Some(task) => match task {
-                ExecutionTask::PausedExecution(id) => {
-                    let paused = exec_env.take_paused_execution(id).unwrap();
-                    let round_context = RoundContext {
-                        network_topology: &network_topology,
-                        hypervisor: &exec_env.hypervisor,
-                        cycles_account_manager: &exec_env.cycles_account_manager,
-                        execution_refund_error_counter: exec_env
-                            .metrics
-                            .execution_cycles_refund_error_counter(),
-                        log: &exec_env.log,
-                        time,
-                    };
-                    let result = paused.resume(canister, round_context, round_limits, subnet_size);
-                    let (canister, instructions_used, heap_delta, ingress_status) =
-                        exec_env.process_result(result);
-                    return ExecuteCanisterResult {
-                        canister,
-                        instructions_used,
-                        heap_delta,
-                        ingress_status,
-                        description: Some("paused execution".to_string()),
-                    };
-                }
-                ExecutionTask::Heartbeat => {
-                    // A heartbeat is expected to finish quickly, so DTS is not supported for it.
-                    let instruction_limits = InstructionLimits::new(
-                        FlagStatus::Disabled,
-                        max_instructions_per_message_without_dts,
-                        max_instructions_per_message_without_dts,
-                    );
-                    let task = CanisterMessageOrTask::Task(CanisterTask::Heartbeat);
-                    (task, instruction_limits, None)
-                }
-                ExecutionTask::GlobalTimer => {
-                    // A heartbeat is expected to finish quickly, so DTS is not supported for it.
-                    let instruction_limits = InstructionLimits::new(
-                        FlagStatus::Disabled,
-                        max_instructions_per_message_without_dts,
-                        max_instructions_per_message_without_dts,
-                    );
-                    let task = CanisterMessageOrTask::Task(CanisterTask::GlobalTimer);
-                    (task, instruction_limits, None)
-                }
-                ExecutionTask::AbortedExecution {
-                    input,
-                    prepaid_execution_cycles,
-                } => (input, instruction_limits, Some(prepaid_execution_cycles)),
-                ExecutionTask::PausedInstallCode(..) | ExecutionTask::AbortedInstallCode { .. } => {
-                    unreachable!("The guard at the beginning filters these cases out")
-                }
-            },
-            None => {
-                let message = canister.pop_input().unwrap();
-                (
-                    CanisterMessageOrTask::Message(message),
-                    instruction_limits,
-                    None,
-                )
+    let (input, prepaid_execution_cycles) = match canister.system_state.task_queue.pop_front() {
+        Some(task) => match task {
+            ExecutionTask::PausedExecution(id) => {
+                let paused = exec_env.take_paused_execution(id).unwrap();
+                let round_context = RoundContext {
+                    network_topology: &network_topology,
+                    hypervisor: &exec_env.hypervisor,
+                    cycles_account_manager: &exec_env.cycles_account_manager,
+                    execution_refund_error_counter: exec_env
+                        .metrics
+                        .execution_cycles_refund_error_counter(),
+                    log: &exec_env.log,
+                    time,
+                };
+                let result = paused.resume(canister, round_context, round_limits, subnet_size);
+                let (canister, instructions_used, heap_delta, ingress_status) =
+                    exec_env.process_result(result);
+                return ExecuteCanisterResult {
+                    canister,
+                    instructions_used,
+                    heap_delta,
+                    ingress_status,
+                    description: Some("paused execution".to_string()),
+                };
             }
-        };
+            ExecutionTask::Heartbeat => {
+                let task = CanisterMessageOrTask::Task(CanisterTask::Heartbeat);
+                (task, None)
+            }
+            ExecutionTask::GlobalTimer => {
+                let task = CanisterMessageOrTask::Task(CanisterTask::GlobalTimer);
+                (task, None)
+            }
+            ExecutionTask::AbortedExecution {
+                input,
+                prepaid_execution_cycles,
+            } => (input, Some(prepaid_execution_cycles)),
+            ExecutionTask::PausedInstallCode(..) | ExecutionTask::AbortedInstallCode { .. } => {
+                unreachable!("The guard at the beginning filters these cases out")
+            }
+        },
+        None => {
+            let message = canister.pop_input().unwrap();
+            (CanisterMessageOrTask::Message(message), None)
+        }
+    };
     execute_canister_input(
         input,
         prepaid_execution_cycles,
