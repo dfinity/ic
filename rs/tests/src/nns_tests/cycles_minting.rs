@@ -1,6 +1,6 @@
-use crate::driver::test_env::{HasIcPrepDir, TestEnv};
+use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv};
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, ADMIN,
 };
 use crate::nns::{
     change_subnet_type_assignment, change_subnet_type_assignment_with_failure,
@@ -59,6 +59,8 @@ use url::Url;
 const USE_COST_SCALING_FLAG: bool = true;
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
@@ -72,6 +74,8 @@ pub fn config(env: TestEnv) {
 }
 
 pub fn config_with_multiple_app_subnets(env: TestEnv) {
+    env.ensure_group_setup_created();
+    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
