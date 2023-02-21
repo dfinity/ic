@@ -728,7 +728,7 @@ fn test_pre_upgrade_support() {
 fn test_start_support() {
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut api = get_system_api(
-        ApiType::start(),
+        ApiType::start(mock_time()),
         &get_system_state(),
         cycles_account_manager,
     );

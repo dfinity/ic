@@ -123,7 +123,7 @@ pub(crate) fn execute_install(
         )
     } else {
         let wasm_execution_result = round.hypervisor.execute_dts(
-            ApiType::start(),
+            ApiType::start(original.time),
             execution_state,
             &SystemState::new_for_start(canister_id),
             helper.canister_memory_usage(),
