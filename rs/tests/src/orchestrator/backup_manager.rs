@@ -26,6 +26,7 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::HasIcPrepDir;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
+use crate::util::UniversalCanister;
 use crate::{
     orchestrator::utils::{
         rw_message::install_nns_and_check_progress,
@@ -42,18 +43,21 @@ use crate::{
 };
 use ic_backup::config::{ColdStorage, Config, SubnetConfig};
 use ic_backup::util::sleep_secs;
+use ic_base_types::SubnetId;
 use ic_recovery::file_sync_helper::{download_binary, write_file};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
-use slog::{info, Logger};
+use slog::{error, info, Logger};
 use std::ffi::OsStr;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 4;
+const DIVERGENCE_LOG_STR: &str = "The state hash of the CUP at height ";
 
 pub fn config(env: TestEnv) {
     env.ensure_group_setup_created();
@@ -89,8 +93,10 @@ pub fn test(env: TestEnv) {
     let nns_node = get_nns_node(&env.topology_snapshot());
     let node_ip: IpAddr = nns_node.get_ip_addr();
     let subnet_id = env.topology_snapshot().root_subnet_id();
-    let replica_version = get_assigned_replica_version(&nns_node).unwrap();
-    let initial_replica_version = ReplicaVersion::try_from(replica_version.clone()).unwrap();
+    let replica_version =
+        get_assigned_replica_version(&nns_node).expect("There should be assigned replica version");
+    let initial_replica_version = ReplicaVersion::try_from(replica_version.clone())
+        .expect("Assigned replica version should be valid");
 
     let backup_binaries_dir = backup_dir.join("binaries").join(&replica_version);
     fs::create_dir_all(&backup_binaries_dir).expect("failure creating backup binaries directory");
@@ -123,6 +129,17 @@ pub fn test(env: TestEnv) {
         .expect("chmod command failed");
     chmod.wait_with_output().expect("chmod execution failed");
 
+    let node = env.get_first_healthy_nns_node_snapshot();
+    let agent = node.build_default_agent();
+    let log2 = log.clone();
+    let id = node.effective_canister_id();
+    let canister_id_hex: String = block_on({
+        async move {
+            let canister = UniversalCanister::new_with_retries(&agent, id, &log2).await;
+            hex::encode(canister.canister_id().as_slice())
+        }
+    });
+
     // Update the registry with the backup key
     let payload = get_updatesubnetpayload_with_keys(subnet_id, None, Some(vec![backup_public_key]));
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
@@ -145,12 +162,10 @@ pub fn test(env: TestEnv) {
         thread_id: 0,
         disable_cold_storage: false,
     };
-
     let cold_storage = Some(ColdStorage {
         cold_storage_dir: cold_storage_dir.clone(),
         versions_hot: 1,
     });
-
     let config = Config {
         version: 1,
         push_metrics: false,
@@ -172,9 +187,7 @@ pub fn test(env: TestEnv) {
     write_file(&config_file, config_str).expect("writing config file failed");
 
     info!(log, "Start the backup process in a separate thread");
-
     let ic_backup_path = binaries_path.join("ic-backup");
-
     let mut command = Command::new(&ic_backup_path);
     command.arg("--config-file").arg(&config_file);
     info!(log, "Will execute: {:?}", command);
@@ -183,7 +196,6 @@ pub fn test(env: TestEnv) {
         .stdout(Stdio::piped())
         .spawn()
         .expect("Failed to start backup process");
-
     info!(log, "Started process: {}", child.id());
 
     info!(log, "Elect the mainnet replica version");
@@ -247,11 +259,24 @@ pub fn test(env: TestEnv) {
         sleep_secs(5);
     }
 
-    info!(log, "Restart and wait for the cold storage to happen");
+    info!(
+        log,
+        "Restart and wait for cold storage and divergence to happen"
+    );
     child.kill().expect("Error killing backup process");
 
-    let mut command = Command::new(ic_backup_path);
-    command.arg("--config-file").arg(config_file);
+    let checkpoint =
+        some_checkpoint_dir(&backup_dir, &subnet_id).expect("Checkpoint doesn't exist");
+    let memory_artifact_path = checkpoint
+        .join("canister_states")
+        .join(canister_id_hex)
+        .join("vmemory_0.bin");
+    assert!(memory_artifact_path.exists());
+    modify_byte_in_file(memory_artifact_path).expect("Modifying a byte failed");
+    info!(log, "Modified memory file");
+
+    let mut command = Command::new(&ic_backup_path);
+    command.arg("--config-file").arg(&config_file);
     info!(log, "Will execute: {:?}", command);
     let mut child = command
         .stdout(Stdio::piped())
@@ -264,8 +289,71 @@ pub fn test(env: TestEnv) {
     ));
     info!(log, "Artifacts and states are moved to cold storage");
 
+    let mut hash_mismatch = false;
+    for _ in 0..12 {
+        info!(log, "Checking logs for hash mismatch...");
+        if let Ok(dirs) = fs::read_dir(backup_dir.join("logs")) {
+            for en in dirs {
+                match en {
+                    Ok(d) => {
+                        let contents = fs::read_to_string(d.path())
+                            .expect("Should have been able to read the log file");
+
+                        if contents.contains(DIVERGENCE_LOG_STR) {
+                            hash_mismatch = true;
+                            break;
+                        }
+                    }
+                    Err(e) => error!(log, "Error opening log file: {:?}", e),
+                }
+            }
+        } else {
+            error!(log, "Error reading log file directory")
+        }
+        if hash_mismatch {
+            break;
+        }
+        sleep_secs(10);
+    }
+    assert!(hash_mismatch);
+    info!(log, "There was a divergence of the state");
+
     info!(log, "Kill child process");
     child.kill().expect("Error killing backup process");
+}
+
+fn some_checkpoint_dir(backup_dir: &Path, subnet_id: &SubnetId) -> Option<PathBuf> {
+    let dir = backup_dir
+        .join("data")
+        .join(subnet_id.to_string())
+        .join("ic_state")
+        .join("checkpoints");
+    if !dir.exists() {
+        return None;
+    }
+    if let Ok(mut cps) = fs::read_dir(dir) {
+        if let Some(Ok(cp)) = cps.next() {
+            return Some(cp.path());
+        }
+    }
+    None
+}
+
+fn modify_byte_in_file(file_path: PathBuf) -> std::io::Result<()> {
+    let mut perms = fs::metadata(&file_path)?.permissions();
+    perms.set_readonly(false);
+    fs::set_permissions(&file_path, perms)?;
+    let mut file = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .open(file_path)?;
+    file.seek(SeekFrom::Start(0))?;
+    let mut byte: [u8; 1] = [0];
+    assert!(file.read(&mut byte)? == 1);
+    byte[0] ^= 0x01;
+    file.seek(SeekFrom::Start(0))?;
+    file.write_all(&byte)
 }
 
 fn cold_storage_exists(cold_storage_dir: PathBuf) -> bool {
@@ -284,7 +372,10 @@ fn dir_exists_and_have_file(dir: &PathBuf) -> bool {
     if !dir.exists() {
         return false;
     }
-    fs::read_dir(dir).unwrap().next().is_some()
+    fs::read_dir(dir)
+        .expect("Should be able to read existing directory")
+        .next()
+        .is_some()
 }
 
 fn copy_file(binaries_path: &Path, backup_binaries_dir: &Path, file_name: &str) {
@@ -319,7 +410,8 @@ fn highest_dir_entry(dir: &PathBuf, radix: u32) -> u64 {
 
 fn download_mainnet_binaries(log: &Logger, backup_dir: &Path, mainnet_version: &str) {
     let binaries_dir = backup_dir.join("binaries").join(mainnet_version);
-    let replica_version = ReplicaVersion::try_from(mainnet_version).unwrap();
+    let replica_version =
+        ReplicaVersion::try_from(mainnet_version).expect("Replica version should be valid");
     fs::create_dir_all(&binaries_dir).expect("failure creating backup binaries directory");
     download_binary_file(log, &replica_version, &binaries_dir, "ic-replay");
     download_binary_file(log, &replica_version, &binaries_dir, "sandbox_launcher");
