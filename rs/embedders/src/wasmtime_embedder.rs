@@ -36,7 +36,8 @@ use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
-    DIRTY_PAGES_COUNTER_GLOBAL_NAME, INSTRUCTIONS_COUNTER_GLOBAL_NAME,
+    ACCESSED_PAGES_COUNTER_GLOBAL_NAME, DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+    INSTRUCTIONS_COUNTER_GLOBAL_NAME,
 };
 use crate::{serialized_module::SerializedModuleBytes, wasm_utils::validation::ensure_determinism};
 
@@ -107,7 +108,10 @@ fn trap_code_to_hypervisor_error(trap: wasmtime::Trap) -> HypervisorError {
 }
 
 fn globals_to_ignore(wasm_native_stable_memory: FlagStatus) -> &'static [&'static str] {
-    const TO_IGNORE: &[&str] = &[DIRTY_PAGES_COUNTER_GLOBAL_NAME];
+    const TO_IGNORE: &[&str] = &[
+        DIRTY_PAGES_COUNTER_GLOBAL_NAME,
+        ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
+    ];
     match wasm_native_stable_memory {
         FlagStatus::Enabled => TO_IGNORE,
         FlagStatus::Disabled => &[],
@@ -306,6 +310,7 @@ impl WasmtimeEmbedder {
             &store,
             self.config.feature_flags,
             self.config.stable_memory_dirty_page_limit,
+            self.config.stable_memory_accessed_page_limit,
         );
 
         let instance = match linker.instantiate(&mut store, module) {
@@ -397,6 +402,10 @@ impl WasmtimeEmbedder {
             instance.get_global(&mut store, DIRTY_PAGES_COUNTER_GLOBAL_NAME)
                 .expect("Counter for dirty pages global should have been added with native stable memory enabled.")
                 .set(&mut store, Val::I64(self.config.stable_memory_dirty_page_limit.get() as i64))
+                .expect("Couldn't set dirty page counter global");
+            instance.get_global(&mut store, ACCESSED_PAGES_COUNTER_GLOBAL_NAME)
+                .expect("Counter for accessed pages global should have been added with native stable memory enabled.")
+                .set(&mut store, Val::I64(self.config.stable_memory_accessed_page_limit.get() as i64))
                 .expect("Couldn't set dirty page counter global");
         }
 
@@ -856,7 +865,7 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                 written: u8,
             ) -> HypervisorResult<()> {
                 let index = PageIndex::new(page_index as u64);
-                match written {
+                match written & 0x1 {
                     1 => {
                         result.push(index);
                         *previous_page_marked_written = true;

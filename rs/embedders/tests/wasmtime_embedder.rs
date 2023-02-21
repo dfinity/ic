@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use ic_embedders::wasmtime_embedder::system_api_complexity;
 use ic_interfaces::execution_environment::SystemApi;
 use ic_replicated_state::Global;
@@ -808,6 +809,190 @@ mod test {
             .run(FuncRef::Method(WasmMethod::Update("test".to_string())))
             .unwrap_err();
         assert_eq!(err, HypervisorError::CalledTrap("Hello".to_string()));
+    }
+
+    #[test]
+    fn stable_read_accessed_pages_allowance() {
+        fn func_ref(name: &str) -> FuncRef {
+            FuncRef::Method(WasmMethod::Update(name.to_string()))
+        }
+        let wat = r#"
+            (module
+                (import "ic0" "stable_grow"
+                    (func $ic0_stable_grow (param $pages i32) (result i32)))
+                (import "ic0" "stable_read"
+                    (func $ic0_stable_read (param $dst i32) (param $offset i32) (param $size i32)))
+                (import "ic0" "stable_write"
+                    (func $ic0_stable_write (param $offset i32) (param $src i32) (param $size i32)))
+
+                (func (export "canister_update read_within_limit")
+                    (drop (call $ic0_stable_grow (i32.const 10)))
+                    ;; touch page 0
+                    (call $ic0_stable_write (i32.const 100) (i32.const 10) (i32.const 5))
+                    ;; touch page 0 and 1
+                    (call $ic0_stable_read (i32.const 10) (i32.const 4094) (i32.const 5))
+                    ;; touch page 0, 1 and 2
+                    (call $ic0_stable_read (i32.const 10) (i32.const 4094) (i32.const 8194))
+                )
+
+                (func (export "canister_update write_within_limit")
+                    (drop (call $ic0_stable_grow (i32.const 10)))
+                    ;; touch page 0
+                    (call $ic0_stable_read (i32.const 10) (i32.const 100) (i32.const 5))
+                    ;; touch page 0 and 1
+                    (call $ic0_stable_write (i32.const 4094) (i32.const 10) (i32.const 5))
+                    ;; touch page 0, 1 and 2
+                    (call $ic0_stable_write (i32.const 4094) (i32.const 10) (i32.const 8194))
+                )
+
+                (func (export "canister_update read_above_limit")
+                    (drop (call $ic0_stable_grow (i32.const 10)))
+                    ;; touch page 0
+                    (call $ic0_stable_write (i32.const 100) (i32.const 10) (i32.const 5))
+                    ;; touch page 0 and 1
+                    (call $ic0_stable_read (i32.const 10) (i32.const 4094) (i32.const 5))
+                    ;; touch pages 0, 1, 2, 3
+                    (call $ic0_stable_read (i32.const 10) (i32.const 4094) (i32.const 8195))
+                )
+
+                (func (export "canister_update write_above_limit")
+                    (drop (call $ic0_stable_grow (i32.const 10)))
+                    ;; touch page 0
+                    (call $ic0_stable_read (i32.const 10) (i32.const 100) (i32.const 5))
+                    ;; touch page 0 and 1
+                    (call $ic0_stable_write (i32.const 4094) (i32.const 10) (i32.const 5))
+                    ;; touch page 0, 1 and 2
+                    (call $ic0_stable_write (i32.const 4094) (i32.const 10) (i32.const 8195))
+                )
+
+                (memory (export "memory") 5)
+            )"#;
+
+        use HypervisorError::*;
+
+        let mut config = ic_config::embedders::Config {
+            stable_memory_accessed_page_limit: ic_types::NumPages::new(3),
+            ..Default::default()
+        };
+        config.feature_flags.wasm_native_stable_memory =
+            ic_config::flag_status::FlagStatus::Enabled;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        instance.run(func_ref("read_within_limit")).unwrap();
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        instance.run(func_ref("write_within_limit")).unwrap();
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("read_above_limit")).unwrap_err();
+        assert_matches!(err, MemoryAccessLimitExceeded(_));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config)
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("write_above_limit")).unwrap_err();
+        assert_matches!(err, MemoryAccessLimitExceeded(_));
+    }
+
+    #[test]
+    fn stable64_read_accessed_pages_allowance() {
+        fn func_ref(name: &str) -> FuncRef {
+            FuncRef::Method(WasmMethod::Update(name.to_string()))
+        }
+        let wat = r#"
+            (module
+                (import "ic0" "stable_grow"
+                    (func $ic0_stable_grow (param $pages i32) (result i32)))
+                (import "ic0" "stable64_read"
+                    (func $ic0_stable64_read (param $dst i64) (param $offset i64) (param $size i64)))
+                (import "ic0" "stable64_write"
+                    (func $ic0_stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+
+                (func (export "canister_update read_within_limit")
+                    (drop (call $ic0_stable_grow (i32.const 10)))
+                    ;; touch page 0
+                    (call $ic0_stable64_write (i64.const 100) (i64.const 10) (i64.const 5))
+                    ;; touch page 0 and 1
+                    (call $ic0_stable64_read (i64.const 10) (i64.const 4094) (i64.const 5))
+                    ;; touch page 0, 1 and 2
+                    (call $ic0_stable64_read (i64.const 10) (i64.const 4094) (i64.const 8194))
+                )
+
+                (func (export "canister_update write_within_limit")
+                    (drop (call $ic0_stable_grow (i32.const 10)))
+                    ;; touch page 0
+                    (call $ic0_stable64_read (i64.const 10) (i64.const 100) (i64.const 5))
+                    ;; touch page 0 and 1
+                    (call $ic0_stable64_write (i64.const 4094) (i64.const 10) (i64.const 5))
+                    ;; touch page 0, 1 and 2
+                    (call $ic0_stable64_write (i64.const 4094) (i64.const 10) (i64.const 8194))
+                )
+
+                (func (export "canister_update read_above_limit")
+                    (drop (call $ic0_stable_grow (i32.const 10)))
+                    ;; touch page 0
+                    (call $ic0_stable64_write (i64.const 100) (i64.const 10) (i64.const 5))
+                    ;; touch page 0 and 1
+                    (call $ic0_stable64_read (i64.const 10) (i64.const 4094) (i64.const 5))
+                    ;; touch pages 0, 1, 2, 3
+                    (call $ic0_stable64_read (i64.const 10) (i64.const 4094) (i64.const 8195))
+                )
+
+                (func (export "canister_update write_above_limit")
+                    (drop (call $ic0_stable_grow (i32.const 10)))
+                    ;; touch page 0
+                    (call $ic0_stable64_read (i64.const 10) (i64.const 100) (i64.const 5))
+                    ;; touch page 0 and 1
+                    (call $ic0_stable64_write (i64.const 4094) (i64.const 10) (i64.const 5))
+                    ;; touch page 0, 1 and 2
+                    (call $ic0_stable64_write (i64.const 4094) (i64.const 10) (i64.const 8195))
+                )
+
+                (memory (export "memory") 5)
+            )"#;
+
+        use HypervisorError::*;
+
+        let mut config = ic_config::embedders::Config {
+            stable_memory_accessed_page_limit: ic_types::NumPages::new(3),
+            ..Default::default()
+        };
+        config.feature_flags.wasm_native_stable_memory =
+            ic_config::flag_status::FlagStatus::Enabled;
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        instance.run(func_ref("read_within_limit")).unwrap();
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        instance.run(func_ref("write_within_limit")).unwrap();
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config.clone())
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("read_above_limit")).unwrap_err();
+        assert_matches!(err, MemoryAccessLimitExceeded(_));
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_config(config)
+            .with_wat(wat)
+            .build();
+        let err = instance.run(func_ref("write_above_limit")).unwrap_err();
+        assert_matches!(err, MemoryAccessLimitExceeded(_));
     }
 
     #[test]
