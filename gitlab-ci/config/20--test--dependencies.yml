@@ -41,7 +41,6 @@ dependency-scan-nightly:
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       # shellcheck disable=SC1090
       source "${NVM_DIR}/nvm.sh"
-      nvm install ${NVM_VERSION}
       nvm use ${NVM_VERSION}
       node --version
       npm --version
