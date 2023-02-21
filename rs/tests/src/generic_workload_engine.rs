@@ -4,22 +4,8 @@ use std::time::{Duration, Instant};
 use tokio::task;
 use tokio::time::sleep_until;
 
-pub trait Aggregator {
-    type Item;
-
-    fn push(&mut self, item: Self::Item);
-}
-
-impl<T> Aggregator for Vec<T> {
-    type Item = T;
-
-    fn push(&mut self, item: Self::Item) {
-        Vec::push(self, item);
-    }
-}
-
 /// A generic Engine, which executes arbitrary Futures at a desired rate for a specified time period.
-pub struct Engine<F, A> {
+pub struct Engine<F> {
     log: slog::Logger,
     /// Callback function generating Futures for the Engine.
     futures_generator: F,
@@ -29,32 +15,22 @@ pub struct Engine<F, A> {
     duration: Duration,
     /// All futures should be started strictly within this time bound. Note that actual execution can take additional time.
     dispatch_timeout: Duration,
-    /// A (generally) stateful object that aggregates the results.
-    aggregator: A,
 }
 
-impl<F, Fut, Out, A> Engine<F, A>
+impl<F, Fut, Out> Engine<F>
 where
     F: FnMut(usize) -> Fut + Send + 'static,
     Out: Send + 'static,
     Fut: Future<Output = Out> + Send + 'static,
-    A: Aggregator<Item = Out> + Send + 'static,
 {
     // Constructor of the Engine.
-    pub fn new(
-        log: slog::Logger,
-        future_generator: F,
-        rps: usize,
-        duration: Duration,
-        aggregator: A,
-    ) -> Self {
+    pub fn new(log: slog::Logger, future_generator: F, rps: usize, duration: Duration) -> Self {
         Self {
             futures_generator: future_generator,
             rps,
             duration,
             log,
             dispatch_timeout: duration,
-            aggregator,
         }
     }
 
@@ -65,7 +41,11 @@ where
     }
 
     /// Start executing futures
-    pub async fn execute(mut self) -> Result<A, EngineError> {
+    pub async fn execute<A, Fold>(mut self, mut aggr: A, f: Fold) -> Result<A, EngineError>
+    where
+        Fold: Fn(A, Out) -> A + Send + 'static,
+        A: Send + 'static,
+    {
         let futures_count = self.rps * self.duration.as_secs() as usize;
         let (fut_snd, mut fut_rcv) = tokio::sync::mpsc::unbounded_channel();
         let log = self.log;
@@ -96,12 +76,11 @@ where
         });
 
         let aggr_jh = task::spawn({
-            let mut aggr = self.aggregator;
             let log = log.clone();
             async move {
                 while let Some((idx, jh)) = fut_rcv.recv().await {
                     if let Ok(res) = jh.await {
-                        aggr.push(res);
+                        aggr = f(aggr, res);
                     } else {
                         warn!(log, "Failed to await join handle for task {idx}.");
                     }
@@ -165,11 +144,11 @@ mod tests {
     async fn engine_succeeds() {
         let log = slog::Logger::root(slog::Discard, slog::o!());
         let future_generator = |_| async move { 1 };
-        let agg = vec![];
-        let engine = Engine::new(log.clone(), future_generator, RPS, DURATION, agg)
+        let engine = Engine::new(log.clone(), future_generator, RPS, DURATION)
             .increase_dispatch_timeout(EXTRA_TIMEOUT);
 
-        let engine_result = engine.execute().await;
+        let agg = vec![];
+        let engine_result = engine.execute(agg, vec_aggr).await;
 
         let futures_results = engine_result.expect("No engine error expected.");
         assert!(futures_results.iter().all(|r| *r == 1));
@@ -179,11 +158,11 @@ mod tests {
     async fn engine_errors_with_timeout() {
         let log = slog::Logger::root(slog::Discard, slog::o!());
         let future_generator = |_| async move {};
-        let agg = vec![];
-        let mut engine = Engine::new(log.clone(), future_generator, RPS, DURATION, agg);
+        let mut engine = Engine::new(log.clone(), future_generator, RPS, DURATION);
         engine.dispatch_timeout -= Duration::from_secs(1); // one sec less than the actual duration
 
-        let engine_result = engine.execute().await;
+        let agg = vec![];
+        let engine_result = engine.execute(agg, vec_aggr).await;
 
         use EngineError::*;
         match engine_result {
@@ -193,5 +172,10 @@ mod tests {
             Err(FuturesExecutionFailure(_e)) => panic!("Unexpected execution failure."),
             Ok(_) => panic!("EngineError result is expected"),
         }
+    }
+
+    fn vec_aggr<Out>(mut aggr: Vec<Out>, out: Out) -> Vec<Out> {
+        aggr.push(out);
+        aggr
     }
 }
