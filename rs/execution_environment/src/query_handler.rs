@@ -156,8 +156,8 @@ impl QueryHandler for InternalHttpQueryHandler {
             subnet_available_memory,
             max_canister_memory_size,
             self.max_instructions_per_query,
-            self.config.max_query_call_depth,
-            self.config.max_instructions_per_composite_query_call,
+            self.config.max_query_call_graph_depth,
+            self.config.max_query_call_graph_instructions,
             self.config.instruction_overhead_per_query_call,
             self.composite_queries,
         );

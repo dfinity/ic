@@ -1363,7 +1363,7 @@ pub struct ExecutionTestBuilder {
     bitcoin_privileged_access: Vec<CanisterId>,
     bitcoin_get_successors_follow_up_responses: BTreeMap<CanisterId, Vec<Vec<u8>>>,
     cost_to_compile_wasm_instruction: u64,
-    max_instructions_per_composite_query_call: NumInstructions,
+    max_query_call_graph_instructions: NumInstructions,
     stable_memory_dirty_page_limit: NumPages,
 }
 
@@ -1380,8 +1380,7 @@ impl Default for ExecutionTestBuilder {
             .subnet_message_memory_capacity
             .get() as i64;
         let max_instructions_per_composite_query_call =
-            ic_config::execution_environment::Config::default()
-                .max_instructions_per_composite_query_call;
+            ic_config::execution_environment::Config::default().max_query_call_graph_instructions;
         Self {
             nns_subnet_id: subnet_test_id(2),
             own_subnet_id: subnet_test_id(1),
@@ -1413,7 +1412,7 @@ impl Default for ExecutionTestBuilder {
             cost_to_compile_wasm_instruction: ic_config::execution_environment::Config::default()
                 .cost_to_compile_wasm_instruction
                 .get(),
-            max_instructions_per_composite_query_call,
+            max_query_call_graph_instructions: max_instructions_per_composite_query_call,
             stable_memory_dirty_page_limit: ic_config::execution_environment::Config::default()
                 .stable_memory_dirty_page_limit,
         }
@@ -1456,12 +1455,12 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_max_instructions_per_composite_query_call(
+    pub fn with_max_query_call_graph_instructions(
         self,
-        max_instructions_per_composite_query_call: NumInstructions,
+        max_query_call_graph_instructions: NumInstructions,
     ) -> Self {
         Self {
-            max_instructions_per_composite_query_call,
+            max_query_call_graph_instructions,
             ..self
         }
     }
@@ -1746,8 +1745,7 @@ impl ExecutionTestBuilder {
                 ..Default::default()
             },
             cost_to_compile_wasm_instruction: self.cost_to_compile_wasm_instruction.into(),
-            max_instructions_per_composite_query_call: self
-                .max_instructions_per_composite_query_call,
+            max_query_call_graph_instructions: self.max_query_call_graph_instructions,
             stable_memory_dirty_page_limit: self.stable_memory_dirty_page_limit,
             ..Config::default()
         };

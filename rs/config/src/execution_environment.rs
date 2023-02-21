@@ -141,11 +141,11 @@ pub struct Config {
     /// this amount of time.
     pub query_scheduling_time_slice_per_canister: Duration,
 
-    /// The maximum depth of the query call tree.
-    pub max_query_call_depth: usize,
+    /// The maximum depth of a query call graph.
+    pub max_query_call_graph_depth: usize,
 
-    /// Maximum total number of cycles allowed for composite queries.
-    pub max_instructions_per_composite_query_call: NumInstructions,
+    /// The maximum number of instructions allowed for a query call graph.
+    pub max_query_call_graph_instructions: NumInstructions,
 
     /// Instructions to charge for each composite query call in addition to the
     /// instructions in the actual query call. This is meant to protect from
@@ -231,8 +231,8 @@ impl Default for Config {
             query_execution_threads_per_canister: QUERY_EXECUTION_THREADS_PER_CANISTER,
             query_execution_threads_total: QUERY_EXECUTION_THREADS_TOTAL,
             query_scheduling_time_slice_per_canister: QUERY_SCHEDULING_TIME_SLICE_PER_CANISTER,
-            max_query_call_depth: MAX_QUERY_CALL_DEPTH,
-            max_instructions_per_composite_query_call: NumInstructions::from(
+            max_query_call_graph_depth: MAX_QUERY_CALL_DEPTH,
+            max_query_call_graph_instructions: NumInstructions::from(
                 MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL,
             ),
             instruction_overhead_per_query_call: NumInstructions::from(

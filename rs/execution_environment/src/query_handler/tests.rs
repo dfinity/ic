@@ -351,7 +351,7 @@ fn query_callgraph_max_instructions_is_enforced() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System) // For now, query calls are only allowed in system subnets
-        .with_max_instructions_per_composite_query_call(NumInstructions::from(
+        .with_max_query_call_graph_instructions(NumInstructions::from(
             NUM_SUCCESSFUL_QUERIES * INSTRUCTION_OVERHEAD_PER_QUERY_CALL,
         ))
         .build();
@@ -517,7 +517,7 @@ fn composite_query_callgraph_max_instructions_is_enforced() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_composite_queries() // For now, query calls are only allowed in system subnets
-        .with_max_instructions_per_composite_query_call(NumInstructions::from(
+        .with_max_query_call_graph_instructions(NumInstructions::from(
             NUM_SUCCESSFUL_QUERIES * INSTRUCTION_OVERHEAD_PER_QUERY_CALL,
         ))
         .build();
