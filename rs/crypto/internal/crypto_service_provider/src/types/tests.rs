@@ -43,8 +43,8 @@ fn should_return_correct_ed25519_secret_key_bytes_for_ed25519_secret_key() {
 
 #[test]
 fn should_return_no_ed25519_secret_key_bytes_for_non_ed25519_secret_key() {
-    let secret_key = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes(
-        [0u8; multi_types::SecretKeyBytes::SIZE],
+    let secret_key = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
+        SecretArray::new_and_dont_zeroize_argument(&[0u8; multi_types::SecretKeyBytes::SIZE]),
     ));
     assert!(sk_ed25519_bytes(&secret_key).is_none())
 }
@@ -62,8 +62,8 @@ fn should_redact_csp_secret_key_ed25519_debug() {
 
 #[test]
 fn should_redact_csp_secret_key_multi_debug() {
-    let cspsk_multi = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes(
-        [1u8; multi_types::SecretKeyBytes::SIZE],
+    let cspsk_multi = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
+        SecretArray::new_and_dont_zeroize_argument(&[1u8; multi_types::SecretKeyBytes::SIZE]),
     ));
     assert_eq!(
         "CspSecretKey::MultiBls12_381 - REDACTED",
@@ -73,8 +73,8 @@ fn should_redact_csp_secret_key_multi_debug() {
 
 #[test]
 fn should_redact_csp_secret_key_thres_debug() {
-    let cspsk_thresh = CspSecretKey::ThresBls12_381(threshold_types::SecretKeyBytes(
-        [1u8; threshold_types::SecretKeyBytes::SIZE],
+    let cspsk_thresh = CspSecretKey::ThresBls12_381(threshold_types::SecretKeyBytes::new(
+        SecretArray::new_and_dont_zeroize_argument(&[1u8; threshold_types::SecretKeyBytes::SIZE]),
     ));
     assert_eq!(
         "CspSecretKey::ThresBls12_381 - REDACTED",
@@ -130,14 +130,14 @@ fn should_return_correct_enum_variant() {
     assert_eq!(key.enum_variant(), "Ed25519");
 
     // MultiBls12_381
-    let key = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes(
-        [0; multi_types::SecretKeyBytes::SIZE],
+    let key = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
+        SecretArray::new_and_dont_zeroize_argument(&[0; multi_types::SecretKeyBytes::SIZE]),
     ));
     assert_eq!(key.enum_variant(), "MultiBls12_381");
 
     // ThresBls12_381
-    let key = CspSecretKey::ThresBls12_381(threshold_types::SecretKeyBytes(
-        [0; threshold_types::SecretKeyBytes::SIZE],
+    let key = CspSecretKey::ThresBls12_381(threshold_types::SecretKeyBytes::new(
+        SecretArray::new_and_dont_zeroize_argument(&[0; threshold_types::SecretKeyBytes::SIZE]),
     ));
     assert_eq!(key.enum_variant(), "ThresBls12_381");
 

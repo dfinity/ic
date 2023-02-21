@@ -1,8 +1,10 @@
+#![allow(clippy::unwrap_used)]
+
 //! Tests for multisignatures
 
 use crate::{
     api, crypto as multi_crypto, types as multi_types, types::arbitrary, types::CombinedSignature,
-    types::IndividualSignature, types::PublicKey, types::SecretKey,
+    types::IndividualSignature, types::PublicKey, types::SecretKey, types::SecretKeyBytes,
 };
 use ic_crypto_internal_bls12_381_type::G1Projective;
 
@@ -67,6 +69,24 @@ mod stability {
             hex::encode(multi_crypto::hash_public_key_to_g1(&public_key_bytes.0[..]).serialize()),
             "b02fd0d54faab7498924d7e230f84b00519ea7f3846cd30f82b149c1f172ad79ee68adb2ea2fc8a2d40ffdf3fd5df02a"
         );
+    }
+
+    #[test]
+    fn secret_key_from_fixed_rng() {
+        let mut csprng = ChaCha20Rng::seed_from_u64(9000);
+        let (secret_key, public_key) = multi_crypto::keypair_from_rng(&mut csprng);
+        let secret_key_bytes = SecretKeyBytes::from(secret_key);
+
+        assert_eq!(
+            hex::encode(serde_cbor::to_vec(&secret_key_bytes).unwrap()),
+            "582020bfd7f85be7ce1f54ea1b0d750ae3324ab7897fde3235e189ec697f0fade983"
+        );
+
+        let public_key_bytes = PublicKeyBytes::from(public_key);
+
+        assert_eq!(
+            hex::encode(serde_cbor::to_vec(&public_key_bytes).unwrap()),
+            "5860805197d0cf9a60da1acc5750be523048f14622dadef70e7c2648b674181555881092e20e26440f6ad277380b33ea84f412f99c5fe4c993198e5c5233e39d1dd55656add17bdbf65d889fec7cc05befb0466bc9ad1b55bb57539c4f9d74c43c5a")
     }
 }
 

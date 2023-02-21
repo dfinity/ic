@@ -8,6 +8,7 @@ base64 = "0.11.0"
 hex = "0.4.2"
 ic-crypto-internal-bls12-381-type = { path = "../../bls12_381/type"}
 ic-crypto-internal-types = { path = "../../types" }
+ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-sha = { path= "../../../../sha"}
 ic-protobuf = { path = "../../../../../protobuf" }
 ic-types = { path = "../../../../../types/types" }
@@ -19,4 +20,4 @@ zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 [dev-dependencies]
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 proptest = "1.0"
-proptest-derive = "0.3.0"
+serde_cbor = "0.11"

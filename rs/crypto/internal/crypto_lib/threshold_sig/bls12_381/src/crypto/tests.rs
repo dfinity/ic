@@ -497,7 +497,7 @@ fn resharing_with_encryption_should_preserve_the_threshold_key() {
         hash.write(&(new_receiver_index as NodeIndex).to_be_bytes()[..]);
         // This reduces modulo the group order which would introduce a slight bias, which
         // would be dangerous in production code but is acceptable in a test.
-        SecretKey::deserialize_unchecked(hash.finish())
+        SecretKey::deserialize_unchecked(&hash.finish())
     }
     let original_threshold = NumberOfNodes::from(3);
     let original_receivers = NumberOfNodes::from(5);

@@ -591,7 +591,7 @@ fn test_scalar_serialization_round_trips() {
         assert_eq!(s_orig, s_d);
         assert_eq!(s_d.serialize(), s_bits);
 
-        let s_du = Scalar::deserialize_unchecked(s_bits);
+        let s_du = Scalar::deserialize_unchecked(&s_bits);
         assert_eq!(s_orig, s_du);
         assert_eq!(s_du.serialize(), s_bits);
     }

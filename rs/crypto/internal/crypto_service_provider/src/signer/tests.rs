@@ -21,6 +21,7 @@ use ic_crypto_internal_test_vectors::multi_bls12_381::{
     TESTVEC_MULTI_BLS12_381_1_PK, TESTVEC_MULTI_BLS12_381_1_SIG,
 };
 use ic_crypto_internal_test_vectors::test_data;
+use ic_crypto_secrets_containers::SecretArray;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use rand::Rng;
 use std::collections::HashSet;
@@ -88,8 +89,8 @@ mod sign_ed25519 {
 
     #[test]
     fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
-        let sk_with_wrong_type = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes(
-            [0u8; multi_types::SecretKeyBytes::SIZE],
+        let sk_with_wrong_type = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
+            SecretArray::new_and_dont_zeroize_argument(&[0u8; multi_types::SecretKeyBytes::SIZE]),
         ));
         let csp = Csp::builder()
             .with_vault(

@@ -61,19 +61,22 @@ impl TryFrom<&PublicKeyBytes> for PublicKey {
 
 impl From<SecretKey> for SecretKeyBytes {
     fn from(key: SecretKey) -> Self {
-        Self(key.serialize())
+        Self::from(&key)
     }
 }
 impl From<&SecretKey> for SecretKeyBytes {
     fn from(key: &SecretKey) -> Self {
-        Self(key.serialize())
+        let mut bytes = key.serialize();
+        Self(ic_crypto_secrets_containers::SecretArray::new_and_zeroize_argument(&mut bytes))
     }
 }
 impl TryFrom<&SecretKeyBytes> for SecretKey {
     type Error = ClibThresholdSignError;
     fn try_from(bytes: &SecretKeyBytes) -> Result<SecretKey, ClibThresholdSignError> {
-        Scalar::deserialize(&bytes.0).map_err(|_| ClibThresholdSignError::MalformedSecretKey {
-            algorithm: AlgorithmId::ThresBls12_381,
+        Scalar::deserialize(&bytes.0.expose_secret()).map_err(|_| {
+            ClibThresholdSignError::MalformedSecretKey {
+                algorithm: AlgorithmId::ThresBls12_381,
+            }
         })
     }
 }
@@ -122,7 +125,7 @@ impl TryFrom<&CombinedSignatureBytes> for CombinedSignature {
 
 impl From<SecretKeyBytes> for String {
     fn from(bytes: SecretKeyBytes) -> String {
-        base64::encode(&bytes.0[..])
+        base64::encode(&bytes.0.expose_secret())
     }
 }
 impl TryFrom<&str> for SecretKeyBytes {
@@ -141,7 +144,9 @@ impl TryFrom<&str> for SecretKeyBytes {
         }
         let mut buffer = [0u8; SecretKeyBytes::SIZE];
         buffer.copy_from_slice(&bytes);
-        Ok(SecretKeyBytes(buffer))
+        Ok(SecretKeyBytes(
+            ic_crypto_secrets_containers::SecretArray::new_and_zeroize_argument(&mut buffer),
+        ))
     }
 }
 impl TryFrom<&String> for SecretKeyBytes {

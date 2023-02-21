@@ -5,6 +5,8 @@
 #![allow(clippy::unit_arg)]
 
 use ic_crypto_internal_bls12_381_type::{G1Projective, G2Projective, Scalar};
+use ic_crypto_secrets_containers::SecretArray;
+use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // A polynomial is a vector of (usually secret) field elements
@@ -47,12 +49,14 @@ impl CombinedSignatureBytes {
 pub(super) type SecretKey = Scalar;
 
 /// A serialized BLS secret key.
-#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
-#[cfg_attr(test, derive(proptest_derive::Arbitrary))]
-pub struct SecretKeyBytes(pub [u8; Scalar::BYTES]);
-ic_crypto_internal_types::derive_serde!(SecretKeyBytes, SecretKeyBytes::SIZE);
+#[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop, Serialize, Deserialize)]
+pub struct SecretKeyBytes(pub(crate) SecretArray<{ SecretKeyBytes::SIZE }>);
 impl SecretKeyBytes {
     pub const SIZE: usize = Scalar::BYTES;
+
+    pub fn new(val: SecretArray<{ SecretKeyBytes::SIZE }>) -> Self {
+        Self(val)
+    }
 }
 
 /// A wrapped BLS public key.

@@ -10,12 +10,15 @@ mod tests;
 
 impl From<SecretKeyBytes> for SecretKey {
     fn from(val: SecretKeyBytes) -> Self {
-        SecretKey::deserialize_unchecked(val.0)
+        SecretKey::deserialize_unchecked(val.0.expose_secret())
     }
 }
 impl From<SecretKey> for SecretKeyBytes {
     fn from(secret_key: SecretKey) -> SecretKeyBytes {
-        SecretKeyBytes(secret_key.serialize())
+        let mut bytes = secret_key.serialize();
+        SecretKeyBytes(
+            ic_crypto_secrets_containers::SecretArray::new_and_zeroize_argument(&mut bytes),
+        )
     }
 }
 
@@ -229,7 +232,7 @@ impl TryFrom<&String> for PublicKeyBytes {
 
 impl From<SecretKeyBytes> for String {
     fn from(val: SecretKeyBytes) -> Self {
-        base64::encode(&val.0[..])
+        base64::encode(&val.0.expose_secret())
     }
 }
 impl TryFrom<&str> for SecretKeyBytes {
@@ -248,7 +251,9 @@ impl TryFrom<&str> for SecretKeyBytes {
         }
         let mut buffer = [0u8; SecretKeyBytes::SIZE];
         buffer.copy_from_slice(&key);
-        Ok(SecretKeyBytes(buffer))
+        Ok(SecretKeyBytes(
+            ic_crypto_secrets_containers::SecretArray::new_and_zeroize_argument(&mut buffer),
+        ))
     }
 }
 impl TryFrom<&String> for SecretKeyBytes {

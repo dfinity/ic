@@ -4,7 +4,6 @@ use crate::types::{
     arbitrary, CombinedSignatureBytes, IndividualSignatureBytes, PopBytes, PublicKeyBytes,
     SecretKeyBytes,
 };
-use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_96_bytes};
 use ic_types::crypto::CryptoResult;
 use proptest::prelude::*;
 use rand::SeedableRng;
@@ -18,16 +17,13 @@ fn bls12_key_generation_is_stable() {
     let (secret_key, public_key) = multi_sig::keypair_from_rng(&mut csprng);
 
     assert_eq!(
-        secret_key,
-        SecretKeyBytes(hex_to_32_bytes(
-            "55f292a9a75dc429aa86f5fb84756558c5210a2de4a8d4d3b4207beb0d419072"
-        ))
+        hex::encode(secret_key.0.expose_secret()),
+        "55f292a9a75dc429aa86f5fb84756558c5210a2de4a8d4d3b4207beb0d419072"
     );
     assert_eq!(
-        public_key,
-        PublicKeyBytes(hex_to_96_bytes("b5077d187db1ff824d246bc7c311f909047e20375dc836087da1d7e5c3add0e8fc838af6aaa7373b41824c9bd080f47c0a50e3cdf06bf1cb4061a6cc6ab1802acce096906cece92e7487a29e89a187b618e6af1292515202640795f3359161c2"))
-
-        );
+        hex::encode(public_key.0),
+        "b5077d187db1ff824d246bc7c311f909047e20375dc836087da1d7e5c3add0e8fc838af6aaa7373b41824c9bd080f47c0a50e3cdf06bf1cb4061a6cc6ab1802acce096906cece92e7487a29e89a187b618e6af1292515202640795f3359161c2"
+    );
 }
 
 fn test_happy_path(

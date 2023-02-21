@@ -9,7 +9,7 @@ macro_rules! derive_serde {
                 &self,
                 serializer: S,
             ) -> Result<S::Ok, S::Error> {
-                serializer.serialize_bytes(&self.0)
+                serializer.serialize_bytes(self.0.as_ref())
             }
         }
 
@@ -26,16 +26,20 @@ macro_rules! derive_serde {
                         &self,
                         formatter: &mut std::fmt::Formatter<'_>,
                     ) -> std::fmt::Result {
-                        write!(formatter, "a blob with with {} bytes", $size)
+                        write!(formatter, "a blob with {} bytes", $size)
                     }
 
                     fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
                     where
                         E: serde::de::Error,
                     {
-                        let mut bytes: [u8; $size] = [0; $size];
-                        bytes.copy_from_slice(v);
-                        Ok($name(bytes))
+                        if v.len() == $size {
+                            let mut bytes: [u8; $size] = [0; $size];
+                            bytes.copy_from_slice(v);
+                            Ok($name(bytes))
+                        } else {
+                            Err(E::invalid_length(v.len(), &self))
+                        }
                     }
                 }
 

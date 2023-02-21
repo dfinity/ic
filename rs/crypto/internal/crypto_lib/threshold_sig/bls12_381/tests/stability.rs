@@ -10,6 +10,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
+use ic_crypto_secrets_containers::SecretArray;
 use ic_crypto_sha::Sha256;
 use ic_types::{NodeIndex, NumberOfNodes};
 use rand::RngCore;
@@ -177,7 +178,9 @@ fn test_create_dealings_and_transcript_with_resharing_secret_is_stable() {
     let (receiver_pk, receiver_sk) = create_receiver_keys(nodes as usize);
     let epoch = Epoch::from(2);
 
-    let resharing_secret = SecretKeyBytes([42; SecretKeyBytes::SIZE]);
+    let resharing_secret = SecretKeyBytes::new(SecretArray::new_and_dont_zeroize_argument(
+        &[42; SecretKeyBytes::SIZE],
+    ));
 
     let expected_dealing_hashes = [
         "c20776601f7900367194bb8f37aa530fa9798a24aa4086804abfd9e65e1d45e2",

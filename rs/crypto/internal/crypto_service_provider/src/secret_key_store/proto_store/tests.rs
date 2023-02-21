@@ -428,10 +428,12 @@ impl TestVector {
                 "7d969948abc60881eef2794043a7550f691dad53d698f4fbbb747a590285bb5e",
             )
             .expect("invalid key id"),
-            secret_key: CspSecretKey::MultiBls12_381(SecretKeyBytes([
-                54, 109, 33, 204, 23, 220, 113, 219, 1, 25, 39, 129, 69, 119, 21, 235, 75, 183,
-                245, 235, 173, 111, 112, 201, 140, 232, 154, 233, 186, 139, 22, 211,
-            ])),
+            secret_key: CspSecretKey::MultiBls12_381(SecretKeyBytes::new(
+                SecretArray::new_and_dont_zeroize_argument(&[
+                    54, 109, 33, 204, 23, 220, 113, 219, 1, 25, 39, 129, 69, 119, 21, 235, 75, 183,
+                    245, 235, 173, 111, 112, 201, 140, 232, 154, 233, 186, 139, 22, 211,
+                ]),
+            )),
         }
     }
 
