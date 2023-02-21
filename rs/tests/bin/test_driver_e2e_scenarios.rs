@@ -41,6 +41,14 @@ fn get_all_e2e_test_scenarios() -> HashMap<String, SystemTestGroup> {
                 .add_test(systest!(test_to_fail)),
         ),
         (
+            "test_with_two_panics".to_string(),
+            SystemTestGroup::new()
+                .with_setup(setup_to_succeed)
+                .add_test(systest!(test_to_succeed))
+                .add_test(systest!(test_to_fail))
+                .add_test(systest!(test_to_fail_2)),
+        ),
+        (
             "test_with_setup_panic".to_string(),
             SystemTestGroup::new()
                 .with_setup(setup_to_panic)
@@ -159,7 +167,12 @@ fn test_to_succeed_5sec(_: TestEnv) {
 
 fn test_to_fail_5sec(_: TestEnv) {
     std::thread::sleep(Duration::from_secs(5));
-    panic!("this test panics after 5 seconds");
+    panic!("this `test_to_fail` panics after 5 seconds");
+}
+
+fn test_to_fail_2(_: TestEnv) {
+    std::thread::sleep(Duration::from_secs(5));
+    panic!("this `test_to_fail_2` panics after 5 seconds");
 }
 
 fn test_to_succeed_3sec(_: TestEnv) {

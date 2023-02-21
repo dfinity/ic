@@ -12,11 +12,9 @@ import (
 var FUZZY_MATCHES_COUNT = 7
 
 type Config struct {
-	useCachedTestResult   bool
-	testTmpDir            string
-	isDryRun              bool
-	useFuzzyMatchedTarget bool
-	keepAlive             bool
+	isDryRun    bool
+	keepAlive   bool
+	filterTests string
 }
 
 func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) error {
@@ -38,6 +36,9 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 		command = append(command, args[1:]...)
 		if !slice_contains_substring(command, "--cache_test_results") {
 			command = append(command, "--cache_test_results=no")
+		}
+		if len(cfg.filterTests) > 0 {
+			command = append(command, "--test_arg=--filter-tests="+cfg.filterTests)
 		}
 		if cfg.keepAlive {
 			command = append(command, "--test_timeout=3600")
@@ -68,9 +69,8 @@ func NewTestCmd() *cobra.Command {
 		RunE:    TestCommandWithConfig(&cfg),
 	}
 	testCmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked without execution.")
-	testCmd.Flags().BoolVarP(&cfg.useCachedTestResult, "cache_test_results", "c", false, "Bazel's cache_test_results, see --cache_test_results tag in Bazel docs.")
 	testCmd.Flags().BoolVarP(&cfg.keepAlive, "keepalive", "k", false, "Keep test system alive for 60 minutes.")
-	testCmd.PersistentFlags().StringVarP(&cfg.testTmpDir, "test_tmpdir", "t", "", "Dir for storing test results, see --test-tmpdir tag in Bazel docs.")
+	testCmd.PersistentFlags().StringVarP(&cfg.filterTests, "filter-tests", "f", "", "Execute only those test functions which contain a substring.")
 	testCmd.SetOut(os.Stdout)
 	return testCmd
 }

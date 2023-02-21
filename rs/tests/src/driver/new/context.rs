@@ -17,6 +17,7 @@ use slog::debug;
 pub struct GroupContext {
     pub exec_path: PathBuf,
     pub group_dir: PathBuf,
+    pub filter_tests: Option<String>,
     logger: Logger,
     pub parent_pid: u32,
     pub debug_keepalive: bool,
@@ -31,6 +32,7 @@ impl GroupContext {
     pub fn new(
         group_dir: PathBuf,
         subproc_info: Option<(TaskId, u32)>,
+        filter_tests: Option<String>,
         debug_keepalive: bool,
     ) -> Result<Self> {
         let task_id = subproc_info.as_ref().map(|t| t.0.clone());
@@ -49,6 +51,7 @@ impl GroupContext {
         Ok(Self {
             exec_path,
             group_dir,
+            filter_tests,
             logger,
             parent_pid,
             debug_keepalive,

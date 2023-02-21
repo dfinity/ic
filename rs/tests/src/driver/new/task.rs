@@ -57,6 +57,53 @@ pub struct EmptyTask {
     sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
 }
 
+pub struct SkipTestTask {
+    spawned: AtomicBool,
+    task_id: TaskId,
+    sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
+}
+
+impl SkipTestTask {
+    pub fn new(sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>, task_id: TaskId) -> Self {
+        Self {
+            spawned: Default::default(),
+            task_id,
+            sub_fact,
+        }
+    }
+}
+
+pub struct SkipTestTaskHandle;
+
+impl TaskHandle for SkipTestTaskHandle {
+    fn fail(&self) {}
+
+    fn stop(&self) {}
+}
+
+impl Task for SkipTestTask {
+    fn spawn(&self) -> Box<dyn TaskHandle> {
+        if self.spawned.fetch_or(true, Ordering::Relaxed) {
+            panic!("Cannot respawn already spawned task.");
+        }
+
+        let mut sub = self.sub_fact.create_broadcasting_subscriber();
+        (sub)(Event::task_spawned(self.task_id.clone()));
+        (sub)(Event::task_skipped(self.task_id.clone()));
+        (sub)(Event::task_stopped(self.task_id.clone()));
+
+        Box::new(SkipTestTaskHandle) as Box<dyn TaskHandle>
+    }
+
+    fn execute(&self) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn task_id(&self) -> TaskId {
+        self.task_id.clone()
+    }
+}
+
 impl EmptyTask {
     pub fn new(sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>, task_id: TaskId) -> Self {
         Self {

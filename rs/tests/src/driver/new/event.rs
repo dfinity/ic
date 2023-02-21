@@ -12,7 +12,7 @@ use utils::thread::JoinOnDrop;
 
 use super::process::ProcessEventPayload;
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize, Hash)]
 pub enum TaskId {
     // Argument x must be unique across all TaskId::Test(x)
     Test(String),
@@ -61,6 +61,9 @@ pub struct Event {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EventPayload {
+    TaskSkipped {
+        task_id: TaskId,
+    },
     TaskSpawned {
         task_id: TaskId,
     },
@@ -87,6 +90,10 @@ pub enum EventPayload {
 }
 
 impl Event {
+    pub fn task_skipped(task_id: TaskId) -> Self {
+        Self::now(EventPayload::TaskSkipped { task_id })
+    }
+
     pub fn task_spawned(task_id: TaskId) -> Self {
         Self::now(EventPayload::TaskSpawned { task_id })
     }
