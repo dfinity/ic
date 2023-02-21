@@ -501,10 +501,7 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
                 "One or more node keys from the registry are missing locally ({:?})",
                 node_keys_errors
             );
-            self.metrics.observe_boolean_result(
-                BooleanOperation::KeyInRegistryMissingLocally,
-                BooleanResult::True,
-            );
+            self.metrics.observe_keys_in_registry_missing_locally();
         }
     }
 

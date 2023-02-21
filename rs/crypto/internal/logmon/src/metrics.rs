@@ -156,6 +156,13 @@ impl CryptoMetrics {
         }
     }
 
+    /// Observes a situation where one or more keys in the registry are missing locally.
+    pub fn observe_keys_in_registry_missing_locally(&self) {
+        if let Some(metrics) = &self.metrics {
+            metrics.crypto_keys_in_registry_missing_locally_total.inc();
+        }
+    }
+
     /// Observes the results of operations returning a boolean.
     pub fn observe_boolean_result(&self, operation: BooleanOperation, result: BooleanResult) {
         if let Some(metrics) = &self.metrics {
@@ -408,7 +415,6 @@ impl Display for BooleanResult {
 
 #[derive(EnumIter, IntoStaticStr)]
 pub enum BooleanOperation {
-    KeyInRegistryMissingLocally,
     LatestLocalIdkgKeyExistsInRegistry,
 }
 
@@ -459,6 +465,9 @@ struct Metrics {
     /// An counter vector for keeping track of key rotation results. Each time a key rotation is
     /// performed, the outcome of the operation is tracked in this counter vector.
     pub crypto_key_rotation_results: IntCounterVec,
+
+    /// A counter for situations where one or more keys in the registry are missing locally.
+    pub crypto_keys_in_registry_missing_locally_total: IntCounter,
 
     /// Counter vector for crypto results that can be expressed as booleans. An additional label
     /// is used to identify the type of operation.
@@ -612,6 +621,10 @@ impl Metrics {
             crypto_idkg_dealing_encryption_pubkey_count: idkg_dealing_encryption_pubkey_count,
             crypto_key_counts: key_counts,
             crypto_key_rotation_results: rotation_results,
+            crypto_keys_in_registry_missing_locally_total: r.int_counter(
+                "crypto_keys_in_registry_missing_locally_total",
+                "One or more keys in the registry is missing locally. This may occur if an adversary manages to register its keys on behalf of a node."
+            ),
             crypto_boolean_results: boolean_results,
             crypto_parameter_byte_sizes: r.histogram_vec(
                 "crypto_parameter_byte_sizes",

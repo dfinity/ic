@@ -873,7 +873,7 @@ mod check_keys_with_registry {
                     .check_keys_with_registry(setup.registry_client.get_latest_version());
 
                 MetricsObservationsAssert::assert_that(setup.metrics_registry)
-                    .contains_keys_missing_locally_alert_metrics(true);
+                    .contains_keys_missing_locally_alert_metrics(1);
             }
         }
 
@@ -890,7 +890,7 @@ mod check_keys_with_registry {
                 .check_keys_with_registry(setup.registry_client.get_latest_version());
 
             MetricsObservationsAssert::assert_that(setup.metrics_registry)
-                .contains_keys_missing_locally_alert_metrics(false);
+                .contains_keys_missing_locally_alert_metrics(0);
         }
 
         #[test]
@@ -916,7 +916,7 @@ mod check_keys_with_registry {
                 .check_keys_with_registry(setup.registry_client.get_latest_version());
 
             MetricsObservationsAssert::assert_that(setup.metrics_registry)
-                .contains_keys_missing_locally_alert_metrics(false);
+                .contains_keys_missing_locally_alert_metrics(0);
         }
     }
 
@@ -1015,7 +1015,7 @@ mod check_keys_with_registry {
                 .check_keys_with_registry(setup.registry_client.get_latest_version());
 
             MetricsObservationsAssert::assert_that(setup.metrics_registry)
-                .contains_key_too_old_but_not_in_registry(1f64);
+                .contains_key_too_old_but_not_in_registry(1);
         }
     }
 
