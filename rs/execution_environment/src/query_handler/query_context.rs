@@ -41,7 +41,7 @@ use crate::{
     execution_environment::{as_round_instructions, RoundLimits},
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
-    NonReplicatedQueryKind,
+    NonReplicatedQueryKind, RoundInstructions,
 };
 use ic_base_types::NumBytes;
 use ic_config::flag_status::FlagStatus;
@@ -70,8 +70,6 @@ use ic_types::{
     NumSlices,
 };
 use std::{collections::BTreeMap, sync::Arc};
-
-const ENABLE_QUERY_OPTIMIZATION: bool = true;
 
 const LOOP_DETECTED_ERROR_MSG: &str =
     "Loop detected.  MVP inter-canister queries do not support loops.";
@@ -130,6 +128,16 @@ fn map_enqueue_error_to_user(enqueue_error: EnqueueRequestsResult) -> Option<Use
     }
 }
 
+/// Returns either `WasmMethod::CompositeQuery` or `WasmMethod::Query` depending
+/// on whether the given method name is exported as a composite query or not.
+fn wasm_query_method(canister: &CanisterState, name: String) -> WasmMethod {
+    let method = WasmMethod::CompositeQuery(name.clone());
+    match validate_method(&method, canister) {
+        Ok(_) => method,
+        Err(_) => WasmMethod::Query(name),
+    }
+}
+
 /// Handles running a single UserQuery to completion by maintaining the call
 /// graph of the query execution between canisters.
 pub(super) struct QueryContext<'a> {
@@ -149,10 +157,8 @@ pub(super) struct QueryContext<'a> {
     outstanding_response: Option<Response>,
     max_canister_memory_size: NumBytes,
     max_instructions_per_query: NumInstructions,
-    max_query_call_depth: usize,
-    remaining_instructions_for_composite_query: NumInstructions,
-    // Number of instructions to charge for each query call
-    instructions_per_composite_query_call: NumInstructions,
+    max_query_call_graph_depth: usize,
+    instruction_overhead_per_query_call: RoundInstructions,
     round_limits: RoundLimits,
     composite_queries: FlagStatus,
 }
@@ -168,15 +174,15 @@ impl<'a> QueryContext<'a> {
         subnet_available_memory: SubnetAvailableMemory,
         max_canister_memory_size: NumBytes,
         max_instructions_per_query: NumInstructions,
-        max_query_call_depth: usize,
-        initial_instructions_for_composite_query: NumInstructions,
-        instructions_per_composite_query_call: NumInstructions,
+        max_query_call_graph_depth: usize,
+        max_query_call_graph_instructions: NumInstructions,
+        instruction_overhead_per_query_call: NumInstructions,
         composite_queries: FlagStatus,
     ) -> Self {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let round_limits = RoundLimits {
-            instructions: as_round_instructions(max_instructions_per_query),
-            execution_complexity: ExecutionComplexity::with_cpu(max_instructions_per_query),
+            instructions: as_round_instructions(max_query_call_graph_instructions),
+            execution_complexity: ExecutionComplexity::with_cpu(max_query_call_graph_instructions),
             subnet_available_memory,
             // Ignore compute allocation
             compute_allocation_used: 0,
@@ -193,9 +199,10 @@ impl<'a> QueryContext<'a> {
             outstanding_response: None,
             max_canister_memory_size,
             max_instructions_per_query,
-            max_query_call_depth,
-            remaining_instructions_for_composite_query: initial_instructions_for_composite_query,
-            instructions_per_composite_query_call,
+            max_query_call_graph_depth,
+            instruction_overhead_per_query_call: as_round_instructions(
+                instruction_overhead_per_query_call,
+            ),
             round_limits,
             composite_queries,
         }
@@ -219,7 +226,6 @@ impl<'a> QueryContext<'a> {
         measurement_scope: &MeasurementScope<'b>,
     ) -> Result<WasmResult, UserError> {
         let canister_id = query.receiver;
-        debug!(self.log, "Executing query for {}", canister_id);
         let old_canister = self.state.get_active_canister(&canister_id)?;
 
         let subnet_size = self
@@ -241,49 +247,18 @@ impl<'a> QueryContext<'a> {
         }
 
         let call_origin = CallOrigin::Query(query.source);
-        let (method, query_kind, retry_as_stateful) = {
-            let method = WasmMethod::CompositeQuery(query.method_name.clone());
-            match validate_method(&method, &old_canister) {
-                Ok(_) => {
-                    if self.composite_queries == FlagStatus::Disabled {
-                        return Err(UserError::new(
-                            ErrorCode::CanisterContractViolation,
-                            "Composite queries are not enabled yet",
-                        ));
-                    }
-                    let query_kind = NonReplicatedQueryKind::Stateful {
-                        call_origin: call_origin.clone(),
-                    };
-                    (method, query_kind, false)
-                }
-                Err(_) => {
-                    // EXC-500: Contain the usage of inter-canister query calls to the subnets
-                    // that currently use it until we decide on the future of this feature and
-                    // get a proper spec for it.
-                    let cross_canister_query_calls_enabled = self.own_subnet_type
-                        == SubnetType::System
-                        || self.own_subnet_type == SubnetType::VerifiedApplication;
-                    let try_pure_query_first =
-                        ENABLE_QUERY_OPTIMIZATION || !cross_canister_query_calls_enabled;
 
-                    let method = WasmMethod::Query(query.method_name.clone());
-                    // First try to run the query as `Pure` assuming that it is not going to
-                    // call other queries. `Pure` queries are about 2x faster than `Stateful`.
-                    let query_kind = if try_pure_query_first {
-                        NonReplicatedQueryKind::Pure {
-                            caller: query.source.get(),
-                        }
-                    } else {
-                        // TODO(RUN-427): Remove this case after all existing users
-                        // transition to composite queries.
-                        NonReplicatedQueryKind::Stateful {
-                            call_origin: call_origin.clone(),
-                        }
-                    };
-                    let retry_as_stateful =
-                        try_pure_query_first && cross_canister_query_calls_enabled;
-                    (method, query_kind, retry_as_stateful)
-                }
+        let method = wasm_query_method(&old_canister, query.method_name);
+
+        let query_kind = match &method {
+            WasmMethod::Query(_) => NonReplicatedQueryKind::Pure {
+                caller: query.source.get(),
+            },
+            WasmMethod::CompositeQuery(_) => NonReplicatedQueryKind::Stateful {
+                call_origin: call_origin.clone(),
+            },
+            WasmMethod::Update(_) | WasmMethod::System(_) => {
+                unreachable!("Expected a Wasm query method");
             }
         };
 
@@ -300,10 +275,15 @@ impl<'a> QueryContext<'a> {
         };
 
         // An attempt to call another query will result in `ContractViolation`.
-        // If that's the case then retry query execution as `Stateful`.
-        if retry_as_stateful {
+        // If that's the case then retry query execution as `Stateful` if the
+        // legacy ICQC is enabled.
+
+        let legacy_icqc_enabled = self.own_subnet_type == SubnetType::System
+            || self.own_subnet_type == SubnetType::VerifiedApplication;
+
+        if let WasmMethod::Query(_) = &method {
             if let Err(err) = &result {
-                if err.code() == ErrorCode::CanisterContractViolation {
+                if err.code() == ErrorCode::CanisterContractViolation && legacy_icqc_enabled {
                     let measurement_scope =
                         MeasurementScope::nested(&metrics.query_retry_call, measurement_scope);
                     let old_canister = self.state.get_active_canister(&canister_id)?;
@@ -449,21 +429,14 @@ impl<'a> QueryContext<'a> {
                         return EnqueueRequestsResult::LoopDetected;
                     }
 
-                    if self.call_stack.len() + 1 > self.max_query_call_depth {
+                    if self.call_stack.len() + 1 > self.max_query_call_graph_depth {
                         return EnqueueRequestsResult::CallGraphTooDeep;
                     }
 
-                    if self.remaining_instructions_for_composite_query
-                        < self.instructions_per_composite_query_call
-                    {
+                    self.round_limits.instructions -= self.instruction_overhead_per_query_call;
+                    if self.round_limits.reached() {
                         return EnqueueRequestsResult::TotalNumInstructionsExceeded;
                     }
-
-                    self.remaining_instructions_for_composite_query = NumInstructions::from(
-                        self.remaining_instructions_for_composite_query
-                            .get()
-                            .saturating_sub(self.instructions_per_composite_query_call.get()),
-                    );
 
                     sent_messages = true;
                     self.outstanding_requests.push(msg);
@@ -491,9 +464,20 @@ impl<'a> QueryContext<'a> {
         query_kind: NonReplicatedQueryKind,
         measurement_scope: &MeasurementScope,
     ) -> (CanisterState, Result<Option<WasmResult>, UserError>) {
-        let instruction_limit = self
-            .max_instructions_per_query
-            .min(self.remaining_instructions_for_composite_query);
+        if let WasmMethod::CompositeQuery(_) = &method_name {
+            if self.composite_queries == FlagStatus::Disabled {
+                return (
+                    canister,
+                    Err(UserError::new(
+                        ErrorCode::CanisterContractViolation,
+                        "Composite queries are not enabled yet",
+                    )),
+                );
+            }
+        }
+        let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
+            self.round_limits.instructions.get().max(0) as u64,
+        ));
         let instruction_limits =
             InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
@@ -511,11 +495,6 @@ impl<'a> QueryContext<'a> {
             &mut self.round_limits,
         );
         let instructions_executed = instruction_limit - instructions_left;
-        self.remaining_instructions_for_composite_query = NumInstructions::from(
-            self.remaining_instructions_for_composite_query
-                .get()
-                .saturating_sub(instructions_executed.get()),
-        );
         measurement_scope.add(
             instructions_executed,
             NumSlices::from(1),
@@ -576,9 +555,9 @@ impl<'a> QueryContext<'a> {
         // No cycles are refunded in a response to a query call.
         let incoming_cycles = Cycles::zero();
 
-        let instruction_limit = self
-            .max_instructions_per_query
-            .min(self.remaining_instructions_for_composite_query);
+        let instruction_limit = self.max_instructions_per_query.min(NumInstructions::new(
+            self.round_limits.instructions.get().max(0) as u64,
+        ));
         let instruction_limits =
             InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
         let mut execution_parameters = self.execution_parameters(&canister, instruction_limits);
@@ -653,12 +632,6 @@ impl<'a> QueryContext<'a> {
             .on_canister_result(call_context_id, Some(callback_id), result);
 
         let instructions_executed = instruction_limit - instructions_left;
-        self.remaining_instructions_for_composite_query = NumInstructions::from(
-            self.remaining_instructions_for_composite_query
-                .get()
-                .saturating_sub(instructions_executed.get()),
-        );
-
         measurement_scope.add(
             instructions_executed,
             NumSlices::from(1),
@@ -761,13 +734,7 @@ impl<'a> QueryContext<'a> {
 
         let call_origin = CallOrigin::CanisterQuery(request.sender, request.sender_reply_callback);
 
-        let method = {
-            let method = WasmMethod::CompositeQuery(request.method_name.clone());
-            match validate_method(&method, &canister) {
-                Ok(_) => method,
-                Err(_) => WasmMethod::Query(request.method_name.clone()),
-            }
-        };
+        let method = wasm_query_method(&canister, request.method_name.clone());
 
         let (mut canister, result) = self.execute_query(
             canister,
@@ -894,7 +861,7 @@ impl<'a> QueryContext<'a> {
                         self.call_stack.insert(canister.canister_id(), canister);
                         None
                     }
-                    _ => map_enqueue_error_to_user(r).map(|s| Err(s)),
+                    _ => map_enqueue_error_to_user(r).map(Err),
                 }
             }
             // This state indicates that the canister produced a
@@ -1008,7 +975,7 @@ impl<'a> QueryContext<'a> {
                         self.call_stack.insert(canister.canister_id(), canister);
                         None
                     }
-                    _ => map_enqueue_error_to_user(r).map(|s| Err(s)),
+                    _ => map_enqueue_error_to_user(r).map(Err),
                 }
             }
 
