@@ -8,45 +8,26 @@ TlaModuleInfo = provider(
     doc = "Provides information about a TLA+ module.",
     fields = {
         "src": "File: the module path.",
-        "deps": "depset: transitive dependencies of this module.a",
+        "deps": "depset: transitive dependencies of this module.",
     },
 )
 
 def _tla_module_impl(ctx):
-    sany = ctx.executable._sany
-
-    dummy_out = ctx.actions.declare_file(ctx.label.name + ".check")
-
     src = ctx.file.src
 
-    files = depset(
+    tla_deps = depset(
         direct = [src],
-        transitive = [dep[TlaModuleInfo].deps for dep in ctx.attr.deps],
+        transitive = [dep[TlaModuleInfo].deps for dep in ctx.attr.deps if TlaModuleInfo in dep],
     )
 
-    cmd = "{sany} {file} && touch {out}".format(
-        sany = sany.path,
-        file = src.path,
-        out = dummy_out.path,
-    )
-
-    # "Building" a library is just checking the syntax.
-    ctx.actions.run_shell(
-        command = cmd,
-        outputs = [dummy_out],
-        tools = [sany],
-        mnemonic = "TLASany",
-        progress_message = "Checking TLA+ module %s" % src.short_path,
-        inputs = files.to_list(),
-    )
-
-    files = depset(direct = [sany, dummy_out, src] + ctx.files.deps)
-    sany_runfiles = ctx.attr._sany[DefaultInfo].default_runfiles
-    runfiles = ctx.runfiles(files = files.to_list()).merge(sany_runfiles)
+    all_runfiles = []
+    for dep in ctx.attr.deps:
+        all_runfiles.append(dep[DefaultInfo].default_runfiles)
+    runfiles = ctx.runfiles(files = tla_deps.to_list()).merge_all(all_runfiles)
 
     return [
         DefaultInfo(runfiles = runfiles),
-        TlaModuleInfo(src = src, deps = files),
+        TlaModuleInfo(src = src, deps = tla_deps),
     ]
 
 tla_module = rule(
@@ -54,11 +35,6 @@ tla_module = rule(
     attrs = {
         "src": attr.label(allow_single_file = TLA_FILE_TYPES),
         "deps": attr.label_list(allow_files = False),
-        "_sany": attr.label(
-            default = Label("//tlaplus:sany"),
-            executable = True,
-            cfg = "exec",
-        ),
     },
     doc = """\
 Declares a single TLA+ module.
@@ -87,7 +63,10 @@ def _tlc_test_impl(ctx):
 
     ctx.actions.write(output = ctx.outputs.executable, content = script)
 
-    runfiles = ctx.runfiles(files = [tlc, config, spec.src])
+    runfiles = ctx.runfiles(
+        files = [tlc, config, spec.src],
+        symlinks = dict([(dep.basename, dep) for dep in spec.deps.to_list()]),
+    )
 
     transitive_runfiles = []
     for dep in (ctx.attr._tlc, ctx.attr.spec):
@@ -123,4 +102,40 @@ tlc_test(
 )
 ```
 """,
+)
+
+def _sany_test_impl(ctx):
+    sany = ctx.executable._sany
+    module = ctx.attr.module[TlaModuleInfo]
+
+    cmd = "{sany} {file}".format(
+        sany = sany.short_path,
+        file = module.src.path,
+    )
+
+    ctx.actions.write(output = ctx.outputs.executable, content = cmd)
+
+    runfiles = ctx.runfiles(
+        files = [sany],
+        symlinks = dict([(dep.basename, dep) for dep in module.deps.to_list()]),
+    )
+    runfiles = runfiles.merge_all([
+        ctx.attr._sany[DefaultInfo].default_runfiles,
+        ctx.attr.module[DefaultInfo].default_runfiles,
+    ])
+    return [
+        DefaultInfo(runfiles = runfiles),
+    ]
+
+sany_test = rule(
+    implementation = _sany_test_impl,
+    test = True,
+    attrs = {
+        "module": attr.label(providers = [TlaModuleInfo]),
+        "_sany": attr.label(
+            default = Label("//tlaplus:sany"),
+            executable = True,
+            cfg = "exec",
+        ),
+    },
 )
