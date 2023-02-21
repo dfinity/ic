@@ -598,8 +598,58 @@ impl SystemTestGroup {
             )
         };
 
+        // normal case: no debugkeepalive, overall timeout is active
+        if !group_ctx.debug_keepalive {
+            let plan = compose(
+                Some(keepalive_task),
+                EvalOrder::Sequential,
+                vec![compose(
+                    None,
+                    EvalOrder::Sequential,
+                    std::iter::once(setup_plan)
+                        .chain(
+                            self.tests
+                                .into_iter()
+                                .map(|sub_group| sub_group.into_plan(&mut compose_ctx)),
+                        )
+                        .collect(),
+                    &mut compose_ctx,
+                )],
+                &mut compose_ctx,
+            );
+
+            let plan = Ok(compose(
+                Some(Box::new(EmptyTask::new(
+                    subs.clone(),
+                    TaskId::Test(REPORT_TASK_NAME.to_string()),
+                ))),
+                EvalOrder::Sequential,
+                vec![timed(
+                    plan,
+                    effective_overall_timeout,
+                    Some(String::from("::group")),
+                    &mut compose_ctx,
+                )],
+                &mut compose_ctx,
+            ));
+            return plan;
+        }
+
+        // otherwise: keepalive needs to be above report task. no overall timeout.
+        let keepalive_plan: Plan<Box<dyn Task>> = Plan::Leaf {
+            task: Box::new(DebugKeepaliveTask::new(
+                subs.clone(),
+                TaskId::Test(String::from("debugKeepAliveTask")),
+                group_ctx.log().clone(),
+                compose_ctx.rh.clone(),
+            )),
+        };
+
         let plan = compose(
-            Some(keepalive_task),
+            Some(Box::new(EmptyTask::new(
+                subs.clone(),
+                TaskId::Test(REPORT_TASK_NAME.to_string()),
+            ))),
             EvalOrder::Sequential,
             vec![compose(
                 None,
@@ -616,43 +666,10 @@ impl SystemTestGroup {
             &mut compose_ctx,
         );
 
-        // TODO: rename this to report -> reporter listens to this one...
-        let plan = Ok(compose(
-            Some(Box::new(EmptyTask::new(
-                subs.clone(),
-                TaskId::Test(REPORT_TASK_NAME.to_string()),
-            ))),
-            EvalOrder::Sequential,
-            vec![timed(
-                plan,
-                effective_overall_timeout,
-                Some(String::from("::group")),
-                &mut compose_ctx,
-            )],
-            &mut compose_ctx,
-        ));
-
-        if !group_ctx.debug_keepalive {
-            return plan;
-        }
-        // otherwise, wrap the regular plan in a keepalive tree
-
-        let keepalive_plan: Plan<Box<dyn Task>> = Plan::Leaf {
-            task: Box::new(DebugKeepaliveTask::new(
-                subs.clone(),
-                TaskId::Test(String::from("debugKeepAliveTask")),
-                group_ctx.log().clone(),
-                compose_ctx.rh.clone(),
-            )),
-        };
-
         Ok(compose(
-            Some(Box::new(EmptyTask::new(
-                subs.clone(),
-                TaskId::Test(DEBUG_KEEPALIVE_TASK_NAME.to_string()),
-            ))),
-            EvalOrder::Sequential,
-            vec![plan.unwrap(), keepalive_plan],
+            Some(keepalive_task),
+            EvalOrder::Parallel,
+            vec![plan, keepalive_plan],
             &mut compose_ctx,
         ))
     }
