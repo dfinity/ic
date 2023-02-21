@@ -227,7 +227,7 @@ impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> (
-        clients::ConsensusClient<PoolConsensus>,
+        clients::ConsensusClient<PoolConsensus, G>,
         ArtifactProcessorManager<ConsensusArtifact>,
     ) {
         let (consensus, consensus_gossip) = setup();
@@ -476,7 +476,7 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> (
-        clients::CertificationClient<PoolCertification>,
+        clients::CertificationClient<PoolCertification, G>,
         ArtifactProcessorManager<CertificationArtifact>,
     ) {
         let (certifier, certifier_gossip) = setup();
@@ -592,7 +592,7 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> DkgProcessor<PoolDkg> {
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> (
-        clients::DkgClient<PoolDkg>,
+        clients::DkgClient<PoolDkg, G>,
         ArtifactProcessorManager<DkgArtifact>,
     ) {
         let (dkg, dkg_gossip) = setup();
@@ -691,7 +691,7 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
     ) -> (
-        clients::EcdsaClient<PoolEcdsa>,
+        clients::EcdsaClient<PoolEcdsa, G>,
         ArtifactProcessorManager<EcdsaArtifact>,
     ) {
         let ecdsa_pool_update_duration = metrics_registry.register(
@@ -816,7 +816,7 @@ impl<
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> (
-        clients::CanisterHttpClient<PoolCanisterHttp>,
+        clients::CanisterHttpClient<PoolCanisterHttp, G>,
         ArtifactProcessorManager<CanisterHttpArtifact>,
     ) {
         let (pool_manager, canister_http_gossip) = setup();
