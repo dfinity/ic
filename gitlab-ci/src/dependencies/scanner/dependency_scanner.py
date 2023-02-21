@@ -1,43 +1,31 @@
-import abc
 import datetime
 import logging
 import os
+import pathlib
+import shutil
 import sys
 import traceback
 import typing
 
 from data_source.commit_type import CommitType
 from data_source.finding_data_source import FindingDataSource
+from gitlab_api.gitlab_comment import GitlabComment
 from model.finding import Finding
-from model.repository import Project
 from model.repository import Repository
 from model.security_risk import SecurityRisk
-from scanner.dependency_manager import DependencyManager
-from scanner.gitlab_comment import GitlabComment
+from scanner.manager.dependency_manager import DependencyManager
+from scanner.process_executor import ProcessExecutor
 from scanner.scanner_job_type import ScannerJobType
 from scanner.scanner_subscriber import ScannerSubscriber
 
-
-class DependencyScanner(abc.ABC):
-    """Base class for helper classes for different scanners"""
-
-    @abc.abstractmethod
-    def on_periodic_scan(self):
-        """Perform scanner actions for a periodic scan"""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def on_merge_request_scan(self):
-        """Perform scanner actions on merge request"""
-        raise NotImplementedError
-
-    @abc.abstractmethod
-    def on_release_scan(self):
-        """Perform scanner actions on release job"""
-        raise NotImplementedError
+PROJECT_ROOT = pathlib.Path(
+    os.environ.get("CI_PROJECT_DIR", pathlib.Path(__file__).absolute().parent.parent.parent.parent.parent)
+)
 
 
-class BazelICScanner(DependencyScanner):
+class DependencyScanner:
+    """generic scanner that performs periodic/merge/release scans with the configured dependency manager"""
+
     def __init__(
         self,
         dependency_manager: DependencyManager,
@@ -47,14 +35,75 @@ class BazelICScanner(DependencyScanner):
         self.subscribers = scanner_subscribers
         self.dependency_manager = dependency_manager
         self.finding_data_source = finding_data_source
-        self.scanner = "BAZEL_IC"
-        self.repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
         self.job_id = os.environ.get("CI_PIPELINE_ID", "CI_PIPELINE_ID")
-        self.periodic_scanner = PeriodicScanner(
-            dependency_manager, finding_data_source, scanner_subscribers, self.scanner, self.job_id
-        )
+        self.root = PROJECT_ROOT
 
-    def on_merge_request_scan(self):
+    @staticmethod
+    def __clone_repository_from_url(url: str, path: pathlib.Path):
+        environment = {}
+        cwd = path
+        command = f"git clone --depth=1 {url}"
+        logging.info(f"Performing git clone {url}")
+        _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
+        return
+
+    def do_periodic_scan(self, repositories: typing.List[Repository]):
+        current_repo_name = ""
+        try:
+            for repository in repositories:
+                current_repo_name = repository.name
+                findings: typing.List[Finding] = []
+                if repository.name != "ic":
+                    # we are cloning an external repository
+                    top_level_path = self.root.parent / repository.name
+                    if top_level_path.is_dir():
+                        # git clone fails if the directory already exists
+                        shutil.rmtree(top_level_path)
+                    self.__clone_repository_from_url(repository.url, self.root.parent)
+
+                for project in repository.projects:
+                    path = self.root.parent / project.path
+                    if not path.is_dir():
+                        raise RuntimeError(f"path {path} is invalid")
+                    logging.info(f"Calling dependency manager for {repository.name} {path} {project.name}")
+                    findings.extend(self.dependency_manager.get_findings(repository.name, project))
+                if len(findings) > 0:
+                    for index, finding in enumerate(findings):
+                        vulnerable_dependency = finding.vulnerable_dependency
+                        jira_finding = self.finding_data_source.get_open_finding(
+                            repository.name,
+                            self.dependency_manager.get_scanner_id(),
+                            vulnerable_dependency.id,
+                            vulnerable_dependency.version,
+                        )
+                        if jira_finding:
+                            # update vulnerabilities and clear risk if we have new vulnerabilities
+                            if jira_finding.vulnerabilities != findings[index].vulnerabilities:
+                                jira_finding.vulnerabilities = findings[index].vulnerabilities
+                                jira_finding.risk = None
+                            if jira_finding.first_level_dependencies != findings[index].first_level_dependencies:
+                                jira_finding.first_level_dependencies = findings[index].first_level_dependencies
+                            if jira_finding.projects != findings[index].projects:
+                                jira_finding.projects = findings[index].projects
+                            if jira_finding.vulnerable_dependency != findings[index].vulnerable_dependency:
+                                jira_finding.vulnerable_dependency = findings[index].vulnerable_dependency
+                            # max score is already calculated by the dependency manager.
+                            jira_finding.score = findings[index].score
+                            self.finding_data_source.create_or_update_open_finding(jira_finding)
+                        else:
+                            findings[index].risk_assessor = self.finding_data_source.get_risk_assessor()
+                            # rest of the parameters needs to be set by the risk assessor for a new finding.
+                            self.finding_data_source.create_or_update_open_finding(findings[index])
+            for subscriber in self.subscribers:
+                subscriber.on_scan_job_succeeded(ScannerJobType.PERIODIC_SCAN, self.job_id)
+        except Exception as err:
+            logging.error(
+                f"{self.dependency_manager.get_scanner_id()} for {current_repo_name} failed for {self.job_id} with error:\n{traceback.format_exc()}"
+            )
+            for subscriber in self.subscribers:
+                subscriber.on_scan_job_failed(ScannerJobType.PERIODIC_SCAN, self.job_id, str(err))
+
+    def do_merge_request_scan(self, repository_name: str):
         should_fail_job = False
         try:
             dependency_changes = self.dependency_manager.has_dependencies_changed()
@@ -69,7 +118,7 @@ class BazelICScanner(DependencyScanner):
                 return
 
             # developer has added made changes to dependencies.
-            findings = self.dependency_manager.get_findings(self.repository, self.scanner)
+            findings = self.dependency_manager.get_findings(repository_name, None)
 
             if len(findings) == 0:
                 return
@@ -78,7 +127,10 @@ class BazelICScanner(DependencyScanner):
             for index, finding in enumerate(findings):
                 vulnerable_dependency = finding.vulnerable_dependency
                 jira_finding = self.finding_data_source.get_open_finding(
-                    self.repository.name, self.scanner, vulnerable_dependency.id, vulnerable_dependency.version
+                    repository_name,
+                    self.dependency_manager.get_scanner_id(),
+                    vulnerable_dependency.id,
+                    vulnerable_dependency.version,
                 )
                 if not jira_finding:
                     findings_to_flag.append(finding)
@@ -120,7 +172,7 @@ class BazelICScanner(DependencyScanner):
         except Exception as err:
             should_fail_job = True
             logging.error(
-                f"{self.scanner} for {self.repository.name} failed for {self.job_id} with error:\n {traceback.format_exc()}"
+                f"{self.dependency_manager.get_scanner_id()} for {repository_name} failed for {self.job_id} with error:\n {traceback.format_exc()}"
             )
             for subscriber in self.subscribers:
                 subscriber.on_scan_job_failed(ScannerJobType.MERGE_SCAN, self.job_id, str(err))
@@ -129,13 +181,10 @@ class BazelICScanner(DependencyScanner):
                 for subscriber in self.subscribers:
                     subscriber.on_scan_job_succeeded(ScannerJobType.MERGE_SCAN, self.job_id)
 
-    def on_periodic_scan(self):
-        self.periodic_scanner.perform_periodic_scan_for_repos([self.repository])
-
-    def on_release_scan(self):
+    def do_release_scan(self, repository_name: str):
         should_fail_job = False
         try:
-            findings = self.dependency_manager.get_findings(self.repository, self.scanner)
+            findings = self.dependency_manager.get_findings(repository_name, None)
             failures: typing.List = []
 
             if len(findings) == 0:
@@ -144,7 +193,10 @@ class BazelICScanner(DependencyScanner):
             for finding in findings:
                 vulnerable_dependency = finding.vulnerable_dependency
                 jira_finding = self.finding_data_source.get_open_finding(
-                    self.repository.name, self.scanner, vulnerable_dependency.id, vulnerable_dependency.version
+                    repository_name,
+                    self.dependency_manager.get_scanner_id(),
+                    vulnerable_dependency.id,
+                    vulnerable_dependency.version,
                 )
                 if jira_finding:
                     if not jira_finding.risk:
@@ -181,7 +233,7 @@ class BazelICScanner(DependencyScanner):
         except Exception as err:
             should_fail_job = True
             logging.error(
-                f"{self.scanner} for {self.repository.name} failed for {self.job_id} with error:\n {traceback.format_exc()}"
+                f"{self.dependency_manager.get_scanner_id()} for {repository_name} failed for {self.job_id} with error:\n {traceback.format_exc()}"
             )
             for subscriber in self.subscribers:
                 subscriber.on_scan_job_failed(ScannerJobType.RELEASE_SCAN, self.job_id, str(err))
@@ -193,85 +245,3 @@ class BazelICScanner(DependencyScanner):
                     subscriber.on_scan_job_succeeded(ScannerJobType.RELEASE_SCAN, self.job_id)
             # else :
             #     sys.exit(1)
-
-
-class NPMICScanner(DependencyScanner):
-    def __init__(
-        self,
-        dependency_manager: DependencyManager,
-        finding_data_source: FindingDataSource,
-        scanner_subscribers: typing.List[ScannerSubscriber],
-        repositories_to_scan: typing.List[Repository],
-    ):
-        self.periodic_scanner = PeriodicScanner(
-            dependency_manager,
-            finding_data_source,
-            scanner_subscribers,
-            "NPM_IC",
-            os.environ.get("CI_PIPELINE_ID", "CI_PIPELINE_ID"),
-        )
-        self.repositories_to_scan = repositories_to_scan
-
-    def on_periodic_scan(self):
-        self.periodic_scanner.perform_periodic_scan_for_repos(self.repositories_to_scan)
-
-    def on_merge_request_scan(self):
-        raise NotImplementedError
-
-    def on_release_scan(self):
-        raise NotImplementedError
-
-
-class PeriodicScanner:
-    def __init__(
-        self,
-        dependency_manager: DependencyManager,
-        finding_data_source: FindingDataSource,
-        scanner_subscribers: typing.List[ScannerSubscriber],
-        scanner: str,
-        job_id: str,
-    ):
-        self.subscribers = scanner_subscribers
-        self.dependency_manager = dependency_manager
-        self.finding_data_source = finding_data_source
-        self.scanner = scanner
-        self.job_id = job_id
-
-    def perform_periodic_scan_for_repos(self, repositories: typing.List[Repository]):
-        current_repo_name = ""
-        try:
-            for repository in repositories:
-                current_repo_name = repository.name
-                findings = self.dependency_manager.get_findings(repository, self.scanner)
-                if len(findings) > 0:
-                    for index, finding in enumerate(findings):
-                        vulnerable_dependency = finding.vulnerable_dependency
-                        jira_finding = self.finding_data_source.get_open_finding(
-                            repository.name, self.scanner, vulnerable_dependency.id, vulnerable_dependency.version
-                        )
-                        if jira_finding:
-                            # update vulnerabilities and clear risk if we have new vulnerabilities
-                            if jira_finding.vulnerabilities != findings[index].vulnerabilities:
-                                jira_finding.vulnerabilities = findings[index].vulnerabilities
-                                jira_finding.risk = None
-                            if jira_finding.first_level_dependencies != findings[index].first_level_dependencies:
-                                jira_finding.first_level_dependencies = findings[index].first_level_dependencies
-                            if jira_finding.projects != findings[index].projects:
-                                jira_finding.projects = findings[index].projects
-                            if jira_finding.vulnerable_dependency != findings[index].vulnerable_dependency:
-                                jira_finding.vulnerable_dependency = findings[index].vulnerable_dependency
-                            # max score is already calculated by the dependency manager.
-                            jira_finding.score = findings[index].score
-                            self.finding_data_source.create_or_update_open_finding(jira_finding)
-                        else:
-                            findings[index].risk_assessor = self.finding_data_source.get_risk_assessor()
-                            # rest of the parameters needs to be set by the risk assessor for a new finding.
-                            self.finding_data_source.create_or_update_open_finding(findings[index])
-            for subscriber in self.subscribers:
-                subscriber.on_scan_job_succeeded(ScannerJobType.PERIODIC_SCAN, self.job_id)
-        except Exception as err:
-            logging.error(
-                f"{self.scanner} for {current_repo_name} failed for {self.job_id} with error:\n{traceback.format_exc()}"
-            )
-            for subscriber in self.subscribers:
-                subscriber.on_scan_job_failed(ScannerJobType.PERIODIC_SCAN, self.job_id, str(err))
