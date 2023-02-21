@@ -5,8 +5,8 @@ from model.repository import Repository
 from notification.notification_config import NotificationConfig
 from notification.slack_notification import SlackNotifier
 from scanner.console_logger_scanner_subscriber import ConsoleLoggerScannerSubscriber
-from scanner.dependency_manager import NPM
-from scanner.dependency_scanner import NPMICScanner
+from scanner.dependency_scanner import DependencyScanner
+from scanner.manager.npm_dependency_manager import NPMDependencyManager
 from scanner.scanner_job_type import ScannerJobType
 
 REPOS_TO_SCAN = [
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     slack_subscriber = SlackNotifier(config)
     finding_data_source_subscribers = [ConsoleLoggerFindingDataSourceSubscriber(), slack_subscriber]
     scanner_subscribers = [ConsoleLoggerScannerSubscriber(), slack_subscriber]
-    scanner_job = NPMICScanner(
-        NPM(), JiraFindingDataSource(finding_data_source_subscribers), scanner_subscribers, REPOS_TO_SCAN
+    scanner_job = DependencyScanner(
+        NPMDependencyManager(), JiraFindingDataSource(finding_data_source_subscribers), scanner_subscribers
     )
-    scanner_job.on_periodic_scan()
+    scanner_job.do_periodic_scan(REPOS_TO_SCAN)
