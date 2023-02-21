@@ -7,11 +7,6 @@ use ic_interfaces::{
         AdvertMismatchError, ArtifactClient, ArtifactPoolDescriptor, OnArtifactError,
     },
     artifact_pool::{ArtifactPoolError, ReplicaVersionMismatch, UnvalidatedArtifact},
-    canister_http::*,
-    certification::CertificationPool,
-    consensus_pool::ConsensusPool,
-    dkg::DkgPool,
-    ecdsa::EcdsaPool,
     gossip_pool::GossipPool,
     ingress_pool::{IngressPool, IngressPoolThrottler},
     time_source::TimeSource,
@@ -225,23 +220,20 @@ where
 }
 
 /// The *Consensus* `ArtifactClient` to be managed by the `ArtifactManager`.
-pub struct ConsensusClient<Pool> {
+pub struct ConsensusClient<Pool, T> {
     /// The *Consensus* pool, protected by a read-write lock and automatic
     /// reference counting.
     consensus_pool: Arc<RwLock<Pool>>,
     /// The `ConsensusGossip` client.
-    client: Arc<dyn ArtifactPoolDescriptor<ConsensusArtifact, Pool>>,
+    client: T,
 }
 
-impl<Pool> ConsensusClient<Pool> {
+impl<Pool, T> ConsensusClient<Pool, T> {
     /// The constructor creates a `ConsensusClient` instance.
-    pub fn new<T: ArtifactPoolDescriptor<ConsensusArtifact, Pool> + 'static>(
-        consensus_pool: Arc<RwLock<Pool>>,
-        consensus: T,
-    ) -> Self {
+    pub fn new(consensus_pool: Arc<RwLock<Pool>>, client: T) -> Self {
         Self {
             consensus_pool,
-            client: Arc::new(consensus),
+            client,
         }
     }
 }
@@ -261,8 +253,10 @@ fn check_protocol_version<T: HasVersion>(artifact: &T) -> Result<(), ReplicaVers
     }
 }
 
-impl<Pool: ConsensusPool + GossipPool<ConsensusArtifact> + Send + Sync>
-    ArtifactClient<ConsensusArtifact> for ConsensusClient<Pool>
+impl<
+        Pool: GossipPool<ConsensusArtifact> + Send + Sync,
+        T: ArtifactPoolDescriptor<ConsensusArtifact, Pool> + 'static,
+    > ArtifactClient<ConsensusArtifact> for ConsensusClient<Pool, T>
 {
     /// The method checks if the protocol version in the *Consensus* message is
     /// correct.
@@ -460,29 +454,28 @@ impl<
 }
 
 /// The certification `ArtifactClient` to be managed by the `ArtifactManager`.
-pub struct CertificationClient<PoolCertification> {
+pub struct CertificationClient<PoolCertification, T> {
     /// The certification pool, protected by a read-write lock and automatic
     /// reference counting.
     certification_pool: Arc<RwLock<PoolCertification>>,
     /// The `ArtifactPoolDescriptor` client.
-    client: Arc<dyn ArtifactPoolDescriptor<CertificationArtifact, PoolCertification>>,
+    client: T,
 }
 
-impl<PoolCertification> CertificationClient<PoolCertification> {
+impl<PoolCertification, T> CertificationClient<PoolCertification, T> {
     /// The constructor creates a `CertificationClient` instance.
-    pub fn new<T: ArtifactPoolDescriptor<CertificationArtifact, PoolCertification> + 'static>(
-        certification_pool: Arc<RwLock<PoolCertification>>,
-        certifier: T,
-    ) -> Self {
+    pub fn new(certification_pool: Arc<RwLock<PoolCertification>>, client: T) -> Self {
         Self {
             certification_pool,
-            client: Arc::new(certifier),
+            client,
         }
     }
 }
 
-impl<PoolCertification: CertificationPool + GossipPool<CertificationArtifact> + Send + Sync>
-    ArtifactClient<CertificationArtifact> for CertificationClient<PoolCertification>
+impl<
+        PoolCertification: GossipPool<CertificationArtifact> + Send + Sync,
+        T: ArtifactPoolDescriptor<CertificationArtifact, PoolCertification> + 'static,
+    > ArtifactClient<CertificationArtifact> for CertificationClient<PoolCertification, T>
 {
     /// The method always accepts the given `CertificationMessage`.
     fn check_artifact_acceptance(
@@ -545,29 +538,25 @@ impl<PoolCertification: CertificationPool + GossipPool<CertificationArtifact> + 
 }
 
 /// The DKG client.
-pub struct DkgClient<Pool> {
+pub struct DkgClient<Pool, T> {
     /// The DKG pool, protected by a read-write lock and automatic reference
     /// counting.
     dkg_pool: Arc<RwLock<Pool>>,
     /// The `DkgGossip` client.
-    client: Arc<dyn ArtifactPoolDescriptor<DkgArtifact, Pool>>,
+    client: T,
 }
 
-impl<Pool> DkgClient<Pool> {
+impl<Pool, T> DkgClient<Pool, T> {
     /// The constructor creates a `DkgClient` instance.
-    pub fn new<T: ArtifactPoolDescriptor<DkgArtifact, Pool> + 'static>(
-        dkg_pool: Arc<RwLock<Pool>>,
-        dkg: T,
-    ) -> Self {
-        Self {
-            dkg_pool,
-            client: Arc::new(dkg),
-        }
+    pub fn new(dkg_pool: Arc<RwLock<Pool>>, client: T) -> Self {
+        Self { dkg_pool, client }
     }
 }
 
-impl<Pool: DkgPool + GossipPool<DkgArtifact> + Send + Sync> ArtifactClient<DkgArtifact>
-    for DkgClient<Pool>
+impl<
+        Pool: GossipPool<DkgArtifact> + Send + Sync,
+        T: ArtifactPoolDescriptor<DkgArtifact, Pool> + 'static,
+    > ArtifactClient<DkgArtifact> for DkgClient<Pool, T>
 {
     /// The method checks if the protocol version is correct.
     ///
@@ -610,25 +599,21 @@ impl<Pool: DkgPool + GossipPool<DkgArtifact> + Send + Sync> ArtifactClient<DkgAr
 }
 
 /// The ECDSA client.
-pub struct EcdsaClient<Pool> {
+pub struct EcdsaClient<Pool, T> {
     ecdsa_pool: Arc<RwLock<Pool>>,
-    ecdsa_gossip: Arc<dyn ArtifactPoolDescriptor<EcdsaArtifact, Pool>>,
+    gossip: T,
 }
 
-impl<Pool> EcdsaClient<Pool> {
-    pub fn new<T: ArtifactPoolDescriptor<EcdsaArtifact, Pool> + 'static>(
-        ecdsa_pool: Arc<RwLock<Pool>>,
-        gossip: T,
-    ) -> Self {
-        Self {
-            ecdsa_pool,
-            ecdsa_gossip: Arc::new(gossip),
-        }
+impl<Pool, T> EcdsaClient<Pool, T> {
+    pub fn new(ecdsa_pool: Arc<RwLock<Pool>>, gossip: T) -> Self {
+        Self { ecdsa_pool, gossip }
     }
 }
 
-impl<Pool: EcdsaPool + GossipPool<EcdsaArtifact> + Send + Sync> ArtifactClient<EcdsaArtifact>
-    for EcdsaClient<Pool>
+impl<
+        Pool: GossipPool<EcdsaArtifact> + Send + Sync,
+        T: ArtifactPoolDescriptor<EcdsaArtifact, Pool> + 'static,
+    > ArtifactClient<EcdsaArtifact> for EcdsaClient<Pool, T>
 {
     fn check_artifact_acceptance(
         &self,
@@ -651,7 +636,7 @@ impl<Pool: EcdsaPool + GossipPool<EcdsaArtifact> + Send + Sync> ArtifactClient<E
 
     fn get_priority_function(&self) -> Option<PriorityFn<EcdsaMessageId, EcdsaMessageAttribute>> {
         let ecdsa_pool = &*self.ecdsa_pool.read().unwrap();
-        Some(self.ecdsa_gossip.get_priority_function(ecdsa_pool))
+        Some(self.gossip.get_priority_function(ecdsa_pool))
     }
 
     fn get_chunk_tracker(&self, _id: &EcdsaMessageId) -> Box<dyn Chunkable + Send + Sync> {
@@ -660,27 +645,21 @@ impl<Pool: EcdsaPool + GossipPool<EcdsaArtifact> + Send + Sync> ArtifactClient<E
 }
 
 /// The CanisterHttp Client
-pub struct CanisterHttpClient<Pool> {
+pub struct CanisterHttpClient<Pool, T> {
     pool: Arc<RwLock<Pool>>,
-    gossip: Arc<dyn ArtifactPoolDescriptor<CanisterHttpArtifact, Pool> + Send + Sync>,
+    gossip: T,
 }
 
-impl<Pool: CanisterHttpPool + GossipPool<CanisterHttpArtifact> + Send + Sync>
-    CanisterHttpClient<Pool>
-{
-    pub fn new<T: ArtifactPoolDescriptor<CanisterHttpArtifact, Pool> + Send + Sync + 'static>(
-        pool: Arc<RwLock<Pool>>,
-        gossip: T,
-    ) -> Self {
-        Self {
-            pool,
-            gossip: Arc::new(gossip),
-        }
+impl<Pool, T> CanisterHttpClient<Pool, T> {
+    pub fn new(pool: Arc<RwLock<Pool>>, gossip: T) -> Self {
+        Self { pool, gossip }
     }
 }
 
-impl<Pool: CanisterHttpPool + GossipPool<CanisterHttpArtifact> + Send + Sync>
-    ArtifactClient<CanisterHttpArtifact> for CanisterHttpClient<Pool>
+impl<
+        Pool: GossipPool<CanisterHttpArtifact> + Send + Sync,
+        T: ArtifactPoolDescriptor<CanisterHttpArtifact, Pool> + 'static,
+    > ArtifactClient<CanisterHttpArtifact> for CanisterHttpClient<Pool, T>
 {
     fn check_artifact_acceptance(
         &self,
