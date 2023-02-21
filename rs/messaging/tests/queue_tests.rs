@@ -203,6 +203,10 @@ fn test_timeout_removes_requests_from_output_queues() {
 /// back to the remote canister. If the local canister restarts sending requests and
 /// continuously triggering timeouts each round, timed out requests will pile up in the output
 /// queue which will eventually lead to failed inductions due to backpressure.
+/// In a last step, a request is gc'ed in the XNet stream on the local subnet to the remote
+/// subnet, which will cause the blocking response to slip into the XNet stream. With the response
+/// popped from the output queue, all the timed out requests are gc'ed, leading to an empty
+/// output queue.
 #[test]
 fn test_response_in_output_queue_causes_backpressure() {
     let (env, remote_env) = make_state_machine_pair();
@@ -284,6 +288,43 @@ fn test_response_in_output_queue_causes_backpressure() {
     let mut iter = get_output_queue_iter(&state, &local_canister_id, &remote_canister_id).unwrap();
     assert_matches!(iter.next(), Some(Some(RequestOrResponse::Response(_))));
     assert!(iter.all(|msg| msg.is_none()));
+
+    // Call the 'stop' method on the local canister, then induct a request from the local subnet
+    // into the remote subnet.
+    call_stop_on_xnet_canister(&env, local_canister_id).unwrap();
+    let xnet_payload = env
+        .generate_xnet_payload(
+            remote_env.get_subnet_id(),
+            None,    // witness_begin
+            None,    // msg_begin
+            Some(1), // msg_limit
+            None,    // byte_limit
+        )
+        .unwrap();
+    remote_env.execute_block_with_xnet_payload(xnet_payload);
+
+    // An 'empty' XNet payload (as in no messages) contains a header including a 'request received'
+    // signal. Inducting this payload will trigger the request sent to the remote subnet to be
+    // gc'ed in the XNet stream of the local subnet.
+    let xnet_payload = remote_env
+        .generate_xnet_payload(
+            env.get_subnet_id(),
+            None,    // witness_begin
+            None,    // msg_begin
+            Some(0), // msg_limit
+            None,    // byte_limit
+        )
+        .unwrap();
+    env.execute_block_with_xnet_payload(xnet_payload);
+
+    // The blocking response should now have slipped into the XNet stream; this will trigger all
+    // the timed out requests to be gc'ed, resulting in an empty output queue.
+    assert!(peek_output_queue(
+        &env.get_latest_state(),
+        &local_canister_id,
+        &remote_canister_id,
+    )
+    .is_none());
 }
 
 /// Test the presence of reservations in input queues does not inhibit inducting xnet
