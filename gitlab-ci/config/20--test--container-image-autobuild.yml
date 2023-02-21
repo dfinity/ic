@@ -11,8 +11,6 @@ container-autobuild-protected:
     name: "dfinity/ic-build:latest"
   needs: []
   stage: test
-  tags:
-    - dfinity-launch
   script:
     - |
       # use docker on protected runner
