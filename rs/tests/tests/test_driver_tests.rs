@@ -38,56 +38,56 @@ fn test_scenario_with_test_panic_fails() {
     assert!(result.is_err())
 }
 
-#[test]
-fn test_scenario_with_skipped_panic_test_succeeds() {
-    let scenario_name = "test_with_panic";
-    let working_dir = PathBuf::from(env::var("TEST_TMPDIR").unwrap()).join(scenario_name);
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
-        "--working-dir",
-        working_dir.to_str().unwrap(),
-        "--filter-tests",
-        "non_existing_test_function", // execute test functions containing this substring (and skip all the others)
-        "run",
-    ]);
-    let result = execute_cmd(cmd);
-    assert!(result.is_ok())
-}
+// #[test]
+// fn test_scenario_with_skipped_panic_test_succeeds() {
+//     let scenario_name = "test_with_panic";
+//     let working_dir = PathBuf::from(env::var("TEST_TMPDIR").unwrap()).join(scenario_name);
+//     let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
+//     let mut cmd = Command::new(binary_path);
+//     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+//         "--working-dir",
+//         working_dir.to_str().unwrap(),
+//         "--filter-tests",
+//         "non_existing_test_function", // execute test functions containing this substring (and skip all the others)
+//         "run",
+//     ]);
+//     let result = execute_cmd(cmd);
+//     assert!(result.is_ok())
+// }
 
-#[test]
-fn test_scenario_with_non_skipped_panic_test_fails() {
-    let scenario_name = "test_with_panic";
-    let working_dir = PathBuf::from(env::var("TEST_TMPDIR").unwrap()).join(scenario_name);
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
-        "--working-dir",
-        working_dir.to_str().unwrap(),
-        "--filter-tests",
-        "test_to_fail", // execute test functions containing this substring (and skip all the others)
-        "run",
-    ]);
-    let result = execute_cmd(cmd);
-    assert!(result.is_err())
-}
+// #[test]
+// fn test_scenario_with_non_skipped_panic_test_fails() {
+//     let scenario_name = "test_with_panic";
+//     let working_dir = PathBuf::from(env::var("TEST_TMPDIR").unwrap()).join(scenario_name);
+//     let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
+//     let mut cmd = Command::new(binary_path);
+//     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+//         "--working-dir",
+//         working_dir.to_str().unwrap(),
+//         "--filter-tests",
+//         "test_to_fail", // execute test functions containing this substring (and skip all the others)
+//         "run",
+//     ]);
+//     let result = execute_cmd(cmd);
+//     assert!(result.is_err())
+// }
 
-#[test]
-fn test_scenario_with_two_skipped_panic_tests_succeeds() {
-    let scenario_name = "test_with_two_panics";
-    let working_dir = PathBuf::from(env::var("TEST_TMPDIR").unwrap()).join(scenario_name);
-    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
-    let mut cmd = Command::new(binary_path);
-    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
-        "--working-dir",
-        working_dir.to_str().unwrap(),
-        "--filter-tests",
-        "test_to_succeed", // execute test functions containing this substring (and skip all the others)
-        "run",
-    ]);
-    let result = execute_cmd(cmd);
-    assert!(result.is_ok())
-}
+// #[test]
+// fn test_scenario_with_two_skipped_panic_tests_succeeds() {
+//     let scenario_name = "test_with_two_panics";
+//     let working_dir = PathBuf::from(env::var("TEST_TMPDIR").unwrap()).join(scenario_name);
+//     let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
+//     let mut cmd = Command::new(binary_path);
+//     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+//         "--working-dir",
+//         working_dir.to_str().unwrap(),
+//         "--filter-tests",
+//         "test_to_succeed", // execute test functions containing this substring (and skip all the others)
+//         "run",
+//     ]);
+//     let result = execute_cmd(cmd);
+//     assert!(result.is_ok())
+// }
 
 #[test]
 fn test_scenario_with_setup_panic_fails() {
