@@ -296,6 +296,7 @@ impl BackupHelper {
         ));
         cmd.arg("--timeout=60");
         cmd.args(arguments);
+        cmd.arg("--bwlimit=25M").arg("--time-limit=5"); // 25M * 5 * 60 = 7.5G max per sync
         cmd.arg("--min-size=1").arg(remote_dir).arg(local_dir);
         debug!(self.log, "Will execute: {:?}", cmd);
 
