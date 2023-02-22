@@ -997,6 +997,43 @@ fn composite_query_no_canister_response() {
         .unwrap();
     match result {
         WasmResult::Reply(_) => unreachable!("Expected reject"),
-        WasmResult::Reject(msg) => assert_eq!(msg, "Canister did not reply"),
+        WasmResult::Reject(msg) => assert_eq!(
+            msg,
+            format!("Canister {} did not produce a response", canisters[1])
+        ),
     }
+}
+
+#[test]
+fn composite_query_recursive() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_composite_queries() // For now, query calls are only allowed in system subnets
+        .build();
+
+    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let payload = wasm().composite_query(
+        canister,
+        call_args().other_side(wasm().message_payload().append_and_reply()),
+    );
+
+    let err = test
+        .query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canister,
+                method_name: "composite_query".to_string(),
+                method_payload: payload.build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::QueryCallGraphLoopDetected);
+    assert_eq!(
+        err.description(),
+        "Query calls re-entering the same canister are not allowed yet."
+    );
 }
