@@ -4,7 +4,7 @@ version = "0.8.0"
 edition = "2021"
 
 [dependencies]
-async-stream = "0.3.2"
+async-stream = "0.3.4"
 byte-unit = "4.0.14"
 derive_more = "0.99.17"
 futures = "0.3.13"
