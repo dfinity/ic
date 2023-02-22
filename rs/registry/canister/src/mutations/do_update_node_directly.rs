@@ -45,31 +45,7 @@ impl Registry {
         node_id: NodeId,
         payload: UpdateNodeDirectlyPayload,
     ) -> Result<(), String> {
-        let duration_since_unix_epoch = now
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map_err(|err| format!("couldn't get time since unix epoch: {}", err))?;
-
-        // 1. Deserialize and validate the pk
-        let valid_idkg_dealing_encryption_pk = {
-            let mut pk = PublicKey::decode(
-                &payload
-                    .idkg_dealing_encryption_pk
-                    .as_ref()
-                    .map_or(&vec![], |v| v)[..],
-            )
-            .map_err(|e| {
-                format!(
-                    "idkg_dealing_encryption_pk is not in the expected format: {:?}",
-                    e
-                )
-            })?;
-            // Set the key timestamp to the current time.
-            pk.timestamp = Some(duration_since_unix_epoch.as_millis() as u64);
-            ValidIDkgDealingEncryptionPublicKey::try_from(pk)
-                .map_err(|e| format!("key validation failed: {}", e))?
-        };
-
-        // 2. Check that caller is a node with a node_id that exists
+        // 1. Check that caller is a node with a node_id that exists
         let node_key = make_node_record_key(node_id);
         self
             .get(node_key.as_bytes(), self.latest_version())
@@ -77,7 +53,7 @@ impl Registry {
             "{}do_update_node_directly: Node Id {:} not found in the registry, aborting node update.",
             LOG_PREFIX, node_id))?;
 
-        // 3. Disallow updating if the node is not on an ECDSA subnet or key rotation is disabled.
+        // 2. Disallow updating if the node is not on an ECDSA subnet or key rotation is disabled.
         let subnet_record = self.get_subnet_from_node_id_or_panic(node_id);
         let subnet_size = subnet_record.membership.len();
         if subnet_record
@@ -95,7 +71,11 @@ impl Registry {
             .and_then(|c| c.idkg_key_rotation_period_ms)
             .ok_or_else(|| "the key rotation feature is disabled".to_string())?;
 
-        // 4. Disallow updating if the existing key is sufficiently fresh.
+        // 3. Disallow updating if the existing key is sufficiently fresh.
+        let duration_since_unix_epoch = now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map_err(|err| format!("couldn't get time since unix epoch: {}", err))?;
+
         let idkg_pk_key = make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption);
         let previous_timestamp_set = match self.get(idkg_pk_key.as_bytes(), self.latest_version()) {
             Some(record) => {
@@ -125,7 +105,7 @@ impl Registry {
             None => false,
         };
 
-        // 5. Disallow updating if the most recent key update on the subnet is not old enough.
+        // 4. Disallow updating if the most recent key update on the subnet is not old enough.
         //    If the node has no timestamp, skip all checks.
         if previous_timestamp_set {
             if let Some(last_key_update_timestamp) = self.last_key_update_on_subnet(subnet_record) {
@@ -143,6 +123,26 @@ impl Registry {
                 }
             }
         }
+
+        // 5. Deserialize and validate the pk
+        let valid_idkg_dealing_encryption_pk = {
+            let mut pk = PublicKey::decode(
+                &payload
+                    .idkg_dealing_encryption_pk
+                    .as_ref()
+                    .map_or(&vec![], |v| v)[..],
+            )
+            .map_err(|e| {
+                format!(
+                    "idkg_dealing_encryption_pk is not in the expected format: {:?}",
+                    e
+                )
+            })?;
+            // Set the key timestamp to the current time.
+            pk.timestamp = Some(duration_since_unix_epoch.as_millis() as u64);
+            ValidIDkgDealingEncryptionPublicKey::try_from(pk)
+                .map_err(|e| format!("key validation failed: {}", e))?
+        };
 
         // 6. Create mutation for new record
         let insert_idkg_key = update(
@@ -211,7 +211,7 @@ mod test {
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_registry_transport::insert;
-    use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
+    use ic_test_utilities::types::ids::subnet_test_id;
     use ic_types::crypto::CurrentNodePublicKeys;
     use std::ops::Add;
 
@@ -227,7 +227,64 @@ mod test {
     }
 
     #[test]
-    // Tests that disabling the key rotation feature works.
+    #[should_panic(expected = "not found in the registry, aborting node update")]
+    fn test_invalid_node_id() {
+        let mut registry = invariant_compliant_registry();
+
+        let now = SystemTime::now();
+
+        let (keys, node_id) = valid_node_keys_and_node_id();
+        let pk = keys.idkg_dealing_encryption_public_key.unwrap();
+
+        registry
+            .do_update_node(
+                now,
+                node_id,
+                UpdateNodeDirectlyPayload {
+                    idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk)),
+                },
+            )
+            .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "the node is not on an ECDSA subnet")]
+    fn test_node_not_on_ecdsa_subnet() {
+        let mut registry = invariant_compliant_registry();
+
+        let (mutate_request, node_ids) = prepare_registry_with_nodes(4);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let mut subnet_list_record = registry.get_subnet_list_record();
+
+        let subnet_id = subnet_test_id(1000);
+
+        // Create the subnet record with disabled ecdsa feature.
+        let subnet_record: SubnetRecord = get_invariant_compliant_subnet_record(node_ids.clone());
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+        ));
+
+        let now = SystemTime::now();
+
+        let (keys, _node_id) = valid_node_keys_and_node_id();
+        let pk = keys.idkg_dealing_encryption_public_key.unwrap();
+
+        registry
+            .do_update_node(
+                now,
+                node_ids[0],
+                UpdateNodeDirectlyPayload {
+                    idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk)),
+                },
+            )
+            .unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "the key rotation feature is disabled")]
     fn test_idkg_key_update_disabled() {
         let mut registry = invariant_compliant_registry();
 
@@ -266,20 +323,19 @@ mod test {
         let (keys, _node_id) = valid_node_keys_and_node_id();
         let pk = keys.idkg_dealing_encryption_public_key.unwrap();
 
-        assert_eq!(
-            registry.do_update_node(
+        registry
+            .do_update_node(
                 now,
                 node_ids[0],
                 UpdateNodeDirectlyPayload {
                     idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk)),
-                }
-            ),
-            Err("the key rotation feature is disabled".to_string()),
-        );
+                },
+            )
+            .unwrap();
     }
 
     #[test]
-    // Tests all possible failures during the key update.
+    // Tests failures with invalid keys during the key update.
     fn test_idkg_key_update_fail() {
         let mut registry = invariant_compliant_registry();
 
@@ -289,11 +345,29 @@ mod test {
         let mut subnet_list_record = registry.get_subnet_list_record();
 
         let subnet_id = subnet_test_id(1000);
+        let idkg_key_rotation_period_ms = 14 * 24 * 60 * 60 * 1000; // 2 weeks
 
+        // Create the subnet record.
+        let mut subnet_record: SubnetRecord =
+            get_invariant_compliant_subnet_record(node_ids.clone());
+        let key_id = EcdsaKeyId {
+            curve: EcdsaCurve::Secp256k1,
+            name: "test_key_id".to_string(),
+        };
+        subnet_record.ecdsa_config = Some(
+            EcdsaConfig {
+                quadruples_to_create_in_advance: 1,
+                key_ids: vec![key_id],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                signature_request_timeout_ns: None,
+                idkg_key_rotation_period_ms: Some(idkg_key_rotation_period_ms),
+            }
+            .into(),
+        );
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             subnet_id,
             &mut subnet_list_record,
-            get_invariant_compliant_subnet_record(node_ids.clone()),
+            subnet_record,
         ));
 
         let now = SystemTime::now();
@@ -319,31 +393,6 @@ mod test {
             Err(msg) if msg.contains("DecodeError") => {}
             val => panic!("unexpected result: {:?}", val),
         };
-
-        let (keys, _node_id) = valid_node_keys_and_node_id();
-        let pk = keys.idkg_dealing_encryption_public_key.unwrap();
-
-        assert_eq!(
-            registry.do_update_node(
-                now,
-                node_test_id(777),
-                UpdateNodeDirectlyPayload {
-                    idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk.clone())),
-                }
-            ),
-            Err("[Registry] do_update_node_directly: Node Id 6ad5a-hyjam-aaaaa-aaaap-2ai not found in the registry, aborting node update.".to_string()),
-        );
-
-        assert_eq!(
-            registry.do_update_node(
-                now,
-                node_ids[0],
-                UpdateNodeDirectlyPayload {
-                    idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk)),
-                }
-            ),
-            Err("the node is not on an ECDSA subnet".to_string()),
-        );
     }
 
     #[test]
