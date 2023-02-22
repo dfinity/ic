@@ -76,6 +76,7 @@ PODMAN_RUN_ARGS=(
     --hostname=devenv-container
     --add-host devenv-container:127.0.0.1
     --entrypoint=
+    --init
 
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
     -e CI_COMMIT_REF_PROTECTED="${CI_COMMIT_REF_PROTECTED:-true}"

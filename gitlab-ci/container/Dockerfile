@@ -84,14 +84,6 @@ RUN mkdir $NVM_DIR && \
 # even if this directory is empty.
 ENV CARGO_HOME=/cargo
 
-# Init for reaping zombies and performing signal forwarding (https://github.com/krallin/tini)
-ARG tini_version=0.19.0
-RUN curl -fsSL https://github.com/krallin/tini/releases/download/v${tini_version}/tini -o /tini && \
-    curl -fsSL https://github.com/krallin/tini/releases/download/v${tini_version}/tini.asc -o /tini.asc && \
-    chmod +x /tini
-RUN gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 595E85A6B1B4779EA4DAAEC70B588DFF0527A9B7 && \
-    gpg --batch --verify /tini.asc /tini && chmod +x /tini
-
 RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit==2.20.0 honeycomb-beeline junit-xml paramiko \
     python-gitlab libhoney termcolor pygithub python-dateutil elasticsearch elasticsearch-dsl freezegun \
     jsonschema mypy pylint pytest-shutil pyyaml xmltodict pytest==5.4.3 jira toml cvss pytest-cov \
@@ -128,4 +120,4 @@ RUN mv /usr/bin/docker /usr/bin/docker-bin
 COPY ./files/containers.conf /etc/containers/containers.conf
 COPY ./files/docker.sh /usr/bin/docker
 
-ENTRYPOINT ["/tini", "--", "/entrypoint.sh"]
+ENTRYPOINT ["/entrypoint.sh"]

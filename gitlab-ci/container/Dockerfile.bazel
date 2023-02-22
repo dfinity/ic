@@ -41,14 +41,6 @@ RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu
 # CI before script requires sudo
 RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-# Init for reaping zombies and performing signal forwarding (https://github.com/krallin/tini)
-ARG tini_version=0.19.0
-RUN curl -fsSL https://github.com/krallin/tini/releases/download/v${tini_version}/tini -o /tini && \
-    curl -fsSL https://github.com/krallin/tini/releases/download/v${tini_version}/tini.asc -o /tini.asc && \
-    chmod +x /tini
-RUN gpg --batch --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 595E85A6B1B4779EA4DAAEC70B588DFF0527A9B7 && \
-    gpg --batch --verify /tini.asc /tini && chmod +x /tini
-
 COPY ./files/generate-bazel-completion.sh /tmp/
 RUN /tmp/generate-bazel-completion.sh
 RUN echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
@@ -66,5 +58,5 @@ COPY ./files/containers.conf /etc/containers/containers.conf
 COPY ./files/docker.sh /usr/bin/docker
 COPY ./files/entrypoint.sh /entrypoint.sh
 
-ENTRYPOINT ["/tini", "--", "/entrypoint.sh"]
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
