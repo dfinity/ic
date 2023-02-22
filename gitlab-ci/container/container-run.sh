@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
+if [ -n "${IN_NIX_SHELL:-}" ]; then
+    echo "Please do not run $0 inside of nix-shell." >&2
+    exit 1
+fi
+
 if [ -e /run/.containerenv ]; then
     echo "Nested $0 is not supported!" >&2
     exit 1
