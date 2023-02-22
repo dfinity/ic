@@ -125,18 +125,15 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             }
         }
 
-        if let (Some(cmd), is_new) = match subcmd {
-            Some(SubCommand::RestoreFromBackup(cmd)) => (Some(cmd.clone()), false),
-            Some(SubCommand::RestoreFromBackup2(cmd2)) => {
-                let cmd = RestoreFromBackupCmd {
-                    registry_local_store_path: cmd2.registry_local_store_path.clone(),
-                    backup_spool_path: cmd2.backup_spool_path.clone(),
-                    replica_version: cmd2.replica_version.clone(),
-                    start_height: cmd2.start_height,
-                };
-                (Some(cmd), true)
-            }
-            _ => (None, false),
+        if let Some(cmd) = match subcmd {
+            Some(SubCommand::RestoreFromBackup(cmd)) => Some(cmd.clone()),
+            Some(SubCommand::RestoreFromBackup2(cmd2)) => Some(RestoreFromBackupCmd {
+                registry_local_store_path: cmd2.registry_local_store_path.clone(),
+                backup_spool_path: cmd2.backup_spool_path.clone(),
+                replica_version: cmd2.replica_version.clone(),
+                start_height: cmd2.start_height,
+            }),
+            _ => None,
         } {
             let _enter_guard = rt.enter();
 
@@ -148,7 +145,6 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
                 &cmd.registry_local_store_path,
                 subnet_id,
                 cmd.start_height,
-                is_new,
             )
             .with_replay_target_height(target_height);
             *res_clone.borrow_mut() = player.restore(cmd.start_height + 1);
