@@ -25,6 +25,7 @@ use ic_sns_init::pb::v1::{
     AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
     SnsInitPayload, SwapDistribution, TreasuryDistribution,
 };
+use ic_sns_init::SnsCanisterIds as InitSnsCanisterIds;
 use ic_sns_root::pb::v1::ListSnsCanistersRequest;
 use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
 use ic_sns_swap::pb::v1::{
@@ -241,6 +242,60 @@ impl SnsClient {
         sns_client.write_attribute(env);
         sns_client
     }
+
+    pub fn get_sns_client_for_static_testnet(env: &TestEnv) -> SnsClient {
+        let sns_canisters_str =
+            std::env::var("SNS_CANISTERS").expect("variable SNS_CANISTERS not specified");
+        let sns_canisters: InitSnsCanisterIds = serde_json::from_str(&sns_canisters_str)
+            .unwrap_or_else(|_| panic!("cannot parse string as JSON: `{sns_canisters_str}`"));
+
+        // Transform from a json-parsable representation to the protobuf representation which is
+        // used to init the sns canisters.
+        let sns_canisters = SnsCanisterIds {
+            governance: sns_canisters.governance.into(),
+            ledger: sns_canisters.ledger.into(),
+            root: sns_canisters.root.into(),
+            swap: sns_canisters.swap.into(),
+            index: sns_canisters.index.into(),
+        };
+
+        let sns_client = SnsClient {
+            sns_canisters,
+            wallet_canister_id: PrincipalId::from_str("aaaaa-aa").unwrap(), // FIXME
+            sns_wasm_canister_id: SNS_WASM_CANISTER_ID.get(),
+        };
+        sns_client.write_attribute(env);
+        sns_client
+    }
+}
+
+pub fn setup_static_testnet(env: TestEnv) {
+    SnsClient::get_sns_client_for_static_testnet(&env);
+}
+
+pub fn workload_static_testnet(env: TestEnv) {
+    let log = env.logger();
+    let duration = Duration::from_secs(60 * 60);
+    let rps = std::env::var("WORKLOAD_RPS").expect("variable WORKLOAD_RPS not specified");
+    let rps = rps
+        .parse()
+        .unwrap_or_else(|_| panic!("cannot parse as usize: `{rps}`"));
+
+    let request_provider = SnsRequestProvider::from_env(&env);
+    let request = request_provider.refresh_buyer_tokens(None);
+    let plan = RoundRobinPlan::new(vec![request]);
+
+    let static_testnet_name = std::env::var("TESTNET").expect("variable TESTNET not specified");
+    let static_testnet_bn_url = &format!("https://{static_testnet_name}.testnet.dfinity.network/");
+    let agent = block_on(assert_create_agent(static_testnet_bn_url));
+
+    // --- Generate workload ---
+    let workload = Workload::new(vec![agent], rps, duration, plan, log.clone())
+        .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
+        .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
+
+    let metrics = block_on(workload.execute()).expect("Workload execution has failed.");
+    env.emit_report(format!("{metrics}"));
 }
 
 fn setup(env: TestEnv, sale_participants: Vec<SaleParticipant>) {
