@@ -13,7 +13,7 @@ pub use types::*;
 
 /// Cycles cost to create a canister.
 ///
-/// https://internetcomputer.org/docs/current/developer-docs/deploy/computation-and-storage-costs
+/// <https://internetcomputer.org/docs/current/developer-docs/deploy/computation-and-storage-costs>
 pub const CREATE_CANISTER_CYCLES: u128 = 100_000_000_000u128;
 
 /// Register a new canister and get its canister id.

@@ -9,7 +9,7 @@ use candid::{
 use core::hash::Hash;
 use serde::{Deserialize, Serialize};
 
-/// "transform" function of type: `func (http_response) -> (http_response) query`
+/// "transform" function of type: `func (http_request) -> (http_response) query`
 #[derive(Deserialize, Debug, PartialEq, Clone)]
 pub struct TransformFunc(pub candid::Func);
 
@@ -44,9 +44,9 @@ pub struct TransformArgs {
 
 /// Type used for encoding/decoding:
 /// `record {
-//       function : func (record {response : http_response; context : blob}) -> (http_response) query;
-//       context : blob;
-//   }`
+///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
+///     context : blob;
+/// }`
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct TransformContext {
     /// Reference function with signature: `func (record {response : http_response; context : blob}) -> (http_response) query;`.
