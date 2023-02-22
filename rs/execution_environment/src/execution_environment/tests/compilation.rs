@@ -291,6 +291,7 @@ mod execution_tests {
         ));
 
         // Call the same method on the canister twice.
+        let executed_instructions_before = test.canister_executed_instructions(canister_id);
         assert_eq!(
             test.ingress(canister_id, "go", vec![]).unwrap_err().code(),
             ErrorCode::CanisterInvalidWasm
@@ -299,6 +300,8 @@ mod execution_tests {
             test.ingress(canister_id, "go", vec![]).unwrap_err().code(),
             ErrorCode::CanisterInvalidWasm
         );
+        let executed_instructions_after = test.canister_executed_instructions(canister_id);
+        assert_eq!(executed_instructions_before, executed_instructions_after);
 
         // Only the first update should trigger a compilation.
         let cache_lookup_metric = fetch_int_counter_vec(
