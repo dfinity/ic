@@ -528,16 +528,6 @@ pub struct Snapshot {
     pub state: Arc<ReplicatedState>,
 }
 
-enum ComputeManifestRequest {
-    /// Compute manifest and store the result as a side effect.
-    Compute {
-        checkpoint_layout: CheckpointLayout<ReadOnly>,
-        manifest_delta: Option<manifest::ManifestDelta>,
-    },
-    /// When the request gets through the queue, notify by sending () into the provided channel.
-    Wait { sender: Sender<()> },
-}
-
 /// StateSyncRefs keeps track of the ongoing and aborted state syncs.
 #[derive(Clone)]
 pub struct StateSyncRefs {
@@ -645,13 +635,11 @@ pub struct StateManagerImpl {
     verifier: Arc<dyn Verifier>,
     own_subnet_id: SubnetId,
     own_subnet_type: SubnetType,
-    compute_manifest_request_sender: Sender<ComputeManifestRequest>,
     deallocation_sender: Sender<Deallocation>,
     // Cached latest state height.  We cache it separately because it's
     // requested quite often and this causes high contention on the lock.
     latest_state_height: AtomicU64,
     latest_certified_height: AtomicU64,
-    _state_hasher_handle: JoinOnDrop<()>,
     _deallocation_handle: JoinOnDrop<()>,
     persist_metadata_guard: Arc<Mutex<()>>,
     tip_channel: Sender<TipRequest>,
@@ -744,11 +732,6 @@ fn initialize_tip(
     tip_channel
         .send(TipRequest::ResetTipTo { checkpoint_layout })
         .unwrap();
-
-    // Wait for reset_tip_to so that we don't reflink in parallel with other operations.
-    let (send, recv) = unbounded();
-    tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
-    recv.recv().unwrap();
 
     ReplicatedState::clone(&snapshot.state)
 }
@@ -887,8 +870,8 @@ fn report_last_diverged_state(
 struct PopulatedMetadata {
     certifications_metadata: CertificationsMetadata,
     states_metadata: StatesMetadata,
-    compute_manifest_requests: Vec<ComputeManifestRequest>,
-    snapshots: Vec<(Snapshot, CheckpointLayout<ReadOnly>)>,
+    checkpoint_layouts_to_compute_manifest: Vec<CheckpointLayout<ReadOnly>>,
+    snapshots_with_checkpoint_layouts: Vec<(Snapshot, CheckpointLayout<ReadOnly>)>,
 }
 
 /// An enum describing all possible PageMaps in ReplicatedState
@@ -1240,14 +1223,22 @@ fn persist_metadata_or_die(
     debug!(log, "Persisted states metadata in {:?}", elapsed);
 }
 
+struct CreateCheckpointResult {
+    checkpointed_state: ReplicatedState,
+    state_metadata: StateMetadata,
+    // TipRequest to compute manifest.
+    compute_manifest_request: TipRequest,
+    // Other TipRequests to perform after the copmute manifest.
+    tip_requests: Vec<TipRequest>,
+}
+
 impl StateManagerImpl {
-    pub fn flush_manifest_thread(&self) {
+    pub fn flush_tip_channel(&self) {
         let (sender, recv) = unbounded();
-        self.compute_manifest_request_sender
-            .send(ComputeManifestRequest::Wait { sender })
-            .expect("failed to send ComputeManifestRequest Wait message");
-        recv.recv()
-            .expect("failed to wait for ComputeManifest thread");
+        self.tip_channel
+            .send(TipRequest::Wait { sender })
+            .expect("failed to send TipHandler Wait message");
+        recv.recv().expect("failed to wait for TipHandler thread");
     }
 
     /// Height for the initial default state.
@@ -1284,6 +1275,7 @@ impl StateManagerImpl {
             state_layout.capture_tip_handler(),
             state_layout.clone(),
             metrics.clone(),
+            malicious_flags.clone(),
         );
 
         let starting_time = Instant::now();
@@ -1385,8 +1377,8 @@ impl StateManagerImpl {
         let PopulatedMetadata {
             certifications_metadata,
             states_metadata,
-            compute_manifest_requests,
-            snapshots,
+            checkpoint_layouts_to_compute_manifest,
+            snapshots_with_checkpoint_layouts,
         } = Self::populate_metadata(
             &log,
             &metrics,
@@ -1409,7 +1401,7 @@ impl StateManagerImpl {
             state: Arc::new(initial_state(own_subnet_id, own_subnet_type).take()),
         };
 
-        let tip_height_and_state = match snapshots.last() {
+        let tip_height_and_state = match snapshots_with_checkpoint_layouts.last() {
             Some((snapshot, checkpoint_layout)) => {
                 // Set latest state height in metadata to be last checkpoint height
                 latest_state_height.store(snapshot.height.get(), Ordering::Relaxed);
@@ -1427,7 +1419,11 @@ impl StateManagerImpl {
         };
 
         let snapshots: VecDeque<Snapshot> = std::iter::once(initial_snapshot)
-            .chain(snapshots.into_iter().map(|(snapshot, _)| snapshot))
+            .chain(
+                snapshots_with_checkpoint_layouts
+                    .into_iter()
+                    .map(|(snapshot, _)| snapshot),
+            )
             .collect();
 
         // Make sure the snapshots' order is maintained in initialization.
@@ -1452,40 +1448,7 @@ impl StateManagerImpl {
             tip: Some(tip_height_and_state),
         }));
 
-        let (compute_manifest_request_sender, compute_manifest_request_receiver) = unbounded();
-
         let persist_metadata_guard = Arc::new(Mutex::new(()));
-
-        let malicious_flags_clone = malicious_flags.clone();
-        let _state_hasher_handle = JoinOnDrop::new(
-            std::thread::Builder::new()
-                .name("StateHasher".to_string())
-                .spawn({
-                    let log = log.clone();
-                    let states = Arc::clone(&states);
-                    let metrics = metrics.clone();
-                    let state_layout = state_layout.clone();
-                    let persist_metadata_guard = persist_metadata_guard.clone();
-                    let mut manifest_thread_pool =
-                        scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
-
-                    move || {
-                        while let Ok(req) = compute_manifest_request_receiver.recv() {
-                            Self::handle_compute_manifest_request(
-                                &mut manifest_thread_pool,
-                                &metrics,
-                                &log,
-                                &states,
-                                &state_layout,
-                                req,
-                                &persist_metadata_guard,
-                                &malicious_flags_clone,
-                            );
-                        }
-                    }
-                })
-                .expect("failed to spawn background state hasher"),
-        );
 
         let (deallocation_sender, deallocation_receiver) = unbounded();
         let _deallocation_handle = JoinOnDrop::new(
@@ -1503,9 +1466,14 @@ impl StateManagerImpl {
                 .expect("failed to spawn background deallocation thread"),
         );
 
-        for req in compute_manifest_requests {
-            compute_manifest_request_sender
-                .send(req)
+        for checkpoint_layout in checkpoint_layouts_to_compute_manifest {
+            tip_channel
+                .send(TipRequest::ComputeManifest {
+                    checkpoint_layout,
+                    manifest_delta: None,
+                    states: states.clone(),
+                    persist_metadata_guard: persist_metadata_guard.clone(),
+                })
                 .expect("failed to send ComputeManifestRequest");
         }
 
@@ -1519,11 +1487,9 @@ impl StateManagerImpl {
             verifier,
             own_subnet_id,
             own_subnet_type,
-            compute_manifest_request_sender,
             deallocation_sender,
             latest_state_height,
             latest_certified_height,
-            _state_hasher_handle,
             _deallocation_handle,
             persist_metadata_guard,
             tip_channel,
@@ -1622,133 +1588,6 @@ impl StateManagerImpl {
         );
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn handle_compute_manifest_request(
-        thread_pool: &mut scoped_threadpool::Pool,
-        metrics: &StateManagerMetrics,
-        log: &ReplicaLogger,
-        states: &parking_lot::RwLock<SharedState>,
-        state_layout: &StateLayout,
-        req: ComputeManifestRequest,
-        persist_metadata_lock: &Arc<Mutex<()>>,
-        #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
-    ) {
-        match req {
-            ComputeManifestRequest::Wait { sender } => {
-                sender.send(()).expect("failed to sync hasher")
-            }
-            ComputeManifestRequest::Compute {
-                checkpoint_layout,
-                manifest_delta,
-            } => {
-                let system_metadata = checkpoint_layout
-                    .system_metadata()
-                    .deserialize()
-                    .unwrap_or_else(|err| {
-                        fatal!(
-                            log,
-                            "Failed to decode system metadata @{}: {}",
-                            checkpoint_layout.height(),
-                            err
-                        )
-                    });
-
-                let state_sync_version = system_metadata.state_sync_version;
-
-                assert!(
-                    state_sync_version <= MAX_SUPPORTED_STATE_SYNC_VERSION,
-                    "Unable to compute a manifest with version {:?}. Maximum supported StateSync version is {:?}",
-                    state_sync_version,
-                    MAX_SUPPORTED_STATE_SYNC_VERSION
-                );
-
-                let start = Instant::now();
-                let manifest = crate::manifest::compute_manifest(
-                    thread_pool,
-                    &metrics.manifest_metrics,
-                    log,
-                    state_sync_version,
-                    &checkpoint_layout,
-                    crate::manifest::DEFAULT_CHUNK_SIZE,
-                    manifest_delta,
-                )
-                .unwrap_or_else(|err| {
-                    fatal!(
-                        log,
-                        "Failed to compute manifest for checkpoint @{} after {:?}: {}",
-                        checkpoint_layout.height(),
-                        start.elapsed(),
-                        err
-                    )
-                });
-
-                let elapsed = start.elapsed();
-                metrics
-                    .checkpoint_op_duration
-                    .with_label_values(&["compute_manifest"])
-                    .observe(elapsed.as_secs_f64());
-
-                info!(
-                    log,
-                    "Computed manifest version {} for state @{} in {:?}",
-                    manifest.version,
-                    checkpoint_layout.height(),
-                    elapsed
-                );
-
-                let state_size_bytes: i64 = manifest
-                    .file_table
-                    .iter()
-                    .map(|f| f.size_bytes as i64)
-                    .sum();
-
-                metrics.state_size.set(state_size_bytes);
-                metrics
-                    .last_computed_manifest_height
-                    .set(checkpoint_layout.height().get() as i64);
-
-                // This is where we maliciously alter the root_hash!
-                #[cfg(feature = "malicious_code")]
-                let malicious_root_hash = maliciously_return_wrong_hash(
-                    &manifest,
-                    log,
-                    malicious_flags,
-                    checkpoint_layout.height(),
-                );
-
-                let bundled_manifest = compute_bundled_manifest(manifest);
-
-                #[cfg(feature = "malicious_code")]
-                let bundled_manifest = BundledManifest {
-                    root_hash: malicious_root_hash,
-                    ..bundled_manifest
-                };
-
-                info!(
-                    log,
-                    "Computed root hash {:?} of state @{}",
-                    bundled_manifest.root_hash,
-                    checkpoint_layout.height()
-                );
-
-                let mut states = states.write();
-
-                if let Some(metadata) = states.states_metadata.get_mut(&checkpoint_layout.height())
-                {
-                    metadata.bundled_manifest = Some(bundled_manifest);
-                }
-
-                release_lock_and_persist_metadata(
-                    log,
-                    metrics,
-                    state_layout,
-                    states,
-                    persist_metadata_lock,
-                );
-            }
-        }
-    }
-
     fn latest_certified_state(
         &self,
     ) -> Option<(Arc<ReplicatedState>, Certification, Arc<HashTree>)> {
@@ -1834,11 +1673,12 @@ impl StateManagerImpl {
         mut metadatas: BTreeMap<Height, StateMetadata>,
         states: Vec<(Height, ReplicatedState)>,
     ) -> PopulatedMetadata {
-        let mut compute_manifest_requests = Vec::<ComputeManifestRequest>::new();
+        let mut checkpoint_layouts_to_compute_manifest = Vec::<CheckpointLayout<ReadOnly>>::new();
 
         let mut certifications_metadata = CertificationsMetadata::default();
         let mut states_metadata = StatesMetadata::default();
-        let mut snapshots: Vec<(Snapshot, CheckpointLayout<ReadOnly>)> = Default::default();
+        let mut snapshots_with_checkpoint_layouts: Vec<(Snapshot, CheckpointLayout<ReadOnly>)> =
+            Default::default();
 
         for (height, state) in states {
             certifications_metadata.insert(
@@ -1864,10 +1704,7 @@ impl StateManagerImpl {
             } else {
                 // It is possible that the replica did not finish manifest computation before restarting.
                 // In this case, we need to send a request of manifest computation for this checkpoint.
-                compute_manifest_requests.push(ComputeManifestRequest::Compute {
-                    checkpoint_layout: checkpoint_layout.clone(),
-                    manifest_delta: None,
-                });
+                checkpoint_layouts_to_compute_manifest.push(checkpoint_layout.clone());
 
                 states_metadata.insert(
                     height,
@@ -1879,7 +1716,7 @@ impl StateManagerImpl {
                 );
             }
 
-            snapshots.push((
+            snapshots_with_checkpoint_layouts.push((
                 Snapshot {
                     height,
                     state: Arc::new(state),
@@ -1891,8 +1728,8 @@ impl StateManagerImpl {
         PopulatedMetadata {
             certifications_metadata,
             states_metadata,
-            compute_manifest_requests,
-            snapshots,
+            checkpoint_layouts_to_compute_manifest,
+            snapshots_with_checkpoint_layouts,
         }
     }
 
@@ -2292,7 +2129,7 @@ impl StateManagerImpl {
         &self,
         state: &mut ReplicatedState,
         height: Height,
-    ) -> (ReplicatedState, StateMetadata, ComputeManifestRequest) {
+    ) -> CreateCheckpointResult {
         struct PreviousCheckpointInfo {
             dirty_pages: DirtyPages,
             base_manifest: Manifest,
@@ -2310,8 +2147,9 @@ impl StateManagerImpl {
             // We need the previous manifest computation to complete because:
             //   1) We need it it speed up the next manifest computation using ManifestDelta
             //   2) We don't want to run too much ahead of the latest ready manifest.
-            self.flush_manifest_thread();
+            self.flush_tip_channel();
         }
+
         let previous_checkpoint_info = {
             let states = self.states.read();
             states
@@ -2348,7 +2186,6 @@ impl StateManagerImpl {
                 self.get_fd_factory(),
             )
         };
-
         let elapsed = start.elapsed();
         let (cp_layout, checkpointed_state) = match result {
             Ok(checkpointed_state) => {
@@ -2363,7 +2200,7 @@ impl StateManagerImpl {
                 warn!(
                     self.log,
                     "Failed to create checkpoint @{} because it already exists, \
-                                re-loading the checkpoint from disk",
+                    re-loading the checkpoint from disk",
                     height
                 );
 
@@ -2428,21 +2265,28 @@ impl StateManagerImpl {
             )
         };
 
-        let state_metadata = StateMetadata {
-            checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
-            bundled_manifest: None,
-            state_sync_file_group: None,
-        };
-
-        let compute_manifest_request = ComputeManifestRequest::Compute {
-            checkpoint_layout: cp_layout,
-            manifest_delta: if is_nns { None } else { manifest_delta },
-        };
-        (checkpointed_state, state_metadata, compute_manifest_request)
+        CreateCheckpointResult {
+            checkpointed_state,
+            state_metadata: StateMetadata {
+                checkpoint_layout: Some(self.state_layout.checkpoint(height).unwrap()),
+                bundled_manifest: None,
+                state_sync_file_group: None,
+            },
+            compute_manifest_request: TipRequest::ComputeManifest {
+                checkpoint_layout: cp_layout,
+                manifest_delta: if is_nns { None } else { manifest_delta },
+                states: self.states.clone(),
+                persist_metadata_guard: self.persist_metadata_guard.clone(),
+            },
+            tip_requests: vec![TipRequest::DefragTip {
+                height,
+                page_map_types: PageMapType::list_all(state),
+            }],
+        }
     }
 
-    pub fn test_only_tip_channel(&self) -> Sender<TipRequest> {
-        self.tip_channel.clone()
+    pub fn test_only_send_wait_to_tip_channel(&self, sender: Sender<()>) {
+        self.tip_channel.send(TipRequest::Wait { sender }).unwrap();
     }
 }
 
@@ -2968,18 +2812,23 @@ impl StateManager for StateManagerImpl {
 
         self.populate_extra_metadata(&mut state, height);
 
-        let mut state_metadata_and_compute_manifest_request: Option<(
-            StateMetadata,
-            ComputeManifestRequest,
-        )> = None;
+        let mut state_metadata_and_compute_manifest_request: Option<(StateMetadata, TipRequest)> =
+            None;
+        let mut follow_up_tip_requests = Vec::new();
 
         let checkpointed_state = match scope {
             CertificationScope::Full => {
                 self.flush_page_maps(&mut state, height);
-                let (checkpointed_state, state_metadata, compute_manifest_request) =
-                    self.create_checkpoint_and_switch(&mut state, height);
+                let CreateCheckpointResult {
+                    checkpointed_state,
+                    state_metadata,
+                    compute_manifest_request,
+                    tip_requests,
+                } = self.create_checkpoint_and_switch(&mut state, height);
                 state_metadata_and_compute_manifest_request =
                     Some((state_metadata, compute_manifest_request));
+                follow_up_tip_requests = tip_requests;
+
                 checkpointed_state
             }
             CertificationScope::Metadata => {
@@ -3046,7 +2895,8 @@ impl StateManager for StateManagerImpl {
                 state_metadata_and_compute_manifest_request
             {
                 states.states_metadata.insert(height, state_metadata);
-                self.compute_manifest_request_sender
+                debug_assert!(self.tip_channel.len() <= 1);
+                self.tip_channel
                     .send(compute_manifest_request)
                     .expect("failed to send ComputeManifestRequest message");
             } else {
@@ -3067,6 +2917,11 @@ impl StateManager for StateManagerImpl {
 
         if scope == CertificationScope::Full {
             self.release_lock_and_persist_metadata(states);
+        }
+        for req in follow_up_tip_requests {
+            self.tip_channel
+                .send(req)
+                .expect("failed to send tip request");
         }
     }
 

@@ -1,6 +1,10 @@
-use crate::{CheckpointError, PageMapType, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS};
+use crate::{
+    compute_bundled_manifest, release_lock_and_persist_metadata, CheckpointError, PageMapType,
+    SharedState, StateManagerMetrics, MAX_SUPPORTED_STATE_SYNC_VERSION,
+    NUMBER_OF_CHECKPOINT_THREADS,
+};
 use crossbeam_channel::{unbounded, Sender};
-use ic_logger::{fatal, ReplicaLogger};
+use ic_logger::{fatal, info, ReplicaLogger};
 #[allow(unused)]
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory, BitcoinState, CanisterState, NumWasmPages,
@@ -10,7 +14,7 @@ use ic_state_layout::{
     error::LayoutError, BitcoinStateBits, BitcoinStateLayout, CanisterStateBits, CheckpointLayout,
     ExecutionStateBits, ReadOnly, RwPolicy, StateLayout, TipHandler,
 };
-use ic_types::{CanisterId, Height};
+use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
 use ic_utils::fs::defrag_file_partially;
 use ic_utils::thread::parallel_map;
 use ic_utils::thread::JoinOnDrop;
@@ -21,12 +25,14 @@ use rand_chacha::ChaChaRng;
 use std::collections::BTreeSet;
 use std::os::unix::prelude::MetadataExt;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 const DEFRAG_SIZE: u64 = 1 << 29; // 500 MB
 const DEFRAG_SAMPLE: usize = 100;
 
 /// Request for the Tip directory handling thread.
-pub enum TipRequest {
+pub(crate) enum TipRequest {
     /// Create checkpoint from the current tip for the given height.
     /// Return the created checkpoint or error into the sender.
     TipToCheckpoint {
@@ -63,6 +69,13 @@ pub enum TipRequest {
         height: Height,
         page_map_types: Vec<PageMapType>,
     },
+    /// Compute manifest, store result into states and perist metadata as result.
+    ComputeManifest {
+        checkpoint_layout: CheckpointLayout<ReadOnly>,
+        manifest_delta: Option<crate::manifest::ManifestDelta>,
+        states: Arc<parking_lot::RwLock<SharedState>>,
+        persist_metadata_guard: Arc<Mutex<()>>,
+    },
     Wait {
         sender: Sender<()>,
     },
@@ -91,11 +104,12 @@ fn page_map_path(
         })
 }
 
-pub fn spawn_tip_thread(
+pub(crate) fn spawn_tip_thread(
     log: ReplicaLogger,
     mut tip_handler: TipHandler,
     state_layout: StateLayout,
     metrics: StateManagerMetrics,
+    malicious_flags: MaliciousFlags,
 ) -> (JoinOnDrop<()>, Sender<TipRequest>) {
     let (tip_sender, tip_receiver) = unbounded();
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
@@ -253,6 +267,25 @@ pub fn spawn_tip_thread(
                         TipRequest::Wait { sender } => {
                             let _timer = request_timer(&metrics, "wait");
                             let _ = sender.send(());
+                        }
+
+                        TipRequest::ComputeManifest {
+                            checkpoint_layout,
+                            manifest_delta,
+                            states,
+                            persist_metadata_guard,
+                        } => {
+                            handle_compute_manifest_request(
+                                &mut thread_pool,
+                                &metrics,
+                                &log,
+                                &states,
+                                &state_layout,
+                                &checkpoint_layout,
+                                manifest_delta,
+                                &persist_metadata_guard,
+                                &malicious_flags,
+                            );
                         }
                     }
                 }
@@ -524,6 +557,118 @@ fn truncate_path(log: &ReplicaLogger, path: &Path) {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn handle_compute_manifest_request(
+    thread_pool: &mut scoped_threadpool::Pool,
+    metrics: &StateManagerMetrics,
+    log: &ReplicaLogger,
+    states: &parking_lot::RwLock<SharedState>,
+    state_layout: &StateLayout,
+    checkpoint_layout: &CheckpointLayout<ReadOnly>,
+    manifest_delta: Option<crate::manifest::ManifestDelta>,
+    persist_metadata_guard: &Arc<Mutex<()>>,
+    #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
+) {
+    let system_metadata = checkpoint_layout
+        .system_metadata()
+        .deserialize()
+        .unwrap_or_else(|err| {
+            fatal!(
+                log,
+                "Failed to decode system metadata @{}: {}",
+                checkpoint_layout.height(),
+                err
+            )
+        });
+
+    let state_sync_version = system_metadata.state_sync_version;
+
+    assert!(
+        state_sync_version <= MAX_SUPPORTED_STATE_SYNC_VERSION,
+        "Unable to compute a manifest with version {:?}. \
+                    Maximum supported StateSync version is {:?}",
+        state_sync_version,
+        MAX_SUPPORTED_STATE_SYNC_VERSION
+    );
+
+    let start = Instant::now();
+    let manifest = crate::manifest::compute_manifest(
+        thread_pool,
+        &metrics.manifest_metrics,
+        log,
+        state_sync_version,
+        checkpoint_layout,
+        crate::manifest::DEFAULT_CHUNK_SIZE,
+        manifest_delta,
+    )
+    .unwrap_or_else(|err| {
+        fatal!(
+            log,
+            "Failed to compute manifest for checkpoint @{} after {:?}: {}",
+            checkpoint_layout.height(),
+            start.elapsed(),
+            err
+        )
+    });
+
+    let elapsed = start.elapsed();
+    metrics
+        .checkpoint_op_duration
+        .with_label_values(&["compute_manifest"])
+        .observe(elapsed.as_secs_f64());
+
+    info!(
+        log,
+        "Computed manifest version {} for state @{} in {:?}",
+        manifest.version,
+        checkpoint_layout.height(),
+        elapsed
+    );
+
+    let state_size_bytes: i64 = manifest
+        .file_table
+        .iter()
+        .map(|f| f.size_bytes as i64)
+        .sum();
+
+    metrics.state_size.set(state_size_bytes);
+    metrics
+        .last_computed_manifest_height
+        .set(checkpoint_layout.height().get() as i64);
+
+    // This is where we maliciously alter the root_hash!
+    #[cfg(feature = "malicious_code")]
+    let malicious_root_hash = crate::maliciously_return_wrong_hash(
+        &manifest,
+        log,
+        malicious_flags,
+        checkpoint_layout.height(),
+    );
+
+    let bundled_manifest = compute_bundled_manifest(manifest);
+
+    #[cfg(feature = "malicious_code")]
+    let bundled_manifest = crate::BundledManifest {
+        root_hash: malicious_root_hash,
+        ..bundled_manifest
+    };
+
+    info!(
+        log,
+        "Computed root hash {:?} of state @{}",
+        bundled_manifest.root_hash,
+        checkpoint_layout.height()
+    );
+
+    let mut states = states.write();
+
+    if let Some(metadata) = states.states_metadata.get_mut(&checkpoint_layout.height()) {
+        metadata.bundled_manifest = Some(bundled_manifest);
+    }
+
+    release_lock_and_persist_metadata(log, metrics, state_layout, states, persist_metadata_guard);
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -542,7 +687,8 @@ mod test {
             let metrics_registry = ic_metrics::MetricsRegistry::new();
             let metrics = StateManagerMetrics::new(&metrics_registry);
             let tip_handler = layout.capture_tip_handler();
-            let (_h, _s) = spawn_tip_thread(log, tip_handler, layout, metrics);
+            let (_h, _s) =
+                spawn_tip_thread(log, tip_handler, layout, metrics, MaliciousFlags::default());
         });
     }
 
