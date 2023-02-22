@@ -71,15 +71,14 @@ PODMAN_RUN_ARGS=(
     -w "$WORKDIR"
 
     -u "$(id -u):$(id -g)"
-    --env PATH=/ic/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    --env HOME="/home/$USER"
+    -e PATH=/ic/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    -e HOME="/home/$USER"
+    -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
+    -e HOSTUSER="$USER"
     --hostname=devenv-container
     --add-host devenv-container:127.0.0.1
     --entrypoint=
     --init
-
-    -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
-    -e CI_COMMIT_REF_PROTECTED="${CI_COMMIT_REF_PROTECTED:-true}"
 )
 
 if podman version | grep -qE 'Version:\s+4.'; then
