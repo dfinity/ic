@@ -1,40 +1,3 @@
-//! This module implements an MVP version of inter-canister queries. This
-//! implementation has the following restrictions:
-//!
-//! - A canister can only query other canisters on the same subnet.
-//!
-//! - A canister can only query other canisters when it is doing non-replicated
-//! execution, i.e. the originator of the processing is a Query from an end-user
-//! and not an Ingress message.
-//!
-//! - Loops are not allowed. E.g. call graphs like A -> B -> C -> A are not
-//! supported.
-//!
-//! Some interesting factoids about inter-canister query execution to keep in
-//! mind:
-//!
-//! - If a canister produces a response then there is no point in executing any
-//! more messages on it or handling any outstanding requests that it sent. This
-//! is because additional execution will not change the produced response and as
-//! we are not committing modifications to the canister state, any modifications
-//! caused by the additional execution are not needed either.
-//!
-//! - Due to the point above, while a canister has not produced a response and
-//! has outstanding requests, we store its modified state in the query context.
-//! And as soon as it has produced a response, we drop its state. Once a
-//! canister's state has been dropped, it becomes available for being queried
-//! again.
-//!
-//! - We process the outstanding requests in a depth first search manner. This
-//! means that if canister A sends canister B two requests (M1 and M2) back to
-//! back, we first fully traverse the branch from executing M1; drop the
-//! modified state of B after this branch finishes; and then start branch M2 on
-//! a clean version of B. If we did breadth first search, then we would have to
-//! maintain two distinct versions of B.
-//!
-//! - For a lack of a better strategy, always prioritise responses over
-//! requests.
-
 use crate::{
     execution::common::{self, validate_method},
     execution::nonreplicated_query::execute_non_replicated_query,
@@ -51,7 +14,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     ExecutionComplexity, ExecutionMode, HypervisorError, SubnetAvailableMemory,
 };
-use ic_logger::{debug, error, fatal, warn, ReplicaLogger};
+use ic_logger::{fatal, warn, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
@@ -59,9 +22,7 @@ use ic_replicated_state::{
 use ic_system_api::{ApiType, ExecutionParameters, InstructionLimits};
 use ic_types::{
     ingress::WasmResult,
-    messages::{
-        CallbackId, Payload, RejectContext, Request, RequestOrResponse, Response, UserQuery,
-    },
+    messages::{Payload, RejectContext, Request, RequestOrResponse, Response, UserQuery},
     methods::WasmMethod,
     CanisterId, Cycles, NumInstructions, NumMessages, Time,
 };
@@ -69,63 +30,25 @@ use ic_types::{
     methods::{FuncRef, WasmClosure},
     NumSlices,
 };
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::VecDeque, sync::Arc};
 
-const LOOP_DETECTED_ERROR_MSG: &str =
-    "Loop detected.  MVP inter-canister queries do not support loops.";
+use super::query_call_graph::evaluate_query_call_graph;
 
-const CALL_GRAPH_TOO_DEEP_ERROR_MSG: &str =
-    "Call exceeded the limit for maximum number of nested query calls.";
-
-const TOTAL_NUM_INSTRUCTIONS_EXCEEDED: &str =
-    "Query call graph exceeded the limit for the total maximum number of instructions.";
-
-/// A simple enum representing the different things that
-/// QueryContext::enqueue_requests() can return.
-enum EnqueueRequestsResult {
-    /// The canister had some valid messages to enqueue and they were
-    /// successfully enqueued.
-    MessagesEnqueued,
-    /// The canister had no messages to enqueue.
-    NoMessages,
-    /// A loop in the callgraph was detected so no messages were enqueued.
-    LoopDetected,
-    /// The call graph is too large
-    CallGraphTooDeep,
-    /// The total number of instructions executed in call context is too large.
-    TotalNumInstructionsExceeded,
+/// The response of a query. If the query originated from a user, then it
+/// contains either `UserResponse` or `UserError`. If the query originated from
+/// a canister, then it containts `CanisterResponse`.
+pub(super) enum QueryResponse {
+    UserResponse(WasmResult),
+    UserError(UserError),
+    CanisterResponse(Response),
 }
 
-// A handy function to create a `Response` using parameters from the `Request`
-fn generate_response(request: Arc<Request>, payload: Payload) -> Response {
-    Response {
-        originator: request.sender,
-        respondent: request.receiver,
-        originator_reply_callback: request.sender_reply_callback,
-        response_payload: payload,
-        refund: Cycles::zero(),
-    }
-}
-
-/// Map an error occurred when enqueuing a new request to a user error.
-///
-/// Unless NoMessages or MessagesEnqueued, this is guaranteed to return Some.
-fn map_enqueue_error_to_user(enqueue_error: EnqueueRequestsResult) -> Option<UserError> {
-    match enqueue_error {
-        EnqueueRequestsResult::LoopDetected => Some(UserError::new(
-            ErrorCode::QueryCallGraphLoopDetected,
-            LOOP_DETECTED_ERROR_MSG.to_string(),
-        )),
-        EnqueueRequestsResult::CallGraphTooDeep => Some(UserError::new(
-            ErrorCode::QueryCallGraphTooDeep,
-            CALL_GRAPH_TOO_DEEP_ERROR_MSG.to_string(),
-        )),
-        EnqueueRequestsResult::TotalNumInstructionsExceeded => Some(UserError::new(
-            ErrorCode::QueryCallGraphTotalInstructionLimitExceeded,
-            TOTAL_NUM_INSTRUCTIONS_EXCEEDED.to_string(),
-        )),
-        EnqueueRequestsResult::NoMessages | EnqueueRequestsResult::MessagesEnqueued => None,
-    }
+/// The result of execution of a query or a response callback.
+/// The execution either produces a response or returns a possibly empty set of
+/// outgoing calls with the new canister state and the call origin.
+pub(super) enum ExecutionResult {
+    Response(QueryResponse),
+    Calls(CanisterState, CallOrigin, VecDeque<Arc<Request>>),
 }
 
 /// Returns either `WasmMethod::CompositeQuery` or `WasmMethod::Query` depending
@@ -138,8 +61,7 @@ fn wasm_query_method(canister: &CanisterState, name: String) -> WasmMethod {
     }
 }
 
-/// Handles running a single UserQuery to completion by maintaining the call
-/// graph of the query execution between canisters.
+/// Executes a single user query along with its outgoing query calls.
 pub(super) struct QueryContext<'a> {
     log: &'a ReplicaLogger,
     hypervisor: &'a Hypervisor,
@@ -148,13 +70,6 @@ pub(super) struct QueryContext<'a> {
     state: Arc<ReplicatedState>,
     network_topology: Arc<NetworkTopology>,
     data_certificate: Vec<u8>,
-    // Contains all canisters that currently have pending calls.
-    call_stack: BTreeMap<CanisterId, CanisterState>,
-    outstanding_requests: Vec<Arc<Request>>,
-    // Response (if available) waiting to be executed. We always process
-    // responses first if one is available hence, there will never be more than
-    // one outstanding response.
-    outstanding_response: Option<Response>,
     max_canister_memory_size: NumBytes,
     max_instructions_per_query: NumInstructions,
     max_query_call_graph_depth: usize,
@@ -194,9 +109,6 @@ impl<'a> QueryContext<'a> {
             state,
             network_topology,
             data_certificate,
-            call_stack: BTreeMap::new(),
-            outstanding_requests: Vec::new(),
-            outstanding_response: None,
             max_canister_memory_size,
             max_instructions_per_query,
             max_query_call_graph_depth,
@@ -208,7 +120,7 @@ impl<'a> QueryContext<'a> {
         }
     }
 
-    /// Executes the given Query sent by an end user.
+    /// Executes the given query sent by an end user.
     ///
     /// - If it produces a response return the response.
     ///
@@ -291,7 +203,9 @@ impl<'a> QueryContext<'a> {
                         old_canister,
                         method,
                         query.method_payload.as_slice(),
-                        NonReplicatedQueryKind::Stateful { call_origin },
+                        NonReplicatedQueryKind::Stateful {
+                            call_origin: call_origin.clone(),
+                        },
                         &measurement_scope,
                     );
                     canister = new_canister;
@@ -307,74 +221,39 @@ impl<'a> QueryContext<'a> {
             Err(err) => Err(err),
             Ok(Some(wasm_result)) => Ok(wasm_result),
             Ok(None) => {
-                let r = self.enqueue_requests(&mut canister);
-                match r {
-                    EnqueueRequestsResult::NoMessages => Err(UserError::new(
-                        ErrorCode::CanisterDidNotReply,
-                        format!(
-                            "Canister {} did not reply to the call",
-                            canister.canister_id()
-                        ),
-                    )),
-                    EnqueueRequestsResult::MessagesEnqueued => {
-                        self.call_stack.insert(canister.canister_id(), canister);
-                        self.run_loop(canister_id, metrics, measurement_scope)
+                // The query did not produce any response. We need to evaluate
+                // the query call graph. Note that if the call graph is empty,
+                // then a synthetic reject response will be generated.
+                let measurement_scope =
+                    MeasurementScope::nested(&metrics.query_spawned_calls, measurement_scope);
+                let mut requests = VecDeque::new();
+                self.extract_query_requests(&mut canister, &mut requests);
+                let result = evaluate_query_call_graph(
+                    self,
+                    canister,
+                    call_origin,
+                    requests,
+                    self.max_query_call_graph_depth,
+                    &measurement_scope,
+                );
+                match result {
+                    QueryResponse::UserResponse(wasm_result) => Ok(wasm_result),
+                    QueryResponse::UserError(err) => Err(err),
+                    QueryResponse::CanisterResponse(_) => {
+                        unreachable!("A user query cannot produce a canister response.");
                     }
-                    _ => Err(map_enqueue_error_to_user(r).unwrap()),
                 }
             }
         }
     }
 
-    // Keep processing the call graph till a result is achieved or no more
-    // outstanding calls are left.
-    fn run_loop<'b>(
-        &mut self,
-        starting_canister_id: CanisterId,
-        metrics: &'b QueryHandlerMetrics,
-        measurement_scope: &MeasurementScope<'b>,
-    ) -> Result<WasmResult, UserError> {
-        let measurement_scope =
-            MeasurementScope::nested(&metrics.query_spawned_calls, measurement_scope);
-        loop {
-            if let Some(response) = self.outstanding_response.take() {
-                debug!(self.log, "Executing response for {}", response.originator);
-                // Any result returned by `handle_response` is a query context
-                // terminating response and can be returned.
-                if let Some(result) = self.handle_response(response, &measurement_scope) {
-                    return result;
-                }
-                continue;
-            }
-
-            if let Some(request) = self.outstanding_requests.pop() {
-                debug!(self.log, "Executing request for {}", request.receiver);
-                if let Some(err) = self.handle_request(request, &measurement_scope) {
-                    return Err(err);
-                }
-                continue;
-            }
-
-            // There are no outstanding requests and responses. The call
-            // graph finished without producing a response.
-            debug!(
-                self.log,
-                "Call graph for {} finished without result", starting_canister_id
-            );
-            return Err(UserError::new(
-                ErrorCode::CanisterDidNotReply,
-                format!(
-                    "Canister {} did not reply to the call",
-                    starting_canister_id
-                ),
-            ));
-        }
-    }
-
-    // A helper function that enqueues any outgoing requests that the canister
-    // has.
-    fn enqueue_requests(&mut self, canister: &mut CanisterState) -> EnqueueRequestsResult {
-        let mut sent_messages = false;
+    // A helper function that extracts the query calls of the given canister and
+    // enqueues them onto the given deque.
+    fn extract_query_requests(
+        &self,
+        canister: &mut CanisterState,
+        requests: &mut VecDeque<Arc<Request>>,
+    ) {
         let canister_id = canister.canister_id();
 
         let outgoing_messages: Vec<_> = canister.output_into_iter().map(|(_, msg)| msg).collect();
@@ -407,39 +286,17 @@ impl<'a> QueryContext<'a> {
                         )
                         .unwrap();
                     match call_origin {
-                        // Messages of these types are not produced by this
-                        // module so must have existed on the canister's output
-                        // queue from before.
-                        CallOrigin::CanisterUpdate(_, _)
-                        | CallOrigin::SystemTask
-                        | CallOrigin::Ingress(_, _) => continue,
+                        CallOrigin::CanisterUpdate(..)
+                        | CallOrigin::Ingress(..)
+                        | CallOrigin::SystemTask => {}
 
-                        // We never serialize messages of such types in the
-                        // canister's state so these must have been produced by
-                        // this module.
-                        CallOrigin::Query(_) | CallOrigin::CanisterQuery(_, _) => {}
+                        CallOrigin::Query(_) | CallOrigin::CanisterQuery(_, _) => {
+                            // We never serialize messages of such types in the
+                            // canister's state so these must have been produced
+                            // by this module.
+                            requests.push_back(msg);
+                        }
                     }
-
-                    if msg.receiver == canister_id || self.call_stack.contains_key(&msg.receiver) {
-                        // Call graph loop detector. There is already a canister
-                        // in the call graph that is waiting for some responses
-                        // to come back and this canister is trying to send it
-                        // messages. The MVP inter-canister queries
-                        // implementation does not support loops.
-                        return EnqueueRequestsResult::LoopDetected;
-                    }
-
-                    if self.call_stack.len() + 1 > self.max_query_call_graph_depth {
-                        return EnqueueRequestsResult::CallGraphTooDeep;
-                    }
-
-                    self.round_limits.instructions -= self.instruction_overhead_per_query_call;
-                    if self.round_limits.reached() {
-                        return EnqueueRequestsResult::TotalNumInstructionsExceeded;
-                    }
-
-                    sent_messages = true;
-                    self.outstanding_requests.push(msg);
                 }
 
                 // Messages of these types are not produced by this
@@ -447,11 +304,6 @@ impl<'a> QueryContext<'a> {
                 // queue from before.
                 RequestOrResponse::Response(_) => {}
             }
-        }
-        if sent_messages {
-            EnqueueRequestsResult::MessagesEnqueued
-        } else {
-            EnqueueRequestsResult::NoMessages
         }
     }
 
@@ -700,35 +552,36 @@ impl<'a> QueryContext<'a> {
         }
     }
 
-    // Executes a query sent from one canister to another. If a loop in the call
-    // graph is detected, then an error is returned.
-    fn handle_request(
+    /// Executes a query call in its own query call context.
+    /// If the execution does not produce any response, then the function
+    /// returns the new query call context (canister and call origin) and a list
+    /// of outgoing query calls (requests).
+    /// If the execution produces a response, then the function returns it and
+    /// discards the call context and outgoing requests.
+    pub fn handle_request(
         &mut self,
         request: Arc<Request>,
         measurement_scope: &MeasurementScope,
-    ) -> Option<UserError> {
-        // we are always prioritising responses over requests so when we execute
-        // a request, there should not be any outstanding responses.
-        if self.outstanding_response.is_some() {
-            fatal!(
-                self.log,
-                "[EXC-BUG] Prioritising responses invariant failed. Handling a request when outstanding responses exist."
-            );
-        }
+    ) -> ExecutionResult {
+        // A handy function to create a `Response` using parameters from the `Request`
+        let to_query_result = |payload: Payload| {
+            QueryResponse::CanisterResponse(Response {
+                originator: request.sender,
+                respondent: request.receiver,
+                originator_reply_callback: request.sender_reply_callback,
+                response_payload: payload,
+                refund: Cycles::zero(),
+            })
+        };
 
         let canister_id = request.receiver;
-        // As we do not support loops in the call graph, the canister that we
-        // want to execute a request on should not already be loaded.
-        if self.call_stack.contains_key(&canister_id) {
-            error!(self.log, "[EXC-BUG] The canister that we want to execute a request on should not already be loaded.");
-        }
 
-        let canister = match self.state.get_active_canister(&request.receiver) {
+        let canister = match self.state.get_active_canister(&canister_id) {
             Ok(canister) => canister,
             Err(err) => {
-                let payload = Payload::Reject(RejectContext::from(err));
-                self.outstanding_response = Some(generate_response(request, payload));
-                return None;
+                return ExecutionResult::Response(to_query_result(Payload::Reject(
+                    RejectContext::from(err),
+                )));
             }
         };
 
@@ -740,19 +593,20 @@ impl<'a> QueryContext<'a> {
             canister,
             method,
             request.method_payload.as_slice(),
-            NonReplicatedQueryKind::Stateful { call_origin },
+            NonReplicatedQueryKind::Stateful {
+                call_origin: call_origin.clone(),
+            },
             measurement_scope,
         );
+
+        self.round_limits.instructions -= self.instruction_overhead_per_query_call;
 
         match result {
             // Execution of the message failed. We do not need to bother with
             // any outstanding requests and we can return a response.
-            Err(err) => {
-                let payload = Payload::Reject(RejectContext::from(err));
-                let response = generate_response(request, payload);
-                self.outstanding_response = Some(response);
-                None
-            }
+            Err(err) => ExecutionResult::Response(to_query_result(Payload::Reject(
+                RejectContext::from(err),
+            ))),
 
             Ok(opt_result) => {
                 match opt_result {
@@ -767,265 +621,81 @@ impl<'a> QueryContext<'a> {
                                 string,
                             )),
                         };
-                        self.outstanding_response = Some(generate_response(request, payload));
-                        None
+                        ExecutionResult::Response(to_query_result(payload))
                     }
                     None => {
-                        let r = self.enqueue_requests(&mut canister);
-                        match r {
-                            // The canister did not produce a response and did not
-                            // produce any outgoing requests. So produce a "did not
-                            // reply" response on its behalf.
-                            EnqueueRequestsResult::NoMessages => {
-                                let error_msg =
-                                    format!("Canister {} did not reply", request.receiver);
-                                let payload = Payload::Reject(RejectContext::new(
-                                    RejectCode::CanisterError,
-                                    error_msg,
-                                ));
-                                self.outstanding_response =
-                                    Some(generate_response(request, payload));
-                                None
-                            }
-                            EnqueueRequestsResult::MessagesEnqueued => {
-                                self.call_stack.insert(canister.canister_id(), canister);
-                                None
-                            }
-                            _ => map_enqueue_error_to_user(r),
-                        }
+                        let mut requests = VecDeque::default();
+                        self.extract_query_requests(&mut canister, &mut requests);
+                        ExecutionResult::Calls(canister, call_origin, requests)
                     }
                 }
             }
         }
     }
 
-    /// Handles results from executing a response on a canister where the sender
-    /// of the request was an end-user. This means that this is the very first
-    /// canister in the inter-canister query call graph hence if it produces a
-    /// response, it can be returned and the rest of the call graph abandoned.
-    fn handle_response_with_query_origin(
-        &mut self,
-        mut canister: CanisterState,
+    /// Extracts the query result from the call context action.
+    fn action_to_result(
+        &self,
+        canister_id: CanisterId,
         action: CallContextAction,
     ) -> Option<Result<WasmResult, UserError>> {
-        let canister_id = canister.canister_id();
-
         use CallContextAction::*;
-        match action {
-            Reply { payload, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        self.log,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                Some(Ok(WasmResult::Reply(payload)))
-            }
-            Reject { payload, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        self.log,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                Some(Ok(WasmResult::Reject(payload)))
-            }
-            NoResponse { refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        self.log,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
+        let (result, refund) = match action {
+            Reply { payload, refund } => (Some(Ok(WasmResult::Reply(payload))), refund),
+            Reject { payload, refund } => (Some(Ok(WasmResult::Reject(payload))), refund),
+            Fail { error, refund } => (Some(Err(error.into_user_error(&canister_id))), refund),
+            // The canister did not produce a response and there are no
+            // outstanding calls in the call context. Generate a synthetic
+            // reject message.
+            NoResponse { refund } => (
                 Some(Err(UserError::new(
                     ErrorCode::CanisterDidNotReply,
                     format!("Canister {} did not produce a response", canister_id),
-                )))
-            }
-            Fail { error, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        self.log,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                Some(Err(error.into_user_error(&canister.canister_id())))
-            }
-            // No response available and there are still outstanding
-            // callbacks.  Enqueue any produced requests and continue
-            // processing the query context.
-            NotYetResponded => {
-                let r = self.enqueue_requests(&mut canister);
-                match r {
-                    EnqueueRequestsResult::NoMessages | EnqueueRequestsResult::MessagesEnqueued => {
-                        self.call_stack.insert(canister.canister_id(), canister);
-                        None
-                    }
-                    _ => map_enqueue_error_to_user(r).map(Err),
-                }
-            }
-            // This state indicates that the canister produced a
-            // response or reject earlier and we continued to keep
-            // executing it.  This should not happen as once the
-            // canister has produced a response, we drop its state and
-            // do not process further messages on it.
+                ))),
+                refund,
+            ),
+            // The canister did not produce a response, but there are
+            // outstanding calls in the call context that may respond.
+            NotYetResponded => (None, Cycles::zero()),
+            // This state indicates that the canister produced a response or
+            // reject earlier and we continued to keep executing it. This
+            // should not happen as once the canister has produced a response,
+            // we drop its state and do not process further messages on it.
             AlreadyResponded => fatal!(
                 self.log,
                 "Canister {}: Should not be possible to keep executing after producing a response",
                 canister_id
             ),
-        }
-    }
-
-    // Handles execution results for canister where the sender of the request is
-    // a canister. Any produced response must be enqueued for further handling.
-    fn handle_response_with_canister_origin(
-        &mut self,
-        mut canister: CanisterState,
-        originator: CanisterId,
-        callback_id: CallbackId,
-        action: CallContextAction,
-    ) -> Option<Result<WasmResult, UserError>> {
-        let canister_id = canister.canister_id();
-        let logger = self.log;
-
-        // A helper function to produce and enqueue `Response`s from
-        // common fields.
-        let mut enqueue_response = |payload: Payload| {
-            let response = Response {
-                originator,
-                respondent: canister_id,
-                originator_reply_callback: callback_id,
-                response_payload: payload,
-                refund: Cycles::zero(),
-            };
-            self.outstanding_response = Some(response);
         };
 
-        use CallContextAction::*;
-        match action {
-            Reply { payload, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        logger,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                enqueue_response(Payload::Data(payload));
-                // The canister has produced a response so remove any other
-                // requests that it may have produced to minimize unnecessary
-                // work.
-                self.outstanding_requests
-                    .retain(|request| request.sender != canister_id);
-                None
-            }
-
-            Reject { payload, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        logger,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                enqueue_response(Payload::Reject(RejectContext::new(
-                    RejectCode::CanisterReject,
-                    payload,
-                )));
-                // The canister has produced a response so remove any other
-                // requests that it may have produced to minimize unnecessary
-                // work.
-                self.outstanding_requests
-                    .retain(|request| request.sender != canister_id);
-                None
-            }
-
-            NoResponse { refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        logger,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                enqueue_response(Payload::Reject(RejectContext::new(
-                    RejectCode::CanisterError,
-                    "Canister did not reply".to_string(),
-                )));
-                None
-            }
-
-            Fail { error, refund } => {
-                if !refund.is_zero() {
-                    warn!(
-                        logger,
-                        "[EXC-BUG] No cycles are refunded in a response to a query call."
-                    );
-                }
-                let user_error = error.into_user_error(&canister.canister_id());
-                enqueue_response(Payload::Reject(RejectContext::from(user_error)));
-                None
-            }
-
-            // No response available and there are still outstanding
-            // callbacks so enqueue any produced requests and continue
-            // processing the query context.
-            NotYetResponded => {
-                let r = self.enqueue_requests(&mut canister);
-                match r {
-                    EnqueueRequestsResult::NoMessages | EnqueueRequestsResult::MessagesEnqueued => {
-                        self.call_stack.insert(canister.canister_id(), canister);
-                        None
-                    }
-                    _ => map_enqueue_error_to_user(r).map(Err),
-                }
-            }
-
-            // This state indicates that the canister produced a
-            // response or reject earlier and we continued to keep
-            // executing it.  This should not happen as once the
-            // canister has produced a response, we drop its state and
-            // do not process further messages on it.
-            AlreadyResponded => fatal!(
+        if !refund.is_zero() {
+            warn!(
                 self.log,
-                "Canister {}: Should not be possible to keep executing after producing a response",
-                canister.canister_id()
-            ),
-        }
-    }
-
-    // Executes a query response sent from a canister to another canister.  If
-    // executing the response produces another response that terminates the
-    // query context, it is returned; otherwise, None is returned.  Any other
-    // intermediate requests or response are enqueued by the function.
-    fn handle_response(
-        &mut self,
-        response: Response,
-        measurement_scope: &MeasurementScope,
-    ) -> Option<Result<WasmResult, UserError>> {
-        if self.outstanding_response.is_some() {
-            fatal!(
-                self.log,
-                "[EXC-BUG] Prioritising responses invariant failed. There will never be more than one outstanding response."
+                "[EXC-BUG] Canister {} refunded {} in a response to a query call.",
+                canister_id,
+                refund,
             );
         }
+        result
+    }
 
+    /// Executes the response callback corresponding to the given response.
+    /// If the execution does not produce any response, then the function returns
+    /// a new canister state together with the old and new outgoing requests.
+    /// If the execution produces a response, then the function returns it and
+    /// discards the canister and outgoing requests.
+    pub fn handle_response(
+        &mut self,
+        canister: CanisterState,
+        response: Response,
+        mut requests: VecDeque<Arc<Request>>,
+        measurement_scope: &MeasurementScope,
+    ) -> ExecutionResult {
         let canister_id = response.originator;
-        // As we are executing a response, we must have executed a request on
-        // the canister before and must have stored its state so the following
-        // should not fail.
-        let canister = self.call_stack.remove(&canister_id).unwrap_or_else(|| {
-            fatal!(
-                self.log,
-                "Expected to find canister {} in the cache",
-                canister_id
-            )
-        });
-
-        let (canister, call_origin, action) =
+        let (mut canister, call_origin, action) =
             self.execute_callback(canister, response, measurement_scope);
 
         match call_origin {
-            CallOrigin::Query(_) => self.handle_response_with_query_origin(canister, action),
-
             CallOrigin::CanisterUpdate(_, _)
             | CallOrigin::Ingress(_, _)
             | CallOrigin::SystemTask => fatal!(
@@ -1034,8 +704,84 @@ impl<'a> QueryContext<'a> {
                 canister_id
             ),
 
+            CallOrigin::Query(_) => match self.action_to_result(canister.canister_id(), action) {
+                Some(Ok(wasm_result)) => {
+                    ExecutionResult::Response(QueryResponse::UserResponse(wasm_result))
+                }
+                Some(Err(error)) => ExecutionResult::Response(QueryResponse::UserError(error)),
+                None => {
+                    self.extract_query_requests(&mut canister, &mut requests);
+                    ExecutionResult::Calls(canister, call_origin, requests)
+                }
+            },
             CallOrigin::CanisterQuery(originator, callback_id) => {
-                self.handle_response_with_canister_origin(canister, originator, callback_id, action)
+                let canister_id = canister.canister_id();
+                let to_query_result = |payload| {
+                    let response = Response {
+                        originator,
+                        respondent: canister_id,
+                        originator_reply_callback: callback_id,
+                        refund: Cycles::zero(),
+                        response_payload: payload,
+                    };
+                    QueryResponse::CanisterResponse(response)
+                };
+                match self.action_to_result(canister_id, action) {
+                    Some(Ok(wasm_result)) => {
+                        let payload = match wasm_result {
+                            WasmResult::Reply(payload) => Payload::Data(payload),
+                            WasmResult::Reject(reject) => Payload::Reject(RejectContext::new(
+                                RejectCode::CanisterReject,
+                                reject,
+                            )),
+                        };
+                        ExecutionResult::Response(to_query_result(payload))
+                    }
+                    Some(Err(error)) => ExecutionResult::Response(to_query_result(
+                        Payload::Reject(RejectContext::from(error)),
+                    )),
+                    None => {
+                        self.extract_query_requests(&mut canister, &mut requests);
+                        ExecutionResult::Calls(canister, call_origin, requests)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Returns true if the total number of instructions executed by queries and
+    /// response callbacks exceeds the limit in `round_limits`.
+    pub fn instruction_limit_reached(&self) -> bool {
+        self.round_limits.reached()
+    }
+
+    /// Returns a synthetic reject reponse for the case when a query call
+    /// context did not produce any response.
+    pub fn empty_response(
+        &self,
+        canister_id: CanisterId,
+        call_origin: CallOrigin,
+    ) -> QueryResponse {
+        let error = UserError::new(
+            ErrorCode::CanisterDidNotReply,
+            format!("Canister {} did not produce a response", canister_id),
+        );
+        match call_origin {
+            CallOrigin::Ingress(_, _)
+            | CallOrigin::CanisterUpdate(_, _)
+            | CallOrigin::SystemTask => {
+                unreachable!("Expected a query call context");
+            }
+            CallOrigin::Query(_) => QueryResponse::UserError(error),
+            CallOrigin::CanisterQuery(originator, callback_id) => {
+                let response = Response {
+                    originator,
+                    respondent: canister_id,
+                    originator_reply_callback: callback_id,
+                    refund: Cycles::zero(),
+                    response_payload: Payload::Reject(RejectContext::from(error)),
+                };
+                QueryResponse::CanisterResponse(response)
             }
         }
     }

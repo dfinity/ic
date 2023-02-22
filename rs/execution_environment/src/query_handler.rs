@@ -1,6 +1,7 @@
 //! This module implements the `QueryHandler` trait which is used to execute
 //! query methods via query calls.
 
+mod query_call_graph;
 mod query_context;
 mod query_scheduler;
 #[cfg(test)]
