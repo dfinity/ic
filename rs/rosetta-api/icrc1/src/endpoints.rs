@@ -42,6 +42,8 @@ impl From<CoreTransferError> for TransferError {
             LTE::TxDuplicate { duplicate_of } => TE::Duplicate {
                 duplicate_of: Nat::from(duplicate_of),
             },
+            LTE::InsufficientAllowance { .. } => todo!(),
+            LTE::ExpiredApproval { .. } => todo!(),
         }
     }
 }

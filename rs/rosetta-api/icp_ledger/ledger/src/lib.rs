@@ -3,16 +3,19 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1::Account;
 use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
 use ic_ledger_canister_core::blockchain::Blockchain;
-use ic_ledger_canister_core::ledger::{self as core_ledger, LedgerData, TransactionInfo};
+use ic_ledger_canister_core::ledger::{
+    self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
+};
 use ic_ledger_core::{
+    approvals::AllowanceTable,
     balances::Balances,
     block::{EncodedBlock, HashOf},
     timestamp::TimeStamp,
 };
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use icp_ledger::{
-    AccountIdentifier, Block, LedgerBalances, Memo, Operation, PaymentError, Transaction,
-    TransferError, TransferFee, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, ApprovalKey, Block, LedgerBalances, Memo, Operation, PaymentError,
+    Transaction, TransferError, TransferFee, DEFAULT_TRANSFER_FEE,
 };
 use intmap::IntMap;
 use lazy_static::lazy_static;
@@ -62,6 +65,8 @@ fn unknown_token() -> String {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Ledger {
     pub balances: LedgerBalances,
+    #[serde(default)]
+    pub approvals: AllowanceTable<ApprovalKey, AccountIdentifier, AccountIdentifier>,
     pub blockchain: Blockchain<dfn_runtime::DfnRuntime, IcpLedgerArchiveWasm>,
     // A cap on the maximum number of accounts
     pub maximum_number_of_accounts: usize,
@@ -101,13 +106,34 @@ pub struct Ledger {
     pub token_name: String,
 }
 
-impl LedgerData for Ledger {
+impl LedgerContext for Ledger {
     type AccountId = AccountIdentifier;
+    type SpenderId = AccountIdentifier;
+    type Approvals = AllowanceTable<ApprovalKey, Self::AccountId, Self::SpenderId>;
+    type BalancesStore = HashMap<AccountIdentifier, Tokens>;
+
+    fn balances(&self) -> &Balances<Self::BalancesStore> {
+        &self.balances
+    }
+
+    fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
+        &mut self.balances
+    }
+
+    fn approvals(&self) -> &Self::Approvals {
+        &self.approvals
+    }
+
+    fn approvals_mut(&mut self) -> &mut Self::Approvals {
+        &mut self.approvals
+    }
+}
+
+impl LedgerData for Ledger {
     type Runtime = dfn_runtime::DfnRuntime;
     type ArchiveWasm = IcpLedgerArchiveWasm;
     type Transaction = Transaction;
     type Block = Block;
-    type BalancesStore = HashMap<AccountIdentifier, Tokens>;
 
     fn transaction_window(&self) -> Duration {
         self.transaction_window
@@ -135,14 +161,6 @@ impl LedgerData for Ledger {
 
     fn token_symbol(&self) -> &str {
         &self.token_symbol
-    }
-
-    fn balances(&self) -> &Balances<Self::BalancesStore> {
-        &self.balances
-    }
-
-    fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
-        &mut self.balances
     }
 
     fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm> {
@@ -177,6 +195,7 @@ impl LedgerData for Ledger {
 impl Default for Ledger {
     fn default() -> Self {
         Self {
+            approvals: Default::default(),
             balances: LedgerBalances::default(),
             blockchain: Blockchain::default(),
             maximum_number_of_accounts: 28_000_000,
@@ -258,6 +277,8 @@ impl Ledger {
                 }),
                 CTE::TxCreatedInFuture { .. } => PTE(TE::TxCreatedInFuture),
                 CTE::TxDuplicate { duplicate_of } => PTE(TE::TxDuplicate { duplicate_of }),
+                CTE::InsufficientAllowance { .. } => todo!(),
+                CTE::ExpiredApproval { .. } => todo!(),
                 CTE::TxThrottled => PaymentError::Reject(
                     concat!(
                         "Too many transactions in replay prevention window, ",
@@ -272,7 +293,7 @@ impl Ledger {
     /// This adds a pre created block to the ledger. This should only be used
     /// during canister migration or upgrade
     pub fn add_block(&mut self, block: Block) -> Result<BlockIndex, String> {
-        icp_ledger::apply_operation(&mut self.balances, &block.transaction.operation)
+        icp_ledger::apply_operation(self, &block.transaction.operation, block.timestamp)
             .map_err(|e| format!("failed to execute transfer {:?}: {:?}", block, e))?;
         self.blockchain.add_block(block)
     }

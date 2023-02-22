@@ -112,6 +112,20 @@ type Operation = variant {
         amount : Tokens;
         fee : Tokens;
     };
+    Approve : record {
+        from : AccountIdentifier;
+        spender : AccountIdentifier;
+        allowance_e8s : int;
+        fee : Tokens;
+        expires_at : opt TimeStamp;
+    };
+    TransferFrom : record {
+        from : AccountIdentifier;
+        to : AccountIdentifier;
+        spender : AccountIdentifier;
+        amount : Tokens;
+        fee : Tokens;
+    };
 };
 
  

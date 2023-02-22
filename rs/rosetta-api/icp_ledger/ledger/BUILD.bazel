@@ -23,6 +23,7 @@ rust_library(
     version = "0.8.0",
     deps = [
         "//rs/constants",
+        "//rs/crypto/sha",
         "//rs/rosetta-api/icp_ledger",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/ledger_canister_core",

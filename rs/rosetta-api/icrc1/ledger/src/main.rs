@@ -14,7 +14,7 @@ use ic_icrc1::{
 };
 use ic_icrc1_ledger::{Ledger, LedgerArgument};
 use ic_ledger_canister_core::ledger::{
-    apply_transaction, archive_blocks, LedgerAccess, LedgerData,
+    apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
 };
 use ic_ledger_core::{timestamp::TimeStamp, tokens::Tokens};
 use num_traits::ToPrimitive;
