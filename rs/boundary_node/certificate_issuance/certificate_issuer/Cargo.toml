@@ -16,6 +16,7 @@ chacha20poly1305 = "0.10.0"
 chrono = { version = "0.4.19", default-features = false, features = ["clock"] }
 clap = { version = "4.0.18", features = ["derive"] }
 cloudflare = "0.9.1"
+flate2 = "1.0.22"
 futures = "0.3.25"
 garcon = "0.2.3"
 hyper = { version = "0.14.20", features = ["full"] }

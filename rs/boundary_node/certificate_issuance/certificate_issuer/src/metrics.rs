@@ -603,6 +603,7 @@ impl<T: Check> Check for WithMetrics<T> {
         let status = match &out {
             Ok(_) => "ok",
             Err(err) => match err {
+                CheckError::ExistingDnsTxtChallenge { .. } => "existing-dns-txt-challenge",
                 CheckError::MissingDnsCname { .. } => "missing-dns-cname",
                 CheckError::MissingDnsTxtCanisterId { .. } => "missing-dns-txt-canister-id",
                 CheckError::MultipleDnsTxtCanisterId { .. } => "multiple-dns-txt-canister-id",

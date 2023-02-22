@@ -1,19 +1,26 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::Principal;
+use flate2::bufread::GzDecoder;
 use ic_agent::Agent;
 use ic_utils::{
     call::SyncCall,
-    interfaces::http_request::{HttpRequestCanister, HttpResponse},
+    interfaces::http_request::{HeaderField, HttpRequestCanister},
 };
 use mockall::automock;
-use std::sync::Arc;
+use std::{
+    io::{BufRead, Read},
+    sync::Arc,
+};
 use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
 
 use crate::dns::Resolve;
 
 #[derive(Debug, thiserror::Error)]
 pub enum CheckError {
+    #[error("existing dns txt challenge record at {src}")]
+    ExistingDnsTxtChallenge { src: String },
+
     #[error("missing dns cname record from {src} to {dst}")]
     MissingDnsCname { src: String, dst: String },
 
@@ -63,34 +70,25 @@ impl Checker {
     }
 }
 
-fn has_well_known_file(response: &HttpResponse) -> bool {
-    if response.body.is_empty() {
-        return false;
-    }
-
-    let response_body = String::from_utf8(response.body.clone()).unwrap();
-
-    let first_line = response_body.lines().next().unwrap();
-
-    let first_char = first_line.chars().next().unwrap();
-
-    !matches!(first_char, '<' | '{')
-}
-
-fn file_contents(response: &HttpResponse) -> Vec<String> {
-    let mut file_contents = Vec::new();
-
-    for line in String::from_utf8(response.body.clone()).unwrap().lines() {
-        file_contents.push(line.to_string());
-    }
-
-    file_contents
-}
-
 #[async_trait]
 impl Check for Checker {
     async fn check(&self, name: &str) -> Result<Principal, CheckError> {
-        // Phase 1 - Ensure a challenge delegation CNAME record exists
+        // Phase 1 - Ensure NO existing TXT challenge record exists
+        let txt_src = format!("_acme-challenge.{}.", name);
+
+        match self.resolver.lookup(&txt_src, RecordType::TXT).await {
+            Ok(_) => Err(CheckError::ExistingDnsTxtChallenge {
+                src: txt_src.to_owned(),
+            }),
+            Err(err) => match err.kind() {
+                ResolveErrorKind::NoRecordsFound { .. } => Ok(()),
+                _ => Err(CheckError::UnexpectedError(anyhow!(
+                    "failed to resolve TXT: {err}"
+                ))),
+            },
+        }?;
+
+        // Phase 2 - Ensure a challenge delegation CNAME record exists
         let cname_src = format!("_acme-challenge.{}.", name);
         let cname_dst = format!("_acme-challenge.{}.{}.", name, self.delegation_domain);
 
@@ -115,7 +113,7 @@ impl Check for Checker {
                 Ok(())
             })?;
 
-        // Phase 2 - Ensure a TXT record for a canister mapping exists
+        // Phase 3 - Ensure a TXT record for a canister mapping exists
         let txt_src = format!("_canister-id.{}.", name);
 
         let canister_id = self
@@ -154,42 +152,62 @@ impl Check for Checker {
                 Ok(id)
             })?;
 
-        let canister = HttpRequestCanister::create(self.agent.as_ref(), canister_id);
-        let (response,) = canister
+        // Phase 4 - Ensure canister mentions known domain
+        let (response,) = HttpRequestCanister::create(&self.agent, canister_id)
             .http_request("GET", "/.well-known/ic-domains", vec![], vec![])
             .call()
             .await
-            .unwrap();
+            .map_err(|_| CheckError::KnownDomainsUnavailable {
+                id: canister_id.to_string(),
+            })?;
 
         match response.status_code {
-            200 => {}
-            404 => {
-                return Err(CheckError::MissingKnownDomains {
-                    id: canister_id.to_string(),
-                });
-            }
-            _ => {
-                return Err(CheckError::KnownDomainsUnavailable {
-                    id: canister_id.to_string(),
-                });
-            }
-        }
+            200 => Ok(()),
+            404 => Err(CheckError::MissingKnownDomains {
+                id: canister_id.to_string(),
+            }),
+            _ => Err(CheckError::KnownDomainsUnavailable {
+                id: canister_id.to_string(),
+            }),
+        }?;
 
-        if !has_well_known_file(&response) {
+        // Decode body
+        let enc = response
+            .headers
+            .iter()
+            .find(|HeaderField(name, _)| name == "Content-Encoding")
+            .map(|HeaderField(_, value)| value.as_ref());
+
+        let body = match enc {
+            // Identity
+            None | Some("identity") => Ok(response.body),
+
+            // Gzip
+            Some("gzip") => {
+                let mut buf = Vec::new();
+                GzDecoder::new(response.body.as_ref())
+                    .read_to_end(&mut buf)
+                    .map_err(|err| {
+                        CheckError::UnexpectedError(anyhow!(
+                            "failed to decode gzipped response body: {err}"
+                        ))
+                    })?;
+                Ok(buf)
+            }
+
+            // Other
+            Some(enc) => Err(anyhow!("unsupported content-encoding: {}", enc)),
+        }?;
+
+        // Search for name in response body
+        if !body.lines().any(|ln| match ln {
+            Ok(ln) => ln.eq(name),
+            _ => false,
+        }) {
             return Err(CheckError::MissingKnownDomains {
                 id: canister_id.to_string(),
             });
         }
-
-        let lns = file_contents(&response).to_vec();
-
-        if !lns.iter().any(|ln| ln.as_str().eq(name)) {
-            return Err(CheckError::MissingKnownDomains {
-                id: canister_id.to_string(),
-            });
-        }
-
-        // Phase 4 (Optional) - Ensure a CNAME for the domain exists pointing it at a valid endpoint
 
         Ok(canister_id)
     }

@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "@crate_index//:chrono",
     "@crate_index//:clap_4_0_0",
     "@crate_index//:cloudflare",
+    "@crate_index//:flate2",
     "@crate_index//:futures",
     "@crate_index//:garcon",
     "@crate_index//:hyper-rustls",
