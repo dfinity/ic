@@ -155,6 +155,7 @@ def create_env_variables(is_local_run: bool, artifact_dir: str, ci_project_dir: 
     env["PATH"] = f"{ci_project_dir}/rs/tests:" + env["PATH"]
     if not is_local_run:
         env["XNET_TEST_CANISTER_WASM_PATH"] = f"{artifact_dir}/xnet-test-canister.wasm"
+        env["REGISTRY_CANISTER_WASM_PATH"] = f"{artifact_dir}/registry-canister.wasm"
     slack_notify = f"{ci_project_dir}/gitlab-ci/src/notify_slack"
     if env.get("PYTHONPATH") is None:
         env.setdefault("PYTHONPATH", slack_notify)
