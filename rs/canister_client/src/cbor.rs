@@ -1,8 +1,7 @@
-use crate::agent::Agent;
 use ic_canister_client_sender::Sender;
 use ic_crypto_tree_hash::{LabeledTree, LookupStatus, Path};
-use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
+    crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
         HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope, HttpUserQuery, MessageId,
@@ -88,7 +87,7 @@ pub fn parse_read_state_response(
 }
 
 /// Given a CBOR response from a `query`, extract the response.
-pub(crate) fn parse_query_response(message: &CBOR) -> Result<RequestStatus, String> {
+pub fn parse_query_response(message: &CBOR) -> Result<RequestStatus, String> {
     let content = match message {
         CBOR::Map(content) => Ok(content),
         cbor => Err(format!(
@@ -148,68 +147,72 @@ pub(crate) fn parse_query_response(message: &CBOR) -> Result<RequestStatus, Stri
     })
 }
 
-impl Agent {
-    /// Prepares an update request.
-    pub fn prepare_update<S: ToString>(
-        &self,
-        canister_id: &CanisterId,
-        method: S,
-        arguments: Vec<u8>,
-        nonce: Vec<u8>,
-        ingress_expiry: Time,
-    ) -> Result<(SignedRequestBytes, MessageId), Box<dyn Error>> {
-        let content = HttpCallContent::Call {
-            update: HttpCanisterUpdate {
-                canister_id: to_blob(canister_id),
-                method_name: method.to_string(),
-                arg: Blob(arguments),
-                nonce: Some(Blob(nonce)),
-                sender: self.sender_field.clone(),
-                ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
-            },
-        };
+/// Prepares an update request.
+pub fn prepare_update<S: ToString>(
+    sender: &Sender,
+    canister_id: &CanisterId,
+    method: S,
+    arguments: Vec<u8>,
+    nonce: Vec<u8>,
+    ingress_expiry: Time,
+    sender_field: Blob,
+) -> Result<(SignedRequestBytes, MessageId), Box<dyn Error>> {
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: to_blob(canister_id),
+            method_name: method.to_string(),
+            arg: Blob(arguments),
+            nonce: Some(Blob(nonce)),
+            sender: sender_field,
+            ingress_expiry: ingress_expiry.as_nanos_since_unix_epoch(),
+        },
+    };
 
-        let (submit_request, request_id) = sign_submit(content, &self.sender)?;
-        let signed_request_bytes = SignedRequestBytes::try_from(submit_request)?;
-        Ok((signed_request_bytes, request_id))
-    }
+    let (submit_request, request_id) = sign_submit(content, sender)?;
+    let signed_request_bytes = SignedRequestBytes::try_from(submit_request)?;
+    Ok((signed_request_bytes, request_id))
+}
 
-    /// Prepares and serializes a CBOR query request.
-    pub fn prepare_query(
-        &self,
-        canister_id: &CanisterId,
-        method: &str,
-        arguments: Vec<u8>,
-    ) -> Result<SignedRequestBytes, Box<dyn Error>> {
-        let content = HttpQueryContent::Query {
-            query: HttpUserQuery {
-                canister_id: to_blob(canister_id),
-                method_name: method.to_string(),
-                arg: Blob(arguments),
-                sender: self.sender_field.clone(),
-                nonce: None,
-                ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
-            },
-        };
+/// Prepares and serializes a CBOR query request.
+pub fn prepare_query(
+    sender: &Sender,
+    canister_id: &CanisterId,
+    method: &str,
+    arguments: Vec<u8>,
+    sender_field: Blob,
+) -> Result<SignedRequestBytes, Box<dyn Error>> {
+    let content = HttpQueryContent::Query {
+        query: HttpUserQuery {
+            canister_id: to_blob(canister_id),
+            method_name: method.to_string(),
+            arg: Blob(arguments),
+            sender: sender_field,
+            nonce: None,
+            ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
+        },
+    };
 
-        let request = sign_query(content, &self.sender)?;
-        Ok(SignedRequestBytes::try_from(request)?)
-    }
+    let request = sign_query(content, sender)?;
+    Ok(SignedRequestBytes::try_from(request)?)
+}
 
-    /// Prepares and serializes a CBOR read_state request, with the given paths
-    pub fn prepare_read_state(&self, paths: &[Path]) -> Result<Vec<u8>, Box<dyn Error>> {
-        let content = HttpReadStateContent::ReadState {
-            read_state: HttpReadState {
-                sender: self.sender_field.clone(),
-                paths: paths.to_vec(),
-                nonce: None,
-                ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
-            },
-        };
+/// Prepares and serializes a CBOR read_state request, with the given paths
+pub fn prepare_read_state(
+    sender: &Sender,
+    paths: &[Path],
+    sender_field: Blob,
+) -> Result<SignedRequestBytes, Box<dyn Error>> {
+    let content = HttpReadStateContent::ReadState {
+        read_state: HttpReadState {
+            sender: sender_field,
+            paths: paths.to_vec(),
+            nonce: None,
+            ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
+        },
+    };
 
-        let request = sign_read_state(content, &self.sender)?;
-        Ok(SignedRequestBytes::try_from(request)?.into())
-    }
+    let request = sign_read_state(content, sender)?;
+    Ok(SignedRequestBytes::try_from(request)?)
 }
 
 fn to_blob(canister_id: &CanisterId) -> Blob {
@@ -284,24 +287,6 @@ fn sign_query(
         sender_sig,
         sender_delegation: None,
     })
-}
-
-pub(crate) fn bytes_to_cbor(bytes: Vec<u8>) -> Result<CBOR, String> {
-    let cbor = serde_cbor::from_slice(&bytes).map_err(|e| {
-        format!(
-            "Agent::bytes_to_cbor: Failed to parse result from IC, got: {:?} - error {:?}",
-            String::from_utf8(
-                bytes
-                    .iter()
-                    .copied()
-                    .flat_map(std::ascii::escape_default)
-                    .collect()
-            )
-            .expect("ASCII is legal utf8"),
-            e
-        )
-    })?;
-    Ok(cbor)
 }
 
 #[cfg(test)]

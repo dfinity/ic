@@ -3,7 +3,7 @@ use crate::cmd::{
     WithTrustedNeuronsFollowingNeuronCmd,
 };
 use candid::{decode_one, Encode};
-use ic_canister_client::{Agent, Sender};
+use ic_canister_client::{prepare_update, Agent, Sender};
 use ic_nervous_system_common::ledger;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
@@ -58,9 +58,16 @@ fn make_signed_ingress(
     let nonce = format!("{:?}", std::time::Instant::now())
         .as_bytes()
         .to_vec();
-    let (http_body, _request_id) = agent
-        .prepare_update(&canister_id, method, payload, nonce, expiry)
-        .map_err(|err| format!("Error preparing update message: {:?}", err))?;
+    let (http_body, _request_id) = prepare_update(
+        &agent.sender,
+        &canister_id,
+        method,
+        payload,
+        nonce,
+        expiry,
+        agent.sender_field.clone(),
+    )
+    .map_err(|err| format!("Error preparing update message: {:?}", err))?;
     SignedIngress::try_from(http_body)
         .map_err(|err| format!("Error converting to SignedIngress: {:?}", err))
 }
@@ -404,9 +411,16 @@ pub fn atomic_mutate(
     let nonce = format!("{:?}", std::time::Instant::now())
         .as_bytes()
         .to_vec();
-    let (http_body, _request_id) = agent
-        .prepare_update(&canister_id, "atomic_mutate", payload, nonce, expiry)
-        .map_err(|err| format!("Error preparing update message: {:?}", err))?;
+    let (http_body, _request_id) = prepare_update(
+        &agent.sender,
+        &canister_id,
+        "atomic_mutate",
+        payload,
+        nonce,
+        expiry,
+        agent.sender_field.clone(),
+    )
+    .map_err(|err| format!("Error preparing update message: {:?}", err))?;
     SignedIngress::try_from(http_body)
         .map_err(|err| format!("Error converting to SignedIngress: {:?}", err))
 }
