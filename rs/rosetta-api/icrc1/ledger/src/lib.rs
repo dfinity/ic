@@ -5,6 +5,7 @@ use candid::{
     types::number::{Int, Nat},
     CandidType,
 };
+use ic_base_types::PrincipalId;
 use ic_icrc1::endpoints::{
     ArchivedTransactionRange, GetTransactionsResponse, QueryArchiveFn, Transaction as Tx, Value,
 };
@@ -12,10 +13,11 @@ use ic_icrc1::{Account, Block, LedgerBalances, Transaction};
 use ic_ledger_canister_core::{
     archive::{ArchiveCanisterWasm, ArchiveOptions},
     blockchain::Blockchain,
-    ledger::{apply_transaction, block_locations, LedgerData, TransactionInfo},
+    ledger::{apply_transaction, block_locations, LedgerContext, LedgerData, TransactionInfo},
     range_utils,
 };
 use ic_ledger_core::{
+    approvals::AllowanceTable,
     balances::Balances,
     block::{BlockIndex, BlockType, HashOf},
     timestamp::TimeStamp,
@@ -179,13 +181,43 @@ impl Ledger {
     }
 }
 
-impl LedgerData for Ledger {
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct ApprovalKey(Account, PrincipalId);
+
+impl From<(&Account, &PrincipalId)> for ApprovalKey {
+    fn from((account, principal): (&Account, &PrincipalId)) -> Self {
+        Self(*account, *principal)
+    }
+}
+
+impl LedgerContext for Ledger {
     type AccountId = Account;
+    type SpenderId = PrincipalId;
+    type Approvals = AllowanceTable<ApprovalKey, Account, PrincipalId>;
+    type BalancesStore = HashMap<Self::AccountId, Tokens>;
+
+    fn balances(&self) -> &Balances<Self::BalancesStore> {
+        &self.balances
+    }
+
+    fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
+        &mut self.balances
+    }
+
+    fn approvals(&self) -> &Self::Approvals {
+        unimplemented!()
+    }
+
+    fn approvals_mut(&mut self) -> &mut Self::Approvals {
+        unimplemented!()
+    }
+}
+
+impl LedgerData for Ledger {
     type Runtime = CdkRuntime;
     type ArchiveWasm = Icrc1ArchiveWasm;
     type Transaction = Transaction;
     type Block = Block;
-    type BalancesStore = HashMap<Self::AccountId, Tokens>;
 
     fn transaction_window(&self) -> Duration {
         TRANSACTION_WINDOW
@@ -213,14 +245,6 @@ impl LedgerData for Ledger {
 
     fn token_symbol(&self) -> &str {
         &self.token_symbol
-    }
-
-    fn balances(&self) -> &Balances<Self::BalancesStore> {
-        &self.balances
-    }
-
-    fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
-        &mut self.balances
     }
 
     fn blockchain(&self) -> &Blockchain<Self::Runtime, Self::ArchiveWasm> {

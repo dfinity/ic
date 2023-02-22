@@ -1,10 +1,15 @@
-use crate::Ledger;
+use crate::{AccountIdentifier, Ledger};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ledger_canister_core::{archive::Archive, ledger as core_ledger, ledger::LedgerTransaction};
+use ic_ledger_canister_core::{
+    archive::Archive,
+    ledger as core_ledger,
+    ledger::{LedgerContext, LedgerTransaction, TxApplyError},
+};
 use ic_ledger_core::{
+    approvals::{Allowance, Approvals},
     block::{BlockIndex, BlockType},
     timestamp::TimeStamp,
-    tokens::Tokens,
+    tokens::{SignedTokens, Tokens},
 };
 use icp_ledger::{
     apply_operation, ArchiveOptions, Block, LedgerBalances, Memo, Operation, PaymentError,
@@ -13,6 +18,22 @@ use icp_ledger::{
 use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
+
+fn test_account_id(n: u64) -> AccountIdentifier {
+    PrincipalId::new_user_test_id(n).into()
+}
+
+fn tokens(n: u64) -> Tokens {
+    Tokens::from_e8s(n)
+}
+
+fn stokens(n: i128) -> SignedTokens {
+    SignedTokens::try_from_i128(n).unwrap()
+}
+
+fn ts(n: u64) -> TimeStamp {
+    TimeStamp::from_nanos_since_unix_epoch(n)
+}
 
 #[test]
 fn balances_overflow() {
@@ -78,122 +99,143 @@ fn balances_overflow() {
 
 #[test]
 fn balances_remove_accounts_with_zero_balance() {
-    let mut b = LedgerBalances::new();
+    let mut ctx = Ledger::default();
     let canister = CanisterId::from_u64(7).get().into();
     let target_canister = CanisterId::from_u64(13).into();
+    let now = ts(123456789);
     apply_operation(
-        &mut b,
+        &mut ctx,
         &Operation::Mint {
             to: canister,
             amount: Tokens::from_e8s(1000),
         },
+        now,
     )
     .unwrap();
     // verify that an account entry exists for the `canister`
-    assert_eq!(b.store.get(&canister), Some(&Tokens::from_e8s(1000)));
+    assert_eq!(
+        ctx.balances().store.get(&canister),
+        Some(&Tokens::from_e8s(1000))
+    );
     // make 2 transfers that empty the account
     for _ in 0..2 {
         apply_operation(
-            &mut b,
+            &mut ctx,
             &Operation::Transfer {
                 from: canister,
                 to: target_canister,
                 amount: Tokens::from_e8s(400),
                 fee: Tokens::from_e8s(100),
             },
+            now,
         )
         .unwrap();
     }
     // target canister's balance adds up
-    assert_eq!(b.store.get(&target_canister), Some(&Tokens::from_e8s(800)));
+    assert_eq!(
+        ctx.balances().store.get(&target_canister),
+        Some(&Tokens::from_e8s(800))
+    );
     // source canister has been removed
-    assert_eq!(b.store.get(&canister), None);
-    assert_eq!(b.account_balance(&canister), Tokens::ZERO);
+    assert_eq!(ctx.balances().store.get(&canister), None);
+    assert_eq!(ctx.balances().account_balance(&canister), Tokens::ZERO);
 
     // one account left in the store
-    assert_eq!(b.store.len(), 1);
+    assert_eq!(ctx.balances().store.len(), 1);
 
     apply_operation(
-        &mut b,
+        &mut ctx,
         &Operation::Transfer {
             from: target_canister,
             to: canister,
             amount: Tokens::from_e8s(0),
             fee: Tokens::from_e8s(100),
         },
+        now,
     )
     .unwrap();
     // No new account should have been created
-    assert_eq!(b.store.len(), 1);
+    assert_eq!(ctx.balances().store.len(), 1);
     // and the fee should have been taken from sender
-    assert_eq!(b.store.get(&target_canister), Some(&Tokens::from_e8s(700)));
+    assert_eq!(
+        ctx.balances().store.get(&target_canister),
+        Some(&Tokens::from_e8s(700))
+    );
 
     apply_operation(
-        &mut b,
+        &mut ctx,
         &Operation::Mint {
             to: canister,
             amount: Tokens::from_e8s(0),
         },
+        now,
     )
     .unwrap();
 
     // No new account should have been created
-    assert_eq!(b.store.len(), 1);
+    assert_eq!(ctx.balances().store.len(), 1);
 
     apply_operation(
-        &mut b,
+        &mut ctx,
         &Operation::Burn {
             from: target_canister,
             amount: Tokens::from_e8s(700),
         },
+        now,
     )
     .unwrap();
 
     // And burn should have exhausted the target_canister
-    assert_eq!(b.store.len(), 0);
+    assert_eq!(ctx.balances().store.len(), 0);
 }
 
 #[test]
 fn balances_fee() {
-    let mut b = LedgerBalances::new();
-    let pool_start_balance = b.token_pool.get_e8s();
+    let mut ctx = Ledger::default();
+    let pool_start_balance = ctx.balances().token_pool.get_e8s();
     let uid0 = PrincipalId::new_user_test_id(1000).into();
     let uid1 = PrincipalId::new_user_test_id(1007).into();
     let mint_amount = 1000000;
     let send_amount = 10000;
     let send_fee = 100;
+    let now = ts(12345678);
 
     apply_operation(
-        &mut b,
+        &mut ctx,
         &Operation::Mint {
             to: uid0,
             amount: Tokens::from_e8s(mint_amount),
         },
+        now,
     )
     .unwrap();
-    assert_eq!(b.token_pool.get_e8s(), pool_start_balance - mint_amount);
-    assert_eq!(b.account_balance(&uid0).get_e8s(), mint_amount);
+    assert_eq!(
+        ctx.balances().token_pool.get_e8s(),
+        pool_start_balance - mint_amount
+    );
+    assert_eq!(ctx.balances().account_balance(&uid0).get_e8s(), mint_amount);
 
     apply_operation(
-        &mut b,
+        &mut ctx,
         &Operation::Transfer {
             from: uid0,
             to: uid1,
             amount: Tokens::from_e8s(send_amount),
             fee: Tokens::from_e8s(send_fee),
         },
+        now,
     )
     .unwrap();
 
     assert_eq!(
-        b.token_pool.get_e8s(),
+        ctx.balances().token_pool.get_e8s(),
         pool_start_balance - mint_amount + send_fee
     );
     assert_eq!(
-        b.account_balance(&uid0).get_e8s(),
+        ctx.balances().account_balance(&uid0).get_e8s(),
         mint_amount - send_amount - send_fee
     );
-    assert_eq!(b.account_balance(&uid1).get_e8s(), send_amount);
+    assert_eq!(ctx.balances().account_balance(&uid1).get_e8s(), send_amount);
 }
 
 #[test]
@@ -791,4 +833,342 @@ fn test_transaction_hash_consistency() {
         hash_string, "646bf98eac33a37c4f018f13eeef7cf1826156ab69523ecbb51c25345340bbdb",
         "Transaction hash must be stable."
     )
+}
+
+#[test]
+fn test_approvals_are_cumulative() {
+    let mut ctx = Ledger::default();
+
+    let from = test_account_id(1);
+    let spender = test_account_id(2);
+    let now = ts(12345678);
+
+    ctx.balances_mut().mint(&from, tokens(100_000)).unwrap();
+
+    let approved_amount = tokens(150_000);
+    let fee = tokens(10_000);
+
+    apply_operation(
+        &mut ctx,
+        &Operation::Approve {
+            from,
+            spender,
+            allowance: stokens(approved_amount.get_e8s() as i128),
+            expires_at: None,
+            fee,
+        },
+        now,
+    )
+    .unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(90_000));
+    assert_eq!(ctx.balances().account_balance(&spender), tokens(0));
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: approved_amount,
+            expires_at: None
+        },
+    );
+
+    let extra_allowance = tokens(200_000);
+
+    let expiration = now + Duration::from_secs(300);
+    apply_operation(
+        &mut ctx,
+        &Operation::Approve {
+            from,
+            spender,
+            allowance: stokens(extra_allowance.get_e8s() as i128),
+            expires_at: Some(expiration),
+            fee,
+        },
+        now,
+    )
+    .unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(80_000));
+    assert_eq!(ctx.balances().account_balance(&spender), tokens(0));
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: (approved_amount + extra_allowance).unwrap(),
+            expires_at: Some(expiration)
+        }
+    );
+}
+
+#[test]
+fn test_approval_transfer_from() {
+    let mut ctx = Ledger::default();
+
+    let from = test_account_id(1);
+    let spender = test_account_id(2);
+    let to = test_account_id(3);
+    let now = ts(1);
+
+    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
+    let fee = tokens(10_000);
+
+    assert_eq!(
+        apply_operation(
+            &mut ctx,
+            &Operation::TransferFrom {
+                from,
+                to,
+                spender,
+                amount: tokens(100_000),
+                fee,
+            },
+            now,
+        )
+        .unwrap_err(),
+        TxApplyError::InsufficientAllowance {
+            allowance: tokens(0)
+        }
+    );
+
+    apply_operation(
+        &mut ctx,
+        &Operation::Approve {
+            from,
+            spender,
+            allowance: stokens(150_000),
+            expires_at: None,
+            fee,
+        },
+        now,
+    )
+    .unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(190_000));
+
+    apply_operation(
+        &mut ctx,
+        &Operation::TransferFrom {
+            from,
+            to,
+            spender,
+            amount: tokens(100_000),
+            fee,
+        },
+        now,
+    )
+    .unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&to), tokens(100_000));
+    assert_eq!(ctx.balances().account_balance(&spender), Tokens::ZERO);
+    assert_eq!(ctx.balances().account_balance(&from), tokens(80_000));
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(50_000),
+            expires_at: None
+        },
+    );
+
+    assert_eq!(
+        apply_operation(
+            &mut ctx,
+            &Operation::TransferFrom {
+                from,
+                to,
+                spender,
+                amount: tokens(100_000),
+                fee,
+            },
+            now,
+        )
+        .unwrap_err(),
+        TxApplyError::InsufficientAllowance {
+            allowance: tokens(50_000)
+        }
+    );
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(50_000),
+            expires_at: None
+        },
+    );
+    assert_eq!(ctx.balances().account_balance(&from), tokens(80_000),);
+    assert_eq!(ctx.balances().account_balance(&to), tokens(100_000),);
+}
+
+#[test]
+fn test_approval_expiration_override() {
+    let mut ctx = Ledger::default();
+
+    let from = test_account_id(1);
+    let spender = test_account_id(2);
+    let now = ts(1000);
+
+    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
+
+    let approve = |amount: SignedTokens, expires_at: Option<u64>| Operation::Approve {
+        from,
+        spender,
+        allowance: amount,
+        expires_at: expires_at.map(ts),
+        fee: tokens(10_000),
+    };
+
+    apply_operation(&mut ctx, &approve(stokens(100_000), Some(2000)), now).unwrap();
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(100_000),
+            expires_at: Some(ts(2000))
+        },
+    );
+
+    apply_operation(&mut ctx, &approve(stokens(100_000), Some(1500)), now).unwrap();
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(200_000),
+            expires_at: Some(ts(1500))
+        },
+    );
+
+    apply_operation(&mut ctx, &approve(stokens(100_000), Some(2500)), now).unwrap();
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(300_000),
+            expires_at: Some(ts(2500))
+        },
+    );
+
+    // The expiration is in the past, the allowance is rejected.
+    assert_eq!(
+        apply_operation(&mut ctx, &approve(stokens(100_000), Some(500)), now).unwrap_err(),
+        TxApplyError::ExpiredApproval { now }
+    );
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(300_000),
+            expires_at: Some(ts(2500))
+        },
+    );
+}
+
+#[test]
+fn test_approval_negative() {
+    let mut ctx = Ledger::default();
+
+    let from = test_account_id(1);
+    let spender = test_account_id(2);
+    let now = ts(1000);
+
+    ctx.balances_mut().mint(&from, tokens(200_000)).unwrap();
+
+    let approve = |amount: SignedTokens, expires_at: Option<u64>| Operation::Approve {
+        from,
+        spender,
+        allowance: amount,
+        expires_at: expires_at.map(ts),
+        fee: tokens(10_000),
+    };
+
+    apply_operation(&mut ctx, &approve(stokens(100_000), Some(2000)), now).unwrap();
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(100_000),
+            expires_at: Some(ts(2000))
+        },
+    );
+
+    apply_operation(&mut ctx, &approve(stokens(-50_000), Some(1500)), now).unwrap();
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance {
+            amount: tokens(50_000),
+            expires_at: Some(ts(1500))
+        },
+    );
+
+    apply_operation(&mut ctx, &approve(stokens(-1_000_000_000), Some(2500)), now).unwrap();
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance::default(),
+    );
+}
+
+#[test]
+fn test_approval_no_fee_on_reject() {
+    let mut ctx = Ledger::default();
+
+    let from = test_account_id(1);
+    let spender = test_account_id(2);
+    let now = ts(1000);
+
+    ctx.balances_mut().mint(&from, tokens(20_000)).unwrap();
+
+    assert_eq!(
+        apply_operation(
+            &mut ctx,
+            &Operation::Approve {
+                from,
+                spender,
+                allowance: stokens(1_000),
+                expires_at: Some(ts(1)),
+                fee: tokens(10_000),
+            },
+            ts(1000),
+        )
+        .unwrap_err(),
+        TxApplyError::ExpiredApproval { now }
+    );
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &spender, now),
+        Allowance::default(),
+    );
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(20_000));
+}
+
+#[test]
+fn test_self_transfer_from() {
+    let mut ctx = Ledger::default();
+
+    let from = test_account_id(1);
+    let to = test_account_id(2);
+    let now = ts(1000);
+
+    ctx.balances_mut().mint(&from, tokens(100_000)).unwrap();
+
+    assert_eq!(
+        ctx.approvals().allowance(&from, &from, now),
+        Allowance::default(),
+    );
+
+    apply_operation(
+        &mut ctx,
+        &Operation::TransferFrom {
+            from,
+            spender: from,
+            to,
+            amount: tokens(20_000),
+            fee: tokens(10_000),
+        },
+        ts(1000),
+    )
+    .unwrap();
+
+    assert_eq!(ctx.balances().account_balance(&from), tokens(70_000));
+    assert_eq!(ctx.balances().account_balance(&to), tokens(20_000));
 }

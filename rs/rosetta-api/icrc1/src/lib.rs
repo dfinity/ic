@@ -4,9 +4,9 @@ pub mod hash;
 use candid::CandidType;
 use ciborium::tag::Required;
 use ic_base_types::PrincipalId;
-use ic_ledger_canister_core::ledger::LedgerTransaction;
+use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
-    balances::{BalanceError, Balances, BalancesStore},
+    balances::Balances,
     block::{BlockType, EncodedBlock, HashOf},
     timestamp::TimeStamp,
     tokens::Tokens,
@@ -272,6 +272,7 @@ pub struct Transaction {
 
 impl LedgerTransaction for Transaction {
     type AccountId = Account;
+    type SpenderId = PrincipalId;
 
     fn burn(
         from: Account,
@@ -309,13 +310,14 @@ impl LedgerTransaction for Transaction {
             })
     }
 
-    fn apply<S>(
+    fn apply<C>(
         &self,
-        balances: &mut Balances<S>,
+        context: &mut C,
+        _now: TimeStamp,
         effective_fee: Tokens,
-    ) -> Result<(), BalanceError>
+    ) -> Result<(), TxApplyError>
     where
-        S: Default + BalancesStore<AccountId = Self::AccountId>,
+        C: LedgerContext<AccountId = Self::AccountId>,
     {
         match &self.operation {
             Operation::Transfer {
@@ -323,15 +325,20 @@ impl LedgerTransaction for Transaction {
                 to,
                 amount,
                 fee,
-            } => balances.transfer(
+            } => context.balances_mut().transfer(
                 from,
                 to,
                 Tokens::from_e8s(*amount),
                 fee.map(Tokens::from_e8s).unwrap_or(effective_fee),
-            ),
-            Operation::Burn { from, amount } => balances.burn(from, Tokens::from_e8s(*amount)),
-            Operation::Mint { to, amount } => balances.mint(to, Tokens::from_e8s(*amount)),
+            )?,
+            Operation::Burn { from, amount } => context
+                .balances_mut()
+                .burn(from, Tokens::from_e8s(*amount))?,
+            Operation::Mint { to, amount } => {
+                context.balances_mut().mint(to, Tokens::from_e8s(*amount))?
+            }
         }
+        Ok(())
     }
 }
 

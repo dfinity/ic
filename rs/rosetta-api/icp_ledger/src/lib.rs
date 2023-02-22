@@ -4,9 +4,10 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
 use ic_icrc1::Account;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_canister_core::ledger::LedgerTransaction;
+use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
-    balances::{BalanceError, Balances, BalancesStore},
+    approvals::Approvals,
+    balances::Balances,
     block::{BlockType, EncodedBlock, HashOf, HASH_LENGTH},
 };
 use on_wire::{FromWire, IntoWire};
@@ -105,12 +106,13 @@ pub enum Operation {
     },
 }
 
-pub fn apply_operation<S>(
-    balances: &mut Balances<S>,
+pub fn apply_operation<C>(
+    context: &mut C,
     operation: &Operation,
-) -> Result<(), BalanceError>
+    now: TimeStamp,
+) -> Result<(), TxApplyError>
 where
-    S: Default + BalancesStore<AccountId = AccountIdentifier>,
+    C: LedgerContext<AccountId = AccountIdentifier, SpenderId = AccountIdentifier>,
 {
     match operation {
         Operation::Transfer {
@@ -118,12 +120,74 @@ where
             to,
             amount,
             fee,
-        } => balances.transfer(from, to, *amount, *fee),
-        Operation::Burn { from, amount, .. } => balances.burn(from, *amount),
-        Operation::Mint { to, amount, .. } => balances.mint(to, *amount),
-        Operation::Approve { .. } => unimplemented!(),
-        Operation::TransferFrom { .. } => unimplemented!(),
-    }
+        } => context.balances_mut().transfer(from, to, *amount, *fee)?,
+        Operation::Burn { from, amount, .. } => context.balances_mut().burn(from, *amount)?,
+        Operation::Mint { to, amount, .. } => context.balances_mut().mint(to, *amount)?,
+        Operation::Approve {
+            from,
+            spender,
+            allowance,
+            expires_at,
+            fee,
+        } => {
+            // NB. We cannot reliably detect self-approvals at this level
+            // because the approver and the spender principals are hashed.
+            // We rely on the approve endpoint to perform this check.
+
+            context.balances_mut().burn(from, *fee)?;
+
+            let result = match allowance {
+                SignedTokens::Plus(amount) => context
+                    .approvals_mut()
+                    .approve(from, spender, *amount, *expires_at, now)
+                    .map_err(TxApplyError::from),
+                SignedTokens::Minus(amount) => context
+                    .approvals_mut()
+                    .decrease_allowance(from, spender, *amount, *expires_at, now)
+                    .map_err(TxApplyError::from),
+            };
+            if let Err(e) = result {
+                context
+                    .balances_mut()
+                    .mint(from, *fee)
+                    .expect("bug: failed to refund approval fee");
+                return Err(e);
+            }
+        }
+
+        Operation::TransferFrom {
+            from,
+            to,
+            spender,
+            amount,
+            fee,
+        } => {
+            if from == spender {
+                // NB. We bypass the allowance check if the account owner calls
+                // transfer_from.
+
+                // NB. We cannot reliably detect self-transfers at this level.
+                // We need help from the transfer_from endpoint to populate
+                // [from] and [spender] with equal values if the spender is the
+                // account owner.
+                context.balances_mut().transfer(from, to, *amount, *fee)?;
+                return Ok(());
+            }
+
+            let allowance = context.approvals().allowance(from, spender, now);
+            if allowance.amount < *amount {
+                return Err(TxApplyError::InsufficientAllowance {
+                    allowance: allowance.amount,
+                });
+            }
+            context.balances_mut().transfer(from, to, *amount, *fee)?;
+            context
+                .approvals_mut()
+                .use_allowance(from, spender, *amount, now)
+                .expect("bug: cannot use allowance");
+        }
+    };
+    Ok(())
 }
 
 /// An operation with the metadata the client generated attached to it
@@ -141,6 +205,7 @@ pub struct Transaction {
 
 impl LedgerTransaction for Transaction {
     type AccountId = AccountIdentifier;
+    type SpenderId = AccountIdentifier;
 
     fn burn(
         from: Self::AccountId,
@@ -166,15 +231,16 @@ impl LedgerTransaction for Transaction {
         HashOf::new(state.finish())
     }
 
-    fn apply<S>(
+    fn apply<C>(
         &self,
-        balances: &mut Balances<S>,
+        context: &mut C,
+        now: TimeStamp,
         _effective_fee: Tokens,
-    ) -> Result<(), BalanceError>
+    ) -> Result<(), TxApplyError>
     where
-        S: Default + BalancesStore<AccountId = Self::AccountId>,
+        C: LedgerContext<AccountId = Self::AccountId, SpenderId = Self::SpenderId>,
     {
-        apply_operation(balances, &self.operation)
+        apply_operation(context, &self.operation, now)
     }
 }
 
@@ -199,6 +265,15 @@ impl Transaction {
             icrc1_memo: None,
             created_at_time: Some(created_at_time),
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct ApprovalKey(AccountIdentifier, AccountIdentifier);
+
+impl From<(&AccountIdentifier, &AccountIdentifier)> for ApprovalKey {
+    fn from((account, spender): (&AccountIdentifier, &AccountIdentifier)) -> Self {
+        Self(*account, *spender)
     }
 }
 

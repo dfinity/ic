@@ -1,18 +1,54 @@
 use ic_ledger_canister_blocks_synchronizer::{
-    balance_book::BalanceBook,
+    balance_book::{BalanceBook, ClientBalancesStore},
     blocks::{BlockStoreError, Blocks},
 };
 use ic_ledger_canister_blocks_synchronizer_test_utils::{
     create_tmp_dir, init_test_logger, sample_data::Scribe,
 };
-use ic_ledger_canister_core::ledger::LedgerTransaction;
-use ic_ledger_core::{balances::BalancesStore, block::BlockType, Tokens};
-use icp_ledger::{apply_operation, AccountIdentifier, Block, Operation};
+use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction};
+use ic_ledger_core::{
+    approvals::AllowanceTable, balances::BalancesStore, block::BlockType, timestamp::TimeStamp,
+    Tokens,
+};
+use icp_ledger::{apply_operation, AccountIdentifier, ApprovalKey, Block, Operation};
 use rusqlite::params;
 use std::path::Path;
+
 pub(crate) fn sqlite_on_disk_store(path: &Path) -> Blocks {
     Blocks::new_persistent(path).unwrap()
 }
+
+type Approvals = AllowanceTable<ApprovalKey, AccountIdentifier, AccountIdentifier>;
+
+#[derive(Default)]
+struct TestContext {
+    pub balance_book: BalanceBook,
+    pub approvals: Approvals,
+}
+
+impl LedgerContext for TestContext {
+    type AccountId = AccountIdentifier;
+    type SpenderId = AccountIdentifier;
+    type Approvals = Approvals;
+    type BalancesStore = ClientBalancesStore;
+
+    fn balances(&self) -> &BalanceBook {
+        &self.balance_book
+    }
+
+    fn balances_mut(&mut self) -> &mut BalanceBook {
+        &mut self.balance_book
+    }
+
+    fn approvals(&self) -> &Approvals {
+        &self.approvals
+    }
+
+    fn approvals_mut(&mut self) -> &mut Approvals {
+        &mut self.approvals
+    }
+}
+
 #[actix_rt::test]
 async fn store_smoke_test() {
     init_test_logger();
@@ -90,13 +126,14 @@ async fn store_account_balances_test() {
     let tmpdir = create_tmp_dir();
     let mut store = sqlite_on_disk_store(tmpdir.path());
     let scribe = Scribe::new_with_sample_data(10, 100);
-    let mut account_balances = &mut BalanceBook::default();
+    let mut context = TestContext::default();
+    let now = TimeStamp::from_nanos_since_unix_epoch(12345678);
     for hb in &scribe.blockchain {
         let tx = Block::decode(hb.block.clone()).unwrap().transaction;
         let operation = tx.operation;
-        account_balances.store.transaction_context = Some(hb.index);
-        apply_operation(account_balances, &operation).ok();
-        account_balances.store.transaction_context = None;
+        context.balance_book.store.transaction_context = Some(hb.index);
+        apply_operation(&mut context, &operation, now).ok();
+        context.balance_book.store.transaction_context = None;
         store.push(hb).unwrap();
         store.set_hashed_block_to_verified(&hb.index).unwrap();
         let to_account: Option<String>;
@@ -126,17 +163,17 @@ async fn store_account_balances_test() {
         if let Some(acc_str) = from_account {
             let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
             let amount_from = store.get_account_balance(&id, &hb.index).unwrap();
-            let amount_local = *account_balances.store.get_balance(&id).unwrap();
+            let amount_local = *context.balance_book.store.get_balance(&id).unwrap();
             assert_eq!(amount_from, amount_local);
         }
         if let Some(acc_str) = to_account {
             let id = AccountIdentifier::from_hex(acc_str.as_str()).unwrap();
             let amount_to = store.get_account_balance(&id, &hb.index).unwrap();
-            let amount_local = *account_balances.store.get_balance(&id).unwrap();
+            let amount_local = *context.balance_book.store.get_balance(&id).unwrap();
             assert_eq!(amount_to, amount_local);
         }
     }
-    for (acc, history) in account_balances.store.acc_to_hist.iter() {
+    for (acc, history) in context.balance_book.store.acc_to_hist.iter() {
         for (block_index, tokens) in history.get_history(None) {
             let amount = store.get_account_balance(acc, block_index).unwrap();
             assert_eq!(*tokens, amount);
