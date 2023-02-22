@@ -35,7 +35,7 @@ pub async fn download_binary(
         .await
         .map_err(|e| RecoveryError::download_error(binary_url, &file, e))?;
 
-    info!(logger, "Unziping file...");
+    info!(logger, "Unzipping file...");
     let mut gunzip = Command::new("gunzip");
     gunzip.arg(file);
 
