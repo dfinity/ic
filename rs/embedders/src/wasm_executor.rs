@@ -613,6 +613,7 @@ pub fn process(
     );
 
     let first_slice_instruction_limit = system_api.slice_instruction_limit();
+    let message_instruction_limit = system_api.message_instruction_limit();
 
     let mut instance = match embedder.new_instance(
         canister_id,
@@ -625,16 +626,14 @@ pub fn process(
     ) {
         Ok(instance) => instance,
         Err((err, system_api)) => {
-            // TODO(RUN-269): The `num_instructions_left` should be set to
-            // the limit, not zero here.
             return (
                 SliceExecutionOutput {
-                    executed_instructions: first_slice_instruction_limit,
+                    executed_instructions: NumInstructions::from(0),
                     execution_complexity: ExecutionComplexity::default(),
                 },
                 WasmExecutionOutput {
                     wasm_result: Err(err),
-                    num_instructions_left: NumInstructions::from(0),
+                    num_instructions_left: message_instruction_limit,
                     allocated_bytes: NumBytes::from(0),
                     allocated_message_bytes: NumBytes::from(0),
                     instance_stats: InstanceStats::default(),
@@ -663,7 +662,6 @@ pub fn process(
     let slice_instructions_executed = system_api
         .slice_instructions_executed(instruction_counter)
         .min(slice_instruction_limit);
-    let message_instruction_limit = system_api.message_instruction_limit();
     // Capping at the limit to avoid an underflow when computing the remaining
     // instructions below.
     let message_instructions_executed = system_api
