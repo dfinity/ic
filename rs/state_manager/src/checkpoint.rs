@@ -1,7 +1,6 @@
 use super::PageAllocatorFileDescriptorImpl;
 use crate::{
-    CheckpointError, CheckpointMetrics, PageMapType, PersistenceError, TipRequest,
-    NUMBER_OF_CHECKPOINT_THREADS,
+    CheckpointError, CheckpointMetrics, PersistenceError, TipRequest, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::CanisterId;
@@ -37,7 +36,7 @@ use std::{
 /// If the result is `Ok`, the returned state is "rebased" to use
 /// files from the newly created checkpoint. If the result is `Err`,
 /// the returned state is exactly the one that was passed as argument.
-pub fn make_checkpoint(
+pub(crate) fn make_checkpoint(
     state: &ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
@@ -84,13 +83,6 @@ pub fn make_checkpoint(
     let (send, recv) = unbounded();
     tip_channel.send(TipRequest::Wait { sender: send }).unwrap();
     recv.recv().unwrap();
-
-    tip_channel
-        .send(TipRequest::DefragTip {
-            height,
-            page_map_types: PageMapType::list_all(state),
-        })
-        .unwrap();
 
     let state = {
         let _timer = metrics
@@ -480,6 +472,7 @@ mod tests {
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_tmpdir::tmpdir;
+    use ic_types::malicious_flags::MaliciousFlags;
     use ic_types::messages::StopCanisterContext;
     use ic_types::{CanisterId, Cycles, ExecutionRound, Height};
     use ic_wasm_types::CanisterModule;
@@ -542,8 +535,13 @@ mod tests {
             let layout =
                 StateLayout::try_new(log.clone(), root.clone(), &MetricsRegistry::new()).unwrap();
             let tip_handler = layout.capture_tip_handler();
-            let (_tip_thread, tip_channel) =
-                spawn_tip_thread(log, tip_handler, layout.clone(), state_manager_metrics());
+            let (_tip_thread, tip_channel) = spawn_tip_thread(
+                log,
+                tip_handler,
+                layout.clone(),
+                state_manager_metrics(),
+                MaliciousFlags::default(),
+            );
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
@@ -602,8 +600,13 @@ mod tests {
                 StateLayout::try_new(log.clone(), root.clone(), &MetricsRegistry::new()).unwrap();
             let tip_handler = layout.capture_tip_handler();
             let state_manager_metrics = state_manager_metrics();
-            let (_tip_thread, tip_channel) =
-                spawn_tip_thread(log, tip_handler, layout, state_manager_metrics.clone());
+            let (_tip_thread, tip_channel) = spawn_tip_thread(
+                log,
+                tip_handler,
+                layout,
+                state_manager_metrics.clone(),
+                MaliciousFlags::default(),
+            );
 
             const HEIGHT: Height = Height::new(42);
             let canister_id = canister_test_id(10);
@@ -652,6 +655,7 @@ mod tests {
                 tip_handler,
                 layout.clone(),
                 state_manager_metrics.clone(),
+                MaliciousFlags::default(),
             );
 
             const HEIGHT: Height = Height::new(42);
@@ -751,6 +755,7 @@ mod tests {
                 tip_handler,
                 layout.clone(),
                 state_manager_metrics.clone(),
+                MaliciousFlags::default(),
             );
 
             const HEIGHT: Height = Height::new(42);
@@ -834,6 +839,7 @@ mod tests {
                 tip_handler,
                 layout.clone(),
                 state_manager_metrics.clone(),
+                MaliciousFlags::default(),
             );
 
             const HEIGHT: Height = Height::new(42);
@@ -899,6 +905,7 @@ mod tests {
                 tip_handler,
                 layout.clone(),
                 state_manager_metrics.clone(),
+                MaliciousFlags::default(),
             );
 
             const HEIGHT: Height = Height::new(42);
@@ -950,6 +957,7 @@ mod tests {
                 tip_handler,
                 layout.clone(),
                 state_manager_metrics.clone(),
+                MaliciousFlags::default(),
             );
 
             const HEIGHT: Height = Height::new(42);
@@ -1001,6 +1009,7 @@ mod tests {
                 tip_handler,
                 layout.clone(),
                 state_manager_metrics.clone(),
+                MaliciousFlags::default(),
             );
 
             const HEIGHT: Height = Height::new(42);
@@ -1054,6 +1063,7 @@ mod tests {
                 tip_handler,
                 layout.clone(),
                 state_manager_metrics.clone(),
+                MaliciousFlags::default(),
             );
 
             const HEIGHT: Height = Height::new(42);
@@ -1107,6 +1117,7 @@ mod tests {
                 tip_handler,
                 layout.clone(),
                 state_manager_metrics.clone(),
+                MaliciousFlags::default(),
             );
 
             const HEIGHT: Height = Height::new(42);
