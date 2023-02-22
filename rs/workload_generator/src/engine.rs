@@ -8,7 +8,9 @@ use crate::{
     RequestType,
 };
 use backoff::backoff::Backoff;
-use ic_canister_client::{update_path, Agent, HttpClientConfig, Sender as AgentSender};
+use ic_canister_client::{
+    prepare_update, update_path, Agent, HttpClientConfig, Sender as AgentSender,
+};
 use ic_types::{
     messages::{Blob, MessageId},
     time::current_time_and_expiry_time,
@@ -305,15 +307,16 @@ impl Engine {
     ) -> bool {
         let nonce = plan.nonce.clone();
         let deadline = Instant::now() + agent.ingress_timeout;
-        let (content, request_id) = agent
-            .prepare_update(
-                &plan.canister_id,
-                method,
-                arg,
-                format!("inc {} {}", nonce, n).into_bytes(),
-                current_time_and_expiry_time().1,
-            )
-            .unwrap();
+        let (content, request_id) = prepare_update(
+            &agent.sender,
+            &plan.canister_id,
+            method,
+            arg,
+            format!("inc {} {}", nonce, n).into_bytes(),
+            current_time_and_expiry_time().1,
+            agent.sender_field.clone(),
+        )
+        .unwrap();
 
         debug!("Sending signed update. request id: {}.", request_id);
 

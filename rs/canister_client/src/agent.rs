@@ -1,6 +1,9 @@
 //! An agent to talk to the Internet Computer through the public endpoints.
 use crate::{
-    cbor::{bytes_to_cbor, parse_query_response, parse_read_state_response, RequestStatus},
+    cbor::{
+        parse_query_response, parse_read_state_response, prepare_query, prepare_read_state,
+        prepare_update, RequestStatus,
+    },
     http_client::{HttpClient, HttpClientConfig},
 };
 use backoff::backoff::Backoff;
@@ -215,9 +218,14 @@ impl Agent {
         method: &str,
         arg: Vec<u8>,
     ) -> Result<Option<Vec<u8>>, String> {
-        let envelope = self
-            .prepare_query(canister_id, method, arg)
-            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+        let envelope = prepare_query(
+            &self.sender,
+            canister_id,
+            method,
+            arg,
+            self.sender_field.clone(),
+        )
+        .map_err(|e| format!("Failed to prepare query: {}", e))?;
         let bytes = self
             .http_client
             .post_with_response(
@@ -252,15 +260,16 @@ impl Agent {
     ) -> Result<Option<Vec<u8>>, String> {
         let deadline = Instant::now() + self.ingress_timeout;
         let mut backoff = get_backoff_policy();
-        let (http_body, request_id) = self
-            .prepare_update(
-                canister_id,
-                method,
-                arguments,
-                nonce,
-                current_time_and_expiry_time().1,
-            )
-            .map_err(|err| format!("{}", err))?;
+        let (http_body, request_id) = prepare_update(
+            &self.sender,
+            canister_id,
+            method,
+            arguments,
+            nonce,
+            current_time_and_expiry_time().1,
+            self.sender_field.clone(),
+        )
+        .map_err(|err| format!("{}", err))?;
         self.http_client
             .post_with_response(
                 &self.url,
@@ -322,16 +331,16 @@ impl Agent {
         effective_canister_id: &CanisterId,
     ) -> Result<CBOR, String> {
         let path = Path::new(vec!["request_status".into(), request_id.into()]);
-        let status_request_body = self
-            .prepare_read_state(&[path])
-            .map_err(|e| format!("Failed to prepare read state: {:?}", e))?;
+        let signed_request_bytes =
+            prepare_read_state(&self.sender, &[path], self.sender_field.clone())
+                .map_err(|e| format!("Failed to prepare read state: {:?}", e))?;
 
         let bytes = self
             .http_client
             .post_with_response(
                 &self.url,
                 &read_state_path(*effective_canister_id),
-                status_request_body,
+                signed_request_bytes.into(),
                 tokio::time::Instant::from_std(deadline),
             )
             .await?;
@@ -406,4 +415,22 @@ impl Agent {
         .await
         .map(|_| ())
     }
+}
+
+fn bytes_to_cbor(bytes: Vec<u8>) -> Result<CBOR, String> {
+    let cbor = serde_cbor::from_slice(&bytes).map_err(|e| {
+        format!(
+            "Agent::bytes_to_cbor: Failed to parse result from IC, got: {:?} - error {:?}",
+            String::from_utf8(
+                bytes
+                    .iter()
+                    .copied()
+                    .flat_map(std::ascii::escape_default)
+                    .collect()
+            )
+            .expect("ASCII is legal utf8"),
+            e
+        )
+    })?;
+    Ok(cbor)
 }
