@@ -3,7 +3,7 @@
 ///
 /// Existing socket systemd configurations can be found
 /// ic-os/guestos/rootfs/etc/systemd/system/*.socket.
-use async_stream::AsyncStream;
+use async_stream::__private::AsyncStream;
 use futures::TryFutureExt;
 use std::{
     os::unix::io::FromRawFd,
