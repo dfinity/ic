@@ -135,7 +135,7 @@ use super::cli::{
     bail_if_sha256_invalid, parse_journalbeat_hosts, parse_replica_log_debug_overrides,
 };
 use super::config::NODES_INFO;
-use super::driver_setup::{DEFAULT_FARM_BASE_URL, SSH_AUTHORIZED_PRIV_KEYS_DIR};
+use super::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use super::farm::{DnsRecord, PlaynetCertificate};
 use super::test_setup::GroupSetup;
 use crate::driver::farm::{Farm, GroupSpec};
@@ -171,6 +171,7 @@ use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
+use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh2::Session;
 use std::collections::{HashMap, HashSet};
@@ -723,12 +724,12 @@ pub trait HasIcDependencies {
     fn get_canister_http_test_ca_key(&self) -> Result<String>;
 }
 
-impl<T: HasDependencies> HasIcDependencies for T {
+impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     fn get_farm_url(&self) -> Result<Url> {
         let dep_rel_path = "farm_base_url";
         let url = self
             .read_dependency_to_string(dep_rel_path)
-            .unwrap_or_else(|_| DEFAULT_FARM_BASE_URL.to_string());
+            .unwrap_or_else(|_| FarmBaseUrl::read_attribute(&self.test_env()).to_string());
         Ok(Url::parse(&url)?)
     }
 
@@ -872,8 +873,8 @@ impl HasGroupSetup for TestEnv {
         if !is_group_setup_existing {
             let log = self.logger();
             let group_setup = GroupSetup::from_bazel_env();
-            let farm_base_url = Url::parse(constants::DEFAULT_FARM_BASE_URL).expect("can't fail");
-            let farm = Farm::new(farm_base_url, self.logger());
+            let farm_base_url = FarmBaseUrl::read_attribute(self);
+            let farm = Farm::new(farm_base_url.into(), self.logger());
             let group_spec = GroupSpec {
                 vm_allocation: None,
                 required_host_features: vec![],
@@ -1641,34 +1642,6 @@ pub(crate) const WASM_MAGIC_BYTES: &[u8] = &[0, 97, 115, 109];
 /// See https://ic-interface-spec.netlify.app/#canister-module-format
 pub(crate) const GZIPPED_WASM_MAGIC_BYTES: &[u8] = &[31, 139, 8, 0];
 
-pub fn prepare_group(group_setup: &GroupSetup, logger: Logger) -> Result<()> {
-    info!(logger, "SystemTestGroup.prepare_group");
-
-    let farm_base_url = Url::parse(constants::DEFAULT_FARM_BASE_URL).expect("can't fail");
-    let farm = Farm::new(farm_base_url, logger);
-
-    let group_spec = GroupSpec {
-        vm_allocation: None,
-        required_host_features: vec![],
-        preferred_network: None,
-    };
-
-    Ok(farm.create_group(
-        &group_setup.farm_group_name,
-        group_setup.group_timeout,
-        group_spec,
-    )?)
-}
-
-pub fn finalize_group(group_setup: &GroupSetup, logger: Logger) -> Result<()> {
-    info!(logger, "SystemTestGroup.finalize_group");
-
-    let farm_base_url = Url::parse(constants::DEFAULT_FARM_BASE_URL).expect("can't fail");
-    let farm = Farm::new(farm_base_url, logger);
-
-    Ok(farm.delete_group(&group_setup.farm_group_name)?)
-}
-
 pub trait CreateDnsRecords {
     /// Creates DNS records under the suffix: `.<group-name>.farm.dfinity.systems`.
     /// The records will be garbage collected some time after the group has expired.
@@ -1736,5 +1709,38 @@ where
         let group_name = group_setup.farm_group_name;
         farm.acquire_playnet_certificate(&group_name)
             .expect("Failed to acquire a certificate for a playnet")
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct FarmBaseUrl {
+    url: Url,
+}
+
+impl FarmBaseUrl {
+    pub fn new_or_default(url: Option<Url>) -> Self {
+        let url = match url {
+            Some(url) => url,
+            None => Url::parse(constants::DEFAULT_FARM_BASE_URL).unwrap(),
+        };
+        Self { url }
+    }
+}
+
+impl ToString for FarmBaseUrl {
+    fn to_string(&self) -> String {
+        self.url.to_string()
+    }
+}
+
+impl From<FarmBaseUrl> for Url {
+    fn from(value: FarmBaseUrl) -> Self {
+        value.url
+    }
+}
+
+impl TestEnvAttribute for FarmBaseUrl {
+    fn attribute_name() -> String {
+        "farm_url".to_string()
     }
 }

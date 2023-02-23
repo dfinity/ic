@@ -152,7 +152,7 @@ rust_test(
     name = "test_e2e_scenarios",
     srcs = ["tests/test_driver_tests.rs"],
     crate_root = "tests/test_driver_tests.rs",
-    deps = DEPENDENCIES + [":test-driver-e2e-scenarios"],
+    deps = DEPENDENCIES + [":test-driver-e2e-scenarios"] + [":tests"],
 )
 
 system_test(
