@@ -60,6 +60,7 @@ ethtool
 ipmitool
 locales
 libarchive-zip-perl
+libusb-1.0-0
 libvirt-daemon-system libvirt-dev
 mtools
 ovmf

@@ -24,7 +24,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     apt -yqq install --no-install-recommends \
         android-sdk-ext4-utils \
         build-essential pkg-config libssl-dev llvm-10-dev llvm-dev liblmdb-dev clang clang-10 cmake libbz2-dev gcc-multilib zlib1g-dev \
-        lldb libc-bin libclang-10-dev liblz4-dev librocksdb-dev libsnappy-dev libzstd-dev zstd vim emacs nano jq \
+        lldb libc-bin libclang-10-dev liblz4-dev librocksdb-dev libsnappy-dev libusb-1.0-0-dev libzstd-dev zstd vim emacs nano jq \
         zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev libcsmith-dev sqlite3 libsqlite3-dev libselinux-dev libunwind-dev libsystemd-dev uuid-dev \
         qemu-system-x86 ovmf iproute2 dosfstools mtools fakeroot faketime android-sdk-ext4-utils \
         policycoreutils python-is-python3 python3 python3-pip python3-gflags python3-cbor pipenv shellcheck \
