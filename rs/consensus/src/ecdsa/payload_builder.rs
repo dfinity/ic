@@ -6,7 +6,9 @@ use super::pre_signer::{EcdsaTranscriptBuilder, EcdsaTranscriptBuilderImpl};
 use super::signer::{EcdsaSignatureBuilder, EcdsaSignatureBuilderImpl};
 use super::utils::EcdsaBlockReaderImpl;
 use crate::consensus::{
-    crypto::ConsensusCrypto, metrics::EcdsaPayloadMetrics, pool_reader::PoolReader,
+    crypto::ConsensusCrypto,
+    metrics::{EcdsaPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING},
+    pool_reader::PoolReader,
 };
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
 use ic_crypto::{get_mega_pubkey, MegaKeyFromRegistryError};
@@ -309,6 +311,7 @@ pub(crate) fn create_summary_payload(
         curr_interval_registry_version,
         next_interval_registry_version,
         ecdsa_payload,
+        ecdsa_payload_metrics,
         log,
     )
 }
@@ -321,6 +324,7 @@ fn create_summary_payload_helper(
     curr_interval_registry_version: RegistryVersion,
     next_interval_registry_version: RegistryVersion,
     ecdsa_payload: &ecdsa::EcdsaPayload,
+    ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
     log: ReplicaLogger,
 ) -> Result<ecdsa::Summary, EcdsaPayloadError> {
     let created = match &ecdsa_payload.key_transcript.next_in_creation {
@@ -332,10 +336,13 @@ fn create_summary_payload_helper(
             ))
         }
         _ => {
-            warn!(
-                log,
-                "Key not created in previous interval, to retry in next interval(height = {:?}), key_transcript = {}",
-                height, ecdsa_payload.key_transcript
+            if let Some(metrics) = ecdsa_payload_metrics {
+                metrics.critical_error_ecdsa_key_transcript_missing.inc();
+            }
+            error!(
+              log,
+              "{}: Key not created in previous interval, keep trying in next interval(height = {:?}), key_transcript = {}",
+              CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING, height, ecdsa_payload.key_transcript
             );
             None
         }
@@ -364,7 +371,7 @@ fn create_summary_payload_helper(
     {
         info!(
             log,
-            "Noticed subnet membership change, will start key_transcript_creation: height = {:?} \
+            "Noticed subnet membership or mega encryption key change, will start key_transcript_creation: height = {:?} \
                 current_version = {:?}, next_version = {:?}",
             height,
             curr_interval_registry_version,
@@ -3860,6 +3867,7 @@ mod tests {
                 registry_version,
                 registry_version,
                 &payload_0,
+                None,
                 no_op_logger(),
             );
             assert!(matches!(payload_1, Ok(Some(_))));
@@ -3902,6 +3910,7 @@ mod tests {
                 registry_version,
                 registry_version,
                 &payload_2,
+                None,
                 no_op_logger(),
             );
             assert!(matches!(payload_3, Ok(Some(_))));
@@ -3937,6 +3946,7 @@ mod tests {
                 registry_version,
                 registry_version,
                 &payload_2,
+                None,
                 no_op_logger(),
             );
             assert!(matches!(payload_4, Ok(Some(_))));

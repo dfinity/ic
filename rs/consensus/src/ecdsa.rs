@@ -172,7 +172,10 @@
 #![allow(dead_code)]
 
 use crate::consensus::{
-    metrics::{timed_call, EcdsaClientMetrics, EcdsaGossipMetrics},
+    metrics::{
+        timed_call, EcdsaClientMetrics, EcdsaGossipMetrics,
+        CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
+    },
     utils::RoundRobin,
     ConsensusCrypto,
 };
@@ -186,7 +189,7 @@ use ic_interfaces::ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaPool};
 use ic_interfaces::{
     artifact_manager::ArtifactPoolDescriptor, consensus_pool::ConsensusBlockCache,
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::{EcdsaMessageAttribute, EcdsaMessageId, Priority, PriorityFn},
@@ -287,6 +290,7 @@ impl EcdsaImpl {
     /// Purges the transcripts that are no longer active.
     fn purge_inactive_transcripts(&self, block_reader: &dyn EcdsaBlockReader) {
         let mut active_transcripts = HashSet::new();
+        let mut error_count = 0;
         for transcript_ref in block_reader.active_transcripts() {
             match block_reader.transcript(&transcript_ref) {
                 Ok(transcript) => {
@@ -308,21 +312,30 @@ impl EcdsaImpl {
                         .client_errors
                         .with_label_values(&["resolve_active_transcript_refs"])
                         .inc();
+                    error_count += 1;
                 }
             }
+        }
+
+        if error_count > 0 {
+            warn!(
+                self.logger,
+                "purge_inactive_transcripts(): abort due to {} errors", error_count,
+            );
+            return;
         }
 
         if let Err(error) =
             IDkgProtocol::retain_active_transcripts(&*self.crypto, &active_transcripts)
         {
-            warn!(
+            error!(
                 self.logger,
-                "purge_inactive_transcripts(): retain_active_transcripts() failed: err = {:?}",
-                error,
+                "{}: failed with error = {:?}",
+                CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
+                error
             );
             self.metrics
-                .client_errors
-                .with_label_values(&["retain_active_transcripts"])
+                .critical_error_ecdsa_retain_active_transcripts
                 .inc();
         } else {
             self.metrics
