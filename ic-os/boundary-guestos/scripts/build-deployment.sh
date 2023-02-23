@@ -48,6 +48,7 @@ Arguments:
        --cert-issuer-creds              specify a credentials file for certificate-issuer
        --cert-issuer-identity           specify an identity file for certificate-issuer
        --cert-issuer-enc-key            specify an encryption key for certificate-issuer
+       --pre-isolation-canisters        specify a set of pre-domain-isolation canisters
   -x,  --debug                          enable verbose console output
 '
     exit 1
@@ -107,6 +108,9 @@ for argument in "${@}"; do
             ;;
         --cert-issuer-enc-key=*)
             CERTIFICATE_ISSUER_ENCRYPTION_KEY="${argument#*=}"
+            ;;
+        --pre-isolation-canisters=*)
+            PRE_ISOLATION_CANISTERS="${argument#*=}"
             ;;
         *)
             echo "Error: Argument \"${argument#}\" is not supported for $0"
@@ -491,6 +495,27 @@ EOF
     done
 }
 
+function copy_pre_isolation_canisters() {
+    if [[ -z "${PRE_ISOLATION_CANISTERS:-}" ]]; then
+        err "pre-domain-isolation canisters have not been provided, proceeding without copying them"
+        return
+    fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        mkdir -p "${CONFIG_DIR}/${NODE_PREFIX}"
+        cp "${PRE_ISOLATION_CANISTERS}" "${CONFIG_DIR}/${NODE_PREFIX}/pre_isolation_canisters.txt"
+    done
+}
+
 function build_tarball() {
     for n in $NODES; do
         declare -n NODE=$n
@@ -542,6 +567,7 @@ function main() {
     copy_deny_list
     copy_geolite2_dbs
     generate_certificate_issuer_config
+    copy_pre_isolation_canisters
     build_tarball
     build_removable_media
     remove_temporary_directories
