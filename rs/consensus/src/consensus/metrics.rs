@@ -24,6 +24,9 @@ const RANKS_TO_RECORD: [&str; 6] = ["0", "1", "2", "3", "4", "5"];
 pub(crate) const CRITICAL_ERROR_PAYLOAD_TOO_LARGE: &str = "consensus_payload_too_large";
 pub(crate) const CRITICAL_ERROR_VALIDATION_NOT_PASSED: &str = "consensus_validation_not_passed";
 pub(crate) const CRITICAL_ERROR_SUBNET_RECORD_ISSUE: &str = "consensus_subnet_record_issue";
+pub(crate) const CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING: &str = "ecdsa_key_transcript_missing";
+pub(crate) const CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS: &str =
+    "ecdsa_retain_active_transcripts_error";
 
 pub struct BlockMakerMetrics {
     pub get_payload_calls: IntCounterVec,
@@ -568,6 +571,8 @@ pub struct EcdsaClientMetrics {
     pub on_state_change_duration: HistogramVec,
     pub client_metrics: IntCounterVec,
     pub client_errors: IntCounterVec,
+    /// critical error when retain_active_transcripts fails
+    pub critical_error_ecdsa_retain_active_transcripts: IntCounter,
 }
 
 impl EcdsaClientMetrics {
@@ -591,6 +596,8 @@ impl EcdsaClientMetrics {
                 "ECDSA client related errors",
                 &["type"],
             ),
+            critical_error_ecdsa_retain_active_transcripts: metrics_registry
+                .error_counter(CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS),
         }
     }
 }
@@ -697,6 +704,8 @@ pub struct EcdsaPayloadMetrics {
     pub transcript_builder_metrics: IntCounterVec,
     pub transcript_builder_errors: IntCounterVec,
     pub transcript_builder_duration: HistogramVec,
+    /// Critical error for failure to create/reshare key transcript
+    pub critical_error_ecdsa_key_transcript_missing: IntCounter,
 }
 
 impl EcdsaPayloadMetrics {
@@ -730,6 +739,8 @@ impl EcdsaPayloadMetrics {
                 decimal_buckets(-4, 2),
                 &["sub_component"],
             ),
+            critical_error_ecdsa_key_transcript_missing: metrics_registry
+                .error_counter(CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING),
         }
     }
 
