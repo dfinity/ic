@@ -40,15 +40,14 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
         replica_logger.clone(),
     );
 
+    let mut consensus = MockConsensus::new();
+    consensus.expect_on_state_change().return_const(vec![]);
+    let consensus_gossip = UnimplementedConsensusPoolDescriptor {};
+
     // Create consensus client
     let (consensus_client, actor) = processors::ConsensusProcessor::build(
         |_| {},
-        || {
-            let mut consensus = MockConsensus::new();
-            consensus.expect_on_state_change().return_const(vec![]);
-            let consensus_gossip = UnimplementedConsensusPoolDescriptor {};
-            (consensus, consensus_gossip)
-        },
+        (consensus, consensus_gossip),
         Arc::clone(&time_source) as Arc<_>,
         Arc::clone(&consensus_pool),
         replica_logger,
