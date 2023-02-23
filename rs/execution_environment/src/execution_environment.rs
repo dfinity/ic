@@ -330,11 +330,15 @@ impl ExecutionEnvironment {
 
     /// Look up the current amount of memory available on the subnet.
     pub fn subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
-        let (memory_taken, message_memory_taken) = state.total_and_message_memory_taken();
+        let memory_taken = state.memory_taken();
         SubnetAvailableMemory::new(
-            self.config.subnet_memory_capacity.get() as i64 - memory_taken.get() as i64,
+            self.config.subnet_memory_capacity.get() as i64 - memory_taken.total().get() as i64,
             self.config.subnet_message_memory_capacity.get() as i64
-                - message_memory_taken.get() as i64,
+                - memory_taken.messages().get() as i64,
+            self.config
+                .subnet_wasm_custom_sections_memory_capacity
+                .get() as i64
+                - memory_taken.wasm_custom_sections().get() as i64,
         )
     }
 
@@ -2272,6 +2276,7 @@ pub(crate) fn subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAvailabl
     SubnetAvailableMemory::new(
         config.subnet_memory_capacity.get() as i64,
         config.subnet_message_memory_capacity.get() as i64,
+        config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
     )
 }
 

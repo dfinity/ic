@@ -1353,6 +1353,7 @@ pub struct ExecutionTestBuilder {
     initial_canister_cycles: Cycles,
     subnet_total_memory: i64,
     subnet_message_memory: i64,
+    subnet_wasm_custom_sections_memory: i64,
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     rate_limiting_of_instructions: bool,
@@ -1379,6 +1380,9 @@ impl Default for ExecutionTestBuilder {
         let subnet_message_memory = ic_config::execution_environment::Config::default()
             .subnet_message_memory_capacity
             .get() as i64;
+        let subnet_wasm_custom_sections_memory = ic_config::execution_environment::Config::default()
+            .subnet_wasm_custom_sections_memory_capacity
+            .get() as i64;
         let max_instructions_per_composite_query_call =
             ic_config::execution_environment::Config::default().max_query_call_graph_instructions;
         Self {
@@ -1400,6 +1404,7 @@ impl Default for ExecutionTestBuilder {
             initial_canister_cycles: INITIAL_CANISTER_CYCLES,
             subnet_total_memory,
             subnet_message_memory,
+            subnet_wasm_custom_sections_memory,
             registry_settings: test_registry_settings(),
             manual_execution: false,
             rate_limiting_of_instructions: false,
@@ -1535,6 +1540,16 @@ impl ExecutionTestBuilder {
     pub fn with_subnet_message_memory(self, subnet_message_memory: i64) -> Self {
         Self {
             subnet_message_memory,
+            ..self
+        }
+    }
+
+    pub fn with_subnet_wasm_custom_sections_memory(
+        self,
+        subnet_wasm_custom_sections_memory: i64,
+    ) -> Self {
+        Self {
+            subnet_wasm_custom_sections_memory,
             ..self
         }
     }
@@ -1806,6 +1821,7 @@ impl ExecutionTestBuilder {
             subnet_available_memory: SubnetAvailableMemory::new(
                 self.subnet_total_memory,
                 self.subnet_message_memory,
+                self.subnet_wasm_custom_sections_memory,
             ),
             time: mock_time(),
             instruction_limits: InstructionLimits::new(

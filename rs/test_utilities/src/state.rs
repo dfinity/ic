@@ -475,27 +475,54 @@ impl Default for CallContextBuilder {
 }
 
 pub fn initial_execution_state() -> ExecutionState {
-    let mut metadata: BTreeMap<String, CustomSection> = BTreeMap::new();
-    metadata.insert(
-        String::from("candid"),
-        CustomSection::new(CustomSectionType::Private, vec![0, 2]),
-    );
-    metadata.insert(
-        String::from("dummy"),
-        CustomSection::new(CustomSectionType::Public, vec![2, 1]),
-    );
-    let wasm_metadata = WasmMetadata::new(metadata);
+    ExecutionStateBuilder::new().build()
+}
 
-    ExecutionState {
-        canister_root: "NOT_USED".into(),
-        session_nonce: None,
-        wasm_binary: WasmBinary::new(CanisterModule::new(vec![])),
-        wasm_memory: Memory::new_for_testing(),
-        stable_memory: Memory::new_for_testing(),
-        exported_globals: vec![],
-        exports: ExportedFunctions::new(BTreeSet::new()),
-        metadata: wasm_metadata,
-        last_executed_round: ExecutionRound::from(0),
+pub struct ExecutionStateBuilder {
+    execution_state: ExecutionState,
+}
+
+impl Default for ExecutionStateBuilder {
+    fn default() -> Self {
+        let mut metadata: BTreeMap<String, CustomSection> = BTreeMap::new();
+        metadata.insert(
+            String::from("candid"),
+            CustomSection::new(CustomSectionType::Private, vec![0, 2]),
+        );
+        metadata.insert(
+            String::from("dummy"),
+            CustomSection::new(CustomSectionType::Public, vec![2, 1]),
+        );
+        let wasm_metadata = WasmMetadata::new(metadata);
+
+        ExecutionStateBuilder {
+            execution_state: ExecutionState {
+                canister_root: "NOT_USED".into(),
+                session_nonce: None,
+                wasm_binary: WasmBinary::new(CanisterModule::new(vec![])),
+                wasm_memory: Memory::new_for_testing(),
+                stable_memory: Memory::new_for_testing(),
+                exported_globals: vec![],
+                exports: ExportedFunctions::new(BTreeSet::new()),
+                metadata: wasm_metadata,
+                last_executed_round: ExecutionRound::from(0),
+            },
+        }
+    }
+}
+
+impl ExecutionStateBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_wasm_metadata(mut self, metadata: WasmMetadata) -> Self {
+        self.execution_state.metadata = metadata;
+        self
+    }
+
+    pub fn build(self) -> ExecutionState {
+        self.execution_state
     }
 }
 

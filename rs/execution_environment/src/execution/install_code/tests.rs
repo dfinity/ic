@@ -377,6 +377,141 @@ fn install_code_validates_execution_state() {
     );
 }
 
+#[test]
+fn install_code_fails_when_not_enough_wasm_custom_sections_memory() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_slice_instruction_limit(1_000_000_000)
+        .with_deterministic_time_slicing()
+        .with_subnet_wasm_custom_sections_memory(32)
+        .with_manual_execution()
+        .build();
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+
+    // Install code on canister with Wasm sections that are larger than the available memory on the subnet.
+    let message_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
+    test.execute_subnet_message();
+    let result = check_ingress_status(test.ingress_status(&message_id));
+    assert!(result.is_err());
+}
+
+#[test]
+fn install_code_succeeds_with_enough_wasm_custom_sections_memory() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_slice_instruction_limit(1_000_000_000)
+        .with_deterministic_time_slicing()
+        .with_subnet_wasm_custom_sections_memory(1024 * 1024) // 1MiB
+        .with_manual_execution()
+        .build();
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+
+    // Install code on canister with Wasm sections that fit in the available memory on the subnet.
+    assert!(test
+        .subnet_message(Method::InstallCode, payload.encode())
+        .is_ok());
+    assert_eq!(
+        test.canister_state(canister_id).next_execution(),
+        NextExecution::None,
+    );
+}
+
+#[test]
+fn install_code_respects_wasm_custom_sections_available_memory() {
+    let available_wasm_custom_sections_memory = 200 * 1024; // 200KiB
+
+    // This value might need adjustment if something changes in the canister's
+    // wasm that gets installed in the test.
+    let total_memory_taken_per_canister_in_bytes = 364249;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_install_code_instruction_limit(1_000_000_000)
+        .with_install_code_slice_instruction_limit(1_000_000_000)
+        .with_deterministic_time_slicing()
+        .with_subnet_wasm_custom_sections_memory(available_wasm_custom_sections_memory)
+        .with_manual_execution()
+        .build();
+
+    let subnet_available_memory_before = test.subnet_available_memory().get_total_memory();
+    let mut iterations = 0;
+    loop {
+        let canister_id = test
+            .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+            .unwrap();
+
+        let payload = InstallCodeArgs {
+            mode: CanisterInstallMode::Install,
+            canister_id: canister_id.get(),
+            wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
+            arg: vec![],
+            compute_allocation: None,
+            memory_allocation: None,
+            query_allocation: None,
+            sender_canister_version: None,
+        };
+
+        if test
+            .subnet_message(Method::InstallCode, payload.encode())
+            .is_err()
+        {
+            // We expect that at some point there is not enough wasm custom sections
+            // memory left on the subnet and the request to install the canister
+            // will fail.
+            break;
+        }
+        iterations += 1;
+    }
+
+    // One more request to install a canister with wasm custom sections should fail.
+    let canister_id = test
+        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
+        .unwrap();
+
+    let payload = InstallCodeArgs {
+        mode: CanisterInstallMode::Install,
+        canister_id: canister_id.get(),
+        wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
+        arg: vec![],
+        compute_allocation: None,
+        memory_allocation: None,
+        query_allocation: None,
+        sender_canister_version: None,
+    };
+    let result = test.subnet_message(Method::InstallCode, payload.encode());
+
+    assert!(result.is_err());
+    assert_eq!(
+        test.subnet_available_memory().get_total_memory(),
+        subnet_available_memory_before - iterations * total_memory_taken_per_canister_in_bytes
+    );
+}
+
 fn execute_install_code_message_dts_helper(
     test: &mut ExecutionTest,
     canister_id: CanisterId,

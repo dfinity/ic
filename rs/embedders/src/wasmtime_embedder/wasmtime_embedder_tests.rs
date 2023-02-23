@@ -24,7 +24,7 @@ use wasmtime::{Engine, Module, Store, Val};
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2);
+        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
 }
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
 

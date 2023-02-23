@@ -2170,7 +2170,7 @@ fn subnet_available_memory_is_updated_by_canister_init() {
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     );
-    let memory_used = test.state().total_and_message_memory_taken().0.get() as i64;
+    let memory_used = test.state().memory_taken().total().get() as i64;
     assert_eq!(
         test.subnet_available_memory().get_total_memory(),
         initial_subnet_available_memory.get_total_memory() - memory_used
@@ -2205,7 +2205,7 @@ fn subnet_available_memory_is_updated_by_canister_start() {
         mem_before_upgrade,
         test.subnet_available_memory().get_total_memory()
     );
-    let memory_used = test.state().total_and_message_memory_taken().0.get() as i64;
+    let memory_used = test.state().memory_taken().total().get() as i64;
     assert_eq!(
         test.subnet_available_memory().get_total_memory(),
         initial_subnet_available_memory.get_total_memory() - memory_used
@@ -2332,7 +2332,7 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
 
     test.install_canister_with_allocation(canister_id, binary, None, Some(memory_allocation.get()))
         .unwrap();
-    let initial_memory_used = test.state().total_and_message_memory_taken().0;
+    let initial_memory_used = test.state().memory_taken().total();
     assert_eq!(initial_memory_used.get(), memory_allocation.get());
     let initial_subnet_available_memory = test.subnet_available_memory();
     let result = test.ingress(canister_id, "test", vec![]);
@@ -2346,10 +2346,7 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     );
-    assert_eq!(
-        initial_memory_used,
-        test.state().total_and_message_memory_taken().0
-    );
+    assert_eq!(initial_memory_used, test.state().memory_taken().total());
 }
 
 #[test]
@@ -4562,7 +4559,7 @@ fn dts_concurrent_subnet_available_change() {
         test.canister_state(canister_id).next_execution(),
         NextExecution::ContinueLong
     );
-    test.set_subnet_available_memory(SubnetAvailableMemory::new(0, 0));
+    test.set_subnet_available_memory(SubnetAvailableMemory::new(0, 0, 0));
     while test.canister_state(canister_id).next_execution() == NextExecution::ContinueLong {
         test.execute_slice(canister_id);
     }
@@ -4613,7 +4610,7 @@ fn system_state_apply_change_fails() {
     test.induct_messages();
     test.execute_slice(b_id);
     // No memory available after the first slice.
-    test.set_subnet_available_memory(SubnetAvailableMemory::new(0, 0));
+    test.set_subnet_available_memory(SubnetAvailableMemory::new(0, 0, 0));
     while test.canister_state(b_id).next_execution() == NextExecution::ContinueLong {
         test.execute_slice(b_id);
     }

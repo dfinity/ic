@@ -49,7 +49,7 @@ pub const USER_ID: u64 = 0;
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(i64::MAX, i64::MAX);
+        SubnetAvailableMemory::new(i64::MAX, i64::MAX, i64::MAX);
 }
 
 /// Pieces needed to execute a benchmark.

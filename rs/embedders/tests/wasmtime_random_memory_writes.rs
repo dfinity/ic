@@ -34,7 +34,7 @@ const STABLE_OP_BYTES: u64 = 37;
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2);
+        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
 }
 
 fn test_api_for_update(

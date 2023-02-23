@@ -801,6 +801,9 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
             })
             .with_subnet_total_memory(subnet_available_memory.get_total_memory() as u64)
             .with_subnet_message_memory(subnet_available_memory.get_message_memory() as u64)
+            .with_subnet_wasm_custom_sections_memory(
+                subnet_available_memory.get_wasm_custom_sections_memory() as u64,
+            )
             // Canisters can have up to 5 outstanding requests (plus epsilon). I.e. for
             // source canister, 4 outgoing + 1 incoming request plus small responses.
             .with_max_canister_memory_size(MAX_RESPONSE_COUNT_BYTES as u64 * 55 / 10)
@@ -857,19 +860,19 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
     // Subnet has memory for 4 initial requests and 2 additional requests (plus
     // epsilon, for small responses).
     run_test(
-        SubnetAvailableMemory::new(MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10, 1 << 30),
+        SubnetAvailableMemory::new(MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10, 1 << 30, 0),
         SubnetType::Application,
     );
     // Subnet has memory for 4 initial requests and 2 additional requests (plus
     // epsilon, for small responses).
     run_test(
-        SubnetAvailableMemory::new(1 << 30, MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10),
+        SubnetAvailableMemory::new(1 << 30, MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10, 0),
         SubnetType::Application,
     );
 
     // On system subnets limits will not be enforced for local messages, so running with 0 available
     // memory should also lead to inducting messages on local subnet.
-    run_test(SubnetAvailableMemory::new(0, 0), SubnetType::System);
+    run_test(SubnetAvailableMemory::new(0, 0, 0), SubnetType::System);
 }
 
 /// Verifies that the [`SchedulerConfig::instruction_overhead_per_message`] puts

@@ -92,7 +92,7 @@ const MINIMAL_WASM: [u8; 8] = [
 
 lazy_static! {
     static ref MAX_SUBNET_AVAILABLE_MEMORY: SubnetAvailableMemory =
-        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2);
+        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
     static ref INITIAL_CYCLES: Cycles =
         CANISTER_FREEZE_BALANCE_RESERVE + Cycles::new(5_000_000_000_000);
     static ref EXECUTION_PARAMETERS: ExecutionParameters = ExecutionParameters {
@@ -807,6 +807,7 @@ fn can_update_memory_allocation_during_upgrade() {
             instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
             execution_complexity: ExecutionComplexity::MAX,
             subnet_available_memory: SubnetAvailableMemory::new(
+                MEMORY_CAPACITY.get() as i64,
                 MEMORY_CAPACITY.get() as i64,
                 MEMORY_CAPACITY.get() as i64,
             ),

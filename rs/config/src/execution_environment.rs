@@ -38,6 +38,10 @@ const SUBNET_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(25 * GB);
 /// memory plus reservations.
 const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(4 * GB);
 
+/// This is the upper limit on how much memory can be used by wasm custom
+/// sections on a given subnet.
+const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * GB);
+
 /// This is the upper limit on how big heap deltas all the canisters together
 /// can produce on a subnet in between checkpoints. Once, the total delta size
 /// is above this limit, no more canisters will be executed till the next
@@ -114,6 +118,10 @@ pub struct Config {
     /// The maximum amount of logical storage available to the ingress history
     /// across the whole subnet.
     pub ingress_history_memory_capacity: NumBytes,
+
+    /// The maximum amount of logical storage available to wasm custom sections
+    /// across the whole subnet.    
+    pub subnet_wasm_custom_sections_memory_capacity: NumBytes,
 
     /// The maximum amount of memory that can be utilized by a single canister.
     pub max_canister_memory_size: NumBytes,
@@ -218,6 +226,8 @@ impl Default for Config {
             subnet_memory_capacity: SUBNET_MEMORY_CAPACITY,
             subnet_message_memory_capacity: SUBNET_MESSAGE_MEMORY_CAPACITY,
             ingress_history_memory_capacity: INGRESS_HISTORY_MEMORY_CAPACITY,
+            subnet_wasm_custom_sections_memory_capacity:
+                SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY,
             max_canister_memory_size: NumBytes::new(
                 MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES,
             ),

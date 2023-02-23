@@ -82,7 +82,9 @@ pub(crate) struct InstallCodeHelper {
     // Bytes allocated and deallocated by the steps.
     allocated_bytes: NumBytes,
     allocated_message_bytes: NumBytes,
+    allocated_wasm_custom_sections_bytes: NumBytes,
     deallocated_bytes: NumBytes,
+    deallocated_wasm_custom_sections_bytes: NumBytes,
     // The total heap delta of all steps.
     total_heap_delta: NumBytes,
 }
@@ -96,7 +98,9 @@ impl InstallCodeHelper {
             execution_parameters: original.execution_parameters.clone(),
             allocated_bytes: NumBytes::from(0),
             allocated_message_bytes: NumBytes::from(0),
+            allocated_wasm_custom_sections_bytes: NumBytes::from(0),
             deallocated_bytes: NumBytes::from(0),
+            deallocated_wasm_custom_sections_bytes: NumBytes::from(0),
             total_heap_delta: NumBytes::from(0),
         }
     }
@@ -187,16 +191,24 @@ impl InstallCodeHelper {
             .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
 
         let mut subnet_available_memory = round_limits.subnet_available_memory;
-        subnet_available_memory.increment(self.deallocated_bytes, NumBytes::from(0));
-        if let Err(err) = subnet_available_memory
-            .try_decrement(self.allocated_bytes, self.allocated_message_bytes)
-        {
+        subnet_available_memory.increment(
+            self.deallocated_bytes,
+            NumBytes::from(0),
+            self.deallocated_wasm_custom_sections_bytes,
+        );
+        if let Err(err) = subnet_available_memory.try_decrement(
+            self.allocated_bytes,
+            self.allocated_message_bytes,
+            self.allocated_wasm_custom_sections_bytes,
+        ) {
             match err {
                 SubnetAvailableMemoryError::InsufficientMemory {
                     requested_total,
                     message_requested: _,
+                    wasm_custom_sections_requested: _,
                     available_total,
                     available_messages: _,
+                    available_wasm_custom_sections: _,
                 } => {
                     return finish_err(
                         clean_canister,
@@ -351,10 +363,18 @@ impl InstallCodeHelper {
         let old_memory_usage = self.canister.memory_usage(subnet_type);
         let old_memory_allocation = self.canister.system_state.memory_allocation;
         let old_compute_allocation = self.canister.scheduler_state.compute_allocation;
+        let old_wasm_custom_sections_memory_used = self
+            .canister
+            .execution_state
+            .as_ref()
+            .map_or(NumBytes::from(0), |es| es.metadata.memory_usage());
 
         // Replace the execution state and maybe the stable memory.
         let mut execution_state =
             maybe_execution_state.map_err(|err| (self.canister.canister_id(), err))?;
+
+        let new_wasm_custom_sections_memory_used = execution_state.metadata.memory_usage();
+
         execution_state.stable_memory =
             match (stable_memory_handling, self.canister.execution_state.take()) {
                 (StableMemoryHandling::Keep, Some(old)) => old.stable_memory,
@@ -401,8 +421,10 @@ impl InstallCodeHelper {
         self.update_allocated_bytes(
             old_memory_usage,
             old_memory_allocation,
+            old_wasm_custom_sections_memory_used,
             new_memory_usage,
             new_memory_allocation,
+            new_wasm_custom_sections_memory_used,
         );
         Ok(())
     }
@@ -412,8 +434,10 @@ impl InstallCodeHelper {
         &mut self,
         old_memory_usage: NumBytes,
         old_memory_allocation: MemoryAllocation,
+        old_wasm_custom_sections_memory_used: NumBytes,
         new_memory_usage: NumBytes,
         new_memory_allocation: MemoryAllocation,
+        new_wasm_custom_sections_memory_used: NumBytes,
     ) {
         let old_bytes = old_memory_allocation.bytes().max(old_memory_usage);
         let new_bytes = new_memory_allocation.bytes().max(new_memory_usage);
@@ -421,6 +445,13 @@ impl InstallCodeHelper {
             self.allocated_bytes += new_bytes - old_bytes;
         } else {
             self.deallocated_bytes += old_bytes - new_bytes;
+        }
+        if new_wasm_custom_sections_memory_used >= old_wasm_custom_sections_memory_used {
+            self.allocated_wasm_custom_sections_bytes +=
+                new_wasm_custom_sections_memory_used - old_wasm_custom_sections_memory_used;
+        } else {
+            self.deallocated_wasm_custom_sections_bytes +=
+                old_wasm_custom_sections_memory_used - new_wasm_custom_sections_memory_used;
         }
     }
 

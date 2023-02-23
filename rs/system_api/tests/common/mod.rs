@@ -127,7 +127,7 @@ pub fn get_system_api(
         sandbox_safe_system_state,
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
-        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
+        SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2),
         default_memory_for_system_api(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
