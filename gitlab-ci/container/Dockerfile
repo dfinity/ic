@@ -28,10 +28,9 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev libcsmith-dev sqlite3 libsqlite3-dev libselinux-dev libunwind-dev libsystemd-dev uuid-dev \
         qemu-system-x86 ovmf iproute2 dosfstools mtools fakeroot faketime android-sdk-ext4-utils \
         policycoreutils python-is-python3 python3 python3-pip python3-gflags python3-cbor pipenv shellcheck \
-        sudo docker-ce-cli ripgrep patchelf asciidoctor plantuml graphviz cpio nodejs npm gosu pigz zsh hub less \
+        sudo docker-ce-cli ripgrep patchelf cpio nodejs npm gosu pigz zsh hub less \
         ca-certificates curl git isolinux p7zip-full syslinux xorriso cryptsetup-bin autoconf automake \
-        grub-efi-amd64-bin podman buildah && \
-    gem install asciidoctor-diagram rouge
+        grub-efi-amd64-bin podman buildah
 
 COPY --from=docker/buildx-bin:latest /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 
@@ -68,9 +67,6 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     rustup default ${rust_version}-x86_64-unknown-linux-gnu && \
     rustup target add wasm32-unknown-unknown && \
     chown -R ${USER}.${USER} ${RUSTUP_HOME} ${CARGO_HOME}
-
-# cargo-nextest
-RUN curl -LsSf https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-0.9.36/cargo-nextest-0.9.36-x86_64-unknown-linux-gnu.tar.gz | tar zxf - -C /opt/cargo/bin
 
 ARG nvm_version=v0.39.1
 ARG node_version=17
