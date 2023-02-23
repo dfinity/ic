@@ -218,9 +218,9 @@ pub fn current_time() -> Time {
     UNIX_EPOCH + since_epoch
 }
 
-/// A utility function to help set the expiry time when creating an
-/// SignedIngress message from scratch.  Returns the current time and expiry
-/// time.  The expiry time is set from the current system time + the maximum
+/// A utility function that returns an expiry time when creating an
+/// SignedIngress message from scratch.
+/// The expiry time is set from the current system time + the maximum
 /// amount of time ingress messages are allowed to stay alive for - 60 seconds.
 ///
 /// Subtracting 60 seconds is because this uses the system time and not the
@@ -234,15 +234,11 @@ pub fn current_time() -> Time {
 ///
 /// WARNING: this function should not be used in any deterministic part of the
 /// IC as it accesses system time, which is non-deterministic between nodes.
-//
-// This function is made public to be able to use it for testing purposes.
-pub fn current_time_and_expiry_time() -> (Time, Time) {
+pub fn expiry_time_from_now() -> Time {
     let start = std::time::SystemTime::now();
     let since_epoch = start
         .duration_since(std::time::UNIX_EPOCH)
         .expect("Time wrapped around");
-    (
-        UNIX_EPOCH + since_epoch,
-        UNIX_EPOCH + (since_epoch + MAX_INGRESS_TTL - PERMITTED_DRIFT),
-    )
+
+    UNIX_EPOCH + (since_epoch + MAX_INGRESS_TTL - PERMITTED_DRIFT)
 }

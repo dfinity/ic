@@ -36,7 +36,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{SignedIngress, UserQuery},
     replica_config::NODE_INDEX_DEFAULT,
-    time::current_time_and_expiry_time,
+    time::expiry_time_from_now,
     CanisterId, Height, NodeId, RegistryVersion, Time,
 };
 use prost::Message;
@@ -511,7 +511,7 @@ impl LocalTestRuntime {
             &self.ingress_sender,
             self.ingress_history_reader.as_ref(),
             SignedIngressBuilder::new()
-                .expiry_time(current_time_and_expiry_time().1)
+                .expiry_time(expiry_time_from_now())
                 .method_name(Method::ProvisionalCreateCanisterWithCycles)
                 .canister_id(IC_00)
                 .method_payload(
@@ -647,7 +647,7 @@ impl LocalTestRuntime {
                     &ingress_sender,
                     ingress_history_reader.as_ref(),
                     SignedIngressBuilder::new()
-                        .expiry_time(current_time_and_expiry_time().1)
+                        .expiry_time(expiry_time_from_now())
                         .canister_id(IC_00)
                         .method_name(Method::InstallCode)
                         .method_payload(install_code_args.encode())
@@ -668,7 +668,7 @@ impl LocalTestRuntime {
             &self.ingress_sender,
             self.ingress_history_reader.as_ref(),
             SignedIngressBuilder::new()
-                .expiry_time(current_time_and_expiry_time().1)
+                .expiry_time(expiry_time_from_now())
                 .canister_id(IC_00)
                 .method_name(Method::InstallCode)
                 .method_payload(install_code_args.encode())
@@ -743,7 +743,7 @@ impl LocalTestRuntime {
             &self.ingress_sender,
             self.ingress_history_reader.as_ref(),
             SignedIngressBuilder::new()
-                .expiry_time(current_time_and_expiry_time().1)
+                .expiry_time(expiry_time_from_now())
                 .canister_id(canister_id)
                 .method_name(method_name.to_string())
                 .method_payload(payload.into())
@@ -787,7 +787,7 @@ impl LocalTestRuntime {
             &self.ingress_sender,
             self.ingress_history_reader.as_ref(),
             SignedIngressBuilder::new()
-                .expiry_time(current_time_and_expiry_time().1)
+                .expiry_time(expiry_time_from_now())
                 .canister_id(canister_id)
                 .method_name(method_name.to_string())
                 .method_payload(payload.into())

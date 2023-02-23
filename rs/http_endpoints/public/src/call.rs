@@ -294,13 +294,13 @@ mod test {
     use super::*;
     use ic_types::{
         messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope},
-        time::current_time_and_expiry_time,
+        time::expiry_time_from_now,
     };
     use std::convert::TryFrom;
 
     #[test]
     fn check_request_id() {
-        let expiry_time = current_time_and_expiry_time().1;
+        let expiry_time = expiry_time_from_now();
         let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: Blob(vec![42; 8]),

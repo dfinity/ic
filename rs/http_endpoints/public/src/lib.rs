@@ -72,7 +72,7 @@ use ic_types::{
         Blob, Certificate, CertificateDelegation, HttpReadState, HttpReadStateContent,
         HttpReadStateResponse, HttpRequestEnvelope, ReplicaHealthStatus,
     },
-    time::current_time_and_expiry_time,
+    time::expiry_time_from_now,
     CanisterId, NodeId, SubnetId,
 };
 use metrics::HttpHandlerMetrics;
@@ -813,7 +813,7 @@ async fn load_root_delegation(
                             b"canister_ranges".into(),
                         ]),
                     ],
-                    ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
+                    ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
                     nonce: None,
                 },
             },

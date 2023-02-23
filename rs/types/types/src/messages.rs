@@ -257,7 +257,7 @@ impl SignedRequestBytes {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::time::current_time_and_expiry_time;
+    use crate::time::expiry_time_from_now;
     use maplit::btreemap;
     use serde_cbor::Value;
     use std::{convert::TryFrom, io::Cursor};
@@ -338,7 +338,7 @@ mod tests {
 
     #[test]
     fn decoding_submit_call() {
-        let (_, expiry_time) = current_time_and_expiry_time();
+        let expiry_time = expiry_time_from_now();
         assert_cbor_de_equal(
             &HttpRequestEnvelope::<HttpCallContent> {
                 content: HttpCallContent::Call {
@@ -372,7 +372,7 @@ mod tests {
 
     #[test]
     fn decoding_submit_call_arg() {
-        let (_, expiry_time) = current_time_and_expiry_time();
+        let expiry_time = expiry_time_from_now();
         assert_cbor_de_equal(
             &HttpRequestEnvelope::<HttpCallContent> {
                 content: HttpCallContent::Call {
@@ -406,7 +406,7 @@ mod tests {
 
     #[test]
     fn decoding_submit_call_with_nonce() {
-        let (_, expiry_time) = current_time_and_expiry_time();
+        let expiry_time = expiry_time_from_now();
         assert_cbor_de_equal(
             &HttpRequestEnvelope::<HttpCallContent> {
                 content: HttpCallContent::Call {
@@ -441,7 +441,7 @@ mod tests {
 
     #[test]
     fn serialize_via_bincode() {
-        let expiry_time = current_time_and_expiry_time().1;
+        let expiry_time = expiry_time_from_now();
         let update = HttpRequestEnvelope::<HttpCallContent> {
             content: HttpCallContent::Call {
                 update: HttpCanisterUpdate {
@@ -469,7 +469,7 @@ mod tests {
     /// 2. The deserialized_from is used on data that has just been serialized before the method.
     #[allow(clippy::disallowed_methods)]
     fn serialize_via_bincode_without_signature() {
-        let expiry_time = current_time_and_expiry_time().1;
+        let expiry_time = expiry_time_from_now();
         let update = HttpRequestEnvelope::<HttpCallContent> {
             content: HttpCallContent::Call {
                 update: HttpCanisterUpdate {

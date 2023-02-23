@@ -513,7 +513,7 @@ mod tests {
         batch::IngressPayload,
         ingress::{IngressState, IngressStatus},
         messages::{MessageId, SignedIngress},
-        time::current_time_and_expiry_time,
+        time::expiry_time_from_now,
         Height, RegistryVersion,
     };
     use std::{collections::HashSet, convert::TryInto, time::Duration};
@@ -1282,7 +1282,7 @@ mod tests {
                     .build(),
             ),
             |ingress_manager, _| {
-                let time = current_time_and_expiry_time().1;
+                let time = expiry_time_from_now();
                 let ingress_message1 = SignedIngressBuilder::new()
                     .canister_id(canister_test_id(0))
                     .expiry_time(time)
