@@ -412,7 +412,11 @@ fn try_apply_canister_state_changes(
 ) -> HypervisorResult<()> {
     match &system_state.memory_allocation {
         MemoryAllocation::BestEffort => subnet_available_memory
-            .try_decrement(output.allocated_bytes, output.allocated_message_bytes)
+            .try_decrement(
+                output.allocated_bytes,
+                output.allocated_message_bytes,
+                NumBytes::from(0),
+            )
             .map_err(|_| HypervisorError::OutOfMemory)?,
         MemoryAllocation::Reserved(_) => (),
     }

@@ -126,7 +126,7 @@ impl WasmtimeInstanceBuilder {
                 subnet_type: self.subnet_type,
                 execution_mode: ExecutionMode::Replicated,
             },
-            SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2),
+            SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2),
             match embedder.config().feature_flags.wasm_native_stable_memory {
                 FlagStatus::Enabled => None,
                 FlagStatus::Disabled => Some(Memory::new_for_testing()),

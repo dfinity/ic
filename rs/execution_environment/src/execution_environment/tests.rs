@@ -292,7 +292,7 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
     let available_memory_after_create = test.subnet_available_memory().get_total_memory();
     assert_eq!(
         available_memory_after_create,
-        ONE_GIB - test.state().total_and_message_memory_taken().0.get() as i64
+        ONE_GIB - test.state().memory_taken().total().get() as i64
     );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
@@ -316,7 +316,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
     let available_memory_after_create = test.subnet_available_memory().get_total_memory();
     assert_eq!(
         available_memory_after_create,
-        ONE_GIB - test.state().total_and_message_memory_taken().0.get() as i64
+        ONE_GIB - test.state().memory_taken().total().get() as i64
     );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
@@ -1400,7 +1400,7 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
         .with_subnet_message_memory(ONE_GIB)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
-    let memory_after_create = test.state().total_and_message_memory_taken().0.get() as i64;
+    let memory_after_create = test.state().memory_taken().total().get() as i64;
     assert_eq!(
         test.subnet_available_memory().get_total_memory(),
         ONE_GIB - memory_after_create
@@ -1419,7 +1419,7 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
         .with_subnet_message_memory(ONE_GIB)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
-    let memory_after_create = test.state().total_and_message_memory_taken().0.get() as i64;
+    let memory_after_create = test.state().memory_taken().total().get() as i64;
     assert_eq!(
         test.subnet_available_memory().get_total_memory(),
         ONE_GIB - memory_after_create

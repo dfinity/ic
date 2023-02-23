@@ -6,12 +6,13 @@ use ic_protobuf::{
     state::canister_state_bits::v1 as pb,
 };
 use ic_sys::PAGE_SIZE;
-use ic_types::{methods::WasmMethod, ExecutionRound, NumBytes};
+use ic_types::{methods::WasmMethod, CountBytes, ExecutionRound, NumBytes};
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
+use std::mem::size_of_val;
 use std::{
     collections::BTreeSet,
     convert::{From, TryFrom},
@@ -442,6 +443,7 @@ impl ExecutionState {
                 .expect("could not convert from stable memory number of pages to bytes")
             + NumBytes::from(globals_size_bytes)
             + NumBytes::from(wasm_binary_size_bytes)
+            + self.metadata.memory_usage()
     }
 
     /// Returns the number of global variables in the Wasm module.
@@ -511,6 +513,12 @@ impl CustomSection {
     }
 }
 
+impl CountBytes for CustomSection {
+    fn count_bytes(&self) -> usize {
+        size_of_val(&self.visibility) + self.content.len()
+    }
+}
+
 impl From<&CustomSection> for pb::WasmCustomSection {
     fn from(item: &CustomSection) -> Self {
         Self {
@@ -550,11 +558,23 @@ pub struct WasmMetadata {
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
     custom_sections: Arc<BTreeMap<String, CustomSection>>,
+    /// Memory usage that the Wasm custom sections contribute.
+    ///
+    /// This field is computed at the struct's construction time as it shouldn't
+    /// change except for when a new Wasm module is installed and then create
+    /// a fresh instance of `WasmMetadata` which lives until the next change.
+    memory_usage: NumBytes,
 }
 
 impl WasmMetadata {
     pub fn new(custom_sections: BTreeMap<String, CustomSection>) -> Self {
         Self {
+            memory_usage: NumBytes::from(
+                custom_sections
+                    .iter()
+                    .map(|(k, v)| k.len() + v.count_bytes())
+                    .sum::<usize>() as u64,
+            ),
             custom_sections: Arc::new(custom_sections),
         }
     }
@@ -568,12 +588,29 @@ impl WasmMetadata {
     pub fn get_custom_section(&self, custom_section_name: &str) -> Option<&CustomSection> {
         self.custom_sections.get(custom_section_name)
     }
+
+    /// Returns the memory used by Wasm custom sections in bytes.
+    pub fn memory_usage(&self) -> NumBytes {
+        // Pre-computed memory usage at struct initialization should be equal to
+        // the sum of memory used by all custom sections.
+        debug_assert_eq!(
+            self.memory_usage,
+            NumBytes::from(
+                self.custom_sections
+                    .iter()
+                    .map(|(k, v)| k.len() + v.count_bytes())
+                    .sum::<usize>() as u64,
+            )
+        );
+        self.memory_usage
+    }
 }
 
 impl Default for WasmMetadata {
     fn default() -> Self {
         Self {
             custom_sections: Arc::new(btreemap![]),
+            memory_usage: NumBytes::from(0),
         }
     }
 }
@@ -596,9 +633,7 @@ impl FromIterator<(std::string::String, CustomSection)> for WasmMetadata {
     where
         T: IntoIterator<Item = (String, CustomSection)>,
     {
-        WasmMetadata {
-            custom_sections: Arc::new(BTreeMap::from_iter(iter)),
-        }
+        WasmMetadata::new(BTreeMap::from_iter(iter))
     }
 }
 
@@ -615,8 +650,6 @@ impl TryFrom<pb::WasmMetadata> for WasmMetadata {
                 },
             )
             .collect::<Result<_, _>>()?;
-        Ok(WasmMetadata {
-            custom_sections: Arc::new(custom_sections),
-        })
+        Ok(WasmMetadata::new(custom_sections))
     }
 }

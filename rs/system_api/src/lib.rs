@@ -663,10 +663,11 @@ impl MemoryUsage {
         if overflow || new_usage > self.limit.get() {
             return Err(HypervisorError::OutOfMemory);
         }
-        match self
-            .subnet_available_memory
-            .try_decrement(total_bytes, message_bytes)
-        {
+        match self.subnet_available_memory.try_decrement(
+            total_bytes,
+            message_bytes,
+            NumBytes::from(0),
+        ) {
             Ok(()) => {
                 self.current_usage = NumBytes::from(new_usage);
                 self.total_allocated_memory += total_bytes;
@@ -685,7 +686,7 @@ impl MemoryUsage {
         self.validate_requested_memory(total_bytes, message_bytes);
 
         self.subnet_available_memory
-            .increment(total_bytes, message_bytes);
+            .increment(total_bytes, message_bytes, NumBytes::from(0));
 
         debug_assert!(self.current_usage >= total_bytes);
         debug_assert!(self.total_allocated_memory >= total_bytes);

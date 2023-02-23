@@ -450,6 +450,14 @@ impl CanisterState {
         self.system_state.memory_usage()
     }
 
+    /// Returns the amount of memory used by canisters that have custom Wasm
+    /// sections defined.
+    pub fn wasm_custom_sections_memory_usage(&self) -> NumBytes {
+        self.execution_state
+            .as_ref()
+            .map_or(NumBytes::from(0), |es| es.metadata.memory_usage())
+    }
+
     /// Hack to get the dashboard templating working.
     pub fn memory_usage_ref(&self, own_subnet_type: &SubnetType) -> NumBytes {
         self.memory_usage(*own_subnet_type)

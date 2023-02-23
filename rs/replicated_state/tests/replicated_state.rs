@@ -12,12 +12,13 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
+    canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
     metadata_state::subnet_call_context_manager::BitcoinGetSuccessorsContext,
-    replicated_state::PeekableOutputIterator, replicated_state::ReplicatedStateMessageRouting,
+    replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
     BitcoinStateError, CanisterState, ReplicatedState, SchedulerState, StateError, SystemState,
 };
 use ic_test_utilities::mock_time;
-use ic_test_utilities::state::arb_replicated_state_with_queues;
+use ic_test_utilities::state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
 use ic_test_utilities::types::{
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
@@ -27,7 +28,7 @@ use ic_types::{
     CountBytes, Cycles, Time,
 };
 use proptest::prelude::*;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -75,10 +76,16 @@ struct ReplicatedStateFixture {
 
 impl ReplicatedStateFixture {
     fn new() -> ReplicatedStateFixture {
-        ReplicatedStateFixture::from_canister_ids(&[CANISTER_ID])
+        ReplicatedStateFixture::from_canister_ids_and_wasm_metadata(
+            &[CANISTER_ID],
+            WasmMetadata::new(BTreeMap::new()),
+        )
     }
 
-    fn from_canister_ids(canister_ids: &[CanisterId]) -> ReplicatedStateFixture {
+    pub fn from_canister_ids_and_wasm_metadata(
+        canister_ids: &[CanisterId],
+        wasm_metadata: WasmMetadata,
+    ) -> ReplicatedStateFixture {
         let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
         for canister_id in canister_ids {
             let scheduler_state = SchedulerState::default();
@@ -88,7 +95,14 @@ impl ReplicatedStateFixture {
                 Cycles::new(1 << 36),
                 NumSeconds::from(100_000),
             );
-            state.put_canister_state(CanisterState::new(system_state, None, scheduler_state));
+            let execution_state = ExecutionStateBuilder::default()
+                .with_wasm_metadata(wasm_metadata.clone())
+                .build();
+            state.put_canister_state(CanisterState::new(
+                system_state,
+                Some(execution_state),
+                scheduler_state,
+            ));
         }
         ReplicatedStateFixture { state }
     }
@@ -137,12 +151,8 @@ impl ReplicatedStateFixture {
         self.state.put_streams(streams);
     }
 
-    fn total_memory_taken(&self) -> NumBytes {
-        self.state.total_and_message_memory_taken().0
-    }
-
-    fn message_memory_taken(&self) -> NumBytes {
-        self.state.total_and_message_memory_taken().1
+    fn memory_taken(&self) -> MemoryTaken {
+        self.state.memory_taken()
     }
 
     fn remote_subnet_input_schedule(&self) -> &VecDeque<CanisterId> {
@@ -167,7 +177,7 @@ impl ReplicatedStateFixture {
 fn assert_total_memory_taken(total_memory_usage: usize, fixture: &ReplicatedStateFixture) {
     assert_eq!(
         total_memory_usage as u64,
-        fixture.total_memory_taken().get()
+        fixture.memory_taken().total().get()
     );
 }
 
@@ -175,18 +185,27 @@ fn assert_total_memory_taken_with_messages(
     total_memory_usage: usize,
     fixture: &ReplicatedStateFixture,
 ) {
-    let (raw_total_memory, message_memory_taken) =
-        fixture.state.raw_total_and_message_memory_taken();
+    let memory_taken = fixture.memory_taken();
     assert_eq!(
         total_memory_usage as u64,
-        raw_total_memory.get() + message_memory_taken.get()
+        memory_taken.execution().get() + memory_taken.messages().get()
     );
 }
 
 fn assert_message_memory_taken(queues_memory_usage: usize, fixture: &ReplicatedStateFixture) {
     assert_eq!(
         queues_memory_usage as u64,
-        fixture.message_memory_taken().get()
+        fixture.memory_taken().messages().get()
+    );
+}
+
+fn assert_wasm_custom_sections_memory_taken(
+    wasm_custom_sections_memory_usage: u64,
+    fixture: &ReplicatedStateFixture,
+) {
+    assert_eq!(
+        wasm_custom_sections_memory_usage,
+        fixture.memory_taken().wasm_custom_sections().get()
     );
 }
 
@@ -207,7 +226,7 @@ fn memory_taken_by_canister_queues() {
     let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
     // Zero memory used initially.
-    assert_eq!(0, fixture.total_memory_taken().get());
+    assert_total_memory_taken(0, &fixture);
 
     // Push a request into a canister input queue.
     fixture
@@ -223,6 +242,7 @@ fn memory_taken_by_canister_queues() {
     assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &fixture);
     assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &fixture);
     assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
     assert_subnet_available_memory(
         SUBNET_AVAILABLE_MEMORY,
         MAX_RESPONSE_COUNT_BYTES,
@@ -236,6 +256,7 @@ fn memory_taken_by_canister_queues() {
     assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &fixture);
     assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &fixture);
     assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 
     // Push a response into the output queue.
     let response = response_to(OTHER_CANISTER_ID);
@@ -245,6 +266,7 @@ fn memory_taken_by_canister_queues() {
     assert_total_memory_taken(response.count_bytes(), &fixture);
     assert_total_memory_taken_with_messages(response.count_bytes(), &fixture);
     assert_message_memory_taken(response.count_bytes(), &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 }
 
 #[test]
@@ -253,7 +275,7 @@ fn memory_taken_by_subnet_queues() {
     let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
     // Zero memory used initially.
-    assert_eq!(0, fixture.total_memory_taken().get());
+    assert_total_memory_taken(0, &fixture);
 
     // Push a request into the subnet input queues. Should ignore the
     // `max_canister_memory_size` argument.
@@ -270,6 +292,7 @@ fn memory_taken_by_subnet_queues() {
     assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &fixture);
     assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &fixture);
     assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
     assert_subnet_available_memory(
         SUBNET_AVAILABLE_MEMORY,
         MAX_RESPONSE_COUNT_BYTES,
@@ -283,6 +306,7 @@ fn memory_taken_by_subnet_queues() {
     assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &fixture);
     assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &fixture);
     assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 
     // Push a response into the subnet output queues.
     let response = response_from(SUBNET_ID.into());
@@ -294,6 +318,7 @@ fn memory_taken_by_subnet_queues() {
     assert_total_memory_taken(response.count_bytes(), &fixture);
     assert_total_memory_taken_with_messages(response.count_bytes(), &fixture);
     assert_message_memory_taken(response.count_bytes(), &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 }
 
 #[test]
@@ -301,7 +326,7 @@ fn memory_taken_by_stream_responses() {
     let mut fixture = ReplicatedStateFixture::new();
 
     // Zero memory used initially.
-    assert_eq!(0, fixture.total_memory_taken().get());
+    assert_total_memory_taken(0, &fixture);
 
     // Push a request and a response into a stream.
     let response = response_to(OTHER_CANISTER_ID);
@@ -314,6 +339,53 @@ fn memory_taken_by_stream_responses() {
     assert_total_memory_taken(response.count_bytes(), &fixture);
     assert_total_memory_taken_with_messages(response.count_bytes(), &fixture);
     assert_message_memory_taken(response.count_bytes(), &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
+}
+
+#[test]
+fn memory_taken_by_wasm_custom_sections() {
+    let mut custom_sections: BTreeMap<String, CustomSection> = BTreeMap::new();
+    custom_sections.insert(
+        String::from("candid"),
+        CustomSection::new(CustomSectionType::Private, vec![0; 10 * 1024]),
+    );
+    let wasm_metadata = WasmMetadata::new(custom_sections);
+    let wasm_metadata_memory = wasm_metadata.memory_usage();
+
+    let mut fixture =
+        ReplicatedStateFixture::from_canister_ids_and_wasm_metadata(&[CANISTER_ID], wasm_metadata);
+    let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
+
+    // Only memory for wasm custom sections is used initially.
+    assert_total_memory_taken(wasm_metadata_memory.get() as usize, &fixture);
+    assert_wasm_custom_sections_memory_taken(wasm_metadata_memory.get(), &fixture);
+
+    // Push a request into a canister input queue.
+    fixture
+        .state
+        .push_input(
+            request_from(OTHER_CANISTER_ID),
+            MAX_CANISTER_MEMORY_SIZE,
+            &mut subnet_available_memory,
+        )
+        .unwrap();
+
+    // Reserved memory for one response.
+    assert_total_memory_taken(
+        wasm_metadata_memory.get() as usize + MAX_RESPONSE_COUNT_BYTES,
+        &fixture,
+    );
+    assert_total_memory_taken_with_messages(
+        wasm_metadata_memory.get() as usize + MAX_RESPONSE_COUNT_BYTES,
+        &fixture,
+    );
+    assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &fixture);
+    assert_wasm_custom_sections_memory_taken(wasm_metadata_memory.get(), &fixture);
+    assert_subnet_available_memory(
+        SUBNET_AVAILABLE_MEMORY,
+        MAX_RESPONSE_COUNT_BYTES,
+        subnet_available_memory,
+    );
 }
 
 #[test]
@@ -325,7 +397,7 @@ fn system_subnet_memory_taken_by_canister_queues() {
     fixture.state.metadata.own_subnet_type = SubnetType::System;
 
     // Zero memory used initially.
-    assert_eq!(0, fixture.total_memory_taken().get());
+    assert_total_memory_taken(0, &fixture);
 
     // Push a request into a canister input queue.
     fixture
@@ -348,6 +420,7 @@ fn system_subnet_memory_taken_by_canister_queues() {
         MAX_RESPONSE_COUNT_BYTES,
         subnet_available_memory,
     );
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 }
 
 #[test]
@@ -359,7 +432,7 @@ fn system_subnet_memory_taken_by_subnet_queues() {
     let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
     // Zero memory used initially.
-    assert_eq!(0, fixture.total_memory_taken().get());
+    assert_total_memory_taken(0, &fixture);
 
     // Push a request into the subnet input queues. Should ignore the
     // `max_canister_memory_size` argument.
@@ -383,6 +456,7 @@ fn system_subnet_memory_taken_by_subnet_queues() {
         MAX_RESPONSE_COUNT_BYTES,
         subnet_available_memory,
     );
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
 }
 
 #[test]
@@ -393,7 +467,7 @@ fn system_subnet_memory_taken_by_stream_responses() {
     fixture.state.metadata.own_subnet_type = SubnetType::System;
 
     // Zero memory used initially.
-    assert_eq!(0, fixture.total_memory_taken().get());
+    assert_total_memory_taken(0, &fixture);
 
     // Push a request and a response into a stream.
     let response = response_to(OTHER_CANISTER_ID);
@@ -407,6 +481,56 @@ fn system_subnet_memory_taken_by_stream_responses() {
     // But do in other `memory_taken()` methods.
     assert_total_memory_taken_with_messages(response.count_bytes(), &fixture);
     assert_message_memory_taken(response.count_bytes(), &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
+}
+
+#[test]
+fn system_subnet_memory_taken_by_wasm_custom_sections() {
+    let mut custom_sections: BTreeMap<String, CustomSection> = BTreeMap::new();
+    custom_sections.insert(
+        String::from("candid"),
+        CustomSection::new(CustomSectionType::Private, vec![0; 10 * 1024]),
+    );
+    let wasm_metadata = WasmMetadata::new(custom_sections);
+    let wasm_metadata_memory = wasm_metadata.memory_usage();
+
+    let mut fixture =
+        ReplicatedStateFixture::from_canister_ids_and_wasm_metadata(&[CANISTER_ID], wasm_metadata);
+
+    // Make it a system subnet.
+    fixture.state.metadata.own_subnet_type = SubnetType::System;
+
+    let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
+
+    // Only memory for wasm custom sections is used initially.
+    assert_total_memory_taken(wasm_metadata_memory.get() as usize, &fixture);
+    assert_wasm_custom_sections_memory_taken(wasm_metadata_memory.get(), &fixture);
+
+    // Push a request into a canister input queue.
+    fixture
+        .state
+        .push_input(
+            request_from(OTHER_CANISTER_ID),
+            MAX_CANISTER_MEMORY_SIZE,
+            &mut subnet_available_memory,
+        )
+        .unwrap();
+
+    // System subnets don't account for messages in `memory_taken()`.
+    assert_total_memory_taken(wasm_metadata_memory.get() as usize, &fixture);
+    // But do in other `memory_taken()` methods.
+    assert_total_memory_taken_with_messages(
+        wasm_metadata_memory.get() as usize + MAX_RESPONSE_COUNT_BYTES,
+        &fixture,
+    );
+    assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &fixture);
+    assert_wasm_custom_sections_memory_taken(wasm_metadata_memory.get(), &fixture);
+    // And `&mut subnet_available_memory` is updated by the push.
+    assert_subnet_available_memory(
+        SUBNET_AVAILABLE_MEMORY,
+        MAX_RESPONSE_COUNT_BYTES,
+        subnet_available_memory,
+    );
 }
 
 #[test]
@@ -416,7 +540,7 @@ fn push_subnet_queues_input_respects_subnet_available_memory() {
     let mut subnet_available_memory = initial_available_memory;
 
     // Zero memory used initially.
-    assert_eq!(0, fixture.total_memory_taken().get());
+    assert_total_memory_taken(0, &fixture);
 
     // Push a request into the subnet input queues. Should ignore the
     // `max_canister_memory_size` argument.
@@ -433,6 +557,7 @@ fn push_subnet_queues_input_respects_subnet_available_memory() {
     assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &fixture);
     assert_total_memory_taken_with_messages(MAX_RESPONSE_COUNT_BYTES, &fixture);
     assert_message_memory_taken(MAX_RESPONSE_COUNT_BYTES, &fixture);
+    assert_wasm_custom_sections_memory_taken(0, &fixture);
     assert_subnet_available_memory(
         initial_available_memory,
         MAX_RESPONSE_COUNT_BYTES,
@@ -459,10 +584,7 @@ fn push_subnet_queues_input_respects_subnet_available_memory() {
     );
 
     // Unchanged memory usage.
-    assert_eq!(
-        MAX_RESPONSE_COUNT_BYTES as u64,
-        fixture.total_memory_taken().get()
-    );
+    assert_total_memory_taken(MAX_RESPONSE_COUNT_BYTES, &fixture);
     assert_eq!(0, subnet_available_memory);
 }
 
@@ -657,7 +779,10 @@ fn insert_bitcoin_response() {
 
 #[test]
 fn time_out_requests_updates_subnet_input_schedules_correctly() {
-    let mut fixture = ReplicatedStateFixture::from_canister_ids(&[CANISTER_ID, OTHER_CANISTER_ID]);
+    let mut fixture = ReplicatedStateFixture::from_canister_ids_and_wasm_metadata(
+        &[CANISTER_ID, OTHER_CANISTER_ID],
+        WasmMetadata::new(BTreeMap::new()),
+    );
 
     // Push 3 requests into the canister with id `local_canister_id1`:
     // - one to self.

@@ -591,6 +591,7 @@ pub(crate) struct SchedulerTestBuilder {
     initial_canister_cycles: Cycles,
     subnet_total_memory: u64,
     subnet_message_memory: u64,
+    subnet_wasm_custom_sections_memory: u64,
     registry_settings: RegistryExecutionSettings,
     max_canister_memory_size: u64,
     allocatable_compute_capacity_in_percent: usize,
@@ -619,7 +620,10 @@ impl Default for SchedulerTestBuilder {
             scheduler_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
             subnet_total_memory,
-            subnet_message_memory: subnet_total_memory,
+            subnet_message_memory: config.subnet_message_memory_capacity.get(),
+            subnet_wasm_custom_sections_memory: config
+                .subnet_wasm_custom_sections_memory_capacity
+                .get(),
             registry_settings: test_registry_settings(),
             max_canister_memory_size,
             allocatable_compute_capacity_in_percent: 100,
@@ -659,6 +663,16 @@ impl SchedulerTestBuilder {
     pub fn with_subnet_message_memory(self, subnet_message_memory: u64) -> Self {
         Self {
             subnet_message_memory,
+            ..self
+        }
+    }
+
+    pub fn with_subnet_wasm_custom_sections_memory(
+        self,
+        subnet_wasm_custom_sections_memory: u64,
+    ) -> Self {
+        Self {
+            subnet_wasm_custom_sections_memory,
             ..self
         }
     }
@@ -787,6 +801,9 @@ impl SchedulerTestBuilder {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_memory_capacity: NumBytes::from(self.subnet_total_memory),
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory),
+            subnet_wasm_custom_sections_memory_capacity: NumBytes::from(
+                self.subnet_wasm_custom_sections_memory,
+            ),
             max_canister_memory_size: NumBytes::from(self.max_canister_memory_size),
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,

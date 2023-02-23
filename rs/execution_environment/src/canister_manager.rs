@@ -511,12 +511,14 @@ impl CanisterManager {
             // settings were validated before so this should always succeed
             round_limits
                 .subnet_available_memory
-                .try_decrement(new_mem - old_mem, NumBytes::from(0))
+                .try_decrement(new_mem - old_mem, NumBytes::from(0), NumBytes::from(0))
                 .ok();
         } else {
-            round_limits
-                .subnet_available_memory
-                .increment(old_mem - new_mem, NumBytes::from(0));
+            round_limits.subnet_available_memory.increment(
+                old_mem - new_mem,
+                NumBytes::from(0),
+                NumBytes::from(0),
+            );
         }
 
         canister.system_state.canister_version += 1;
@@ -1173,7 +1175,7 @@ impl CanisterManager {
         // settings were validated before so this should always succeed
         round_limits
             .subnet_available_memory
-            .try_decrement(new_mem, NumBytes::from(0))
+            .try_decrement(new_mem, NumBytes::from(0), NumBytes::from(0))
             .ok();
 
         round_limits.compute_allocation_used = round_limits

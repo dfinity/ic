@@ -1472,7 +1472,9 @@ fn call_perform_not_enough_cycles_resets_state() {
 fn update_available_memory_updates_subnet_available_memory() {
     let wasm_page_size = 64 << 10;
     let subnet_available_memory_bytes = 2 * wasm_page_size;
-    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0);
+    let subnet_available_memory = SubnetAvailableMemory::new(subnet_available_memory_bytes, 0, 0);
+    let wasm_custom_sections_available_memory_before =
+        subnet_available_memory.get_wasm_custom_sections_memory();
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let sandbox_safe_system_state = SandboxSafeSystemState::new(
@@ -1495,15 +1497,25 @@ fn update_available_memory_updates_subnet_available_memory() {
     api.update_available_memory(0, 1).unwrap();
     assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
     assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
+    assert_eq!(
+        subnet_available_memory.get_wasm_custom_sections_memory(),
+        wasm_custom_sections_available_memory_before
+    );
 
     api.update_available_memory(0, 10).unwrap_err();
     assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
     assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
+    assert_eq!(
+        subnet_available_memory.get_wasm_custom_sections_memory(),
+        wasm_custom_sections_available_memory_before
+    );
 }
 
 #[test]
 fn take_execution_result_properly_frees_memory() {
-    let subnet_available_memory = SubnetAvailableMemory::new(1 << 30, 1 << 30);
+    let subnet_available_memory = SubnetAvailableMemory::new(1 << 30, 1 << 30, 0);
+    let wasm_custom_sections_available_memory_before =
+        subnet_available_memory.get_wasm_custom_sections_memory();
     let system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new(
@@ -1553,12 +1565,20 @@ fn take_execution_result_properly_frees_memory() {
     assert!(api.get_allocated_bytes().get() > 0);
     assert!(api.get_allocated_message_bytes().get() > 0);
     assert_eq!(
+        subnet_available_memory.get_wasm_custom_sections_memory(),
+        wasm_custom_sections_available_memory_before
+    );
+    assert_eq!(
         api.take_execution_result(Some(&HypervisorError::OutOfMemory))
             .unwrap_err(),
         HypervisorError::OutOfMemory
     );
     assert_eq!(api.get_allocated_bytes().get(), 0);
     assert_eq!(api.get_allocated_message_bytes().get(), 0);
+    assert_eq!(
+        subnet_available_memory.get_wasm_custom_sections_memory(),
+        wasm_custom_sections_available_memory_before
+    );
 }
 
 #[test]
@@ -1567,6 +1587,7 @@ fn push_output_request_respects_memory_limits() {
         let subnet_available_memory = SubnetAvailableMemory::new(
             subnet_available_memory_bytes,
             subnet_available_message_memory_bytes,
+            0,
         );
         let mut system_state = SystemStateBuilder::default().build();
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
@@ -1670,7 +1691,7 @@ fn push_output_request_respects_memory_limits() {
 fn push_output_request_oversized_request_memory_limits() {
     let subnet_available_memory_bytes = 3 * MAX_RESPONSE_COUNT_BYTES as i64;
     let subnet_available_memory =
-        SubnetAvailableMemory::new(subnet_available_memory_bytes, 1 << 30);
+        SubnetAvailableMemory::new(subnet_available_memory_bytes, 1 << 30, 0);
     let mut system_state = SystemStateBuilder::default().build();
     let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
     let mut sandbox_safe_system_state = SandboxSafeSystemState::new(

@@ -471,6 +471,29 @@ fn induct_loopback_stream_with_subnet_message_memory_limit() {
     });
 }
 
+/// Tests that wasm custom sections memory capacity does not affect
+/// `StreamHandlerImpl::induct_loopback_stream()`.
+#[test]
+fn induct_loopback_stream_with_zero_subnet_wasm_custom_sections_limit() {
+    with_test_replica_logger(|log| {
+        // A stream handler with a subnet message memory limit that only allows up to 3 reservations
+        // and no allowance for wasm custom sections.
+        let config = HypervisorConfig {
+            subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+            subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
+            ..Default::default()
+        };
+        let (stream_handler, initial_state, metrics_registry) =
+            new_fixture_with_config(&log, config);
+
+        induct_loopback_stream_with_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
+    });
+}
+
 /// Tests that canister memory limit is ignored by
 /// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
 #[test]
@@ -523,6 +546,29 @@ fn system_subnet_induct_loopback_stream_ignores_subnet_message_memory_limit() {
         // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
         let config = HypervisorConfig {
             subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+            ..Default::default()
+        };
+        let (stream_handler, mut initial_state, metrics_registry) =
+            new_fixture_with_config(&log, config);
+        initial_state.metadata.own_subnet_type = SubnetType::System;
+
+        induct_loopback_stream_ignores_memory_limit_impl(
+            stream_handler,
+            initial_state,
+            metrics_registry,
+        );
+    });
+}
+
+/// Tests that subnet wasm custom sections memory limit is ignored by
+/// `StreamHandlerImpl::induct_loopback_stream()` for system subnets.
+#[test]
+fn system_subnet_induct_loopback_stream_ignores_subnet_wasm_custom_sections_memory_limit() {
+    with_test_replica_logger(|log| {
+        // A stream handler with a subnet message memory limit that only allows up to 3 reservations.
+        let config = HypervisorConfig {
+            subnet_message_memory_capacity: NumBytes::new(MAX_RESPONSE_COUNT_BYTES as u64 * 7 / 2),
+            subnet_wasm_custom_sections_memory_capacity: NumBytes::new(0),
             ..Default::default()
         };
         let (stream_handler, mut initial_state, metrics_registry) =

@@ -301,6 +301,47 @@ impl std::fmt::Display for StateError {
     }
 }
 
+/// Represents the memory taken in bytes by various resources.
+///
+/// Should  be used in cases where the deterministic state machine needs to
+/// compute how much available memory exists for canisters to use for the
+/// various resources while respecting the relevant configured limits.
+pub struct MemoryTaken {
+    /// Execution memory accounts for canister memory reservation where
+    /// specified and the actual canister memory usage where no explicit
+    /// memory reservation has been made.
+    execution: NumBytes,
+    /// Memory taken by canister messages.
+    messages: NumBytes,
+    /// Memory taken by Wasm Custom Sections.
+    wasm_custom_sections: NumBytes,
+    /// Total memory taken. This is a sum of all other fields on application
+    /// subnets and excludes canister message memory on system subnets.
+    total: NumBytes,
+}
+
+impl MemoryTaken {
+    /// Returns the amount of memory taken by execution state.
+    pub fn execution(&self) -> NumBytes {
+        self.execution
+    }
+
+    /// Returns the amount of memory taken by canister messages.
+    pub fn messages(&self) -> NumBytes {
+        self.messages
+    }
+
+    /// Returns the amount of memory taken by Wasm Custom Sections.
+    pub fn wasm_custom_sections(&self) -> NumBytes {
+        self.wasm_custom_sections
+    }
+
+    /// Returns the total amount of memory taken.
+    pub fn total(&self) -> NumBytes {
+        self.total
+    }
+}
+
 /// ReplicatedState is the deterministic replicated state of the system.
 /// Broadly speaking it consists of two parts:  CanisterState used for canister
 /// execution and SystemMetadata used for message routing and history queries.
@@ -503,31 +544,9 @@ impl ReplicatedState {
             .sum()
     }
 
-    /// Returns:
-    ///   * the total memory taken by canisters in bytes
-    ///   * the memory taken by canister messages in bytes
-    ///
-    /// Total memory taken accounts for the canister memory reservation, where
-    /// specified; and the actual canister memory usage, where no explicit
-    /// memory reservation has been made. Canister message memory usage is
-    /// included for application subnets only.
-    pub fn total_and_message_memory_taken(&self) -> (NumBytes, NumBytes) {
-        let (raw_total_memory_taken, message_memory_taken) =
-            self.raw_total_and_message_memory_taken();
-        let total_memory_taken = if self.metadata.own_subnet_type != SubnetType::System {
-            raw_total_memory_taken + message_memory_taken
-        } else {
-            raw_total_memory_taken
-        };
-        (total_memory_taken, message_memory_taken)
-    }
-
-    /// Returns:
-    ///   * the raw total memory taken by canisters in bytes, i.e. without
-    ///     including memory taken by canister messages
-    ///   * the memory taken by canister messages in bytes
-    pub fn raw_total_and_message_memory_taken(&self) -> (NumBytes, NumBytes) {
-        let (raw_memory_taken, mut message_memory_taken) = self
+    /// Returns the memory taken by different types of memory resources.
+    pub fn memory_taken(&self) -> MemoryTaken {
+        let (raw_memory_taken, mut message_memory_taken, wasm_custom_sections_memory_taken) = self
             .canisters_iter()
             .map(|canister| {
                 (
@@ -536,14 +555,29 @@ impl ReplicatedState {
                         MemoryAllocation::BestEffort => canister.raw_memory_usage(),
                     },
                     canister.system_state.memory_usage(),
+                    canister.wasm_custom_sections_memory_usage(),
                 )
             })
-            .reduce(|accum, val| (accum.0 + val.0, accum.1 + val.1))
+            .reduce(|accum, val| (accum.0 + val.0, accum.1 + val.1, accum.2 + val.2))
             .unwrap_or_default();
 
         message_memory_taken += (self.subnet_queues.memory_usage() as u64).into();
 
-        (raw_memory_taken, message_memory_taken)
+        // Raw memory taken includes `wasm_custom_sections_memory_taken` so we
+        // don't have to add it to the total memory taken separately.
+        let mut total_memory_taken = raw_memory_taken;
+
+        // Add message memory taken to total for non-system subnets only.
+        if self.metadata.own_subnet_type != SubnetType::System {
+            total_memory_taken += message_memory_taken;
+        }
+
+        MemoryTaken {
+            execution: raw_memory_taken,
+            messages: message_memory_taken,
+            wasm_custom_sections: wasm_custom_sections_memory_taken,
+            total: total_memory_taken,
+        }
     }
 
     /// Returns the total memory taken by the ingress history in bytes.
