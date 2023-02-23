@@ -17,6 +17,18 @@ server {
             rewrite ^(.*)$ /seo/$1 last;
         }
 
+        rewrite ^(.*)$ /sw/$1 last;
+    }
+
+    # Serve Service-Worker related files
+    # This internal location is needed because we ran into an odd bug
+    # where a seemingly random if-statement made try_files fail with a 404
+    #
+    # See https://dfinity.atlassian.net/browse/BOUN-534
+    location /sw/ {
+        internal;
+        rewrite ^/sw/(.*)$ $1 break;
+
         # Canister / Gateway (Header)
         add_header "X-Ic-Gateway" "$primary_api_domain" always;
         add_header "X-Ic-Canister-Id" "$inferred_canister_id" always;
