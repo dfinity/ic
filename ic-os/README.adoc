@@ -43,7 +43,7 @@ All build scripts are contained in the scripts/ directory.
 Note: guestOS has many scripts in its own scripts/ subdirectory that still need to be unified with the outer scripts/ directory.
 
 == Environment setup
-To build IC-OS images outside of using /gitlab-ci/container/container-run.sh, you will need to configure your environment. To see what packages you must install, see ic/gitlab-ci/docker/Dockerfile.
+To build IC-OS images outside of using /gitlab-ci/container/container-run.sh, you will need to configure your environment. To see what packages you must install, see ic/gitlab-ci/container/Dockerfile.
 
 == Storing the SEV Certificates on the host (e.g. for test/farm machines)
 
