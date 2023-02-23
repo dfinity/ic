@@ -208,7 +208,9 @@ class BazelRustDependencyManager(DependencyManager):
 
         return changed
 
-    def get_findings(self, repository_name: str, project: typing.Optional[Project]) -> typing.List[Finding]:
+    def get_findings(
+        self, repository_name: str, project: typing.Optional[Project], engine_version: typing.Optional[int]
+    ) -> typing.List[Finding]:
         finding_builder: typing.List[Finding] = []
         # Unless cargo dependency is completely removed from the system,
         # set(cargo) - set(bazel) \neq 0

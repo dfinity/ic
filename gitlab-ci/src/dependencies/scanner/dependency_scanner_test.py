@@ -26,7 +26,9 @@ class FakeBazel(BazelRustDependencyManager):
         super().__init__()
         self.fake_type = fake_type
 
-    def get_findings(self, repository_name: str, project: typing.Optional[Project]) -> typing.List[Finding]:
+    def get_findings(
+        self, repository_name: str, project: typing.Optional[Project], engine_version: typing.Optional[int]
+    ) -> typing.List[Finding]:
         if self.fake_type == 1:
             return []
 
@@ -95,7 +97,7 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
     repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
-    finding = fake_bazel.get_findings(repository.name, repository.projects[0])[0]
+    finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
     finding.risk_assessor = [User("mickey", "Mickey Mouse")]
 
     scanner_job.do_periodic_scan([repository])
@@ -139,7 +141,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
 
     scanner_job.do_periodic_scan(repos)
 
-    finding = fake_bazel.get_findings(repos[0].name, repos[0].projects[0])[0]
+    finding = fake_bazel.get_findings(repos[0].name, repos[0].projects[0], repository.engine_version)[0]
     jira_finding.vulnerable_dependency = finding.vulnerable_dependency
     jira_finding.vulnerabilities = finding.vulnerabilities
     jira_finding.first_level_dependencies = finding.first_level_dependencies
@@ -189,7 +191,7 @@ def test_get_findings_ic_dir(shutil, clone_repo, jira_lib_mock):
 
     shutil.assert_not_called()
     clone_repo.assert_not_called()
-    fake_bazel.get_findings.assert_called_once_with("ic", project)
+    fake_bazel.get_findings.assert_called_once_with("ic", project, repo.engine_version)
 
 
 @patch("scanner.dependency_scanner.DependencyScanner._DependencyScanner__clone_repository_from_url")
@@ -205,7 +207,7 @@ def test_get_findings_external_dir(shutil, clone_repo, jira_lib_mock):
 
         shutil.assert_called_once()
         clone_repo.assert_called_once_with("https://github.com/dfinity/cycles-wallet", scanner_job.root.parent)
-        fake_bazel.get_findings.assert_called_once_with("cycles-wallet", project)
+        fake_bazel.get_findings.assert_called_once_with("cycles-wallet", project, repo.engine_version)
 
 
 def test_on_merge_request_no_changes_to_dependency_files(jira_lib_mock):

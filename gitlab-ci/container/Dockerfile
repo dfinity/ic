@@ -68,9 +68,12 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     rustup target add wasm32-unknown-unknown && \
     chown -R ${USER}.${USER} ${RUSTUP_HOME} ${CARGO_HOME}
 
+# Since we are cloning multiple NPM repos, we need to have multiple node versions installed 
+# to switch between them for comptability. 
 ARG nvm_version=v0.39.1
 ARG node_version=17
-ARG dependency_mgmt_node_version=19
+ARG dependency_mgmt_nns_dapp_node_version=16
+ARG dependency_mgmt_default_node_version=19
 ENV NVM_DIR=/opt/nvm
 RUN mkdir $NVM_DIR && \
     curl --fail https://raw.githubusercontent.com/nvm-sh/nvm/${nvm_version}/install.sh -sSf | bash
@@ -90,7 +93,11 @@ RUN curl --fail \
          --location https://github.com/dfinity/candid/releases/download/${didc_release_date}/didc-linux64 \
          --output /usr/bin/didc-linux64 && chmod +x /usr/bin/didc-linux64
 
-RUN . /opt/nvm/nvm.sh && nvm install ${dependency_mgmt_node_version} && nvm install ${node_version} && npm install -g @vscode/dev-container-cli
+RUN . /opt/nvm/nvm.sh && \
+    nvm install ${dependency_mgmt_nns_dapp_node_version} && \
+    nvm install ${dependency_mgmt_default_node_version} && \
+    nvm install ${node_version} && \
+    npm install -g @vscode/dev-container-cli
 
 USER ${UID}
 

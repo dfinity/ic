@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import pathlib
 import typing
 
@@ -40,10 +41,11 @@ class NPMDependencyManager(DependencyManager):
         return
 
     @staticmethod
-    def __npm_audit_output(path: pathlib.Path) -> typing.Dict:
+    def __npm_audit_output(engine_version: int, path: pathlib.Path) -> typing.Dict:
+        nvm_dir = os.environ.get("NVM_DIR", "/opt/nvm")
         environment = {}
         cwd = path
-        command = "npm audit --json"
+        command = f"bash -c 'source {nvm_dir}/nvm.sh && nvm use default {engine_version} --silent && npm audit --json'"
 
         logging.info(f"Performing npm audit {cwd.resolve()}")
         result = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
@@ -52,14 +54,17 @@ class NPMDependencyManager(DependencyManager):
         return audit_out
 
     @staticmethod
-    def __npm_list_output(path: pathlib.Path) -> typing.Dict:
+    def __npm_list_output(engine_version: int, path: pathlib.Path) -> typing.Dict:
+        nvm_dir = os.environ.get("NVM_DIR", "/opt/nvm")
         environment = {}
         cwd = path
-        command = "npm ci"
+        command = f"bash -c 'source {nvm_dir}/nvm.sh && nvm use default {engine_version} --silent && npm ci'"
         logging.info(f"Performing npm ci {cwd.resolve()}")
         _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
 
-        command = "npm list --all --json"
+        command = (
+            f"bash -c 'source {nvm_dir}/nvm.sh && nvm use default {engine_version} --silent && npm list --all --json'"
+        )
 
         result = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
         list_out = json.loads(result)
@@ -141,17 +146,19 @@ class NPMDependencyManager(DependencyManager):
 
         return vulnerable_dependency
 
-    def get_findings(self, repository_name: str, project: typing.Optional[Project]) -> typing.List[Finding]:
+    def get_findings(
+        self, repository_name: str, project: typing.Optional[Project], engine_version: typing.Optional[int]
+    ) -> typing.List[Finding]:
         path = self.root.parent / project.path
         finding_builder: typing.List[Finding] = []
 
-        npm_audit_output = self.__npm_audit_output(path)
+        npm_audit_output = self.__npm_audit_output(engine_version, path)
 
         # no vulnerabilities
         if "vulnerabilities" not in npm_audit_output or len(npm_audit_output["vulnerabilities"]) == 0:
             return finding_builder
 
-        npm_list_output = self.__npm_list_output(path)
+        npm_list_output = self.__npm_list_output(engine_version, path)
 
         for dependency_key, dependency_value in npm_audit_output["vulnerabilities"].items():
             vulnerable_dependencies = self.__get_vulnerable_dependency_from_npm_list(

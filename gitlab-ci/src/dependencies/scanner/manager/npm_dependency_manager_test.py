@@ -10,6 +10,8 @@ from model.repository import Project
 from model.vulnerability import Vulnerability
 from scanner.manager.npm_dependency_manager import NPMDependencyManager
 
+DEFAULT_NODE_VERSION = 19
+
 
 @pytest.fixture
 def npm_test():
@@ -27,24 +29,32 @@ def test_clone_repository_from_url(process_executor_mock, npm_test):
 
 @patch("scanner.process_executor.ProcessExecutor.execute_command", return_value="{'key':'value'}")
 @patch("json.loads")
-def test_npm_audit_output(json_mock, process_executor_mock, npm_test):
+@patch("os.environ.get", return_value="/path/to/nvm")
+def test_npm_audit_output(_os_mock, json_mock, process_executor_mock, npm_test):
     path = pathlib.Path()
     resolved_path = path.resolve()
-    npm_test._NPMDependencyManager__npm_audit_output(path)
-    process_executor_mock.assert_called_once_with("npm audit --json", resolved_path, {})
+    npm_test._NPMDependencyManager__npm_audit_output(DEFAULT_NODE_VERSION, path)
+    process_executor_mock.assert_called_once_with(
+        "bash -c 'source /path/to/nvm/nvm.sh && nvm use default 19 --silent && npm audit --json'", resolved_path, {}
+    )
     json_mock.assert_called_once_with("{'key':'value'}")
 
 
 @patch("scanner.process_executor.ProcessExecutor.execute_command", return_value="{'key':'value'}")
 @patch("json.loads")
-def test_npm_list_output(json_mock, process_executor_mock, npm_test):
+@patch("os.environ.get", return_value="/path/to/nvm")
+def test_npm_list_output(_os_mock, json_mock, process_executor_mock, npm_test):
     path = pathlib.Path()
     resolved_path = path.resolve()
-    npm_test._NPMDependencyManager__npm_list_output(path)
+    npm_test._NPMDependencyManager__npm_list_output(DEFAULT_NODE_VERSION, path)
     process_executor_mock.assert_has_calls(
         [
-            call("npm ci", resolved_path, {}),
-            call("npm list --all --json", resolved_path, {}),
+            call("bash -c 'source /path/to/nvm/nvm.sh && nvm use default 19 --silent && npm ci'", resolved_path, {}),
+            call(
+                "bash -c 'source /path/to/nvm/nvm.sh && nvm use default 19 --silent && npm list --all --json'",
+                resolved_path,
+                {},
+            ),
         ]
     )
     json_mock.assert_called_once_with("{'key':'value'}")
@@ -402,7 +412,7 @@ class FakeNPM:
     def __init__(self, fake_audit_type: int):
         self.fake_audit_type = fake_audit_type
 
-    def npm_audit_output(self, path: pathlib.Path) -> typing.Dict:
+    def npm_audit_output(self, engine_version: int, path: pathlib.Path) -> typing.Dict:
         if self.fake_audit_type == 1:
             return {}
 
@@ -481,7 +491,7 @@ class FakeNPM:
                 },
             }
 
-    def npm_list_output(self, path: pathlib.Path) -> typing.Dict:
+    def npm_list_output(self, engine_version: int, path: pathlib.Path) -> typing.Dict:
         return {
             "version": "0.1.0",
             "name": "wallet-ui",
@@ -510,7 +520,7 @@ def test_findings_helper_no_vulnerabilites(npm_test):
     npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
     npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
 
-    findings = npm_test.get_findings(repository, project)
+    findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert not findings
 
 
@@ -521,7 +531,7 @@ def test_findings_helper_one_finding(npm_test):
     npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
     npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
 
-    findings = npm_test.get_findings(repository, project)
+    findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert len(findings) == 1
     assert findings[0] == Finding(
         repository="ic",
@@ -565,7 +575,7 @@ def test_findings_helper_vulnerable_dependency_not_in_range(npm_test):
     npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
     npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
 
-    findings = npm_test.get_findings(repository, project)
+    findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert not findings
 
 
@@ -576,5 +586,5 @@ def test_findings_helper_transitive_vulnerability(npm_test):
     npm_test._NPMDependencyManager__npm_audit_output = fake_npm.npm_audit_output.__get__(npm_test, NPMDependencyManager)
     npm_test._NPMDependencyManager__npm_list_output = fake_npm.npm_list_output.__get__(npm_test, NPMDependencyManager)
 
-    findings = npm_test.get_findings(repository, project)
+    findings = npm_test.get_findings(repository, project, DEFAULT_NODE_VERSION)
     assert not findings
