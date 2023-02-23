@@ -15,9 +15,11 @@ Alternatively, the following script allows building IC-OS in a container with th
 
 Build a guestOS image:
 
-    bazel build //ic-os/guestos/dev/...
+* You can build any of the guestos targets (`prod`, `dev`, `dev-malicious`):
 
-This will output disk-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/dev, which is your tarred guestOS image.
+    bazel build //ic-os/guestos/{prod,dev,dev-malicious}/...
+
+This will output disk-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/{prod,dev,dev-malicious}, which is your tarred guestOS image.
 
 === Running guestOS
 
@@ -46,9 +48,9 @@ We can write to the passive partition set, and when we are ready, we can swap th
 
 The same bazel command to build a guestOS image will also produce a guestOS upgrade image:
 
-    bazel build //ic-os/guestos/dev/...
+    bazel build //ic-os/guestos/{prod,dev,dev-malicious}/...
 
-This will output update-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/dev, which is your tarred guestOS-update image.
+This will output update-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/{prod,dev,dev-malicious}, which is your tarred guestOS-update image.
 
 === Installing upgrade image
 
