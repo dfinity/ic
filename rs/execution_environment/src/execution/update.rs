@@ -202,7 +202,7 @@ fn finish_err(
 
     canister
         .system_state
-        .apply_cycles_debit(canister.canister_id(), round.log);
+        .apply_ingress_induction_cycles_debit(canister.canister_id(), round.log);
 
     let instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
@@ -335,7 +335,7 @@ impl UpdateHelper {
     ) -> ExecuteMessageResult {
         self.canister
             .system_state
-            .apply_cycles_debit(self.canister.canister_id(), round.log);
+            .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
 
         // Check that the cycles balance does not go below the freezing
         // threshold after applying the Wasm execution state changes.

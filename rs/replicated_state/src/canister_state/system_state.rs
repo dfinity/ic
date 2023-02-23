@@ -98,10 +98,10 @@ pub struct SystemState {
     ///
     /// Deterministic time slicing requires that `cycles_balance` remains the
     /// same throughout a multi-round execution. During that time all charges
-    /// performed outside of execution (e.g. charging for ingress induction) are
-    /// recorded in `cycles_debit`. When the multi-round execution completes,
-    /// it will apply `cycles_debit` to `cycles_balance`.
-    cycles_debit: Cycles,
+    /// performed in ingress induction are recorded in
+    /// `ingress_induction_cycles_debit`. When the multi-round execution
+    /// completes, it will apply `ingress_induction_cycles_debit` to `cycles_balance`.
+    ingress_induction_cycles_debit: Cycles,
 
     /// Tasks to execute before processing input messages.
     /// Currently the task queue is empty outside of execution rounds.
@@ -448,7 +448,7 @@ impl SystemState {
             controllers: btreeset! {controller},
             queues: CanisterQueues::default(),
             cycles_balance: initial_cycles,
-            cycles_debit: Cycles::zero(),
+            ingress_induction_cycles_debit: Cycles::zero(),
             memory_allocation: MemoryAllocation::BestEffort,
             freeze_threshold,
             status,
@@ -487,7 +487,7 @@ impl SystemState {
         certified_data: Vec<u8>,
         canister_metrics: CanisterMetrics,
         cycles_balance: Cycles,
-        cycles_debit: Cycles,
+        ingress_induction_cycles_debit: Cycles,
         task_queue: VecDeque<ExecutionTask>,
         global_timer: CanisterTimer,
         canister_version: u64,
@@ -502,7 +502,7 @@ impl SystemState {
             certified_data,
             canister_metrics,
             cycles_balance,
-            cycles_debit,
+            ingress_induction_cycles_debit,
             task_queue,
             global_timer,
             canister_version,
@@ -518,16 +518,16 @@ impl SystemState {
         self.cycles_balance
     }
 
-    /// Returns the balance after applying the pending debit.
-    /// Returns 0 if the balance is smaller than the pending debit.
+    /// Returns the balance after applying the pending 'ingress_induction_cycles_debit'.
+    /// Returns 0 if the balance is smaller than the pending 'ingress_induction_cycles_debit'.
     pub fn debited_balance(&self) -> Cycles {
         // We rely on saturating operations of `Cycles` here.
-        self.cycles_balance - self.cycles_debit
+        self.cycles_balance - self.ingress_induction_cycles_debit
     }
 
-    /// Returns the pending debit.
-    pub fn cycles_debit(&self) -> Cycles {
-        self.cycles_debit
+    /// Returns the pending 'ingress_induction_cycles_debit'.
+    pub fn ingress_induction_cycles_debit(&self) -> Cycles {
+        self.ingress_induction_cycles_debit
     }
 
     /// Records the given amount as debit that will be charged from the balance
@@ -535,23 +535,27 @@ impl SystemState {
     ///
     /// Precondition:
     /// - `charge <= self.debited_balance()`.
-    pub fn add_postponed_charge_to_cycles_debit(&mut self, charge: Cycles) {
+    pub fn add_postponed_charge_to_ingress_induction_cycles_debit(&mut self, charge: Cycles) {
         assert!(
             charge <= self.debited_balance(),
             "Insufficient cycles for a postponed charge: {} vs {}",
             charge,
             self.debited_balance()
         );
-        self.cycles_debit += charge;
+        self.ingress_induction_cycles_debit += charge;
     }
 
-    /// Charges the pending debit from the balance.
+    /// Charges the pending 'ingress_induction_cycles_debit' from the balance.
     ///
     /// Precondition:
     /// - The balance is large enough to cover the debit.
-    pub fn apply_cycles_debit(&mut self, canister_id: CanisterId, log: &ReplicaLogger) {
+    pub fn apply_ingress_induction_cycles_debit(
+        &mut self,
+        canister_id: CanisterId,
+        log: &ReplicaLogger,
+    ) {
         // We rely on saturating operations of `Cycles` here.
-        let remaining_debit = self.cycles_debit - self.cycles_balance;
+        let remaining_debit = self.ingress_induction_cycles_debit - self.cycles_balance;
         debug_assert_eq!(remaining_debit.get(), 0);
         if remaining_debit.get() > 0 {
             // This case is unreachable and may happen only due to a bug: if the
@@ -566,8 +570,9 @@ impl SystemState {
             // Continue the execution by dropping the remaining debit, which makes
             // some of the postponed charges free.
         }
-        self.cycles_balance -= self.cycles_debit;
-        self.cycles_debit = Cycles::zero();
+        self.observe_consumed_cycles(self.ingress_induction_cycles_debit);
+        self.cycles_balance -= self.ingress_induction_cycles_debit;
+        self.ingress_induction_cycles_debit = Cycles::zero();
     }
 
     /// This method is used for maintaining the backwards compatibility.

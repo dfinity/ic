@@ -61,10 +61,10 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     // Test steps:
     // 1. Canister A starts running the update method.
     // 2. While canister A is paused, we emulate a postponed charge
-    //    of 1000 cycles (i.e. add 1000 to `cycles_debit`).
+    //    of 1000 cycles (i.e. add 1000 to `ingress_induction_cycles_debit`).
     // 3. The update method resumes and calls canister B with 1000 cycles.
     // 4. The update method succeeds because there are enough cycles
-    //    in the canister balance to cover both the call and cycles debit.
+    //    in the canister balance to cover both the call and 'ingress_induction_cycles_debit'.
     let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
@@ -143,7 +143,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
 
     test.canister_state_mut(a_id)
         .system_state
-        .add_postponed_charge_to_cycles_debit(cycles_debit);
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
     test.execute_message(a_id);
 
@@ -166,10 +166,10 @@ fn dts_update_concurrent_cycles_change_fails() {
     // Test steps:
     // 1. Canister A starts running the update method.
     // 2. While canister A is paused, we emulate a postponed charge
-    //    of 1000 cycles (i.e. add 1000 to `cycles_debit`).
+    //    of 1000 cycles (i.e. add 1000 to `ingress_induction_cycles_debit`).
     // 3. The update method resumes and calls canister B with 1000 cycles.
     // 4. The update method fails because there are not enough cycles
-    //    in the canister balance to cover both the call and cycles debit.
+    //    in the canister balance to cover both the call and 'ingress_induction_cycles_debit'.
     let instruction_limit = 100_000_000;
     let mut test = ExecutionTestBuilder::new()
         .with_instruction_limit(instruction_limit)
@@ -244,7 +244,7 @@ fn dts_update_concurrent_cycles_change_fails() {
     let cycles_debit = test.canister_state(a_id).system_state.balance();
     test.canister_state_mut(a_id)
         .system_state
-        .add_postponed_charge_to_cycles_debit(cycles_debit);
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
     test.execute_message(a_id);
 
@@ -596,11 +596,11 @@ fn dts_abort_of_call_works() {
 }
 
 #[test]
-fn dts_cycles_debit_is_applied_on_aborts() {
+fn dts_ingress_induction_cycles_debit_is_applied_on_aborts() {
     // Test steps:
     // 1. Canister A starts running the update method.
     // 2. While canister A is paused, we emulate a postponed charge
-    //    of 1000 cycles (i.e. add 1000 to `cycles_debit`).
+    //    of 1000 cycles (i.e. add 1000 to `ingress_induction_cycles_debit`).
     // 3. The update method is aborted and we expected the cycles debit to be
     //    applied.
     let instruction_limit = 100_000_000;
@@ -633,14 +633,21 @@ fn dts_cycles_debit_is_applied_on_aborts() {
     let cycles_debit = Cycles::new(1000);
     test.canister_state_mut(a_id)
         .system_state
-        .add_postponed_charge_to_cycles_debit(cycles_debit);
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
-    assert!(test.canister_state(a_id).system_state.cycles_debit() > Cycles::zero());
+    assert!(
+        test.canister_state(a_id)
+            .system_state
+            .ingress_induction_cycles_debit()
+            > Cycles::zero()
+    );
 
     test.abort_all_paused_executions();
 
     assert_eq!(
-        test.canister_state(a_id).system_state.cycles_debit(),
+        test.canister_state(a_id)
+            .system_state
+            .ingress_induction_cycles_debit(),
         Cycles::zero()
     );
 

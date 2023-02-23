@@ -184,7 +184,7 @@ impl InstallCodeHelper {
 
         self.canister
             .system_state
-            .apply_cycles_debit(self.canister.canister_id(), round.log);
+            .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
 
         let mut subnet_available_memory = round_limits.subnet_available_memory;
         subnet_available_memory.increment(self.deallocated_bytes, NumBytes::from(0));
@@ -674,7 +674,7 @@ pub(crate) fn finish_err(
 
     new_canister
         .system_state
-        .apply_cycles_debit(new_canister.canister_id(), round.log);
+        .apply_ingress_induction_cycles_debit(new_canister.canister_id(), round.log);
 
     let message_instruction_limit = original.execution_parameters.instruction_limits.message();
     round.cycles_account_manager.refund_unused_execution_cycles(
