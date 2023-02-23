@@ -120,7 +120,7 @@ class DependencyScanner:
                 return
 
             # developer has added made changes to dependencies.
-            findings = self.dependency_manager.get_findings(repository_name, None)
+            findings = self.dependency_manager.get_findings(repository_name, None, None)
 
             if len(findings) == 0:
                 return
@@ -186,7 +186,7 @@ class DependencyScanner:
     def do_release_scan(self, repository_name: str):
         should_fail_job = False
         try:
-            findings = self.dependency_manager.get_findings(repository_name, None)
+            findings = self.dependency_manager.get_findings(repository_name, None, None)
             failures: typing.List = []
 
             if len(findings) == 0:
