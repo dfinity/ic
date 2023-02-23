@@ -218,10 +218,9 @@ impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
         C: Consensus + 'static,
         G: ArtifactPoolDescriptor<ConsensusArtifact, PoolConsensus> + 'static,
         S: Fn(AdvertSendRequest<ConsensusArtifact>) + Send + 'static,
-        F: FnOnce() -> (C, G),
     >(
         send_advert: S,
-        setup: F,
+        (consensus, consensus_gossip): (C, G),
         time_source: Arc<SysTimeSource>,
         consensus_pool: Arc<RwLock<PoolConsensus>>,
         log: ReplicaLogger,
@@ -230,7 +229,6 @@ impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
         clients::ConsensusClient<PoolConsensus, G>,
         ArtifactProcessorManager<ConsensusArtifact>,
     ) {
-        let (consensus, consensus_gossip) = setup();
         let client = Self {
             consensus_pool: consensus_pool.clone(),
             client: Box::new(consensus),
@@ -346,29 +344,29 @@ impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
 }
 
 /// The ingress `OnStateChange` client.
-pub struct IngressProcessor<Pool> {
+pub struct IngressProcessor<PoolIngress> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
-    ingress_pool: Arc<RwLock<Pool>>,
+    ingress_pool: Arc<RwLock<PoolIngress>>,
     /// The ingress handler.
     client: Arc<dyn IngressHandler + Send + Sync>,
     /// Our node id
     node_id: NodeId,
 }
 
-impl<Pool: MutableIngressPool + Send + Sync + 'static> IngressProcessor<Pool> {
+impl<PoolIngress: MutableIngressPool + Send + Sync + 'static> IngressProcessor<PoolIngress> {
     #[allow(clippy::too_many_arguments)]
     pub fn build<S: Fn(AdvertSendRequest<IngressArtifact>) + Send + 'static>(
         send_advert: S,
         time_source: Arc<SysTimeSource>,
-        ingress_pool: Arc<RwLock<Pool>>,
+        ingress_pool: Arc<RwLock<PoolIngress>>,
         ingress_handler: Arc<dyn IngressHandler + Send + Sync>,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
         malicious_flags: MaliciousFlags,
     ) -> (
-        clients::IngressClient<Pool>,
+        clients::IngressClient<PoolIngress>,
         ArtifactProcessorManager<IngressArtifact>,
     ) {
         let client = Self {
@@ -389,8 +387,8 @@ impl<Pool: MutableIngressPool + Send + Sync + 'static> IngressProcessor<Pool> {
     }
 }
 
-impl<Pool: MutableIngressPool + Send + Sync + 'static> ArtifactProcessor<IngressArtifact>
-    for IngressProcessor<Pool>
+impl<PoolIngress: MutableIngressPool + Send + Sync + 'static> ArtifactProcessor<IngressArtifact>
+    for IngressProcessor<PoolIngress>
 {
     /// The method processes changes in the ingress pool.
     fn process_changes(
@@ -466,10 +464,9 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
         C: Certifier + 'static,
         G: ArtifactPoolDescriptor<CertificationArtifact, PoolCertification> + 'static,
         S: Fn(AdvertSendRequest<CertificationArtifact>) + Send + 'static,
-        F: FnOnce() -> (C, G),
     >(
         send_advert: S,
-        setup: F,
+        (certifier, certifier_gossip): (C, G),
         time_source: Arc<SysTimeSource>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         certification_pool: Arc<RwLock<PoolCertification>>,
@@ -479,7 +476,6 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
         clients::CertificationClient<PoolCertification, G>,
         ArtifactProcessorManager<CertificationArtifact>,
     ) {
-        let (certifier, certifier_gossip) = setup();
         let client = Self {
             consensus_pool_cache: consensus_pool_cache.clone(),
             certification_pool: certification_pool.clone(),
@@ -583,10 +579,9 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> DkgProcessor<PoolDkg> {
         C: Dkg + 'static,
         G: ArtifactPoolDescriptor<DkgArtifact, PoolDkg> + 'static,
         S: Fn(AdvertSendRequest<DkgArtifact>) + Send + 'static,
-        F: FnOnce() -> (C, G),
     >(
         send_advert: S,
-        setup: F,
+        (dkg, dkg_gossip): (C, G),
         time_source: Arc<SysTimeSource>,
         dkg_pool: Arc<RwLock<PoolDkg>>,
         log: ReplicaLogger,
@@ -595,7 +590,6 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> DkgProcessor<PoolDkg> {
         clients::DkgClient<PoolDkg, G>,
         ArtifactProcessorManager<DkgArtifact>,
     ) {
-        let (dkg, dkg_gossip) = setup();
         let client = Self {
             dkg_pool: dkg_pool.clone(),
             client: Box::new(dkg),
@@ -682,10 +676,9 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
         C: Ecdsa + 'static,
         G: ArtifactPoolDescriptor<EcdsaArtifact, PoolEcdsa> + 'static,
         S: Fn(AdvertSendRequest<EcdsaArtifact>) + Send + 'static,
-        F: FnOnce() -> (C, G),
     >(
         send_advert: S,
-        setup: F,
+        (ecdsa, ecdsa_gossip): (C, G),
         time_source: Arc<SysTimeSource>,
         ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
         metrics_registry: MetricsRegistry,
@@ -706,7 +699,6 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
             .unwrap(),
         );
 
-        let (ecdsa, ecdsa_gossip) = setup();
         let client = Self {
             ecdsa_pool: ecdsa_pool.clone(),
             client: Box::new(ecdsa),
@@ -806,10 +798,9 @@ impl<
         C: CanisterHttpPoolManager + Sync + 'static,
         G: ArtifactPoolDescriptor<CanisterHttpArtifact, PoolCanisterHttp> + Send + Sync + 'static,
         S: Fn(AdvertSendRequest<CanisterHttpArtifact>) + Send + 'static,
-        F: FnOnce() -> (C, G),
     >(
         send_advert: S,
-        setup: F,
+        (pool_manager, canister_http_gossip): (C, G),
         time_source: Arc<SysTimeSource>,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
@@ -819,7 +810,6 @@ impl<
         clients::CanisterHttpClient<PoolCanisterHttp, G>,
         ArtifactProcessorManager<CanisterHttpArtifact>,
     ) {
-        let (pool_manager, canister_http_gossip) = setup();
         let client = Self {
             consensus_pool_cache: consensus_pool_cache.clone(),
             canister_http_pool: canister_http_pool.clone(),
