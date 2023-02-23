@@ -4,7 +4,7 @@ use hex::decode;
 use ic_ic00_types::{self as ic00, CanisterInstallMode, Payload};
 use ic_types::{
     messages::{SignedIngress, UserQuery},
-    time::current_time_and_expiry_time,
+    time::expiry_time_from_now,
     PrincipalId, UserId,
 };
 
@@ -172,7 +172,7 @@ fn parse_message(s: &str, nonce: u64) -> Result<Message, String> {
             receiver: parse_canister_id(canister_id)?,
             method_name: validate_method_name(method_name)?,
             method_payload: parse_octet_string(payload)?,
-            ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
+            ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
             nonce: Some(nonce.to_le_bytes().to_vec()),
         })),
         ["create"] => parse_create(nonce),

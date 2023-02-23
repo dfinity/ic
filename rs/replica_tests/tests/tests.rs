@@ -10,8 +10,8 @@ use ic_sys::PAGE_SIZE;
 use ic_test_utilities::types::ids::canister_test_id;
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_types::{
-    ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
-    time::current_time_and_expiry_time, CanisterId, NumBytes, RegistryVersion,
+    ingress::WasmResult, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, time::expiry_time_from_now,
+    CanisterId, NumBytes, RegistryVersion,
 };
 
 const WASM_PAGE_SIZE: usize = 65536;
@@ -50,7 +50,7 @@ fn test_duplicate_message_is_noop() {
             Ok(WasmResult::Reply(vec![0, 0, 0, 0]))
         );
 
-        let expiry_time = current_time_and_expiry_time().1;
+        let expiry_time = expiry_time_from_now();
 
         // Grow stable memory again. Output should be the size of stable memory
         // before growing it (1).

@@ -42,7 +42,7 @@ mod tests {
     use super::*;
     use crate::types::messages::SignedIngressBuilder;
     use assert_matches::assert_matches;
-    use ic_types::{batch::IngressPayloadError, time::current_time_and_expiry_time};
+    use ic_types::{batch::IngressPayloadError, time::expiry_time_from_now};
     use std::convert::TryFrom;
     use std::time::Duration;
 
@@ -55,7 +55,7 @@ mod tests {
             bincode::deserialize::<IngressPayload>(&bytes).unwrap(),
             payload
         );
-        let (_, time) = current_time_and_expiry_time();
+        let time = expiry_time_from_now();
 
         // Some test messages.
         let m1 = SignedIngressBuilder::new()

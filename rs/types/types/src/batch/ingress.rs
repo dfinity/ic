@@ -187,14 +187,14 @@ mod tests {
             Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope,
             SignedDelegation, SignedIngress,
         },
-        time::current_time_and_expiry_time,
+        time::expiry_time_from_now,
     };
 
     /// Build a Vec<SignedIngress>.  Convert to IngressPayload and then back to
     /// Vec<SignedIngress>.  Ensure that the two vectors are identical.
     #[test]
     fn into_ingress_payload_and_back() {
-        let ingress_expiry = current_time_and_expiry_time().1;
+        let ingress_expiry = expiry_time_from_now();
         let content = HttpCallContent::Call {
             update: HttpCanisterUpdate {
                 canister_id: Blob(vec![42; 8]),

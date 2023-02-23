@@ -16,7 +16,7 @@ use ic_test_utilities::{
         messages::{IngressBuilder, RequestBuilder, ResponseBuilder},
     },
 };
-use ic_types::{messages::CallbackId, time::current_time_and_expiry_time};
+use ic_types::{messages::CallbackId, time::expiry_time_from_now};
 use maplit::btreemap;
 use proptest::prelude::*;
 use std::convert::TryInto;
@@ -312,7 +312,7 @@ fn test_message_picking_ingress_only() {
             method_name: String::from("test"),
             method_payload: vec![i as u8],
             message_id: message_test_id(555),
-            expiry_time: current_time_and_expiry_time().1,
+            expiry_time: expiry_time_from_now(),
         });
     }
 
@@ -451,7 +451,7 @@ fn test_message_picking_round_robin() {
         method_name: String::from("test"),
         method_payload: Vec::new(),
         message_id: message_test_id(555),
-        expiry_time: current_time_and_expiry_time().1,
+        expiry_time: expiry_time_from_now(),
     });
 
     // POPPING
@@ -629,7 +629,7 @@ fn test_peek_round_robin() {
         method_payload: Vec::new(),
         effective_canister_id: None,
         message_id: message_test_id(555),
-        expiry_time: current_time_and_expiry_time().1,
+        expiry_time: expiry_time_from_now(),
     };
     queues.push_ingress(ingress.clone());
 
@@ -699,7 +699,7 @@ fn test_skip_round_robin() {
         method_payload: Vec::new(),
         effective_canister_id: None,
         message_id: message_test_id(555),
-        expiry_time: current_time_and_expiry_time().1,
+        expiry_time: expiry_time_from_now(),
     };
     queues.push_ingress(ingress.clone());
     let ingress_input = CanisterMessage::Ingress(Arc::new(ingress));

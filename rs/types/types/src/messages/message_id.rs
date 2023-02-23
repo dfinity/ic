@@ -244,7 +244,7 @@ mod tests {
         SignedIngress,
     };
     use super::*;
-    use crate::{time::current_time_and_expiry_time, CanisterId, PrincipalId, Time};
+    use crate::{time::expiry_time_from_now, CanisterId, PrincipalId, Time};
     use hex_literal::hex;
 
     #[test]
@@ -449,7 +449,7 @@ mod tests {
     /// on two messages containing different public keys and signatures and
     /// asserts that the computed MessageIds should be the same.
     fn message_id_icf_reference() {
-        let expiry_time = current_time_and_expiry_time().1;
+        let expiry_time = expiry_time_from_now();
         let signed_ingress1 = signed_ingress(
             CanisterId::new(PrincipalId::try_from(&[0, 0, 0, 0, 0, 0, 4, 210][..]).unwrap())
                 .unwrap(),

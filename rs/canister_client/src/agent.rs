@@ -15,7 +15,7 @@ use ic_types::{
     consensus::catchup::CatchUpPackageParam,
     crypto::threshold_sig::ThresholdSigPublicKey,
     messages::{Blob, HttpStatusResponse, MessageId, ReplicaHealthStatus},
-    time::current_time_and_expiry_time,
+    time::expiry_time_from_now,
     CanisterId,
 };
 use prost::Message;
@@ -266,7 +266,7 @@ impl Agent {
             method,
             arguments,
             nonce,
-            current_time_and_expiry_time().1,
+            expiry_time_from_now(),
             self.sender_field.clone(),
         )
         .map_err(|err| format!("{}", err))?;

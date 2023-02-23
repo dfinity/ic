@@ -7,7 +7,7 @@ use ic_types::{
         HttpReadStateContent, HttpReadStateResponse, HttpRequestEnvelope, HttpUserQuery, MessageId,
         SignedRequestBytes,
     },
-    time::current_time_and_expiry_time,
+    time::expiry_time_from_now,
     CanisterId, Time,
 };
 use serde::Deserialize;
@@ -188,7 +188,7 @@ pub fn prepare_query(
             arg: Blob(arguments),
             sender: sender_field,
             nonce: None,
-            ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
+            ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
         },
     };
 
@@ -207,7 +207,7 @@ pub fn prepare_read_state(
             sender: sender_field,
             paths: paths.to_vec(),
             nonce: None,
-            ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
+            ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
         },
     };
 

@@ -121,7 +121,7 @@ mod tests {
         messages::{
             Blob, HttpQueryContent, HttpRequest, HttpRequestEnvelope, HttpUserQuery, UserQuery,
         },
-        time::current_time_and_expiry_time,
+        time::expiry_time_from_now,
     };
     use ic_validator::get_authorized_canisters;
     use std::convert::TryFrom;
@@ -129,7 +129,7 @@ mod tests {
 
     #[tokio::test]
     async fn async_get_authorized_canisters() {
-        let expiry_time = current_time_and_expiry_time().1;
+        let expiry_time = expiry_time_from_now();
         let content = HttpQueryContent::Query {
             query: HttpUserQuery {
                 canister_id: Blob(vec![67, 3]),

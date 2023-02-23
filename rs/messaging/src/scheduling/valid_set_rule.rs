@@ -27,7 +27,7 @@ use ic_types::{
         extract_effective_canister_id, HttpRequestContent, Ingress, ParseIngressError,
         SignedIngressContent,
     },
-    time::current_time_and_expiry_time,
+    time::expiry_time_from_now,
     SubnetId, Time,
 };
 use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
@@ -41,7 +41,7 @@ struct VsrMetrics {
     inducted_ingress_payload_sizes: Histogram,
     /// Latency of inducting an ingress message, by induction status.
     /// The latency metric is unreliable because we assume expiry time
-    /// was set by 'current_time_and_expiry_time'.
+    /// was set by 'expiry_time'.
     unreliable_induct_ingress_message_duration: HistogramVec,
     /// Memory currently used by payloads of statuses in the ingress
     /// history.
@@ -240,7 +240,7 @@ impl ValidSetRuleImpl {
         status: &str,
         ingress_expiry: Time,
     ) {
-        let current_expiry_time = current_time_and_expiry_time().1;
+        let current_expiry_time = expiry_time_from_now();
         let delta_in_nanos = if current_expiry_time <= ingress_expiry {
             Duration::from_secs(0)
         } else {

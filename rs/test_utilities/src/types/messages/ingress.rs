@@ -6,7 +6,7 @@ use ic_types::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, Ingress, MessageId,
         SignedIngress,
     },
-    time::current_time_and_expiry_time,
+    time::expiry_time_from_now,
     CanisterId, PrincipalId, Time, UserId,
 };
 use rand::thread_rng;
@@ -28,7 +28,7 @@ impl Default for IngressBuilder {
                 method_name: "".to_string(),
                 method_payload: Vec::new(),
                 message_id: MessageId::from([0; 32]),
-                expiry_time: current_time_and_expiry_time().1,
+                expiry_time: expiry_time_from_now(),
             },
         }
     }
@@ -94,7 +94,7 @@ impl Default for SignedIngressBuilder {
             method_name: "".to_string(),
             arg: Blob(vec![]),
             sender: Blob(PrincipalId::new_anonymous().into()),
-            ingress_expiry: current_time_and_expiry_time().1.as_nanos_since_unix_epoch(),
+            ingress_expiry: expiry_time_from_now().as_nanos_since_unix_epoch(),
             nonce: None,
         };
         Self {
@@ -181,7 +181,7 @@ impl SignedIngressBuilder {
     }
 
     pub fn build(&self) -> SignedIngress {
-        // TODO(NNS1-502): Consider panicking if expiry_time() was not called
+        // TODO(NNS1-502): Consider panicking if expiry_time_from_now() was not called
 
         let content = HttpCallContent::Call {
             update: self.update.clone(),

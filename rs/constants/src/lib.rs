@@ -11,7 +11,7 @@ use std::time::Duration;
 pub const MAX_INGRESS_TTL: Duration = Duration::from_secs(5 * 60); // 5 minutes
 
 /// Duration subtracted from `MAX_INGRESS_TTL` by
-/// `current_time_and_expiry_time()` when creating an ingress message.
+/// `expiry_time_from_now()` when creating an ingress message.
 pub const PERMITTED_DRIFT: Duration = Duration::from_secs(60);
 
 /// Duration added to `MAX_INGRESS_TTL` when checking the max allowed

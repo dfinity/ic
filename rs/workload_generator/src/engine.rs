@@ -13,7 +13,7 @@ use ic_canister_client::{
 };
 use ic_types::{
     messages::{Blob, MessageId},
-    time::current_time_and_expiry_time,
+    time::expiry_time_from_now,
     CanisterId,
 };
 
@@ -313,7 +313,7 @@ impl Engine {
             method,
             arg,
             format!("inc {} {}", nonce, n).into_bytes(),
-            current_time_and_expiry_time().1,
+            expiry_time_from_now(),
             agent.sender_field.clone(),
         )
         .unwrap();
