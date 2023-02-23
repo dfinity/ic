@@ -3,10 +3,11 @@
 /// Relevant configuration files:
 /// systemd service ic-os/guestos/rootfs/etc/systemd/system/ic-onchain-observability-adapter.service
 /// systemd socket ic-os/guestos/rootfs/etc/systemd/system/ic-onchain-observability-adapter.socket
+use candid::{Decode, Encode};
 use clap::Parser;
 use hyper::Client;
 use ic_async_utils::abort_on_panic;
-use ic_base_types::NodeId;
+use ic_base_types::{CanisterId, NodeId};
 use ic_canister_client::{Agent, Sender};
 use ic_config::registry_client::DataProviderConfig;
 use ic_crypto::CryptoComponent;
@@ -23,19 +24,25 @@ use ic_types::{
     messages::MessageId,
     onchain_observability::{PeerReport, Report, SignedReport},
 };
+use rand::Rng;
 use serde_json::to_string_pretty;
 use std::{
     collections::{HashMap, HashSet},
+    str::FromStr,
     sync::Arc,
     time::SystemTime,
 };
 use tokio::{
     runtime::Handle,
-    time::{interval, MissedTickBehavior},
+    time::{interval, sleep, Duration, MissedTickBehavior},
 };
 use url::Url;
 
 const MAX_CRYPTO_SIGNATURE_ATTEMPTS: u64 = 5;
+
+const PREPARE_SOME_METHOD: &str = "prepare_some";
+const GET_CERTIFICATE_METHOD: &str = "get_certificate";
+const COMMIT_METHOD: &str = "commit";
 
 #[tokio::main]
 pub async fn main() {
@@ -52,13 +59,17 @@ pub async fn main() {
     }
     let canister_client_url =
         Url::parse(&config.canister_client_url).expect("Failed to create url");
+    let canister_id =
+        CanisterId::from_str(&config.canister_id).expect("Failed to parse canister id");
 
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
 
     info!(
         logger,
-        "Starting the onchain observability adapter with config: {}",
-        to_string_pretty(&config).unwrap()
+        "Starting the onchain observability adapter with config: {}, url: {:?} id{:?}",
+        to_string_pretty(&config).unwrap(),
+        canister_client_url,
+        canister_id,
     );
     let handle = Handle::current();
     // TODO (NET-1332): Switch to adapter-specific metrics registry
@@ -66,9 +77,9 @@ pub async fn main() {
     let crypto_component =
         create_crypto_component(&logger, &metrics_registry, &config, handle).await;
     let node_id = crypto_component.get_node_id();
-    let _canister_client =
-        create_canister_client(crypto_component.clone(), canister_client_url, node_id).await;
 
+    let canister_client =
+        create_canister_client(crypto_component.clone(), canister_client_url, node_id).await;
     let http_client = Client::new();
     let http_client_clone = http_client.clone();
 
@@ -113,8 +124,17 @@ pub async fn main() {
 
             for signature_attempts in 0..MAX_CRYPTO_SIGNATURE_ATTEMPTS {
                 match sign_report(crypto_component.clone(), report.clone(), node_id).await {
-                    Ok(_signed_report) => {
-                        /* send report */
+                    Ok(signed_report) => {
+                        if let Err(e) = send_report_to_canister(
+                            &canister_client,
+                            canister_id,
+                            signed_report,
+                            &logger,
+                        )
+                        .await
+                        {
+                            error!(logger, "Failed to send report: {:?}", e);
+                        }
                         break;
                     }
                     Err(e) => {
@@ -257,6 +277,126 @@ async fn sign_report(
         Ok(signature) => Ok(SignedReport { report, signature }),
         Err(e) => Err(e),
     }
+}
+
+/// Publish the report to the canister using the Canister Client API.  This involves a 3-step process
+/// 1. prepare_some(vec![encoded report]) to prepare the data and create a certificate
+/// 2. Get_certificate() to get the certificate for the data
+/// 3. commit(certificate) to publish the results to the canister
+/// Note that these calls must account for race conditions from simultaneous publishes across replicas
+async fn send_report_to_canister(
+    canister_client: &Agent,
+    canister_id: CanisterId,
+    report: SignedReport,
+    logger: &ReplicaLogger,
+) -> Result<(), String> {
+    // Introducing some jitter to break synchronization across replicas and reduce probability that multiple replicas
+    // initiate a request at the same time, which can cause canister client calls to fail. TODO(NET-1343) - integrate into retry logic
+    let mut rng = rand::thread_rng();
+    let random_sleep_duration = 2 * rng.gen_range(0..5);
+    sleep(Duration::from_secs(random_sleep_duration)).await;
+
+    // Step 1 - the canister API requires us to call prepare_some(Vec<Vec<u8>>) to prepare the data. Note that this requires 2 levels of encoding.
+    // First we encode the report itself to vec<u8>.  However, the API expects vec<vec<u8> so we must then wrap it in another vector.
+    // Finally, the canister client expects a candid-encoded representation of the method arguments, so we must re-encode this back into another Vec<u8>.
+    let encoded_report =
+        Encode!(&report).or_else(|_| Err("Error serializing report to candid".to_string()))?;
+    let candid_prepare_some_arg = Encode!(&vec![encoded_report])
+        .or_else(|_| Err("Error encoding prepare_some() args".to_string()))?;
+
+    canister_client
+        .execute_update(
+            &canister_id,
+            &canister_id,
+            PREPARE_SOME_METHOD,
+            candid_prepare_some_arg,
+            generate_nonce(),
+        )
+        .await
+        .map_err(|e| format!("Canister client prepare_some() query failed: {e}"))?
+        .ok_or_else(|| {
+            "Canister client unexpectedly received empty response from prepare_some()".to_string()
+        })?;
+
+    // Step 2 - We must call get_certificate() to obtain the certificate corresponding to the prepared data.
+    // This is used later to confirm we are not attempting to publish stale data.
+    let encoded_empty_arg = Encode!(&Vec::<u8>::new())
+        .or_else(|_| Err("Error encoding get_certificate() args".to_string()))?;
+
+    let encoded_certificate = canister_client
+        .execute_query(&canister_id, GET_CERTIFICATE_METHOD, encoded_empty_arg)
+        .await
+        .map_err(|e| format!("Canister client get_certificate() query failed: {e}"))?
+        .ok_or_else(|| {
+            "Canister client unexpectedly received empty response from get_certificate()"
+                .to_string()
+        })?;
+
+    let decoded_certificate_opt = Decode!(&encoded_certificate, Option<Vec<u8>>)
+        .or_else(|_| Err("Error deserializing certificate into optional type".to_string()))?;
+
+    // Step 3 - We must commit the data using the certificate
+    // If certificate is not found, that means there was no pending data and we can assume
+    // that this data was already published by another replica.
+    let certificate = match decoded_certificate_opt {
+        Some(cert) => cert,
+        None => {
+            warn!(
+                logger,
+                "Certificate not found. Data may have already been published"
+            );
+            return Ok(());
+        }
+    };
+
+    let candid_commit_arg =
+        Encode!(&certificate).or_else(|_| Err("Error encoding commit() args".to_string()))?;
+
+    match canister_client
+        .execute_update(
+            &canister_id,
+            &canister_id,
+            COMMIT_METHOD,
+            candid_commit_arg,
+            generate_nonce(),
+        )
+        .await
+    {
+        // If error, we can assume this is due to stale certificate and that
+        // another replica staged new data and will eventually commit the data
+
+        // TODO: Convert canister client to strongly typed error so that we can also
+        // check for timeouts
+        Ok(Some(encoded_block_number)) => {
+            let decoded_result = Decode!(&encoded_block_number, Option<u64>)
+                .or_else(|_| Err("Error decoding block".to_string()))?;
+            if let Some(block) = decoded_result {
+                info!(
+                    logger,
+                    "Successfully published data at block height: {:?}", block
+                );
+            } else {
+                warn!(logger, "Commit was skipped due to no pending data");
+            }
+        }
+        Ok(None) => return Err("Commit() did not return a valid response".to_string()),
+        Err(e) => {
+            warn!(
+                logger,
+                "Did not commit data (may have already been committed): {:?}", e
+            );
+        }
+    }
+    Ok(())
+}
+
+fn generate_nonce() -> Vec<u8> {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos()
+        .to_le_bytes()
+        .to_vec()
 }
 
 // Peer label is in form of "{NODE IP}_{NODE ID PREFIX}" so we can take the prefix

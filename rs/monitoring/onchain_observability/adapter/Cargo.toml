@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 async-trait = "0.1.31"
+candid = "0.8.1"
 clap = { version = "3.1.6", features = ["derive"] }
 hyper = { version = "0.14.18", features = ["full"] }
 ic-async-utils = { path = "../../../async_utils" }
@@ -21,6 +22,7 @@ ic-registry-local-store = { path = "../../../registry/local_store" }
 ic-types = { path = "../../../types/types" }
 itertools = "0.10.5"
 prometheus-parse = "0.2.3"
+rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_with = "1.6.2"

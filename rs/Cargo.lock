@@ -7426,6 +7426,7 @@ name = "ic-onchain-observability-adapter"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "candid",
  "clap 3.2.23",
  "hyper",
  "ic-async-utils",
@@ -7441,6 +7442,7 @@ dependencies = [
  "ic-types",
  "itertools",
  "prometheus-parse",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "serde_with",
