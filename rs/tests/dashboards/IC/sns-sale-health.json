@@ -30,420 +30,330 @@
     "links": [],
     "liveNow": true,
     "panels": [
-      {
-        "datasource": {
-          "type": "prometheus",
-          "uid": "000000001"
-        },
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "palette-classic"
-            },
-            "custom": {
-              "axisLabel": "",
-              "axisPlacement": "auto",
-              "barAlignment": 0,
-              "drawStyle": "line",
-              "fillOpacity": 0,
-              "gradientMode": "none",
-              "hideFrom": {
-                "legend": false,
-                "tooltip": false,
-                "viz": false
-              },
-              "lineInterpolation": "smooth",
-              "lineWidth": 1,
-              "pointSize": 5,
-              "scaleDistribution": {
-                "type": "linear"
-              },
-              "showPoints": "never",
-              "spanNulls": false,
-              "stacking": {
-                "group": "A",
-                "mode": "none"
-              },
-              "thresholdsStyle": {
-                "mode": "off"
-              }
-            },
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "green",
-                  "value": null
-                },
-                {
-                  "color": "red",
-                  "value": 80
-                }
-              ]
-            },
-            "unit": "s"
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byRegexp",
-                "options": "^Value$"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "N/A"
-                }
-              ]
-            }
-          ]
-        },
-        "gridPos": {
-          "h": 8,
-          "w": 12,
-          "x": 0,
-          "y": 0
-        },
-        "id": 49,
-        "options": {
-          "legend": {
-            "calcs": [
-              "mean",
-              "min",
-              "max"
-            ],
-            "displayMode": "table",
-            "placement": "right",
-            "sortBy": "Mean",
-            "sortDesc": true
-          },
-          "tooltip": {
-            "mode": "multi",
-            "sort": "none"
-          }
-        },
-        "pluginVersion": "8.5.11",
-        "targets": [
-          {
-            "alias": "",
-            "bucketAggs": [
-              {
-                "id": "2",
-                "settings": {
-                  "interval": "auto"
-                },
-                "type": "date_histogram"
-              }
-            ],
+        {
             "datasource": {
               "type": "prometheus",
               "uid": "000000001"
             },
-            "editorMode": "code",
-            "exemplar": true,
-            "expr": "sum by (hostname) (\n  rate(nginx_request_sec_duration_sum{\n    env=~\"prod\",\n    hostname=~\"$hostname\",\n}[$period]))\n/\nsum by (hostname) (\n  rate(nginx_request_sec_duration_count{\n    env=~\"prod\",\n    hostname=~\"$hostname\",\n}[$period]))",
-            "interval": "",
-            "intervalFactor": 1,
-            "legendFormat": "{{ hostname }}",
-            "metrics": [
-              {
-                "id": "1",
-                "type": "count"
-              }
-            ],
-            "query": "",
-            "range": true,
-            "refId": "A",
-            "timeField": "@timestamp"
-          }
-        ],
-        "title": "(Boundary Nodes) Host Latencies",
-        "transparent": true,
-        "type": "timeseries"
-      },
-      {
-        "datasource": {
-          "type": "prometheus",
-          "uid": "000000001"
-        },
-        "description": "Codes 200-299 are for successful responses. 300-399 are for redirections. 400-499 are for client errors (429 is for throttling). 500-599 are for server errors. For more details, see e.g. https://developer.mozilla.org/en-US/docs/Web/HTTP/Status. ",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "palette-classic"
-            },
-            "custom": {
-              "axisLabel": "",
-              "axisPlacement": "auto",
-              "barAlignment": 0,
-              "drawStyle": "line",
-              "fillOpacity": 0,
-              "gradientMode": "none",
-              "hideFrom": {
-                "legend": false,
-                "tooltip": false,
-                "viz": false
-              },
-              "lineInterpolation": "smooth",
-              "lineWidth": 1,
-              "pointSize": 5,
-              "scaleDistribution": {
-                "type": "linear"
-              },
-              "showPoints": "never",
-              "spanNulls": false,
-              "stacking": {
-                "group": "A",
-                "mode": "none"
-              },
-              "thresholdsStyle": {
-                "mode": "line+area"
-              }
-            },
-            "decimals": 1,
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "transparent",
-                  "value": null
+            "description": "Shows the time from the Boundary Node receiving a request until the response is being returned to the client. This just shows if queues are building in the Boundary Nodes as not everything can be processed at once.\n* Good conditions: on average around 500ms (some outliers)\n* Bad conditions: on average >750ms",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
                 },
+                "custom": {
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "smooth",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "off"
+                  }
+                },
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 80
+                    }
+                  ]
+                },
+                "unit": "s"
+              },
+              "overrides": [
                 {
-                  "color": "red",
-                  "value": 7000
+                  "matcher": {
+                    "id": "byRegexp",
+                    "options": "^Value$"
+                  },
+                  "properties": [
+                    {
+                      "id": "displayName",
+                      "value": "N/A"
+                    }
+                  ]
                 }
               ]
             },
-            "unit": "short"
-          },
-          "overrides": []
-        },
-        "gridPos": {
-          "h": 8,
-          "w": 6,
-          "x": 12,
-          "y": 0
-        },
-        "id": 45,
-        "options": {
-          "legend": {
-            "calcs": [
-              "mean",
-              "sum"
-            ],
-            "displayMode": "table",
-            "placement": "right"
-          },
-          "tooltip": {
-            "mode": "multi",
-            "sort": "none"
-          }
-        },
-        "pluginVersion": "8.5.11",
-        "targets": [
-          {
-            "alias": "",
-            "bucketAggs": [
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 0,
+              "y": 0
+            },
+            "id": 49,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "min",
+                  "max"
+                ],
+                "displayMode": "table",
+                "placement": "right",
+                "sortBy": "Mean",
+                "sortDesc": true
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "none"
+              }
+            },
+            "pluginVersion": "8.5.11",
+            "targets": [
               {
-                "id": "2",
-                "settings": {
-                  "interval": "auto"
+                "alias": "",
+                "bucketAggs": [
+                  {
+                    "id": "2",
+                    "settings": {
+                      "interval": "auto"
+                    },
+                    "type": "date_histogram"
+                  }
+                ],
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "000000001"
                 },
-                "type": "date_histogram"
+                "editorMode": "code",
+                "exemplar": true,
+                "expr": "sum by (hostname) (\n  rate(nginx_request_sec_duration_sum{\n    env=~\"prod\",\n    hostname=~\"$hostname\",\n    ic_subnet_id=~\"$ic_subnet\",\n}[$period]))\n/\nsum by (hostname) (\n  rate(nginx_request_sec_duration_count{\n    env=~\"prod\",\n    hostname=~\"$hostname\",\n    ic_subnet_id=~\"$ic_subnet\",\n}[$period]))",
+                "interval": "",
+                "intervalFactor": 1,
+                "legendFormat": "{{ hostname }}",
+                "metrics": [
+                  {
+                    "id": "1",
+                    "type": "count"
+                  }
+                ],
+                "query": "",
+                "range": true,
+                "refId": "A",
+                "timeField": "@timestamp"
               }
             ],
+            "title": "(Boundary Nodes) Host Latencies",
+            "transparent": true,
+            "type": "timeseries"
+        },
+        {
+            "alert": {
+              "alertRuleTags": {},
+              "conditions": [
+                {
+                  "evaluator": {
+                    "params": [
+                      7000
+                    ],
+                    "type": "gt"
+                  },
+                  "operator": {
+                    "type": "and"
+                  },
+                  "query": {
+                    "params": [
+                      "StatusCode5XX",
+                      "5m",
+                      "now"
+                    ]
+                  },
+                  "reducer": {
+                    "params": [],
+                    "type": "avg"
+                  },
+                  "type": "query"
+                }
+              ],
+              "executionErrorState": "alerting",
+              "for": "5m",
+              "frequency": "1m",
+              "handler": 1,
+              "message": "Boundary Nodes are returning an excess of 5XX responses",
+              "name": "BoundaryNodeStatusCode5XX",
+              "noDataState": "no_data",
+              "notifications": [
+                {
+                  "uid": "8YXDWIi4k"
+                }
+              ]
+            },
             "datasource": {
               "type": "prometheus",
               "uid": "000000001"
             },
-            "editorMode": "code",
-            "exemplar": true,
-            "expr": "sum by (status) (\n  rate(nginx_request_total{\n    env=~\"prod\",\n    hostname=~\"$hostname\",\n  }[$period])\n)",
-            "hide": false,
-            "interval": "",
-            "intervalFactor": 1,
-            "legendFormat": "{{ status }}",
-            "metrics": [
-              {
-                "id": "1",
-                "type": "count"
-              }
-            ],
-            "query": "",
-            "range": true,
-            "refId": "A",
-            "timeField": "@timestamp"
-          },
-          {
-            "alias": "",
-            "bucketAggs": [
-              {
-                "id": "2",
-                "settings": {
-                  "interval": "auto"
+            "description": "Shows the HTTP status codes of all requests being answered by the boundary nodes. If anything is going wrong with the Boundary Nodes, we should see it here.\n* Good conditions: 2XX status codes (e.g., mostly 200s and some 204s)\n* Bad conditions: 5XX\n\nStatus Code Explanation: \nCodes 200-299 are for successful responses. 300-399 are for redirections. 400-499 are for client errors (429 is for throttling). 500-599 are for server errors. For more details, see e.g. https://developer.mozilla.org/en-US/docs/Web/HTTP/Status. ",
+            "fieldConfig": {
+              "defaults": {
+                "color": {
+                  "mode": "palette-classic"
                 },
-                "type": "date_histogram"
-              }
-            ],
-            "datasource": {
-              "type": "prometheus",
-              "uid": "000000001"
-            },
-            "editorMode": "code",
-            "exemplar": true,
-            "expr": "sum by (status) (\n  rate(nginx_request_total{\n    status=~\"5..\",\n  }[$period])\n)",
-            "hide": true,
-            "interval": "",
-            "intervalFactor": 1,
-            "legendFormat": "{{ status }}",
-            "metrics": [
-              {
-                "id": "1",
-                "type": "count"
-              }
-            ],
-            "query": "",
-            "range": true,
-            "refId": "StatusCode5XX",
-            "timeField": "@timestamp"
-          }
-        ],
-        "title": "(Boundary Nodes) Status Codes",
-        "transparent": true,
-        "type": "timeseries"
-      },
-      {
-        "datasource": {
-          "type": "prometheus",
-          "uid": "000000001"
-        },
-        "description": "HITs correspond to cached responses. MISS, BYPASS and EXPIRED correspond to the forwarded requests. For more information, see https://www.nginx.com/blog/nginx-caching-guide/#Frequently-Asked-Questions-(FAQ).",
-        "fieldConfig": {
-          "defaults": {
-            "color": {
-              "mode": "palette-classic"
-            },
-            "custom": {
-              "axisLabel": "",
-              "axisPlacement": "auto",
-              "barAlignment": 0,
-              "drawStyle": "line",
-              "fillOpacity": 0,
-              "gradientMode": "none",
-              "hideFrom": {
-                "legend": false,
-                "tooltip": false,
-                "viz": false
-              },
-              "lineInterpolation": "smooth",
-              "lineWidth": 1,
-              "pointSize": 5,
-              "scaleDistribution": {
-                "type": "linear"
-              },
-              "showPoints": "never",
-              "spanNulls": false,
-              "stacking": {
-                "group": "A",
-                "mode": "none"
-              },
-              "thresholdsStyle": {
-                "mode": "off"
-              }
-            },
-            "mappings": [],
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                {
-                  "color": "green",
-                  "value": null
+                "custom": {
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 0,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                    "legend": false,
+                    "tooltip": false,
+                    "viz": false
+                  },
+                  "lineInterpolation": "smooth",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                    "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": false,
+                  "stacking": {
+                    "group": "A",
+                    "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                    "mode": "line+area"
+                  }
                 },
-                {
-                  "color": "red",
-                  "value": 80
-                }
-              ]
-            },
-            "unit": "short"
-          },
-          "overrides": [
-            {
-              "matcher": {
-                "id": "byRegexp",
-                "options": "^Value$"
-              },
-              "properties": [
-                {
-                  "id": "displayName",
-                  "value": "N/A"
-                }
-              ]
-            }
-          ]
-        },
-        "gridPos": {
-          "h": 8,
-          "w": 6,
-          "x": 18,
-          "y": 0
-        },
-        "id": 47,
-        "options": {
-          "legend": {
-            "calcs": [
-              "mean"
-            ],
-            "displayMode": "table",
-            "placement": "right",
-            "sortBy": "Mean",
-            "sortDesc": true
-          },
-          "tooltip": {
-            "mode": "multi",
-            "sort": "none"
-          }
-        },
-        "pluginVersion": "8.5.11",
-        "targets": [
-          {
-            "alias": "",
-            "bucketAggs": [
-              {
-                "id": "2",
-                "settings": {
-                  "interval": "auto"
+                "decimals": 1,
+                "mappings": [],
+                "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "transparent",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 7000
+                    }
+                  ]
                 },
-                "type": "date_histogram"
-              }
-            ],
-            "datasource": {
-              "type": "prometheus",
-              "uid": "000000001"
+                "unit": "short"
+              },
+              "overrides": []
             },
-            "editorMode": "code",
-            "exemplar": true,
-            "expr": "sum by (upstream_cache_status) (\n  rate(nginx_request_total{\n    env=~\"prod\",\n    hostname=~\"$hostname\",\n  }[$period])\n)",
-            "interval": "",
-            "intervalFactor": 1,
-            "legendFormat": "{{ upstream_cache_status }}",
-            "metrics": [
+            "gridPos": {
+              "h": 8,
+              "w": 12,
+              "x": 12,
+              "y": 0
+            },
+            "id": 45,
+            "options": {
+              "legend": {
+                "calcs": [
+                  "mean",
+                  "sum"
+                ],
+                "displayMode": "table",
+                "placement": "right"
+              },
+              "tooltip": {
+                "mode": "multi",
+                "sort": "none"
+              }
+            },
+            "pluginVersion": "8.5.11",
+            "targets": [
               {
-                "id": "1",
-                "type": "count"
+                "alias": "",
+                "bucketAggs": [
+                  {
+                    "id": "2",
+                    "settings": {
+                      "interval": "auto"
+                    },
+                    "type": "date_histogram"
+                  }
+                ],
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "000000001"
+                },
+                "editorMode": "code",
+                "exemplar": true,
+                "expr": "sum by (status) (\n  rate(nginx_request_total{\n    env=~\"prod\",\n    hostname=~\"$hostname\",\n    ic_subnet_id=~\"$ic_subnet\",\n  }[$period])\n)",
+                "hide": false,
+                "interval": "",
+                "intervalFactor": 1,
+                "legendFormat": "{{ status }}",
+                "metrics": [
+                  {
+                    "id": "1",
+                    "type": "count"
+                  }
+                ],
+                "query": "",
+                "range": true,
+                "refId": "A",
+                "timeField": "@timestamp"
+              },
+              {
+                "alias": "",
+                "bucketAggs": [
+                  {
+                    "id": "2",
+                    "settings": {
+                      "interval": "auto"
+                    },
+                    "type": "date_histogram"
+                  }
+                ],
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "000000001"
+                },
+                "editorMode": "code",
+                "exemplar": true,
+                "expr": "sum by (status) (\n  rate(nginx_request_total{\n    status=~\"5..\",\n  }[$period])\n)",
+                "hide": true,
+                "interval": "",
+                "intervalFactor": 1,
+                "legendFormat": "{{ status }}",
+                "metrics": [
+                  {
+                    "id": "1",
+                    "type": "count"
+                  }
+                ],
+                "query": "",
+                "range": true,
+                "refId": "StatusCode5XX",
+                "timeField": "@timestamp"
               }
             ],
-            "query": "",
-            "range": true,
-            "refId": "A",
-            "timeField": "@timestamp"
-          }
-        ],
-        "title": "(Boundary Nodes) Cache Status",
-        "transparent": true,
-        "type": "timeseries"
+            "title": "(Boundary Nodes) Status Codes",
+            "transparent": true,
+            "type": "timeseries"
       },
       {
         "aliasColors": {},
