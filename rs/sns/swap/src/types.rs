@@ -242,14 +242,6 @@ impl Params {
             ));
         }
 
-        // Cap `min_participant_icp_e8s` at 100.
-        if self.min_participants > 100 {
-            return Err(format!(
-                "min_participants ({}) can be at most 100",
-                self.min_participants
-            ));
-        }
-
         // 100 * 1B * E8S should fit in a u64.
         assert!(self
             .max_icp_e8s
