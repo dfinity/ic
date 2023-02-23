@@ -66,7 +66,9 @@ class DependencyScanner:
                     if not path.is_dir():
                         raise RuntimeError(f"path {path} is invalid")
                     logging.info(f"Calling dependency manager for {repository.name} {path} {project.name}")
-                    findings.extend(self.dependency_manager.get_findings(repository.name, project))
+                    findings.extend(
+                        self.dependency_manager.get_findings(repository.name, project, repository.engine_version)
+                    )
                 if len(findings) > 0:
                     for index, finding in enumerate(findings):
                         vulnerable_dependency = finding.vulnerable_dependency

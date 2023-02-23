@@ -9,45 +9,60 @@ from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.npm_dependency_manager import NPMDependencyManager
 from scanner.scanner_job_type import ScannerJobType
 
+DEFAULT_NODE_VERSION = 19
+
 REPOS_TO_SCAN = [
     Repository(
-        "ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("service-worker", "ic/typescript/service-worker")]
+        "ic",
+        "https://gitlab.com/dfinity-lab/public/ic",
+        [Project("service-worker", "ic/typescript/service-worker")],
+        17,
     ),
     Repository(
         "nns-dapp",
         "https://github.com/dfinity/nns-dapp",
-        [
-            Project("frontend", "nns-dapp/frontend"),
-            Project("proxy", "nns-dapp/proxy"),
-        ],
+        [Project("frontend", "nns-dapp/frontend")],
+        16,
     ),
     Repository(
         "internet-identity",
         "https://github.com/dfinity/internet-identity",
         [Project("internet-identity", "internet-identity")],
+        DEFAULT_NODE_VERSION,
     ),
-    Repository("ic-js", "https://github.com/dfinity/ic-js", [Project("ic-js", "ic-js")]),
-    Repository("agent-js", "https://github.com/dfinity/agent-js", [Project("agent-js", "agent-js")]),
+    Repository("ic-js", "https://github.com/dfinity/ic-js", [Project("ic-js", "ic-js")], DEFAULT_NODE_VERSION),
     Repository(
-        "cycles-wallet", "https://github.com/dfinity/cycles-wallet", [Project("cycles-wallet", "cycles-wallet")]
+        "agent-js", "https://github.com/dfinity/agent-js", [Project("agent-js", "agent-js")], DEFAULT_NODE_VERSION
     ),
     Repository(
-        "rosetta-client", "https://github.com/dfinity/rosetta-client", [Project("rosetta-client", "rosetta-client")]
+        "cycles-wallet",
+        "https://github.com/dfinity/cycles-wallet",
+        [Project("cycles-wallet", "cycles-wallet")],
+        DEFAULT_NODE_VERSION,
+    ),
+    Repository(
+        "rosetta-client",
+        "https://github.com/dfinity/rosetta-client",
+        [Project("rosetta-client", "rosetta-client")],
+        DEFAULT_NODE_VERSION,
     ),
     Repository(
         "hardware-wallet-cli",
         "https://github.com/dfinity/hardware-wallet-cli",
         [Project("hardware-wallet-cli", "hardware-wallet-cli")],
+        DEFAULT_NODE_VERSION,
     ),
     Repository(
         "gix-components",
         "https://github.com/dfinity/gix-components",
         [Project("gix-components", "gix-components")],
+        DEFAULT_NODE_VERSION,
     ),
     Repository(
         "ic-docutrack",
         "https://github.com/dfinity/ic-docutrack",
         [Project("frontend", "ic-docutrack/frontend")],
+        DEFAULT_NODE_VERSION,
     ),
 ]
 
