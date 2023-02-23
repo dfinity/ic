@@ -497,24 +497,41 @@ fn wasm_can_be_loaded_from_a_file() {
 }
 
 #[test]
-fn canister_state_cycles_debit() {
+fn canister_state_ingress_induction_cycles_debit() {
     let system_state = &mut CanisterStateFixture::new().canister_state.system_state;
     let initial_balance = system_state.balance();
-
-    system_state.add_postponed_charge_to_cycles_debit(Cycles::new(42));
-    assert_eq!(Cycles::new(42), system_state.cycles_debit());
+    let ingress_induction_debit = Cycles::new(42);
+    system_state.add_postponed_charge_to_ingress_induction_cycles_debit(ingress_induction_debit);
+    assert_eq!(
+        ingress_induction_debit,
+        system_state.ingress_induction_cycles_debit()
+    );
     assert_eq!(initial_balance, system_state.balance());
     assert_eq!(
-        initial_balance - Cycles::new(42),
+        initial_balance - ingress_induction_debit,
         system_state.debited_balance()
     );
 
-    system_state.apply_cycles_debit(system_state.canister_id(), &no_op_logger());
-    assert_eq!(Cycles::zero(), system_state.cycles_debit());
-    assert_eq!(initial_balance - Cycles::new(42), system_state.balance());
+    system_state.apply_ingress_induction_cycles_debit(system_state.canister_id(), &no_op_logger());
     assert_eq!(
-        initial_balance - Cycles::new(42),
+        Cycles::zero(),
+        system_state.ingress_induction_cycles_debit()
+    );
+    assert_eq!(
+        initial_balance - ingress_induction_debit,
+        system_state.balance()
+    );
+    assert_eq!(
+        initial_balance - ingress_induction_debit,
         system_state.debited_balance()
+    );
+    // Check that 'ingress_induction_cycles_debit' is added
+    // to 'consumed_cycles_since_replica_started'.
+    assert_eq!(
+        system_state
+            .canister_metrics
+            .consumed_cycles_since_replica_started,
+        ingress_induction_debit.into()
     );
 }
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);

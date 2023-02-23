@@ -1337,7 +1337,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     let cycles_debit = Cycles::new(1000);
     test.canister_state_mut(a_id)
         .system_state
-        .add_postponed_charge_to_cycles_debit(cycles_debit);
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
     // Complete the response callback execution.
     test.execute_message(a_id);
@@ -1456,7 +1456,7 @@ fn dts_response_concurrent_cycles_change_fails() {
     let cycles_debit = test.canister_state(a_id).system_state.balance();
     test.canister_state_mut(a_id)
         .system_state
-        .add_postponed_charge_to_cycles_debit(cycles_debit);
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
     test.execute_message(a_id);
 
@@ -1602,16 +1602,16 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
     let mut cycles_debit = test.canister_state(a_id).system_state.balance() - Cycles::new(1000);
     test.canister_state_mut(a_id)
         .system_state
-        .add_postponed_charge_to_cycles_debit(cycles_debit);
+        .add_postponed_charge_to_ingress_induction_cycles_debit(cycles_debit);
 
     // We don't know when the response callback finishes and the cleanup
     // callback starts running, so we execute each slice one by one and
-    // add 1 cycle to `cycles_debit`.
+    // add 1 cycle to `ingress_induction_cycles_debit`.
     test.execute_slice(a_id);
     while test.canister_state(a_id).next_execution() != NextExecution::None {
         test.canister_state_mut(a_id)
             .system_state
-            .add_postponed_charge_to_cycles_debit(Cycles::new(1));
+            .add_postponed_charge_to_ingress_induction_cycles_debit(Cycles::new(1));
         cycles_debit += Cycles::new(1);
         test.execute_slice(a_id);
     }

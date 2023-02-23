@@ -280,7 +280,7 @@ impl CyclesAccountManager {
             }
             canister
                 .system_state
-                .add_postponed_charge_to_cycles_debit(cycles);
+                .add_postponed_charge_to_ingress_induction_cycles_debit(cycles);
             Ok(())
         } else {
             self.consume_with_threshold(&mut canister.system_state, cycles, threshold)

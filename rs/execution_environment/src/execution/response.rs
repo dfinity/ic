@@ -321,7 +321,7 @@ impl ResponseHelper {
     ) -> Result<ExecuteMessageResult, (Self, HypervisorError, NumInstructions)> {
         self.canister
             .system_state
-            .apply_cycles_debit(self.canister.canister_id(), round.log);
+            .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
 
         // Check that the cycles balance does not go below zero after applying
         // the Wasm execution state changes.
@@ -390,7 +390,7 @@ impl ResponseHelper {
     ) -> ExecuteMessageResult {
         self.canister
             .system_state
-            .apply_cycles_debit(self.canister.canister_id(), round.log);
+            .apply_ingress_induction_cycles_debit(self.canister.canister_id(), round.log);
 
         if let Some(state_changes) = &canister_state_changes {
             let requested = state_changes.system_state_changes.removed_cycles();

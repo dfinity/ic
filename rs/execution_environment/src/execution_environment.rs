@@ -2142,7 +2142,9 @@ impl ExecutionEnvironment {
             // pending execution anymore.
             canister.scheduler_state.long_execution_mode = LongExecutionMode::default();
             let canister_id = canister.canister_id();
-            canister.system_state.apply_cycles_debit(canister_id, log);
+            canister
+                .system_state
+                .apply_ingress_induction_cycles_debit(canister_id, log);
         };
     }
 
