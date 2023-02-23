@@ -2956,6 +2956,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedders_bench"
+version = "0.8.0"
+dependencies = [
+ "candid",
+ "canister-test",
+ "criterion",
+ "ic-test-utilities",
+ "ic-test-utilities-execution-environment",
+ "ic-types",
+]
+
+[[package]]
 name = "ena"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6037,6 +6049,7 @@ dependencies = [
  "candid",
  "canister-test",
  "criterion",
+ "embedders_bench",
  "ic-config",
  "ic-cycles-account-manager",
  "ic-interfaces",

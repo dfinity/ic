@@ -35,6 +35,7 @@ rayon = "1.5.1"
 
 
 [dev-dependencies]
+embedders_bench = { path = "benches/embedders_bench" }
 candid = "0.8.1"
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { version = "0.3", features = ["html_reports"] }

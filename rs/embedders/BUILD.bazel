@@ -143,12 +143,43 @@ rust_bench(
     deps = [":embedders"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
+rust_library(
+    name = "embedders_bench",
+    testonly = True,
+    srcs = [
+        "benches/embedders_bench/src/lib.rs",
+    ],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = [
+        "//rs/rust_canisters/canister_test",
+        "@crate_index//:candid",
+    ] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
 rust_bench(
     name = "stable_memory_bench",
+    testonly = True,
     srcs = ["benches/stable_memory.rs"],
     data = DATA,
     env = ENV,
     deps = [
+        ":embedders_bench",
+        "//rs/rust_canisters/canister_test",
+        "//rs/types/base_types",
+        "@crate_index//:candid",
+    ] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "heap_bench",
+    testonly = True,
+    srcs = ["benches/heap.rs"],
+    data = DATA,
+    env = ENV,
+    deps = [
+        ":embedders_bench",
         "//rs/rust_canisters/canister_test",
         "//rs/types/base_types",
         "@crate_index//:candid",

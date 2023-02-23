@@ -1,13 +1,8 @@
-use std::cell::RefCell;
-
 use candid::Encode;
-use canister_test::{CanisterId, CanisterInstallMode, Cycles, InstallCodeArgs};
-use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-
+use criterion::{criterion_group, criterion_main, Criterion};
+use embedders_bench::{query_bench, update_bench};
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_sys::PAGE_SIZE;
-use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
-use ic_types::ingress::WasmResult;
 
 const INITIAL_NUMBER_OF_ENTRIES: u64 = 128 * 1024;
 const ENTRIES_TO_CHANGE: u64 = 8 * 1024;
@@ -106,88 +101,24 @@ fn stable_write_repeat() -> String {
     )
 }
 
-fn initialize_execution_test(wasm: &[u8], cell: &RefCell<Option<(ExecutionTest, CanisterId)>>) {
-    const LARGE_INSTRUCTION_LIMIT: u64 = 1_000_000_000_000;
-
-    let mut current = cell.borrow_mut();
-    if current.is_some() {
-        return;
-    }
-
-    let mut test = ExecutionTestBuilder::new()
-        .with_instruction_limit(LARGE_INSTRUCTION_LIMIT)
-        .with_instruction_limit_without_dts(LARGE_INSTRUCTION_LIMIT)
-        .with_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT)
-        .build();
-    let canister_id = test.create_canister(Cycles::from(1_u128 << 64));
-    let args = InstallCodeArgs::new(
-        CanisterInstallMode::Install,
-        canister_id,
-        wasm.to_vec(),
-        Encode!(&INITIAL_NUMBER_OF_ENTRIES).unwrap(),
-        None,
-        None,
-        None,
-    );
-    let _result = test.install_code(args).unwrap();
-    *current = Some((test, canister_id));
-}
-
-fn update_bench(c: &mut Criterion, wasm: Vec<u8>, name: &str, method: &str, payload: &[u8]) {
-    let cell = RefCell::new(None);
-
-    c.bench_function(name, |bench| {
-        bench.iter_batched(
-            || initialize_execution_test(&wasm, &cell),
-            |()| {
-                let mut setup = cell.borrow_mut();
-                let (test, canister_id) = setup.as_mut().unwrap();
-                let result = test
-                    .ingress(*canister_id, method, payload.to_vec())
-                    .unwrap();
-                assert!(matches!(result, WasmResult::Reply(_)));
-            },
-            BatchSize::SmallInput,
-        );
-    });
-}
-
-fn query_bench(c: &mut Criterion, wasm: Vec<u8>, name: &str, method: &str, payload: &[u8]) {
-    let cell = RefCell::new(None);
-
-    c.bench_function(name, |bench| {
-        bench.iter_batched(
-            || initialize_execution_test(&wasm, &cell),
-            |()| {
-                let mut setup = cell.borrow_mut();
-                let (test, canister_id) = setup.as_mut().unwrap();
-                let result = test
-                    .anonymous_query(*canister_id, method, payload.to_vec())
-                    .unwrap();
-                assert!(matches!(result, WasmResult::Reply(_)));
-            },
-            BatchSize::SmallInput,
-        );
-    });
-}
-
 fn update_direct_read_write(c: &mut Criterion) {
     let wasm = wat::parse_str(stable_read_write_wat()).unwrap();
-    update_bench(c, wasm, "update_direct_read_write", "update_test", &[]);
+    update_bench(c, wasm, "direct_read_write", "update_test", &[], None);
 }
 
 fn update_direct_write_single(c: &mut Criterion) {
     let wasm = wat::parse_str(stable_write_repeat()).unwrap();
-    update_bench(c, wasm, "update_direct_write_single", "update_test", &[]);
+    update_bench(c, wasm, "direct_write_single", "update_test", &[], None);
 }
 
 fn update_btree_seq(c: &mut Criterion) {
     update_bench(
         c,
         STABLE_STRUCTURES_CANISTER.clone(),
-        "update_btree_seq",
+        "btree_seq",
         "update_increment_values_seq",
         &Encode!(&ENTRIES_TO_CHANGE).unwrap(),
+        None,
     );
 }
 
@@ -195,13 +126,14 @@ fn update_btree_sparse(c: &mut Criterion) {
     update_bench(
         c,
         STABLE_STRUCTURES_CANISTER.clone(),
-        "update_btree_sparse",
+        "btree_sparse",
         "update_increment_values_sparse",
         &Encode!(
             &ENTRIES_TO_CHANGE,
             &(INITIAL_NUMBER_OF_ENTRIES / ENTRIES_TO_CHANGE)
         )
         .unwrap(),
+        None,
     );
 }
 
@@ -209,9 +141,10 @@ fn update_btree_single(c: &mut Criterion) {
     update_bench(
         c,
         STABLE_STRUCTURES_CANISTER.clone(),
-        "update_btree_single",
+        "btree_single",
         "update_increment_one_value",
         &Encode!(&(ENTRIES_TO_CHANGE as u32)).unwrap(),
+        None,
     );
 }
 
@@ -219,29 +152,31 @@ fn update_empty(c: &mut Criterion) {
     update_bench(
         c,
         STABLE_STRUCTURES_CANISTER.clone(),
-        "update_empty",
+        "empty",
         "update_empty",
         &Encode!(&()).unwrap(),
+        None,
     );
 }
 
 fn query_direct_read_write(c: &mut Criterion) {
     let wasm = wat::parse_str(stable_read_write_wat()).unwrap();
-    query_bench(c, wasm, "query_direct_read_write", "query_test", &[]);
+    query_bench(c, wasm, "direct_read_write", "query_test", &[], None);
 }
 
 fn query_direct_write_single(c: &mut Criterion) {
-    let wasm = wat::parse_str(stable_write_repeat()).unwrap();
-    query_bench(c, wasm, "query_direct_write_single", "query_test", &[]);
+    let wasm = wat::parse_str(stable_read_write_wat()).unwrap();
+    query_bench(c, wasm, "direct_write_single", "query_test", &[], None);
 }
 
 fn query_btree_seq(c: &mut Criterion) {
     query_bench(
         c,
         STABLE_STRUCTURES_CANISTER.clone(),
-        "query_btree_seq",
+        "btree_seq",
         "query_increment_values_seq",
         &Encode!(&ENTRIES_TO_CHANGE).unwrap(),
+        None,
     );
 }
 
@@ -249,13 +184,14 @@ fn query_btree_sparse(c: &mut Criterion) {
     update_bench(
         c,
         STABLE_STRUCTURES_CANISTER.clone(),
-        "query_btree_sparse",
+        "btree_sparse",
         "query_increment_values_sparse",
         &Encode!(
             &ENTRIES_TO_CHANGE,
             &(INITIAL_NUMBER_OF_ENTRIES / ENTRIES_TO_CHANGE)
         )
         .unwrap(),
+        None,
     );
 }
 
@@ -263,9 +199,10 @@ fn query_btree_single(c: &mut Criterion) {
     query_bench(
         c,
         STABLE_STRUCTURES_CANISTER.clone(),
-        "query_btree_single",
+        "btree_single",
         "query_increment_one_value",
         &Encode!(&(ENTRIES_TO_CHANGE as u32)).unwrap(),
+        None,
     );
 }
 
@@ -273,9 +210,10 @@ fn query_empty(c: &mut Criterion) {
     query_bench(
         c,
         STABLE_STRUCTURES_CANISTER.clone(),
-        "query_empty",
+        "empty",
         "query_empty",
         &Encode!(&()).unwrap(),
+        None,
     );
 }
 
