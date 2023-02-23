@@ -8,7 +8,7 @@
   </metadata>
   <memory unit='KiB'>{{ ic_memory_kib | int | default("513802240") }}</memory>
   <currentMemory unit='KiB'>{{ ic_memory_kib | int | default("513802240") }}</currentMemory>
-  <vcpu placement='static'>{{ ic_cores | int | default("60") }}</vcpu>
+  <vcpu placement='static'>{{ (hostvars[item].ic_cores | default(ic_cores)) | int | default("60") }}</vcpu>
   <resource>
     <partition>/machine</partition>
   </resource>
