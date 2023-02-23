@@ -12,13 +12,14 @@ function cleanup() {
 }
 
 function help() {
-    echo "Usage: bazel run //ic-os/<image>:vuln-scan -- --format <html|json> --output-path <path to file> [--images <full path to ic repo>]"
+    echo "Usage: bazel run //ic-os/<image>:vuln-scan -- --format <html|json> --output-path <path to file> [--hash-output-path <path to file>] [--images <full path to ic repo>]"
     echo "  -f, --format: the output format 'html' or 'json'"
     echo "  -o, --output-path: full or relative path for output file"
+    echo "  -h, --hash-output-path: full or relative path for file that contains sha256 hashes of rootfs binary files"
     echo "  --images: list the target for images"
     echo ""
     echo "Example:"
-    echo "  bazel run //ic-os/boundary-guestos/envs/prod:vuln-scan -- --output-path guestos.html --format html"
+    echo "  bazel run //ic-os/boundary-guestos/envs/prod:vuln-scan -- --output-path guestos.html --format html --hash-output-path guestos.hash-list"
     echo "  bazel run //ic-os/boundary-guestos/envs/prod:vuln-scan -- --images $(pwd)"
     exit 1
 }
@@ -38,6 +39,11 @@ function setup() {
             -o | --output-path)
                 REPORT_OUTPUT="${2:-}"
                 log " * output path has been set to $REPORT_OUTPUT"
+                shift
+                ;;
+            -h | --hash-output-path)
+                HASH_OUTPUT="${2:-}"
+                log " * hash output path has been set to $HASH_OUTPUT"
                 shift
                 ;;
             --images)
@@ -68,7 +74,7 @@ function setup() {
     fi
 
     if [[ -z "${REPORT_OUTPUT:-}" ]]; then
-        log 'missing -o, --output' >&2
+        log 'missing -o, --output-path' >&2
         help
     fi
 }
@@ -111,6 +117,14 @@ function execution() {
 
     log " * path of report"
     ls -lah $(realpath "$REPORT_OUTPUT")
+
+    if [ -n "${HASH_OUTPUT:-}" ]; then
+        log "* computing sha256 hashes of binary files"
+        find "$UNTAR_DIR" -type f -executable -exec sha256sum {} \; >"$HASH_OUTPUT"
+
+        log " * path of hash list"
+        ls -lah $(realpath "$HASH_OUTPUT")
+    fi
 }
 
 setup "$@"
