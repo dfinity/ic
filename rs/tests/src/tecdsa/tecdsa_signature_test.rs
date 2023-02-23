@@ -68,6 +68,10 @@ const NUMBER_OF_NODES: usize = 4;
 
 const ECDSA_KEY_TRANSCRIPT_CREATED: &str = "consensus_ecdsa_key_transcript_created";
 
+/// Life cycle test requires more time
+pub const LIFE_CYCLE_OVERALL_TIMEOUT: Duration = Duration::from_secs(14 * 60);
+pub const LIFE_CYCLE_PER_TEST_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
 pub(crate) fn make_key(name: &str) -> EcdsaKeyId {
     EcdsaKeyId {
         curve: EcdsaCurve::Secp256k1,
