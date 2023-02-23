@@ -22,6 +22,7 @@ use crate::driver::{
         task::{DebugKeepaliveTask, EmptyTask},
         task_scheduler::{new_task_scheduler, TaskTable},
     },
+    test_env_api::FarmBaseUrl,
 };
 use crate::driver::{
     pot_dsl::{PotSetupFn, SysTestFn},
@@ -79,6 +80,12 @@ pub struct CliArgs {
         help = r#"Execute only those test functions, which contain a substring and skip all the others."#
     )]
     pub filter_tests: Option<String>,
+
+    #[clap(
+        long = "farm-base-url",
+        help = r#"Use a custom url for the Farm webservice."#
+    )]
+    pub farm_base_url: Option<url::Url>,
 }
 
 impl CliArgs {
@@ -694,6 +701,8 @@ impl SystemTestGroup {
             args.debug_keepalive,
         )?;
         if is_parent_process {
+            let root_env = group_ctx.get_root_env().unwrap();
+            FarmBaseUrl::new_or_default(args.farm_base_url).write_attribute(&root_env);
             debug!(group_ctx.log(), "Created group context: {:?}", group_ctx);
         }
 

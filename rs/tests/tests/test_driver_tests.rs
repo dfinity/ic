@@ -1,4 +1,5 @@
 use anyhow::{bail, Result};
+use ic_tests::driver::test_env_api::FarmBaseUrl;
 use std::{env, path::PathBuf, process::Command};
 use tempfile::Builder;
 
@@ -7,11 +8,14 @@ const BINARY_PATH: &str = "rs/tests/test-driver-e2e-scenarios";
 // It is important that each #[test] creates a unique tmp directory.
 fn create_unique_working_dir() -> PathBuf {
     let prefix_path = PathBuf::from(env::var("TEST_TMPDIR").unwrap());
-    Builder::new()
+    let path = Builder::new()
         .prefix(prefix_path.as_os_str())
         .tempdir()
         .unwrap()
-        .into_path()
+        .into_path();
+    // Test driver assumes that "root_env" dir already exists prior to starting execution.
+    std::fs::create_dir(path.join("root_env")).unwrap();
+    path
 }
 
 fn execute_cmd(mut cmd: Command) -> Result<()> {
@@ -35,8 +39,6 @@ fn execute_test_scenario_with_default_cmd(scenario_name: &str) -> Result<()> {
     execute_cmd(cmd)
 }
 
-// these tests don't work in the cargo case
-
 #[test]
 fn test_scenario_without_errors_succeeds() {
     let result = execute_test_scenario_with_default_cmd("test_without_errors");
@@ -47,6 +49,52 @@ fn test_scenario_without_errors_succeeds() {
 fn test_scenario_with_test_panic_fails() {
     let result = execute_test_scenario_with_default_cmd("test_with_panic");
     assert!(result.is_err())
+}
+
+#[test]
+fn test_scenario_with_default_farm_url_succeeds() {
+    let working_dir = create_unique_working_dir();
+    let scenario_name = "test_without_errors";
+    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
+    let mut cmd = Command::new(binary_path);
+    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+        "--working-dir",
+        working_dir.to_str().unwrap(),
+        "run",
+    ]);
+    let result = execute_cmd(cmd);
+    assert!(result.is_ok());
+    // Check that Farm url stored in test env matches the default one.
+    let farm_url: FarmBaseUrl = {
+        let file_path = working_dir.join("root_env/farm_url.json");
+        let content = std::fs::read_to_string(file_path).unwrap();
+        serde_json::from_str::<FarmBaseUrl>(&content).unwrap()
+    };
+    assert_eq!(farm_url.to_string(), "https://farm.dfinity.systems/");
+}
+
+#[test]
+fn test_scenario_with_custom_farm_url_succeeds() {
+    let working_dir = create_unique_working_dir();
+    let scenario_name = "test_without_errors";
+    let binary_path = env::current_dir().unwrap().join(BINARY_PATH);
+    let mut cmd = Command::new(binary_path);
+    cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
+        "--working-dir",
+        working_dir.to_str().unwrap(),
+        "--farm-base-url",
+        "https://my_custom_url.com/",
+        "run",
+    ]);
+    let result = execute_cmd(cmd);
+    assert!(result.is_ok());
+    // Check that Farm url stored in test env matches the given url.
+    let farm_url: FarmBaseUrl = {
+        let file_path = working_dir.join("root_env/farm_url.json");
+        let content = std::fs::read_to_string(file_path).unwrap();
+        serde_json::from_str::<FarmBaseUrl>(&content).unwrap()
+    };
+    assert_eq!(farm_url.to_string(), "https://my_custom_url.com/");
 }
 
 #[test]
