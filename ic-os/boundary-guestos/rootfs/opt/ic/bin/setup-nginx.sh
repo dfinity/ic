@@ -229,6 +229,21 @@ function setup_custom_domains() {
     fi
 }
 
+function setup_pre_isolation_canisters() {
+    local -r SRC_CANISTERS_PATH="${BOOT_DIR}/pre_isolation_canisters.txt"
+    local -r DST_CANISTERS_PATH="/run/ic-node/etc/nginx/conf.d/pre_isolation_canisters.conf"
+
+    if [[ ! -f "${SRC_CANISTERS_PATH}" ]]; then
+        err "missing pre_isolation_canisters.txt file: ${SRC_CANISTERS_PATH}; continuing with an empty one"
+        touch "${DST_CANISTERS_PATH}"
+        return
+    fi
+
+    while read id; do
+        echo "${id} 1;" >>"${DST_CANISTERS_PATH}"
+    done <"${SRC_CANISTERS_PATH}"
+}
+
 function setup_canister_id_alises() {
     local -r CANISTER_ID_ALIASES_DIR="/var/opt/nginx/canister_aliases"
     local -r CANISTER_ID_ALIASES_PATH="${CANISTER_ID_ALIASES_DIR}/canister_id_aliases.js"
@@ -286,6 +301,7 @@ function main() {
     setup_geolite2_dbs
     setup_ic_router
     setup_custom_domains
+    setup_pre_isolation_canisters
     setup_canister_id_alises
     setup_cgi
     setup_certification
