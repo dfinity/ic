@@ -210,7 +210,9 @@ impl VotingRewardsParameters {
             .expect("reward_rate_transition_duration_seconds unset");
 
         let time_since_genesis = now - *GENESIS;
-        if time_since_genesis.as_secs() >= i2d(reward_rate_transition_duration_seconds) {
+        if reward_rate_transition_duration_seconds == 0
+            || time_since_genesis.as_secs() >= i2d(reward_rate_transition_duration_seconds)
+        {
             return self.final_reward_rate();
         }
 
@@ -299,7 +301,7 @@ impl VotingRewardsParameters {
     pub fn with_default_values() -> Self {
         Self {
             round_duration_seconds: Some(ONE_DAY_SECONDS),
-            reward_rate_transition_duration_seconds: Some(1),
+            reward_rate_transition_duration_seconds: Some(0),
             initial_reward_rate_basis_points: Some(0),
             final_reward_rate_basis_points: Some(0),
         }
@@ -490,7 +492,11 @@ mod test {
 
     #[test]
     fn reward_rate_zero() {
-        let expected = RewardRate::from_basis_points(100);
+        let expected = RewardRate::from_basis_points(
+            VOTING_REWARDS_PARAMETERS
+                .final_reward_rate_basis_points
+                .unwrap(),
+        );
         let parameters_with_zero_transition_duration_seconds = VotingRewardsParameters {
             reward_rate_transition_duration_seconds: Some(0),
             ..VOTING_REWARDS_PARAMETERS
@@ -520,18 +526,26 @@ mod test {
 
     #[test]
     fn reward_rate_flattens_out() {
-        let expected = RewardRate::from_basis_points(100);
+        let final_reward_rate = RewardRate::from_basis_points(
+            VOTING_REWARDS_PARAMETERS.final_reward_rate_basis_points(),
+        );
         assert_eq!(
             VOTING_REWARDS_PARAMETERS.reward_rate_at(round_number_to_instant(42)),
-            expected
+            final_reward_rate
         );
         assert_eq!(
             VOTING_REWARDS_PARAMETERS.reward_rate_at(round_number_to_instant(42 + 5)),
-            expected
+            final_reward_rate
         );
         assert_eq!(
             VOTING_REWARDS_PARAMETERS.reward_rate_at(round_number_to_instant(123456)),
-            expected
+            final_reward_rate
+        );
+
+        // The reward rate should not be the final reward rate at time zero.
+        assert!(
+            VOTING_REWARDS_PARAMETERS.reward_rate_at(round_number_to_instant(0))
+                != final_reward_rate
         );
     }
 
@@ -614,6 +628,16 @@ mod test {
             }
             .validate(),
         );
+    }
+
+    #[test]
+    fn test_reward_rate_transition_duration_seconds_validation_accepts_zero() {
+        VotingRewardsParameters {
+            reward_rate_transition_duration_seconds: Some(0),
+            ..VOTING_REWARDS_PARAMETERS
+        }
+        .validate()
+        .unwrap()
     }
 
     #[test]

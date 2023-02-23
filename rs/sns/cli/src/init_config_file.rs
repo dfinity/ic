@@ -761,7 +761,7 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 #
 # The default value is {}. Values of 0 result in the reward rate always being
 # `final_reward_rate_basis_points`. The value used by the NNS is 8 years, or 
-# {} seconds. (The value cannot be set to 0.)
+# {} seconds.
 #
 #"##,
                 default_config

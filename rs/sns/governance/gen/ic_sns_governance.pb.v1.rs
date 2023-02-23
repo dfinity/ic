@@ -860,8 +860,14 @@ pub struct ProposalData {
     /// GenericNervousSystemFunction validator_canister.
     #[prost(string, optional, tag = "15")]
     pub payload_text_rendering: ::core::option::Option<::prost::alloc::string::String>,
-    /// True if NervousSystemParameters.voting_rewards_parameters was set when the
+    /// False if both (initial|final)_reward_rate_basis_points are zero when the
     /// proposal was made.
+    /// This field is not very useful and will be removed in the future. The plan
+    /// is to treat all proposals as eligible for rewards, and not distribute
+    /// anything if the reward rate is zero.
+    /// The original purpose of this field is to make sure that proposals that are
+    /// not eligible for rewards are not be blocked from garbage collection,
+    /// which normally only happens after rewards are distributed.
     #[prost(bool, tag = "16")]
     pub is_eligible_for_rewards: bool,
     /// The initial voting period of the proposal, identical in meaning to the one in  
