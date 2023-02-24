@@ -34,3 +34,22 @@ RUN apt-get -y update && \
     apt-get -y upgrade && \
     apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
     rm /tmp/packages.*
+
+# Install kernel modified to support sev-snp. Link the resulting kernel as the default.
+# Then clean up old kernel to save space
+# In the future this will change. Either:
+# - the mainline kernel will get SEV-SNP or
+# - AMDSEV repo might get built as part of this dockerfile
+ARG MODIFIED_KERNEL_DEB="linux-image-5.14.0-rc2-snp-host-6d4469b86f90_5.14.0-rc2-snp-host-6d4469b86f90-1_amd64.deb"
+RUN curl -LsSf --remote-name https://github.com/dfinity/AMDSEV/releases/download/sev-snp-release-2022-06-01/${MODIFIED_KERNEL_DEB} \
+    && dpkg -i ${MODIFIED_KERNEL_DEB} \
+    && rm ${MODIFIED_KERNEL_DEB} \
+    && ln -sf vmlinuz-5.14.0-rc2-snp-host-6d4469b86f90 /boot/vmlinuz \
+    && ln -sf initrd.img-5.14.0-rc2-snp-host-6d4469b86f90 /boot/initrd.img \
+    && find /boot -name "*.old" | xargs -L 1 unlink \
+    && find /boot -name "initrd*generic" \
+    -o -name "vmlinuz*generic" \
+    -o -name "config*generic" \
+    -o -name "System*generic" \
+    | xargs rm \
+    && find /usr/lib/modules -maxdepth 1 -type d -name "*generic" | xargs rm -rf

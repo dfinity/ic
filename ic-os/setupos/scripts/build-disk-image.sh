@@ -277,33 +277,73 @@ function assemble_and_populate_image() {
     echo "${VERSION}" >"${TMP_DIR}/version.txt"
     touch -t ${TOUCH_TIMESTAMP} ${TMP_DIR}/version.txt
 
-    "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/boot-tree.tar" "${BASE_DIR}/bootloader"
-    "${TOOL_DIR}"/docker_tar.py -o "${TMP_DIR}/rootfs-tree.tar" --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" --file-build-arg BASE_IMAGE="${BASE_IMAGE_FILE}" "${BASE_DIR}/rootfs"
+    "${TOOL_DIR}"/docker_tar.py \
+        --output "${TMP_DIR}/boot-tree.tar" \
+        "${BASE_DIR}/bootloader"
 
-    "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-esp.tar" -s 50M -p boot/efi -i "${TMP_DIR}/boot-tree.tar"
-    "${TOOL_DIR}"/build_vfat_image.py -o "${TMP_DIR}/partition-grub.tar" -s 50M -p boot/grub -i "${TMP_DIR}/boot-tree.tar" \
+    "${TOOL_DIR}"/docker_tar.py \
+        --output "${TMP_DIR}/rootfs-tree.tar" \
+        --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" \
+        --file-build-arg BASE_IMAGE="${BASE_IMAGE_FILE}" "${BASE_DIR}/rootfs"
+
+    "${TOOL_DIR}"/build_vfat_image.py \
+        --input "${TMP_DIR}/boot-tree.tar" \
+        --output "${TMP_DIR}/partition-esp.tar" \
+        --size 50M \
+        --path boot/efi
+
+    "${TOOL_DIR}"/build_vfat_image.py \
+        --input "${TMP_DIR}/boot-tree.tar" \
+        --output "${TMP_DIR}/partition-grub.tar" \
+        --size 50M \
+        --path boot/grub \
         "${BASE_DIR}/bootloader/grub.cfg:/boot/grub/grub.cfg:644" \
         "${BASE_DIR}/bootloader/grubenv:/boot/grub/grubenv:644"
 
-    "${TOOL_DIR}"/build_fat32_image.py -o "${TMP_DIR}/partition-config.tar" -s 50M -p config/ -l CONFIG -i "${TMP_DIR}/config.tar"
-    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-data.tar" -s 1750M -p data/ -i "${TMP_DIR}/data.tar"
+    "${TOOL_DIR}"/build_fat32_image.py \
+        --input "${TMP_DIR}/config.tar" \
+        --output "${TMP_DIR}/partition-config.tar" \
+        --size 50M \
+        --path config/ \
+        --label CONFIG
 
-    tar xOf "${TMP_DIR}"/rootfs-tree.tar --occurrence=1 etc/selinux/default/contexts/files/file_contexts >"${TMP_DIR}/file_contexts"
+    "${TOOL_DIR}"/build_ext4_image.py \
+        --input "${TMP_DIR}/data.tar" \
+        --output "${TMP_DIR}/partition-data.tar" \
+        --size 1750M \
+        --path data/
 
-    "${TOOL_DIR}"/build_ext4_image.py -o "${TMP_DIR}/partition-boot.tar" -s 100M -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" -p boot/ \
+    tar xOf "${TMP_DIR}"/rootfs-tree.tar \
+        --occurrence=1 \
+        etc/selinux/default/contexts/files/file_contexts \
+        >"${TMP_DIR}/file_contexts"
+
+    "${TOOL_DIR}"/build_ext4_image.py \
+        --input "${TMP_DIR}/rootfs-tree.tar" \
+        --output "${TMP_DIR}/partition-boot.tar" \
+        --size 100M \
+        --file_contexts "${TMP_DIR}/file_contexts" \
+        --path boot/ \
         "${TMP_DIR}/version.txt:/boot/version.txt:0644" \
         "${BASE_DIR}/bootloader/extra_boot_args:/boot/extra_boot_args:0644"
 
-    "${TOOL_DIR}"/build_ext4_image.py --strip-paths /run /boot -o "${TMP_DIR}/partition-root.tar" -s 1750M -i "${TMP_DIR}/rootfs-tree.tar" -S "${TMP_DIR}/file_contexts" \
+    "${TOOL_DIR}"/build_ext4_image.py \
+        --input "${TMP_DIR}/rootfs-tree.tar" \
+        --output "${TMP_DIR}/partition-root.tar" \
+        --size 1750M \
+        --strip-paths /run /boot \
+        --file_contexts "${TMP_DIR}/file_contexts" \
         "${TMP_DIR}/version.txt:/opt/ic/share/version.txt:0644"
 
-    "${TOOL_DIR}"/build_disk_image.py -o "${TMP_DIR}/disk.img.tar" -p "${BASE_DIR}/scripts/partitions.csv" \
-        ${TMP_DIR}/partition-esp.tar \
-        ${TMP_DIR}/partition-grub.tar \
-        ${TMP_DIR}/partition-config.tar \
-        ${TMP_DIR}/partition-data.tar \
-        ${TMP_DIR}/partition-boot.tar \
-        ${TMP_DIR}/partition-root.tar
+    "${TOOL_DIR}"/build_disk_image.py \
+        --out "${TMP_DIR}/disk.img.tar" \
+        --partition_table "${BASE_DIR}/scripts/partitions.csv" \
+        "${TMP_DIR}/partition-esp.tar" \
+        "${TMP_DIR}/partition-grub.tar" \
+        "${TMP_DIR}/partition-config.tar" \
+        "${TMP_DIR}/partition-data.tar" \
+        "${TMP_DIR}/partition-boot.tar" \
+        "${TMP_DIR}/partition-root.tar"
 }
 
 function provide_raw_image() {
