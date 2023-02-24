@@ -36,21 +36,10 @@ use std::sync::Arc;
 /// After all clients are added to the `ArtifactManagerMaker`, an
 /// `ArtifactManager` is created.
 #[allow(clippy::type_complexity)]
+#[derive(Default)]
 pub struct ArtifactManagerImpl {
-    /// The time source.
-    time_source: Arc<dyn TimeSource>,
     /// The clients for each artifact tag.
     clients: HashMap<ArtifactTag, Box<dyn ArtifactManagerBackend>>,
-}
-
-impl ArtifactManagerImpl {
-    /// The constructor creates an `ArtifactManagerImpl` instance.
-    pub fn new(time_source: Arc<dyn TimeSource>) -> Self {
-        Self {
-            time_source,
-            clients: HashMap::new(),
-        }
-    }
 }
 
 impl ArtifactManager for ArtifactManagerImpl {
@@ -70,7 +59,7 @@ impl ArtifactManager for ArtifactManagerImpl {
     ) -> Result<(), OnArtifactError<artifact::Artifact>> {
         let tag: ArtifactTag = (&msg).into();
         if let Some(client) = self.clients.get(&tag) {
-            return client.on_artifact(self.time_source.as_ref(), msg, advert, *peer_id);
+            return client.on_artifact(msg, advert, *peer_id);
         }
         Err(OnArtifactError::NotProcessed(Box::new(msg)))
     }
@@ -81,7 +70,7 @@ impl ArtifactManager for ArtifactManagerImpl {
         let tag: ArtifactTag = message_id.into();
 
         match self.clients.get(&tag) {
-            Some(client) => client.has_artifact(message_id).unwrap_or(false),
+            Some(client) => client.has_artifact(message_id),
             None => false,
         }
     }
@@ -96,9 +85,7 @@ impl ArtifactManager for ArtifactManagerImpl {
         let tag: ArtifactTag = message_id.into();
 
         match self.clients.get(&tag) {
-            Some(client) => client
-                .get_validated_by_identifier(message_id)
-                .unwrap_or(None),
+            Some(client) => client.get_validated_by_identifier(message_id),
             None => None,
         }
     }
@@ -206,7 +193,11 @@ impl ArtifactManagerMaker {
         let tag = Artifact::TAG;
         self.clients.insert(
             tag,
-            Box::new(ArtifactManagerBackendImpl { client, processor }),
+            Box::new(ArtifactManagerBackendImpl {
+                client,
+                processor,
+                time_source: self.time_source.clone(),
+            }),
         );
     }
 
@@ -214,7 +205,6 @@ impl ArtifactManagerMaker {
     /// creates an `ArtifactManager` component that manages all clients.
     pub fn finish(self) -> Arc<dyn ArtifactManager> {
         Arc::new(ArtifactManagerImpl {
-            time_source: self.time_source,
             clients: self.clients,
         })
     }

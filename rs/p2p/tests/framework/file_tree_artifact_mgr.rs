@@ -4,7 +4,7 @@
 //! filesystem tree like layout.
 
 use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor, ProcessingResult};
-use ic_interfaces::artifact_pool::{ArtifactPoolError, UnvalidatedArtifact};
+use ic_interfaces::artifact_pool::UnvalidatedArtifact;
 use ic_interfaces::time_source::TimeSource;
 use ic_replica_setup_ic_network::{
     TestArtifact, TestArtifactAttribute, TestArtifactId, TestArtifactMessage,
@@ -33,7 +33,6 @@ type FileTreeSyncInMemoryPool = HashMap<TestArtifactId, FileTreeSyncArtifact>;
 #[derive(Clone)]
 pub struct ArtifactChunkingTestImpl {
     node_pool_dir: PathBuf, // Path to on disk pool
-    node_id: NodeId,
     file_tree_sync_unvalidated_pool: Arc<Mutex<FileTreeSyncInMemoryPool>>, /* In memory representaion
                                                                             * on on-disk
                                                                             * pool */
@@ -71,20 +70,6 @@ impl ArtifactProcessor<TestArtifact> for ArtifactChunkingTestImpl {
 }
 
 impl ArtifactClient<TestArtifact> for ArtifactChunkingTestImpl {
-    fn check_artifact_acceptance(
-        &self,
-        artifact: &TestArtifactMessage,
-        peer_id: &NodeId,
-    ) -> Result<(), ArtifactPoolError> {
-        println!(
-            "Node-{} Receive complete for artifact {:?} from last node {}",
-            self.node_id.get(),
-            artifact,
-            peer_id
-        );
-        Ok(())
-    }
-
     fn has_artifact(&self, message_id: &TestArtifactId) -> bool {
         let pool = self.file_tree_sync_validated_pool.lock();
         pool.contains_key(message_id)
@@ -133,7 +118,6 @@ impl ArtifactChunkingTestImpl {
 
         ArtifactChunkingTestImpl {
             node_pool_dir: on_disk_pool_path,
-            node_id,
             file_tree_sync_unvalidated_pool: Arc::new(Mutex::new(mem_pool)),
             file_tree_sync_validated_pool: Arc::new(Mutex::new(HashMap::new())),
         }

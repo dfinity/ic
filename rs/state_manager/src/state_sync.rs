@@ -7,7 +7,7 @@ use crate::{
 };
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactProcessor, ProcessingResult},
-    artifact_pool::{ArtifactPoolError, UnvalidatedArtifact},
+    artifact_pool::UnvalidatedArtifact,
     time_source::TimeSource,
 };
 use ic_interfaces_state_manager::{StateManager, CERT_CERTIFIED};
@@ -20,7 +20,7 @@ use ic_types::{
     chunkable::Chunkable,
     crypto::crypto_hash,
     state_sync::FileGroupChunks,
-    Height, NodeId,
+    Height,
 };
 use std::sync::{Arc, Mutex};
 
@@ -97,14 +97,6 @@ impl ArtifactKind for StateSyncArtifact {
 }
 
 impl ArtifactClient<StateSyncArtifact> for StateSync {
-    fn check_artifact_acceptance(
-        &self,
-        _msg: &StateSyncMessage,
-        _peer_id: &NodeId,
-    ) -> Result<(), ArtifactPoolError> {
-        Ok(())
-    }
-
     fn get_validated_by_identifier(
         &self,
         msg_id: &StateSyncArtifactId,
