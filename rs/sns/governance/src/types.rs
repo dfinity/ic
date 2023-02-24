@@ -1022,14 +1022,14 @@ impl From<Action> for NervousSystemFunction {
                 function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
             },
             Action::RegisterDappCanisters(_) => NervousSystemFunction {
-                id: native_action_ids::DEREGISTER_DAPP_CANISTERS,
+                id: native_action_ids::REGISTER_DAPP_CANISTERS,
                 name: "Register dapp canisters".to_string(),
                 description: Some("Proposal to register a dapp canister with the SNS.".to_string()),
                 function_type: Some(FunctionType::NativeNervousSystemFunction(Empty {})),
             },
             Action::DeregisterDappCanisters(_) => NervousSystemFunction {
-                id: native_action_ids::REGISTER_DAPP_CANISTERS,
-                name: "Deegister Dapp Canisters".to_string(),
+                id: native_action_ids::DEREGISTER_DAPP_CANISTERS,
+                name: "Deregister Dapp Canisters".to_string(),
                 description: Some(
                     "Proposal to deregister a previously-registered dapp canister from the SNS."
                         .to_string(),
