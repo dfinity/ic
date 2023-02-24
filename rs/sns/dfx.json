@@ -99,6 +99,61 @@
         }
       }
     },
+    "oc-sns-governance": {
+      "build": "",
+      "wasm": "",
+      "candid": "governance/canister/governance.did",
+      "type": "custom",
+      "remote": {
+        "id": {
+          "ic": "2jvtu-yqaaa-aaaaq-aaama-cai"
+        }
+      }
+    },
+    "oc-sns-root": {
+      "build": "",
+      "wasm": "",
+      "candid": "root/canister/root.did",
+      "type": "custom",
+      "remote": {
+        "id": {
+          "ic": "3e3x2-xyaaa-aaaaq-aaalq-cai"
+        }
+      }
+    },
+    "oc-sns-swap": {
+      "build": "",
+      "wasm": "",
+      "candid": "swap/canister/swap.did",
+      "type": "custom",
+      "remote": {
+        "id": {
+          "ic": "2hx64-daaaa-aaaaq-aaana-cai"
+        }
+      }
+    },
+    "oc-sns-ledger": {
+      "build": "",
+      "wasm": "",
+      "candid": "../rosetta-api/icrc1/ledger/icrc1.did",
+      "type": "custom",
+      "remote": {
+        "id": {
+          "ic": "2ouva-viaaa-aaaaq-aaamq-cai"
+        }
+      }
+    },
+    "oc-sns-index": {
+      "build": "",
+      "wasm": "",
+      "candid": "../rosetta-api/icrc1/index/index.did",
+      "type": "custom",
+      "remote": {
+        "id": {
+          "ic": "2awyi-oyaaa-aaaaq-aaanq-cai"
+        }
+      }
+    },
     "sns-governance": {
       "build": "",
       "wasm": "",
