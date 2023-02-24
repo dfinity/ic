@@ -115,14 +115,9 @@ pub trait ArtifactClient<Artifact: artifact::ArtifactKind>: Send + Sync {
         Vec::new()
     }
 
-    /// Return the remaining quota that this peer is allowed to consume.
-    fn get_remaining_quota(&self, _peer_id: NodeId) -> usize {
-        usize::max_value()
-    }
-
     /// Return the priority function used by this client.
     #[allow(clippy::type_complexity)]
-    fn get_priority_function(&self) -> Option<PriorityFn<Artifact::Id, Artifact::Attribute>>;
+    fn get_priority_function(&self) -> PriorityFn<Artifact::Id, Artifact::Attribute>;
 
     /// Get Chunk tracker for an advert.  Download/Chunk trackers for
     /// Semi-structured/multi-chunk artifacts need to be operated by
@@ -253,19 +248,10 @@ pub trait ArtifactManager: Send + Sync {
         artifact_id: &artifact::ArtifactId,
     ) -> Option<Box<dyn chunkable::Chunkable + Send + Sync>>;
 
-    /// Return the remaining quota the given peer is allowed to consume for a
-    /// specific client that is identified by the given artifact tag.
-    ///
-    /// Before P2P schedules to download an artifact it first checks that
-    /// the corresponding artifact pool has enough space to store the artifact.
-    ///
-    /// See `ArtifactClient::get_remaining_quota` for more details.
-    fn get_remaining_quota(&self, tag: artifact::ArtifactTag, peer_id: NodeId) -> Option<usize>;
-
     /// Return the priority function for a specific client that is identified by
     /// the given artifact tag.
     ///
     /// See `ArtifactClient::get_priority_function` for more details.
-    fn get_priority_function(&self, tag: artifact::ArtifactTag) -> Option<ArtifactPriorityFn>;
+    fn get_priority_function(&self, tag: artifact::ArtifactTag) -> ArtifactPriorityFn;
 }
 // end::artifact_manager[]

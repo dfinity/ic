@@ -165,10 +165,7 @@ fn get_priority_fn_from_manager(
     artifact_manager: &dyn ArtifactManager,
     tag: ArtifactTag,
 ) -> ArtifactPriorityFn {
-    match artifact_manager.get_priority_function(tag) {
-        Some(function) => function,
-        None => Box::new(priority_fn_default),
-    }
+    artifact_manager.get_priority_function(tag)
 }
 
 /// Tracks download attempt history for a chunk

@@ -85,10 +85,11 @@ impl ArtifactClient<TestArtifact> for ArtifactChunkingTestImpl {
 
     fn get_priority_function(
         &self,
-    ) -> Option<
-        Box<dyn Fn(&TestArtifactId, &TestArtifactAttribute) -> Priority + Send + Sync + 'static>,
-    > {
-        None
+    ) -> Box<dyn Fn(&TestArtifactId, &TestArtifactAttribute) -> Priority + Send + Sync + 'static>
+    {
+        Box::new(
+            move |_id: &'_ TestArtifactId, _attribute: &'_ TestArtifactAttribute| Priority::Fetch,
+        )
     }
 
     fn get_chunk_tracker(&self, id: &TestArtifactId) -> Box<dyn Chunkable + Send + Sync> {

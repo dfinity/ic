@@ -172,11 +172,6 @@ impl ArtifactDownloadList for ArtifactDownloadListImpl {
         // Schedule a download of an artifact that is not currently being downloaded.
         if !self.artifacts.contains_key(&advert.integrity_hash) {
             let artifact_id = &advert.artifact_id;
-            match artifact_manager.get_remaining_quota(artifact_id.into(), peer_id) {
-                None => return None,
-                Some(quota_size) if quota_size < advert.size => return None,
-                Some(_) => { /* enough quota remaining */ }
-            }
 
             if let Some(chunk_tracker) = artifact_manager.get_chunk_tracker(&advert.artifact_id) {
                 let requested_instant = Instant::now();
@@ -329,10 +324,7 @@ mod tests {
     #[test]
     fn download_list_expire_test() {
         // Insert and time out artifacts.
-        let artifact_manager = TestArtifactManager {
-            quota: std::usize::MAX,
-            num_chunks: 0,
-        };
+        let artifact_manager = TestArtifactManager { num_chunks: 0 };
         let logger = p2p_test_setup_logger();
         let log: ReplicaLogger = logger.root.clone().into();
         let mut artifact_download_list = ArtifactDownloadListImpl::new(log);
@@ -366,10 +358,7 @@ mod tests {
     /// artifact download list.
     #[test]
     fn download_list_remove_test() {
-        let artifact_manager = TestArtifactManager {
-            quota: std::usize::MAX,
-            num_chunks: 0,
-        };
+        let artifact_manager = TestArtifactManager { num_chunks: 0 };
         let logger = p2p_test_setup_logger();
         let log: ReplicaLogger = logger.root.clone().into();
         let mut artifact_download_list = ArtifactDownloadListImpl::new(log);

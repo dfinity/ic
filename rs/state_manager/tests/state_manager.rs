@@ -1683,10 +1683,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
 
-        let priority_fn = state_sync
-            .get_priority_function()
-            .expect("state manager returned no priority function");
-
+        let priority_fn = state_sync.get_priority_function();
         for (h, p) in [
             (1, Priority::Drop),
             (2, Priority::Drop),
@@ -1711,9 +1708,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
 
         // Request fetching of state 3.
         state_manager.fetch_state(height(3), hash(3), Height::new(99));
-        let priority_fn = state_sync
-            .get_priority_function()
-            .expect("state manager returned no priority function");
+        let priority_fn = state_sync.get_priority_function();
         // Good hash
         assert_eq!(
             Priority::Fetch,
@@ -1745,9 +1740,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
 
         // Request fetching of newer state 4.
         state_manager.fetch_state(height(4), hash(4), Height::new(99));
-        let priority_fn = state_sync
-            .get_priority_function()
-            .expect("state manager returned no priority function");
+        let priority_fn = state_sync.get_priority_function();
         assert_eq!(
             Priority::Drop,
             priority_fn(

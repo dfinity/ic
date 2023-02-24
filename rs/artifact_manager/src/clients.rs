@@ -70,12 +70,8 @@ pub(crate) trait ArtifactManagerBackend: Send + Sync {
         filter: &artifact::ArtifactFilter,
     ) -> Vec<p2p::GossipAdvert>;
 
-    /// The method returns the remaining quota for a given peer and artifact
-    /// tag.
-    fn get_remaining_quota(&self, tag: artifact::ArtifactTag, peer_id: NodeId) -> Option<usize>;
-
     /// The method returns a priority function for a given artifact tag.
-    fn get_priority_function(&self, tag: artifact::ArtifactTag) -> Option<ArtifactPriorityFn>;
+    fn get_priority_function(&self, tag: artifact::ArtifactTag) -> ArtifactPriorityFn;
 
     /// The method returns a chunk tracker for a given artifact ID.
     fn get_chunk_tracker(
@@ -180,29 +176,25 @@ where
             .collect::<Vec<_>>()
     }
 
-    /// The method returns the remaining quota for the peer with the given ID.s
-    fn get_remaining_quota(&self, tag: artifact::ArtifactTag, peer_id: NodeId) -> Option<usize> {
-        if tag == Artifact::TAG {
-            Some(self.client.as_ref().get_remaining_quota(peer_id))
-        } else {
-            None
-        }
-    }
-
     /// The method returns the priority function.
-    fn get_priority_function(&self, tag: artifact::ArtifactTag) -> Option<ArtifactPriorityFn> {
+    fn get_priority_function(&self, tag: artifact::ArtifactTag) -> ArtifactPriorityFn {
         if tag == Artifact::TAG {
-            let func = self.client.as_ref().get_priority_function()?;
-            Some(Box::new(
+            let func = self.client.as_ref().get_priority_function();
+            Box::new(
                 move |id: &'_ artifact::ArtifactId, attribute: &'_ artifact::ArtifactAttribute| {
                     match (id.try_into(), attribute.try_into()) {
                         (Ok(idd), Ok(attr)) => func(idd, attr),
                         _ => panic!("Priority function called on wrong id or attribute!"),
                     }
                 },
-            ))
+            )
         } else {
-            None
+            Box::new(
+                move |_id: &'_ artifact::ArtifactId,
+                      _attribute: &'_ artifact::ArtifactAttribute| {
+                    Priority::Fetch
+                },
+            )
         }
     }
 
@@ -305,11 +297,9 @@ impl<
     }
 
     /// The method returns the priority function.
-    fn get_priority_function(
-        &self,
-    ) -> Option<PriorityFn<ConsensusMessageId, ConsensusMessageAttribute>> {
+    fn get_priority_function(&self) -> PriorityFn<ConsensusMessageId, ConsensusMessageAttribute> {
         let consensus_pool = &*self.consensus_pool.read().unwrap();
-        Some(self.client.get_priority_function(consensus_pool))
+        self.client.get_priority_function(consensus_pool)
     }
 
     /// The method returns the chunk tracker for the given *Consensus* message
@@ -418,13 +408,11 @@ impl<
     }
 
     /// The method returns the priority function.
-    fn get_priority_function(
-        &self,
-    ) -> Option<PriorityFn<IngressMessageId, IngressMessageAttribute>> {
+    fn get_priority_function(&self) -> PriorityFn<IngressMessageId, IngressMessageAttribute> {
         let start = self.time_source.get_relative_time();
         let range = start..=start + MAX_INGRESS_TTL;
         let pool = self.ingress_pool.clone();
-        Some(Box::new(move |ingress_id, _| {
+        Box::new(move |ingress_id, _| {
             // EXPLANATION: Because ingress messages are included in blocks, consensus
             // does not rely on ingress gossip for correctness. Ingress gossip exists to
             // reduce latency in cases where replicas don't have enough ingress messages
@@ -442,7 +430,7 @@ impl<
             } else {
                 Priority::Drop
             }
-        }))
+        })
     }
 
     /// The method returns a new chunk tracker for (single-chunked) ingress
@@ -515,9 +503,9 @@ impl<
     /// The method returns the priority function.
     fn get_priority_function(
         &self,
-    ) -> Option<PriorityFn<CertificationMessageId, CertificationMessageAttribute>> {
+    ) -> PriorityFn<CertificationMessageId, CertificationMessageAttribute> {
         let certification_pool = &*self.certification_pool.read().unwrap();
-        Some(self.client.get_priority_function(certification_pool))
+        self.client.get_priority_function(certification_pool)
     }
 
     /// The method returns a new (single-chunked) certification tracker,
@@ -577,9 +565,9 @@ impl<
     }
 
     /// The method returns the priority function.
-    fn get_priority_function(&self) -> Option<PriorityFn<DkgMessageId, DkgMessageAttribute>> {
+    fn get_priority_function(&self) -> PriorityFn<DkgMessageId, DkgMessageAttribute> {
         let dkg_pool = &*self.dkg_pool.read().unwrap();
-        Some(self.client.get_priority_function(dkg_pool))
+        self.client.get_priority_function(dkg_pool)
     }
 
     /// The method returns a new (single-chunked) DKG message tracker.
@@ -616,9 +604,9 @@ impl<
             .get_validated_by_identifier(msg_id)
     }
 
-    fn get_priority_function(&self) -> Option<PriorityFn<EcdsaMessageId, EcdsaMessageAttribute>> {
+    fn get_priority_function(&self) -> PriorityFn<EcdsaMessageId, EcdsaMessageAttribute> {
         let ecdsa_pool = &*self.ecdsa_pool.read().unwrap();
-        Some(self.gossip.get_priority_function(ecdsa_pool))
+        self.gossip.get_priority_function(ecdsa_pool)
     }
 
     fn get_chunk_tracker(&self, _id: &EcdsaMessageId) -> Box<dyn Chunkable + Send + Sync> {
@@ -659,9 +647,9 @@ impl<
 
     fn get_priority_function(
         &self,
-    ) -> Option<PriorityFn<CanisterHttpResponseId, CanisterHttpResponseAttribute>> {
+    ) -> PriorityFn<CanisterHttpResponseId, CanisterHttpResponseAttribute> {
         let pool = &*self.pool.read().unwrap();
-        Some(self.gossip.get_priority_function(pool))
+        self.gossip.get_priority_function(pool)
     }
 
     fn get_chunk_tracker(&self, _id: &CanisterHttpResponseId) -> Box<dyn Chunkable + Send + Sync> {
