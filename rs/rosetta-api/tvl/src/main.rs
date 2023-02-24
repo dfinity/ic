@@ -19,8 +19,8 @@ async fn post_upgrade(upgrade_args: Option<InitArgs>) {
     ic_tvl_canister::post_upgrade(upgrade_args).await
 }
 
-#[update]
-#[candid_method(update)]
+#[query]
+#[candid_method(query)]
 async fn get_tvl() -> Result<TvlResult, TvlResultError> {
     ic_tvl_canister::get_tvl().await
 }

@@ -30,7 +30,7 @@ type TvlResultError = record {
 type Result_tvl = variant { Ok : TvlResult; Err : TvlResultError };
 
 service : (InitArgs) -> {
-    get_tvl : () -> (Result_tvl);
+    get_tvl : () -> (Result_tvl) query;
     get_tvl_timeseries : () -> (TvlTimeseriesResult);
     get_xr_timeseries : () -> (TimeseriesResult);
     get_locked_e8s_timeseries : () -> (TimeseriesResult);
