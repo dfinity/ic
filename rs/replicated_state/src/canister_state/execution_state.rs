@@ -6,7 +6,10 @@ use ic_protobuf::{
     state::canister_state_bits::v1 as pb,
 };
 use ic_sys::PAGE_SIZE;
-use ic_types::{methods::WasmMethod, CountBytes, ExecutionRound, NumBytes};
+use ic_types::{
+    methods::{SystemMethod, WasmMethod},
+    CountBytes, ExecutionRound, NumBytes,
+};
 use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
@@ -131,27 +134,47 @@ impl TryFrom<pb::Global> for Global {
 ///
 /// Arc is used to make cheap clones of this during snapshots.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExportedFunctions(
+pub struct ExportedFunctions {
     /// Since the value is only shared when taking a snapshot, there is no
     /// problem with serializing this field.
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
     #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
-    Arc<BTreeSet<WasmMethod>>,
-);
+    exported_functions: Arc<BTreeSet<WasmMethod>>,
+
+    /// Cached info about exporting a heartbeat method to skip expensive BTreeSet lookup.
+    exports_heartbeat: bool,
+
+    /// Cached info about exporting a global timer method to skip expensive BTreeSet lookup.
+    exports_global_timer: bool,
+}
 
 impl ExportedFunctions {
     pub fn new(exported_functions: BTreeSet<WasmMethod>) -> Self {
-        Self(Arc::new(exported_functions))
+        let exports_heartbeat =
+            exported_functions.contains(&WasmMethod::System(SystemMethod::CanisterHeartbeat));
+        let exports_global_timer =
+            exported_functions.contains(&WasmMethod::System(SystemMethod::CanisterGlobalTimer));
+        Self {
+            exported_functions: Arc::new(exported_functions),
+            exports_heartbeat,
+            exports_global_timer,
+        }
     }
 
     pub fn has_method(&self, method: &WasmMethod) -> bool {
-        self.0.contains(method)
+        match method {
+            // Cached values.
+            WasmMethod::System(SystemMethod::CanisterHeartbeat) => self.exports_heartbeat,
+            WasmMethod::System(SystemMethod::CanisterGlobalTimer) => self.exports_global_timer,
+            // Expensive lookup.
+            _ => self.exported_functions.contains(method),
+        }
     }
 }
 
 impl std::convert::AsRef<BTreeSet<WasmMethod>> for ExportedFunctions {
     fn as_ref(&self) -> &BTreeSet<WasmMethod> {
-        &self.0
+        &self.exported_functions
     }
 }
 
@@ -160,13 +183,13 @@ impl FromIterator<WasmMethod> for ExportedFunctions {
     where
         T: IntoIterator<Item = WasmMethod>,
     {
-        Self(Arc::new(BTreeSet::from_iter(iter)))
+        Self::new(BTreeSet::from_iter(iter))
     }
 }
 
 impl From<&ExportedFunctions> for Vec<pb::WasmMethod> {
     fn from(item: &ExportedFunctions) -> Self {
-        item.0.iter().map(From::from).collect()
+        item.exported_functions.iter().map(From::from).collect()
     }
 }
 
