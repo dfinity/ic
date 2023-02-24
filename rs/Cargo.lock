@@ -9552,6 +9552,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-validator-ingress-message"
+version = "0.8.0"
+dependencies = [
+ "assert_matches",
+ "base64 0.13.1",
+ "hex",
+ "ic-canister-client-sender",
+ "ic-crypto",
+ "ic-crypto-temp-crypto",
+ "ic-crypto-test-utils-reproducible-rng",
+ "ic-crypto-utils-threshold-sig-der",
+ "ic-interfaces",
+ "ic-logger",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-client-helpers",
+ "ic-registry-keys",
+ "ic-registry-proto-data-provider",
+ "ic-types",
+ "ic-validator",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "ic-verify-bls-signature"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
