@@ -75,7 +75,6 @@ async fn call_update_tvl() {
 
 /// Retrieve last data from timeseries. Perform a TVL update if none is present.
 pub async fn get_tvl() -> Result<TvlResult, TvlResultError> {
-    ic_cdk::println!("Getting last TVL");
     let last: Option<TvlResult> = TVL_TIMESERIES.with(|map| {
         if let Some((time_sec, tvl)) = map.borrow().iter().last() {
             Some(TvlResult {
