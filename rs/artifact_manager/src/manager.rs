@@ -13,7 +13,7 @@ use ic_interfaces::{
 };
 use ic_types::{
     artifact,
-    artifact::{Advert, ArtifactKind, ArtifactPriorityFn, ArtifactTag},
+    artifact::{Advert, ArtifactKind, ArtifactPriorityFn, ArtifactTag, Priority},
     chunkable::{Chunkable, ChunkableArtifact},
     p2p, NodeId,
 };
@@ -118,25 +118,20 @@ impl ArtifactManager for ArtifactManagerImpl {
         adverts.collect()
     }
 
-    /// The method returns the remaining quota the given peer is allowed to
-    /// consume for a specific client that is identified by the given
-    /// artifact tag.
-    ///
-    /// See `ArtifactClient::get_remaining_quota` for more details.
-    fn get_remaining_quota(&self, tag: artifact::ArtifactTag, peer_id: NodeId) -> Option<usize> {
-        self.clients
-            .get(&tag)
-            .and_then(|client| client.get_remaining_quota(tag, peer_id))
-    }
-
     /// The method returns the priority function for a specific client that is
     /// identified by the given artifact tag.
     ///
     /// See `ArtifactClient::get_priority_function` for more details.
-    fn get_priority_function(&self, tag: artifact::ArtifactTag) -> Option<ArtifactPriorityFn> {
-        self.clients
-            .get(&tag)
-            .and_then(|client| client.get_priority_function(tag))
+    fn get_priority_function(&self, tag: artifact::ArtifactTag) -> ArtifactPriorityFn {
+        match self.clients.get(&tag) {
+            None => Box::new(
+                move |_id: &'_ artifact::ArtifactId,
+                      _attribute: &'_ artifact::ArtifactAttribute| {
+                    Priority::Fetch
+                },
+            ),
+            Some(client) => client.get_priority_function(tag),
+        }
     }
 
     /// The method returns the chunk tracker for an advert with the given ID.

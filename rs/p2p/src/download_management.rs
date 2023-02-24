@@ -1022,8 +1022,6 @@ pub mod tests {
     /// The test artifact manager.
     #[derive(Default)]
     pub(crate) struct TestArtifactManager {
-        /// The quota.
-        pub quota: usize,
         /// The number of chunks.
         pub num_chunks: u32,
     }
@@ -1106,19 +1104,10 @@ pub mod tests {
             unimplemented!()
         }
 
-        /// The method returns the internal quota.
-        fn get_remaining_quota(
-            &self,
-            _tag: artifact::ArtifactTag,
-            _peer_id: NodeId,
-        ) -> Option<usize> {
-            Some(self.quota)
-        }
-
         /// The method returns the priority function that always uses
         /// Priority::FetchAll.
-        fn get_priority_function(&self, _: artifact::ArtifactTag) -> Option<ArtifactPriorityFn> {
-            Some(Box::new(priority_fn_fetch_now_all))
+        fn get_priority_function(&self, _: artifact::ArtifactTag) -> ArtifactPriorityFn {
+            Box::new(priority_fn_fetch_now_all)
         }
 
         /// The method returns a new TestArtifact instance.
@@ -1154,10 +1143,7 @@ pub mod tests {
         rt_handle: tokio::runtime::Handle,
     ) -> GossipImpl {
         let log: ReplicaLogger = logger.root.clone().into();
-        let artifact_manager = TestArtifactManager {
-            quota: 2 * 1024 * 1024 * 1024,
-            num_chunks: 1,
-        };
+        let artifact_manager = TestArtifactManager { num_chunks: 1 };
 
         // Set up transport.
         let hub_access: HubAccess = Arc::new(Mutex::new(Default::default()));
@@ -1553,7 +1539,6 @@ pub mod tests {
         let mut gossip = new_test_gossip(num_peers, &logger, tokio::runtime::Handle::current());
         let request_queue_size = gossip.gossip_config.max_artifact_streams_per_peer;
         gossip.artifact_manager = Arc::new(TestArtifactManager {
-            quota: 2 * 1024 * 1024 * 1024,
             num_chunks: request_queue_size * num_peers,
         });
 

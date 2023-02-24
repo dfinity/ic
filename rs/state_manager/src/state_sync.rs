@@ -203,9 +203,8 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
 
     fn get_priority_function(
         &self,
-    ) -> Option<
-        Box<dyn Fn(&StateSyncArtifactId, &StateSyncAttribute) -> Priority + Send + Sync + 'static>,
-    > {
+    ) -> Box<dyn Fn(&StateSyncArtifactId, &StateSyncAttribute) -> Priority + Send + Sync + 'static>
+    {
         use ic_interfaces_state_manager::StateReader;
 
         let latest_height = self.state_manager.latest_state_height();
@@ -213,7 +212,7 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
         let state_sync_refs = self.state_sync_refs.clone();
         let log = self.log.clone();
 
-        Some(Box::new(move |_artifact_id, attr| {
+        Box::new(move |_artifact_id, attr| {
             use std::cmp::Ordering;
 
             if attr.height <= latest_height {
@@ -272,7 +271,7 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
             }
 
             Priority::Stash
-        }))
+        })
     }
 
     /// Get StateSync Filter for re-transmission purpose.
