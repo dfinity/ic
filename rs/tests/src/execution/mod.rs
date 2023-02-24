@@ -12,7 +12,6 @@ pub mod queries;
 pub mod registry_authentication_test;
 pub mod request_signature_test;
 pub mod system_api_security_test;
-pub mod upgraded_pots;
 
 use crate::driver::{
     ic::{InternetComputer, Subnet},
@@ -32,6 +31,7 @@ pub fn config_system_verified_application_subnets(env: TestEnv) {
 }
 
 pub fn config_system_verified_subnets(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(Subnet::fast_single_node(SubnetType::VerifiedApplication))
@@ -53,6 +53,7 @@ pub fn config_many_system_subnets(env: TestEnv) {
 // A special configuration for testing the maximum number of canisters on a
 // subnet. The value is set to 3 for the tests.
 pub fn config_max_number_of_canisters(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System).with_max_number_of_canisters(3))
         .setup_and_start(&env)
