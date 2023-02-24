@@ -923,7 +923,7 @@ pub(crate) mod test {
     use super::*;
     use ic_artifact_manager::manager::ArtifactManagerImpl;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::{types::ids::node_test_id, FastForwardTimeSource};
+    use ic_test_utilities::types::ids::node_test_id;
     use ic_test_utilities_metrics::fetch_histogram_stats;
     use ic_types::crypto::CryptoHash;
     use std::time::Duration;
@@ -1016,8 +1016,7 @@ pub(crate) mod test {
     /// Then, it removes all of them and verifies that they are indeed removed.
     #[test]
     fn basic_insert_delete_update() {
-        let time_source = FastForwardTimeSource::new();
-        let artifact_manager = ArtifactManagerImpl::new(time_source);
+        let artifact_manager = ArtifactManagerImpl::default();
         let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
             &artifact_manager,
             DownloadPrioritizerMetrics::new(&MetricsRegistry::new()),
@@ -1088,8 +1087,7 @@ pub(crate) mod test {
     /// A test to verify reported metrics
     #[test]
     fn validate_timing_metric() {
-        let time_source = FastForwardTimeSource::new();
-        let artifact_manager = ArtifactManagerImpl::new(time_source);
+        let artifact_manager = ArtifactManagerImpl::default();
         let metrics_registry = MetricsRegistry::new();
         let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
             &artifact_manager,
@@ -1122,8 +1120,7 @@ pub(crate) mod test {
     /// function
     #[test]
     fn update_priority_queues() {
-        let time_source = FastForwardTimeSource::new();
-        let artifact_manager = ArtifactManagerImpl::new(time_source);
+        let artifact_manager = ArtifactManagerImpl::default();
         let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
             &artifact_manager,
             DownloadPrioritizerMetrics::new(&MetricsRegistry::new()),
@@ -1187,8 +1184,7 @@ pub(crate) mod test {
     /// function sets the priority of all adverts to `Drop`
     #[test]
     fn drop_all() {
-        let time_source = FastForwardTimeSource::new();
-        let artifact_manager = ArtifactManagerImpl::new(time_source);
+        let artifact_manager = ArtifactManagerImpl::default();
         let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
             &artifact_manager,
             DownloadPrioritizerMetrics::new(&MetricsRegistry::new()),
@@ -1257,8 +1253,7 @@ pub(crate) mod test {
     /// function
     #[test]
     fn priority_test() {
-        let time_source = FastForwardTimeSource::new();
-        let artifact_manager = ArtifactManagerImpl::new(time_source);
+        let artifact_manager = ArtifactManagerImpl::default();
         let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
             &artifact_manager,
             DownloadPrioritizerMetrics::new(&MetricsRegistry::new()),
@@ -1304,8 +1299,7 @@ pub(crate) mod test {
     /// Tests various behaviors
     #[test]
     fn crud_test() {
-        let time_source = FastForwardTimeSource::new();
-        let artifact_manager = ArtifactManagerImpl::new(time_source);
+        let artifact_manager = ArtifactManagerImpl::default();
         let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
             &artifact_manager,
             DownloadPrioritizerMetrics::new(&MetricsRegistry::new()),
@@ -1387,8 +1381,7 @@ pub(crate) mod test {
     /// Tests the `clear_peer_adverts` method of the prioritizer
     #[test]
     fn clear_peer_adverts() {
-        let time_source = FastForwardTimeSource::new();
-        let artifact_manager = ArtifactManagerImpl::new(time_source);
+        let artifact_manager = ArtifactManagerImpl::default();
         let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
             &artifact_manager,
             DownloadPrioritizerMetrics::new(&MetricsRegistry::new()),
@@ -1427,8 +1420,7 @@ pub(crate) mod test {
     /// Tests the behavior of the prioritizer when all adverts are stashed
     #[test]
     fn stash_advert() {
-        let time_source = FastForwardTimeSource::new();
-        let artifact_manager = ArtifactManagerImpl::new(time_source);
+        let artifact_manager = ArtifactManagerImpl::default();
         let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
             &artifact_manager,
             DownloadPrioritizerMetrics::new(&MetricsRegistry::new()),
@@ -1501,8 +1493,7 @@ pub(crate) mod test {
     /// Tests the `peek_priority` method
     #[test]
     fn peek_advert() {
-        let time_source = FastForwardTimeSource::new();
-        let artifact_manager = ArtifactManagerImpl::new(time_source);
+        let artifact_manager = ArtifactManagerImpl::default();
         let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
             &artifact_manager,
             DownloadPrioritizerMetrics::new(&MetricsRegistry::new()),
@@ -1558,8 +1549,7 @@ pub(crate) mod test {
     /// download attempt round is reset.
     #[test]
     fn download_attempt_basic() {
-        let time_source = FastForwardTimeSource::new();
-        let artifact_manager = ArtifactManagerImpl::new(time_source);
+        let artifact_manager = ArtifactManagerImpl::default();
         let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
             &artifact_manager,
             DownloadPrioritizerMetrics::new(&MetricsRegistry::new()),
@@ -1631,8 +1621,7 @@ pub(crate) mod test {
     /// Test the set/unset of the `in_progress` flag in the advert tracker
     #[test]
     fn download_in_progress_set_reset() {
-        let time_source = FastForwardTimeSource::new();
-        let artifact_manager = ArtifactManagerImpl::new(time_source);
+        let artifact_manager = ArtifactManagerImpl::default();
         let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
             &artifact_manager,
             DownloadPrioritizerMetrics::new(&MetricsRegistry::new()),

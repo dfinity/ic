@@ -47,20 +47,19 @@ pub(crate) trait ArtifactManagerBackend: Send + Sync {
     /// The method is called when an artifact is received.
     fn on_artifact(
         &self,
-        time_source: &dyn TimeSource,
         msg: artifact::Artifact,
         advert: p2p::GossipAdvert,
         peer_id: NodeId,
     ) -> Result<(), OnArtifactError<artifact::Artifact>>;
 
     /// The method indicates whether an artifact exists.
-    fn has_artifact(&self, msg_id: &artifact::ArtifactId) -> Result<bool, ()>;
+    fn has_artifact(&self, msg_id: &artifact::ArtifactId) -> bool;
 
     /// The method returns a validated artifact with the given ID, or an error.
     fn get_validated_by_identifier(
         &self,
         msg_id: &artifact::ArtifactId,
-    ) -> Result<Option<Box<dyn ChunkableArtifact>>, ()>;
+    ) -> Option<Box<dyn ChunkableArtifact>>;
 
     /// The method adds the client's filter to the given artifact filter.
     fn get_filter(&self, filter: &mut artifact::ArtifactFilter);
@@ -91,6 +90,7 @@ pub(crate) struct ArtifactManagerBackendImpl<Artifact: ArtifactKind + 'static> {
     pub client: Box<dyn ArtifactClient<Artifact>>,
     /// The artifact processor front end.
     pub processor: ArtifactProcessorManager<Artifact>,
+    pub time_source: Arc<dyn TimeSource>,
 }
 
 /// Trait implementation for `ArtifactManagerBackend`.
@@ -112,7 +112,6 @@ where
     /// The method is called when the given artifact is received.
     fn on_artifact(
         &self,
-        time_source: &dyn TimeSource,
         artifact: artifact::Artifact,
         advert: p2p::GossipAdvert,
         peer_id: NodeId,
@@ -130,7 +129,7 @@ where
                 self.processor.on_artifact(UnvalidatedArtifact {
                     message,
                     peer_id,
-                    timestamp: time_source.get_relative_time(),
+                    timestamp: self.time_source.get_relative_time(),
                 });
 
                 Ok(())
@@ -141,10 +140,10 @@ where
     }
 
     /// The method checks if the artifact with the given ID is available.
-    fn has_artifact(&self, msg_id: &artifact::ArtifactId) -> Result<bool, ()> {
+    fn has_artifact(&self, msg_id: &artifact::ArtifactId) -> bool {
         match msg_id.try_into() {
-            Ok(id) => Ok(self.client.as_ref().has_artifact(id)),
-            Err(_) => Err(()),
+            Ok(id) => self.client.as_ref().has_artifact(id),
+            Err(_) => false,
         }
     }
 
@@ -152,14 +151,14 @@ where
     fn get_validated_by_identifier(
         &self,
         msg_id: &artifact::ArtifactId,
-    ) -> Result<Option<Box<dyn ChunkableArtifact>>, ()> {
+    ) -> Option<Box<dyn ChunkableArtifact>> {
         match msg_id.try_into() {
-            Ok(id) => Ok(self
+            Ok(id) => self
                 .client
                 .as_ref()
                 .get_validated_by_identifier(id)
-                .map(|x| Box::new(x) as Box<dyn ChunkableArtifact>)),
-            Err(_) => Err(()),
+                .map(|x| Box::new(x) as Box<dyn ChunkableArtifact>),
+            Err(_) => None,
         }
     }
 
@@ -477,15 +476,6 @@ impl<
         T: ArtifactPoolDescriptor<CertificationArtifact, PoolCertification> + 'static,
     > ArtifactClient<CertificationArtifact> for CertificationClient<PoolCertification, T>
 {
-    /// The method always accepts the given `CertificationMessage`.
-    fn check_artifact_acceptance(
-        &self,
-        _msg: &CertificationMessage,
-        _peer_id: &NodeId,
-    ) -> Result<(), ArtifactPoolError> {
-        Ok(())
-    }
-
     /// The method checks if the certification pool contains a certification
     /// message with the given ID.
     fn has_artifact(&self, msg_id: &CertificationMessageId) -> bool {
@@ -615,14 +605,6 @@ impl<
         T: ArtifactPoolDescriptor<EcdsaArtifact, Pool> + 'static,
     > ArtifactClient<EcdsaArtifact> for EcdsaClient<Pool, T>
 {
-    fn check_artifact_acceptance(
-        &self,
-        _msg: &EcdsaMessage,
-        _peer_id: &NodeId,
-    ) -> Result<(), ArtifactPoolError> {
-        Ok(())
-    }
-
     fn has_artifact(&self, msg_id: &EcdsaMessageId) -> bool {
         self.ecdsa_pool.read().unwrap().contains(msg_id)
     }
@@ -661,14 +643,6 @@ impl<
         T: ArtifactPoolDescriptor<CanisterHttpArtifact, Pool> + 'static,
     > ArtifactClient<CanisterHttpArtifact> for CanisterHttpClient<Pool, T>
 {
-    fn check_artifact_acceptance(
-        &self,
-        _msg: &CanisterHttpResponseShare,
-        _peer_id: &NodeId,
-    ) -> Result<(), ArtifactPoolError> {
-        Ok(())
-    }
-
     fn has_artifact(&self, msg_id: &CanisterHttpResponseId) -> bool {
         self.pool.read().unwrap().contains(msg_id)
     }
