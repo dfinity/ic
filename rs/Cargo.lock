@@ -6559,7 +6559,6 @@ dependencies = [
  "candid",
  "cddl",
  "ciborium",
- "dfn_http_metrics",
  "hex",
  "ic-base-types",
  "ic-canister-log",
