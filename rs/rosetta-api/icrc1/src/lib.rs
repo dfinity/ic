@@ -1,3 +1,4 @@
+pub mod blocks;
 pub mod endpoints;
 pub mod hash;
 

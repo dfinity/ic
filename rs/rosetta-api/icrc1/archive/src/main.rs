@@ -2,7 +2,8 @@ use candid::{candid_method, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_icrc1::{
-    endpoints::{GetTransactionsRequest, Transaction, TransactionRange},
+    blocks::Icrc1Block,
+    endpoints::{BlockRange, GetBlocksArgs, GetTransactionsRequest, Transaction, TransactionRange},
     Block,
 };
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
@@ -121,6 +122,11 @@ fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
         .into()
 }
 
+fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> Icrc1Block {
+    let encoded_block = EncodedBlock::from(bytes);
+    Icrc1Block::from(&encoded_block)
+}
+
 #[init]
 #[candid_method(init)]
 fn init(
@@ -215,13 +221,7 @@ fn get_transaction(index: BlockIndex) -> Option<Transaction> {
     Some(decode_transaction(index, block))
 }
 
-#[query]
-#[candid_method(query)]
-fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
-    let (start, length) = req
-        .as_start_and_length()
-        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
-
+fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>) -> R) -> Vec<R> {
     let offset = with_archive_opts(|opts| {
         if start < opts.block_index_offset {
             ic_cdk::api::trap(&format!(
@@ -233,13 +233,35 @@ fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
     });
 
     let length = length.min(with_archive_opts(|opts| opts.max_transactions_per_response));
-    let transactions = with_blocks(|blocks| {
+    with_blocks(|blocks| {
         let limit = blocks.len().min(offset.saturating_add(length));
         (offset..limit)
-            .map(|i| decode_transaction(start + i, blocks.get(i).unwrap()))
+            .map(|i| decoder(start + i, blocks.get(i).unwrap()))
             .collect()
-    });
+    })
+}
+
+#[query]
+#[candid_method(query)]
+fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
+    let (start, length) = req
+        .as_start_and_length()
+        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
+
+    let transactions = decode_block_range(start, length, decode_transaction);
     TransactionRange { transactions }
+}
+
+/// Get length Blocks starting at start BlockIndex.
+#[query]
+#[candid_method(query)]
+fn get_blocks(req: GetBlocksArgs) -> BlockRange {
+    let (start, length) = req
+        .as_start_and_length()
+        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
+
+    let blocks = decode_block_range(start, length, decode_icrc1_block);
+    BlockRange { blocks }
 }
 
 #[query]

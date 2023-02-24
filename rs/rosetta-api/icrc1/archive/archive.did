@@ -1,4 +1,5 @@
 type Account = record { owner : principal; subaccount : opt blob };
+type BlockIndex = nat;
 
 type Transaction = record {
      kind : text;
@@ -24,9 +25,24 @@ type Transaction = record {
      timestamp : nat64;
 };
 
+type Value = variant { 
+    Blob : blob; 
+    Text : text; 
+    Nat : nat;
+    Nat64: nat64;
+    Int : int;
+    Array : vec Value; 
+    Map : Map; 
+};
+
+type Map = vec record { text; Value };
+
+type Block = Value;
+
 service : (principal, nat64, opt nat64) -> {
     append_blocks : (vec blob) -> ();
     remaining_capacity : () -> (nat64) query;
     get_transaction : (nat64) -> (opt Transaction) query;
     get_transactions : (record { start : nat; length : nat }) -> (record { transactions : vec Transaction }) query;
+    get_blocks : (record { start : nat; length : nat }) -> (record { blocks : vec Block }) query;
 }

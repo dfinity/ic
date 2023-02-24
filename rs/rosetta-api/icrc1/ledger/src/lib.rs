@@ -5,9 +5,11 @@ use candid::{
     types::number::{Int, Nat},
     CandidType,
 };
-use ic_base_types::PrincipalId;
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_icrc1::blocks::Icrc1Block;
 use ic_icrc1::endpoints::{
-    ArchivedTransactionRange, GetTransactionsResponse, QueryArchiveFn, Transaction as Tx, Value,
+    ArchivedRange, GetBlocksResponse, GetTransactionsResponse, QueryBlockArchiveFn,
+    QueryTxArchiveFn, Transaction as Tx, Value,
 };
 use ic_icrc1::{Account, Block, LedgerBalances, Transaction};
 use ic_ledger_canister_core::{
@@ -19,7 +21,7 @@ use ic_ledger_canister_core::{
 use ic_ledger_core::{
     approvals::AllowanceTable,
     balances::Balances,
-    block::{BlockIndex, BlockType, HashOf},
+    block::{BlockIndex, BlockType, EncodedBlock, HashOf},
     timestamp::TimeStamp,
     tokens::Tokens,
 };
@@ -331,41 +333,74 @@ impl Ledger {
         tree.digest().0
     }
 
-    /// Returns transactions in the specified range.
-    pub fn get_transactions(&self, start: BlockIndex, length: usize) -> GetTransactionsResponse {
+    fn query_blocks<ArchiveFn, B>(
+        &self,
+        start: BlockIndex,
+        length: usize,
+        decode: impl Fn(&EncodedBlock) -> B,
+        make_callback: impl Fn(CanisterId) -> ArchiveFn,
+    ) -> (u64, Vec<B>, Vec<ArchivedRange<ArchiveFn>>) {
         let locations = block_locations(self, start, length);
 
-        let local_blocks = range_utils::take(&locations.local_blocks, MAX_TRANSACTIONS_PER_REQUEST);
+        let local_blocks_range =
+            range_utils::take(&locations.local_blocks, MAX_TRANSACTIONS_PER_REQUEST);
 
-        let local_transactions: Vec<Tx> = self
+        let local_blocks: Vec<B> = self
             .blockchain
-            .block_slice(local_blocks.clone())
+            .block_slice(local_blocks_range)
             .iter()
-            .map(|enc_block| -> Tx {
+            .map(decode)
+            .collect();
+
+        let archived_blocks = locations
+            .archived_blocks
+            .into_iter()
+            .map(|(canister_id, slice)| ArchivedRange {
+                start: Nat::from(slice.start),
+                length: Nat::from(range_utils::range_len(&slice)),
+                callback: make_callback(canister_id),
+            })
+            .collect();
+
+        (locations.local_blocks.start, local_blocks, archived_blocks)
+    }
+
+    /// Returns transactions in the specified range.
+    pub fn get_transactions(&self, start: BlockIndex, length: usize) -> GetTransactionsResponse {
+        let (first_index, local_transactions, archived_transactions) = self.query_blocks(
+            start,
+            length,
+            |enc_block| -> Tx {
                 Block::decode(enc_block.clone())
                     .expect("bug: failed to decode encoded block")
                     .into()
-            })
-            .collect();
-
-        let archived_transactions = locations
-            .archived_blocks
-            .into_iter()
-            .map(|(canister_id, slice)| ArchivedTransactionRange {
-                start: Nat::from(slice.start),
-                length: Nat::from(range_utils::range_len(&slice)),
-                callback: QueryArchiveFn {
-                    canister_id,
-                    method: "get_transactions".to_string(),
-                },
-            })
-            .collect();
+            },
+            |canister_id| QueryTxArchiveFn::new(canister_id, "get_transactions"),
+        );
 
         GetTransactionsResponse {
-            first_index: Nat::from(local_blocks.start),
+            first_index: Nat::from(first_index),
             log_length: Nat::from(self.blockchain.chain_length()),
             transactions: local_transactions,
             archived_transactions,
+        }
+    }
+
+    /// Returns blocks in the specified range.
+    pub fn get_blocks(&self, start: BlockIndex, length: usize) -> GetBlocksResponse {
+        let (first_index, local_blocks, archived_blocks) = self.query_blocks(
+            start,
+            length,
+            |enc_block| Icrc1Block::from(enc_block),
+            |canister_id| QueryBlockArchiveFn::new(canister_id, "get_blocks"),
+        );
+
+        GetBlocksResponse {
+            first_index: Nat::from(first_index),
+            chain_length: self.blockchain.chain_length(),
+            certificate: ic_cdk::api::data_certificate().map(serde_bytes::ByteBuf::from),
+            blocks: local_blocks,
+            archived_blocks,
         }
     }
 }
