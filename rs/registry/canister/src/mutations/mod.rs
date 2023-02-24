@@ -13,6 +13,7 @@ pub mod do_remove_node_operators;
 pub mod do_remove_nodes_from_subnet;
 pub mod do_retire_replica_version;
 pub mod do_set_firewall_config;
+pub mod do_update_elected_replica_versions;
 pub mod do_update_node_directly;
 pub mod do_update_node_operator_config;
 pub mod do_update_node_operator_config_directly;

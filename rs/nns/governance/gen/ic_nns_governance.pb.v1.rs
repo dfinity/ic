@@ -2922,6 +2922,15 @@ pub enum NnsFunction {
     RetireReplicaVersion = 36,
     /// Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
     InsertSnsWasmUpgradePathEntries = 37,
+    /// A proposal to update currently elected replica versions, by electing a new version,
+    /// and/or unelecting multiple unused versions. The version to elect (identified by the hash of the
+    /// installation image) is added to the registry. Besides creating a record for that
+    /// version, the proposal also appends that version to the list of elected versions
+    /// that can be installed on a subnet. By itself, this proposal
+    /// does not effect any upgrade.
+    /// The specified versions to unelect are removed from the registry and the elected versions record.
+    /// This ensures that the replica cannot upgrade to these versions anymore.
+    UpdateElectedReplicaVersions = 38,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -2971,6 +2980,9 @@ impl NnsFunction {
             NnsFunction::RetireReplicaVersion => "NNS_FUNCTION_RETIRE_REPLICA_VERSION",
             NnsFunction::InsertSnsWasmUpgradePathEntries => {
                 "NNS_FUNCTION_INSERT_SNS_WASM_UPGRADE_PATH_ENTRIES"
+            }
+            NnsFunction::UpdateElectedReplicaVersions => {
+                "NNS_FUNCTION_UPDATE_ELECTED_REPLICA_VERSIONS"
             }
         }
     }

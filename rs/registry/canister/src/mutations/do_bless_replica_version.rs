@@ -1,6 +1,6 @@
 use crate::{
     common::LOG_PREFIX,
-    mutations::common::{decode_registry_value, encode_or_panic},
+    mutations::do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
     registry::Registry,
 };
 
@@ -9,68 +9,24 @@ use candid::{CandidType, Deserialize};
 use dfn_core::println;
 use serde::Serialize;
 
-use ic_protobuf::registry::replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord};
-use ic_registry_keys::{make_blessed_replica_version_key, make_replica_version_key};
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
-
 impl Registry {
     /// Adds a new replica version to the registry and blesses it, i.e., adds
     /// the version's ID to the list of blessed replica versions.
     ///
     /// This method is called by the governance canister, after a proposal
     /// for blessing a new replica version has been accepted.
+    /// TODO(CON-924): Remove this function once release team switches to new "update
+    /// elected replica versions" proposal, and it is supported by frontends.
     pub fn do_bless_replica_version(&mut self, payload: BlessReplicaVersionPayload) {
         println!("{}do_bless_replica_version: {:?}", LOG_PREFIX, payload);
 
-        let version = self.latest_version();
-        // Get the current list
-        let blessed_key = make_blessed_replica_version_key();
-        let before_append = match self.get(blessed_key.as_bytes(), version) {
-            Some(old_blessed_replica_version) => {
-                decode_registry_value::<BlessedReplicaVersions>(
-                    old_blessed_replica_version.value.clone(),
-                )
-                .blessed_version_ids
-            }
-            None => vec![],
-        };
-
-        let after_append = {
-            let mut copy = before_append.clone();
-            copy.push(payload.replica_version_id.clone());
-            copy
-        };
-        println!(
-            "{}Blessed version before: {:?} and after: {:?}",
-            LOG_PREFIX, before_append, after_append
-        );
-
-        let mutations = vec![
-            // Register the new version (that is, insert the new ReplicaVersionRecord)
-            RegistryMutation {
-                mutation_type: registry_mutation::Type::Insert as i32,
-                key: make_replica_version_key(&payload.replica_version_id)
-                    .as_bytes()
-                    .to_vec(),
-                value: encode_or_panic(&ReplicaVersionRecord {
-                    release_package_sha256_hex: payload.release_package_sha256_hex,
-                    release_package_urls: payload.release_package_urls.unwrap(),
-                    guest_launch_measurement_sha256_hex: payload
-                        .guest_launch_measurement_sha256_hex,
-                }),
-            },
-            // Bless the new version (that is, update the list of blessed versions)
-            RegistryMutation {
-                mutation_type: registry_mutation::Type::Upsert as i32,
-                key: blessed_key.as_bytes().to_vec(),
-                value: encode_or_panic(&BlessedReplicaVersions {
-                    blessed_version_ids: after_append,
-                }),
-            },
-        ];
-
-        // Check invariants before applying mutations
-        self.maybe_apply_mutation_internal(mutations);
+        self.do_update_elected_replica_versions(UpdateElectedReplicaVersionsPayload {
+            replica_version_to_elect: Some(payload.replica_version_id),
+            release_package_sha256_hex: Some(payload.release_package_sha256_hex),
+            release_package_urls: payload.release_package_urls.unwrap_or_default(),
+            guest_launch_measurement_sha256_hex: payload.guest_launch_measurement_sha256_hex,
+            replica_versions_to_unelect: vec![],
+        });
     }
 }
 
