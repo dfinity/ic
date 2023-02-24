@@ -161,6 +161,7 @@ impl QueryHandler for InternalHttpQueryHandler {
             self.config.max_query_call_graph_instructions,
             self.config.instruction_overhead_per_query_call,
             self.composite_queries,
+            query.receiver,
         );
         context.run(
             query,
