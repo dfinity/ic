@@ -43,6 +43,7 @@ use registry_canister::{
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
         do_retire_replica_version::RetireReplicaVersionPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
+        do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
         do_update_node_directly::UpdateNodeDirectlyPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
@@ -396,6 +397,21 @@ fn retire_replica_version() {
 #[candid_method(update, rename = "retire_replica_version")]
 fn retire_replica_version_(payload: RetireReplicaVersionPayload) {
     registry_mut().do_retire_replica_version(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update update_elected_replica_versions"]
+fn update_elected_replica_versions() {
+    check_caller_is_governance_and_log("update_elected_replica_versions");
+    over(
+        candid_one,
+        |payload: UpdateElectedReplicaVersionsPayload| update_elected_replica_versions_(payload),
+    );
+}
+
+#[candid_method(update, rename = "update_elected_replica_versions")]
+fn update_elected_replica_versions_(payload: UpdateElectedReplicaVersionsPayload) {
+    registry_mut().do_update_elected_replica_versions(payload);
     recertify_registry();
 }
 

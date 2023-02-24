@@ -109,6 +109,7 @@ use prost::Message;
 use registry_canister::mutations::common::decode_registry_value;
 use registry_canister::mutations::do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest};
 use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
+use registry_canister::mutations::do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload;
 use registry_canister::mutations::do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload;
 use registry_canister::mutations::firewall::{
     add_firewall_rules_compute_entries, compute_firewall_ruleset_hash,
@@ -291,6 +292,9 @@ enum SubCommand {
     /// --propose-to-bless-replica-version instead, which is less flexible, but
     /// easier to use.
     ProposeToBlessReplicaVersionFlexible(ProposeToBlessReplicaVersionFlexibleCmd),
+    /// Submits a proposal to update currently elected replica versions, by electing
+    /// a new version and/or unelecting multiple versions.
+    ProposeToUpdateElectedReplicaVersions(ProposeToUpdateElectedReplicaVersionsCmd),
     /// Submits a proposal to create a new subnet.
     ProposeToCreateSubnet(ProposeToCreateSubnetCmd),
     /// Submits a proposal to update an existing subnet.
@@ -942,6 +946,56 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload>
             release_package_urls: Some(vec![release_package_url]),
             guest_launch_measurement_sha256_hex: None,
         }
+    }
+}
+
+/// Sub-command to submit a proposal to update elected replica versions.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToUpdateElectedReplicaVersionsCmd {
+    #[clap(long)]
+    /// The replica version ID to elect.
+    pub replica_version_to_elect: Option<String>,
+
+    #[clap(long)]
+    /// The hex-formatted SHA-256 hash of the archive served by
+    /// 'release_package_urls'.
+    pub release_package_sha256_hex: Option<String>,
+
+    #[clap(long, multiple_values(true))]
+    /// The URLs against which an HTTP GET request will return a release
+    /// package that corresponds to this version.
+    pub release_package_urls: Vec<String>,
+
+    #[clap(long, multiple_values(true))]
+    /// The replica version ids to remove.
+    pub replica_versions_to_unelect: Vec<String>,
+}
+
+#[async_trait]
+impl ProposalTitleAndPayload<UpdateElectedReplicaVersionsPayload>
+    for ProposeToUpdateElectedReplicaVersionsCmd
+{
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => match self.replica_version_to_elect.as_ref() {
+                Some(v) => format!("Elect new replica binary revision (commit {v})"),
+                None => "Retire IC replica version(s)".to_string(),
+            },
+        }
+    }
+
+    async fn payload(&self, _: Url) -> UpdateElectedReplicaVersionsPayload {
+        let payload = UpdateElectedReplicaVersionsPayload {
+            replica_version_to_elect: self.replica_version_to_elect.clone(),
+            release_package_sha256_hex: self.release_package_sha256_hex.clone(),
+            release_package_urls: self.release_package_urls.clone(),
+            guest_launch_measurement_sha256_hex: None,
+            replica_versions_to_unelect: self.replica_versions_to_unelect.clone(),
+        };
+        payload.validate().expect("Failed to validate payload");
+        payload
     }
 }
 
@@ -3491,6 +3545,7 @@ async fn main() {
             SubCommand::ProposeToAddNnsCanister(_) => (),
             SubCommand::ProposeToBlessReplicaVersion(_) => (),
             SubCommand::ProposeToBlessReplicaVersionFlexible(_) => (),
+            SubCommand::ProposeToUpdateElectedReplicaVersions(_) => (),
             SubCommand::ProposeToRetireReplicaVersion(_) => (),
             SubCommand::ProposeToUpdateSubnet(_) => (),
             SubCommand::ProposeToClearProvisionalWhitelist(_) => (),
@@ -3832,6 +3887,21 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::RetireReplicaVersion,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToUpdateElectedReplicaVersions(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::UpdateElectedReplicaVersions,
                 make_canister_client(
                     opts.nns_url,
                     opts.verify_nns_responses,
