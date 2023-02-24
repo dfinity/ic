@@ -9,9 +9,9 @@ from model.finding import Finding
 from model.repository import Project
 from model.vulnerability import Vulnerability
 from nested_lookup import nested_lookup
+from nodesemver import satisfies
 from scanner.manager.dependency_manager import DependencyManager
 from scanner.process_executor import ProcessExecutor
-from semver import satisfies
 
 NPM_URL = "https://www.npmjs.com/package/"
 
