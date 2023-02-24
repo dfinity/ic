@@ -96,6 +96,12 @@ fn test_tx_time_bounds() {
 fn test_archiving() {
     ic_icrc1_ledger_sm_tests::test_archiving(ledger_wasm(), encode_init_args, archive_wasm());
 }
+
+#[test]
+fn test_get_blocks() {
+    ic_icrc1_ledger_sm_tests::test_get_blocks(ledger_wasm(), encode_init_args);
+}
+
 // Generate random blocks and check that their CBOR encoding complies with the CDDL spec.
 #[test]
 fn block_encoding_agrees_with_the_schema() {

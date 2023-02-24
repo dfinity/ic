@@ -10,7 +10,7 @@ pub fn hash_cbor(bytes: &[u8]) -> Result<Hash, String> {
     hash_value(&value)
 }
 
-fn hash_value(value: &Value) -> Result<Hash, String> {
+pub(crate) fn hash_value(value: &Value) -> Result<Hash, String> {
     match value {
         Value::Integer(int) => {
             let v: i128 = (*int).into();

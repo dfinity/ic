@@ -1,3 +1,4 @@
+use crate::blocks::Icrc1Block;
 use crate::{Account, Block, Memo, Subaccount};
 use candid::types::number::{Int, Nat};
 use candid::CandidType;
@@ -6,6 +7,7 @@ use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
 use std::convert::TryFrom;
+use std::marker::PhantomData;
 
 pub type NumTokens = Nat;
 pub type BlockIndex = Nat;
@@ -168,6 +170,8 @@ impl GetTransactionsRequest {
     }
 }
 
+pub type GetBlocksArgs = GetTransactionsRequest;
+
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Mint {
     pub amount: Nat,
@@ -204,10 +208,10 @@ pub struct Transaction {
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct ArchivedTransactionRange {
+pub struct ArchivedRange<Callback> {
     pub start: Nat,
     pub length: Nat,
-    pub callback: QueryArchiveFn,
+    pub callback: Callback,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -215,7 +219,16 @@ pub struct GetTransactionsResponse {
     pub log_length: Nat,
     pub first_index: Nat,
     pub transactions: Vec<Transaction>,
-    pub archived_transactions: Vec<ArchivedTransactionRange>,
+    pub archived_transactions: Vec<ArchivedRange<QueryTxArchiveFn>>,
+}
+
+#[derive(Debug, CandidType, Deserialize)]
+pub struct GetBlocksResponse {
+    pub first_index: BlockIndex,
+    pub chain_length: u64,
+    pub certificate: Option<serde_bytes::ByteBuf>,
+    pub blocks: Vec<Icrc1Block>,
+    pub archived_blocks: Vec<ArchivedRange<QueryBlockArchiveFn>>,
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -223,15 +236,38 @@ pub struct TransactionRange {
     pub transactions: Vec<Transaction>,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "candid::types::reference::Func")]
-pub struct QueryArchiveFn {
+pub struct QueryArchiveFn<Input: CandidType, Output: CandidType> {
     pub canister_id: CanisterId,
     pub method: String,
+    pub _marker: PhantomData<(Input, Output)>,
 }
 
-impl From<QueryArchiveFn> for candid::types::reference::Func {
-    fn from(archive_fn: QueryArchiveFn) -> Self {
+impl<Input: CandidType, Output: CandidType> QueryArchiveFn<Input, Output> {
+    pub fn new(canister_id: CanisterId, method: impl Into<String>) -> Self {
+        Self {
+            canister_id,
+            method: method.into(),
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<Input: CandidType, Output: CandidType> Clone for QueryArchiveFn<Input, Output> {
+    fn clone(&self) -> Self {
+        Self {
+            canister_id: self.canister_id,
+            method: self.method.clone(),
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<Input: CandidType, Output: CandidType> From<QueryArchiveFn<Input, Output>>
+    for candid::types::reference::Func
+{
+    fn from(archive_fn: QueryArchiveFn<Input, Output>) -> Self {
         let p: &ic_base_types::PrincipalId = archive_fn.canister_id.as_ref();
         Self {
             principal: p.0,
@@ -240,7 +276,9 @@ impl From<QueryArchiveFn> for candid::types::reference::Func {
     }
 }
 
-impl TryFrom<candid::types::reference::Func> for QueryArchiveFn {
+impl<Input: CandidType, Output: CandidType> TryFrom<candid::types::reference::Func>
+    for QueryArchiveFn<Input, Output>
+{
     type Error = String;
     fn try_from(func: candid::types::reference::Func) -> Result<Self, Self::Error> {
         let canister_id = CanisterId::try_from(func.principal.as_slice())
@@ -248,16 +286,17 @@ impl TryFrom<candid::types::reference::Func> for QueryArchiveFn {
         Ok(QueryArchiveFn {
             canister_id,
             method: func.method,
+            _marker: PhantomData,
         })
     }
 }
 
-impl CandidType for QueryArchiveFn {
+impl<Input: CandidType, Output: CandidType> CandidType for QueryArchiveFn<Input, Output> {
     fn _ty() -> candid::types::Type {
         candid::types::Type::Func(candid::types::Function {
             modes: vec![candid::parser::types::FuncMode::Query],
-            args: vec![GetTransactionsRequest::_ty()],
-            rets: vec![TransactionRange::_ty()],
+            args: vec![Input::_ty()],
+            rets: vec![Output::_ty()],
         })
     }
 
@@ -268,6 +307,14 @@ impl CandidType for QueryArchiveFn {
         candid::types::reference::Func::from(self.clone()).idl_serialize(serializer)
     }
 }
+
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct BlockRange {
+    pub blocks: Vec<Icrc1Block>,
+}
+
+pub type QueryBlockArchiveFn = QueryArchiveFn<GetBlocksArgs, BlockRange>;
+pub type QueryTxArchiveFn = QueryArchiveFn<GetTransactionsRequest, TransactionRange>;
 
 impl From<Block> for Transaction {
     fn from(b: Block) -> Transaction {

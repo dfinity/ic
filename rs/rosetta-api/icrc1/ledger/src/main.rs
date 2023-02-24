@@ -7,8 +7,8 @@ use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{
     endpoints::{
-        ArchiveInfo, GetTransactionsRequest, GetTransactionsResponse, StandardRecord, TransferArg,
-        TransferError, Value,
+        ArchiveInfo, GetBlocksArgs, GetBlocksResponse, GetTransactionsRequest,
+        GetTransactionsResponse, StandardRecord, TransferArg, TransferError, Value,
     },
     Account, Operation, Transaction,
 };
@@ -376,6 +376,15 @@ fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
     Access::with_ledger(|ledger| ledger.get_transactions(start, length as usize))
+}
+
+#[query]
+#[candid_method(query)]
+fn get_blocks(req: GetBlocksArgs) -> GetBlocksResponse {
+    let (start, length) = req
+        .as_start_and_length()
+        .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
+    Access::with_ledger(|ledger| ledger.get_blocks(start, length as usize))
 }
 
 candid::export_service!();

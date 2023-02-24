@@ -4,7 +4,7 @@ use std::collections::{btree_map, BTreeMap};
 use candid::{CandidType, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::stable::{StableReader, StableWriter};
-use ic_icrc1::endpoints::{ArchivedTransactionRange, TransactionRange};
+use ic_icrc1::endpoints::{ArchivedRange, QueryTxArchiveFn, TransactionRange};
 use ic_icrc1::{
     endpoints::{GetTransactionsRequest, GetTransactionsResponse, Transaction, Transfer},
     Account, Subaccount,
@@ -202,7 +202,7 @@ async fn get_transactions_from_ledger(
 }
 
 async fn get_transactions_from_archive(
-    archived: &ArchivedTransactionRange,
+    archived: &ArchivedRange<QueryTxArchiveFn>,
 ) -> Result<TransactionRange, String> {
     let req = GetTransactionsRequest {
         start: archived.start.clone(),
@@ -228,7 +228,7 @@ async fn build_index() -> Result<(), String> {
         let last_txid = archived.start.clone() + archived.length.clone();
         let mut next_archived_txid = archived.start.clone();
         while next_archived_txid < last_txid {
-            let archived = ArchivedTransactionRange {
+            let archived = ArchivedRange::<QueryTxArchiveFn> {
                 start: next_archived_txid,
                 length: archived.length.clone(),
                 callback: archived.callback.clone(),

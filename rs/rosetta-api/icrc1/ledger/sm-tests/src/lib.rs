@@ -1,11 +1,13 @@
 use candid::{CandidType, Decode, Encode, Nat};
 use ic_base_types::PrincipalId;
-use ic_icrc1::endpoints::{Transaction as Tx, TransactionRange};
+use ic_icrc1::blocks::Icrc1Block;
+use ic_icrc1::endpoints::{BlockRange, Transaction as Tx, TransactionRange};
 use ic_icrc1::{
     endpoints::{
-        ArchiveInfo, GetTransactionsRequest, GetTransactionsResponse, StandardRecord, Transfer,
-        TransferArg, TransferError, Value,
+        ArchiveInfo, GetBlocksResponse, GetTransactionsRequest, GetTransactionsResponse,
+        StandardRecord, Transfer, TransferArg, TransferError, Value,
     },
+    hash::Hash,
     Account, Block, Memo, Operation, Transaction,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -211,16 +213,17 @@ fn get_archive_transaction(
     .expect("failed to decode get_transaction response")
 }
 
-fn get_transactions(
+fn get_transactions_as<Response: CandidType + for<'a> candid::Deserialize<'a>>(
     env: &StateMachine,
-    ledger: CanisterId,
+    canister: CanisterId,
     start: u64,
     length: usize,
-) -> GetTransactionsResponse {
+    method_name: String,
+) -> Response {
     Decode!(
         &env.query(
-            ledger,
-            "get_transactions",
+            canister,
+            method_name,
             Encode!(&GetTransactionsRequest {
                 start: Nat::from(start),
                 length: Nat::from(length)
@@ -229,7 +232,7 @@ fn get_transactions(
         )
         .expect("failed to query ledger transactions")
         .bytes(),
-        GetTransactionsResponse
+        Response
     )
     .expect("failed to decode get_transactions response")
 }
@@ -240,21 +243,55 @@ fn get_archive_transactions(
     start: u64,
     length: usize,
 ) -> TransactionRange {
-    Decode!(
-        &env.query(
-            archive,
-            "get_transactions",
-            Encode!(&GetTransactionsRequest {
-                start: Nat::from(start),
-                length: Nat::from(length)
-            })
-            .unwrap()
-        )
-        .expect("failed to query archive transactions")
-        .bytes(),
-        TransactionRange
-    )
-    .expect("failed to decode get_transactions archive response")
+    get_transactions_as(env, archive, start, length, "get_transactions".to_string())
+}
+
+fn get_transactions(
+    env: &StateMachine,
+    archive: CanisterId,
+    start: u64,
+    length: usize,
+) -> GetTransactionsResponse {
+    get_transactions_as(env, archive, start, length, "get_transactions".to_string())
+}
+
+fn get_blocks(
+    env: &StateMachine,
+    archive: CanisterId,
+    start: u64,
+    length: usize,
+) -> GetBlocksResponse {
+    get_transactions_as(env, archive, start, length, "get_blocks".to_string())
+}
+
+fn get_archive_blocks(
+    env: &StateMachine,
+    archive: CanisterId,
+    start: u64,
+    length: usize,
+) -> BlockRange {
+    get_transactions_as(env, archive, start, length, "get_blocks".to_string())
+}
+
+fn get_phash(block: &Icrc1Block) -> Result<Option<Hash>, String> {
+    match block {
+        Icrc1Block::Map(map) => {
+            for (k, v) in map.iter() {
+                if k == "phash" {
+                    return match v {
+                        Icrc1Block::Blob(blob) => blob
+                            .as_slice()
+                            .try_into()
+                            .map(Some)
+                            .map_err(|_| "phash is not a hash".to_string()),
+                        _ => Err("phash should be a blob".to_string()),
+                    };
+                }
+            }
+            Ok(None)
+        }
+        _ => Err("top level element should be a map".to_string()),
+    }
 }
 
 pub fn total_supply(env: &StateMachine, ledger: CanisterId) -> u64 {
@@ -1158,6 +1195,62 @@ pub fn test_archiving<T>(
         }
     }
 }
+
+pub fn test_get_blocks<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let p1 = PrincipalId::new_user_test_id(1);
+    let p2 = PrincipalId::new_user_test_id(2);
+
+    let (env, canister_id) = setup(
+        ledger_wasm,
+        encode_init_args,
+        vec![(Account::from(p1), 10_000_000)],
+    );
+
+    for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
+        transfer(&env, canister_id, p1, p2, 10_000 + i * 10_000).expect("transfer failed");
+    }
+
+    env.run_until_completion(/*max_ticks=*/ 10);
+
+    let resp = get_blocks(&env, canister_id, 0, 1_000_000);
+    assert_eq!(resp.first_index, Nat::from(NUM_BLOCKS_TO_ARCHIVE));
+    assert_eq!(
+        resp.blocks.len(),
+        (ARCHIVE_TRIGGER_THRESHOLD - NUM_BLOCKS_TO_ARCHIVE + 1) as usize
+    );
+    assert_eq!(resp.archived_blocks.len(), 1);
+    assert_eq!(resp.archived_blocks[0].start, Nat::from(0));
+    assert_eq!(
+        resp.archived_blocks[0].length,
+        Nat::from(NUM_BLOCKS_TO_ARCHIVE)
+    );
+    assert!(resp.certificate.is_some());
+
+    let archive_canister_id = list_archives(&env, canister_id)[0].canister_id;
+    let archived_blocks =
+        get_archive_blocks(&env, archive_canister_id, 0, NUM_BLOCKS_TO_ARCHIVE as usize).blocks;
+    assert_eq!(archived_blocks.len(), NUM_BLOCKS_TO_ARCHIVE as usize);
+
+    let mut prev_hash = None;
+
+    // Check that the hash chain is correct.
+    for block in archived_blocks.into_iter().chain(resp.blocks.into_iter()) {
+        assert_eq!(
+            prev_hash,
+            get_phash(&block).expect("cannot get the hash of the previous block")
+        );
+        prev_hash = Some(block.hash());
+    }
+
+    // Check that requesting non-existing blocks does not crash the ledger.
+    let missing_blocks_reply = get_blocks(&env, canister_id, 100, 5);
+    assert_eq!(0, missing_blocks_reply.blocks.len());
+    assert_eq!(0, missing_blocks_reply.archived_blocks.len());
+}
+
 // Generate random blocks and check that their CBOR encoding complies with the CDDL spec.
 pub fn block_encoding_agrees_with_the_schema() {
     use std::path::PathBuf;
