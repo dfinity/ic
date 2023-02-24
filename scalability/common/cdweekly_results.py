@@ -29,6 +29,16 @@ gflags.DEFINE_boolean("regenerate", False, "Regenerate all reports")
 TEMPLATE_BASEDIR = "templates"
 TEMPLATE_PATH = TEMPLATE_BASEDIR + "/cd-overview.html.hb"
 
+# Template for rendering hover boxes for plots
+# Guidance: https://plotly.com/javascript/hover-text-and-formatting/
+HOVERTEMPLATE = """
+<b>Click for full report</b><br><br>
+%{yaxis.title.text}: %{y:,.0f}<br>
+%{xaxis.title.text}: %{x}<br>
+<br>
+%{text}
+"""
+
 # Exclude the following experiments from plotting (e.g. for outliers or failed benchmakrs)
 BLACKLIST = [
     ("0b2e60bb5af556c401c4253e763c13d23e2947be", "1639340737"),
@@ -116,7 +126,7 @@ def copy_results(git_revision: str, timestamp: str):
 
 
 def default_label_formatter_from_workload_description(
-    workload_command_summary_map, experiment_file, workload_id, githash
+    workload_command_summary_map, iteration, experiment_file, workload_id, githash
 ):
     """Determines the label to be used for plotting from the given data."""
     if workload_id not in workload_command_summary_map.keys():
@@ -140,9 +150,21 @@ def default_label_formatter_from_workload_description(
     else:
         request_type = str(data[1])
 
-    label = ",".join(data[0]) + " - req type: " + request_type + " - " + str(data[3]) + " rps"
+    label = (
+        ",".join(data[0])
+        + " - req type: "
+        + request_type
+        + " - "
+        + str(data[3])
+        + " rps"
+        + " - iter: "
+        + str(iteration)
+    )
     if data[5] is not None:
-        label = label + " - payload: " + str(data[5])
+        payload_tmp = str(data[5])
+        if len(payload_tmp) > 32:
+            payload_tmp = payload_tmp[30] + ".."
+        label = label + " - payload: " + payload_tmp
 
     # Attempt to replace the canister ID with canister names
     for canister_name, canister_ids in experiment_file.canister_id.items():
@@ -150,8 +172,8 @@ def default_label_formatter_from_workload_description(
             label = label.replace(canister_id, f"{canister_name}_{idx}")
 
     # Shorten labels that are too long
-    if len(label) > 60:
-        label = label[:58] + ".."
+    if len(label) > 120:
+        label = label[:118] + ".."
 
     return label
 
@@ -186,7 +208,7 @@ def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_d
                 if os.path.exists(path):
                     with open(path, "r") as summary_map_f:
                         workload_command_summary_map = json.loads(summary_map_f.read())
-                        label = f_label(workload_command_summary_map, experiment_file, workload_id, githash)
+                        label = f_label(workload_command_summary_map, iteration, experiment_file, workload_id, githash)
 
                 else:
                     # No workload summary mapping file, so we cannot look up anything useful as label
@@ -208,7 +230,7 @@ def parse_rps_experiment_with_evaluated_summary(data, githash, timestamp, meta_d
                     }
                 )
 
-                raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue)]
+                raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue, label)]
                 added = True
 
     return added
@@ -274,7 +296,7 @@ def parse_rps_experiment_max_capacity(data, githash, experiment_timestamp, meta_
         )
 
         label = f"workload {idx}"
-        raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue)]
+        raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue, "Maximum capacity")]
         added = True
 
     return added
@@ -304,7 +326,7 @@ def parse_xnet_experiment(data, githash, timestamp, meta_data, raw_data):
             "  {:40} {:30} {:10.3f}".format(data["experiment_name"], convert_date(data["t_experiment_start"]), yvalue)
         )
         label = None
-        raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue)]
+        raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue, "Xnet capacity")]
         return True
 
     else:
@@ -339,7 +361,7 @@ def parse_statesync_experiment(data, githash, timestamp, meta_data, raw_data):
             "  {:40} {:30} {:10.3f}".format(data["experiment_name"], convert_date(data["t_experiment_start"]), yvalue)
         )
         label = False
-        raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue)]
+        raw_data[label] = raw_data.get(label, []) + [(xvalue, yvalue, "Statesync capacity")]
         return True
     else:
         return False
@@ -487,6 +509,7 @@ def render_results(
         data = sorted(data)
         xdata = [e[0] for e in data]
         ydata = [e[1] for e in data]
+        text = [e[2] for e in data]
 
         all_xdata += xdata
         all_ydata += ydata
@@ -495,7 +518,9 @@ def render_results(
             {
                 "x": [convert_date(e) for e in xdata],
                 "y": ydata,
+                "text": text,
                 "name": str(label),
+                "hovertemplate": HOVERTEMPLATE,
             }
         )
 
