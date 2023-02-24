@@ -239,9 +239,11 @@ function setup_pre_isolation_canisters() {
         return
     fi
 
+    # Check that ID matches the regex for a canister ID
+    # And write to nginx config
     while read id; do
         echo "${id} 1;" >>"${DST_CANISTERS_PATH}"
-    done <"${SRC_CANISTERS_PATH}"
+    done < <(cat "${SRC_CANISTERS_PATH}" | grep -E '^[a-z0-9-]{27}$')
 }
 
 function setup_canister_id_alises() {
