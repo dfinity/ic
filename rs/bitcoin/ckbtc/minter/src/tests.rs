@@ -262,6 +262,17 @@ fn test_no_zero_outputs() {
     assert_eq!(available_utxos.len(), 1);
 }
 
+#[test]
+fn blocklist_is_sorted() {
+    use crate::blocklist::BTC_ADDRESS_BLOCKLIST;
+    for (l, r) in BTC_ADDRESS_BLOCKLIST
+        .iter()
+        .zip(BTC_ADDRESS_BLOCKLIST.iter().skip(1))
+    {
+        assert!(l < r, "the block list is not sorted: {} >= {}", l, r);
+    }
+}
+
 fn arb_amount() -> impl Strategy<Value = Satoshi> {
     1..10_000_000_000u64
 }

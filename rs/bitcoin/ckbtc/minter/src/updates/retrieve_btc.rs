@@ -81,6 +81,13 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     state::read_state(|s| s.mode.is_withdrawal_available_for(&caller))
         .map_err(RetrieveBtcError::TemporarilyUnavailable)?;
 
+    if crate::blocklist::BTC_ADDRESS_BLOCKLIST
+        .binary_search(&args.address.trim())
+        .is_ok()
+    {
+        ic_cdk::trap("attempted to retrieve BTC to a blocked address");
+    }
+
     init_ecdsa_public_key().await;
 
     let main_account = Account {
