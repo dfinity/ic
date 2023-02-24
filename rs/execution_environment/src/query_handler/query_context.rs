@@ -69,7 +69,8 @@ pub(super) struct QueryContext<'a> {
     // The state against which all queries in the context will be executed.
     state: Arc<ReplicatedState>,
     network_topology: Arc<NetworkTopology>,
-    data_certificate: Vec<u8>,
+    // Certificate for certified queries + canister ID of the root query of this context
+    data_certificate: (Vec<u8>, CanisterId),
     max_canister_memory_size: NumBytes,
     max_instructions_per_query: NumInstructions,
     max_query_call_graph_depth: usize,
@@ -93,6 +94,7 @@ impl<'a> QueryContext<'a> {
         max_query_call_graph_instructions: NumInstructions,
         instruction_overhead_per_query_call: NumInstructions,
         composite_queries: FlagStatus,
+        canister_id: CanisterId,
     ) -> Self {
         let network_topology = Arc::new(state.metadata.network_topology.clone());
         let round_limits = RoundLimits {
@@ -108,7 +110,7 @@ impl<'a> QueryContext<'a> {
             own_subnet_type,
             state,
             network_topology,
-            data_certificate,
+            data_certificate: (data_certificate, canister_id),
             max_canister_memory_size,
             max_instructions_per_query,
             max_query_call_graph_depth,
@@ -334,12 +336,13 @@ impl<'a> QueryContext<'a> {
             InstructionLimits::new(FlagStatus::Disabled, instruction_limit, instruction_limit);
         let execution_parameters = self.execution_parameters(&canister, instruction_limits);
 
+        let data_certificate = self.get_data_certificate(&canister.canister_id());
         let (canister, instructions_left, result) = execute_non_replicated_query(
             query_kind,
             method_name,
             method_payload,
             canister,
-            Some(self.data_certificate.clone()),
+            data_certificate,
             self.state.time(),
             execution_parameters,
             &self.network_topology,
@@ -797,6 +800,14 @@ impl<'a> QueryContext<'a> {
             compute_allocation: canister.scheduler_state.compute_allocation,
             subnet_type: self.own_subnet_type,
             execution_mode: ExecutionMode::NonReplicated,
+        }
+    }
+
+    fn get_data_certificate(&self, canister_id: &CanisterId) -> Option<Vec<u8>> {
+        if canister_id != &self.data_certificate.1 {
+            None
+        } else {
+            Some(self.data_certificate.0.clone())
         }
     }
 }
