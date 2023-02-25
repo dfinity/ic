@@ -277,9 +277,7 @@ function assemble_and_populate_image() {
     echo "${VERSION}" >"${TMP_DIR}/version.txt"
     touch -t ${TOUCH_TIMESTAMP} ${TMP_DIR}/version.txt
 
-    "${TOOL_DIR}"/docker_tar.py \
-        --output "${TMP_DIR}/boot-tree.tar" \
-        "${BASE_DIR}/bootloader"
+    "${BASE_DIR}/bootloader/build-bootloader-tree.sh" -o "${TMP_DIR}/boot-tree.tar"
 
     "${TOOL_DIR}"/docker_tar.py \
         --output "${TMP_DIR}/rootfs-tree.tar" \

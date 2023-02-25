@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# NOTE: This file duplicates `ic-os/bootloader/build-bootloader-tree.sh`. This
+# duplication will be cleaned up when moving HostOS to bazel builds, with
+# NODE-622.
+
 # This builds the filesystem tree for the /boot hierarchy containing
 # the /boot/grub and /boot/efi portions. From this, the grub and
 # efi partitions of the disk image can be built.
@@ -25,6 +29,7 @@ BASE_IMAGE="dfinity/ic-build-bazel@sha256:1978886cfda51b09057bffd60f2e5edb588c6c
 
 docker build --iidfile ${TMPDIR}/iidfile - <<<"
     FROM $BASE_IMAGE
+    USER root:root
     RUN mkdir -p /build/boot/grub
     RUN cp -r /usr/lib/grub/x86_64-efi /build/boot/grub
     RUN mkdir -p /build/boot/efi/EFI/Boot
