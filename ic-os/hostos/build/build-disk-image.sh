@@ -29,33 +29,6 @@ function fstree_to_vfat() {
     done
 }
 
-# Build bootloader -- this consists of the EFI System Partition (ESP) +
-# a dedicated partition to hold grub modules and configuration.
-#
-# Arguments:
-# - $1: name of the ESP image file; this must be a file truncated
-#   to the desired size of the filesystem to be built
-# - $2: name of the grub partition image file; this must be a file truncated
-#   to the desired size of the filesystem to be built
-#
-# The function expects the "bootloader docker tarball" output on stdin.
-function build_bootloader_from_tar() {
-    ESP_IMAGE="$1"
-    GRUB_IMAGE="$2"
-
-    local FAKEROOT_STATE_FILE=$(mktemp -t fakerootstate-XXXXXXXXXXXX)
-    local DOCKER_EXTRACT_TMPDIR=$(mktemp -d -t bootloader-XXXXXXXXXXXX)
-    fakeroot -s "${FAKEROOT_STATE_FILE}" "${BASE_DIR}"/scripts/docker_extract.py "${DOCKER_EXTRACT_TMPDIR}"
-
-    local EFI_FSDIR="${DOCKER_EXTRACT_TMPDIR}"/boot/efi
-    local GRUB_FSDIR="${DOCKER_EXTRACT_TMPDIR}"/boot/grub
-    cp bootloader/grub.cfg bootloader/grubenv "${GRUB_FSDIR}"/
-    fstree_to_vfat "${ESP_IMAGE}" "${EFI_FSDIR}"
-    fstree_to_vfat "${GRUB_IMAGE}" "${GRUB_FSDIR}"
-
-    rm -rf "${DOCKER_EXTRACT_TMPDIR}"
-}
-
 # -----------------------------------------------------------------------
 
 BASE_DIR=$(dirname "${BASH_SOURCE[0]}")/..
@@ -67,13 +40,11 @@ trap "rm -rf $TMPDIR $UPDATE_DIR" exit
 
 DISK_IMG="disk.img"
 
-# Build bootloader partitions.
-BOOTLOADER_TAR="bootloader.tar"
-ESP_IMG="${TMPDIR}/esp.img"
-GRUB_IMG="${TMPDIR}/grub.img"
-truncate --size 100M "$ESP_IMG"
-truncate --size 100M "$GRUB_IMG"
-build_bootloader_from_tar "$ESP_IMG" "$GRUB_IMG" <"${BOOTLOADER_TAR}"
+# Prepare bootloader partitions.
+ESP_IMG="esp.img"
+GRUB_IMG="grub.img"
+tar -xOf "${ESP_IMG}.tar" >${ESP_IMG}
+tar -xOf "${GRUB_IMG}.tar" >${GRUB_IMG}
 
 # Prepare empty config partition.
 CONFIG_IMG="${TMPDIR}/config.img"
