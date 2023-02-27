@@ -69,7 +69,7 @@ step 3 "Fetch the NNS state from the backup pod." || (
     log "writing log to $LOG_FILE ..."
     mkdir -p "$DATA_DIR"
     # Repeat the command until it succeeded
-    while ! rsync -e "ssh $SSH_ARGS" -av dev@zh1-pyr07.dc1.dfinity.network:~/nns_state/ "$DATA_DIR/" >"$LOG_FILE"; do
+    while ! rsync -e "ssh $SSH_ARGS" -av dev@zh1-pyr07.zh1.dfinity.network:~/nns_state/ "$DATA_DIR/" >"$LOG_FILE"; do
         echo "rsync failed with status code $?"
         sleep 1
     done
