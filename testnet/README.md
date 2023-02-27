@@ -282,6 +282,14 @@ And to list only the IPv6 addresses:
 testnet/env/<testnet>/hosts --ipv6
 ```
 
+Be aware that these commands require python dependencies. If these are not pre-installed on the machine, you will need to start a python virtual environment and install them yourself. Alternatively you can run the same commands in bazel:
+
+```
+bazel run testnet//inventory -- --deployment <testnet> --list
+bazel run testnet//inventory -- --deployment <testnet> --nodes
+bazel run testnet//inventory -- --deployment <testnet> --ipv6
+```
+
 ### Host-Variables
 
 To list variables for a specific node, you can run the dynamic inventory script:
