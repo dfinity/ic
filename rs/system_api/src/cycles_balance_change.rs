@@ -1,6 +1,5 @@
 use std::{cmp::Ordering, ops::Add};
 
-use ic_replicated_state::SystemState;
 use ic_types::Cycles;
 use serde::{Deserialize, Serialize};
 
@@ -42,14 +41,6 @@ impl CyclesBalanceChange {
         match self {
             Self::Added(added) => balance + added,
             Self::Removed(removed) => balance - removed,
-        }
-    }
-
-    /// Applies the change to the given state.
-    pub fn apply_on_state(&self, state: &mut SystemState) {
-        match self {
-            Self::Added(added) => state.add_cycles(*added),
-            Self::Removed(removed) => state.remove_cycles(*removed),
         }
     }
 
@@ -126,7 +117,6 @@ impl Add for CyclesBalanceChange {
 #[cfg(test)]
 mod tests {
     use crate::cycles_balance_change::CyclesBalanceChange;
-    use ic_test_utilities::state::SystemStateBuilder;
     use ic_types::Cycles;
 
     fn cc(value: u128) -> Cycles {
@@ -208,14 +198,6 @@ mod tests {
             cc(0),
             CyclesBalanceChange::removed(cc(u128::MAX)).apply(cc(0))
         );
-    }
-
-    #[test]
-    fn test_apply_ref() {
-        let mut state = SystemStateBuilder::new().initial_cycles(cc(100)).build();
-        let change = CyclesBalanceChange::removed(cc(42));
-        change.apply_on_state(&mut state);
-        assert_eq!(cc(58), state.balance());
     }
 
     #[test]

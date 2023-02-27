@@ -45,7 +45,7 @@ use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{MetricsRegistry, Timer};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::NextExecution;
+use ic_replicated_state::canister_state::{system_state::CyclesUseCase, NextExecution};
 use ic_replicated_state::ExecutionTask;
 use ic_replicated_state::{
     canister_state::system_state::PausedExecutionId,
@@ -599,6 +599,7 @@ impl ExecutionEnvironment {
                                     canister.scheduler_state.compute_allocation,
                                     induction_cost,
                                     registry_settings.subnet_size,
+                                    CyclesUseCase::IngressInduction,
                                 );
                             }
                         }
