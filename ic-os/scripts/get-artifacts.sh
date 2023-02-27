@@ -6,7 +6,7 @@ GET_GUEST_OS=${GET_GUEST_OS-$GET_GUEST_OS_DEFAULT}
 DEFAULT=$(git rev-parse HEAD)
 GIT=${GIT-$DEFAULT}
 
-CI_PROJECT_DIR=$(dirname "$0")/../../..
+CI_PROJECT_DIR=$(dirname "$0")/../..
 cd "${CI_PROJECT_DIR}"
 echo "➡️  Downloading artifacts for revision $GIT"
 set -x

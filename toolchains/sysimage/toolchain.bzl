@@ -3,12 +3,12 @@ Tools for building IC OS image.
 """
 
 def _docker_tar_impl(ctx):
-    in_dir = ctx.files.src[0]
     tool = ctx.files._build_docker_save_tool[0]
     tar_file = ctx.actions.declare_file(ctx.label.name)
     hash_list_file = ctx.actions.declare_file(ctx.label.name + ".hash-list")
 
-    inputs = [in_dir] + ctx.files.dep
+    inputs = [] + ctx.files.dep
+    context_dir = ctx.files.dep[0].dirname
 
     arguments = ["--dockerfile", ctx.file.dockerfile.path] if ctx.file.dockerfile else []
     arguments.extend(["-o", tar_file.path])
@@ -17,7 +17,7 @@ def _docker_tar_impl(ctx):
     for file, name in ctx.attr.file_build_args.items():
         arguments.extend(["--file-build-arg", name + "=" + file.files.to_list()[0].path])
         inputs += file.files.to_list()
-    arguments.extend([in_dir.path])
+    arguments.extend([context_dir])
 
     if ctx.file.dockerfile:
         inputs.append(ctx.file.dockerfile)
@@ -35,10 +35,6 @@ def _docker_tar_impl(ctx):
 docker_tar = rule(
     implementation = _docker_tar_impl,
     attrs = {
-        "src": attr.label(
-            allow_files = True,
-            mandatory = True,
-        ),
         "dep": attr.label_list(
             allow_files = True,
         ),
