@@ -85,6 +85,8 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_constants::{LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_registry_subnet_type::SubnetType;
 
+use super::sns_aggregator::{aggregator_http_request, nns_dapp_http_request};
+
 const WORKLOAD_GENERATION_DURATION: Duration = Duration::from_secs(60);
 
 const DKG_INTERVAL: u64 = 199;
@@ -275,24 +277,74 @@ pub fn setup_static_testnet(env: TestEnv) {
 
 pub fn workload_static_testnet(env: TestEnv) {
     let log = env.logger();
-    let duration = Duration::from_secs(60 * 60);
-    let rps = std::env::var("WORKLOAD_RPS").expect("variable WORKLOAD_RPS not specified");
-    let rps = rps
+    let duration =
+        std::env::var("DURATION_MINUTES").expect("variable DURATION_MINUTES not specified");
+    let duration: usize = duration
         .parse()
-        .unwrap_or_else(|_| panic!("cannot parse as usize: `{rps}`"));
+        .unwrap_or_else(|_| panic!("cannot parse as usize: `{duration}`"));
+    let duration = Duration::from_secs(duration as u64 * 60);
 
-    let request_provider = SnsRequestProvider::from_env(&env);
-    let request = request_provider.refresh_buyer_tokens(None);
-    let plan = RoundRobinPlan::new(vec![request]);
-
+    let aggr_canister_id =
+        std::env::var("AGGREGATOR_CANISTER").expect("variable AGGREGATOR_CANISTER not specified");
+    let aggr_canister_id = Principal::from_text(aggr_canister_id).unwrap();
     let static_testnet_name = std::env::var("TESTNET").expect("variable TESTNET not specified");
     let static_testnet_bn_url = &format!("https://{static_testnet_name}.testnet.dfinity.network/");
     let agent = block_on(assert_create_agent(static_testnet_bn_url));
 
+    let request_provider = SnsRequestProvider::from_env(&env);
+
+    let account = {
+        let sns_client = SnsClient::read_attribute(&env);
+        let sns_sale_canister_id = sns_client.sns_canisters.swap().get();
+        let sns_subaccount = Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL));
+        Account {
+            owner: sns_sale_canister_id,
+            subaccount: sns_subaccount,
+        }
+    };
+    let ledger_canister_id = Principal::try_from(LEDGER_CANISTER_ID.get()).unwrap();
+    let nns_dapp_canister_id =
+        std::env::var("NNS_DAPP_CANISTER").expect("variable NNS_DAPP_CANISTER not specified");
+    let nns_dapp_canister_id = Principal::from_text(nns_dapp_canister_id).unwrap();
+    let buyer = Some(*TEST_USER1_PRINCIPAL);
+
+    let large_asset_name =
+        std::env::var("LARGE_ASSET_NAME").expect("variable LARGE_ASSET_NAME not specified");
+    let mut plan = vec![
+        request_provider.icrc1_balance_of(account, CallMode::Query, ledger_canister_id),
+        request_provider.icrc1_balance_of(account, CallMode::Update, ledger_canister_id),
+        request_provider.get_account(CallMode::Query, nns_dapp_canister_id),
+        request_provider.get_account(CallMode::Update, nns_dapp_canister_id),
+        request_provider.get_buyer_state(buyer, CallMode::Query),
+        request_provider.get_buyer_state(buyer, CallMode::Update),
+        aggregator_http_request(aggr_canister_id),
+        nns_dapp_http_request(nns_dapp_canister_id, large_asset_name),
+    ];
+
+    let little_asset_name = "/main.js".to_string();
+    for _ in 0..40 {
+        let little_asset_req =
+            nns_dapp_http_request(nns_dapp_canister_id, little_asset_name.clone());
+        plan.push(little_asset_req);
+    }
+
+    // Compute the raw RPS based on the effective RPS specified by the user
+    let effective_rps = std::env::var("WORKLOAD_RPS").expect("variable WORKLOAD_RPS not specified");
+    let effective_rps: usize = effective_rps
+        .parse()
+        .unwrap_or_else(|_| panic!("cannot parse as usize: `{effective_rps}`"));
+    let raw_rps = effective_rps * (plan.len());
+
     // --- Generate workload ---
-    let workload = Workload::new(vec![agent], rps, duration, plan, log.clone())
-        .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
-        .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
+    let workload = Workload::new(
+        vec![agent],
+        raw_rps,
+        duration,
+        RoundRobinPlan::new(plan),
+        log.clone(),
+    )
+    .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
+    .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     let metrics = block_on(workload.execute()).expect("Workload execution has failed.");
     env.emit_report(format!("{metrics}"));
@@ -443,7 +495,8 @@ pub fn check_all_participants(env: TestEnv) {
 
     for participant in participants {
         let sns_agent = app_node.build_sns_agent_with_identity(participant.clone());
-        let request = request_provider.get_buyer_state(participant.principal_id, CallMode::Query);
+        let request =
+            request_provider.get_buyer_state(Some(participant.principal_id), CallMode::Query);
         info!(log, "Submitting request {request:?} ...");
         let res = block_on(sns_agent.query(request)).unwrap();
         let res = Decode!(res.as_slice(), GetBuyerStateResponse).expect("failed to decode");
@@ -587,13 +640,13 @@ impl SnsRequestProvider {
         }
     }
 
-    pub fn get_buyer_state(&self, buyer: PrincipalId, mode: CallMode) -> Request {
+    pub fn get_buyer_state(&self, buyer: Option<PrincipalId>, mode: CallMode) -> Request {
         let swap_canister = self.sns_canisters.swap().get().into();
         let spec = CallSpec::new(
             swap_canister,
             "get_buyer_state",
             Encode!(&GetBuyerStateRequest {
-                principal_id: Some(buyer)
+                principal_id: buyer
             })
             .unwrap(),
         );
@@ -658,6 +711,27 @@ impl SnsRequestProvider {
             "get_state",
             Encode!(&GetStateRequest {}).unwrap(),
         );
+        Self::spec_to_query_req(spec, mode)
+    }
+
+    // The requests below are used for generating workload for static testnets
+
+    pub fn icrc1_balance_of(
+        &self,
+        account: Account,
+        mode: CallMode,
+        icp_ledger_canister_id: Principal,
+    ) -> Request {
+        let spec = CallSpec::new(
+            icp_ledger_canister_id,
+            "icrc1_balance_of",
+            Encode!(&account).unwrap(),
+        );
+        Self::spec_to_query_req(spec, mode)
+    }
+
+    pub fn get_account(&self, mode: CallMode, nns_dapp_canister_id: Principal) -> Request {
+        let spec = CallSpec::new(nns_dapp_canister_id, "get_account", Encode!().unwrap());
         Self::spec_to_query_req(spec, mode)
     }
 }
@@ -870,8 +944,8 @@ pub fn add_one_participant(env: TestEnv) {
         "Validating the pre-transfer state via the `get_buyer_state` endpoint ..."
     );
     let res_3 = {
-        let request =
-            request_provider.get_buyer_state(wealthy_user_identity.principal_id, CallMode::Query);
+        let request = request_provider
+            .get_buyer_state(Some(wealthy_user_identity.principal_id), CallMode::Query);
         let res = block_on(default_sns_agent.query(request)).unwrap();
         Decode!(res.as_slice(), GetBuyerStateResponse).expect("failed to decode")
     };
@@ -972,8 +1046,8 @@ pub fn add_one_participant(env: TestEnv) {
         "Validating the participation setup via the `get_buyer_state` endpoint ..."
     );
     let res_6 = {
-        let request =
-            request_provider.get_buyer_state(wealthy_user_identity.principal_id, CallMode::Query);
+        let request = request_provider
+            .get_buyer_state(Some(wealthy_user_identity.principal_id), CallMode::Query);
         let res = block_on(default_sns_agent.query(request)).unwrap();
         Decode!(res.as_slice(), GetBuyerStateResponse).expect("failed to decode")
     };
