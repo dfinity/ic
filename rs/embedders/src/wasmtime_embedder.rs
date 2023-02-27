@@ -107,15 +107,30 @@ fn trap_code_to_hypervisor_error(trap: wasmtime::Trap) -> HypervisorError {
     }
 }
 
-fn globals_to_ignore(wasm_native_stable_memory: FlagStatus) -> &'static [&'static str] {
+fn get_exported_globals<T>(
+    wasm_native_stable_memory: FlagStatus,
+    instance: &Instance,
+    store: &mut Store<T>,
+) -> Vec<wasmtime::Global> {
     const TO_IGNORE: &[&str] = &[
         DIRTY_PAGES_COUNTER_GLOBAL_NAME,
         ACCESSED_PAGES_COUNTER_GLOBAL_NAME,
     ];
-    match wasm_native_stable_memory {
+    let globals_to_ignore = match wasm_native_stable_memory {
         FlagStatus::Enabled => TO_IGNORE,
         FlagStatus::Disabled => &[],
-    }
+    };
+
+    instance
+        .exports(store)
+        .filter_map(|e| {
+            if globals_to_ignore.contains(&e.name()) {
+                None
+            } else {
+                e.into_global()
+            }
+        })
+        .collect()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -333,20 +348,11 @@ impl WasmtimeEmbedder {
             instance.get_global(&mut store, INSTRUCTIONS_COUNTER_GLOBAL_NAME);
 
         if let Some(exported_globals) = exported_globals {
-            let globals_to_ignore =
-                globals_to_ignore(self.config.feature_flags.wasm_native_stable_memory);
-
-            // in wasmtime only exported globals are accessible
-            let instance_globals: Vec<_> = instance
-                .exports(&mut store)
-                .filter_map(|e| {
-                    if globals_to_ignore.contains(&e.name()) {
-                        None
-                    } else {
-                        e.into_global()
-                    }
-                })
-                .collect();
+            let instance_globals = get_exported_globals(
+                self.config.feature_flags.wasm_native_stable_memory,
+                &instance,
+                &mut store,
+            );
 
             if exported_globals.len() != instance_globals.len() {
                 fatal!(
@@ -990,18 +996,12 @@ impl<S: SystemApi> WasmtimeInstance<S> {
 
     /// Returns a list of exported globals.
     pub fn get_exported_globals(&mut self) -> Vec<Global> {
-        let globals_to_ignore = globals_to_ignore(self.wasm_native_stable_memory);
-        let globals: Vec<_> = self
-            .instance
-            .exports(&mut self.store)
-            .filter_map(|e| {
-                if globals_to_ignore.contains(&e.name()) {
-                    None
-                } else {
-                    e.into_global()
-                }
-            })
-            .collect();
+        let globals = get_exported_globals(
+            self.wasm_native_stable_memory,
+            &self.instance,
+            &mut self.store,
+        );
+
         globals
             .iter()
             .map(|g| match g.ty(&self.store).content() {
