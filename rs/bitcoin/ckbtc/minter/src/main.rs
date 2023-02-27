@@ -5,7 +5,7 @@ use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::dashboard::build_dashboard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
-use ic_ckbtc_minter::lifecycle::{self, init::InitArgs};
+use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest};
 use ic_ckbtc_minter::state::{read_state, RetrieveBtcStatus};
@@ -23,14 +23,21 @@ use ic_ckbtc_minter::{
 use ic_icrc1::Account;
 
 #[init]
-fn init(args: InitArgs) {
-    storage::record_event(&Event::Init(args.clone()));
-    lifecycle::init::init(args);
-    schedule_now(TaskType::ProcessLogic);
-    schedule_now(TaskType::RefreshFeePercentiles);
+fn init(args: MinterArg) {
+    match args {
+        MinterArg::Init(args) => {
+            storage::record_event(&Event::Init(args.clone()));
+            lifecycle::init::init(args);
+            schedule_now(TaskType::ProcessLogic);
+            schedule_now(TaskType::RefreshFeePercentiles);
 
-    #[cfg(feature = "self_check")]
-    ok_or_die(check_invariants())
+            #[cfg(feature = "self_check")]
+            ok_or_die(check_invariants())
+        }
+        MinterArg::Upgrade(_) => {
+            panic!("expected InitArgs got UpgradeArgs");
+        }
+    }
 }
 
 #[cfg(feature = "self_check")]
@@ -85,8 +92,15 @@ fn timer() {
 }
 
 #[post_upgrade]
-fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
-    lifecycle::upgrade::post_upgrade(upgrade_args);
+fn post_upgrade(minter_arg: Option<MinterArg>) {
+    let mut upgrade_arg: Option<UpgradeArgs> = None;
+    if let Some(minter_arg) = minter_arg {
+        upgrade_arg = match minter_arg {
+            MinterArg::Upgrade(upgrade_args) => upgrade_args,
+            MinterArg::Init(_) => panic!("expected Option<UpgradeArgs> got InitArgs."),
+        };
+    }
+    lifecycle::upgrade::post_upgrade(upgrade_arg);
     schedule_now(TaskType::ProcessLogic);
 }
 
@@ -114,7 +128,6 @@ async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, RetrieveBt
 #[candid_method(query)]
 #[query]
 fn retrieve_btc_status(req: RetrieveBtcStatusRequest) -> RetrieveBtcStatus {
-    check_anonymous_caller();
     read_state(|s| s.retrieve_btc_status(req.block_index))
 }
 

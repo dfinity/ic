@@ -189,7 +189,12 @@ type Event = variant {
     confirmed_transaction : record { txid : blob };
 };
 
-service : (InitArgs) -> {
+type MinterArg = variant {
+    Init : InitArgs;
+    Upgrade : opt UpgradeArgs;
+}
+
+service : (minter_arg : MinterArg) -> {
     // Section "Convert BTC to ckBTC" {{{
 
     // Returns the bitcoin address to which the owner should send BTC

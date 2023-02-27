@@ -2,6 +2,7 @@ use candid::{Decode, Encode, Principal};
 use ic_base_types::CanisterId;
 use ic_btc_types::Network;
 use ic_ckbtc_minter::lifecycle::init::InitArgs as CkbtcMinterInitArgs;
+use ic_ckbtc_minter::lifecycle::init::MinterArg;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::state::Mode;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
@@ -75,7 +76,8 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
         min_confirmations: Some(1),
         mode: Mode::GeneralAvailability,
     };
-    env.install_canister(minter_wasm(), Encode!(&args).unwrap(), None)
+    let minter_arg = MinterArg::Init(args);
+    env.install_canister(minter_wasm(), Encode!(&minter_arg).unwrap(), None)
         .unwrap()
 }
 
@@ -103,7 +105,8 @@ fn test_upgrade_read_only() {
         max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::ReadOnly),
     };
-    env.upgrade_canister(minter_id, minter_wasm(), Encode!(&upgrade_args).unwrap())
+    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
+    env.upgrade_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
         .expect("Failed to upgrade the minter canister");
 
     // when the mode is ReadOnly then the minter should reject all update calls.
@@ -170,7 +173,8 @@ fn test_upgrade_restricted() {
         max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::RestrictedTo(vec![authorized_principal])),
     };
-    env.upgrade_canister(minter_id, minter_wasm(), Encode!(&upgrade_args).unwrap())
+    let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
+    env.upgrade_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
         .expect("Failed to upgrade the minter canister");
 
     // Check that the unauthorized user cannot modify the state.
