@@ -23,8 +23,9 @@ use ic_interfaces::{
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    canister_state::NextExecution, testing::ReplicatedStateTesting, CanisterState, CanisterStatus,
-    ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
+    canister_state::{system_state::CyclesUseCase, NextExecution},
+    testing::ReplicatedStateTesting,
+    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
 };
 use ic_system_api::InstructionLimits;
 use ic_types::{
@@ -991,7 +992,9 @@ impl SchedulerImpl {
                     canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
                     canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
                     // Burn the remaining balance of the canister.
-                    canister.system_state.burn_remaining_balance();
+                    canister
+                        .system_state
+                        .burn_remaining_balance(CyclesUseCase::Uninstall);
 
                     info!(
                         self.log,

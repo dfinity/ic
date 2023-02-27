@@ -8,6 +8,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{NetworkTopology, SystemState};
 use ic_system_api::sandbox_safe_system_state::SandboxSafeSystemState;
@@ -243,7 +244,10 @@ fn correct_charging_source_canister_for_a_request() {
         SMALL_APP_SUBNET_MAX_SIZE,
     );
 
-    system_state.increment_balance_and_decrement_consumed_cycles(refund_cycles);
+    system_state.increment_balance_and_decrement_consumed_cycles(
+        refund_cycles,
+        CyclesUseCase::RequestTransmissionAndProcessing,
+    );
 
     // MAX_NUM_INSTRUCTIONS also gets partially refunded in the real
     // ExecutionEnvironmentImpl::execute_canister_response()

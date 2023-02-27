@@ -15,8 +15,8 @@ use ic_logger::{info, ReplicaLogger};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::DEFAULT_QUEUE_CAPACITY, CallOrigin, CanisterStatus, NetworkTopology,
-    SystemState,
+    canister_state::{system_state::CyclesUseCase, DEFAULT_QUEUE_CAPACITY},
+    CallOrigin, CanisterStatus, NetworkTopology, SystemState,
 };
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, Request},
@@ -59,7 +59,7 @@ pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
     pub(super) callback_updates: Vec<CallbackUpdate>,
     cycles_balance_change: CyclesBalanceChange,
-    cycles_consumed: Cycles,
+    cycles_consumed_for_pushing_requests: Cycles,
     call_context_balance_taken: BTreeMap<CallContextId, Cycles>,
     request_slots_used: BTreeMap<CanisterId, usize>,
     requests: Vec<Request>,
@@ -72,7 +72,7 @@ impl Default for SystemStateChanges {
             new_certified_data: None,
             callback_updates: vec![],
             cycles_balance_change: CyclesBalanceChange::zero(),
-            cycles_consumed: Cycles::zero(),
+            cycles_consumed_for_pushing_requests: Cycles::zero(),
             call_context_balance_taken: BTreeMap::new(),
             request_slots_used: BTreeMap::new(),
             requests: vec![],
@@ -278,10 +278,10 @@ impl SystemStateChanges {
     ) -> HypervisorResult<()> {
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
-        self.cycles_balance_change.apply_on_state(system_state);
+        self.apply_balance_changes(system_state);
 
         // Observe consumed cycles.
-        system_state.observe_consumed_cycles(self.cycles_consumed);
+        system_state.observe_consumed_cycles(self.cycles_consumed_for_pushing_requests);
 
         // Verify we don't accept more cycles than are available from each call
         // context and update each call context balance
@@ -433,6 +433,53 @@ impl SystemStateChanges {
         }
 
         Ok(())
+    }
+
+    /// Applies the balance change to the given state.
+    pub fn apply_balance_changes(&self, state: &mut SystemState) {
+        let balance_before = state.balance();
+        let removed_consumed_cycles = self.cycles_consumed_for_pushing_requests;
+        state.remove_cycles(
+            removed_consumed_cycles,
+            CyclesUseCase::RequestTransmissionAndProcessing,
+        );
+
+        // The final balance of the canister should reflect `cycles_balance_change`.
+        // Since we removed `removed_consumed_cycles` above, we need to add it back
+        // to the `cycles_balance_change` to make sure the final balance of the canister is correct.
+        match self.cycles_balance_change {
+            CyclesBalanceChange::Added(added) => {
+                // When 'cycles_balance_change' is positive we should add 'removed_consumed_cycles'.
+                state.add_cycles(added + removed_consumed_cycles);
+                debug_assert_eq!(balance_before + added, state.balance());
+            }
+            CyclesBalanceChange::Removed(removed) => {
+                // When 'cycles_balance_change' is negative we are adding 'removed_consumed_cycles'
+                // but additionaly we should take care about the sign of the sum, which will
+                // determine whether we are adding or removing cycles from the balance.
+                if removed_consumed_cycles > removed {
+                    state.add_cycles(removed_consumed_cycles - removed);
+                } else {
+                    state.remove_cycles(
+                        removed - removed_consumed_cycles,
+                        CyclesUseCase::NonConsumed,
+                    );
+                }
+                debug_assert_eq!(balance_before - removed, state.balance());
+            }
+        }
+    }
+
+    #[cfg(test)]
+    fn default_with_cycles_changes(
+        cycles_balance_change: CyclesBalanceChange,
+        cycles_consumed_for_pushing_requests: Cycles,
+    ) -> SystemStateChanges {
+        SystemStateChanges {
+            cycles_balance_change,
+            cycles_consumed_for_pushing_requests,
+            ..Default::default()
+        }
     }
 }
 
@@ -657,7 +704,8 @@ impl SandboxSafeSystemState {
             new_balance
         );
         let consumed = old_balance - new_balance;
-        self.system_state_changes.cycles_consumed += consumed;
+        self.system_state_changes
+            .cycles_consumed_for_pushing_requests += consumed;
         self.update_balance_change(new_balance);
     }
 
@@ -817,5 +865,79 @@ impl SandboxSafeSystemState {
         } else {
             Ok(NumInstructions::from(inst))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ic_base_types::NumSeconds;
+    use ic_replicated_state::SystemState;
+    use ic_test_utilities::types::ids::{canister_test_id, user_test_id};
+    use ic_types::Cycles;
+
+    use crate::{
+        cycles_balance_change::CyclesBalanceChange, sandbox_safe_system_state::SystemStateChanges,
+    };
+
+    #[test]
+    fn test_apply_balance_changes() {
+        let mut system_state = SystemState::new_running(
+            canister_test_id(0),
+            user_test_id(1).get(),
+            Cycles::new(1_000_000_000),
+            NumSeconds::from(100_000),
+        );
+
+        let initial_cycles_balance = system_state.balance();
+
+        let removed = Cycles::new(500_000);
+        let consumed = Cycles::new(100_000);
+        let system_state_changes = SystemStateChanges::default_with_cycles_changes(
+            CyclesBalanceChange::Removed(removed),
+            consumed,
+        );
+
+        system_state_changes.apply_balance_changes(&mut system_state);
+
+        assert_eq!(initial_cycles_balance - removed, system_state.balance());
+
+        let initial_cycles_balance = system_state.balance();
+
+        let removed = Cycles::new(500_000);
+        let consumed = Cycles::new(600_000);
+        let system_state_changes = SystemStateChanges::default_with_cycles_changes(
+            CyclesBalanceChange::Removed(removed),
+            consumed,
+        );
+
+        system_state_changes.apply_balance_changes(&mut system_state);
+
+        assert_eq!(initial_cycles_balance - removed, system_state.balance());
+
+        let initial_cycles_balance = system_state.balance();
+
+        let added = Cycles::new(500_000);
+        let consumed = Cycles::new(100_000);
+        let system_state_changes = SystemStateChanges::default_with_cycles_changes(
+            CyclesBalanceChange::Added(added),
+            consumed,
+        );
+
+        system_state_changes.apply_balance_changes(&mut system_state);
+
+        assert_eq!(initial_cycles_balance + added, system_state.balance());
+
+        let initial_cycles_balance = system_state.balance();
+
+        let added = Cycles::new(500_000);
+        let consumed = Cycles::new(600_000);
+        let system_state_changes = SystemStateChanges::default_with_cycles_changes(
+            CyclesBalanceChange::Added(added),
+            consumed,
+        );
+
+        system_state_changes.apply_balance_changes(&mut system_state);
+
+        assert_eq!(initial_cycles_balance + added, system_state.balance());
     }
 }

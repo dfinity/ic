@@ -24,6 +24,7 @@ use ic_interfaces::messages::CanisterCall;
 use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::{
     CallOrigin, CanisterState, CanisterStatus, NetworkTopology, ReplicatedState, SchedulerState,
     SystemState,
@@ -1148,10 +1149,6 @@ impl CanisterManager {
             None => self.generate_new_canister_id(state)?,
         };
 
-        // Take the fee out of the cycles that are going to be added as the canister's
-        // initial balance.
-        let cycles = cycles - creation_fee;
-
         // Canister id available. Create the new canister.
         let mut system_state = SystemState::new_running(
             new_canister_id,
@@ -1160,6 +1157,7 @@ impl CanisterManager {
             self.config.default_freeze_threshold,
         );
 
+        system_state.remove_cycles(creation_fee, CyclesUseCase::CreationFee);
         system_state.observe_consumed_cycles(creation_fee);
         let scheduler_state = SchedulerState::new(state.metadata.batch_time);
         let mut new_canister = CanisterState::new(system_state, None, scheduler_state);

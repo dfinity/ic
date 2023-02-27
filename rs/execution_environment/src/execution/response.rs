@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use ic_base_types::CanisterId;
 use ic_constants::LOG_CANISTER_OPERATION_CYCLES_THRESHOLD;
+use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use prometheus::IntCounter;
 
 use ic_embedders::wasm_executor::{
@@ -195,7 +196,10 @@ impl ResponseHelper {
         // additionally fixes up the cycles-burned metric.
         self.canister
             .system_state
-            .increment_balance_and_decrement_consumed_cycles(self.refund_for_response_transmission);
+            .increment_balance_and_decrement_consumed_cycles(
+                self.refund_for_response_transmission,
+                CyclesUseCase::RequestTransmissionAndProcessing,
+            );
     }
 
     /// Checks that the canister has not been uninstalled:

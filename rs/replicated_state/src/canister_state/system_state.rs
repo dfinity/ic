@@ -35,6 +35,19 @@ lazy_static! {
         PrincipalId::from_str("zrl4w-cqaaa-nocon-troll-eraaa-d5qc").unwrap();
 }
 
+/// Enumerates use cases of consumed cycles.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CyclesUseCase {
+    Memory,
+    ComputeAllocation,
+    IngressInduction,
+    Instructions,
+    RequestTransmissionAndProcessing,
+    Uninstall,
+    CreationFee,
+    NonConsumed,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// Canister-specific metrics on scheduling, maintained by the scheduler.
 // For semantics of the fields please check
@@ -571,7 +584,10 @@ impl SystemState {
             // some of the postponed charges free.
         }
         self.observe_consumed_cycles(self.ingress_induction_cycles_debit);
-        self.cycles_balance -= self.ingress_induction_cycles_debit;
+        self.remove_cycles(
+            self.ingress_induction_cycles_debit,
+            CyclesUseCase::IngressInduction,
+        );
         self.ingress_induction_cycles_debit = Cycles::zero();
     }
 
@@ -963,15 +979,15 @@ impl SystemState {
     }
 
     /// Decreases 'cycles_balance' for 'amount'.
-    pub fn remove_cycles(&mut self, amount: Cycles) {
+    pub fn remove_cycles(&mut self, amount: Cycles, _use_case: CyclesUseCase) {
         self.cycles_balance -= amount;
     }
 
     /// Removes all cycles from 'cycles_balance'.
-    pub fn burn_remaining_balance(&mut self) {
+    pub fn burn_remaining_balance(&mut self, use_case: CyclesUseCase) {
         let balance = self.cycles_balance;
         self.observe_consumed_cycles(balance);
-        self.remove_cycles(balance);
+        self.remove_cycles(balance, use_case);
     }
 
     /// Increments the metric `consumed_cycles_since_replica_started` with the
@@ -983,7 +999,11 @@ impl SystemState {
 
     /// Add cycles to the balance and decrements the metric `consumed_cycles_since_replica_started`
     /// with the number of cycles refunded.
-    pub fn increment_balance_and_decrement_consumed_cycles(&mut self, cycles: Cycles) {
+    pub fn increment_balance_and_decrement_consumed_cycles(
+        &mut self,
+        cycles: Cycles,
+        _use_case: CyclesUseCase,
+    ) {
         self.add_cycles(cycles);
         self.canister_metrics.consumed_cycles_since_replica_started -=
             NominalCycles::from_cycles(cycles);

@@ -20,7 +20,9 @@ use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterState, SystemState};
+use ic_replicated_state::{
+    canister_state::system_state::CyclesUseCase, CanisterState, SystemState,
+};
 use ic_types::{
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
     messages::{Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
@@ -283,7 +285,12 @@ impl CyclesAccountManager {
                 .add_postponed_charge_to_ingress_induction_cycles_debit(cycles);
             Ok(())
         } else {
-            self.consume_with_threshold(&mut canister.system_state, cycles, threshold)
+            self.consume_with_threshold(
+                &mut canister.system_state,
+                cycles,
+                threshold,
+                CyclesUseCase::IngressInduction,
+            )
         }
     }
 
@@ -304,6 +311,7 @@ impl CyclesAccountManager {
         canister_compute_allocation: ComputeAllocation,
         cycles: Cycles,
         subnet_size: usize,
+        use_case: CyclesUseCase,
     ) -> Result<(), CanisterOutOfCyclesError> {
         let threshold = self.freeze_threshold_cycles(
             system_state.freeze_threshold,
@@ -312,7 +320,7 @@ impl CyclesAccountManager {
             canister_compute_allocation,
             subnet_size,
         );
-        self.consume_with_threshold(system_state, cycles, threshold)
+        self.consume_with_threshold(system_state, cycles, threshold, use_case)
     }
 
     /// Prepays the cost of executing a message with the given number of
@@ -344,6 +352,7 @@ impl CyclesAccountManager {
                 canister_compute_allocation,
                 subnet_size,
             ),
+            CyclesUseCase::Instructions,
         )
         .map(|_| cost)
     }
@@ -378,7 +387,10 @@ impl CyclesAccountManager {
                 subnet_size,
             )
             .min(prepaid_execution_cycles);
-        system_state.increment_balance_and_decrement_consumed_cycles(cycles_to_refund);
+        system_state.increment_balance_and_decrement_consumed_cycles(
+            cycles_to_refund,
+            CyclesUseCase::Instructions,
+        );
     }
 
     /// Charges the canister for its compute allocation
@@ -397,7 +409,12 @@ impl CyclesAccountManager {
         let cycles = self.compute_allocation_cost(compute_allocation, duration, subnet_size);
 
         // Can charge all the way to the empty account (zero cycles)
-        self.consume_with_threshold(system_state, cycles, Cycles::zero())
+        self.consume_with_threshold(
+            system_state,
+            cycles,
+            Cycles::zero(),
+            CyclesUseCase::ComputeAllocation,
+        )
     }
 
     /// The cost of compute allocation, per round
@@ -505,7 +522,12 @@ impl CyclesAccountManager {
         let cycles_amount = self.memory_cost(bytes, duration, subnet_size);
 
         // Can charge all the way to the empty account (zero cycles)
-        self.consume_with_threshold(system_state, cycles_amount, Cycles::zero())
+        self.consume_with_threshold(
+            system_state,
+            cycles_amount,
+            Cycles::zero(),
+            CyclesUseCase::Memory,
+        )
     }
 
     /// The cost of using `bytes` worth of memory.
@@ -673,6 +695,7 @@ impl CyclesAccountManager {
         system_state: &mut SystemState,
         cycles: Cycles,
         threshold: Cycles,
+        use_case: CyclesUseCase,
     ) -> Result<(), CanisterOutOfCyclesError> {
         self.verify_cycles_balance_with_treshold(
             system_state.canister_id,
@@ -681,7 +704,7 @@ impl CyclesAccountManager {
             threshold,
         )?;
 
-        system_state.remove_cycles(cycles);
+        system_state.remove_cycles(cycles, use_case);
         system_state.observe_consumed_cycles(cycles);
         Ok(())
     }
