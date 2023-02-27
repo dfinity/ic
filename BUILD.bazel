@@ -1,4 +1,5 @@
 load("@bazel_gazelle//:def.bzl", "gazelle")
+load("@rules_python//python:pip.bzl", "compile_pip_requirements")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -60,4 +61,14 @@ alias(
     name = "gobin",
     actual = "@go_sdk//:bin/go",
     visibility = ["//visibility:public"],
+)
+
+# Builds python dependencies
+compile_pip_requirements(
+    name = "python-requirements",
+    requirements_in = "requirements.in",
+    requirements_txt = "requirements.txt",
+    tags = [
+        "requires-network",
+    ],
 )

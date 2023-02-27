@@ -1,19 +1,5 @@
 load("@rules_python//python:defs.bzl", "py_library", "py_test")
-load("@rules_python//python:pip.bzl", "compile_pip_requirements")
-load("@scalability_deps//:requirements.bzl", "all_requirements", "requirement")
-
-# Bazel has an automatic test that checks whether current requirements are up to date
-# Because of this, it's possible that this test could fail if a new version is available even if
-# no python code was changed. To avoid unexpected failures, I added the tag "allow_to_fail"
-compile_pip_requirements(
-    name = "requirements",
-    requirements_in = "requirements.in",
-    requirements_txt = "requirements.txt",
-    tags = [
-        "allow_to_fail",
-        "requires-network",
-    ],
-)
+load("@python_deps//:requirements.bzl", "all_requirements", "requirement")
 
 # there were some issues with loading uuid, therefore we need load requirements individually instead of usings all_requirements
 py_library(
