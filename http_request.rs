@@ -10,7 +10,7 @@ use core::hash::Hash;
 use serde::{Deserialize, Serialize};
 
 /// "transform" function of type: `func (http_request) -> (http_response) query`
-#[derive(Deserialize, Debug, PartialEq, Clone)]
+#[derive(Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct TransformFunc(pub candid::Func);
 
 impl CandidType for TransformFunc {
@@ -47,7 +47,7 @@ pub struct TransformArgs {
 ///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
 ///     context : blob;
 /// }`
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
+#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct TransformContext {
     /// Reference function with signature: `func (record {response : http_response; context : blob}) -> (http_response) query;`.
     pub function: TransformFunc,
@@ -126,7 +126,7 @@ pub enum HttpMethod {
 }
 
 /// Argument type of [http_request].
-#[derive(CandidType, Deserialize, Debug, PartialEq, Clone)]
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct CanisterHttpRequestArgument {
     /// The requested URL.
     pub url: String,
