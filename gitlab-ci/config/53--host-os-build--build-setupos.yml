@@ -34,7 +34,7 @@ setup-os-diskimg:
       "$CI_PROJECT_DIR"/gitlab-ci/tools/download "host-os/disk-img/disk-img.tar.gz" > hostos/disk-img/disk-img.tar.gz
 
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" build-disk-img -- \
-          ./scripts/build-disk-image.sh -o "${BUILD_TMP}/disk.img" -v "$VERSION" -f "./hostos/disk-img/disk-img.tar.gz" -g "./guestos/disk-img/disk-img.tar.gz"
+          ./build-disk-image.sh -o "${BUILD_TMP}/disk.img" -v "$VERSION" -f "./hostos/disk-img/disk-img.tar.gz" -g "./guestos/disk-img/disk-img.tar.gz"
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" tar-build-out -- \
           tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse \
           -cvzf "${BUILD_OUT}/disk-img.tar.gz" -C "$BUILD_TMP" disk.img version.txt

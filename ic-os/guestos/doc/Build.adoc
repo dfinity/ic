@@ -13,19 +13,14 @@ The Ubuntu-based IC OS is built by:
 * putting everything together into a pre-partitioned disk image with a layout
   suitable for A/B system upgrades
 
-The entire disk image is built using the following command:
+The entire disk image can be built using the following command:
 
 ----
-scripts/build-disk-image.sh \
-  -o disk.img \
-  -x path_to_compiled_ic_binaries \
-  -p root_password_for_console_login \
-  -v version_tag
+bazel build //ic-os/guestos/prod/...
 ----
 
-"root password" is optional (must only be used for dev/debug images). "version tag" is
-optional, but must be set to something unique per build such that the
-upgrade process can distinguish different builds.
+"prod" can be replaced with "dev" for the dev variant. The built image can be
+found at `/ic/bazel-bin/ic-os/guestos/prod/disk-img.tar{.gz,.zst}`
 
 See notes below on the individual build steps.
 

@@ -3,7 +3,6 @@ package(default_visibility = ["__subpackages__"])
 exports_files([
     "bootloader/extra_boot_args.template",
     "partitions.csv",
-    "rootfs",
     "scripts/build-bootstrap-config-image.sh",
 ])
 

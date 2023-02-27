@@ -227,9 +227,7 @@ def load_artifacts(artifacts_path: str):
         artifacts_env = os.environ.copy()
         artifacts_env["GIT"] = subprocess.check_output(["git", "rev-parse", "HEAD"], encoding="utf-8")
         artifacts_env["GET_GUEST_OS"] = "0"
-        output = subprocess.check_output(
-            ["../ic-os/guestos/scripts/get-artifacts.sh"], encoding="utf-8", env=artifacts_env
-        )
+        output = subprocess.check_output(["../ic-os/scripts/get-artifacts.sh"], encoding="utf-8", env=artifacts_env)
         match = re.findall(r"Downloading artifacts for revision ([a-f0-9]*)", output)[0]
         with open(f_artifacts_hash, "wt", encoding="utf-8") as f:
             f.write(match)

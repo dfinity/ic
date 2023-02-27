@@ -3,7 +3,6 @@ package(default_visibility = ["__subpackages__"])
 exports_files([
     "bootloader/extra_boot_args.template",
     "partitions.csv",
-    "rootfs",
     "rootfs/docker-base.dev",
     "rootfs/docker-base.prod",
     "rootfs/allow_console_root",

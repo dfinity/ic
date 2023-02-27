@@ -85,32 +85,3 @@ Be sure *not* to use Nix to build the IC binary artifacts.
 This command will output a tarred guestOS image in the artifacts/icos folder: "disk-img.tar.gz"
 
 Note that building with Podman creates a production image as opposed to a development image. When you run production images inside of QEMU, you will not be able to access the console and other debugging tools.
-
-=== Building directly from the build scripts
-
-In order to build directly from the build scripts, you must first build the release binaries. These binaries can be built locally, but they can also be downloaded remotely from a previous build.
-
-Downloading the binaries from a previous build is much faster, but it will not include your local changes to the replica and orchestrator. 
-However, this is not a problem if you are not working on the release binaries. 
-In fact, this is preferable if you do not want your local environment to impact the creation of the release binaries.
-
-As the node team rarely touches the release binaries, we prefer this build path.
-
-    GET_GUEST_OS=0 ./ic-os/guestos/scripts/get-artifacts.sh
-
-This will download the release binaries and place them in the ic/artifacts folder.
-
-Setting GET_GUEST_OS=0 will tell the get-artifacts script to ignore downloading a complete guestOS image.
-Leave out GET_GUEST_OS=0 if you want to quickly obtain a guestOS image!
-
-Once you have the canister and release binaries, you can build the image:
-
-    ./scripts/build-disk-image.sh -o <output> -v <version> -t dev -p <password> -x ../../artifacts/release
-
-This command will take up to 10 minutes to run. 
-It will output disk.img, which is the guestOS image.
-
-
-Similar to a guestOS image, a guestOS-upgrade image can be built by using the build scripts directly:
-
-    ./scripts/build-ubuntu.sh -o /tmp/upgrade-image.tar

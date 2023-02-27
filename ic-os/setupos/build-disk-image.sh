@@ -10,7 +10,7 @@ set -o pipefail
 SHELL="/bin/bash"
 PATH="/sbin:/bin:/usr/sbin:/usr/bin"
 
-BASE_DIR="$(dirname "${BASH_SOURCE[0]}")/.."
+BASE_DIR="$(dirname "${BASH_SOURCE[0]}")"
 TMP_DIR="$(mktemp -d)"
 trap "rm -rf ${TMP_DIR}" EXIT
 TOOL_DIR="${BASE_DIR}/../../toolchains/sysimage/"
@@ -335,7 +335,7 @@ function assemble_and_populate_image() {
 
     "${TOOL_DIR}"/build_disk_image.py \
         --out "${TMP_DIR}/disk.img.tar" \
-        --partition_table "${BASE_DIR}/scripts/partitions.csv" \
+        --partition_table "${BASE_DIR}/partitions.csv" \
         "${TMP_DIR}/partition-esp.tar" \
         "${TMP_DIR}/partition-grub.tar" \
         "${TMP_DIR}/partition-config.tar" \
