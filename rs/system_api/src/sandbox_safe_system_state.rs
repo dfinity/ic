@@ -450,7 +450,7 @@ impl SystemStateChanges {
         match self.cycles_balance_change {
             CyclesBalanceChange::Added(added) => {
                 // When 'cycles_balance_change' is positive we should add 'removed_consumed_cycles'.
-                state.add_cycles(added + removed_consumed_cycles);
+                state.add_cycles(added + removed_consumed_cycles, CyclesUseCase::NonConsumed);
                 debug_assert_eq!(balance_before + added, state.balance());
             }
             CyclesBalanceChange::Removed(removed) => {
@@ -458,7 +458,10 @@ impl SystemStateChanges {
                 // but additionaly we should take care about the sign of the sum, which will
                 // determine whether we are adding or removing cycles from the balance.
                 if removed_consumed_cycles > removed {
-                    state.add_cycles(removed_consumed_cycles - removed);
+                    state.add_cycles(
+                        removed_consumed_cycles - removed,
+                        CyclesUseCase::NonConsumed,
+                    );
                 } else {
                     state.remove_cycles(
                         removed - removed_consumed_cycles,

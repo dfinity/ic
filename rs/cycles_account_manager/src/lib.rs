@@ -387,10 +387,7 @@ impl CyclesAccountManager {
                 subnet_size,
             )
             .min(prepaid_execution_cycles);
-        system_state.increment_balance_and_decrement_consumed_cycles(
-            cycles_to_refund,
-            CyclesUseCase::Instructions,
-        );
+        system_state.add_cycles(cycles_to_refund, CyclesUseCase::Instructions);
     }
 
     /// Charges the canister for its compute allocation

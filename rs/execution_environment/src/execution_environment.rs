@@ -1280,7 +1280,9 @@ impl ExecutionEnvironment {
 
             Some(canister_state) => {
                 let cycles = msg.take_cycles();
-                canister_state.system_state.add_cycles(cycles);
+                canister_state
+                    .system_state
+                    .add_cycles(cycles, CyclesUseCase::NonConsumed);
                 if cycles.get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                     info!(
                         self.log,

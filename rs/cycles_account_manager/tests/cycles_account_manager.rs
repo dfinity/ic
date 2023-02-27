@@ -67,7 +67,9 @@ fn test_can_charge_application_subnets() {
                             subnet_size,
                         ) + cycles_account_manager.memory_cost(memory, duration, subnet_size);
                     let initial_cycles = expected_fee + Cycles::new(100);
-                    canister.system_state.add_cycles(initial_cycles);
+                    canister
+                        .system_state
+                        .add_cycles(initial_cycles, CyclesUseCase::NonConsumed);
                     cycles_account_manager
                         .charge_canister_for_resource_allocation_and_usage(
                             &log,

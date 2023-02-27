@@ -1211,7 +1211,9 @@ impl CanisterManager {
             None => self.config.default_provisional_cycles_balance,
         };
 
-        canister.system_state.add_cycles(cycles_amount);
+        canister
+            .system_state
+            .add_cycles(cycles_amount, CyclesUseCase::NonConsumed);
 
         Ok(())
     }

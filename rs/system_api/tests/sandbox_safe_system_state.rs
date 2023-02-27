@@ -244,7 +244,7 @@ fn correct_charging_source_canister_for_a_request() {
         SMALL_APP_SUBNET_MAX_SIZE,
     );
 
-    system_state.increment_balance_and_decrement_consumed_cycles(
+    system_state.add_cycles(
         refund_cycles,
         CyclesUseCase::RequestTransmissionAndProcessing,
     );
@@ -288,7 +288,10 @@ fn mint_cycles_large_value() {
         .canister_id(CYCLES_MINTING_CANISTER_ID)
         .build();
 
-    system_state.add_cycles(Cycles::from(1_000_000_000_000_000_u128));
+    system_state.add_cycles(
+        Cycles::from(1_000_000_000_000_000_u128),
+        CyclesUseCase::NonConsumed,
+    );
 
     let api_type = ApiTypeBuilder::build_update_api();
     let mut api = get_system_api(api_type, &system_state, cycles_account_manager);
