@@ -404,34 +404,47 @@ pub fn validate_aggregator_data(env: TestEnv) {
     );
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+struct SimpleHttpHeader(String, String);
+
+#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+struct SimpleHttpRequest {
+    url: String,
+    method: String,
+    headers: Vec<SimpleHttpHeader>,
+    body: Vec<u8>,
+}
+
+/// asset_endpoint e.g. "/_app/immutable/chunks/vendor-b5e14c74.js"
+pub fn nns_dapp_http_request(nns_dapp_canister_id: Principal, asset_endpoint: String) -> Request {
+    let http_request = SimpleHttpRequest {
+        url: asset_endpoint,
+        method: "GET".to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+    let payload = Encode!(&http_request).unwrap();
+    Request::Query(CallSpec::new(nns_dapp_canister_id, "http_request", payload))
+}
+
+pub fn aggregator_http_request(aggr_canister_id: Principal) -> Request {
+    let http_request = SimpleHttpRequest {
+        url: AggregatorClient::aggregator_http_endpoint(),
+        method: "GET".to_string(),
+        headers: vec![],
+        body: vec![],
+    };
+    let payload = Encode!(&http_request).unwrap();
+    Request::Query(CallSpec::new(aggr_canister_id, "http_request", payload))
+}
+
 pub fn workload_via_aggregator(env: TestEnv, rps: usize, duration: Duration) {
     let log = env.logger();
 
     // --- Create a plan ---
     let plan = {
-        #[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
-        struct SimpleHttpHeader(String, String);
-
-        #[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
-        struct SimpleHttpRequest {
-            url: String,
-            method: String,
-            headers: Vec<SimpleHttpHeader>,
-            body: Vec<u8>,
-        }
-        let http_request = SimpleHttpRequest {
-            url: AggregatorClient::aggregator_http_endpoint(),
-            method: "GET".to_string(),
-            headers: vec![],
-            body: vec![],
-        };
-        let payload = Encode!(&http_request).unwrap();
         let aggregator = AggregatorClient::read_attribute(&env);
-        let request = Request::Query(CallSpec::new(
-            aggregator.principal(),
-            "http_request",
-            payload,
-        ));
+        let request = aggregator_http_request(aggregator.principal());
         RoundRobinPlan::new(vec![request])
     };
 
