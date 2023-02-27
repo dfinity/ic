@@ -205,10 +205,10 @@ impl InstallCodeHelper {
                 SubnetAvailableMemoryError::InsufficientMemory {
                     requested_total,
                     message_requested: _,
-                    wasm_custom_sections_requested: _,
+                    wasm_custom_sections_requested,
                     available_total,
                     available_messages: _,
-                    available_wasm_custom_sections: _,
+                    available_wasm_custom_sections,
                 } => {
                     return finish_err(
                         clean_canister,
@@ -216,8 +216,12 @@ impl InstallCodeHelper {
                         original,
                         round,
                         CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                            requested: requested_total,
-                            available: NumBytes::new(available_total.max(0) as u64),
+                            requested_total,
+                            requested_wasm_custom_sections: wasm_custom_sections_requested,
+                            available_total: NumBytes::new(available_total.max(0) as u64),
+                            available_wasm_custom_sections: NumBytes::new(
+                                available_wasm_custom_sections.max(0) as u64,
+                            ),
                         },
                     );
                 }
@@ -664,8 +668,12 @@ pub(crate) fn validate_memory_allocation(
                 + canister_current_allocation.get() as i128
         {
             return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                requested: memory_allocation.bytes(),
-                available: NumBytes::from((available_memory.get_total_memory()).max(0) as u64),
+                requested_total: memory_allocation.bytes(),
+                requested_wasm_custom_sections: NumBytes::from(0),
+                available_total: NumBytes::from((available_memory.get_total_memory()).max(0) as u64),
+                available_wasm_custom_sections: NumBytes::from(
+                    (available_memory.get_wasm_custom_sections_memory()).max(0) as u64,
+                ),
             });
         }
     }
