@@ -47,7 +47,7 @@ Because python tests can be run in different environments, it makes sense to hav
 1. Add new requirements or change existing ones in `requirements.in`
 1. Update lock file (will generate `requirements.txt`)
     ```
-    bazel run //scalability:requirements.update
+    bazel run //:python-requirements.update
     ```
 1. Commit changes
 
@@ -97,7 +97,6 @@ A clean way of managing dependencies for a python project, is via isolated virtu
 
 - Configure your local virtual environment and install the dependencies:
   ```
-  $ cd ic/scalability
   $ pipenv --python 3
   $ pipenv install -r requirements.txt
   ```
