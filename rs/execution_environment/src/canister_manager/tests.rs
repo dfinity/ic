@@ -779,7 +779,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
         .unwrap_err();
 
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
-    assert_eq!(err.description(), "Canister with memory allocation 11MiB cannot be installed because the Subnet's remaining memory capacity is 10MiB");
+    assert_eq!(err.description(), "Canister requested 11.00 MiB total memory and 0 B in wasm custom sections memory but the Subnet's remaining total memory capacity is 10.00 MiB and wasm custom sections capacity is 2.00 GiB");
     // The memory allocation is validated first before charging the fee.
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
@@ -792,7 +792,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
         .unwrap_err();
     let execution_cost_after = test.canister_execution_cost(canister2);
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
-    assert_eq!(err.description(), "Canister with memory allocation 10MiB cannot be installed because the Subnet's remaining memory capacity is 10MiB");
+    assert_eq!(err.description(), "Canister requested 10.00 MiB total memory and 0 B in wasm custom sections memory but the Subnet's remaining total memory capacity is 10.00 MiB and wasm custom sections capacity is 2.00 GiB");
 
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
@@ -2677,7 +2677,7 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
         .unwrap_err();
 
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
-    assert_eq!(err.description(), "Canister with memory allocation 11MiB cannot be installed because the Subnet's remaining memory capacity is 9MiB");
+    assert_eq!(err.description(), "Canister requested 11.00 MiB total memory and 0 B in wasm custom sections memory but the Subnet's remaining total memory capacity is 10.00 MiB and wasm custom sections capacity is 2.00 GiB");
 
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
@@ -2690,7 +2690,7 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
         .unwrap_err();
     let execution_cost_after = test.canister_execution_cost(canister2);
     assert_eq!(err.code(), ErrorCode::SubnetOversubscribed);
-    assert_eq!(err.description(), "Canister with memory allocation 10MiB cannot be installed because the Subnet's remaining memory capacity is 9MiB");
+    assert_eq!(err.description(), "Canister requested 10.00 MiB total memory and 0 B in wasm custom sections memory but the Subnet's remaining total memory capacity is 10.00 MiB and wasm custom sections capacity is 2.00 GiB");
 
     assert_eq!(
         test.canister_state(canister2).system_state.balance(),
@@ -4207,9 +4207,8 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
     let result = test.ingress(uc, "update", create_canister).unwrap();
     match result {
         WasmResult::Reject(msg) => {
-            assert!(
-                msg.contains("memory allocation"),
-                "actual reject message: {}",
+            assert_eq!(
+                "Canister requested 4.00 GiB total memory and 0 B in wasm custom sections memory but the Subnet's remaining total memory capacity is 3.99 GiB and wasm custom sections capacity is 2.00 GiB",
                 msg
             )
         }

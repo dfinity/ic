@@ -380,8 +380,14 @@ impl CanisterManager {
             let requested_allocation: NumBytes = memory_allocation.bytes();
             if requested_allocation.get() as i64 > available_memory.get_total_memory() {
                 return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                    requested: requested_allocation,
-                    available: NumBytes::from(available_memory.get_total_memory().max(0) as u64),
+                    requested_total: requested_allocation,
+                    requested_wasm_custom_sections: NumBytes::from(0),
+                    available_total: NumBytes::from(
+                        available_memory.get_total_memory().max(0) as u64
+                    ),
+                    available_wasm_custom_sections: NumBytes::from(
+                        available_memory.get_wasm_custom_sections_memory().max(0) as u64,
+                    ),
                 });
             }
         }
@@ -1282,8 +1288,10 @@ pub(crate) enum CanisterManagerError {
         available: u64,
     },
     SubnetMemoryCapacityOverSubscribed {
-        requested: NumBytes,
-        available: NumBytes,
+        requested_total: NumBytes,
+        requested_wasm_custom_sections: NumBytes,
+        available_total: NumBytes,
+        available_wasm_custom_sections: NumBytes,
     },
     Hypervisor(CanisterId, HypervisorError),
     DeleteCanisterNotStopped(CanisterId),
@@ -1341,13 +1349,15 @@ impl From<CanisterManagerError> for UserError {
                 )
             }
             Hypervisor(canister_id, err) => err.into_user_error(&canister_id),
-            SubnetMemoryCapacityOverSubscribed {requested, available } => {
+            SubnetMemoryCapacityOverSubscribed {requested_total, requested_wasm_custom_sections, available_total, available_wasm_custom_sections } => {
                 Self::new(
                     ErrorCode::SubnetOversubscribed,
                     format!(
-                        "Canister with memory allocation {}MiB cannot be installed because the Subnet's remaining memory capacity is {}MiB",
-                        requested.get() / (1024 * 1024),
-                        available.get() / (1024 * 1024),
+                        "Canister requested {} total memory and {} in wasm custom sections memory but the Subnet's remaining total memory capacity is {} and wasm custom sections capacity is {}",
+                        requested_total.display(),
+                        requested_wasm_custom_sections.display(),
+                        available_total.display(),
+                        available_wasm_custom_sections.display(),
                     )
                 )
             }
