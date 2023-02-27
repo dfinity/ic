@@ -15,15 +15,20 @@ func NewRootCmd() *cobra.Command {
 		Use:     "ict",
 		Long:    "ict " + version + "\nA simple CLI for running system_tests in Bazel.",
 		Example: "ict test //rs/tests:basic_health_test",
-		Run: func(cmd *cobra.Command, args []string) {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			// Print help by default, i.e. if no args are provided.
 			if len(args) == 0 {
 				cmd.Help()
-				return
 			}
+			return nil
 		},
 	}
-	// rootCmd.SetOutput(color.Output)
+	rootCmd.SetHelpCommand(&cobra.Command{
+		Use:    "no-help",
+		Hidden: true,
+	})
+	rootCmd.SilenceUsage = true
+	rootCmd.SilenceErrors = true
 	cobra.AddTemplateFunc("StyleHeading", color.New(color.FgGreen).SprintFunc())
 	usageTemplate := rootCmd.UsageTemplate()
 	usageTemplate = strings.NewReplacer(

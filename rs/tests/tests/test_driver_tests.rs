@@ -106,7 +106,7 @@ fn test_scenario_with_skipped_panic_test_succeeds() {
     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
         "--working-dir",
         working_dir.to_str().unwrap(),
-        "--filter-tests",
+        "--include-tests",
         "non_existing_test_function", // execute test functions containing this substring (and skip all the others)
         "run",
     ]);
@@ -123,7 +123,7 @@ fn test_scenario_with_non_skipped_panic_test_fails() {
     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
         "--working-dir",
         working_dir.to_str().unwrap(),
-        "--filter-tests",
+        "--include-tests",
         "test_to_fail", // execute test functions containing this substring (and skip all the others)
         "run",
     ]);
@@ -140,7 +140,7 @@ fn test_scenario_with_two_skipped_panic_tests_succeeds() {
     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
         "--working-dir",
         working_dir.to_str().unwrap(),
-        "--filter-tests",
+        "--include-tests",
         "test_to_succeed", // execute test functions containing this substring (and skip all the others)
         "run",
     ]);
