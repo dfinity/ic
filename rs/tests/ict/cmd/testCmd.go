@@ -39,7 +39,7 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 			command = append(command, "--cache_test_results=no")
 		}
 		if len(cfg.filterTests) > 0 {
-			command = append(command, "--test_arg=--filter-tests="+cfg.filterTests)
+			command = append(command, "--test_arg=--include-tests="+cfg.filterTests)
 		}
 		if len(cfg.farmBaseUrl) > 0 {
 			command = append(command, "--test_arg=--farm-base-url="+cfg.farmBaseUrl)
@@ -74,7 +74,7 @@ func NewTestCmd() *cobra.Command {
 	}
 	testCmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked without execution.")
 	testCmd.Flags().BoolVarP(&cfg.keepAlive, "keepalive", "k", false, "Keep test system alive for 60 minutes.")
-	testCmd.PersistentFlags().StringVarP(&cfg.filterTests, "filter-tests", "f", "", "Execute only those test functions which contain a substring.")
+	testCmd.PersistentFlags().StringVarP(&cfg.filterTests, "include-tests", "i", "", "Execute only those test functions which contain a substring.")
 	testCmd.PersistentFlags().StringVarP(&cfg.farmBaseUrl, "farm-url", "", "", "Use a custom url for the Farm webservice.")
 	testCmd.SetOut(os.Stdout)
 	return testCmd

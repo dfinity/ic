@@ -21,7 +21,7 @@ if [ "${CODE}" != "0" ]; then
         exit 1
     fi
 fi
-# Check whether ict binary is exists/up-to-date. If not compile/recompile + handle errors.
+# Check whether ict binary exists/up-to-date. If not compile/recompile + handle errors.
 echo -e "${BOLD}${GREEN}Checking ict is up-to-date ...${NC}"
 bazel build ${BAZEL_ICT_TARGET} --config=local --check_up_to_date >/dev/null 2>&1
 CODE="$?"

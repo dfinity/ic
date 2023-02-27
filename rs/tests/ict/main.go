@@ -20,7 +20,7 @@ func AssembleAllCmds() *cobra.Command {
 func main() {
 	if err := AssembleAllCmds().Execute(); err != nil {
 		color.New(color.FgRed, color.Bold).Fprintf(os.Stderr, "There was an error while executing CLI: ")
-		fmt.Fprintf(os.Stderr, "'%s'\n", err)
+		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
 }

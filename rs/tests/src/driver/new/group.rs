@@ -76,7 +76,7 @@ pub struct CliArgs {
     pub debug_keepalive: bool,
 
     #[clap(
-        long = "filter-tests",
+        long = "include-tests",
         help = r#"Execute only those test functions, which contain a substring and skip all the others."#
     )]
     pub filter_tests: Option<String>,
@@ -319,7 +319,7 @@ impl SystemTestSubGroup {
                     .collect(),
                 ctx,
             ),
-            // If filtering flag `--filter-tests` is set, then for all
+            // If filtering flag `--include-tests` is set, then for all
             // skipped test function we execute a SkipTestTask, which sends EventPayload::TaskSkipped.
             SystemTestSubGroup::Singleton { task_fn, task_id } => {
                 let logger = ctx.logger.clone();
