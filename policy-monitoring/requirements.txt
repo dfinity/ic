@@ -1,4 +1,4 @@
-certifi==2021.10.8
+certifi==2022.12.7
 charset-normalizer==2.0.12
 elasticsearch==7.16.3
 func-timeout==4.3.5
