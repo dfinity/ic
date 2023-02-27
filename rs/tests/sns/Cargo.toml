@@ -100,7 +100,6 @@ ic-utils = "=0.22.0"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
 itertools = "0.10.0"
 json5 = "0.4.1"
-k256 = "0.11"
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
 lifeline = { path = "../../nns/handlers/lifeline" }

@@ -229,13 +229,13 @@ impl PrivateKey {
     pub fn sign_message(&self, message: &[u8]) -> Vec<u8> {
         use k256::ecdsa::{signature::Signer, Signature};
         let sig: Signature = self.key.sign(message);
-        sig.to_vec()
+        sig.to_bytes().to_vec()
     }
 
     /// Return the public key cooresponding to this private key
     pub fn public_key(&self) -> PublicKey {
         let key = self.key.verifying_key();
-        PublicKey { key }
+        PublicKey { key: *key }
     }
 }
 
@@ -279,7 +279,6 @@ impl PublicKey {
     ///
     /// The point can optionally be compressed
     pub fn serialize_sec1(&self, compressed: bool) -> Vec<u8> {
-        use k256::elliptic_curve::sec1::ToEncodedPoint;
         self.key.to_encoded_point(compressed).to_bytes().to_vec()
     }
 
@@ -299,8 +298,8 @@ impl PublicKey {
     /// perform s-normalization, this function will reject roughly half of all
     /// signatures.
     pub fn verify_signature(&self, message: &[u8], signature: &[u8]) -> bool {
-        use k256::ecdsa::signature::{Signature, Verifier};
-        let signature = match k256::ecdsa::Signature::from_bytes(signature) {
+        use k256::ecdsa::signature::Verifier;
+        let signature = match k256::ecdsa::Signature::try_from(signature) {
             Ok(sig) => sig,
             Err(_) => return false,
         };
@@ -322,8 +321,8 @@ impl PublicKey {
     /// public key. Unlike `verify_signature`, this function accepts either `s`
     /// value.
     pub fn verify_signature_with_malleability(&self, message: &[u8], signature: &[u8]) -> bool {
-        use k256::ecdsa::signature::{Signature, Verifier};
-        let signature = match k256::ecdsa::Signature::from_bytes(signature) {
+        use k256::ecdsa::signature::Verifier;
+        let signature = match k256::ecdsa::Signature::try_from(signature) {
             Ok(sig) => sig,
             Err(_) => return false,
         };
