@@ -67,6 +67,8 @@ mod ic0 {
         pub fn performance_counter(counter_type: u32) -> u64;
         pub fn global_timer_set(timestamp: u64) -> u64;
         pub fn canister_version() -> u64;
+
+        pub fn mint_cycles(amount: u64) -> u64;
     }
 }
 
@@ -379,6 +381,11 @@ pub fn trap_with(message: &str) -> ! {
     unsafe {
         ic0::trap(message.as_ptr() as u32, message.len() as u32);
     }
+}
+
+/// Mint cycles (only works on CMC).
+pub fn mint_cycles(amount: u64) -> u64 {
+    unsafe { ic0::mint_cycles(amount) }
 }
 
 use std::panic;
